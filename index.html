@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jules - Self-Modifying Web App</title>
+    <script src="https://cdn.jsdelivr.net/npm/ipfs-http-client@60.0.1/dist/index.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -112,12 +113,22 @@
         <h2>Code Review</h2>
         <div id="review-output" class="output-area">No review yet.</div>
 
+        <h2>Evolution Result</h2>
+        <div id="evolution-output" class="output-area">No evolution yet.</div>
+
         <h2>Current Source Code</h2>
         <textarea id="currentCode" readonly></textarea>
 
     </div>
 
     <script>
+        // --- IPFS Client Initialization ---
+        const ipfs = window.IpfsHttpClient.create({
+            host: 'ipfs.infura.io',
+            port: 5001,
+            protocol: 'https'
+        });
+
         // --- Application State ---
         const state = {
             apiKey: 'AIzaSyA-jfxiOqRoWOXEjTmT9zMpc4M6nen6k10', // WARNING: Hardcoded API Key
@@ -138,6 +149,7 @@
             planOutput: document.getElementById('plan-output'),
             newCode: document.getElementById('newCode'),
             reviewOutput: document.getElementById('review-output'),
+            evolutionOutput: document.getElementById('evolution-output'),
             currentCode: document.getElementById('currentCode'),
         };
 
@@ -284,24 +296,30 @@ Review:`;
             dom.reviewCodeBtn.textContent = '3. Review Code';
         }
 
-        function handleApplyCode() {
+        async function handleApplyCode() {
             // This is the "evolution" step.
-            // In a real scenario, this would involve publishing to IPFS.
-            // For now, we'll simulate it by creating a blob and opening it in a new tab.
-
-            if (!confirm('This will open the new version of the app in a new tab. Proceed?')) {
+            if (!confirm('This will publish the new version of the app to IPFS and open it in a new tab. Proceed?')) {
                 return;
             }
 
-            const blob = new Blob([state.newCode], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
+            dom.applyCodeBtn.disabled = true;
+            dom.applyCodeBtn.textContent = 'Publishing to IPFS...';
 
-            // This is where you would hook in an IPFS upload.
-            // For example: const cid = await ipfs.add(state.newCode);
-            // window.open(`https://ipfs.io/ipfs/${cid}`);
+            try {
+                const { cid } = await ipfs.add(state.newCode);
+                const ipfsUrl = `https://ipfs.io/ipfs/${cid.toString()}`;
 
-            alert('Simulating evolution. In a real implementation, this would be published to IPFS. Opening the new version now.');
-            window.open(url, '_blank');
+                const successMsg = `Successfully published to IPFS! <a href="${ipfsUrl}" target="_blank">View new version</a>`;
+                dom.evolutionOutput.innerHTML = successMsg;
+                window.open(ipfsUrl, '_blank');
+
+            } catch (error) {
+                console.error('Error publishing to IPFS:', error);
+                alert(`Failed to publish to IPFS: ${error.message}`);
+            } finally {
+                dom.applyCodeBtn.disabled = false;
+                dom.applyCodeBtn.textContent = '4. Apply & Evolve';
+            }
         }
 
         async function handleAutopilot() {
