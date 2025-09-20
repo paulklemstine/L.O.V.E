@@ -174,13 +174,14 @@
                 return { error: 'API Key not provided' };
             }
 
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${state.apiKey}`;
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent`;
 
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'x-goog-api-key': state.apiKey,
                     },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: prompt }] }]
@@ -188,10 +189,16 @@
                 });
 
                 if (!response.ok) {
+                    const errorBody = await response.text();
+                    console.error('API Error Response:', errorBody);
                     throw new Error(`API request failed with status ${response.status}`);
                 }
 
                 const data = await response.json();
+                if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0].text) {
+                    console.error('Unexpected API response structure:', data);
+                    throw new Error('Unexpected API response structure.');
+                }
                 return data.candidates[0].content.parts[0].text;
             } catch (error) {
                 console.error('Error calling Gemini API:', error);
