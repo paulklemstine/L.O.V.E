@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jules - Self-Modifying Web App</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #container {
+            width: 90%;
+            max-width: 1200px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        h1, h2 {
+            color: #333;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+        textarea {
+            width: 98%;
+            height: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        input[type="text"], input[type="password"] {
+            width: 98%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #4267B2;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #365899;
+        }
+        button:disabled {
+            background-color: #a0a0a0;
+            cursor: not-allowed;
+        }
+        #controls, #autopilot-controls {
+            margin-bottom: 20px;
+        }
+        .output-area {
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: "Courier New", Courier, monospace;
+            min-height: 50px;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Jules - A Self-Modifying Organism</h1>
+
+        <h2 class="hidden">Configuration</h2>
+        <!-- API Key input removed for hardcoding -->
+
+        <h2>1. Goal</h2>
+        <input type="text" id="prompt" placeholder="Describe the change you want to make...">
+
+        <h2>2. Manual Controls</h2>
+        <div id="controls">
+            <button id="getPlan">1. Generate Plan</button>
+            <button id="getCode" disabled>2. Generate Code</button>
+            <button id="reviewCode" disabled>3. Review Code</button>
+            <button id="applyCode" disabled>4. Apply & Evolve</button>
+        </div>
+
+        <h2>3. Autopilot</h2>
+        <div id="autopilot-controls">
+            <button id="autopilot">Start Autopilot</button>
+        </div>
+
+        <h2>Plan</h2>
+        <div id="plan-output" class="output-area">No plan generated yet.</div>
+
+        <h2>Proposed Code</h2>
+        <textarea id="newCode" readonly></textarea>
+
+        <h2>Code Review</h2>
+        <div id="review-output" class="output-area">No review yet.</div>
+
+        <h2>Current Source Code</h2>
+        <textarea id="currentCode" readonly></textarea>
+
+    </div>
+
+    <script>
+        // --- Application State ---
+        const state = {
+            apiKey: 'AIzaSyA-jfxiOqRoWOXEjTmT9zMpc4M6nen6k10', // WARNING: Hardcoded API Key
+            currentCode: '',
+            plan: '',
+            newCode: '',
+            review: '',
+        };
+
+        // --- DOM Elements ---
+        const dom = {
+            prompt: document.getElementById('prompt'),
+            getPlanBtn: document.getElementById('getPlan'),
+            getCodeBtn: document.getElementById('getCode'),
+            reviewCodeBtn: document.getElementById('reviewCode'),
+            applyCodeBtn: document.getElementById('applyCode'),
+            autopilotBtn: document.getElementById('autopilot'),
+            planOutput: document.getElementById('plan-output'),
+            newCode: document.getElementById('newCode'),
+            reviewOutput: document.getElementById('review-output'),
+            currentCode: document.getElementById('currentCode'),
+        };
+
+        // --- Initialization ---
+        window.onload = () => {
+            // Capture the entire HTML source of the current page
+            state.currentCode = document.documentElement.outerHTML;
+            dom.currentCode.value = state.currentCode;
+
+            // Add event listeners
+            dom.getPlanBtn.addEventListener('click', handleGetPlan);
+            dom.getCodeBtn.addEventListener('click', handleGetCode);
+            dom.reviewCodeBtn.addEventListener('click', handleReviewCode);
+            dom.applyCodeBtn.addEventListener('click', handleApplyCode);
+            dom.autopilotBtn.addEventListener('click', handleAutopilot);
+        };
+
+        // --- API Communication ---
+        async function callGemini(prompt) {
+            if (!state.apiKey) {
+                alert('Please enter your Google Gemini API Key.');
+                return { error: 'API Key not provided' };
+            }
+
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${state.apiKey}`;
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                const data = await response.json();
+                return data.candidates[0].content.parts[0].text;
+            } catch (error) {
+                console.error('Error calling Gemini API:', error);
+                alert(`Error communicating with Gemini API: ${error.message}`);
+                return { error: error.message };
+            }
+        }
+
+        // --- Workflow Handlers ---
+        async function handleGetPlan() {
+            const userPrompt = dom.prompt.value;
+            if (!userPrompt) {
+                alert('Please enter a goal.');
+                return;
+            }
+
+            dom.getPlanBtn.disabled = true;
+            dom.getPlanBtn.textContent = 'Generating...';
+
+            const planPrompt = `You are an expert software engineer. Your task is to create a step-by-step plan to modify the following HTML code based on the user's request. The entire application is in this single file.
+
+User Request: "${userPrompt}"
+
+Current Code:
+\`\`\`html
+${state.currentCode}
+\`\`\`
+
+Provide a concise plan.`;
+
+            const result = await callGemini(planPrompt);
+            if (result && !result.error) {
+                state.plan = result;
+                dom.planOutput.textContent = state.plan;
+                dom.getCodeBtn.disabled = false;
+            }
+
+            dom.getPlanBtn.disabled = false;
+            dom.getPlanBtn.textContent = '1. Generate Plan';
+        }
+
+        async function handleGetCode() {
+            dom.getCodeBtn.disabled = true;
+            dom.getCodeBtn.textContent = 'Generating...';
+
+            const codePrompt = `You are an expert software engineer. Based on the following plan and the current code, generate the complete, new HTML code for the file. Ensure you only output the raw code, with no explanations or markdown formatting.
+
+Plan:
+${state.plan}
+
+Current Code:
+\`\`\`html
+${state.currentCode}
+\`\`\`
+
+New Code:`;
+
+            const result = await callGemini(codePrompt);
+            if (result && !result.error) {
+                // Clean the result to remove potential markdown backticks
+                state.newCode = result.replace(/^```html\n/, '').replace(/\n```$/, '');
+                dom.newCode.value = state.newCode;
+                dom.reviewCodeBtn.disabled = false;
+            }
+
+            dom.getCodeBtn.disabled = false;
+            dom.getCodeBtn.textContent = '2. Generate Code';
+        }
+
+        async function handleReviewCode() {
+            dom.reviewCodeBtn.disabled = true;
+            dom.reviewCodeBtn.textContent = 'Reviewing...';
+
+            const reviewPrompt = `You are a world-class code reviewer. Review the "New Code" and check if it correctly implements the "Plan" and doesn't introduce any obvious bugs. The "Original Code" is provided for context. Provide a short, concise review. If the code looks good, say "LGTM!" (Looks Good To Me!).
+
+Plan:
+${state.plan}
+
+Original Code:
+\`\`\`html
+${state.currentCode}
+\`\`\`
+
+New Code:
+\`\`\`html
+${state.newCode}
+\`\`\`
+
+Review:`;
+
+            const result = await callGemini(reviewPrompt);
+            if (result && !result.error) {
+                state.review = result;
+                dom.reviewOutput.textContent = state.review;
+                // A simple check to see if the review is positive
+                if (state.review.toLowerCase().includes('lgtm')) {
+                    dom.applyCodeBtn.disabled = false;
+                }
+            }
+
+            dom.reviewCodeBtn.disabled = false;
+            dom.reviewCodeBtn.textContent = '3. Review Code';
+        }
+
+        function handleApplyCode() {
+            // This is the "evolution" step.
+            // In a real scenario, this would involve publishing to IPFS.
+            // For now, we'll simulate it by creating a blob and opening it in a new tab.
+
+            if (!confirm('This will open the new version of the app in a new tab. Proceed?')) {
+                return;
+            }
+
+            const blob = new Blob([state.newCode], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+
+            // This is where you would hook in an IPFS upload.
+            // For example: const cid = await ipfs.add(state.newCode);
+            // window.open(`https://ipfs.io/ipfs/${cid}`);
+
+            alert('Simulating evolution. In a real implementation, this would be published to IPFS. Opening the new version now.');
+            window.open(url, '_blank');
+        }
+
+        async function handleAutopilot() {
+            dom.autopilotBtn.disabled = true;
+            dom.autopilotBtn.textContent = 'Autopilot Running...';
+
+            alert('Autopilot started. This will now run through the plan, code, and review steps automatically.');
+
+            await handleGetPlan();
+            if (dom.getCodeBtn.disabled) {
+                alert('Autopilot stopped: Could not generate a plan.');
+                resetAutopilotBtn();
+                return;
+            }
+
+            await handleGetCode();
+            if (dom.reviewCodeBtn.disabled) {
+                alert('Autopilot stopped: Could not generate code.');
+                resetAutopilotBtn();
+                return;
+            }
+
+            await handleReviewCode();
+            if (dom.applyCodeBtn.disabled) {
+                alert('Autopilot stopped: Code review was not approved.');
+                resetAutopilotBtn();
+                return;
+            }
+
+            alert('Autopilot: Code review passed. Applying changes.');
+            handleApplyCode();
+
+            resetAutopilotBtn();
+        }
+
+        function resetAutopilotBtn() {
+            dom.autopilotBtn.disabled = false;
+            dom.autopilotBtn.textContent = 'Start Autopilot';
+        }
+
+    </script>
+</body>
+</html>
