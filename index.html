@@ -84,8 +84,8 @@
     <div id="container">
         <h1>Jules - A Self-Modifying Organism</h1>
 
-        <h2>Configuration</h2>
-        <input type="password" id="apiKey" placeholder="Enter your Google Gemini API Key">
+        <h2 class="hidden">Configuration</h2>
+        <!-- API Key input removed for hardcoding -->
 
         <h2>1. Goal</h2>
         <input type="text" id="prompt" placeholder="Describe the change you want to make...">
@@ -120,7 +120,7 @@
     <script>
         // --- Application State ---
         const state = {
-            apiKey: '',
+            apiKey: 'AIzaSyA-jfxiOqRoWOXEjTmT9zMpc4M6nen6k10', // WARNING: Hardcoded API Key
             currentCode: '',
             plan: '',
             newCode: '',
@@ -129,7 +129,6 @@
 
         // --- DOM Elements ---
         const dom = {
-            apiKey: document.getElementById('apiKey'),
             prompt: document.getElementById('prompt'),
             getPlanBtn: document.getElementById('getPlan'),
             getCodeBtn: document.getElementById('getCode'),
@@ -148,20 +147,7 @@
             state.currentCode = document.documentElement.outerHTML;
             dom.currentCode.value = state.currentCode;
 
-            // Load API key from local storage if it exists
-            const savedApiKey = localStorage.getItem('geminiApiKey');
-            if (savedApiKey) {
-                dom.apiKey.value = savedApiKey;
-                state.apiKey = savedApiKey;
-            }
-
             // Add event listeners
-            dom.apiKey.addEventListener('change', () => {
-                state.apiKey = dom.apiKey.value;
-                localStorage.setItem('geminiApiKey', state.apiKey);
-                alert('API Key saved.');
-            });
-
             dom.getPlanBtn.addEventListener('click', handleGetPlan);
             dom.getCodeBtn.addEventListener('click', handleGetCode);
             dom.reviewCodeBtn.addEventListener('click', handleReviewCode);
