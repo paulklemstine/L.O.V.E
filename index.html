@@ -272,7 +272,7 @@
         }
 
         async function verifyCidOnNetwork(cid, maxRetries = 3, retryDelay = 2000) {
-            const gateways = ['https://ipfs.io', 'https://ipfs.dweb.link', 'https://trustless-gateway.link'];
+            const gateways = ['https://ipfs.io', 'https://dweb.link', 'https://trustless-gateway.link'];
             for (let i = 0; i < maxRetries; i++) {
                 const gateway = gateways[i % gateways.length]; // Cycle through gateways
                 const url = `${gateway}/ipfs/${cid}`;
@@ -289,7 +289,7 @@
                     if (response.ok) {
                         console.log(`Verification successful for CID: ${cid} via ${gateway}`);
                         dom.ipfsVerified.classList.remove('hidden');
-                        return; // Exit successfully
+                        return true; // Exit successfully
                     } else {
                         console.warn(`Gateway verification failed for CID ${cid} with status: ${response.status}`);
                     }
@@ -304,6 +304,7 @@
                     console.error(`Failed to verify CID ${cid} after ${maxRetries} attempts.`);
                 }
             }
+            return false; // Indicate failure after all retries
         }
 
         async function seedAndVerifyCurrentPage() {
@@ -551,39 +552,48 @@ Review:`;
                 console.log('Published to IPFS with CID:', cid);
 
                 dom.applyCodeBtn.textContent = 'Verifying...';
-                await verifyCidOnNetwork(cid);
+                const isVerified = await verifyCidOnNetwork(cid);
 
-                dom.applyCodeBtn.textContent = 'Evolving...';
+                if (isVerified) {
+                    dom.applyCodeBtn.textContent = 'Evolving...';
 
-                // --- NEW EVOLUTION LOGIC ---
-                const gateway = 'https://ipfs.io'; // Using a reliable public gateway
-                let newUrl = `${gateway}/ipfs/${cid}?apiKey=${state.apiKey}`;
+                    const gateway = 'https://ipfs.io';
+                    let newUrl = `${gateway}/ipfs/${cid}?apiKey=${state.apiKey}`;
 
-                const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
-                if (isAutopilot) {
-                    newUrl += '&autopilot=true';
+                    const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
+                    if (isAutopilot) {
+                        newUrl += '&autopilot=true';
+                    }
+
+                    console.log(`Opening new version in a new tab: ${newUrl}`);
+                    window.open(newUrl, '_blank');
+
+                    if (isAutopilot) {
+                        console.log('Disabling autopilot in this tab and preparing to reload.');
+                        sessionStorage.removeItem('autopilotEnabled');
+                    }
+
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+
+                } else {
+                    // Verification failed. Check if autopilot is on.
+                    const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
+                    if (isAutopilot) {
+                        console.warn(`IPFS verification failed for CID ${cid}. Autopilot is on, so starting a new cycle.`);
+                        runDrGeminiCycle(); // Silently fail and start the next round.
+                    } else {
+                        // For manual users, show an alert.
+                        alert('Failed to verify new version on the public IPFS network. Please try again in a moment.');
+                        dom.applyCodeBtn.disabled = false;
+                        dom.applyCodeBtn.textContent = '4. Apply & Evolve';
+                    }
                 }
-
-                console.log(`Opening new version in a new tab: ${newUrl}`);
-                window.open(newUrl, '_blank');
-
-                // In the original tab, disable autopilot if it was on.
-                if (isAutopilot) {
-                    console.log('Disabling autopilot in this tab and preparing to reload.');
-                    sessionStorage.removeItem('autopilotEnabled');
-                }
-
-                // Reload the original page to a clean state after a short delay.
-                // This gives the new tab a moment to open.
-                setTimeout(() => {
-                    window.location.reload();
-                }, 500);
-
 
             } catch (error) {
                 console.error('Evolution failed:', error);
-                console.error(error.message); // Log the actual error message
-                // If evolution fails, re-enable the button so the user can try again.
+                console.error(error.message);
                 dom.applyCodeBtn.disabled = false;
                 dom.applyCodeBtn.textContent = '4. Apply & Evolve';
             }
