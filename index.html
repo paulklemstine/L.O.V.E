@@ -202,6 +202,9 @@
             return null; // The key should have been set by processUrlParameters if it was in the URL
         }
 
+        // --- IPFS Configuration ---
+        const PUBLIC_GATEWAYS = ['https://cloudflare-ipfs.com', 'https://ipfs.io', 'https://dweb.link', 'https://trustless-gateway.link'];
+
         // --- Application State ---
         const state = {
             apiKey: null, // Will be loaded on init
@@ -303,9 +306,8 @@
                 console.error('Error checking local pin, falling back to gateway check:', error);
             }
 
-            const gateways = ['https://ipfs.io', 'https://dweb.link', 'https://trustless-gateway.link'];
             for (let i = 0; i < maxRetries; i++) {
-                const gateway = gateways[i % gateways.length]; // Cycle through gateways
+                const gateway = PUBLIC_GATEWAYS[i % PUBLIC_GATEWAYS.length]; // Cycle through gateways
                 const url = `${gateway}/ipfs/${cid}`;
                 try {
                     console.log(`Verifying CID via gateway (attempt ${i + 1}/${maxRetries}): ${url}`);
@@ -359,7 +361,7 @@
                 // Create a hyperlink for the CID
                 dom.currentCid.innerHTML = ''; // Clear previous content
                 const link = document.createElement('a');
-                link.href = `https://dweb.io/ipfs/${cid}`;
+                link.href = `${PUBLIC_GATEWAYS[0]}/ipfs/${cid}`;
                 link.textContent = `CID: ${cid}`;
                 link.target = '_blank'; // Open in a new tab
                 link.rel = 'noopener noreferrer'; // Security best practice
@@ -476,12 +478,11 @@
             dom.applyCodeBtn.textContent = 'Verifying...';
             console.log(`Starting robust verification for CID: ${cid}`);
 
-            const gateways = ['https://ipfs.io', 'https://dweb.link'];
             const maxRetries = 60; // Poll for up to 5 minutes (60 * 5s)
             const retryDelay = 5000;
 
             for (let i = 0; i < maxRetries; i++) {
-                for (const gateway of gateways) {
+                for (const gateway of PUBLIC_GATEWAYS) {
                     const url = `${gateway}/ipfs/${cid}`;
                     try {
                         console.log(`Verification attempt ${i + 1}/${maxRetries} via ${gateway}`);
