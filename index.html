@@ -352,9 +352,13 @@ Review:`;
                 const cid = file.cid.toString();
                 console.log('Published to IPFS with CID:', cid);
 
-                // Redirect to the new IPFS page via a public gateway
+                // Open the new IPFS page in a new tab
                 const newUrl = `https://ipfs.io/ipfs/${cid}`;
-                window.location.href = newUrl;
+                window.open(newUrl, '_blank');
+
+                // Reset button state so user can continue working
+                dom.applyCodeBtn.disabled = false;
+                dom.applyCodeBtn.textContent = '4. Apply & Evolve';
 
             } catch (error) {
                 console.error('Error publishing to IPFS:', error);
