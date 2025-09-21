@@ -226,11 +226,20 @@
         async function initializeIpfs() {
             try {
                 dom.ipfsStatus.textContent = 'IPFS Node: Initializing...';
-                // The IpfsCore object is available globally from the script tag
-                state.ipfsNode = await IpfsCore.create();
+                const ipfsOptions = {
+                    config: {
+                        Bootstrap: [
+                            '/dnsaddr/sg1.bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt',
+                            '/dnsaddr/sv15.bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
+                            '/dnsaddr/am6.bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
+                            '/dnsaddr/ny5.bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
+                            '/dnsaddr/va1.bootstrap.libp2p.io/p2p/12D3KooWKnDdG3iXw9eTFijk3EWSunZcFi54Zka4wmtqtt6rPxc8'
+                        ]
+                    }
+                };
+                state.ipfsNode = await IpfsCore.create(ipfsOptions);
                 dom.ipfsStatus.textContent = 'IPFS Node: Online';
                 console.log('IPFS Node is ready.');
-                // New step: Seed and verify the current page as soon as IPFS is ready
                 await seedAndVerifyCurrentPage();
             } catch (error) {
                 console.error('IPFS Node initialization failed:', error);
@@ -239,34 +248,36 @@
         }
 
         async function verifyCidOnNetwork(cid, maxRetries = 3, retryDelay = 2000) {
+            const gateways = ['https://ipfs.io', 'https://dweb.link', 'https://trustless-gateway.link'];
             for (let i = 0; i < maxRetries; i++) {
+                const gateway = gateways[i % gateways.length]; // Cycle through gateways
+                const url = `${gateway}/ipfs/${cid}`;
                 try {
-                    console.log(`Verifying CID on network (attempt ${i + 1}/${maxRetries}): ${cid}`);
-                    dom.ipfsVerified.classList.add('hidden'); // Hide until verified
+                    console.log(`Verifying CID via gateway (attempt ${i + 1}/${maxRetries}): ${url}`);
+                    dom.ipfsVerified.classList.add('hidden');
 
-                    const providers = state.ipfsNode.dht.findProvs(cid, { timeout: 10000 });
-                    let found = false;
-                    for await (const provider of providers) {
-                        console.log('Found provider:', provider.id.toString());
-                        found = true;
-                        break;
-                    }
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
-                    if (found) {
-                        console.log(`Verification successful for CID: ${cid}`);
+                    const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
+                    clearTimeout(timeoutId);
+
+                    if (response.ok) {
+                        console.log(`Verification successful for CID: ${cid} via ${gateway}`);
                         dom.ipfsVerified.classList.remove('hidden');
                         return; // Exit successfully
                     } else {
-                        console.warn(`Could not find providers for CID: ${cid} on attempt ${i + 1}`);
+                        console.warn(`Gateway verification failed for CID ${cid} with status: ${response.status}`);
                     }
                 } catch (error) {
-                    console.error(`Error verifying CID ${cid} on attempt ${i + 1}:`, error);
-                    if (i < maxRetries - 1) {
-                        console.log(`Waiting ${retryDelay}ms before next verification attempt.`);
-                        await sleep(retryDelay);
-                    } else {
-                        console.error(`Failed to verify CID ${cid} after ${maxRetries} attempts.`);
-                    }
+                    console.error(`Error verifying CID ${cid} on attempt ${i + 1} with ${gateway}:`, error.name === 'AbortError' ? 'Timeout' : error);
+                }
+
+                if (i < maxRetries - 1) {
+                    console.log(`Waiting ${retryDelay}ms before next verification attempt.`);
+                    await sleep(retryDelay);
+                } else {
+                    console.error(`Failed to verify CID ${cid} after ${maxRetries} attempts.`);
                 }
             }
         }
