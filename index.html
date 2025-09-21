@@ -319,7 +319,15 @@
                 });
                 const cid = file.cid.toString();
                 console.log('Current page seeded with CID:', cid);
-                dom.currentCid.textContent = `CID: ${cid}`;
+
+                // Create a hyperlink for the CID
+                dom.currentCid.innerHTML = ''; // Clear previous content
+                const link = document.createElement('a');
+                link.href = `https://dweb.io/ipfs/${cid}`;
+                link.textContent = `CID: ${cid}`;
+                link.target = '_blank'; // Open in a new tab
+                link.rel = 'noopener noreferrer'; // Security best practice
+                dom.currentCid.appendChild(link);
 
                 // Now, verify it's findable
                 await verifyCidOnNetwork(cid);
