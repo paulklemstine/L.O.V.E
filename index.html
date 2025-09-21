@@ -291,20 +291,8 @@
             }
         }
 
-        async function verifyCidOnNetwork(cid, maxRetries = 3, retryDelay = 2000) {
-            // 1. Check local node first
-            try {
-                console.log(`Verifying CID ${cid} on local IPFS node...`);
-                const pinLs = state.ipfsNode.pin.ls({ paths: cid });
-                for await (const p of pinLs) {
-                    console.log(`CID ${cid} is pinned locally.`);
-                    dom.ipfsVerified.classList.remove('hidden');
-                    return true;
-                }
-                console.log(`CID ${cid} not found in local pins. Checking public gateways...`);
-            } catch (error) {
-                console.error('Error checking local pin, falling back to gateway check:', error);
-            }
+        async function verifyCidOnNetwork(cid, maxRetries = 30, retryDelay = 5000) {
+            console.log(`Starting background check for CID ${cid} on public gateways.`);
 
             for (let i = 0; i < maxRetries; i++) {
                 const gateway = PUBLIC_GATEWAYS[i % PUBLIC_GATEWAYS.length]; // Cycle through gateways
@@ -346,36 +334,35 @@
                 return;
             }
             try {
-                console.log('Seeding current page to IPFS...');
+                // Hide the checkmark initially on every page load.
+                dom.ipfsVerified.classList.add('hidden');
+
+                console.log('Seeding current page to IPFS to get its CID...');
                 const file = await state.ipfsNode.add({
                     path: 'index.html',
                     content: new TextEncoder().encode(state.currentCode)
                 });
                 const cid = file.cid.toString();
-                console.log('Current page seeded with CID:', cid);
+                console.log('Current page identified with CID:', cid);
 
-                // Explicitly pin the content to be safe
                 await state.ipfsNode.pin.add(cid);
-                console.log('Explicitly pinned CID:', cid);
+                console.log('Ensured current page is pinned locally with CID:', cid);
 
-                // Create a hyperlink for the CID
-                dom.currentCid.innerHTML = ''; // Clear previous content
+                // Update the UI with the current CID link
+                dom.currentCid.innerHTML = '';
                 const link = document.createElement('a');
                 link.href = `${PUBLIC_GATEWAYS[0]}/ipfs/${cid}`;
                 link.textContent = `CID: ${cid}`;
-                link.target = '_blank'; // Open in a new tab
-                link.rel = 'noopener noreferrer'; // Security best practice
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
                 dom.currentCid.appendChild(link);
 
-                // We don't need to verify on load anymore, only on evolution.
-                // We can just check for the local pin.
-                const pinLs = state.ipfsNode.pin.ls({ paths: cid });
-                for await (const p of pinLs) {
-                    dom.ipfsVerified.classList.remove('hidden');
-                }
+                // Start background verification for this page's CID.
+                // No need to await this, let it run in the background.
+                verifyCidOnNetwork(cid);
 
             } catch (error) {
-                console.error('Could not seed current page to IPFS:', error);
+                console.error('Could not seed and verify current page:', error);
             }
         }
 
@@ -474,65 +461,8 @@
         }
 
         // --- Workflow Handlers ---
-        async function verifyOnGatewayAndEvolve(cid, expectedContent) {
-            dom.applyCodeBtn.textContent = 'Verifying...';
-            console.log(`Starting robust verification for CID: ${cid}`);
-
-            const maxRetries = 60; // Poll for up to 5 minutes (60 * 5s)
-            const retryDelay = 5000;
-
-            for (let i = 0; i < maxRetries; i++) {
-                for (const gateway of PUBLIC_GATEWAYS) {
-                    const url = `${gateway}/ipfs/${cid}`;
-                    try {
-                        console.log(`Verification attempt ${i + 1}/${maxRetries} via ${gateway}`);
-
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
-
-                        const response = await fetch(url, { signal: controller.signal });
-                        clearTimeout(timeoutId);
-
-                        if (response.ok) {
-                            const fetchedContent = await response.text();
-                            if (fetchedContent === expectedContent) {
-                                console.log(`Success! Content for CID ${cid} matches. Evolving.`);
-                                dom.applyCodeBtn.textContent = 'Evolved!';
-                                dom.applyCodeBtn.style.backgroundColor = '#28a745'; // Green for success
-
-                                const newUrl = `${url}?apiKey=${state.apiKey}`;
-                                window.history.pushState({path: newUrl}, '', newUrl);
-
-                                // Update the main CID link to point to the new, verified CID
-                                dom.currentCid.innerHTML = '';
-                                const link = document.createElement('a');
-                                link.href = newUrl;
-                                link.textContent = `CID: ${cid}`;
-                                link.target = '_blank';
-                                link.rel = 'noopener noreferrer';
-                                dom.currentCid.appendChild(link);
-                                dom.ipfsVerified.classList.remove('hidden');
-
-                                return; // End the function successfully
-                            } else {
-                                console.warn(`Content mismatch for CID ${cid} from ${gateway}.`);
-                            }
-                        } else {
-                            console.warn(`Gateway fetch failed for CID ${cid} from ${gateway} with status: ${response.status}`);
-                        }
-                    } catch (error) {
-                        console.error(`Error during verification attempt with ${gateway}:`, error.name === 'AbortError' ? 'Timeout' : error);
-                    }
-                }
-                // Wait before the next round of gateway checks
-                await sleep(retryDelay);
-            }
-
-            console.error(`Failed to verify and evolve to CID ${cid} after ${maxRetries} attempts.`);
-            alert(`Could not verify the new version on the IPFS network. The content was created with CID: ${cid}, but it could not be retrieved from a public gateway. You may be able to access it later.`);
-            dom.applyCodeBtn.disabled = false;
-            dom.applyCodeBtn.textContent = '4. Apply & Evolve';
-        }
+        // The verifyOnGatewayAndEvolve function has been removed to allow for immediate evolution.
+        // The new page is now responsible for its own verification.
 
         async function handleGetPlan() {
             const userPrompt = dom.prompt.value;
@@ -622,6 +552,9 @@ Review:`;
                 // A simple check to see if the review is positive
                 if (state.review.toLowerCase().includes('lgtm')) {
                     dom.applyCodeBtn.disabled = false;
+                    // --- AUTO-EVOLVE ---
+                    console.log("LGTM received. Automatically applying code...");
+                    handleApplyCode(); // Automatically evolve
                 }
             }
 
@@ -634,14 +567,13 @@ Review:`;
                 console.error('IPFS node is not ready. Please wait a moment and try again.');
                 return;
             }
-
             if (!state.newCode) {
                 console.error('No new code has been generated to apply.');
                 return;
             }
 
             dom.applyCodeBtn.disabled = true;
-            dom.applyCodeBtn.textContent = 'Publishing to IPFS...';
+            dom.applyCodeBtn.textContent = 'Evolving...';
 
             try {
                 const file = await state.ipfsNode.add({
@@ -650,14 +582,27 @@ Review:`;
                 });
 
                 const cid = file.cid.toString();
-                console.log('Published to IPFS with CID:', cid);
+                console.log('New version published to local IPFS node with CID:', cid);
 
-                // Explicitly pin the content to be safe
                 await state.ipfsNode.pin.add(cid);
-                console.log('Explicitly pinned CID:', cid);
+                console.log('Pinned new CID:', cid);
 
-                // Start the background verification and evolution process
-                verifyOnGatewayAndEvolve(cid, state.newCode);
+                // Evolve immediately by navigating to the new IPFS URL.
+                // We'll use the first public gateway as our destination.
+                const gatewayUrl = `${PUBLIC_GATEWAYS[0]}/ipfs/${cid}`;
+
+                // Preserve the API key and autopilot state in the new URL
+                const urlParams = new URLSearchParams();
+                urlParams.set('apiKey', state.apiKey);
+                if (sessionStorage.getItem('autopilotEnabled') === 'true') {
+                    urlParams.set('autopilot', 'true');
+                }
+
+                const newUrl = `${gatewayUrl}?${urlParams.toString()}`;
+                console.log(`Evolving now. Navigating to: ${newUrl}`);
+
+                // Change the window location to the new version.
+                window.location.href = newUrl;
 
             } catch (error) {
                 console.error('Evolution failed during IPFS add/pin:', error);
