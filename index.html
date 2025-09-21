@@ -140,27 +140,49 @@
 
     <script type="module">
 
+        // --- URL Parameter Handling ---
+        function processUrlParameters() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let urlWasModified = false;
+
+            // Process apiKey
+            const apiKeyFromUrl = urlParams.get('apiKey');
+            if (apiKeyFromUrl) {
+                console.log('API Key found in URL. Storing in sessionStorage.');
+                sessionStorage.setItem('geminiApiKey', apiKeyFromUrl);
+                urlParams.delete('apiKey');
+                urlWasModified = true;
+            }
+
+            // Process autopilot
+            const autopilotFromUrl = urlParams.get('autopilot');
+            if (autopilotFromUrl === 'true') {
+                console.log('Autopilot flag found in URL. Storing in sessionStorage.');
+                sessionStorage.setItem('autopilotEnabled', 'true');
+                urlParams.delete('autopilot');
+                urlWasModified = true;
+            }
+
+            // If we changed anything, clean up the URL
+            if (urlWasModified) {
+                let newUrl = window.location.pathname;
+                const remainingParams = urlParams.toString();
+                if (remainingParams) {
+                    newUrl += '?' + remainingParams;
+                }
+                window.history.replaceState({path: newUrl}, '', newUrl);
+            }
+        }
+
         // --- API Key Handling ---
         function getApiKey() {
+            // This function now ONLY gets the key. URL handling is done in processUrlParameters.
             let key = sessionStorage.getItem('geminiApiKey');
             if (key) {
-                console.log('API Key loaded from sessionStorage.');
+                // console.log('API Key loaded from sessionStorage.'); // Quieter log
                 return key;
             }
-
-            const urlParams = new URLSearchParams(window.location.search);
-            key = urlParams.get('apiKey');
-            if (key) {
-                console.log('API Key found in URL. Storing in sessionStorage.');
-                sessionStorage.setItem('geminiApiKey', key);
-                // Clean the URL for security
-                const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-                window.history.replaceState({path: newUrl}, '', newUrl);
-                return key;
-            }
-
-            console.warn('API Key not found in sessionStorage or URL.');
-            return null;
+            return null; // The key should have been set by processUrlParameters if it was in the URL
         }
 
         // --- Application State ---
@@ -192,7 +214,9 @@
 
         // --- Initialization ---
         window.onload = () => {
+            processUrlParameters(); // Handle URL params like apiKey and autopilot first
             state.apiKey = getApiKey();
+
             if (!state.apiKey) {
                 document.body.innerHTML = '<h1>API Key Missing</h1><p>Please provide a Gemini API key via the `apiKey` URL parameter. Example: `index.html?apiKey=YOUR_KEY_HERE`</p>';
                 document.body.style.textAlign = 'center';
@@ -523,26 +547,35 @@ Review:`;
 
                 dom.applyCodeBtn.textContent = 'Evolving...';
 
-                // Use the much more reliable ipfs.cat to get the content
-                const chunks = [];
-                for await (const chunk of state.ipfsNode.cat(cid)) {
-                    chunks.push(chunk);
-                }
-                const newHtml = new TextDecoder().decode(chunks.reduce((acc, chunk) => {
-                    const tmp = new Uint8Array(acc.length + chunk.length);
-                    tmp.set(acc, 0);
-                    tmp.set(chunk, acc.length);
-                    return tmp;
-                }, new Uint8Array(0)));
+                // --- NEW EVOLUTION LOGIC ---
+                const gateway = 'https://ipfs.io'; // Using a reliable public gateway
+                let newUrl = `${gateway}/ipfs/${cid}?apiKey=${state.apiKey}`;
 
-                console.log('Successfully fetched new version via ipfs.cat. Applying evolution...');
-                document.open();
-                document.write(newHtml);
-                document.close();
+                const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
+                if (isAutopilot) {
+                    newUrl += '&autopilot=true';
+                }
+
+                console.log(`Opening new version in a new tab: ${newUrl}`);
+                window.open(newUrl, '_blank');
+
+                // In the original tab, disable autopilot if it was on.
+                if (isAutopilot) {
+                    console.log('Disabling autopilot in this tab and preparing to reload.');
+                    sessionStorage.removeItem('autopilotEnabled');
+                }
+
+                // Reload the original page to a clean state after a short delay.
+                // This gives the new tab a moment to open.
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+
 
             } catch (error) {
                 console.error('Evolution failed:', error);
-                console.error(error.message);
+                console.error(error.message); // Log the actual error message
+                // If evolution fails, re-enable the button so the user can try again.
                 dom.applyCodeBtn.disabled = false;
                 dom.applyCodeBtn.textContent = '4. Apply & Evolve';
             }
