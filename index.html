@@ -97,6 +97,28 @@
             margin-left: 15px;
             font-family: "Courier New", Courier, monospace;
         }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            #container {
+                width: 100%;
+                padding: 10px;
+            }
+            #controls {
+                display: flex;
+                flex-direction: column;
+            }
+            #controls button {
+                width: 100%;
+                margin-right: 0;
+                margin-bottom: 10px;
+            }
+            textarea {
+                width: 95%;
+            }
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/ipfs-core/dist/index.min.js"></script>
 </head>
