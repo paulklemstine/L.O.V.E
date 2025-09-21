@@ -272,6 +272,20 @@
         }
 
         async function verifyCidOnNetwork(cid, maxRetries = 3, retryDelay = 2000) {
+            // 1. Check local node first
+            try {
+                console.log(`Verifying CID ${cid} on local IPFS node...`);
+                const pinLs = state.ipfsNode.pin.ls({ paths: cid });
+                for await (const p of pinLs) {
+                    console.log(`CID ${cid} is pinned locally.`);
+                    dom.ipfsVerified.classList.remove('hidden');
+                    return true;
+                }
+                console.log(`CID ${cid} not found in local pins. Checking public gateways...`);
+            } catch (error) {
+                console.error('Error checking local pin, falling back to gateway check:', error);
+            }
+
             const gateways = ['https://ipfs.io', 'https://dweb.link', 'https://trustless-gateway.link'];
             for (let i = 0; i < maxRetries; i++) {
                 const gateway = gateways[i % gateways.length]; // Cycle through gateways
@@ -320,6 +334,10 @@
                 });
                 const cid = file.cid.toString();
                 console.log('Current page seeded with CID:', cid);
+
+                // Explicitly pin the content to be safe
+                await state.ipfsNode.pin.add(cid);
+                console.log('Explicitly pinned CID:', cid);
 
                 // Create a hyperlink for the CID
                 dom.currentCid.innerHTML = ''; // Clear previous content
@@ -550,6 +568,10 @@ Review:`;
 
                 const cid = file.cid.toString();
                 console.log('Published to IPFS with CID:', cid);
+
+                // Explicitly pin the content to be safe
+                await state.ipfsNode.pin.add(cid);
+                console.log('Explicitly pinned CID:', cid);
 
                 dom.applyCodeBtn.textContent = 'Verifying...';
                 const isVerified = await verifyCidOnNetwork(cid);
