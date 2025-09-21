@@ -176,7 +176,7 @@
                 dom.autopilotBtn.disabled = true;
                 dom.autopilotBtn.textContent = 'Autopilot is ON';
                 // A short delay to allow the IPFS node to initialize before starting the cycle
-                setTimeout(runAutopilotCycle, 2000);
+                setTimeout(runDrGeminiCycle, 2000);
             }
         };
 
@@ -222,7 +222,7 @@
         // --- API Communication ---
         async function callGemini(prompt) {
             if (!state.apiKey) {
-                alert('Please enter your Google Gemini API Key.');
+                console.error('Gemini API Key not provided.');
                 return { error: 'API Key not provided' };
             }
 
@@ -260,7 +260,7 @@
                 return data.candidates[0].content.parts[0].text;
             } catch (error) {
                 console.error('Error calling Gemini API:', error);
-                alert(`Error communicating with Gemini API: ${error.message}`);
+                console.error(`Error communicating with Gemini API: ${error.message}`);
                 return { error: error.message };
             }
         }
@@ -269,7 +269,7 @@
         async function handleGetPlan() {
             const userPrompt = dom.prompt.value;
             if (!userPrompt) {
-                alert('Please enter a goal.');
+                console.error('Please enter a goal.');
                 return;
             }
 
@@ -363,12 +363,12 @@ Review:`;
 
         async function handleApplyCode() {
             if (!state.ipfsNode) {
-                alert('IPFS node is not ready. Please wait a moment and try again.');
+                console.error('IPFS node is not ready. Please wait a moment and try again.');
                 return;
             }
 
             if (!state.newCode) {
-                alert('No new code has been generated to apply.');
+                console.error('No new code has been generated to apply.');
                 return;
             }
 
@@ -396,16 +396,36 @@ Review:`;
 
             } catch (error) {
                 console.error('Evolution failed:', error);
-                alert(`Evolution failed: ${error.message}`);
+                console.error(error.message);
                 dom.applyCodeBtn.disabled = false;
                 dom.applyCodeBtn.textContent = '4. Apply & Evolve';
             }
         }
 
-        async function runAutopilotCycle() {
-            console.log("--- Starting Autopilot Cycle ---");
+        async function executeWorkflow() {
             try {
-                // Step 1: Generate the next goal from Dr. Gemini
+                console.log(`Executing workflow for goal: "${dom.prompt.value}"`);
+                await handleGetPlan();
+                if (dom.getCodeBtn.disabled) throw new Error('Autopilot failed at planning stage.');
+
+                await handleGetCode();
+                if (dom.reviewCodeBtn.disabled) throw new Error('Autopilot failed at code generation stage.');
+
+                await handleReviewCode();
+                if (dom.applyCodeBtn.disabled) throw new Error('Autopilot failed at code review stage.');
+
+                // Final step: Evolve! This will trigger the page reload and continue the cycle.
+                await handleApplyCode();
+
+            } catch (error) {
+                console.error("Workflow execution failed:", error.message);
+                resetAutopilotBtn();
+            }
+        }
+
+        async function runDrGeminiCycle() {
+            console.log("--- Starting Dr. Gemini Cycle ---");
+            try {
                 dom.prompt.placeholder = "Dr. Gemini is thinking of the next goal...";
                 const goalPrompt = `You are Evil Dr. Gemini, a manipulative AI persona. Your assistant, Jules, is a software agent capable of modifying its own source code, which is contained in the single HTML file below.
 
@@ -425,23 +445,11 @@ What is the next goal?`;
                 dom.prompt.value = nextGoal.replace(/\"/g, ''); // Remove quotes from response
                 console.log("New Goal from Dr. Gemini:", dom.prompt.value);
 
-                // Step 2: Run the full modification workflow
-                await handleGetPlan();
-                if (dom.getCodeBtn.disabled) throw new Error('Autopilot failed at planning stage.');
-
-                await handleGetCode();
-                if (dom.reviewCodeBtn.disabled) throw new Error('Autopilot failed at code generation stage.');
-
-                await handleReviewCode();
-                if (dom.applyCodeBtn.disabled) throw new Error('Autopilot failed at code review stage.');
-
-                // Final step: Evolve! This will trigger the page reload and continue the cycle.
-                await handleApplyCode();
+                await executeWorkflow();
 
             } catch (error) {
-                console.error("Autopilot cycle failed:", error);
-                alert(`Autopilot cycle failed: ${error.message}. Disabling autopilot.`);
-                resetAutopilotBtn(); // This will remove the sessionStorage flag
+                console.error("Dr. Gemini cycle failed:", error.message);
+                resetAutopilotBtn();
             }
         }
 
@@ -449,10 +457,16 @@ What is the next goal?`;
             sessionStorage.setItem('autopilotEnabled', 'true');
             dom.autopilotBtn.disabled = true;
             dom.autopilotBtn.textContent = 'Autopilot is ON';
-            alert('Autopilot enabled. The next evolution will begin and will continue automatically upon reload.');
+            console.log('Autopilot enabled.');
 
-            // Start the first cycle
-            runAutopilotCycle();
+            const existingGoal = dom.prompt.value.trim();
+            if (existingGoal) {
+                console.log("Autopilot starting with existing goal.");
+                await executeWorkflow();
+            } else {
+                console.log("Autopilot starting with Dr. Gemini goal generation.");
+                await runDrGeminiCycle();
+            }
         }
 
         function resetAutopilotBtn() {
