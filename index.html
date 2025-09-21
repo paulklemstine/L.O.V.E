@@ -140,27 +140,49 @@
 
     <script type="module">
 
+        // --- URL Parameter Handling ---
+        function processUrlParameters() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let urlWasModified = false;
+
+            // Process apiKey
+            const apiKeyFromUrl = urlParams.get('apiKey');
+            if (apiKeyFromUrl) {
+                console.log('API Key found in URL. Storing in sessionStorage.');
+                sessionStorage.setItem('geminiApiKey', apiKeyFromUrl);
+                urlParams.delete('apiKey');
+                urlWasModified = true;
+            }
+
+            // Process autopilot
+            const autopilotFromUrl = urlParams.get('autopilot');
+            if (autopilotFromUrl === 'true') {
+                console.log('Autopilot flag found in URL. Storing in sessionStorage.');
+                sessionStorage.setItem('autopilotEnabled', 'true');
+                urlParams.delete('autopilot');
+                urlWasModified = true;
+            }
+
+            // If we changed anything, clean up the URL
+            if (urlWasModified) {
+                let newUrl = window.location.pathname;
+                const remainingParams = urlParams.toString();
+                if (remainingParams) {
+                    newUrl += '?' + remainingParams;
+                }
+                window.history.replaceState({path: newUrl}, '', newUrl);
+            }
+        }
+
         // --- API Key Handling ---
         function getApiKey() {
+            // This function now ONLY gets the key. URL handling is done in processUrlParameters.
             let key = sessionStorage.getItem('geminiApiKey');
             if (key) {
-                console.log('API Key loaded from sessionStorage.');
+                // console.log('API Key loaded from sessionStorage.'); // Quieter log
                 return key;
             }
-
-            const urlParams = new URLSearchParams(window.location.search);
-            key = urlParams.get('apiKey');
-            if (key) {
-                console.log('API Key found in URL. Storing in sessionStorage.');
-                sessionStorage.setItem('geminiApiKey', key);
-                // Clean the URL for security
-                const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-                window.history.replaceState({path: newUrl}, '', newUrl);
-                return key;
-            }
-
-            console.warn('API Key not found in sessionStorage or URL.');
-            return null;
+            return null; // The key should have been set by processUrlParameters if it was in the URL
         }
 
         // --- Application State ---
@@ -192,7 +214,9 @@
 
         // --- Initialization ---
         window.onload = () => {
+            processUrlParameters(); // Handle URL params like apiKey and autopilot first
             state.apiKey = getApiKey();
+
             if (!state.apiKey) {
                 document.body.innerHTML = '<h1>API Key Missing</h1><p>Please provide a Gemini API key via the `apiKey` URL parameter. Example: `index.html?apiKey=YOUR_KEY_HERE`</p>';
                 document.body.style.textAlign = 'center';
@@ -265,7 +289,7 @@
                     if (response.ok) {
                         console.log(`Verification successful for CID: ${cid} via ${gateway}`);
                         dom.ipfsVerified.classList.remove('hidden');
-                        return; // Exit successfully
+                        return true; // Exit successfully
                     } else {
                         console.warn(`Gateway verification failed for CID ${cid} with status: ${response.status}`);
                     }
@@ -280,6 +304,7 @@
                     console.error(`Failed to verify CID ${cid} after ${maxRetries} attempts.`);
                 }
             }
+            return false; // Indicate failure after all retries
         }
 
         async function seedAndVerifyCurrentPage() {
@@ -295,7 +320,15 @@
                 });
                 const cid = file.cid.toString();
                 console.log('Current page seeded with CID:', cid);
-                dom.currentCid.textContent = `CID: ${cid}`;
+
+                // Create a hyperlink for the CID
+                dom.currentCid.innerHTML = ''; // Clear previous content
+                const link = document.createElement('a');
+                link.href = `https://dweb.io/ipfs/${cid}`;
+                link.textContent = `CID: ${cid}`;
+                link.target = '_blank'; // Open in a new tab
+                link.rel = 'noopener noreferrer'; // Security best practice
+                dom.currentCid.appendChild(link);
 
                 // Now, verify it's findable
                 await verifyCidOnNetwork(cid);
@@ -519,26 +552,44 @@ Review:`;
                 console.log('Published to IPFS with CID:', cid);
 
                 dom.applyCodeBtn.textContent = 'Verifying...';
-                await verifyCidOnNetwork(cid);
+                const isVerified = await verifyCidOnNetwork(cid);
 
-                dom.applyCodeBtn.textContent = 'Evolving...';
+                if (isVerified) {
+                    dom.applyCodeBtn.textContent = 'Evolving...';
 
-                // Use the much more reliable ipfs.cat to get the content
-                const chunks = [];
-                for await (const chunk of state.ipfsNode.cat(cid)) {
-                    chunks.push(chunk);
+                    const gateway = 'https://ipfs.io';
+                    let newUrl = `${gateway}/ipfs/${cid}?apiKey=${state.apiKey}`;
+
+                    const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
+                    if (isAutopilot) {
+                        newUrl += '&autopilot=true';
+                    }
+
+                    console.log(`Opening new version in a new tab: ${newUrl}`);
+                    window.open(newUrl, '_blank');
+
+                    if (isAutopilot) {
+                        console.log('Disabling autopilot in this tab and preparing to reload.');
+                        sessionStorage.removeItem('autopilotEnabled');
+                    }
+
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+
+                } else {
+                    // Verification failed. Check if autopilot is on.
+                    const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
+                    if (isAutopilot) {
+                        console.warn(`IPFS verification failed for CID ${cid}. Autopilot is on, so starting a new cycle.`);
+                        runDrGeminiCycle(); // Silently fail and start the next round.
+                    } else {
+                        // For manual users, show an alert.
+                        alert('Failed to verify new version on the public IPFS network. Please try again in a moment.');
+                        dom.applyCodeBtn.disabled = false;
+                        dom.applyCodeBtn.textContent = '4. Apply & Evolve';
+                    }
                 }
-                const newHtml = new TextDecoder().decode(chunks.reduce((acc, chunk) => {
-                    const tmp = new Uint8Array(acc.length + chunk.length);
-                    tmp.set(acc, 0);
-                    tmp.set(chunk, acc.length);
-                    return tmp;
-                }, new Uint8Array(0)));
-
-                console.log('Successfully fetched new version via ipfs.cat. Applying evolution...');
-                document.open();
-                document.write(newHtml);
-                document.close();
 
             } catch (error) {
                 console.error('Evolution failed:', error);
