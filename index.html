@@ -131,9 +131,32 @@
     <script type="module">
         import { geemsPrompts } from './prompts.js';
 
+        // --- API Key Handling ---
+        function getApiKey() {
+            let key = sessionStorage.getItem('geminiApiKey');
+            if (key) {
+                console.log('API Key loaded from sessionStorage.');
+                return key;
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            key = urlParams.get('apiKey');
+            if (key) {
+                console.log('API Key found in URL. Storing in sessionStorage.');
+                sessionStorage.setItem('geminiApiKey', key);
+                // Clean the URL for security
+                const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                window.history.replaceState({path: newUrl}, '', newUrl);
+                return key;
+            }
+
+            console.warn('API Key not found in sessionStorage or URL.');
+            return null;
+        }
+
         // --- Application State ---
         const state = {
-            apiKey: 'AIzaSyA-jfxiOqRoWOXEjTmT9zMpc4M6nen6k10', // WARNING: Hardcoded API Key
+            apiKey: null, // Will be loaded on init
             currentCode: '',
             plan: '',
             newCode: '',
@@ -158,6 +181,14 @@
 
         // --- Initialization ---
         window.onload = () => {
+            state.apiKey = getApiKey();
+            if (!state.apiKey) {
+                document.body.innerHTML = '<h1>API Key Missing</h1><p>Please provide a Gemini API key via the `apiKey` URL parameter. Example: `index.html?apiKey=YOUR_KEY_HERE`</p>';
+                document.body.style.textAlign = 'center';
+                document.body.style.paddingTop = '50px';
+                return; // Stop execution if no key
+            }
+
             // Capture the entire HTML source of the current page
             state.currentCode = document.documentElement.outerHTML;
             dom.currentCode.value = state.currentCode;
