@@ -272,7 +272,7 @@
         }
 
         async function verifyCidOnNetwork(cid, maxRetries = 3, retryDelay = 2000) {
-            const gateways = ['https://ipfs.io', 'https://dweb.link', 'https://trustless-gateway.link'];
+            const gateways = ['https://ipfs.io', 'https://ipfs.dweb.link', 'https://trustless-gateway.link'];
             for (let i = 0; i < maxRetries; i++) {
                 const gateway = gateways[i % gateways.length]; // Cycle through gateways
                 const url = `${gateway}/ipfs/${cid}`;
