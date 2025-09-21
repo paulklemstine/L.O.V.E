@@ -87,13 +87,23 @@
         .hidden {
             display: none;
         }
+        #ipfs-verified {
+            margin-left: 10px;
+            color: green;
+        }
+        #current-cid {
+            font-size: 12px;
+            color: #888;
+            margin-left: 15px;
+            font-family: "Courier New", Courier, monospace;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/ipfs-core/dist/index.min.js"></script>
 </head>
 <body>
     <div id="container">
         <h1>Jules - A Self-Modifying Organism</h1>
-        <div id="ipfs-status">IPFS Node: Offline</div>
+        <div id="ipfs-status">IPFS Node: Offline</div><span id="ipfs-verified" class="hidden">✅ Verified on IPFS</span><span id="current-cid"></span>
 
         <h2 class="hidden">Configuration</h2>
         <!-- API Key input removed for hardcoding -->
@@ -176,6 +186,8 @@
             reviewOutput: document.getElementById('review-output'),
             currentCode: document.getElementById('currentCode'),
             ipfsStatus: document.getElementById('ipfs-status'),
+            ipfsVerified: document.getElementById('ipfs-verified'),
+            currentCid: document.getElementById('current-cid'),
         };
 
         // --- Initialization ---
@@ -218,35 +230,72 @@
                 state.ipfsNode = await IpfsCore.create();
                 dom.ipfsStatus.textContent = 'IPFS Node: Online';
                 console.log('IPFS Node is ready.');
+                // New step: Seed and verify the current page as soon as IPFS is ready
+                await seedAndVerifyCurrentPage();
             } catch (error) {
                 console.error('IPFS Node initialization failed:', error);
                 dom.ipfsStatus.textContent = 'IPFS Node: Error';
             }
         }
 
-        function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-
-        async function fetchFromGateway(cid, maxRetries = 12, retryDelay = 5000) {
+        async function verifyCidOnNetwork(cid, maxRetries = 3, retryDelay = 2000) {
             for (let i = 0; i < maxRetries; i++) {
                 try {
-                    const url = `https://ipfs.io/ipfs/${cid}`;
-                    console.log(`Attempt ${i + 1}/${maxRetries}: Fetching from ${url}`);
-                    dom.planOutput.textContent = `Attempting to fetch new version from public gateway... (${i + 1}/${maxRetries})`;
-                    const response = await fetch(url);
-                    if (response.ok) {
-                        return await response.text();
+                    console.log(`Verifying CID on network (attempt ${i + 1}/${maxRetries}): ${cid}`);
+                    dom.ipfsVerified.classList.add('hidden'); // Hide until verified
+
+                    const providers = state.ipfsNode.dht.findProvs(cid, { timeout: 10000 });
+                    let found = false;
+                    for await (const provider of providers) {
+                        console.log('Found provider:', provider.id.toString());
+                        found = true;
+                        break;
                     }
-                    throw new Error(`Gateway returned status ${response.status}`);
+
+                    if (found) {
+                        console.log(`Verification successful for CID: ${cid}`);
+                        dom.ipfsVerified.classList.remove('hidden');
+                        return; // Exit successfully
+                    } else {
+                        console.warn(`Could not find providers for CID: ${cid} on attempt ${i + 1}`);
+                    }
                 } catch (error) {
-                    console.warn(`Fetch attempt ${i + 1} failed:`, error.message);
+                    console.error(`Error verifying CID ${cid} on attempt ${i + 1}:`, error);
                     if (i < maxRetries - 1) {
+                        console.log(`Waiting ${retryDelay}ms before next verification attempt.`);
                         await sleep(retryDelay);
+                    } else {
+                        console.error(`Failed to verify CID ${cid} after ${maxRetries} attempts.`);
                     }
                 }
             }
-            throw new Error(`Failed to fetch content from IPFS gateway after ${maxRetries} attempts.`);
+        }
+
+        async function seedAndVerifyCurrentPage() {
+            if (!state.ipfsNode) {
+                console.warn('Cannot seed page, IPFS node not ready.');
+                return;
+            }
+            try {
+                console.log('Seeding current page to IPFS...');
+                const file = await state.ipfsNode.add({
+                    path: 'index.html',
+                    content: new TextEncoder().encode(state.currentCode)
+                });
+                const cid = file.cid.toString();
+                console.log('Current page seeded with CID:', cid);
+                dom.currentCid.textContent = `CID: ${cid}`;
+
+                // Now, verify it's findable
+                await verifyCidOnNetwork(cid);
+
+            } catch (error) {
+                console.error('Could not seed current page to IPFS:', error);
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
 
         // --- API Communication ---
@@ -306,29 +355,36 @@
                 console.log(`Attempting to call Gemini with model: ${model}`);
                 const result = await callGemini(prompt, model);
 
-                // If the result is a string, it's a success
                 if (typeof result === 'string') {
                     console.log(`Successfully got response with model: ${model}`);
                     return result;
                 }
 
-                // If it's an error object, check the status
                 if (result && result.error) {
                     lastError = result;
-                    // If it's a 429 error, we'll continue to the next model
                     if (result.status === 429) {
-                        console.warn(`Model ${model} returned 429 (Quota Exceeded). Trying next model.`);
-                        continue; // Try the next model
+                        console.warn(`Model ${model} returned 429 (Quota Exceeded).`);
+                        let delay = 5000; // Default delay
+                        if (result.details) {
+                             const retryInfo = result.details.find(d => d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
+                             if (retryInfo && retryInfo.retryDelay) {
+                                 const seconds = parseInt(retryInfo.retryDelay.replace('s', ''), 10);
+                                 if (!isNaN(seconds)) {
+                                     delay = seconds * 1000;
+                                 }
+                             }
+                        }
+                        console.log(`Waiting for ${delay}ms before trying the next model.`);
+                        await sleep(delay);
+                        continue;
                     } else {
-                        // For any other error, we stop and return the error immediately
                         console.error(`API call failed with non-429 error for model ${model}.`, result);
-                        return result; // Return the specific error
+                        return result;
                     }
                 }
             }
 
-            // If the loop finishes, all models have failed with 429
-            console.error('All models failed due to quota issues. Returning the last error.');
+            console.error('All models failed to respond. Returning the last error.');
             return lastError || { error: 'All Gemini models failed to respond.' };
         }
 
@@ -451,12 +507,24 @@ Review:`;
                 const cid = file.cid.toString();
                 console.log('Published to IPFS with CID:', cid);
 
+                dom.applyCodeBtn.textContent = 'Verifying...';
+                await verifyCidOnNetwork(cid);
+
                 dom.applyCodeBtn.textContent = 'Evolving...';
-                dom.planOutput.textContent = `Published. CID: ${cid}. Fetching from gateway...`;
 
-                const newHtml = await fetchFromGateway(cid);
+                // Use the much more reliable ipfs.cat to get the content
+                const chunks = [];
+                for await (const chunk of state.ipfsNode.cat(cid)) {
+                    chunks.push(chunk);
+                }
+                const newHtml = new TextDecoder().decode(chunks.reduce((acc, chunk) => {
+                    const tmp = new Uint8Array(acc.length + chunk.length);
+                    tmp.set(acc, 0);
+                    tmp.set(chunk, acc.length);
+                    return tmp;
+                }, new Uint8Array(0)));
 
-                console.log('Successfully fetched new version. Applying evolution...');
+                console.log('Successfully fetched new version via ipfs.cat. Applying evolution...');
                 document.open();
                 document.write(newHtml);
                 document.close();
