@@ -220,13 +220,13 @@
         }
 
         // --- API Communication ---
-        async function callGemini(prompt) {
+        async function callGemini(prompt, model) { // Model is now a required parameter
             if (!state.apiKey) {
                 console.error('Gemini API Key not provided.');
                 return { error: 'API Key not provided' };
             }
 
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent`;
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
             try {
                 const response = await fetch(API_URL, {
@@ -248,21 +248,58 @@
 
                 if (!response.ok) {
                     const errorBody = await response.text();
-                    console.error('API Error Response:', errorBody);
-                    throw new Error(`API request failed with status ${response.status}`);
+                    console.error(`API Error Response for model ${model}:`, errorBody);
+                    // Return an error object with a status code
+                    return {
+                        error: `API request failed with status ${response.status}`,
+                        status: response.status
+                    };
                 }
 
                 const data = await response.json();
                 if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0].text) {
                     console.error('Unexpected API response structure:', data);
-                    throw new Error('Unexpected API response structure.');
+                    return { error: 'Unexpected API response structure.' };
                 }
                 return data.candidates[0].content.parts[0].text;
             } catch (error) {
-                console.error('Error calling Gemini API:', error);
-                console.error(`Error communicating with Gemini API: ${error.message}`);
+                console.error(`Error calling Gemini API with model ${model}:`, error);
                 return { error: error.message };
             }
+        }
+
+        async function callGeminiWithFallback(prompt) {
+            const models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+            let lastError = null;
+
+            for (const model of models) {
+                console.log(`Attempting to call Gemini with model: ${model}`);
+                const result = await callGemini(prompt, model);
+
+                // If the result is a string, it's a success
+                if (typeof result === 'string') {
+                    console.log(`Successfully got response with model: ${model}`);
+                    return result;
+                }
+
+                // If it's an error object, check the status
+                if (result && result.error) {
+                    lastError = result;
+                    // If it's a 429 error, we'll continue to the next model
+                    if (result.status === 429) {
+                        console.warn(`Model ${model} returned 429 (Quota Exceeded). Trying next model.`);
+                        continue; // Try the next model
+                    } else {
+                        // For any other error, we stop and return the error immediately
+                        console.error(`API call failed with non-429 error for model ${model}.`, result);
+                        return result; // Return the specific error
+                    }
+                }
+            }
+
+            // If the loop finishes, all models have failed with 429
+            console.error('All models failed due to quota issues. Returning the last error.');
+            return lastError || { error: 'All Gemini models failed to respond.' };
         }
 
         // --- Workflow Handlers ---
@@ -287,7 +324,7 @@ ${state.currentCode}
 
 Provide a concise plan.`;
 
-            const result = await callGemini(planPrompt);
+            const result = await callGeminiWithFallback(planPrompt);
             if (result && !result.error) {
                 state.plan = result;
                 dom.planOutput.textContent = state.plan;
@@ -314,7 +351,7 @@ ${state.currentCode}
 
 New Code:`;
 
-            const result = await callGemini(codePrompt);
+            const result = await callGeminiWithFallback(codePrompt);
             if (result && !result.error) {
                 // Clean the result to remove potential markdown backticks
                 state.newCode = result.replace(/^```html\n/, '').replace(/\n```$/, '');
@@ -347,7 +384,7 @@ ${state.newCode}
 
 Review:`;
 
-            const result = await callGemini(reviewPrompt);
+            const result = await callGeminiWithFallback(reviewPrompt);
             if (result && !result.error) {
                 state.review = result;
                 dom.reviewOutput.textContent = state.review;
@@ -438,7 +475,7 @@ ${state.currentCode}
 
 What is the next goal?`;
 
-                const nextGoal = await callGemini(goalPrompt);
+                const nextGoal = await callGeminiWithFallback(goalPrompt);
                 if (!nextGoal || nextGoal.error) {
                     throw new Error('Failed to get next goal from Dr. Gemini.');
                 }
