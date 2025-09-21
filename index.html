@@ -238,27 +238,36 @@
             }
         }
 
-        async function verifyCidOnNetwork(cid) {
-            try {
-                console.log(`Verifying CID on network: ${cid}`);
-                dom.ipfsVerified.classList.add('hidden'); // Hide until verified
-                const providers = state.ipfsNode.dht.findProvs(cid, { timeout: 10000 });
-                let found = false;
-                for await (const provider of providers) {
-                    console.log('Found provider:', provider.id.toString());
-                    found = true;
-                    // We only need to find one provider to know it's on the network
-                    break;
-                }
+        async function verifyCidOnNetwork(cid, maxRetries = 3, retryDelay = 2000) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    console.log(`Verifying CID on network (attempt ${i + 1}/${maxRetries}): ${cid}`);
+                    dom.ipfsVerified.classList.add('hidden'); // Hide until verified
 
-                if (found) {
-                    console.log(`Verification successful for CID: ${cid}`);
-                    dom.ipfsVerified.classList.remove('hidden');
-                } else {
-                    console.warn(`Could not find providers for CID: ${cid}`);
+                    const providers = state.ipfsNode.dht.findProvs(cid, { timeout: 10000 });
+                    let found = false;
+                    for await (const provider of providers) {
+                        console.log('Found provider:', provider.id.toString());
+                        found = true;
+                        break;
+                    }
+
+                    if (found) {
+                        console.log(`Verification successful for CID: ${cid}`);
+                        dom.ipfsVerified.classList.remove('hidden');
+                        return; // Exit successfully
+                    } else {
+                        console.warn(`Could not find providers for CID: ${cid} on attempt ${i + 1}`);
+                    }
+                } catch (error) {
+                    console.error(`Error verifying CID ${cid} on attempt ${i + 1}:`, error);
+                    if (i < maxRetries - 1) {
+                        console.log(`Waiting ${retryDelay}ms before next verification attempt.`);
+                        await sleep(retryDelay);
+                    } else {
+                        console.error(`Failed to verify CID ${cid} after ${maxRetries} attempts.`);
+                    }
                 }
-            } catch (error) {
-                console.error(`Error verifying CID ${cid}:`, error);
             }
         }
 
