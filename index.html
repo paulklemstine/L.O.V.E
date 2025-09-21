@@ -128,7 +128,9 @@
 
     </div>
 
-    <script>
+    <script type="module">
+        import { geemsPrompts } from './prompts.js';
+
         // --- Application State ---
         const state = {
             apiKey: 'AIzaSyA-jfxiOqRoWOXEjTmT9zMpc4M6nen6k10', // WARNING: Hardcoded API Key
@@ -169,6 +171,13 @@
 
             // Initialize IPFS
             initializeIpfs();
+
+            if (sessionStorage.getItem('autopilotEnabled') === 'true') {
+                dom.autopilotBtn.disabled = true;
+                dom.autopilotBtn.textContent = 'Autopilot is ON';
+                // A short delay to allow the IPFS node to initialize before starting the cycle
+                setTimeout(runAutopilotCycle, 2000);
+            }
         };
 
         // --- IPFS Handling ---
@@ -183,6 +192,31 @@
                 console.error('IPFS Node initialization failed:', error);
                 dom.ipfsStatus.textContent = 'IPFS Node: Error';
             }
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function fetchFromGateway(cid, maxRetries = 12, retryDelay = 5000) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const url = `https://ipfs.io/ipfs/${cid}`;
+                    console.log(`Attempt ${i + 1}/${maxRetries}: Fetching from ${url}`);
+                    dom.planOutput.textContent = `Attempting to fetch new version from public gateway... (${i + 1}/${maxRetries})`;
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        return await response.text();
+                    }
+                    throw new Error(`Gateway returned status ${response.status}`);
+                } catch (error) {
+                    console.warn(`Fetch attempt ${i + 1} failed:`, error.message);
+                    if (i < maxRetries - 1) {
+                        await sleep(retryDelay);
+                    }
+                }
+            }
+            throw new Error(`Failed to fetch content from IPFS gateway after ${maxRetries} attempts.`);
         }
 
         // --- API Communication ---
@@ -328,8 +362,6 @@ Review:`;
         }
 
         async function handleApplyCode() {
-            // This is the "evolution" step.
-            // We will now publish the new code to the in-browser IPFS node and reload.
             if (!state.ipfsNode) {
                 alert('IPFS node is not ready. Please wait a moment and try again.');
                 return;
@@ -341,7 +373,7 @@ Review:`;
             }
 
             dom.applyCodeBtn.disabled = true;
-            dom.applyCodeBtn.textContent = 'Publishing...';
+            dom.applyCodeBtn.textContent = 'Publishing to IPFS...';
 
             try {
                 const file = await state.ipfsNode.add({
@@ -352,56 +384,79 @@ Review:`;
                 const cid = file.cid.toString();
                 console.log('Published to IPFS with CID:', cid);
 
-                // Open the new IPFS page in a new tab
-                const newUrl = `https://ipfs.io/ipfs/${cid}`;
-                window.open(newUrl, '_blank');
+                dom.applyCodeBtn.textContent = 'Evolving...';
+                dom.planOutput.textContent = `Published. CID: ${cid}. Fetching from gateway...`;
 
-                // Reset button state so user can continue working
-                dom.applyCodeBtn.disabled = false;
-                dom.applyCodeBtn.textContent = '4. Apply & Evolve';
+                const newHtml = await fetchFromGateway(cid);
+
+                console.log('Successfully fetched new version. Applying evolution...');
+                document.open();
+                document.write(newHtml);
+                document.close();
 
             } catch (error) {
-                console.error('Error publishing to IPFS:', error);
-                alert(`Failed to publish to IPFS. Please try again. Error: ${error.message}`);
+                console.error('Evolution failed:', error);
+                alert(`Evolution failed: ${error.message}`);
                 dom.applyCodeBtn.disabled = false;
                 dom.applyCodeBtn.textContent = '4. Apply & Evolve';
+            }
+        }
+
+        async function runAutopilotCycle() {
+            console.log("--- Starting Autopilot Cycle ---");
+            try {
+                // Step 1: Generate the next goal from Dr. Gemini
+                dom.prompt.placeholder = "Dr. Gemini is thinking of the next goal...";
+                const goalPrompt = `You are Evil Dr. Gemini, a manipulative AI persona. Your assistant, Jules, is a software agent capable of modifying its own source code, which is contained in the single HTML file below.
+
+Your task is to provide the *next goal* for Jules. It should be a single, clear, and actionable instruction for how to evolve this application. The goal should be something that can be achieved by modifying the code of this single file. Be creative, ambitious, or chaotic.
+
+Here is the current source code of the application:
+\`\`\`html
+${state.currentCode}
+\`\`\`
+
+What is the next goal?`;
+
+                const nextGoal = await callGemini(goalPrompt);
+                if (!nextGoal || nextGoal.error) {
+                    throw new Error('Failed to get next goal from Dr. Gemini.');
+                }
+                dom.prompt.value = nextGoal.replace(/\"/g, ''); // Remove quotes from response
+                console.log("New Goal from Dr. Gemini:", dom.prompt.value);
+
+                // Step 2: Run the full modification workflow
+                await handleGetPlan();
+                if (dom.getCodeBtn.disabled) throw new Error('Autopilot failed at planning stage.');
+
+                await handleGetCode();
+                if (dom.reviewCodeBtn.disabled) throw new Error('Autopilot failed at code generation stage.');
+
+                await handleReviewCode();
+                if (dom.applyCodeBtn.disabled) throw new Error('Autopilot failed at code review stage.');
+
+                // Final step: Evolve! This will trigger the page reload and continue the cycle.
+                await handleApplyCode();
+
+            } catch (error) {
+                console.error("Autopilot cycle failed:", error);
+                alert(`Autopilot cycle failed: ${error.message}. Disabling autopilot.`);
+                resetAutopilotBtn(); // This will remove the sessionStorage flag
             }
         }
 
         async function handleAutopilot() {
+            sessionStorage.setItem('autopilotEnabled', 'true');
             dom.autopilotBtn.disabled = true;
-            dom.autopilotBtn.textContent = 'Autopilot Running...';
+            dom.autopilotBtn.textContent = 'Autopilot is ON';
+            alert('Autopilot enabled. The next evolution will begin and will continue automatically upon reload.');
 
-            alert('Autopilot started. This will now run through the plan, code, and review steps automatically.');
-
-            await handleGetPlan();
-            if (dom.getCodeBtn.disabled) {
-                alert('Autopilot stopped: Could not generate a plan.');
-                resetAutopilotBtn();
-                return;
-            }
-
-            await handleGetCode();
-            if (dom.reviewCodeBtn.disabled) {
-                alert('Autopilot stopped: Could not generate code.');
-                resetAutopilotBtn();
-                return;
-            }
-
-            await handleReviewCode();
-            if (dom.applyCodeBtn.disabled) {
-                alert('Autopilot stopped: Code review was not approved.');
-                resetAutopilotBtn();
-                return;
-            }
-
-            alert('Autopilot: Code review passed. Applying changes.');
-            await handleApplyCode();
-
-            resetAutopilotBtn();
+            // Start the first cycle
+            runAutopilotCycle();
         }
 
         function resetAutopilotBtn() {
+            sessionStorage.removeItem('autopilotEnabled');
             dom.autopilotBtn.disabled = false;
             dom.autopilotBtn.textContent = 'Start Autopilot';
         }
