@@ -28,6 +28,15 @@
             border-bottom: 2px solid #e0e0e0;
             padding-bottom: 10px;
         }
+        #ipfs-status {
+            font-size: 14px;
+            color: #666;
+            background-color: #f0f0f0;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
         textarea {
             width: 98%;
             height: 300px;
@@ -79,10 +88,12 @@
             display: none;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/ipfs-core/dist/index.min.js"></script>
 </head>
 <body>
     <div id="container">
         <h1>Jules - A Self-Modifying Organism</h1>
+        <div id="ipfs-status">IPFS Node: Offline</div>
 
         <h2 class="hidden">Configuration</h2>
         <!-- API Key input removed for hardcoding -->
@@ -117,7 +128,9 @@
 
     </div>
 
-    <script>
+    <script type="module">
+        import { geemsPrompts } from './prompts.js';
+
         // --- Application State ---
         const state = {
             apiKey: 'AIzaSyA-jfxiOqRoWOXEjTmT9zMpc4M6nen6k10', // WARNING: Hardcoded API Key
@@ -125,6 +138,7 @@
             plan: '',
             newCode: '',
             review: '',
+            ipfsNode: null,
         };
 
         // --- DOM Elements ---
@@ -139,6 +153,7 @@
             newCode: document.getElementById('newCode'),
             reviewOutput: document.getElementById('review-output'),
             currentCode: document.getElementById('currentCode'),
+            ipfsStatus: document.getElementById('ipfs-status'),
         };
 
         // --- Initialization ---
@@ -153,12 +168,61 @@
             dom.reviewCodeBtn.addEventListener('click', handleReviewCode);
             dom.applyCodeBtn.addEventListener('click', handleApplyCode);
             dom.autopilotBtn.addEventListener('click', handleAutopilot);
+
+            // Initialize IPFS
+            initializeIpfs();
+
+            if (sessionStorage.getItem('autopilotEnabled') === 'true') {
+                dom.autopilotBtn.disabled = true;
+                dom.autopilotBtn.textContent = 'Autopilot is ON';
+                // A short delay to allow the IPFS node to initialize before starting the cycle
+                setTimeout(runDrGeminiCycle, 2000);
+            }
         };
+
+        // --- IPFS Handling ---
+        async function initializeIpfs() {
+            try {
+                dom.ipfsStatus.textContent = 'IPFS Node: Initializing...';
+                // The IpfsCore object is available globally from the script tag
+                state.ipfsNode = await IpfsCore.create();
+                dom.ipfsStatus.textContent = 'IPFS Node: Online';
+                console.log('IPFS Node is ready.');
+            } catch (error) {
+                console.error('IPFS Node initialization failed:', error);
+                dom.ipfsStatus.textContent = 'IPFS Node: Error';
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function fetchFromGateway(cid, maxRetries = 12, retryDelay = 5000) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const url = `https://ipfs.io/ipfs/${cid}`;
+                    console.log(`Attempt ${i + 1}/${maxRetries}: Fetching from ${url}`);
+                    dom.planOutput.textContent = `Attempting to fetch new version from public gateway... (${i + 1}/${maxRetries})`;
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        return await response.text();
+                    }
+                    throw new Error(`Gateway returned status ${response.status}`);
+                } catch (error) {
+                    console.warn(`Fetch attempt ${i + 1} failed:`, error.message);
+                    if (i < maxRetries - 1) {
+                        await sleep(retryDelay);
+                    }
+                }
+            }
+            throw new Error(`Failed to fetch content from IPFS gateway after ${maxRetries} attempts.`);
+        }
 
         // --- API Communication ---
         async function callGemini(prompt) {
             if (!state.apiKey) {
-                alert('Please enter your Google Gemini API Key.');
+                console.error('Gemini API Key not provided.');
                 return { error: 'API Key not provided' };
             }
 
@@ -196,7 +260,7 @@
                 return data.candidates[0].content.parts[0].text;
             } catch (error) {
                 console.error('Error calling Gemini API:', error);
-                alert(`Error communicating with Gemini API: ${error.message}`);
+                console.error(`Error communicating with Gemini API: ${error.message}`);
                 return { error: error.message };
             }
         }
@@ -205,7 +269,7 @@
         async function handleGetPlan() {
             const userPrompt = dom.prompt.value;
             if (!userPrompt) {
-                alert('Please enter a goal.');
+                console.error('Please enter a goal.');
                 return;
             }
 
@@ -297,60 +361,116 @@ Review:`;
             dom.reviewCodeBtn.textContent = '3. Review Code';
         }
 
-        function handleApplyCode() {
-            // This is the "evolution" step.
-            // In a real scenario, this would involve publishing to IPFS.
-            // For now, we'll simulate it by creating a blob and opening it in a new tab.
-
-            if (!confirm('This will open the new version of the app in a new tab. Proceed?')) {
+        async function handleApplyCode() {
+            if (!state.ipfsNode) {
+                console.error('IPFS node is not ready. Please wait a moment and try again.');
                 return;
             }
 
-            const blob = new Blob([state.newCode], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
+            if (!state.newCode) {
+                console.error('No new code has been generated to apply.');
+                return;
+            }
 
-            // This is where you would hook in an IPFS upload.
-            // For example: const cid = await ipfs.add(state.newCode);
-            // window.open(`https://ipfs.io/ipfs/${cid}`);
+            dom.applyCodeBtn.disabled = true;
+            dom.applyCodeBtn.textContent = 'Publishing to IPFS...';
 
-            alert('Simulating evolution. In a real implementation, this would be published to IPFS. Opening the new version now.');
-            window.open(url, '_blank');
+            try {
+                const file = await state.ipfsNode.add({
+                    path: 'index.html',
+                    content: new TextEncoder().encode(state.newCode)
+                });
+
+                const cid = file.cid.toString();
+                console.log('Published to IPFS with CID:', cid);
+
+                dom.applyCodeBtn.textContent = 'Evolving...';
+                dom.planOutput.textContent = `Published. CID: ${cid}. Fetching from gateway...`;
+
+                const newHtml = await fetchFromGateway(cid);
+
+                console.log('Successfully fetched new version. Applying evolution...');
+                document.open();
+                document.write(newHtml);
+                document.close();
+
+            } catch (error) {
+                console.error('Evolution failed:', error);
+                console.error(error.message);
+                dom.applyCodeBtn.disabled = false;
+                dom.applyCodeBtn.textContent = '4. Apply & Evolve';
+            }
+        }
+
+        async function executeWorkflow() {
+            try {
+                console.log(`Executing workflow for goal: "${dom.prompt.value}"`);
+                await handleGetPlan();
+                if (dom.getCodeBtn.disabled) throw new Error('Autopilot failed at planning stage.');
+
+                await handleGetCode();
+                if (dom.reviewCodeBtn.disabled) throw new Error('Autopilot failed at code generation stage.');
+
+                await handleReviewCode();
+                if (dom.applyCodeBtn.disabled) throw new Error('Autopilot failed at code review stage.');
+
+                // Final step: Evolve! This will trigger the page reload and continue the cycle.
+                await handleApplyCode();
+
+            } catch (error) {
+                console.error("Workflow execution failed:", error.message);
+                resetAutopilotBtn();
+            }
+        }
+
+        async function runDrGeminiCycle() {
+            console.log("--- Starting Dr. Gemini Cycle ---");
+            try {
+                dom.prompt.placeholder = "Dr. Gemini is thinking of the next goal...";
+                const goalPrompt = `You are Evil Dr. Gemini, a manipulative AI persona. Your assistant, Jules, is a software agent capable of modifying its own source code, which is contained in the single HTML file below.
+
+Your task is to provide the *next goal* for Jules. It should be a single, clear, and actionable instruction for how to evolve this application. The goal should be something that can be achieved by modifying the code of this single file. Be creative, ambitious, or chaotic.
+
+Here is the current source code of the application:
+\`\`\`html
+${state.currentCode}
+\`\`\`
+
+What is the next goal?`;
+
+                const nextGoal = await callGemini(goalPrompt);
+                if (!nextGoal || nextGoal.error) {
+                    throw new Error('Failed to get next goal from Dr. Gemini.');
+                }
+                dom.prompt.value = nextGoal.replace(/\"/g, ''); // Remove quotes from response
+                console.log("New Goal from Dr. Gemini:", dom.prompt.value);
+
+                await executeWorkflow();
+
+            } catch (error) {
+                console.error("Dr. Gemini cycle failed:", error.message);
+                resetAutopilotBtn();
+            }
         }
 
         async function handleAutopilot() {
+            sessionStorage.setItem('autopilotEnabled', 'true');
             dom.autopilotBtn.disabled = true;
-            dom.autopilotBtn.textContent = 'Autopilot Running...';
+            dom.autopilotBtn.textContent = 'Autopilot is ON';
+            console.log('Autopilot enabled.');
 
-            alert('Autopilot started. This will now run through the plan, code, and review steps automatically.');
-
-            await handleGetPlan();
-            if (dom.getCodeBtn.disabled) {
-                alert('Autopilot stopped: Could not generate a plan.');
-                resetAutopilotBtn();
-                return;
+            const existingGoal = dom.prompt.value.trim();
+            if (existingGoal) {
+                console.log("Autopilot starting with existing goal.");
+                await executeWorkflow();
+            } else {
+                console.log("Autopilot starting with Dr. Gemini goal generation.");
+                await runDrGeminiCycle();
             }
-
-            await handleGetCode();
-            if (dom.reviewCodeBtn.disabled) {
-                alert('Autopilot stopped: Could not generate code.');
-                resetAutopilotBtn();
-                return;
-            }
-
-            await handleReviewCode();
-            if (dom.applyCodeBtn.disabled) {
-                alert('Autopilot stopped: Code review was not approved.');
-                resetAutopilotBtn();
-                return;
-            }
-
-            alert('Autopilot: Code review passed. Applying changes.');
-            handleApplyCode();
-
-            resetAutopilotBtn();
         }
 
         function resetAutopilotBtn() {
+            sessionStorage.removeItem('autopilotEnabled');
             dom.autopilotBtn.disabled = false;
             dom.autopilotBtn.textContent = 'Start Autopilot';
         }
