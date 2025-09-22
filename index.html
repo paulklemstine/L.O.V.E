@@ -23,6 +23,31 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             padding: 20px;
         }
+        #apiKeyModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        #apiKeyModal.hidden {
+            display: none;
+        }
+        #apiKeyContent {
+            background-color: white;
+            padding: 20px 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        #apiKeyInput {
+             width: 100%;
+        }
         h1, h2 {
             color: #333;
             border-bottom: 2px solid #e0e0e0;
@@ -125,6 +150,14 @@
     <script src="https://cdn.jsdelivr.net/npm/@helia/strings@4.1.0/dist/index.min.js"></script>
 </head>
 <body>
+    <div id="apiKeyModal" class="hidden">
+        <div id="apiKeyContent">
+            <h2>Enter API Key</h2>
+            <p>Please enter your Gemini API key to continue.</p>
+            <input type="password" id="apiKeyInput" placeholder="Your API Key">
+            <button id="saveApiKeyBtn">Save and Continue</button>
+        </div>
+    </div>
     <div id="container">
         <h1>Jules - A Self-Modifying Organism</h1>
         <div id="ipfs-status">IPFS Node: Offline</div><span id="ipfs-verified" class="hidden">✅ Verified on IPFS</span><span id="current-cid"></span>
@@ -172,8 +205,8 @@
             // Process apiKey
             const apiKeyFromUrl = urlParams.get('apiKey');
             if (apiKeyFromUrl) {
-                console.log('API Key found in URL. Storing in sessionStorage.');
-                sessionStorage.setItem('geminiApiKey', apiKeyFromUrl);
+                console.log('API Key found in URL. Storing in localStorage.');
+                localStorage.setItem('apiKey', apiKeyFromUrl);
                 urlParams.delete('apiKey');
                 urlWasModified = true;
             }
@@ -200,13 +233,11 @@
 
         // --- API Key Handling ---
         function getApiKey() {
-            // This function now ONLY gets the key. URL handling is done in processUrlParameters.
-            let key = sessionStorage.getItem('geminiApiKey');
+            let key = localStorage.getItem('apiKey');
             if (key) {
-                // console.log('API Key loaded from sessionStorage.'); // Quieter log
                 return key;
             }
-            return null; // The key should have been set by processUrlParameters if it was in the URL
+            return null;
         }
 
         // --- IPFS Configuration ---
@@ -238,6 +269,10 @@
             ipfsStatus: document.getElementById('ipfs-status'),
             ipfsVerified: document.getElementById('ipfs-verified'),
             currentCid: document.getElementById('current-cid'),
+            apiKeyModal: document.getElementById('apiKeyModal'),
+            apiKeyInput: document.getElementById('apiKeyInput'),
+            saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
+            container: document.getElementById('container'),
         };
 
         // --- Initialization ---
@@ -246,11 +281,36 @@
             state.apiKey = getApiKey();
 
             if (!state.apiKey) {
-                document.body.innerHTML = '<h1>API Key Missing</h1><p>Please provide a Gemini API key via the `apiKey` URL parameter. Example: `index.html?apiKey=YOUR_KEY_HERE`</p>';
-                document.body.style.textAlign = 'center';
-                document.body.style.paddingTop = '50px';
-                return; // Stop execution if no key
+                // No key found, show the modal
+                dom.container.classList.add('hidden');
+                dom.apiKeyModal.classList.remove('hidden');
+                // Add event listener for saving the key
+                dom.saveApiKeyBtn.addEventListener('click', handleSaveApiKey);
+            } else {
+                // Key exists, proceed with initialization
+                initializeApp();
             }
+        };
+
+        function handleSaveApiKey() {
+            const userKey = dom.apiKeyInput.value;
+            if (!userKey) {
+                alert('Please enter an API key.');
+                return;
+            }
+            console.log('API Key saved to localStorage.');
+            localStorage.setItem('apiKey', userKey);
+            state.apiKey = userKey;
+
+            // Hide modal, show app, and initialize
+            dom.apiKeyModal.classList.add('hidden');
+            dom.container.classList.remove('hidden');
+            initializeApp();
+        }
+
+        function initializeApp() {
+            // This function contains the original logic from window.onload after the key check
+            console.log('Initializing application...');
 
             // Capture the entire HTML source of the current page
             state.currentCode = document.documentElement.outerHTML;
@@ -272,7 +332,7 @@
                 // A short delay to allow the IPFS node to initialize before starting the cycle
                 setTimeout(runDrGeminiCycle, 2000);
             }
-        };
+        }
 
         // --- Helia Handling ---
         async function initializeIpfs() {
