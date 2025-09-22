@@ -502,38 +502,58 @@
 
         async function callGeminiWithFallback(prompt) {
             const models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+            const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
             let lastError = null;
 
-            for (const model of models) {
-                console.log(`Attempting to call Gemini with model: ${model}`);
-                const result = await callGemini(prompt, model);
+            while (true) { // This loop will run indefinitely in autopilot mode on retriable errors
+                for (const model of models) {
+                    console.log(`Attempting to call Gemini with model: ${model}`);
+                    const result = await callGemini(prompt, model);
 
-                if (typeof result === 'string') {
-                    console.log(`Successfully got response with model: ${model}`);
-                    return result;
-                }
-
-                if (result && result.error) {
-                    lastError = result;
-                    if (result.status === 429) {
-                        console.warn(`Model ${model} returned 429 (Quota Exceeded).`);
-                        let delay = 5000; // Default delay
-                        if (result.details) {
-                             const retryInfo = result.details.find(d => d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
-                             if (retryInfo && retryInfo.retryDelay) {
-                                 const seconds = parseInt(retryInfo.retryDelay.replace('s', ''), 10);
-                                 if (!isNaN(seconds)) {
-                                     delay = seconds * 1000;
-                                 }
-                             }
-                        }
-                        console.log(`Waiting for ${delay}ms before trying the next model.`);
-                        await sleep(delay);
-                        continue;
-                    } else {
-                        console.error(`API call failed with non-429 error for model ${model}.`, result);
-                        return result;
+                    if (typeof result === 'string') {
+                        console.log(`Successfully got response with model: ${model}`);
+                        return result; // Success, exit everything.
                     }
+
+                    if (result && result.error) {
+                        lastError = result;
+                        // Check for retriable statuses
+                        if (result.status === 429 || result.status === 503) {
+                            console.warn(`Model ${model} returned ${result.status}.`);
+                            let delay = 5000; // Default delay
+                            if (result.status === 429 && result.details) {
+                                const retryInfo = result.details.find(d => d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
+                                if (retryInfo && retryInfo.retryDelay) {
+                                    const seconds = parseInt(retryInfo.retryDelay.replace('s', ''), 10);
+                                    if (!isNaN(seconds)) {
+                                        delay = seconds * 1000;
+                                    }
+                                }
+                            }
+                            console.log(`Waiting for ${delay}ms before trying the next model.`);
+                            await sleep(delay);
+                            // The for loop will now try the next model.
+                            continue;
+                        } else {
+                            // Non-retriable error, fail fast.
+                            console.error(`API call failed with non-retriable error for model ${model}.`, result);
+                            return result;
+                        }
+                    } else {
+                        // Handle cases where result is not a string and not a standard error object
+                        lastError = result || { error: 'An unknown error occurred.' };
+                        console.warn('Unknown response from API, trying next model...', result);
+                        await sleep(5000); // Wait 5s and try next model
+                    }
+                } // end for loop of models
+
+                if (!isAutopilot) {
+                    // If we've gone through all models and we're not in autopilot, break the while loop and return the last error.
+                    break;
+                } else {
+                    // If in autopilot, log that we're restarting the cycle and continue the while loop.
+                    console.log("Completed a full cycle through all models. Retrying from the beginning as autopilot is active.");
+                    await sleep(10000); // Wait 10s before restarting the whole model cycle.
                 }
             }
 
