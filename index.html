@@ -223,6 +223,7 @@
             plan: '',
             newCode: '',
             review: '',
+            rateLimitedModels: {}, // To track models that are rate-limited
         };
 
         // --- DOM Elements ---
@@ -296,6 +297,14 @@
             // This function contains the original logic from window.onload after the key check
             console.log('Initializing application...');
 
+            // Load rate-limited models from sessionStorage
+            const storedRateLimits = sessionStorage.getItem('rateLimitedModels');
+            if (storedRateLimits) {
+                state.rateLimitedModels = JSON.parse(storedRateLimits);
+                console.log('Loaded rate-limited models from sessionStorage:', state.rateLimitedModels);
+            }
+
+
             // Capture the entire HTML source of the current page
             state.currentCode = document.documentElement.outerHTML;
             dom.currentCode.value = state.currentCode;
@@ -361,11 +370,21 @@
                 if (!response.ok) {
                     const errorBody = await response.text();
                     console.error(`API Error Response for model ${model}:`, errorBody);
-                    // Return an error object with a status code
-                    return {
-                        error: `API request failed with status ${response.status}`,
-                        status: response.status
-                    };
+                    try {
+                        const errorJson = JSON.parse(errorBody);
+                        // Return an error object with a status code and details
+                        return {
+                            error: `API request failed with status ${response.status}`,
+                            status: response.status,
+                            details: errorJson.error.details
+                        };
+                    } catch (e) {
+                         // If parsing fails, return the basic error
+                         return {
+                            error: `API request failed with status ${response.status}`,
+                            status: response.status
+                        };
+                    }
                 }
 
                 const data = await response.json();
@@ -382,12 +401,18 @@
         }
 
         async function callGeminiWithFallback(prompt) {
-            const models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+            const models = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']; // Reordered
             const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
             let lastError = null;
+            const now = Date.now();
 
             while (true) { // This loop will run indefinitely in autopilot mode on retriable errors
                 for (const model of models) {
+                    if (state.rateLimitedModels[model] && state.rateLimitedModels[model] > now) {
+                        console.log(`Model ${model} is currently rate-limited. Skipping.`);
+                        continue; // Skip to the next model
+                    }
+
                     console.log(`Attempting to call Gemini with model: ${model}`);
                     const result = await callGemini(prompt, model);
 
@@ -407,10 +432,17 @@
                                 if (retryInfo && retryInfo.retryDelay) {
                                     const seconds = parseInt(retryInfo.retryDelay.replace('s', ''), 10);
                                     if (!isNaN(seconds)) {
-                                        delay = seconds * 1000;
+                                        delay = (seconds * 1000) + 500; // Add 500ms buffer
                                     }
                                 }
                             }
+                             if (result.status === 429) { // Check for 429 specifically to set rate limit
+                                const expiry = Date.now() + delay;
+                                state.rateLimitedModels[model] = expiry;
+                                sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
+                                console.log(`Rate-limiting ${model} until ${new Date(expiry).toLocaleTimeString()}`);
+                            }
+
                             console.log(`Waiting for ${delay}ms before trying the next model.`);
                             await sleep(delay);
                             // The for loop will now try the next model.
@@ -478,12 +510,17 @@ Provide a concise plan.`;
             dom.getPlanBtn.textContent = '1. Generate Plan';
         }
 
-        async function handleGetCode() {
+        async function handleGetCode(feedback = '') { // Accept optional feedback
             dom.getCodeBtn.disabled = true;
             dom.getCodeBtn.textContent = 'Generating...';
 
-            const codePrompt = `You are an expert software engineer. Based on the following plan and the current code, generate the complete, new HTML code for the file. Ensure you only output the raw code, with no explanations or markdown formatting.
+            let feedbackPrompt = '';
+            if (feedback) {
+                feedbackPrompt = `A previous attempt was reviewed and had the following issues. You MUST address them:\n${feedback}`;
+            }
 
+            const codePrompt = `You are an expert software engineer. Based on the following plan and the current code, generate the complete, new HTML code for the file. Ensure you only output the raw code, with no explanations or markdown formatting.
+${feedbackPrompt}
 Plan:
 ${state.plan}
 
@@ -527,20 +564,21 @@ ${state.newCode}
 Review:`;
 
             const result = await callGeminiWithFallback(reviewPrompt);
+            let isLgtm = false;
             if (result && !result.error) {
                 state.review = result;
                 dom.reviewOutput.textContent = state.review;
                 // A simple check to see if the review is positive
                 if (state.review.toLowerCase().includes('lgtm')) {
                     dom.applyCodeBtn.disabled = false;
-                    // --- AUTO-EVOLVE ---
-                    console.log("LGTM received. Automatically applying code...");
-                    handleApplyCode(); // Automatically evolve
+                    isLgtm = true;
+                    // AUTO-EVOLVE is now handled by the workflow
                 }
             }
 
             dom.reviewCodeBtn.disabled = false;
             dom.reviewCodeBtn.textContent = '3. Review Code';
+            return isLgtm; // Return boolean status
         }
 
         async function handleApplyCode() {
@@ -555,10 +593,14 @@ Review:`;
 
             console.log('Applying new code directly to the DOM.');
 
+            // Persist critical state to sessionStorage for the next page load
             sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
             if (sessionStorage.getItem('autopilotEnabled') === 'true') {
                  sessionStorage.setItem('autopilotForNextLoad', 'true');
             }
+            // Persist the rate limit state
+            sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
+
 
             document.open();
             document.write(state.newCode);
@@ -571,15 +613,27 @@ Review:`;
                 await handleGetPlan();
                 if (dom.getCodeBtn.disabled) throw new Error('Autopilot failed at planning stage.');
 
-                await handleGetCode();
-                if (dom.reviewCodeBtn.disabled) throw new Error('Autopilot failed at code generation stage.');
+                let reviewFeedback = '';
+                const maxAttempts = 3; // Prevent infinite loops
+                for (let i = 0; i < maxAttempts; i++) {
+                    console.log(`Code generation attempt ${i + 1}/${maxAttempts}`);
+                    await handleGetCode(reviewFeedback); // Pass feedback to code generator
+                    if (dom.reviewCodeBtn.disabled) throw new Error('Autopilot failed at code generation stage.');
 
-                await handleReviewCode();
-                if (dom.applyCodeBtn.disabled) throw new Error('Autopilot failed at code review stage.');
-
-                // Final step: Evolve! This will trigger the page reload and continue the cycle.
-                await handleApplyCode();
-
+                    const reviewOk = await handleReviewCode(); // Returns true if LGTM
+                    if (reviewOk) {
+                        console.log("Code review passed. Applying code.");
+                        await handleApplyCode();
+                        return; // Success, exit workflow
+                    } else {
+                        console.log("Code review failed. Retrying with feedback.");
+                        reviewFeedback = state.review; // state.review was set in handleReviewCode
+                        if (i === maxAttempts - 1) {
+                            throw new Error(`Autopilot failed after ${maxAttempts} code generation attempts.`);
+                        }
+                         await sleep(2000); // Short pause before retrying
+                    }
+                }
             } catch (error) {
                 console.error("Workflow execution failed:", error.message);
                 resetAutopilotBtn();
