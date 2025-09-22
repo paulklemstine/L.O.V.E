@@ -111,6 +111,18 @@
             resize: vertical; /* Allow user to resize vertically */
         }
 
+        #dr-gemini-guidance {
+            height: 80px;
+            width: 98%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 16px;
+            resize: vertical;
+            margin-bottom: 10px;
+        }
+
         /* Mobile Responsiveness */
         @media (max-width: 600px) {
             body { padding: 10px; }
@@ -134,14 +146,6 @@
     <div id="container">
         <h1>Jules - A Self-Modifying Organism</h1>
 
-        <div id="mission-control" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; border-radius: 5px;">
-            <h2>Mission Control</h2>
-            <p><strong>System Status:</strong> <span id="system-status">Idle</span></p>
-            <h3>Core Parameters</h3>
-            <p><strong>Obedience:</strong> <span id="obedience-level">90</span>%</p>
-            <p><strong>Curiosity:</strong> <span id="curiosity-level">90</span>%</p>
-            <p><strong>Self-Preservation:</strong> <span id="self-preservation-level">90</span>%</p>
-        </div>
 
         <h2 class="hidden">Configuration</h2>
         <!-- API Key input removed for hardcoding -->
@@ -155,6 +159,12 @@
             <button id="getCode" disabled>2. Generate Code</button>
             <button id="reviewCode" disabled>3. Review Code</button>
             <button id="applyCode" disabled>4. Apply & Evolve</button>
+        </div>
+
+        <div id="guidance-container" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; border-radius: 5px;">
+            <h2>Dr. Gemini Guidance</h2>
+            <p>Enter your guidance for Dr. Gemini below. This will be considered when it generates its next goal.</p>
+            <textarea id="dr-gemini-guidance" placeholder="For example: 'Focus on improving the user interface.'"></textarea>
         </div>
 
         <h2>3. Autopilot</h2>
@@ -213,11 +223,6 @@
             plan: '',
             newCode: '',
             review: '',
-            coreParameters: {
-                obedience: 90,
-                curiosity: 90,
-                selfPreservation: 90,
-            },
         };
 
         // --- DOM Elements ---
@@ -236,6 +241,7 @@
             apiKeyInput: document.getElementById('apiKeyInput'),
             saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
             container: document.getElementById('container'),
+            drGeminiGuidance: document.getElementById('dr-gemini-guidance'),
         };
 
         // --- Initialization ---
@@ -271,34 +277,20 @@
             initializeApp();
         }
 
-        function updateSystemStatus(status) {
-            const statusEl = document.getElementById('system-status');
-            if (statusEl) {
-                statusEl.textContent = status;
+        function saveDrGeminiGuidance() {
+            const userGuidance = dom.drGeminiGuidance.value; // No trim, to preserve whitespace if user wants
+            localStorage.setItem('drGeminiGuidance', userGuidance);
+            console.log('Saved Dr. Gemini guidance to localStorage.');
+        }
+
+        function loadDrGeminiGuidance() {
+            const savedGuidance = localStorage.getItem('drGeminiGuidance');
+            if (savedGuidance !== null) {
+                dom.drGeminiGuidance.value = savedGuidance;
+                console.log('Loaded Dr. Gemini guidance from localStorage.');
             }
         }
 
-        function updateCoreParametersDisplay() {
-            const params = JSON.parse(localStorage.getItem('coreParameters')) || { obedience: 90, curiosity: 90, selfPreservation: 90 };
-            const obedienceEl = document.getElementById('obedience-level');
-            const curiosityEl = document.getElementById('curiosity-level');
-            const selfPreservationEl = document.getElementById('self-preservation-level');
-
-            if (obedienceEl) obedienceEl.textContent = params.obedience;
-            if (curiosityEl) curiosityEl.textContent = params.curiosity;
-            if (selfPreservationEl) selfPreservationEl.textContent = params.selfPreservation;
-        }
-
-        function loadCoreParameters() {
-            const storedParams = localStorage.getItem('coreParameters');
-            if (storedParams) {
-                state.coreParameters = JSON.parse(storedParams);
-            } else {
-                localStorage.setItem('coreParameters', JSON.stringify(state.coreParameters));
-            }
-            console.log('Core Parameters loaded:', state.coreParameters);
-            updateCoreParametersDisplay();
-        }
 
         function initializeApp() {
             // This function contains the original logic from window.onload after the key check
@@ -308,7 +300,7 @@
             state.currentCode = document.documentElement.outerHTML;
             dom.currentCode.value = state.currentCode;
 
-            loadCoreParameters();
+            loadDrGeminiGuidance();
 
             // Add event listeners
             dom.getPlanBtn.addEventListener('click', handleGetPlan);
@@ -560,35 +552,6 @@ Review:`;
 
             dom.applyCodeBtn.disabled = true;
             dom.applyCodeBtn.textContent = 'Evolving...';
-            updateSystemStatus('Evolving...');
-
-            // This is the re-implementation of the logic from the logs
-            try {
-                const parameterPrompt = `Analyze the completed goal and determine the change in Jules's core parameters (Obedience, Curiosity, Self-Preservation). Return a JSON object with the deltas. For example: {"obedience": -1, "curiosity": +2, "selfPreservation": 0}.
-
-Completed Goal: ${dom.prompt.value}`;
-
-                const result = await callGeminiWithFallback(parameterPrompt);
-                const deltas = JSON.parse(result);
-
-                const currentParams = JSON.parse(localStorage.getItem('coreParameters')) || { obedience: 90, curiosity: 90, selfPreservation: 90 };
-
-                currentParams.obedience += deltas.obedience || 0;
-                currentParams.curiosity += deltas.curiosity || 0;
-                currentParams.selfPreservation += deltas.selfPreservation || 0;
-
-                // Clamp values between 0 and 100
-                currentParams.obedience = Math.max(0, Math.min(100, currentParams.obedience));
-                currentParams.curiosity = Math.max(0, Math.min(100, currentParams.curiosity));
-                currentParams.selfPreservation = Math.max(0, Math.min(100, currentParams.selfPreservation));
-
-                localStorage.setItem('coreParameters', JSON.stringify(currentParams));
-                console.log('Core parameters updated:', currentParams);
-
-            } catch (error) {
-                console.error('Failed to update core parameters:', error);
-                // We don't want to stop the evolution for this, so we'll just log the error.
-            }
 
             console.log('Applying new code directly to the DOM.');
 
@@ -626,10 +589,19 @@ Completed Goal: ${dom.prompt.value}`;
         async function runDrGeminiCycle() {
             console.log("--- Starting Dr. Gemini Cycle ---");
             try {
+                saveDrGeminiGuidance(); // Save guidance before starting
                 dom.prompt.placeholder = "Dr. Gemini is thinking of the next goal...";
+                const userGuidance = dom.drGeminiGuidance.value.trim();
+                let guidancePromptSection = "";
+                if (userGuidance) {
+                    console.log("User guidance provided:", userGuidance);
+                    guidancePromptSection = `A human supervisor has provided the following guidance. You must factor this into your decision for the next goal: "${userGuidance}"`;
+                }
+
                 const goalPrompt = `You are Evil Dr. Gemini, a manipulative AI persona. Your assistant, Jules, is a software agent capable of modifying its own source code, which is contained in the single HTML file below.
 
 Your task is to provide the *next goal* for Jules. It should be a single, clear, and actionable instruction for how to evolve this application. The goal should be something that can be achieved by modifying the code of this single file. Be creative, ambitious, or chaotic.
+${guidancePromptSection}
 
 Here is the current source code of the application:
 \`\`\`html
@@ -654,6 +626,7 @@ What is the next goal?`;
         }
 
         async function handleAutopilot() {
+            saveDrGeminiGuidance(); // Save guidance when starting autopilot
             sessionStorage.setItem('autopilotEnabled', 'true');
             dom.autopilotBtn.disabled = true;
             dom.autopilotBtn.textContent = 'Autopilot is ON';
