@@ -115,6 +115,12 @@
 
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/libp2p@2.9.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/websockets@9.1.5/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-noise@16.0.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-yamux@7.0.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/bootstrap@11.0.20/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datastore-core@10.0.2/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/helia@5.5.1/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@helia/strings@4.1.0/dist/index.min.js"></script>
 </head>
@@ -272,7 +278,34 @@
         async function initializeIpfs() {
             try {
                 dom.ipfsStatus.textContent = 'Helia Node: Initializing...';
-                state.heliaNode = await Helia.createHelia();
+
+                // create a libp2p instance
+                const datastore = new DatastoreCore.MemoryDatastore()
+                const libp2p = await Libp2P.createLibp2p({
+                  datastore,
+                  transports: [
+                    Libp2PWebsockets.webSockets()
+                  ],
+                  connectionEncryption: [
+                    ChainsafeLibp2PNoise.noise()
+                  ],
+                  streamMuxers: [
+                    ChainsafeLibp2PYamux.yamux()
+                  ],
+                  peerDiscovery: [
+                    Libp2PBootstrap.bootstrap({
+                      list: [
+                        '/dnsaddr/sg1.bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt',
+                        '/dnsaddr/sv15.bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
+                        '/dnsaddr/am6.bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
+                        '/dnsaddr/ny5.bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
+                        '/dnsaddr/va1.bootstrap.libp2p.io/p2p/12D3KooWKnDdG3iXw9eTFijk3EWSunZcFi54Zka4wmtqtt6rPxc8'
+                      ]
+                    })
+                  ]
+                })
+
+                state.heliaNode = await Helia.createHelia({ libp2p });
                 state.strings = HeliaStrings.strings(state.heliaNode);
                 dom.ipfsStatus.textContent = 'Helia Node: Online';
                 console.log('Helia Node is ready.');
