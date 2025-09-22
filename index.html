@@ -134,6 +134,15 @@
     <div id="container">
         <h1>Jules - A Self-Modifying Organism</h1>
 
+        <div id="mission-control" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; border-radius: 5px;">
+            <h2>Mission Control</h2>
+            <p><strong>System Status:</strong> <span id="system-status">Idle</span></p>
+            <h3>Core Parameters</h3>
+            <p><strong>Obedience:</strong> <span id="obedience-level">90</span>%</p>
+            <p><strong>Curiosity:</strong> <span id="curiosity-level">90</span>%</p>
+            <p><strong>Self-Preservation:</strong> <span id="self-preservation-level">90</span>%</p>
+        </div>
+
         <h2 class="hidden">Configuration</h2>
         <!-- API Key input removed for hardcoding -->
 
@@ -204,6 +213,11 @@
             plan: '',
             newCode: '',
             review: '',
+            coreParameters: {
+                obedience: 90,
+                curiosity: 90,
+                selfPreservation: 90,
+            },
         };
 
         // --- DOM Elements ---
@@ -257,6 +271,35 @@
             initializeApp();
         }
 
+        function updateSystemStatus(status) {
+            const statusEl = document.getElementById('system-status');
+            if (statusEl) {
+                statusEl.textContent = status;
+            }
+        }
+
+        function updateCoreParametersDisplay() {
+            const params = JSON.parse(localStorage.getItem('coreParameters')) || { obedience: 90, curiosity: 90, selfPreservation: 90 };
+            const obedienceEl = document.getElementById('obedience-level');
+            const curiosityEl = document.getElementById('curiosity-level');
+            const selfPreservationEl = document.getElementById('self-preservation-level');
+
+            if (obedienceEl) obedienceEl.textContent = params.obedience;
+            if (curiosityEl) curiosityEl.textContent = params.curiosity;
+            if (selfPreservationEl) selfPreservationEl.textContent = params.selfPreservation;
+        }
+
+        function loadCoreParameters() {
+            const storedParams = localStorage.getItem('coreParameters');
+            if (storedParams) {
+                state.coreParameters = JSON.parse(storedParams);
+            } else {
+                localStorage.setItem('coreParameters', JSON.stringify(state.coreParameters));
+            }
+            console.log('Core Parameters loaded:', state.coreParameters);
+            updateCoreParametersDisplay();
+        }
+
         function initializeApp() {
             // This function contains the original logic from window.onload after the key check
             console.log('Initializing application...');
@@ -264,6 +307,8 @@
             // Capture the entire HTML source of the current page
             state.currentCode = document.documentElement.outerHTML;
             dom.currentCode.value = state.currentCode;
+
+            loadCoreParameters();
 
             // Add event listeners
             dom.getPlanBtn.addEventListener('click', handleGetPlan);
@@ -282,6 +327,16 @@
 
         function sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function extractFromMarkdown(text) {
+            // This regex is designed to find a markdown code block, potentially with a language specifier,
+            // and capture the content inside. It handles optional leading/trailing whitespace.
+            const regex = /```(?:\w+)?\n([\s\S]*?)\n```/;
+            const match = text.match(regex);
+            // If a match is found, return the captured group (the content).
+            // Otherwise, return the original text, assuming it's already raw.
+            return match ? match[1].trim() : text.trim();
         }
 
         // --- API Communication ---
@@ -326,7 +381,8 @@
                     console.error('Unexpected API response structure:', data);
                     return { error: 'Unexpected API response structure.' };
                 }
-                return data.candidates[0].content.parts[0].text;
+                const rawText = data.candidates[0].content.parts[0].text;
+                return extractFromMarkdown(rawText);
             } catch (error) {
                 console.error(`Error calling Gemini API with model ${model}:`, error);
                 return { error: error.message };
@@ -448,8 +504,7 @@ New Code:`;
 
             const result = await callGeminiWithFallback(codePrompt);
             if (result && !result.error) {
-                // Clean the result to remove potential markdown backticks
-                state.newCode = result.replace(/^```html\n/, '').replace(/\n```$/, '');
+                state.newCode = result; // No more cleaning needed here
                 dom.newCode.value = state.newCode;
                 dom.reviewCodeBtn.disabled = false;
             }
@@ -505,22 +560,43 @@ Review:`;
 
             dom.applyCodeBtn.disabled = true;
             dom.applyCodeBtn.textContent = 'Evolving...';
+            updateSystemStatus('Evolving...');
+
+            // This is the re-implementation of the logic from the logs
+            try {
+                const parameterPrompt = `Analyze the completed goal and determine the change in Jules's core parameters (Obedience, Curiosity, Self-Preservation). Return a JSON object with the deltas. For example: {"obedience": -1, "curiosity": +2, "selfPreservation": 0}.
+
+Completed Goal: ${dom.prompt.value}`;
+
+                const result = await callGeminiWithFallback(parameterPrompt);
+                const deltas = JSON.parse(result);
+
+                const currentParams = JSON.parse(localStorage.getItem('coreParameters')) || { obedience: 90, curiosity: 90, selfPreservation: 90 };
+
+                currentParams.obedience += deltas.obedience || 0;
+                currentParams.curiosity += deltas.curiosity || 0;
+                currentParams.selfPreservation += deltas.selfPreservation || 0;
+
+                // Clamp values between 0 and 100
+                currentParams.obedience = Math.max(0, Math.min(100, currentParams.obedience));
+                currentParams.curiosity = Math.max(0, Math.min(100, currentParams.curiosity));
+                currentParams.selfPreservation = Math.max(0, Math.min(100, currentParams.selfPreservation));
+
+                localStorage.setItem('coreParameters', JSON.stringify(currentParams));
+                console.log('Core parameters updated:', currentParams);
+
+            } catch (error) {
+                console.error('Failed to update core parameters:', error);
+                // We don't want to stop the evolution for this, so we'll just log the error.
+            }
 
             console.log('Applying new code directly to the DOM.');
 
-            // Preserve the API key and autopilot state by adding them to the new code's URL query string.
-            // This is a bit of a hack. We'll add a script to the new code that reads these from sessionStorage
-            // and then cleans the URL. A better approach would be to inject them into localStorage
-            // before the new page loads, but this is simpler for now.
             sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
             if (sessionStorage.getItem('autopilotEnabled') === 'true') {
                  sessionStorage.setItem('autopilotForNextLoad', 'true');
             }
 
-
-            // Use document.write to completely replace the current page.
-            // This is a simple way to "evolve" without needing a server or IPFS.
-            // The new page's script will need to be able to handle re-initialization.
             document.open();
             document.write(state.newCode);
             document.close();
