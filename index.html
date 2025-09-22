@@ -53,15 +53,6 @@
             border-bottom: 2px solid #e0e0e0;
             padding-bottom: 10px;
         }
-        #ipfs-status {
-            font-size: 14px;
-            color: #666;
-            background-color: #f0f0f0;
-            padding: 5px 10px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
         textarea {
             width: 98%;
             height: 300px;
@@ -112,16 +103,6 @@
         .hidden {
             display: none;
         }
-        #ipfs-verified {
-            margin-left: 10px;
-            color: green;
-        }
-        #current-cid {
-            font-size: 12px;
-            color: #888;
-            margin-left: 15px;
-            font-family: "Courier New", Courier, monospace;
-        }
 
         #prompt {
             height: 80px; /* Taller than a standard input */
@@ -140,14 +121,6 @@
 
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/libp2p@2.9.0/dist/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@libp2p/websockets@9.1.5/dist/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-noise@16.0.1/dist/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-yamux@7.0.1/dist/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@libp2p/bootstrap@11.0.20/dist/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/datastore-core@10.0.2/dist/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/helia@5.5.1/dist/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@helia/strings@4.1.0/dist/index.min.js"></script>
 </head>
 <body>
     <div id="apiKeyModal" class="hidden">
@@ -160,7 +133,6 @@
     </div>
     <div id="container">
         <h1>Jules - A Self-Modifying Organism</h1>
-        <div id="ipfs-status">IPFS Node: Offline</div><span id="ipfs-verified" class="hidden">✅ Verified on IPFS</span><span id="current-cid"></span>
 
         <h2 class="hidden">Configuration</h2>
         <!-- API Key input removed for hardcoding -->
@@ -197,37 +169,22 @@
 
     <script type="module">
 
-        // --- URL Parameter Handling ---
-        function processUrlParameters() {
-            const urlParams = new URLSearchParams(window.location.search);
-            let urlWasModified = false;
-
-            // Process apiKey
-            const apiKeyFromUrl = urlParams.get('apiKey');
-            if (apiKeyFromUrl) {
-                console.log('API Key found in URL. Storing in localStorage.');
-                localStorage.setItem('apiKey', apiKeyFromUrl);
-                urlParams.delete('apiKey');
-                urlWasModified = true;
+        // --- Page Load State Handling ---
+        function processPageLoadState() {
+            // After a page evolution (via document.write), the API key and autopilot state
+            // are stored in sessionStorage. We retrieve them here.
+            const apiKey = sessionStorage.getItem('apiKeyForNextLoad');
+            if (apiKey) {
+                console.log('API Key found in sessionStorage. Storing in localStorage.');
+                localStorage.setItem('apiKey', apiKey);
+                sessionStorage.removeItem('apiKeyForNextLoad'); // Clean up
             }
 
-            // Process autopilot
-            const autopilotFromUrl = urlParams.get('autopilot');
-            if (autopilotFromUrl === 'true') {
-                console.log('Autopilot flag found in URL. Storing in sessionStorage.');
+            const autopilot = sessionStorage.getItem('autopilotForNextLoad');
+            if (autopilot === 'true') {
+                console.log('Autopilot flag found in sessionStorage. Re-enabling.');
                 sessionStorage.setItem('autopilotEnabled', 'true');
-                urlParams.delete('autopilot');
-                urlWasModified = true;
-            }
-
-            // If we changed anything, clean up the URL
-            if (urlWasModified) {
-                let newUrl = window.location.pathname;
-                const remainingParams = urlParams.toString();
-                if (remainingParams) {
-                    newUrl += '?' + remainingParams;
-                }
-                window.history.replaceState({path: newUrl}, '', newUrl);
+                sessionStorage.removeItem('autopilotForNextLoad'); // Clean up
             }
         }
 
@@ -240,9 +197,6 @@
             return null;
         }
 
-        // --- IPFS Configuration ---
-        const PUBLIC_GATEWAYS = ['https://cloudflare-ipfs.com', 'https://ipfs.io', 'https://dweb.link', 'https://trustless-gateway.link'];
-
         // --- Application State ---
         const state = {
             apiKey: null, // Will be loaded on init
@@ -250,8 +204,6 @@
             plan: '',
             newCode: '',
             review: '',
-            heliaNode: null,
-            strings: null,
         };
 
         // --- DOM Elements ---
@@ -266,9 +218,6 @@
             newCode: document.getElementById('newCode'),
             reviewOutput: document.getElementById('review-output'),
             currentCode: document.getElementById('currentCode'),
-            ipfsStatus: document.getElementById('ipfs-status'),
-            ipfsVerified: document.getElementById('ipfs-verified'),
-            currentCid: document.getElementById('current-cid'),
             apiKeyModal: document.getElementById('apiKeyModal'),
             apiKeyInput: document.getElementById('apiKeyInput'),
             saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
@@ -277,7 +226,7 @@
 
         // --- Initialization ---
         window.onload = () => {
-            processUrlParameters(); // Handle URL params like apiKey and autopilot first
+            processPageLoadState(); // Handle state passed from previous page generation
             state.apiKey = getApiKey();
 
             if (!state.apiKey) {
@@ -323,127 +272,11 @@
             dom.applyCodeBtn.addEventListener('click', handleApplyCode);
             dom.autopilotBtn.addEventListener('click', handleAutopilot);
 
-            // Initialize IPFS
-            initializeIpfs();
-
             if (sessionStorage.getItem('autopilotEnabled') === 'true') {
                 dom.autopilotBtn.disabled = true;
                 dom.autopilotBtn.textContent = 'Autopilot is ON';
-                // A short delay to allow the IPFS node to initialize before starting the cycle
-                setTimeout(runDrGeminiCycle, 2000);
-            }
-        }
-
-        // --- Helia Handling ---
-        async function initializeIpfs() {
-            try {
-                dom.ipfsStatus.textContent = 'Helia Node: Initializing...';
-
-                // create a libp2p instance
-                const datastore = new DatastoreCore.MemoryDatastore()
-                const libp2p = await Libp2P.createLibp2p({
-                  datastore,
-                  transports: [
-                    Libp2PWebsockets.webSockets()
-                  ],
-                  connectionEncryption: [
-                    ChainsafeLibp2PNoise.noise()
-                  ],
-                  streamMuxers: [
-                    ChainsafeLibp2PYamux.yamux()
-                  ],
-                  peerDiscovery: [
-                    Libp2PBootstrap.bootstrap({
-                      list: [
-                        '/dnsaddr/sg1.bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt',
-                        '/dnsaddr/sv15.bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
-                        '/dnsaddr/am6.bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
-                        '/dnsaddr/ny5.bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
-                        '/dnsaddr/va1.bootstrap.libp2p.io/p2p/12D3KooWKnDdG3iXw9eTFijk3EWSunZcFi54Zka4wmtqtt6rPxc8'
-                      ]
-                    })
-                  ]
-                })
-
-                state.heliaNode = await Helia.createHelia({ libp2p });
-                state.strings = HeliaStrings.strings(state.heliaNode);
-                dom.ipfsStatus.textContent = 'Helia Node: Online';
-                console.log('Helia Node is ready.');
-                await seedAndVerifyCurrentPage();
-            } catch (error) {
-                console.error('Helia Node initialization failed:', error);
-                dom.ipfsStatus.textContent = 'Helia Node: Error';
-            }
-        }
-
-        async function verifyCidOnNetwork(cid, maxRetries = 30, retryDelay = 5000) {
-            console.log(`Starting background check for CID ${cid} on public gateways.`);
-
-            for (let i = 0; i < maxRetries; i++) {
-                const gateway = PUBLIC_GATEWAYS[i % PUBLIC_GATEWAYS.length]; // Cycle through gateways
-                const url = `${gateway}/ipfs/${cid}`;
-                try {
-                    console.log(`Verifying CID via gateway (attempt ${i + 1}/${maxRetries}): ${url}`);
-                    dom.ipfsVerified.classList.add('hidden');
-
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-
-                    const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
-                    clearTimeout(timeoutId);
-
-                    if (response.ok) {
-                        console.log(`Verification successful for CID: ${cid} via ${gateway}`);
-                        dom.ipfsVerified.classList.remove('hidden');
-                        return true; // Exit successfully
-                    } else {
-                        console.warn(`Gateway verification failed for CID ${cid} with status: ${response.status}`);
-                    }
-                } catch (error) {
-                    console.error(`Error verifying CID ${cid} on attempt ${i + 1} with ${gateway}:`, error.name === 'AbortError' ? 'Timeout' : error);
-                }
-
-                if (i < maxRetries - 1) {
-                    console.log(`Waiting ${retryDelay}ms before next verification attempt.`);
-                    await sleep(retryDelay);
-                } else {
-                    console.error(`Failed to verify CID ${cid} after ${maxRetries} attempts.`);
-                }
-            }
-            return false; // Indicate failure after all retries
-        }
-
-        async function seedAndVerifyCurrentPage() {
-            if (!state.heliaNode) {
-                console.warn('Cannot seed page, Helia node not ready.');
-                return;
-            }
-            try {
-                // Hide the checkmark initially on every page load.
-                dom.ipfsVerified.classList.add('hidden');
-
-                console.log('Seeding current page to Helia to get its CID...');
-                const cid = await state.strings.add(state.currentCode);
-                console.log('Current page identified with CID:', cid);
-
-                await state.heliaNode.pins.add(cid);
-                console.log('Ensured current page is pinned locally with CID:', cid);
-
-                // Update the UI with the current CID link
-                dom.currentCid.innerHTML = '';
-                const link = document.createElement('a');
-                link.href = `${PUBLIC_GATEWAYS[0]}/ipfs/${cid}`;
-                link.textContent = `CID: ${cid}`;
-                link.target = '_blank';
-                link.rel = 'noopener noreferrer';
-                dom.currentCid.appendChild(link);
-
-                // Start background verification for this page's CID.
-                // No need to await this, let it run in the background.
-                verifyCidOnNetwork(cid);
-
-            } catch (error) {
-                console.error('Could not seed and verify current page:', error);
+                // No delay needed, start the cycle.
+                runDrGeminiCycle();
             }
         }
 
@@ -664,48 +497,33 @@ Review:`;
         }
 
         async function handleApplyCode() {
-            if (!state.heliaNode) {
-                console.error('Helia node is not ready. Please wait a moment and try again.');
-                return;
-            }
             if (!state.newCode) {
                 console.error('No new code has been generated to apply.');
+                alert('No new code to apply. Please generate code first.');
                 return;
             }
 
             dom.applyCodeBtn.disabled = true;
             dom.applyCodeBtn.textContent = 'Evolving...';
 
-            try {
-                const cid = await state.strings.add(state.newCode);
-                console.log('New version published to local Helia node with CID:', cid);
+            console.log('Applying new code directly to the DOM.');
 
-                await state.heliaNode.pins.add(cid);
-                console.log('Pinned new CID:', cid);
-
-                // Evolve immediately by navigating to the new IPFS URL.
-                // We'll use the first public gateway as our destination.
-                const gatewayUrl = `${PUBLIC_GATEWAYS[0]}/ipfs/${cid}`;
-
-                // Preserve the API key and autopilot state in the new URL
-                const urlParams = new URLSearchParams();
-                urlParams.set('apiKey', state.apiKey);
-                if (sessionStorage.getItem('autopilotEnabled') === 'true') {
-                    urlParams.set('autopilot', 'true');
-                }
-
-                const newUrl = `${gatewayUrl}?${urlParams.toString()}`;
-                console.log(`Evolving now. Navigating to: ${newUrl}`);
-
-                // Change the window location to the new version.
-                window.location.href = newUrl;
-
-            } catch (error) {
-                console.error('Evolution failed during IPFS add/pin:', error);
-                alert('Failed to publish the new version to IPFS. Check the console for details.');
-                dom.applyCodeBtn.disabled = false;
-                dom.applyCodeBtn.textContent = '4. Apply & Evolve';
+            // Preserve the API key and autopilot state by adding them to the new code's URL query string.
+            // This is a bit of a hack. We'll add a script to the new code that reads these from sessionStorage
+            // and then cleans the URL. A better approach would be to inject them into localStorage
+            // before the new page loads, but this is simpler for now.
+            sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
+            if (sessionStorage.getItem('autopilotEnabled') === 'true') {
+                 sessionStorage.setItem('autopilotForNextLoad', 'true');
             }
+
+
+            // Use document.write to completely replace the current page.
+            // This is a simple way to "evolve" without needing a server or IPFS.
+            // The new page's script will need to be able to handle re-initialization.
+            document.open();
+            document.write(state.newCode);
+            document.close();
         }
 
         async function executeWorkflow() {
