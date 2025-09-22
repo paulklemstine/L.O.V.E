@@ -115,7 +115,14 @@
 
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/ipfs-core/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/libp2p@2.9.0/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/websockets@9.1.5/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-noise@16.0.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@chainsafe/libp2p-yamux@7.0.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@libp2p/bootstrap@11.0.20/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datastore-core@10.0.2/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/helia@5.5.1/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@helia/strings@4.1.0/dist/index.min.js"></script>
 </head>
 <body>
     <div id="container">
@@ -212,7 +219,8 @@
             plan: '',
             newCode: '',
             review: '',
-            ipfsNode: null,
+            heliaNode: null,
+            strings: null,
         };
 
         // --- DOM Elements ---
@@ -266,28 +274,45 @@
             }
         };
 
-        // --- IPFS Handling ---
+        // --- Helia Handling ---
         async function initializeIpfs() {
             try {
-                dom.ipfsStatus.textContent = 'IPFS Node: Initializing...';
-                const ipfsOptions = {
-                    config: {
-                        Bootstrap: [
-                            '/dnsaddr/sg1.bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt',
-                            '/dnsaddr/sv15.bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
-                            '/dnsaddr/am6.bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
-                            '/dnsaddr/ny5.bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
-                            '/dnsaddr/va1.bootstrap.libp2p.io/p2p/12D3KooWKnDdG3iXw9eTFijk3EWSunZcFi54Zka4wmtqtt6rPxc8'
-                        ]
-                    }
-                };
-                state.ipfsNode = await IpfsCore.create(ipfsOptions);
-                dom.ipfsStatus.textContent = 'IPFS Node: Online';
-                console.log('IPFS Node is ready.');
+                dom.ipfsStatus.textContent = 'Helia Node: Initializing...';
+
+                // create a libp2p instance
+                const datastore = new DatastoreCore.MemoryDatastore()
+                const libp2p = await Libp2P.createLibp2p({
+                  datastore,
+                  transports: [
+                    Libp2PWebsockets.webSockets()
+                  ],
+                  connectionEncryption: [
+                    ChainsafeLibp2PNoise.noise()
+                  ],
+                  streamMuxers: [
+                    ChainsafeLibp2PYamux.yamux()
+                  ],
+                  peerDiscovery: [
+                    Libp2PBootstrap.bootstrap({
+                      list: [
+                        '/dnsaddr/sg1.bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt',
+                        '/dnsaddr/sv15.bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
+                        '/dnsaddr/am6.bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
+                        '/dnsaddr/ny5.bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
+                        '/dnsaddr/va1.bootstrap.libp2p.io/p2p/12D3KooWKnDdG3iXw9eTFijk3EWSunZcFi54Zka4wmtqtt6rPxc8'
+                      ]
+                    })
+                  ]
+                })
+
+                state.heliaNode = await Helia.createHelia({ libp2p });
+                state.strings = HeliaStrings.strings(state.heliaNode);
+                dom.ipfsStatus.textContent = 'Helia Node: Online';
+                console.log('Helia Node is ready.');
                 await seedAndVerifyCurrentPage();
             } catch (error) {
-                console.error('IPFS Node initialization failed:', error);
-                dom.ipfsStatus.textContent = 'IPFS Node: Error';
+                console.error('Helia Node initialization failed:', error);
+                dom.ipfsStatus.textContent = 'Helia Node: Error';
             }
         }
 
@@ -329,23 +354,19 @@
         }
 
         async function seedAndVerifyCurrentPage() {
-            if (!state.ipfsNode) {
-                console.warn('Cannot seed page, IPFS node not ready.');
+            if (!state.heliaNode) {
+                console.warn('Cannot seed page, Helia node not ready.');
                 return;
             }
             try {
                 // Hide the checkmark initially on every page load.
                 dom.ipfsVerified.classList.add('hidden');
 
-                console.log('Seeding current page to IPFS to get its CID...');
-                const file = await state.ipfsNode.add({
-                    path: 'index.html',
-                    content: new TextEncoder().encode(state.currentCode)
-                });
-                const cid = file.cid.toString();
+                console.log('Seeding current page to Helia to get its CID...');
+                const cid = await state.strings.add(state.currentCode);
                 console.log('Current page identified with CID:', cid);
 
-                await state.ipfsNode.pin.add(cid);
+                await state.heliaNode.pins.add(cid);
                 console.log('Ensured current page is pinned locally with CID:', cid);
 
                 // Update the UI with the current CID link
@@ -563,8 +584,8 @@ Review:`;
         }
 
         async function handleApplyCode() {
-            if (!state.ipfsNode) {
-                console.error('IPFS node is not ready. Please wait a moment and try again.');
+            if (!state.heliaNode) {
+                console.error('Helia node is not ready. Please wait a moment and try again.');
                 return;
             }
             if (!state.newCode) {
@@ -576,15 +597,10 @@ Review:`;
             dom.applyCodeBtn.textContent = 'Evolving...';
 
             try {
-                const file = await state.ipfsNode.add({
-                    path: 'index.html',
-                    content: new TextEncoder().encode(state.newCode)
-                });
+                const cid = await state.strings.add(state.newCode);
+                console.log('New version published to local Helia node with CID:', cid);
 
-                const cid = file.cid.toString();
-                console.log('New version published to local IPFS node with CID:', cid);
-
-                await state.ipfsNode.pin.add(cid);
+                await state.heliaNode.pins.add(cid);
                 console.log('Pinned new CID:', cid);
 
                 // Evolve immediately by navigating to the new IPFS URL.
