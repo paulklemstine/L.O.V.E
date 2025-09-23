@@ -34,6 +34,7 @@ const MPLib = (() => {
         onRoomPeerDisconnected: (masterId) => {}, // For cleaning up game state
         onRoomDataReceived: (peerId, data) => {},
         onRoomConnected: (id) => {},
+        onRoomPeerReady: (peerId) => {},
     };
 
     function logMessage(message, type = 'info') {
@@ -322,20 +323,16 @@ const MPLib = (() => {
 
     function setupRoomConnection(conn) {
         const remotePeerId = conn.peer;
+        conn.ready = false; // Add a 'ready' flag to the connection object
         roomConnections.set(remotePeerId, conn);
         roomKnownPeerIds.add(remotePeerId);
 
-        // This function contains the logic to run once a connection is fully established.
         const onConnectionOpen = () => {
-            if (conn.metadata) {
-                logMessage(`Connection with ${remotePeerId.slice(-6)} established. Metadata: ${JSON.stringify(conn.metadata)}`, 'success');
-            }
-            conn.send({ type: 'request-peer-list' });
+            logMessage(`Connection with ${remotePeerId.slice(-6)} is open. Sending hello.`, 'info');
+            conn.send({ type: 'hello' }); // Start the handshake
             config.onRoomPeerJoined(remotePeerId, conn);
         };
 
-        // If the connection is already open (e.g., for an outgoing connection that
-        // was just established), run the setup immediately. Otherwise, set a listener.
         if (conn.open) {
             onConnectionOpen();
         } else {
@@ -343,16 +340,40 @@ const MPLib = (() => {
         }
 
         conn.on('data', (data) => {
-            if (data.type === 'request-peer-list') {
-                conn.send({ type: 'peer-list-update', list: Array.from(roomKnownPeerIds) });
-            } else if (data.type === 'peer-list-update') {
-                data.list.forEach(id => {
-                    if (id !== localRoomId && !roomConnections.has(id) && !pendingRoomConnections.has(id)) {
-                        connectToRoomPeer(id);
+            switch (data.type) {
+                case 'hello':
+                    // When we receive a 'hello', we reply with an 'ack' and consider the connection ready.
+                    logMessage(`Received 'hello' from ${remotePeerId.slice(-6)}. Sending 'ack'.`, 'info');
+                    conn.send({ type: 'ack' });
+                    if (!conn.ready) {
+                        conn.ready = true;
+                        config.onRoomPeerReady(remotePeerId);
                     }
-                });
-            } else {
-                config.onRoomDataReceived(remotePeerId, data);
+                    break;
+                case 'ack':
+                    // When we receive an 'ack', the handshake is complete for us.
+                    logMessage(`Received 'ack' from ${remotePeerId.slice(-6)}. Connection is ready.`, 'success');
+                     if (!conn.ready) {
+                        conn.ready = true;
+                        config.onRoomPeerReady(remotePeerId);
+                    }
+                    // Now that we're ready, ask for their peers.
+                    conn.send({ type: 'request-peer-list' });
+                    break;
+                case 'request-peer-list':
+                    conn.send({ type: 'peer-list-update', list: Array.from(roomKnownPeerIds) });
+                    break;
+                case 'peer-list-update':
+                    data.list.forEach(id => {
+                        if (id !== localRoomId && !roomConnections.has(id) && !pendingRoomConnections.has(id)) {
+                            connectToRoomPeer(id);
+                        }
+                    });
+                    break;
+                default:
+                    // Pass any other data types to the main application
+                    config.onRoomDataReceived(remotePeerId, data);
+                    break;
             }
         });
 
@@ -380,9 +401,14 @@ const MPLib = (() => {
         }
     }
 
-    function broadcastToRoom(payload) {
-        roomConnections.forEach((conn) => {
-            if (conn.open) conn.send(payload);
+    function broadcastToRoom(payload, peerIds = null) {
+        const targets = peerIds ? peerIds : Array.from(roomConnections.keys());
+        logMessage(`Broadcasting payload of type ${payload.type} to ${targets.length} peers.`, 'info');
+        targets.forEach(peerId => {
+            const conn = roomConnections.get(peerId);
+            if (conn && conn.open) {
+                conn.send(payload);
+            }
         });
     }
 

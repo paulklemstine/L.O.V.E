@@ -234,6 +234,7 @@
             rateLimitedModels: {}, // To track models that are rate-limited
             pendingLlmRequests: new Map(),
             isBusy: false,
+            readyPeers: new Set(),
         };
 
         // --- DOM Elements ---
@@ -355,6 +356,11 @@
                 },
                 onRoomPeerLeft: (peerId) => {
                     updateConnectionsCount();
+                    state.readyPeers.delete(peerId);
+                },
+                onRoomPeerReady: (peerId) => {
+                    console.log(`Peer ${peerId.slice(-6)} is now ready!`);
+                    state.readyPeers.add(peerId);
                 },
                 onRoomDataReceived: (peerId, data) => {
                     if (data.type === 'llm-request') {
@@ -507,6 +513,14 @@
 
             // This is the local fallback function, to be called by the timer.
             const executeLocalLlmCall = async () => {
+                // First, check if the request is still pending. It might have been resolved by a peer
+                // while the timeout was in flight.
+                if (!state.pendingLlmRequests.has(requestId)) {
+                    console.log(`[Local Fallback] Aborting, request ${requestId.slice(-6)} was resolved by a peer.`);
+                    return;
+                }
+                const { resolve, reject } = state.pendingLlmRequests.get(requestId);
+
                 console.log(`[Local Fallback] No peer responded for request ${requestId.slice(-6)}. Starting local execution.`);
 
                 const models = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
@@ -515,7 +529,10 @@
                 for (const model of models) {
                     const result = await callGemini(prompt, model);
                     if (typeof result === 'string') {
-                        return result;
+                        console.log(`[Local Fallback] Succeeded for request ${requestId.slice(-6)}.`);
+                        resolve(result);
+                        state.pendingLlmRequests.delete(requestId);
+                        return; // Success, exit the function
                     }
                     lastError = result;
                     if (result && (result.status === 429 || result.status === 503)) {
@@ -524,12 +541,11 @@
                         break; // Fail fast on non-retriable errors
                     }
                 }
+
                 // If all models fail, reject the promise.
-                if (state.pendingLlmRequests.has(requestId)) {
-                    const { reject } = state.pendingLlmRequests.get(requestId);
-                    reject(lastError || { error: 'All local Gemini models failed.' });
-                    state.pendingLlmRequests.delete(requestId);
-                }
+                console.error(`[Local Fallback] Failed for request ${requestId.slice(-6)}.`);
+                reject(lastError || { error: 'All local Gemini models failed.' });
+                state.pendingLlmRequests.delete(requestId);
             };
 
             return new Promise((resolve, reject) => {
@@ -538,11 +554,11 @@
                 // Store the promise resolvers and the timeoutID
                 state.pendingLlmRequests.set(requestId, { resolve, reject, fallbackTimeout });
 
-                console.log(`Broadcasting LLM request ${requestId.slice(-6)} to room. Waiting for peer response...`);
+                console.log(`Broadcasting LLM request ${requestId.slice(-6)} to ${state.readyPeers.size} ready peers.`);
                 MPLib.broadcastToRoom({
                     type: 'llm-request',
                     payload: { prompt, requestId }
-                });
+                }, Array.from(state.readyPeers));
             });
         }
 
