@@ -328,8 +328,8 @@ const MPLib = (() => {
         roomKnownPeerIds.add(remotePeerId);
 
         const onConnectionOpen = () => {
-            logMessage(`Connection with ${remotePeerId.slice(-6)} is open. Sending hello.`, 'info');
-            conn.send({ type: 'hello' }); // Start the handshake
+            logMessage(`Connection with ${remotePeerId.slice(-6)} is open. Sending ready signal.`, 'info');
+            conn.send({ type: 'peer_ready' });
             config.onRoomPeerJoined(remotePeerId, conn);
         };
 
@@ -341,24 +341,14 @@ const MPLib = (() => {
 
         conn.on('data', (data) => {
             switch (data.type) {
-                case 'hello':
-                    // When we receive a 'hello', we reply with an 'ack' and consider the connection ready.
-                    logMessage(`Received 'hello' from ${remotePeerId.slice(-6)}. Sending 'ack'.`, 'info');
-                    conn.send({ type: 'ack' });
+                case 'peer_ready':
                     if (!conn.ready) {
+                        logMessage(`Peer ${remotePeerId.slice(-6)} is ready.`, 'success');
                         conn.ready = true;
                         config.onRoomPeerReady(remotePeerId);
+                        // Now that they are ready, ask for their peers
+                        conn.send({ type: 'request-peer-list' });
                     }
-                    break;
-                case 'ack':
-                    // When we receive an 'ack', the handshake is complete for us.
-                    logMessage(`Received 'ack' from ${remotePeerId.slice(-6)}. Connection is ready.`, 'success');
-                     if (!conn.ready) {
-                        conn.ready = true;
-                        config.onRoomPeerReady(remotePeerId);
-                    }
-                    // Now that we're ready, ask for their peers.
-                    conn.send({ type: 'request-peer-list' });
                     break;
                 case 'request-peer-list':
                     conn.send({ type: 'peer-list-update', list: Array.from(roomKnownPeerIds) });
