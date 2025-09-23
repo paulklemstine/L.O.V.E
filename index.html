@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jules - Self-Modifying Web App</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -172,6 +173,13 @@
             <button id="autopilot">Start Autopilot</button>
         </div>
 
+        <div id="p2p-status" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; border-radius: 5px;">
+            <h2>P2P Network</h2>
+            <p><strong>Status:</strong> <span id="p2p-status-text">Disconnected</span></p>
+            <p><strong>My Peer ID:</strong> <span id="peer-id">N/A</span></p>
+            <p><strong>Connected Peers:</strong> <span id="connections-count">0</span></p>
+        </div>
+
         <h2>Plan</h2>
         <div id="plan-output" class="output-area">No plan generated yet.</div>
 
@@ -224,6 +232,8 @@
             newCode: '',
             review: '',
             rateLimitedModels: {}, // To track models that are rate-limited
+            pendingLlmRequests: new Map(),
+            isBusy: false,
         };
 
         // --- DOM Elements ---
@@ -243,6 +253,11 @@
             saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
             container: document.getElementById('container'),
             drGeminiGuidance: document.getElementById('dr-gemini-guidance'),
+            p2p: {
+                statusText: document.getElementById('p2p-status-text'),
+                peerId: document.getElementById('peer-id'),
+                connectionsCount: document.getElementById('connections-count'),
+            },
         };
 
         // --- Initialization ---
@@ -293,6 +308,8 @@
         }
 
 
+        import MPLib from './mplib.js';
+
         function initializeApp() {
             // This function contains the original logic from window.onload after the key check
             console.log('Initializing application...');
@@ -310,6 +327,44 @@
             dom.currentCode.value = state.currentCode;
 
             loadDrGeminiGuidance();
+
+            // --- P2P Initialization ---
+            function updateConnectionsCount() {
+                const connections = MPLib.getRoomConnections();
+                dom.p2p.connectionsCount.textContent = connections.size;
+            }
+
+            MPLib.initialize({
+                onStatusUpdate: (msg, type) => {
+                    console.log(`MPLib Status: ${msg}`);
+                    dom.p2p.statusText.textContent = msg;
+                },
+                onError: (type, err) => {
+                    console.error(`MPLib Error (${type}):`, err);
+                    dom.p2p.statusText.textContent = `Error: ${err.message}`;
+                },
+                onMasterConnected: (id) => {
+                    dom.p2p.peerId.textContent = id;
+                },
+                onNewMasterEstablished: () => {
+                    MPLib.joinRoom('borg-lobby');
+                    MPLib.sendToMaster({ type: 'update_status', payload: { newRoom: 'borg-lobby', isPublic: true } });
+                },
+                onRoomPeerJoined: (peerId, conn) => {
+                    updateConnectionsCount();
+                },
+                onRoomPeerLeft: (peerId) => {
+                    updateConnectionsCount();
+                },
+                onRoomDataReceived: (peerId, data) => {
+                    if (data.type === 'llm-request') {
+                        handleLlmRequest(peerId, data.payload);
+                    } else if (data.type === 'llm-response') {
+                        handleLlmResponse(data.payload);
+                    }
+                }
+            });
+
 
             // Add event listeners
             dom.getPlanBtn.addEventListener('click', handleGetPlan);
@@ -400,78 +455,154 @@
             }
         }
 
-        async function callGeminiWithFallback(prompt) {
-            const models = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']; // Reordered
-            const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
-            let lastError = null;
-            const now = Date.now();
+        async function handleLlmRequest(requesterId, payload) {
+            const { prompt, requestId } = payload;
 
-            while (true) { // This loop will run indefinitely in autopilot mode on retriable errors
-                for (const model of models) {
-                    if (state.rateLimitedModels[model] && state.rateLimitedModels[model] > now) {
-                        console.log(`Model ${model} is currently rate-limited. Skipping.`);
-                        continue; // Skip to the next model
-                    }
-
-                    console.log(`Attempting to call Gemini with model: ${model}`);
-                    const result = await callGemini(prompt, model);
-
-                    if (typeof result === 'string') {
-                        console.log(`Successfully got response with model: ${model}`);
-                        return result; // Success, exit everything.
-                    }
-
-                    if (result && result.error) {
-                        lastError = result;
-                        // Check for retriable statuses
-                        if (result.status === 429 || result.status === 503) {
-                            console.warn(`Model ${model} returned ${result.status}.`);
-                            let delay = 5000; // Default delay
-                            if (result.status === 429 && result.details) {
-                                const retryInfo = result.details.find(d => d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
-                                if (retryInfo && retryInfo.retryDelay) {
-                                    const seconds = parseInt(retryInfo.retryDelay.replace('s', ''), 10);
-                                    if (!isNaN(seconds)) {
-                                        delay = (seconds * 1000) + 500; // Add 500ms buffer
-                                    }
-                                }
-                            }
-                             if (result.status === 429) { // Check for 429 specifically to set rate limit
-                                const expiry = Date.now() + delay;
-                                state.rateLimitedModels[model] = expiry;
-                                sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
-                                console.log(`Rate-limiting ${model} until ${new Date(expiry).toLocaleTimeString()}`);
-                            }
-
-                            console.log(`Waiting for ${delay}ms before trying the next model.`);
-                            await sleep(delay);
-                            // The for loop will now try the next model.
-                            continue;
-                        } else {
-                            // Non-retriable error, fail fast.
-                            console.error(`API call failed with non-retriable error for model ${model}.`, result);
-                            return result;
-                        }
-                    } else {
-                        // Handle cases where result is not a string and not a standard error object
-                        lastError = result || { error: 'An unknown error occurred.' };
-                        console.warn('Unknown response from API, trying next model...', result);
-                        await sleep(5000); // Wait 5s and try next model
-                    }
-                } // end for loop of models
-
-                if (!isAutopilot) {
-                    // If we've gone through all models and we're not in autopilot, break the while loop and return the last error.
-                    break;
-                } else {
-                    // If in autopilot, log that we're restarting the cycle and continue the while loop.
-                    console.log("Completed a full cycle through all models. Retrying from the beginning as autopilot is active.");
-                    await sleep(10000); // Wait 10s before restarting the whole model cycle.
-                }
+            if (state.isBusy) {
+                console.log(`Received LLM request ${requestId.slice(-6)} but I am busy. Ignoring.`);
+                return;
             }
 
-            console.error('All models failed to respond. Returning the last error.');
-            return lastError || { error: 'All Gemini models failed to respond.' };
+            console.log(`Received LLM request ${requestId.slice(-6)} from ${requesterId.slice(-6)}. Handling it.`);
+            state.isBusy = true;
+
+            // Use the core callGemini function, not the fallback, to avoid loops.
+            const result = await callGemini(prompt, 'gemini-1.5-flash'); // Use a fast model for p2p
+
+            if (result && !result.error) {
+                console.log(`Successfully handled LLM request ${requestId.slice(-6)}. Sending response.`);
+                MPLib.sendDirectToRoomPeer(requesterId, {
+                    type: 'llm-response',
+                    payload: {
+                        result: result,
+                        requestId: requestId
+                    }
+                });
+            } else {
+                console.error(`Failed to handle LLM request ${requestId.slice(-6)} for peer.`, result ? result.error : 'Unknown error');
+            }
+
+            state.isBusy = false;
+        }
+
+        function handleLlmResponse(payload) {
+            const { result, requestId } = payload;
+
+            if (state.pendingLlmRequests.has(requestId)) {
+                console.log(`Received peer response for request ${requestId.slice(-6)}. Resolving promise.`);
+                const { resolve } = state.pendingLlmRequests.get(requestId);
+                resolve(result);
+                state.pendingLlmRequests.delete(requestId);
+            } else {
+                console.log(`Received peer response for already completed request ${requestId.slice(-6)}. Ignoring.`);
+            }
+        }
+
+
+        async function callGeminiWithFallback(prompt) {
+            const requestId = `llm-req-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+            const localLlmPromise = (async () => {
+                const models = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+                const isAutopilot = sessionStorage.getItem('autopilotEnabled') === 'true';
+                let lastError = null;
+
+                while (true) { // This loop will run indefinitely in autopilot mode on retriable errors
+                    for (const model of models) {
+                        if (!state.pendingLlmRequests.has(requestId)) {
+                            console.log(`LLM Request ${requestId.slice(-6)} was resolved by a peer. Cancelling local execution.`);
+                            return; // Stop if a peer has already responded.
+                        }
+
+                        console.log(`[Local] Attempting to call Gemini with model: ${model} for request ${requestId.slice(-6)}`);
+                        const result = await callGemini(prompt, model);
+
+                        if (typeof result === 'string') {
+                            console.log(`[Local] Successfully got response with model: ${model}`);
+                            return result; // Success, exit everything.
+                        }
+
+                        if (result && result.error) {
+                            lastError = result;
+                            // Check for retriable statuses
+                            if (result.status === 429 || result.status === 503) {
+                                console.warn(`[Local] Model ${model} returned ${result.status}.`);
+                                let delay = 5000; // Default delay
+                                if (result.status === 429 && result.details) {
+                                    const retryInfo = result.details.find(d => d['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
+                                    if (retryInfo && retryInfo.retryDelay) {
+                                        const seconds = parseInt(retryInfo.retryDelay.replace('s', ''), 10);
+                                        if (!isNaN(seconds)) {
+                                            delay = (seconds * 1000) + 500; // Add 500ms buffer
+                                        }
+                                    }
+                                }
+                                if (result.status === 429) { // Check for 429 specifically to set rate limit
+                                    const expiry = Date.now() + delay;
+                                    state.rateLimitedModels[model] = expiry;
+                                    sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
+                                    console.log(`[Local] Rate-limiting ${model} until ${new Date(expiry).toLocaleTimeString()}`);
+                                }
+
+                                console.log(`[Local] Waiting for ${delay}ms before trying the next model.`);
+                                await sleep(delay);
+                                // The for loop will now try the next model.
+                                continue;
+                            } else {
+                                // Non-retriable error, fail fast.
+                                console.error(`[Local] API call failed with non-retriable error for model ${model}.`, result);
+                                return result;
+                            }
+                        } else {
+                            // Handle cases where result is not a string and not a standard error object
+                            lastError = result || { error: 'An unknown error occurred.' };
+                            console.warn('[Local] Unknown response from API, trying next model...', result);
+                            await sleep(5000); // Wait 5s and try next model
+                        }
+                    } // end for loop of models
+
+                    if (!isAutopilot) {
+                        // If we've gone through all models and we're not in autopilot, break the while loop and return the last error.
+                        break;
+                    } else {
+                        // If in autopilot, log that we're restarting the cycle and continue the while loop.
+                        console.log("[Local] Completed a full cycle through all models. Retrying from the beginning as autopilot is active.");
+                        await sleep(10000); // Wait 10s before restarting the whole model cycle.
+                    }
+                }
+
+                return lastError || { error: 'All local Gemini models failed to respond.' };
+            })();
+
+            return new Promise((resolve, reject) => {
+                state.pendingLlmRequests.set(requestId, { resolve, reject });
+
+                console.log(`Broadcasting LLM request ${requestId.slice(-6)} to room.`);
+                MPLib.broadcastToRoom({
+                    type: 'llm-request',
+                    payload: { prompt, requestId }
+                });
+
+                // Race the local execution against the peer network
+                localLlmPromise.then(localResult => {
+                    // Check if the request is still pending before resolving
+                    if (state.pendingLlmRequests.has(requestId)) {
+                         console.log(`Local LLM call for ${requestId.slice(-6)} finished first.`);
+                        if (localResult && !localResult.error) {
+                            resolve(localResult);
+                        } else {
+                            reject(localResult);
+                        }
+                        state.pendingLlmRequests.delete(requestId);
+                    }
+                }).catch(err => {
+                     if (state.pendingLlmRequests.has(requestId)) {
+                        console.error(`Local LLM call for ${requestId.slice(-6)} failed.`);
+                        reject(err);
+                        state.pendingLlmRequests.delete(requestId);
+                    }
+                });
+            });
         }
 
         // --- Workflow Handlers ---
@@ -488,7 +619,8 @@
             dom.getPlanBtn.disabled = true;
             dom.getPlanBtn.textContent = 'Generating...';
 
-            const planPrompt = `You are an expert software engineer. Your task is to create a step-by-step plan to modify the following HTML code based on the user's request. The entire application is in this single file.
+            try {
+                const planPrompt = `You are an expert software engineer. Your task is to create a step-by-step plan to modify the following HTML code based on the user's request. The entire application is in this single file.
 
 User Request: "${userPrompt}"
 
@@ -499,27 +631,32 @@ ${state.currentCode}
 
 Provide a concise plan.`;
 
-            const result = await callGeminiWithFallback(planPrompt);
-            if (result && !result.error) {
-                state.plan = result;
-                dom.planOutput.textContent = state.plan;
-                dom.getCodeBtn.disabled = false;
+                const result = await callGeminiWithFallback(planPrompt);
+                if (result && !result.error) {
+                    state.plan = result;
+                    dom.planOutput.textContent = state.plan;
+                    dom.getCodeBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error getting plan:', error);
+                dom.planOutput.textContent = `An error occurred: ${error.message || 'Unknown error'}`;
+            } finally {
+                dom.getPlanBtn.disabled = false;
+                dom.getPlanBtn.textContent = '1. Generate Plan';
             }
-
-            dom.getPlanBtn.disabled = false;
-            dom.getPlanBtn.textContent = '1. Generate Plan';
         }
 
         async function handleGetCode(feedback = '') { // Accept optional feedback
             dom.getCodeBtn.disabled = true;
             dom.getCodeBtn.textContent = 'Generating...';
 
-            let feedbackPrompt = '';
-            if (feedback) {
-                feedbackPrompt = `A previous attempt was reviewed and had the following issues. You MUST address them:\n${feedback}`;
-            }
+            try {
+                let feedbackPrompt = '';
+                if (feedback) {
+                    feedbackPrompt = `A previous attempt was reviewed and had the following issues. You MUST address them:\n${feedback}`;
+                }
 
-            const codePrompt = `You are an expert software engineer. Based on the following plan and the current code, generate the complete, new HTML code for the file. Ensure you only output the raw code, with no explanations or markdown formatting.
+                const codePrompt = `You are an expert software engineer. Based on the following plan and the current code, generate the complete, new HTML code for the file. Ensure you only output the raw code, with no explanations or markdown formatting.
 ${feedbackPrompt}
 Plan:
 ${state.plan}
@@ -531,22 +668,28 @@ ${state.currentCode}
 
 New Code:`;
 
-            const result = await callGeminiWithFallback(codePrompt);
-            if (result && !result.error) {
-                state.newCode = result; // No more cleaning needed here
-                dom.newCode.value = state.newCode;
-                dom.reviewCodeBtn.disabled = false;
+                const result = await callGeminiWithFallback(codePrompt);
+                if (result && !result.error) {
+                    state.newCode = result; // No more cleaning needed here
+                    dom.newCode.value = state.newCode;
+                    dom.reviewCodeBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error getting code:', error);
+                dom.newCode.value = `An error occurred: ${error.message || 'Unknown error'}`;
+            } finally {
+                dom.getCodeBtn.disabled = false;
+                dom.getCodeBtn.textContent = '2. Generate Code';
             }
-
-            dom.getCodeBtn.disabled = false;
-            dom.getCodeBtn.textContent = '2. Generate Code';
         }
 
         async function handleReviewCode() {
             dom.reviewCodeBtn.disabled = true;
             dom.reviewCodeBtn.textContent = 'Reviewing...';
+            let isLgtm = false;
 
-            const reviewPrompt = `You are a world-class code reviewer. Review the "New Code" and check if it correctly implements the "Plan" and doesn't introduce any obvious bugs. The "Original Code" is provided for context. Provide a short, concise review. If the code looks good, say "LGTM!" (Looks Good To Me!).
+            try {
+                const reviewPrompt = `You are a world-class code reviewer. Review the "New Code" and check if it correctly implements the "Plan" and doesn't introduce any obvious bugs. The "Original Code" is provided for context. Provide a short, concise review. If the code looks good, say "LGTM!" (Looks Good To Me!).
 
 Plan:
 ${state.plan}
@@ -563,22 +706,24 @@ ${state.newCode}
 
 Review:`;
 
-            const result = await callGeminiWithFallback(reviewPrompt);
-            let isLgtm = false;
-            if (result && !result.error) {
-                state.review = result;
-                dom.reviewOutput.textContent = state.review;
-                // A simple check to see if the review is positive
-                if (state.review.toLowerCase().includes('lgtm')) {
-                    dom.applyCodeBtn.disabled = false;
-                    isLgtm = true;
-                    // AUTO-EVOLVE is now handled by the workflow
+                const result = await callGeminiWithFallback(reviewPrompt);
+                if (result && !result.error) {
+                    state.review = result;
+                    dom.reviewOutput.textContent = state.review;
+                    // A simple check to see if the review is positive
+                    if (state.review.toLowerCase().includes('lgtm')) {
+                        dom.applyCodeBtn.disabled = false;
+                        isLgtm = true;
+                    }
                 }
+            } catch (error) {
+                console.error('Error reviewing code:', error);
+                dom.reviewOutput.textContent = `An error occurred: ${error.message || 'Unknown error'}`;
+            } finally {
+                dom.reviewCodeBtn.disabled = false;
+                dom.reviewCodeBtn.textContent = '3. Review Code';
             }
-
-            dom.reviewCodeBtn.disabled = false;
-            dom.reviewCodeBtn.textContent = '3. Review Code';
-            return isLgtm; // Return boolean status
+            return isLgtm;
         }
 
         async function handleApplyCode() {
@@ -665,9 +810,6 @@ ${state.currentCode}
 What is the next goal?`;
 
                 const nextGoal = await callGeminiWithFallback(goalPrompt);
-                if (!nextGoal || nextGoal.error) {
-                    throw new Error('Failed to get next goal from Dr. Gemini.');
-                }
                 dom.prompt.value = nextGoal.replace(/\"/g, ''); // Remove quotes from response
                 console.log("New Goal from Dr. Gemini:", dom.prompt.value);
 
