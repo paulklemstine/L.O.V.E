@@ -510,8 +510,8 @@
                 while (true) { // This loop will run indefinitely in autopilot mode on retriable errors
                     for (const model of models) {
                         if (!state.pendingLlmRequests.has(requestId)) {
-                            console.log(`LLM Request ${requestId.slice(-6)} was resolved by a peer. Cancelling local execution.`);
-                            return; // Stop if a peer has already responded.
+                            console.log(`LLM Request ${requestId.slice(-6)} was resolved by a peer. Halting local execution chain.`);
+                            return { error: "Cancelled by peer response" }; // Return a specific object instead of undefined
                         }
 
                         console.log(`[Local] Attempting to call Gemini with model: ${model} for request ${requestId.slice(-6)}`);
@@ -639,7 +639,7 @@ Provide a concise plan.`;
                 }
             } catch (error) {
                 console.error('Error getting plan:', error);
-                dom.planOutput.textContent = `An error occurred: ${error.message || 'Unknown error'}`;
+                dom.planOutput.textContent = `An error occurred: ${error.error || JSON.stringify(error)}`;
             } finally {
                 dom.getPlanBtn.disabled = false;
                 dom.getPlanBtn.textContent = '1. Generate Plan';
@@ -676,7 +676,7 @@ New Code:`;
                 }
             } catch (error) {
                 console.error('Error getting code:', error);
-                dom.newCode.value = `An error occurred: ${error.message || 'Unknown error'}`;
+                dom.newCode.value = `An error occurred: ${error.error || JSON.stringify(error)}`;
             } finally {
                 dom.getCodeBtn.disabled = false;
                 dom.getCodeBtn.textContent = '2. Generate Code';
@@ -718,7 +718,7 @@ Review:`;
                 }
             } catch (error) {
                 console.error('Error reviewing code:', error);
-                dom.reviewOutput.textContent = `An error occurred: ${error.message || 'Unknown error'}`;
+                dom.reviewOutput.textContent = `An error occurred: ${error.error || JSON.stringify(error)}`;
             } finally {
                 dom.reviewCodeBtn.disabled = false;
                 dom.reviewCodeBtn.textContent = '3. Review Code';
@@ -816,7 +816,7 @@ What is the next goal?`;
                 await executeWorkflow();
 
             } catch (error) {
-                console.error("Dr. Gemini cycle failed:", error.message);
+                console.error("Dr. Gemini cycle failed:", error);
                 resetAutopilotBtn();
             }
         }
