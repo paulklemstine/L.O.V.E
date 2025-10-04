@@ -133,6 +133,39 @@
             button { font-size: 14px; padding: 8px 12px; }
 
         }
+
+        #debug-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 200px;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            border-top: 2px solid #4267B2;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            z-index: 2000;
+        }
+
+        #debug-header {
+            padding: 5px 10px;
+            background-color: #2a2a2a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #debug-output {
+            flex-grow: 1;
+            padding: 10px;
+            overflow-y: scroll;
+            white-space: pre-wrap;
+        }
+        .log-error { color: #ff8080; }
+        .log-warn { color: #ffcc66; }
     </style>
 </head>
 <body>
@@ -178,6 +211,7 @@
             <p><strong>Status:</strong> <span id="p2p-status-text">Disconnected</span></p>
             <p><strong>My Peer ID:</strong> <span id="peer-id">N/A</span></p>
             <p><strong>Connected Peers:</strong> <span id="connections-count">0</span></p>
+            <button id="shareCodeBtn" style="margin-top: 10px;">Share & Merge Code with Peers</button>
         </div>
 
         <h2>Plan</h2>
@@ -193,6 +227,15 @@
         <textarea id="currentCode" readonly></textarea>
 
     </div>
+
+    <div id="debug-panel">
+        <div id="debug-header">
+            <span>Debug Console</span>
+            <button id="copyLogBtn" style="font-size: 12px; padding: 3px 8px;">Copy Log</button>
+        </div>
+        <div id="debug-output"></div>
+    </div>
+
 
     <script type="module">
 
@@ -235,6 +278,7 @@
             pendingLlmRequests: new Map(),
             isBusy: false,
             readyPeers: new Set(),
+            isMerging: false,
         };
 
         // --- DOM Elements ---
@@ -258,6 +302,7 @@
                 statusText: document.getElementById('p2p-status-text'),
                 peerId: document.getElementById('peer-id'),
                 connectionsCount: document.getElementById('connections-count'),
+                shareCodeBtn: document.getElementById('shareCodeBtn'),
             },
         };
 
@@ -277,6 +322,66 @@
                 initializeApp();
             }
         };
+
+        function initializeDebugPanel() {
+            const debugOutput = document.getElementById('debug-output');
+            const copyLogBtn = document.getElementById('copyLogBtn');
+
+            if (!debugOutput || !copyLogBtn) {
+                console.error("Debug panel elements not found!");
+                return;
+            }
+
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+
+            const createLogMessage = (message, className) => {
+                const pre = document.createElement('pre');
+                pre.textContent = message;
+                if (className) {
+                    pre.className = className;
+                }
+                debugOutput.appendChild(pre);
+                debugOutput.scrollTop = debugOutput.scrollHeight; // Auto-scroll
+            };
+
+            console.log = function(...args) {
+                const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
+                createLogMessage(message);
+                originalLog.apply(console, args);
+            };
+
+            console.error = function(...args) {
+                const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
+                createLogMessage(`ERROR: ${message}`, 'log-error');
+                originalError.apply(console, args);
+            };
+
+            console.warn = function(...args) {
+                const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
+                 createLogMessage(`WARN: ${message}`, 'log-warn');
+                originalWarn.apply(console, args);
+            };
+
+            copyLogBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(debugOutput.innerText)
+                    .then(() => {
+                        copyLogBtn.textContent = 'Copied!';
+                        setTimeout(() => copyLogBtn.textContent = 'Copy Log', 2000);
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy log: ', err);
+                    });
+            });
+
+            // Add a bit of space to the main container so it doesn't get hidden by the debug panel
+            document.getElementById('container').style.marginBottom = '220px';
+
+
+            originalLog('Debug panel initialized.');
+        }
+
 
         function handleSaveApiKey() {
             const userKey = dom.apiKeyInput.value;
@@ -312,6 +417,7 @@
         import MPLib from './mplib.js';
 
         function initializeApp() {
+            initializeDebugPanel();
             // This function contains the original logic from window.onload after the key check
             console.log('Initializing application...');
 
@@ -367,6 +473,17 @@
                         handleLlmRequest(peerId, data.payload);
                     } else if (data.type === 'llm-response') {
                         handleLlmResponse(data.payload);
+                    } else if (data.type === 'source-code-request') {
+                        console.log(`Received source code request from ${peerId.slice(-6)}. Responding.`);
+                        MPLib.sendDirectToRoomPeer(peerId, {
+                            type: 'source-code-response',
+                            payload: {
+                                code: state.currentCode
+                            }
+                        });
+                    } else if (data.type === 'source-code-response') {
+                        console.log(`Received source code response from ${peerId.slice(-6)}.`);
+                        handlePeerCodeResponse(data.payload.code);
                     }
                 }
             });
@@ -378,6 +495,17 @@
             dom.reviewCodeBtn.addEventListener('click', handleReviewCode);
             dom.applyCodeBtn.addEventListener('click', handleApplyCode);
             dom.autopilotBtn.addEventListener('click', handleAutopilot);
+            dom.p2p.shareCodeBtn.addEventListener('click', () => {
+                if (state.isMerging) {
+                    console.warn('A merge is already in progress. Please wait.');
+                    return;
+                }
+                state.isMerging = true;
+                console.log('Requesting source code from all peers...');
+                dom.planOutput.textContent = 'Requesting source code from peers...';
+                dom.p2p.shareCodeBtn.disabled = true;
+                MPLib.broadcastToRoom({ type: 'source-code-request' });
+            });
 
             if (sessionStorage.getItem('autopilotEnabled') === 'true') {
                 dom.autopilotBtn.disabled = true;
@@ -473,7 +601,7 @@
             state.isBusy = true;
 
             // Use the core callGemini function, not the fallback, to avoid loops.
-            const result = await callGemini(prompt, 'gemini-1.5-flash'); // Use a fast model for p2p
+            const result = await callGemini(prompt, 'gemini-2.5-flash'); // Use a fast model for p2p
 
             if (result && !result.error) {
                 console.log(`Successfully handled LLM request ${requestId.slice(-6)}. Sending response.`);
@@ -523,7 +651,7 @@
 
                 console.log(`[Local Fallback] No peer responded for request ${requestId.slice(-6)}. Starting local execution.`);
 
-                const models = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+                const models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-pro'];
                 let lastError = null;
 
                 for (const model of models) {
@@ -799,6 +927,61 @@ What is the next goal?`;
             sessionStorage.removeItem('autopilotEnabled');
             dom.autopilotBtn.disabled = false;
             dom.autopilotBtn.textContent = 'Start Autopilot';
+        }
+
+        async function handlePeerCodeResponse(peerCode) {
+            if (!state.isMerging) {
+                console.log("Ignoring peer code response as a merge is not currently active.");
+                return;
+            }
+            // We've received a response, so we will handle it. Subsequent responses will be ignored
+            // because the isMerging flag is still true. It will be reset in the finally block.
+
+            console.log("Handling peer code response. Preparing to merge...");
+            dom.planOutput.textContent = 'Received code from a peer. Generating merge plan...';
+            dom.getCodeBtn.disabled = true;
+            dom.reviewCodeBtn.disabled = true;
+            dom.applyCodeBtn.disabled = true;
+
+            try {
+                const mergePrompt = `You are an expert software engineer specializing in code merging and integration. Your task is to merge two versions of an HTML file. The goal is to combine the best features and logic from both, creating a superior, unified version.
+
+You must analyze both "Local Code" and "Peer Code". Identify unique functionalities, UI improvements, or bug fixes in each. Then, intelligently merge them. Do not simply pick one over the other.
+
+Prioritize keeping the core application structure and functionality intact. Ensure the resulting code is a complete, valid HTML file. Only output the raw, merged code with no explanations or markdown.
+
+Local Code:
+\`\`\`html
+${state.currentCode}
+\`\`\`
+
+Peer Code:
+\`\`\`html
+${peerCode}
+\`\`\`
+
+New Merged Code:`;
+
+                const mergedCode = await callGeminiWithFallback(mergePrompt);
+                if (mergedCode && !mergedCode.error) {
+                    state.plan = "Code received from a peer and merged using AI. The proposed code below is the result of this merge. Please review carefully before applying.";
+                    state.newCode = mergedCode;
+
+                    dom.planOutput.textContent = state.plan;
+                    dom.newCode.value = state.newCode;
+                    dom.reviewCodeBtn.disabled = false; // Ready for review
+                    console.log("Successfully merged code. Ready for review.");
+                } else {
+                    throw new Error(mergedCode.error || "Unknown error during merge.");
+                }
+            } catch (error) {
+                console.error('Error during code merge:', error);
+                dom.planOutput.textContent = `An error occurred during the merge: ${error.message}`;
+            } finally {
+                // Ensure the merge process is marked as finished and the button is re-enabled
+                state.isMerging = false;
+                dom.p2p.shareCodeBtn.disabled = false;
+            }
         }
 
     </script>
