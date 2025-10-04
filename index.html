@@ -580,7 +580,7 @@
                     <body style="margin:0; padding:0; overflow:hidden; background-color: #1a1a1a;">
                         <div id="terminal" style="width:100vw; height:100vh;"></div>
                         <script>
-                            window.addEventListener('DOMContentLoaded', (event) => {
+                            window.addEventListener('load', (event) => {
                                 const term = new Terminal({ cursorBlink: true, scrollback: 1000 });
                                 term.open(document.getElementById('terminal'));
 
