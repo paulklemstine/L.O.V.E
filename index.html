@@ -49,11 +49,64 @@
         #apiKeyInput {
              width: 100%;
         }
-        h1, h2 {
+        h1 {
             color: #333;
             border-bottom: 2px solid #e0e0e0;
             padding-bottom: 10px;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 20px;
         }
+        h2 {
+            color: #333;
+            padding-bottom: 0;
+            border-bottom: none;
+            font-size: 1.2em;
+            margin: 0;
+        }
+        #dashboard {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .panel {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 calc(50% - 20px); /* Two panels per row */
+        }
+        .panel.panel-full-width {
+            flex-basis: 100%;
+        }
+        .panel-header {
+            background-color: #f0f2f5;
+            padding: 10px 15px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+         .panel-header::after {
+            content: '\\25B2'; /* Up arrow */
+            font-size: 12px;
+            transition: transform 0.3s ease;
+        }
+        .panel.collapsed .panel-header::after {
+            transform: rotate(180deg);
+        }
+        .panel-content {
+            padding: 15px;
+            flex-grow: 1;
+        }
+        .panel.collapsed .panel-content {
+            display: none;
+        }
+
         textarea {
             width: 98%;
             height: 300px;
@@ -180,52 +233,91 @@
     <div id="container">
         <h1>Jules - A Self-Modifying Organism</h1>
 
+        <div id="dashboard">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>1. Goal</h2>
+                </div>
+                <div class="panel-content">
+                    <textarea id="prompt" placeholder="Describe the change you want to make..."></textarea>
+                </div>
+            </div>
 
-        <h2 class="hidden">Configuration</h2>
-        <!-- API Key input removed for hardcoding -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>2. Controls</h2>
+                </div>
+                <div class="panel-content">
+                    <div id="controls">
+                        <button id="getPlan">1. Generate Plan</button>
+                        <button id="getCode" disabled>2. Generate Code</button>
+                        <button id="reviewCode" disabled>3. Review Code</button>
+                        <button id="applyCode" disabled>4. Apply & Evolve</button>
+                    </div>
+                     <div id="autopilot-controls">
+                        <button id="autopilot">Start Autopilot</button>
+                    </div>
+                </div>
+            </div>
 
-        <h2>1. Goal</h2>
-        <textarea id="prompt" placeholder="Describe the change you want to make..."></textarea>
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Dr. Gemini Guidance</h2>
+                </div>
+                <div class="panel-content">
+                     <p>Enter your guidance for Dr. Gemini below. This will be considered when it generates its next goal.</p>
+                    <textarea id="dr-gemini-guidance" placeholder="For example: 'Focus on improving the user interface.'"></textarea>
+                </div>
+            </div>
 
-        <h2>2. Manual Controls</h2>
-        <div id="controls">
-            <button id="getPlan">1. Generate Plan</button>
-            <button id="getCode" disabled>2. Generate Code</button>
-            <button id="reviewCode" disabled>3. Review Code</button>
-            <button id="applyCode" disabled>4. Apply & Evolve</button>
-        </div>
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>P2P Network</h2>
+                </div>
+                <div class="panel-content">
+                    <p><strong>Status:</strong> <span id="p2p-status-text">Disconnected</span></p>
+                    <p><strong>My Peer ID:</strong> <span id="peer-id">N/A</span></p>
+                    <p><strong>Connected Peers:</strong> <span id="connections-count">0</span></p>
+                    <button id="shareCodeBtn" style="margin-top: 10px;">Share & Merge Code with Peers</button>
+                </div>
+            </div>
 
-        <div id="guidance-container" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; border-radius: 5px;">
-            <h2>Dr. Gemini Guidance</h2>
-            <p>Enter your guidance for Dr. Gemini below. This will be considered when it generates its next goal.</p>
-            <textarea id="dr-gemini-guidance" placeholder="For example: 'Focus on improving the user interface.'"></textarea>
-        </div>
+            <div class="panel panel-full-width">
+                <div class="panel-header">
+                    <h2>Plan</h2>
+                </div>
+                <div class="panel-content">
+                    <div id="plan-output" class="output-area">No plan generated yet.</div>
+                </div>
+            </div>
 
-        <h2>3. Autopilot</h2>
-        <div id="autopilot-controls">
-            <button id="autopilot">Start Autopilot</button>
-        </div>
+            <div class="panel panel-full-width collapsed">
+                <div class="panel-header">
+                    <h2>Proposed Code</h2>
+                </div>
+                <div class="panel-content">
+                    <textarea id="newCode" readonly></textarea>
+                </div>
+            </div>
 
-        <div id="p2p-status" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; border-radius: 5px;">
-            <h2>P2P Network</h2>
-            <p><strong>Status:</strong> <span id="p2p-status-text">Disconnected</span></p>
-            <p><strong>My Peer ID:</strong> <span id="peer-id">N/A</span></p>
-            <p><strong>Connected Peers:</strong> <span id="connections-count">0</span></p>
-            <button id="shareCodeBtn" style="margin-top: 10px;">Share & Merge Code with Peers</button>
-        </div>
+            <div class="panel panel-full-width collapsed">
+                <div class="panel-header">
+                    <h2>Code Review</h2>
+                </div>
+                <div class="panel-content">
+                    <div id="review-output" class="output-area">No review yet.</div>
+                </div>
+            </div>
 
-        <h2>Plan</h2>
-        <div id="plan-output" class="output-area">No plan generated yet.</div>
-
-        <h2>Proposed Code</h2>
-        <textarea id="newCode" readonly></textarea>
-
-        <h2>Code Review</h2>
-        <div id="review-output" class="output-area">No review yet.</div>
-
-        <h2>Current Source Code</h2>
-        <textarea id="currentCode" readonly></textarea>
-
+            <div class="panel panel-full-width collapsed">
+                <div class="panel-header">
+                    <h2>Current Source Code</h2>
+                </div>
+                <div class="panel-content">
+                    <textarea id="currentCode" readonly></textarea>
+                </div>
+            </div>
+        </div> <!-- end #dashboard -->
     </div>
 
     <div id="debug-panel">
@@ -413,11 +505,21 @@
             }
         }
 
+        function initializeCollapsiblePanels() {
+            const panelHeaders = document.querySelectorAll('.panel-header');
+            panelHeaders.forEach(header => {
+                header.addEventListener('click', () => {
+                    const panel = header.closest('.panel');
+                    panel.classList.toggle('collapsed');
+                });
+            });
+        }
 
         import MPLib from './mplib.js';
 
         function initializeApp() {
             initializeDebugPanel();
+            initializeCollapsiblePanels();
             // This function contains the original logic from window.onload after the key check
             console.log('Initializing application...');
 
