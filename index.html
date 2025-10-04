@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jules - Self-Modifying Web App</title>
+    <script src="https://cjrtnc.leaningtech.com/4.2/loader.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
     <style>
         body {
@@ -317,6 +318,28 @@
                     <textarea id="currentCode" readonly></textarea>
                 </div>
             </div>
+
+            <div class="panel panel-full-width">
+                <div class="panel-header">
+                    <h2>Linux Terminal</h2>
+                </div>
+                <div class="panel-content">
+                    <div id="webvm-container" style="width: 100%; height: 500px; border: 1px solid #ddd;"></div>
+                </div>
+            </div>
+
+            <div class="panel panel-full-width">
+                <div class="panel-header">
+                    <h2>Java JAR Runner</h2>
+                </div>
+                <div class="panel-content">
+                    <input type="text" id="jar-url-input" placeholder="Enter JAR URL...">
+                    <button id="run-jar-btn">Run JAR</button>
+                    <div id="cheerpj-container" style="width: 100%; height: 500px; border: 1px solid #ddd; margin-top: 10px;">
+                        <div id="cheerpj-display"></div>
+                    </div>
+                </div>
+            </div>
         </div> <!-- end #dashboard -->
     </div>
 
@@ -330,6 +353,28 @@
 
 
     <script type="module">
+        // --- Jules Programmatic Hooks ---
+        window.jules = {
+            webvm: {
+                runCommand: (command) => {
+                    const iframe = document.getElementById('webvm-iframe');
+                    if (iframe && iframe.contentWindow) {
+                        // The '*' target origin is acceptable here because we are communicating with a
+                        // self-generated data URI iframe, which has a null origin.
+                        iframe.contentWindow.postMessage({ type: 'runCommand', command: command }, '*');
+                        console.log(`Sent command to WebVM: ${command}`);
+                    } else {
+                        console.error('WebVM iframe not found or not ready to receive commands.');
+                    }
+                }
+            },
+            jar: {
+                // This will be populated by initializeJarRunner
+                run: async (url) => {
+                    console.error("JAR runner not initialized yet. Cannot run:", url);
+                }
+            }
+        };
 
         // --- Page Load State Handling ---
         function processPageLoadState() {
@@ -515,11 +560,145 @@
             });
         }
 
+        function initializeWebVM() {
+            const container = document.getElementById('webvm-container');
+            if (container) {
+                const iframe = document.createElement('iframe');
+                // A data URI is used to embed the WebVM environment, which avoids cross-origin issues
+                // and allows for programmatic control via postMessage. The content of the data URI
+                // is a self-contained HTML document that loads the WebVM.
+                iframe.src = `data:text/html;base64,${btoa(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="utf-8" />
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                        <title>WebVM</title>
+                        <script src="https://webvm.io/xterm.js"><\/script>
+                        <script src="https://webvm.io/v86.js"><\/script>
+                    </head>
+                    <body style="margin:0; padding:0; overflow:hidden; background-color: #1a1a1a;">
+                        <div id="terminal" style="width:100vw; height:100vh;"></div>
+                        <script>
+                            window.addEventListener('DOMContentLoaded', (event) => {
+                                const term = new Terminal({ cursorBlink: true, scrollback: 1000 });
+                                term.open(document.getElementById('terminal'));
+
+                                const vm = new V86Starter({
+                                    wasm_path: "https://webvm.io/v86.wasm",
+                                    memory_size: 256 * 1024 * 1024,
+                                    vga_memory_size: 8 * 1024 * 1024,
+                                    screen_container: document.createElement('div'), // Off-screen
+                                    bios: { url: "https://webvm.io/bios/seabios.bin" },
+                                    vga_bios: { url: "https://webvm.io/bios/vgabios.bin" },
+                                    cdrom: { url: "https://webvm.io/images/debian-live.iso" },
+                                    initial_state: { url: "https://webvm.io/images/debian-state.bin" },
+                                    autostart: true,
+                                });
+
+                                vm.add_listener("serial0-output-char", function(char) {
+                                    term.write(char);
+                                });
+
+                                term.onData(function(data) {
+                                    vm.serial0_send(data);
+                                });
+
+                                // Listen for commands from the parent window
+                                window.addEventListener('message', (event) => {
+                                    // For a data URI, the origin is 'null'. We can't do a strict origin check,
+                                    // but this is acceptable for this self-contained application.
+                                    if (event.data && event.data.type === 'runCommand') {
+                                        const command = event.data.command;
+                                        if (typeof command === 'string') {
+                                             vm.serial0_send(command + '\\n');
+                                        }
+                                    }
+                                });
+                            });
+                        <\/script>
+                    </body>
+                    </html>
+                `)}`;
+                iframe.style.width = '100%';
+                iframe.style.height = '100%';
+                iframe.style.border = 'none';
+                iframe.setAttribute('id', 'webvm-iframe'); // Give it an ID for later access
+                container.innerHTML = ''; // Clear container
+                container.appendChild(iframe);
+                console.log('WebVM initialized using data URI.');
+            } else {
+                console.error('WebVM container not found!');
+            }
+        }
+
+        function initializeJarRunner() {
+            const runJarBtn = document.getElementById('run-jar-btn');
+            const jarUrlInput = document.getElementById('jar-url-input');
+            const cheerpjDisplay = document.getElementById('cheerpj-display');
+
+            if (runJarBtn && jarUrlInput && cheerpjDisplay) {
+                const run = async (url) => { // Accept an optional URL parameter
+                    // If a URL is passed programmatically, use it. Otherwise, get it from the input field.
+                    const jarUrl = typeof url === 'string' ? url : jarUrlInput.value.trim();
+
+                    if (!jarUrl) {
+                        alert('Please enter or provide a JAR URL.');
+                        return;
+                    }
+
+                    // If called programmatically, update the input field for user visibility
+                    if (typeof url === 'string') {
+                        jarUrlInput.value = url;
+                    }
+
+                    try {
+                        console.log(`Initializing CheerpJ for JAR: ${jarUrl}`);
+                        runJarBtn.disabled = true;
+                        runJarBtn.textContent = 'Loading...';
+
+                        // Clear previous display
+                        cheerpjDisplay.innerHTML = '';
+
+                        await cheerpjInit();
+                        // Create a display with a default size, can be overridden by the Java app
+                        const cheerpj_global = await cheerpjCreateDisplay(800, 600, cheerpjDisplay);
+
+                        console.log('CheerpJ display created. Running JAR...');
+                        // cheerpjRunJar requires the graphics context and the URL of the JAR
+                        await cheerpjRunJar(cheerpj_global, jarUrl);
+                        console.log('JAR execution finished.');
+
+                    } catch (error) {
+                        console.error('CheerpJ Error:', error);
+                        alert(`Failed to run JAR: ${error.message}`);
+                    } finally {
+                        runJarBtn.disabled = false;
+                        runJarBtn.textContent = 'Run JAR';
+                    }
+                };
+
+                // The button click will call run() without an argument
+                runJarBtn.addEventListener('click', () => run());
+
+                // Overwrite the placeholder `run` function on the global object
+                // with our fully-initialized one.
+                window.jules.jar.run = run;
+
+                console.log('JAR runner initialized and programmatic hook is ready.');
+
+            } else {
+                console.error('JAR runner elements not found!');
+            }
+        }
+
         import MPLib from './mplib.js';
 
         function initializeApp() {
             initializeDebugPanel();
             initializeCollapsiblePanels();
+            initializeWebVM();
+            initializeJarRunner();
             // This function contains the original logic from window.onload after the key check
             console.log('Initializing application...');
 
