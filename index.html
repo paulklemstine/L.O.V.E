@@ -320,6 +320,15 @@
 
             <div class="panel panel-full-width">
                 <div class="panel-header">
+                    <h2>Saved Pages</h2>
+                </div>
+                <div class="panel-content">
+                    <ul id="saved-pages-list"></ul>
+                </div>
+            </div>
+
+            <div class="panel panel-full-width">
+                <div class="panel-header">
                     <h2>Linux Terminal</h2>
                 </div>
                 <div class="panel-content">
@@ -423,6 +432,7 @@
                 connectionsCount: document.getElementById('connections-count'),
                 shareCodeBtn: document.getElementById('shareCodeBtn'),
             },
+            savedPagesList: document.getElementById('saved-pages-list'),
         };
 
         // --- Initialization ---
@@ -692,6 +702,10 @@
                     } else if (data.type === 'source-code-response') {
                         console.log(`Received source code response from ${peerId.slice(-6)}.`);
                         handlePeerCodeResponse(data.payload.code);
+                    } else if (data.type === 'new-page-version') {
+                        console.log(`Received new page version from peer: ${data.payload.pageId}`);
+                        savePage(data.payload.pageId, data.payload.pageCode);
+                        renderSavedPagesList(); // Refresh the list
                     }
                 }
             });
@@ -721,6 +735,72 @@
                 // No delay needed, start the cycle.
                 runDrGeminiCycle();
             }
+
+            renderSavedPagesList();
+        }
+
+        function loadPage(pageId) {
+            console.log(`Loading page ${pageId}...`);
+            const pageCode = localStorage.getItem(pageId);
+            if (pageCode) {
+                // Persist critical state just like in handleApplyCode
+                sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
+                if (sessionStorage.getItem('autopilotEnabled') === 'true') {
+                    sessionStorage.setItem('autopilotForNextLoad', 'true');
+                }
+                sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
+
+                document.open();
+                document.write(pageCode);
+                document.close();
+            } else {
+                console.error(`Could not find page with ID ${pageId} in localStorage.`);
+                alert(`Error: Page with ID ${pageId} not found.`);
+            }
+        }
+
+        function renderSavedPagesList() {
+            const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+            dom.savedPagesList.innerHTML = ''; // Clear the list first
+
+            if (savedPages.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = 'No pages saved yet.';
+                dom.savedPagesList.appendChild(li);
+                return;
+            }
+
+            savedPages.forEach(pageId => {
+                const li = document.createElement('li');
+                li.style.marginBottom = '10px';
+
+                const idSpan = document.createElement('span');
+                idSpan.textContent = pageId.substring(0, 25) + '...'; // Truncate for display
+                idSpan.style.marginRight = '15px';
+
+                const loadButton = document.createElement('button');
+                loadButton.textContent = 'Load';
+                loadButton.style.fontSize = '12px';
+                loadButton.style.padding = '3px 8px';
+                loadButton.onclick = () => loadPage(pageId);
+
+                li.appendChild(idSpan);
+                li.appendChild(loadButton);
+                dom.savedPagesList.appendChild(li);
+            });
+        }
+
+        function savePage(pageId, pageCode) {
+            // Save the page content
+            localStorage.setItem(pageId, pageCode);
+
+            // Get and update the master list of page IDs
+            const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+            if (!savedPages.includes(pageId)) {
+                savedPages.push(pageId);
+                localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
+            }
+            console.log(`Page ${pageId} saved to localStorage.`);
         }
 
         function sleep(ms) {
@@ -1029,7 +1109,23 @@ Review:`;
             dom.applyCodeBtn.disabled = true;
             dom.applyCodeBtn.textContent = 'Evolving...';
 
-            console.log('Applying new code directly to the DOM.');
+            console.log('Saving and applying new code...');
+
+            // 1. Generate a unique ID for the new page version.
+            const newPageId = `jules-page-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+            // 2. Save the new page locally.
+            savePage(newPageId, state.newCode);
+
+            // 3. Broadcast the new page to peers.
+            console.log(`Broadcasting new page ${newPageId} to peers.`);
+            MPLib.broadcastToRoom({
+                type: 'new-page-version',
+                payload: {
+                    pageId: newPageId,
+                    pageCode: state.newCode
+                }
+            });
 
             // Persist critical state to sessionStorage for the next page load
             sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
