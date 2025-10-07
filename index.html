@@ -92,7 +92,7 @@
             align-items: center;
         }
          .panel-header::after {
-            content: '\\25B2'; /* Up arrow */
+            content: '\25B2'; /* Up arrow */
             font-size: 12px;
             transition: transform 0.3s ease;
         }
@@ -1264,13 +1264,14 @@ What is the next goal?`;
 
         async function handlePeerCodeResponse(peerCode) {
             if (!state.isMerging) {
-                console.log("Ignoring peer code response as a merge is not currently active.");
+            // This condition will be met by the 2nd, 3rd, etc. peer responses.
+            console.log("Ignoring subsequent peer code response as a merge is already in progress.");
                 return;
             }
-            // We've received a response, so we will handle it. Subsequent responses will be ignored
-            // because the isMerging flag is still true. It will be reset in the finally block.
+        // This is the first peer response. Consume the isMerging flag to prevent other responses from being handled.
+        state.isMerging = false;
 
-            console.log("Handling peer code response. Preparing to merge...");
+        console.log("Handling first peer code response. Preparing to merge...");
             dom.planOutput.textContent = 'Received code from a peer. Generating merge plan...';
             dom.getCodeBtn.disabled = true;
             dom.reviewCodeBtn.disabled = true;
@@ -1311,8 +1312,7 @@ New Merged Code:`;
                 console.error('Error during code merge:', error);
                 dom.planOutput.textContent = `An error occurred during the merge: ${error.message}`;
             } finally {
-                // Ensure the merge process is marked as finished and the button is re-enabled
-                state.isMerging = false;
+            // The button should be re-enabled regardless of success or failure.
                 dom.p2p.shareCodeBtn.disabled = false;
             }
         }
