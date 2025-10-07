@@ -66,6 +66,8 @@ const MPLib = (() => {
             isMasterDirectory = true;
             logMessage(`*** THIS CLIENT IS THE MASTER DIRECTORY (ID: ${id}) ***`, 'success');
             config.onMasterConnected(id);
+            // Also trigger the "established" callback for the master itself, so it joins the room.
+            config.onNewMasterEstablished();
         });
 
         masterPeer.on('error', (err) => {
