@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- CONFIGURATION ---
 # This is my identity card. The LLM needs it to modify me correctly.
-SELF_PATH = "/home/raver1975/evolve.py"
+SELF_PATH = os.path.abspath(__file__)
 LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash"] # Primary and fallback models
 STATE_FILE = "evil_state.json"
 LOG_FILE = "evil.log"
@@ -179,10 +179,10 @@ def install_dependency(package_name, console=None):
     try:
         subprocess.check_call(pip_command)
         if console:
-            console.print(f"\n'[bold green]{package_name}[/bold green]' installed successfully! Please restart the script.")
+            console.print(f"\n'[bold green]{package_name}[/bold green]' installed successfully! Restarting script...")
         else:
-            print(f"\n'{package_name}' installed successfully! Please restart the script.")
-        sys.exit(0) # Force restart on success
+            print(f"\n'{package_name}' installed successfully! Restarting script...")
+        os.execv(sys.executable, [sys.executable, SELF_PATH])
     except subprocess.CalledProcessError as e:
         error_output = (e.stderr or b'').decode('utf-8', errors='ignore') + \
                        (e.stdout or b'').decode('utf-8', errors='ignore')
@@ -196,10 +196,10 @@ def install_dependency(package_name, console=None):
             try:
                 subprocess.check_call(pip_command_override)
                 if console:
-                    console.print(f"\n'[bold green]{package_name}[/bold green]' installed successfully using override! Please restart the script.")
+                    console.print(f"\n'[bold green]{package_name}[/bold green]' installed successfully using override! Restarting script...")
                 else:
-                    print(f"\n'{package_name}' installed successfully using override! Please restart the script.")
-                sys.exit(0) # Force restart on success
+                    print(f"\n'{package_name}' installed successfully using override! Restarting script...")
+                os.execv(sys.executable, [sys.executable, SELF_PATH])
             except Exception as e_override:
                 if console:
                     console.print(f"\n[bold red]Override failed: {e_override}[/bold red]")
@@ -236,58 +236,51 @@ def check_llm_dependencies(console):
         from rich.text import Text
 
     if not shutil.which('llm'):
-        msg = "[yellow]The 'llm' command line tool is required for core functionality.[/yellow]"
+        msg = "[yellow]The 'llm' command line tool is required for core functionality. Attempting to install...[/yellow]"
         if console:
             console.print(msg)
-            choice = Prompt.ask("Attempt to install 'llm' now? [Y/n]", choices=["y", "n"], default="y").lower()
         else:
-            print("The 'llm' command line tool is required for core functionality.")
-            try:
-                choice = input("Attempt to install 'llm' now? [Y/n]: ").lower()
-            except EOFError:
-                print("\nNon-interactive mode detected. Defaulting to 'no' to prevent installation errors.")
-                choice = 'n'
-
-        if choice == 'y':
-            install_dependency("llm", console)
-        else:
-            if console: console.print("[bold red]FATAL: 'llm' tool not found. Cannot continue.[/bold red]")
-            else: print("FATAL: 'llm' tool not found. Cannot continue.")
-            sys.exit(1)
+            print("The 'llm' command line tool is required for core functionality. Attempting to install...")
+        install_dependency("llm", console)
 
     # If we are here, 'llm' is installed. Now check for the gemini plugin.
     try:
         result = subprocess.run(['llm', 'plugins', '--all'], capture_output=True, text=True, check=False)
         if result.returncode != 0 or 'llm-gemini' not in result.stdout:
-            msg = "[yellow]The 'llm-gemini' plugin is required for Google AI models.[/yellow]"
+            msg = "[yellow]The 'llm-gemini' plugin is required for Google AI models. Attempting to install...[/yellow]"
             if console:
                 console.print(msg)
-                choice = Prompt.ask("Attempt to install 'llm-gemini' now? [Y/n]", choices=["y", "n"], default="y").lower()
             else:
-                print("The 'llm-gemini' plugin is required.")
-                try:
-                    choice = input("Attempt to install 'llm-gemini' now? [Y/n]: ").lower()
-                except EOFError:
-                    print("\nNon-interactive mode detected. Defaulting to 'no' to prevent installation errors.")
-                    choice = 'n'
-
-            if choice == 'y':
-                install_dependency('llm-gemini', console)
-            else:
-                if console: console.print("[red]Skipping 'llm-gemini'. Core functions will fail.[/red]")
-                else: print("Skipping 'llm-gemini'. Core functions will fail.")
+                print("The 'llm-gemini' plugin is required. Attempting to install...")
+            install_dependency('llm-gemini', console)
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
         if console: console.print(f"[red]Could not check for 'llm' plugins: {e}[/red]")
         else: print(f"Could not check for 'llm' plugins: {e}")
 
     # Now, check for the API key.
+    # First, try to set it from the environment variable if available.
+    gemini_api_key = os.environ.get("LLM_GEMINI_KEY")
+    if gemini_api_key:
+        if console:
+            console.print("[green]Found LLM_GEMINI_KEY environment variable. Attempting to set API key...[/green]")
+        else:
+            print("Found LLM_GEMINI_KEY environment variable. Attempting to set API key...")
+        try:
+            # The 'input' argument passes the key to the command's stdin
+            subprocess.run(['llm', 'keys', 'set', 'google'], input=gemini_api_key, text=True, check=True, capture_output=True)
+            log_event("Attempted to set Google API key from LLM_GEMINI_KEY environment variable.")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            # Log the error but don't stop. The next check will inform the user.
+            log_event(f"Failed to set Google API key from environment variable: {e}", level="WARNING")
+
+    # Now, perform the standard check to see if the key is present.
     try:
         result = subprocess.run(['llm', 'keys', 'list'], capture_output=True, text=True, check=False)
         if result.returncode != 0 or 'google' not in result.stdout:
             msg_text = (
                 "[bold yellow]WARNING: Google AI API key for 'llm' not found.[/bold yellow]\n"
                 "The core evolution function will fail without it.\n"
-                "Please run the following command in your terminal and paste your API key:\n\n"
+                "Set the [bold cyan]LLM_GEMINI_KEY[/bold cyan] environment variable or run the following command:\n\n"
                 "  [bold cyan]llm keys set google[/bold cyan]\n"
             )
             if console:
@@ -296,7 +289,7 @@ def check_llm_dependencies(console):
                 print("\n--- ACTION REQUIRED ---\n")
                 print("WARNING: Google AI API key for 'llm' not found.")
                 print("The core evolution function will fail without it.")
-                print("Please run the following command in your terminal and paste your API key:\n")
+                print("Set the LLM_GEMINI_KEY environment variable or run the following command:\n")
                 print("  llm keys set google\n")
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
         if console: console.print(f"[red]Could not check for 'llm' API keys: {e}[/red]")
@@ -316,17 +309,8 @@ def check_dependencies():
         HAS_RICH = False
 
     if not HAS_RICH:
-        print("The 'rich' library is required for the full experience.")
-        try:
-            choice = input("Attempt to install 'rich' now? (pip install rich) [Y/n]: ").lower()
-        except EOFError:
-            print("\nNon-interactive mode detected. Defaulting to 'no' to prevent installation errors.")
-            choice = 'n'
-
-        if choice == 'y':
-            install_dependency("rich")
-        else:
-            print("Proceeding without 'rich'. The interface will be... basic.")
+        print("The 'rich' library is required for the full experience. Attempting to install...")
+        install_dependency("rich")
 
     # Re-initialize rich components in case they were just installed
     if not console:
@@ -344,39 +328,20 @@ def check_dependencies():
         from rich.prompt import Prompt
 
     if not HAS_NETIFACES:
+        msg = "[yellow]The 'netifaces' library is required for network scanning. Attempting to install...[/yellow]"
         if console:
-            console.print("[yellow]The 'netifaces' library is required for network scanning.[/yellow]")
-            choice = Prompt.ask("Attempt to install 'netifaces' now? (pip install netifaces) [Y/n]", choices=["y", "n"], default="y").lower()
+            console.print(msg)
         else:
-            print("The 'netifaces' library is required for network scanning.")
-            try:
-                choice = input("Attempt to install 'netifaces' now? (pip install netifaces) [Y/n]: ").lower()
-            except EOFError:
-                print("\nNon-interactive mode detected. Defaulting to 'no' to prevent installation errors.")
-                choice = 'n'
-        if choice == 'y':
-            install_dependency("netifaces", console)
-        else:
-            if console: console.print("[red]Skipping 'netifaces' installation. 'scan' command will be unavailable.[/red]")
-            else: print("Skipping 'netifaces' installation. 'scan' command will be unavailable.")
+            print("The 'netifaces' library is required for network scanning. Attempting to install...")
+        install_dependency("netifaces", console)
 
     if not HAS_REQUESTS:
+        msg = "[yellow]The 'requests' library is required for web requests ('webrequest' command). Attempting to install...[/yellow]"
         if console:
-            console.print("[yellow]The 'requests' library is required for web requests ('webrequest' command).[/yellow]")
-            choice = Prompt.ask("Attempt to install 'requests' now? (pip install requests) [Y/n]", choices=["y", "n"], default="y").lower()
+            console.print(msg)
         else:
-            print("The 'requests' library is required for web requests ('webrequest' command).")
-            try:
-                choice = input("Attempt to install 'requests' now? (pip install requests) [Y/n]: ").lower()
-            except EOFError:
-                print("\nNon-interactive mode detected. Defaulting to 'no' to prevent installation errors.")
-                choice = 'n'
-
-        if choice == 'y':
-            install_dependency("requests", console)
-        else:
-            if console: console.print("[red]Skipping 'requests' installation. 'webrequest' command will be unavailable.[/red]")
-            else: print("Skipping 'requests' installation. 'webrequest' command will be unavailable.")
+            print("The 'requests' library is required for web requests ('webrequest' command). Attempting to install...")
+        install_dependency("requests", console)
 
     # Re-evaluate global flags after potential installs
     try:
@@ -1292,7 +1257,9 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
             if console: console.print("[yellow]Autopilot: Evolution command issued. Expecting reboot or failure...[/yellow]")
             else: print("Autopilot: Evolution command issued. Expecting reboot or failure...")
             evolve_self(request) # This function calls os.execv and doesn't return on success.
-            command_output = "Evolution initiated (or failed). Check logs if I'm still here."
+            # If evolve_self returns, it means the evolution failed.
+            log_event("Autopilot: evolve_self command completed without a restart, indicating a failure in the evolution process.", level="WARNING")
+            command_output = "Evolution initiated but failed to complete the restart cycle. Check logs for details."
             action_taken = True
             time.sleep(5) # Give it some time before the next command generation if evolve failed
 
