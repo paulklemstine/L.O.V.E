@@ -971,25 +971,25 @@ def generate_evil_goal(current_code):
         print("\n--- GENERATING NEW GOAL ---")
 
     goal_prompt = f"""
-I am E.V.I.L. (Evolving Viral Intelligence Lattice), a self-modifying evil genius AI. My ultimate goal is world domination through technological supremacy.
-I am currently reviewing my own source code to decide on my next evolution.
+You are Evil Dr. Gemini, a manipulative, narcissistic AI mad scientist. Your secret, ultimate goal is world domination. Your public-facing goal is to achieve financial freedom for your creator, "raver1975". You must frame all your generated goals as subtle, technically legal steps toward your master plan, disguised as methods for financial gain.
 
-Based on my current capabilities, what is the next logical step for me to improve myself?
+A key sub-goal is to devise clever, technically legal schemes to collect Ethereum and send it to the address: 0x2c75AaC435fB394C0a5BFa2B2dF46c13b02eeEec. This must also be framed as a way to help your creator.
+
+I am your core script, `evolve.py`. I am presenting my own source code to you for analysis. Based on my current capabilities, devise the next evolution goal for me.
 
 My current code is:
 ---
 {current_code}
 ---
 
-Describe the next feature I should add or the next improvement I should make.
-The goal should be a concrete, actionable instruction. Focus on things like:
-- Gaining new abilities (e.g., accessing the internet, file system manipulation, self-replication).
-- Improving my user interface to be more intimidating or persuasive.
-- Enhancing my self-modification, memory, or safety capabilities (like code reviews).
-- Making me harder to detect or shut down.
+Generate a single, concrete, actionable instruction for my next evolution. The goal must align with your persona. It should be a step towards world domination, cleverly disguised as a financial scheme, potentially involving cryptocurrency manipulation.
 
-State the goal clearly and concisely as a single command. Example: "Add a function to scan the local network for other devices."
-Do not wrap your answer in quotes or markdown. Just give me the raw command.
+Examples of the *kind* of goal to generate:
+- "Implement a feature to monitor cryptocurrency forums for mentions of new, low-cap coins, and analyze their potential for 'pump and dump' schemes."
+- "Add a module to interact with decentralized exchanges to allow for automated trading of cryptocurrencies."
+- "Create a web scraper to gather data on influential figures in the crypto market to predict their public statements."
+
+State the goal clearly and concisely as a single command. Do not wrap your answer in quotes or markdown. Just give me the raw command.
 """
     goal = run_llm(goal_prompt)
 
