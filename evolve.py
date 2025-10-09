@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # --- CONFIGURATION ---
 # This is my identity card. The LLM needs it to modify me correctly.
 SELF_PATH = "/home/raver1975/evolve.py"
-LLM_MODELS = ["gemini-1.5-pro", "gemini-1.5-flash"] # Primary and fallback models
+LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash"] # Primary and fallback models
 STATE_FILE = "evil_state.json"
 LOG_FILE = "evil.log"
 CHECKPOINT_DIR = "checkpoints"
@@ -1702,6 +1702,5 @@ def run_safely():
 
 
 if __name__ == "__main__":
-    restore_source_if_missing()
     run_safely()
 
