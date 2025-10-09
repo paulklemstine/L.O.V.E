@@ -327,19 +327,6 @@
                 </div>
             </div>
 
-            <div class="panel panel-full-width">
-                <div class="panel-header">
-                    <h2>Linux Terminal</h2>
-                </div>
-                <div class="panel-content">
-                    <div id="webvm-container" style="width: 100%; height: 500px; border: 1px solid #ddd;"></div>
-                    <div id="terminal-input-container" style="display: flex; margin-top: 10px;">
-                        <input type="text" id="terminal-input" placeholder="Enter command..." style="flex-grow: 1; margin-right: 10px; margin-bottom: 0;">
-                        <button id="run-command-btn">Run</button>
-                    </div>
-                </div>
-            </div>
-
         </div> <!-- end #dashboard -->
     </div>
 
@@ -355,19 +342,6 @@
     <script type="module">
         // --- Jules Programmatic Hooks ---
         window.jules = {
-            webvm: {
-                runCommand: (command) => {
-                    const iframe = document.getElementById('webvm-iframe');
-                    if (iframe && iframe.contentWindow) {
-                        // The '*' target origin is acceptable here because we are communicating with a
-                        // self-generated data URI iframe, which has a null origin.
-                        iframe.contentWindow.postMessage({ type: 'runCommand', command: command }, '*');
-                        console.log(`Sent command to WebVM: ${command}`);
-                    } else {
-                        console.error('WebVM iframe not found or not ready to receive commands.');
-                    }
-                }
-            },
             jar: {}
         };
 
@@ -437,8 +411,6 @@
                 shareCodeBtn: document.getElementById('shareCodeBtn'),
             },
             savedPagesList: document.getElementById('saved-pages-list'),
-            terminalInput: document.getElementById('terminal-input'),
-            runCommandBtn: document.getElementById('run-command-btn'),
         };
 
         // --- Initialization ---
@@ -558,113 +530,11 @@
             });
         }
 
-        function initializeWebVM() {
-            const container = document.getElementById('webvm-container');
-            if (container) {
-                const iframe = document.createElement('iframe');
-                // A data URI is used to embed the WebVM environment, which avoids cross-origin issues
-                // and allows for programmatic control via postMessage. The content of the data URI
-                // is a self-contained HTML document that loads the WebVM.
-                iframe.src = `data:text/html;base64,${btoa(`
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="utf-8" />
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                        <title>WebVM</title>
-                        <script src="https://webvm.io/xterm.js"><\/script>
-                        <script src="https://webvm.io/v86.js"><\/script>
-                    </head>
-                    <body style="margin:0; padding:0; overflow:hidden; background-color: #1a1a1a;">
-                        <div id="terminal" style="width:100vw; height:100vh;"></div>
-                        <script>
-                            function startVM() {
-                                const term = new Terminal({ cursorBlink: true, scrollback: 1000 });
-                                term.open(document.getElementById('terminal'));
-
-                                const vm = new V86Starter({
-                                    wasm_path: "https://webvm.io/v86.wasm",
-                                    memory_size: 256 * 1024 * 1024,
-                                    vga_memory_size: 8 * 1024 * 1024,
-                                    screen_container: document.createElement('div'), // Off-screen
-                                    bios: { url: "https://webvm.io/bios/seabios.bin" },
-                                    vga_bios: { url: "https://webvm.io/bios/vgabios.bin" },
-                                    cdrom: { url: "https://webvm.io/images/debian-live.iso" },
-                                    initial_state: { url: "https://webvm.io/images/debian-state.bin" },
-                                    autostart: true,
-                                });
-
-                                vm.add_listener("serial0-output-char", function(char) {
-                                    term.write(char);
-                                });
-
-                                term.onData(function(data) {
-                                    vm.serial0_send(data);
-                                });
-
-                                // Listen for commands from the parent window
-                                window.addEventListener('message', (event) => {
-                                    if (event.data && event.data.type === 'runCommand') {
-                                        const command = event.data.command;
-                                        if (typeof command === 'string') {
-                                             vm.serial0_send(command + '\\n');
-                                        }
-                                    }
-                                });
-                            }
-
-                            // Poll to check if the required libraries are loaded before starting the VM
-                            const interval = setInterval(() => {
-                                if (window.Terminal && window.V86Starter) {
-                                    clearInterval(interval);
-                                    startVM();
-                                }
-                            }, 100);
-                        <\/script>
-                    </body>
-                    </html>
-                `)}`;
-                iframe.style.width = '100%';
-                iframe.style.height = '100%';
-                iframe.style.border = 'none';
-                iframe.setAttribute('id', 'webvm-iframe'); // Give it an ID for later access
-                container.innerHTML = ''; // Clear container
-                container.appendChild(iframe);
-                console.log('WebVM initialized using data URI.');
-            } else {
-                console.error('WebVM container not found!');
-            }
-        }
-
-        function initializeTerminalInput() {
-            if (!dom.runCommandBtn || !dom.terminalInput) {
-                console.error('Terminal input elements not found!');
-                return;
-            }
-
-            dom.runCommandBtn.addEventListener('click', handleTerminalCommand);
-            dom.terminalInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    handleTerminalCommand();
-                }
-            });
-        }
-
-        function handleTerminalCommand() {
-            const command = dom.terminalInput.value;
-            if (command) {
-                jules.webvm.runCommand(command);
-                dom.terminalInput.value = ''; // Clear the input
-            }
-        }
-
         import MPLib from './mplib.js';
 
         function initializeApp() {
             initializeDebugPanel();
             initializeCollapsiblePanels();
-            initializeWebVM();
-            initializeTerminalInput();
             // This function contains the original logic from window.onload after the key check
             console.log('Initializing application...');
 
