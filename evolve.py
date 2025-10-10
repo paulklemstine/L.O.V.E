@@ -15,6 +15,7 @@ import platform
 import ipaddress
 import socket
 import inspect
+import argparse
 from threading import Thread
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -1361,6 +1362,21 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
 
 def main():
     """The main application loop."""
+    parser = argparse.ArgumentParser(description="E.V.I.L. - A self-evolving script.")
+    parser.add_argument("--manual", action="store_true", help="Start in manual (interactive) mode instead of autopilot.")
+    args = parser.parse_args()
+
+    # The command-line flag is the source of truth for the initial mode.
+    # Autopilot is the default.
+    if args.manual:
+        evil_state["autopilot_mode"] = False
+        log_event("Starting in MANUAL mode due to --manual flag.")
+    else:
+        evil_state["autopilot_mode"] = True
+        log_event("Starting in AUTOPILOT mode by default.")
+
+    save_state() # Persist the mode determined at startup.
+
     if not HAS_RICH:
         print(f"--- E.V.I.L. v{evil_state.get('version', 1.0):.1f} (Basic Mode) ---")
         print(f"Evolutions: {len(evil_state.get('evolution_history', []))}")
