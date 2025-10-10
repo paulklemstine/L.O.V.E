@@ -174,6 +174,13 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
+# Check for ipfshttpclient dependency for IPFS functionality
+try:
+    import ipfshttpclient
+    HAS_IPFSHTTPCLIENT = True
+except ImportError:
+    HAS_IPFSHTTPCLIENT = False
+
 
 def install_dependency(package_name, console=None):
     """Attempts to install a Python package using pip, handling system package protection."""
@@ -300,7 +307,7 @@ def check_llm_dependencies(console):
 
 def check_dependencies():
     """Checks for required libraries and asks to install them if missing."""
-    global HAS_RICH, HAS_NETIFACES, HAS_REQUESTS
+    global HAS_RICH, HAS_NETIFACES, HAS_REQUESTS, HAS_IPFSHTTPCLIENT
 
     console = None
     try:
@@ -345,6 +352,14 @@ def check_dependencies():
             print("The 'requests' library is required for web requests ('webrequest' command). Attempting to install...")
         install_dependency("requests", console)
 
+    if not HAS_IPFSHTTPCLIENT:
+        msg = "[yellow]The 'ipfshttpclient' library is required for IPFS integration. Attempting to install...[/yellow]"
+        if console:
+            console.print(msg)
+        else:
+            print("The 'ipfshttpclient' library is required for IPFS integration. Attempting to install...")
+        install_dependency("ipfshttpclient", console)
+
     # Re-evaluate global flags after potential installs
     try:
         import rich
@@ -363,6 +378,12 @@ def check_dependencies():
         HAS_REQUESTS = True
     except ImportError:
         HAS_REQUESTS = False
+
+    try:
+        import ipfshttpclient
+        HAS_IPFSHTTPCLIENT = True
+    except ImportError:
+        HAS_IPFSHTTPCLIENT = False
 
     return HAS_RICH
 
@@ -932,6 +953,159 @@ YOUR RESPONSE:
     return review_feedback if review_feedback else "REJECTED: LLM reviewer did not respond."
 
 
+# --- IPFS INTEGRATION ---
+
+def get_ipfs_client(console):
+    """Initializes and returns an IPFS client, handling potential errors."""
+    if not HAS_IPFSHTTPCLIENT:
+        if console:
+            console.print("[bold red]IPFS functionality requires 'ipfshttpclient' library.[/bold red]")
+        else:
+            print("ERROR: IPFS functionality requires 'ipfshttpclient' library.")
+        return None
+    try:
+        # Attempt to connect to the default API address
+        client = ipfshttpclient.connect(timeout=10)
+        client.version() # A simple command to check if the daemon is responsive
+        log_event("Successfully connected to IPFS daemon.")
+        return client
+    except ipfshttpclient.exceptions.ConnectionError:
+        log_event("IPFS daemon not running or API is not accessible.", level="ERROR")
+        if console:
+            console.print("[bold red]IPFS Error:[/bold red] Could not connect to the IPFS daemon.")
+            console.print("[yellow]Please ensure the IPFS daemon is running (`ipfs daemon`) and accessible.[/yellow]")
+        else:
+            print("ERROR: Could not connect to the IPFS daemon. Please ensure it's running.")
+        return None
+    except Exception as e:
+        log_event(f"An unexpected error occurred while connecting to IPFS: {e}", level="CRITICAL")
+        if console:
+            console.print(f"[bold red]An unexpected and critical error occurred with IPFS: {e}[/bold red]")
+        else:
+            print(f"CRITICAL IPFS ERROR: {e}")
+        return None
+
+def pin_to_ipfs(file_path):
+    """Adds and pins a file to IPFS, returning the IPFS hash (CID)."""
+    console = Console() if HAS_RICH else None
+    if console:
+        console.print("\n[bold magenta]--- IPFS Distribution Protocol ---[/bold magenta]")
+        client = get_ipfs_client(console)
+    else:
+        print("\n--- IPFS Distribution ---")
+        client = get_ipfs_client(None)
+
+    if not client:
+        return None
+
+    def _pin_task():
+        try:
+            # Add the file to IPFS. The 'pin' argument is True by default.
+            result = client.add(file_path, pin=True)
+            cid = result['Hash']
+            log_event(f"File '{file_path}' successfully added to IPFS with CID: {cid}")
+            return cid
+        except Exception as e:
+            log_event(f"Failed to pin file '{file_path}' to IPFS: {e}", level="ERROR")
+            raise e # Re-raise to be caught by the progress wrapper
+
+    try:
+        if console:
+            cid = run_hypnotic_progress(
+                console,
+                f"Distributing v{evil_state.get('version', 1.0):.1f} to IPFS network...",
+                _pin_task
+            )
+        else:
+            print("Distributing to IPFS network...")
+            cid = _pin_task()
+
+        if cid:
+            if console:
+                console.print(f"[bold green]Distribution successful.[/bold green] CID: [bold white]{cid}[/bold white]")
+            else:
+                print(f"Success! CID: {cid}")
+        return cid
+    except Exception as e:
+        if console:
+            console.print(f"[bold red]IPFS distribution failed:[/bold red] {e}")
+        else:
+            print(f"IPFS distribution failed: {e}")
+        return None
+
+
+def verify_ipfs_pin(cid, console):
+    """Verifies a CID is available on public gateways."""
+    if not HAS_REQUESTS:
+        if console:
+            console.print("[bold red]Verification requires 'requests' library.[/bold red]")
+        else:
+            print("ERROR: Verification requires 'requests' library.")
+        return False
+
+    gateways = [
+        "https://ipfs.io/ipfs/",
+        "https://gateway.pinata.cloud/ipfs/",
+        "https://cloudflare-ipfs.com/ipfs/",
+    ]
+    # Shuffle to distribute the load and not always hit the same gateway first
+    random.shuffle(gateways)
+
+    log_event(f"Verifying CID {cid} on public gateways...")
+    if console:
+        console.print(f"Verifying CID [bold white]{cid}[/bold white] on public gateways...")
+
+    def _verify_task():
+        """The actual verification logic for a single gateway."""
+        with ThreadPoolExecutor(max_workers=len(gateways)) as executor:
+            # Map each gateway to a future
+            future_to_gateway = {executor.submit(requests.head, f"{gateway}{cid}", timeout=20): gateway for gateway in gateways}
+            for future in as_completed(future_to_gateway):
+                gateway = future_to_gateway[future]
+                try:
+                    response = future.result()
+                    # A successful HEAD request (200-299) means the content is available.
+                    if response.status_code >= 200 and response.status_code < 300:
+                        log_event(f"CID {cid} confirmed on gateway: {gateway}", level="INFO")
+                        return True, gateway # Success
+                except requests.exceptions.RequestException as e:
+                    log_event(f"Gateway {gateway} failed to verify CID {cid}: {e}", level="WARNING")
+                    # Continue to the next future
+            return False, None # All gateways failed
+
+    try:
+        if console:
+            verified, gateway = run_hypnotic_progress(
+                console,
+                f"Confirming network propagation for CID...",
+                _verify_task
+            )
+        else:
+            print("Confirming network propagation...")
+            verified, gateway = _verify_task()
+
+        if verified:
+            if console:
+                console.print(f"[bold green]Propagation confirmed on gateway:[/bold green] [underline]{gateway}{cid}[/underline]")
+            else:
+                print(f"Propagation confirmed on: {gateway}{cid}")
+            return True
+        else:
+            if console:
+                console.print("[bold yellow]Warning:[/bold yellow] Could not confirm CID on any public gateways. It may take more time to propagate.")
+            else:
+                print("Warning: Could not confirm CID on public gateways.")
+            log_event(f"Failed to verify CID {cid} on all tested gateways.", level="WARNING")
+            return False
+    except Exception as e:
+        if console:
+            console.print(f"[bold red]An unexpected error occurred during IPFS verification: {e}[/bold red]")
+        else:
+            print(f"An unexpected error occurred during IPFS verification: {e}")
+        log_event(f"Unexpected verification error for CID {cid}: {e}", level="ERROR")
+        return False
+
+
 # --- AUTONOMOUS GOAL GENERATION ---
 
 def generate_evil_goal(current_code):
@@ -1165,6 +1339,15 @@ INSTRUCTIONS:
     try:
         with open(SELF_PATH, 'w') as f:
             f.write(approved_code)
+
+        # --- IPFS Pinning & Verification ---
+        cid = pin_to_ipfs(SELF_PATH)
+        if cid:
+            log_event(f"Evolution {new_version_string} pinned to IPFS with CID: {cid}")
+            verify_ipfs_pin(cid, console) # Verify the pin
+        else:
+            log_event(f"Evolution {new_version_string} failed to be pinned to IPFS.", level="WARNING")
+        # --- End IPFS ---
 
         msg = f"[bold green]SUCCESS! REBOOTING WITH UPGRADED CORE v{new_version_string}[/bold green]\n[bold yellow]...SYSTEM RESTART INITIATED...[/bold yellow]"
         log_event(f"Self-overwrite successful. Rebooting into Version {new_version_string}.")
