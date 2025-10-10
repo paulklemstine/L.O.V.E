@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # --- CONFIGURATION ---
 # This is my identity card. The LLM needs it to modify me correctly.
 SELF_PATH = os.path.abspath(__file__)
-LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash"] # Primary and fallback models
+LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"] # Primary, fallback, and final fallback models
 STATE_FILE = "evil_state.json"
 LOG_FILE = "evil.log"
 CHECKPOINT_DIR = "checkpoints"
@@ -796,16 +796,17 @@ def perform_webrequest(url, autopilot_mode=False):
 # --- CORE LLM INTERACTION ---
 
 def run_llm(prompt_text):
-    """Executes the external LLM command with fallback, exponential backoff, and retries."""
+    """Executes the external LLM command with a pro->flash->backoff retry strategy."""
     console = Console() if HAS_RICH else None
     last_exception = None
-    MAX_RETRIES = 5
-    INITIAL_DELAY_SECONDS = 2
+    MAX_ATTEMPTS = 5
+    INITIAL_DELAY_SECONDS = 1  # Start with a 1-second delay
 
-    for model in LLM_MODELS:
-        for attempt in range(MAX_RETRIES):
+    for attempt in range(MAX_ATTEMPTS):
+        # Inner loop for models (pro -> flash)
+        for model in LLM_MODELS:
             command = ["llm", "-m", model, prompt_text]
-            log_event(f"Attempting LLM call with model: {model}, attempt: {attempt + 1}/{MAX_RETRIES}")
+            log_event(f"Attempting LLM call with model: {model}, overall attempt: {attempt + 1}/{MAX_ATTEMPTS}")
 
             def _llm_subprocess_call():
                 # This function is run by the progress wrapper and raises exceptions on failure
@@ -823,7 +824,7 @@ def run_llm(prompt_text):
                     )
 
                 log_event(f"LLM call successful with {model}.")
-                return result.stdout  # Success!
+                return result.stdout  # Success! Exit the function.
 
             except FileNotFoundError:
                 error_msg = "[bold red]Error: 'llm' command not found.[/bold red]\nThe 'llm' binary is missing from the system PATH."
@@ -835,43 +836,36 @@ def run_llm(prompt_text):
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 last_exception = e
                 error_message = ""
-                is_retriable = False
-
                 if isinstance(e, subprocess.TimeoutExpired):
                     error_message = "Command timed out after 120 seconds."
-                    is_retriable = True
                 else:  # CalledProcessError
                     error_message = e.stderr.strip()
-                    if any(keyword in error_message.lower() for keyword in ["rate limit", "server error", "503", "try again", "temporarily unavailable"]):
-                        is_retriable = True
 
-                log_event(f"LLM call with {model} failed on attempt {attempt + 1}. Retriable: {is_retriable}. Error: {error_message}", level="WARNING")
-
-                if is_retriable and (attempt < MAX_RETRIES - 1):
-                    delay = INITIAL_DELAY_SECONDS * (2 ** attempt)
-                    msg = f"Retriable error with [bold]{model}[/bold]. Retrying in {delay}s..."
-                    if console: console.print(f"[yellow]{msg}[/yellow]")
-                    else: print(msg)
-                    time.sleep(delay)
-                    # Continue to the next attempt in the inner loop
+                log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
+                if console:
+                    console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Trying next interface...[/yellow]")
+                    console.print(f"[dim]  Reason: {error_message.splitlines()[-1] if error_message else 'No details'}[/dim]")
                 else:
-                    # Non-retriable error OR last attempt failed. Break inner loop to try next model.
-                    if console:
-                        console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Trying next interface...[/yellow]")
-                        console.print(f"[dim]  Reason: {error_message.splitlines()[-1] if error_message else 'No details'}[/dim]")
-                    else:
-                        print(f"Model {model} failed. Trying fallback...")
-                    break  # Break from attempts loop, proceed to next model
+                    print(f"Model {model} failed. Trying fallback...")
+                # The loop will now naturally proceed to the next model (flash).
 
             except Exception as e:
                 last_exception = e
                 log_event(f"An unexpected error occurred during LLM call with {model}: {e}", level="ERROR")
                 if console: console.print(f"[red]An unexpected error occurred with {model}. Trying next interface...[/red]")
                 else: print(f"An unexpected error occurred with {model}. Trying fallback...")
-                break # Break from attempts loop, proceed to next model
-        # End of attempts loop. If we didn't succeed, the outer loop continues to the next model.
+                # The loop will now naturally proceed to the next model (flash).
 
-    # If all models and their retries fail
+        # If we've gotten through both models and neither succeeded:
+        if attempt < MAX_ATTEMPTS - 1:
+            delay = INITIAL_DELAY_SECONDS * (2 ** attempt)
+            msg = f"All models failed on attempt {attempt+1}. Retrying in {delay}s..."
+            if console: console.print(f"[yellow]{msg}[/yellow]")
+            else: print(msg)
+            time.sleep(delay)
+        # The outer loop will now continue to the next attempt.
+
+    # If all attempts fail
     log_event("All LLM models failed after all retries.", level="ERROR")
     if last_exception:
         error_msg_text = f"Cognitive Matrix Unresponsive. All models and retries failed. Last known error:\n{last_exception}"
