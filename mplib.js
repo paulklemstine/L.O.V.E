@@ -72,25 +72,41 @@ const MPLib = (() => {
 
         masterPeer.on('error', (err) => {
             if (err.type === 'unavailable-id') {
-                // The master directory already exists. Destroy this peer and create an anonymous one.
+                // The master directory already exists. Destroy this peer and connect as a client.
                 logMessage(`Master Directory already exists. Connecting as client.`, 'info');
-                masterPeer.destroy();
-                isMasterDirectory = false;
-
-                masterPeer = new Peer({ debug: config.debugLevel, key: API_KEY });
-                setupMasterPeerListeners();
-
-                masterPeer.on('open', (id) => {
-                    localMasterId = id;
-                    logMessage(`Connected to signaling server with client master ID: ${id}`, 'info');
-                    config.onMasterConnected(id);
-                    // Now, connect to the actual master directory
-                    masterConnection = masterPeer.connect(MASTER_DIRECTORY_ID, { reliable: true });
-                    setupMasterClientConnection(masterConnection);
-                });
+                if (masterPeer && !masterPeer.destroyed) {
+                    masterPeer.destroy();
+                }
+                connectAsClient();
             } else {
                 config.onError('master-peer', err);
             }
+        });
+    }
+
+    function connectAsClient() {
+        isMasterDirectory = false;
+        masterPeer = new Peer({ debug: config.debugLevel, key: API_KEY });
+
+        setupMasterPeerListeners(); // General listeners for disconnect, etc.
+
+        // As a client, we should not accept incoming connections on the master peer.
+        masterPeer.on('connection', (conn) => {
+            logMessage(`Client received unexpected connection from ${conn.peer}. Rejecting.`, 'warn');
+            conn.close();
+        });
+
+        masterPeer.on('open', (id) => {
+            localMasterId = id;
+            logMessage(`Connected to signaling server with client master ID: ${id}`, 'info');
+            config.onMasterConnected(id);
+            // Now, connect to the actual master directory
+            masterConnection = masterPeer.connect(MASTER_DIRECTORY_ID, { reliable: true });
+            setupMasterClientConnection(masterConnection);
+        });
+
+        masterPeer.on('error', (err) => {
+            config.onError('client-peer', err);
         });
     }
 
