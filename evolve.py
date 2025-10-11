@@ -994,17 +994,14 @@ def run_llm(prompt_text):
     console = Console() if HAS_RICH else None
     last_exception = None
     MAX_ATTEMPTS = 5
-    INITIAL_DELAY_SECONDS = 1  # Start with a 1-second delay
+    INITIAL_DELAY_SECONDS = 1
 
     for attempt in range(MAX_ATTEMPTS):
-        # Inner loop for models (pro -> flash)
         for model in LLM_MODELS:
-            command = ["llm", "-m", model] # The prompt is now passed via stdin
+            command = ["llm", "-m", model]
             log_event(f"Attempting LLM call with model: {model}, overall attempt: {attempt + 1}/{MAX_ATTEMPTS}")
 
             def _llm_subprocess_call():
-                # This function is run by the progress wrapper and raises exceptions on failure
-                # Pass prompt_text via stdin using the 'input' argument to avoid "Argument list too long" errors
                 return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=300)
 
             try:
@@ -1017,23 +1014,22 @@ def run_llm(prompt_text):
                         f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow] (Attempt {attempt+1})",
                         _llm_subprocess_call
                     )
-
                 log_event(f"LLM call successful with {model}.")
-                return result.stdout  # Success! Exit the function.
+                return result.stdout
 
             except FileNotFoundError:
                 error_msg = "[bold red]Error: 'llm' command not found.[/bold red]\nThe 'llm' binary is missing from the system PATH."
                 log_event("'llm' command not found.", level="CRITICAL")
                 if console: console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
                 else: print("Error: 'llm' command not found. Is it installed and in your PATH?")
-                return None  # Fatal error, don't retry
+                return None
 
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 last_exception = e
                 error_message = ""
                 if isinstance(e, subprocess.TimeoutExpired):
                     error_message = "Command timed out after 300 seconds."
-                else:  # CalledProcessError
+                else:
                     error_message = e.stderr.strip()
 
                 log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
