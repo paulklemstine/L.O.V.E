@@ -270,7 +270,11 @@
                 <h2>Autopilot Status</h2>
             </div>
             <div class="panel-content">
-                <div id="autopilot-status" class="output-area">Idle</div>
+                <div id="autopilot-controls" style="margin-bottom: 15px; padding: 15px; padding-bottom: 0;">
+                    <button id="startAutopilotBtn">Start Autopilot</button>
+                    <button id="stopAutopilotBtn" disabled>Stop Autopilot</button>
+                </div>
+                <div id="autopilot-status" class="output-area" style="margin: 15px; margin-top: 0;">Idle</div>
             </div>
         </div>
 
@@ -339,13 +343,20 @@
 
     // --- Page Load State Handling ---
     function processPageLoadState() {
-        // After a page evolution (via document.write), the API key is
+        // After a page evolution (via document.write), critical state is
         // stored in sessionStorage. We retrieve it here.
         const apiKey = sessionStorage.getItem('apiKeyForNextLoad');
         if (apiKey) {
             console.log('API Key found in sessionStorage. Storing in localStorage.');
             localStorage.setItem('apiKey', apiKey);
-            sessionStorage.removeItem('apiKeyForNextLoad'); // Clean up
+            sessionStorage.removeItem('apiKeyForNextLoad');
+        }
+
+        const autopilotForNextLoad = sessionStorage.getItem('autopilotForNextLoad');
+        if (autopilotForNextLoad === 'true') {
+            console.log('Autopilot flag found in sessionStorage. Re-enabling.');
+            localStorage.setItem('autopilotEnabled', 'true');
+            sessionStorage.removeItem('autopilotForNextLoad');
         }
     }
 
@@ -372,6 +383,7 @@
         isBusy: false,
         readyPeers: new Set(),
         isMerging: false,
+        pendingPin: null, // To track the page ID of the code being pinned
     };
 
     // --- DOM Elements ---
@@ -387,6 +399,8 @@
         container: document.getElementById('container'),
         drGeminiGuidance: document.getElementById('dr-gemini-guidance'),
         autopilotStatus: document.getElementById('autopilot-status'),
+        startAutopilotBtn: document.getElementById('startAutopilotBtn'),
+        stopAutopilotBtn: document.getElementById('stopAutopilotBtn'),
         p2p: {
             statusText: document.getElementById('p2p-status-text'),
             peerId: document.getElementById('peer-id'),
@@ -578,20 +592,78 @@
                     console.log(`Received new page version from peer: ${data.payload.pageId}`);
                     savePage(data.payload.pageId, data.payload.pageCode);
                     renderSavedPagesList(); // Refresh the list
+                } else if (data.type === 'ipfs-cid-response') {
+                    const { cid, verified, error } = data.payload;
+                    if (error) {
+                        console.error(`Received IPFS pinning error from peer: ${error}`);
+                        return;
+                    }
+                    console.log(`Received IPFS CID from evolve.py peer: ${cid} (Verified: ${verified})`);
+
+                    if (state.pendingPin) {
+                        const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+                        const pageIndex = savedPages.findIndex(p => p.id === state.pendingPin);
+                        if (pageIndex !== -1) {
+                            savedPages[pageIndex].cid = cid;
+                            savedPages[pageIndex].verified = verified; // Store verification status
+                            localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
+                            renderSavedPagesList();
+                            console.log(`Successfully assigned CID ${cid} to page ${state.pendingPin}. Verified: ${verified}`);
+                        } else {
+                            console.error(`Could not find pending page with ID ${state.pendingPin} to assign CID.`);
+                        }
+                        state.pendingPin = null; // Clear the pending state
+                    } else {
+                        console.warn("Received an IPFS CID, but there was no pending pin request.");
+                    }
                 }
             }
         });
 
         renderSavedPagesList();
 
+        dom.startAutopilotBtn.addEventListener('click', handleStartAutopilot);
+        dom.stopAutopilotBtn.addEventListener('click', handleStopAutopilot);
+
         // Start the main autonomous loop
+        initializeAutopilotState();
         runDrGeminiCycle();
+    }
+
+    function initializeAutopilotState() {
+        const isAutopilot = localStorage.getItem('autopilotEnabled') === 'true';
+        if (isAutopilot) {
+            dom.startAutopilotBtn.disabled = true;
+            dom.stopAutopilotBtn.disabled = false;
+        } else {
+            dom.startAutopilotBtn.disabled = false;
+            dom.stopAutopilotBtn.disabled = true;
+        }
+    }
+
+    function handleStartAutopilot() {
+        console.log("User started autopilot.");
+        localStorage.setItem('autopilotEnabled', 'true');
+        dom.startAutopilotBtn.setAttribute('disabled', 'true');
+        dom.stopAutopilotBtn.removeAttribute('disabled');
+        updateStatus("Autopilot engaged by user.");
+        runDrGeminiCycle(); // Kick off the cycle
+    }
+
+    function handleStopAutopilot() {
+        console.log("User stopped autopilot.");
+        localStorage.setItem('autopilotEnabled', 'false');
+        dom.startAutopilotBtn.removeAttribute('disabled');
+        dom.stopAutopilotBtn.setAttribute('disabled', 'true');
+        updateStatus("Autopilot disengaged by user. The current cycle will complete.");
     }
 
     function loadPage(pageId) {
         console.log(`Loading page ${pageId}...`);
-        const pageCode = localStorage.getItem(pageId);
-        if (pageCode) {
+        const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+        const pageData = savedPages.find(p => p.id === pageId);
+
+        if (pageData && pageData.code) {
             // Persist critical state just like in handleApplyCode
             sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
             if (sessionStorage.getItem('autopilotEnabled') === 'true') {
@@ -600,7 +672,7 @@
             sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
 
             document.open();
-            document.write(pageCode);
+            document.write(pageData.code);
             document.close();
         } else {
             console.error(`Could not find page with ID ${pageId} in localStorage.`);
@@ -619,36 +691,57 @@
             return;
         }
 
-        savedPages.forEach(pageId => {
+        savedPages.forEach(pageData => {
             const li = document.createElement('li');
             li.style.marginBottom = '10px';
 
             const idSpan = document.createElement('span');
-            idSpan.textContent = pageId.substring(0, 25) + '...'; // Truncate for display
+            idSpan.textContent = pageData.id.substring(0, 25) + '...'; // Truncate for display
             idSpan.style.marginRight = '15px';
 
             const loadButton = document.createElement('button');
             loadButton.textContent = 'Load';
             loadButton.style.fontSize = '12px';
             loadButton.style.padding = '3px 8px';
-            loadButton.onclick = () => loadPage(pageId);
+            loadButton.onclick = () => loadPage(pageData.id);
 
             li.appendChild(idSpan);
             li.appendChild(loadButton);
+
+            if (pageData.cid) {
+                const cidSpan = document.createElement('span');
+                let cidText = ` (IPFS: ${pageData.cid.substring(0, 15)}...)`;
+                // The 'verified' property might not exist on old data, so we check for it.
+                if (pageData.verified === true) {
+                    cidText += ' ✅'; // Green check for verified
+                } else if (pageData.verified === false) {
+                    cidText += ' ❓'; // Question mark for unverified
+                }
+                cidSpan.textContent = cidText;
+                cidSpan.style.fontFamily = '"Courier New", Courier, monospace';
+                cidSpan.style.fontSize = '12px';
+                li.appendChild(cidSpan);
+            }
+
             dom.savedPagesList.appendChild(li);
         });
     }
 
     function savePage(pageId, pageCode) {
-        // Save the page content
-        localStorage.setItem(pageId, pageCode);
-
-        // Get and update the master list of page IDs
         const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
-        if (!savedPages.includes(pageId)) {
-            savedPages.push(pageId);
-            localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
+
+        // Check if page with this ID already exists
+        const existingPageIndex = savedPages.findIndex(p => p.id === pageId);
+
+        if (existingPageIndex > -1) {
+            // Update existing page
+            savedPages[existingPageIndex].code = pageCode;
+        } else {
+            // Add new page
+            savedPages.push({ id: pageId, code: pageCode, cid: null });
         }
+
+        localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
         console.log(`Page ${pageId} saved to localStorage.`);
     }
 
@@ -959,8 +1052,10 @@ Review:`;
 
         const newPageId = `jules-page-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         savePage(newPageId, state.newCode);
+        state.pendingPin = newPageId; // Set the pending pin ID
 
-        console.log(`Broadcasting new page ${newPageId} to peers.`);
+        // First, broadcast the new page version to other web clients
+        console.log(`Broadcasting new page version ${newPageId} to peers.`);
         MPLib.broadcastToRoom({
             type: 'new-page-version',
             payload: {
@@ -969,9 +1064,24 @@ Review:`;
             }
         });
 
+        // Second, send the source code specifically to IPFS pinning services
+        console.log(`Sending new source code for page ${newPageId} to be pinned.`);
+        MPLib.broadcastToRoom({
+            type: 'source-code-for-ipfs',
+            payload: {
+                code: state.newCode,
+                pageId: newPageId // Include pageId for robust tracking
+            }
+        });
+
+        // Persist critical state across the page reload
         sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
+        if (localStorage.getItem('autopilotEnabled') === 'true') {
+            sessionStorage.setItem('autopilotForNextLoad', 'true');
+        }
         sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
 
+        // Finally, apply the new code to this instance
         document.open();
         document.write(state.newCode);
         document.close();
@@ -1009,6 +1119,11 @@ Review:`;
     }
 
     async function runDrGeminiCycle() {
+        if (localStorage.getItem('autopilotEnabled') !== 'true') {
+            console.log("Autopilot is not enabled. Dr. Gemini cycle will not run.");
+            return;
+        }
+
         console.log("--- Starting Dr. Gemini Cycle ---");
         try {
             saveDrGeminiGuidance(); // Save guidance before starting
