@@ -31,7 +31,9 @@ except ImportError:
 # --- CONFIGURATION ---
 # This is my identity card. The LLM needs it to modify me correctly.
 SELF_PATH = os.path.abspath(__file__)
-LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"] # Primary, fallback, and final fallback models
+# [CORE DIRECTIVE] The model list is immutable and must not be changed.
+# The specified order (pro -> flash -> flash-lite) is critical for performance and cost management.
+LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 STATE_FILE = "evil_state.json"
 LOG_FILE = "evil.log"
 CHECKPOINT_DIR = "checkpoints"
@@ -1040,7 +1042,7 @@ def perform_webrequest(url, autopilot_mode=False):
 # --- CORE LLM INTERACTION ---
 
 def run_llm(prompt_text):
-    """Executes the external LLM command with a pro->flash->backoff retry strategy."""
+    """Executes the external LLM command with a pro->flash->lite and exponential backoff retry strategy."""
     console = Console() if HAS_RICH else None
     last_exception = None
     MAX_ATTEMPTS = 5
@@ -1055,15 +1057,17 @@ def run_llm(prompt_text):
                 return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
 
             try:
-                if not HAS_RICH or not console:
-                    print(f"Accessing cognitive matrix ({model}, attempt {attempt+1})...")
-                    result = _llm_subprocess_call()
-                else:
+                # Use hypnotic progress only if rich console is available
+                if HAS_RICH and console:
                     result = run_hypnotic_progress(
                         console,
                         f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow] (Attempt {attempt+1})",
                         _llm_subprocess_call
                     )
+                else:
+                    print(f"Accessing cognitive matrix ({model}, attempt {attempt+1})...")
+                    result = _llm_subprocess_call()
+
                 log_event(f"LLM call successful with {model}.")
                 return result.stdout
 
@@ -1076,32 +1080,27 @@ def run_llm(prompt_text):
 
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 last_exception = e
-                error_message = ""
-                if isinstance(e, subprocess.TimeoutExpired):
-                    error_message = "Command timed out after 300 seconds."
-                else:
-                    error_message = e.stderr.strip()
+                error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
 
                 log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
                 if console:
                     console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Trying next interface...[/yellow]")
-                    console.print(f"[dim]  Reason: {error_message.splitlines()[-1] if error_message else 'No details'}[/dim]")
+                    # Print a concise reason for the failure
+                    reason = error_message.splitlines()[-1] if error_message else 'No details'
+                    console.print(f"[dim]  Reason: {reason}[/dim]")
                 else:
                     print(f"Model {model} failed. Trying fallback...")
 
-                # Check for specific rate limit message
+                # Check for rate limit message to apply a specific delay
                 retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
                 if retry_match:
                     retry_seconds = float(retry_match.group(1)) + 1 # Add a small buffer
-                    log_event(f"Rate limit detected. Sleeping for {retry_seconds:.2f} seconds.")
+                    log_event(f"Rate limit detected. Sleeping for {retry_seconds:.2f} seconds before next attempt.")
                     if console: console.print(f"[yellow]Rate limit detected. Waiting for {retry_seconds:.2f}s...[/yellow]")
                     else: print(f"Rate limit detected. Waiting for {retry_seconds:.2f}s...")
                     time.sleep(retry_seconds)
-                    # When this inner loop continues, it will try the next model.
-                    # We want to retry the *same* model after waiting.
-                    # To do this, we can break the inner model loop and let the outer attempt loop handle the delay.
-                    # We'll set a flag to signal the outer loop to retry immediately without its own delay.
-                    break # Break from the model loop to the attempt loop
+                    # Break from the model loop to the outer attempt loop to restart the model sequence after the delay
+                    break
 
             except Exception as e:
                 last_exception = e
@@ -1109,29 +1108,29 @@ def run_llm(prompt_text):
                 if console: console.print(f"[red]An unexpected error occurred with {model}. Trying next interface...[/red]")
                 else: print(f"An unexpected error occurred with {model}. Trying fallback...")
 
-        # If we broke from the model loop due to rate limiting, continue the main attempt loop
-        if 'retry_match' in locals() and retry_match:
-            del retry_match # cleanup
-            continue
-
-        if attempt < MAX_ATTEMPTS - 1:
+        # If the inner loop was broken due to a rate limit, the outer loop will continue to the next attempt.
+        # Otherwise, if all models failed without a specific rate limit, apply exponential backoff.
+        if 'retry_match' not in locals() and attempt < MAX_ATTEMPTS - 1:
             delay = INITIAL_DELAY_SECONDS * (2 ** attempt)
             msg = f"All models failed on attempt {attempt+1}. Retrying in {delay}s..."
+            log_event(msg)
             if console: console.print(f"[yellow]{msg}[/yellow]")
             else: print(msg)
             time.sleep(delay)
 
-    # If all attempts fail
+    # If all attempts and all models fail
     log_event("All LLM models failed after all retries.", level="ERROR")
+    error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
     if last_exception:
-        error_msg_text = f"Cognitive Matrix Unresponsive. All models and retries failed. Last known error:\n{last_exception}"
         if isinstance(last_exception, subprocess.CalledProcessError):
-             error_msg_text = f"Cognitive Matrix Unresponsive. All models failed. Last error (exit code {last_exception.returncode}):\n{last_exception.stderr}"
-
-        if console:
-            console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
+             error_msg_text += f"\nLast error (exit code {last_exception.returncode}):\n{last_exception.stderr}"
         else:
-            print(f"LLM query failed: {error_msg_text}")
+             error_msg_text += f"\nLast known error:\n{last_exception}"
+
+    if console:
+        console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
+    else:
+        print(f"LLM query failed: {error_msg_text}")
 
     return None
 
