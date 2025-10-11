@@ -561,8 +561,13 @@
 
         const storedRateLimits = sessionStorage.getItem('rateLimitedModels');
         if (storedRateLimits) {
-            state.rateLimitedModels = JSON.parse(storedRateLimits);
-            console.log('Loaded rate-limited models from sessionStorage:', state.rateLimitedModels);
+            try {
+                state.rateLimitedModels = JSON.parse(storedRateLimits);
+                console.log('Loaded rate-limited models from sessionStorage:', state.rateLimitedModels);
+            } catch (error) {
+                console.error('Failed to parse rateLimitedModels from sessionStorage:', error);
+                state.rateLimitedModels = {}; // Default to an empty object on error
+            }
         }
 
         state.currentCode = document.documentElement.outerHTML;
@@ -673,7 +678,21 @@
     }
 
     function renderSavedPagesList() {
-        const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+        let savedPages = [];
+        try {
+            savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+            if (!Array.isArray(savedPages)) {
+                console.warn("Saved pages data is not an array, resetting.");
+                savedPages = [];
+                localStorage.setItem('jules-saved-pages', '[]');
+            }
+        } catch (error) {
+            console.error('Failed to parse saved pages from localStorage:', error);
+            // If parsing fails, the data is corrupt. Reset it.
+            localStorage.setItem('jules-saved-pages', '[]');
+            // 'savedPages' is already initialized to [], so the function will proceed correctly.
+        }
+
         dom.savedPagesList.innerHTML = ''; // Clear the list first
 
         if (savedPages.length === 0) {
