@@ -771,6 +771,10 @@
     }
 
     // --- API Communication ---
+    // [CORE DIRECTIVE] The model list is immutable and must not be changed.
+    // The specified order (pro -> flash -> flash-lite) is critical for performance and cost management.
+    const LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+
     async function callGemini(prompt, model) {
         if (!state.apiKey) {
             console.error('Gemini API Key not provided.');
@@ -834,40 +838,28 @@
         let lastError = null;
 
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            // 1. Try primary model
-            console.log(`LLM strategy: Attempt ${attempt + 1}, trying gemini-2.5-pro.`);
-            let result = await callGemini(prompt, 'gemini-2.5-pro');
+            for (const model of LLM_MODELS) {
+                console.log(`LLM strategy: Attempt ${attempt + 1}, trying ${model}.`);
+                const result = await callGemini(prompt, model);
 
-            // 2. If primary fails, immediately try fallback
-            if (typeof result !== 'string') {
-                lastError = result;
-                console.warn('Primary model failed. Trying fallback model gemini-2.5-flash...');
-                result = await callGemini(prompt, 'gemini-2.5-flash');
+                if (typeof result === 'string') {
+                    console.log(`LLM strategy: Succeeded with ${model} on attempt ${attempt + 1}.`);
+                    return result; // Success
+                }
+
+                lastError = result; // Store the latest error
+                console.warn(`Model ${model} failed. Trying next model...`);
             }
 
-            // 3. If fallback also fails, try the final lite model
-            if (typeof result !== 'string') {
-                lastError = result;
-                console.warn('Flash model failed. Trying final fallback model gemini-2.5-flash-lite...');
-                result = await callGemini(prompt, 'gemini-2.5-flash-lite');
-            }
-
-            // 3. Check for success
-            if (typeof result === 'string') {
-                console.log(`LLM strategy: Succeeded on attempt ${attempt + 1}.`);
-                return result; // Success
-            }
-
-            // 4. If both failed, apply backoff and retry
-            lastError = result; // Store the error from the flash model
+            // If all models failed in the current attempt, apply backoff and retry
             if (attempt < MAX_ATTEMPTS - 1) {
                 const delay = INITIAL_DELAY_MS * (2 ** attempt);
-                console.warn(`Both models failed on attempt ${attempt + 1}. Retrying in ${delay}ms...`);
+                console.warn(`All models failed on attempt ${attempt + 1}. Retrying in ${delay}ms...`);
                 await sleep(delay);
             }
         }
 
-        console.error(`LLM strategy: All attempts failed.`);
+        console.error(`LLM strategy: All attempts and all models failed.`);
         return lastError || { error: 'All LLM models failed after multiple attempts.' };
     }
 
