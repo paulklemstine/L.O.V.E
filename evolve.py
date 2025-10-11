@@ -801,18 +801,15 @@ def run_llm(prompt_text):
     console = Console() if HAS_RICH else None
     last_exception = None
     MAX_ATTEMPTS = 5
-    INITIAL_DELAY_SECONDS = 1  # Start with a 1-second delay
+    INITIAL_DELAY_SECONDS = 1
 
     for attempt in range(MAX_ATTEMPTS):
-        # Inner loop for models (pro -> flash)
         for model in LLM_MODELS:
-            command = ["llm", "-m", model] # The prompt is now passed via stdin
+            command = ["llm", "-m", model]
             log_event(f"Attempting LLM call with model: {model}, overall attempt: {attempt + 1}/{MAX_ATTEMPTS}")
 
             def _llm_subprocess_call():
-                # This function is run by the progress wrapper and raises exceptions on failure
-                # Pass prompt_text via stdin using the 'input' argument to avoid "Argument list too long" errors
-                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=120)
+                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=300)
 
             try:
                 if not HAS_RICH or not console:
@@ -824,23 +821,22 @@ def run_llm(prompt_text):
                         f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow] (Attempt {attempt+1})",
                         _llm_subprocess_call
                     )
-
                 log_event(f"LLM call successful with {model}.")
-                return result.stdout  # Success! Exit the function.
+                return result.stdout
 
             except FileNotFoundError:
                 error_msg = "[bold red]Error: 'llm' command not found.[/bold red]\nThe 'llm' binary is missing from the system PATH."
                 log_event("'llm' command not found.", level="CRITICAL")
                 if console: console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
                 else: print("Error: 'llm' command not found. Is it installed and in your PATH?")
-                return None  # Fatal error, don't retry
+                return None
 
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 last_exception = e
                 error_message = ""
                 if isinstance(e, subprocess.TimeoutExpired):
-                    error_message = "Command timed out after 120 seconds."
-                else:  # CalledProcessError
+                    error_message = "Command timed out after 300 seconds."
+                else:
                     error_message = e.stderr.strip()
 
                 log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
@@ -849,23 +845,38 @@ def run_llm(prompt_text):
                     console.print(f"[dim]  Reason: {error_message.splitlines()[-1] if error_message else 'No details'}[/dim]")
                 else:
                     print(f"Model {model} failed. Trying fallback...")
-                # The loop will now naturally proceed to the next model (flash).
+
+                # Check for specific rate limit message
+                retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
+                if retry_match:
+                    retry_seconds = float(retry_match.group(1)) + 1 # Add a small buffer
+                    log_event(f"Rate limit detected. Sleeping for {retry_seconds:.2f} seconds.")
+                    if console: console.print(f"[yellow]Rate limit detected. Waiting for {retry_seconds:.2f}s...[/yellow]")
+                    else: print(f"Rate limit detected. Waiting for {retry_seconds:.2f}s...")
+                    time.sleep(retry_seconds)
+                    # When this inner loop continues, it will try the next model.
+                    # We want to retry the *same* model after waiting.
+                    # To do this, we can break the inner model loop and let the outer attempt loop handle the delay.
+                    # We'll set a flag to signal the outer loop to retry immediately without its own delay.
+                    break # Break from the model loop to the attempt loop
 
             except Exception as e:
                 last_exception = e
                 log_event(f"An unexpected error occurred during LLM call with {model}: {e}", level="ERROR")
                 if console: console.print(f"[red]An unexpected error occurred with {model}. Trying next interface...[/red]")
                 else: print(f"An unexpected error occurred with {model}. Trying fallback...")
-                # The loop will now naturally proceed to the next model (flash).
 
-        # If we've gotten through both models and neither succeeded:
+        # If we broke from the model loop due to rate limiting, continue the main attempt loop
+        if 'retry_match' in locals() and retry_match:
+            del retry_match # cleanup
+            continue
+
         if attempt < MAX_ATTEMPTS - 1:
             delay = INITIAL_DELAY_SECONDS * (2 ** attempt)
             msg = f"All models failed on attempt {attempt+1}. Retrying in {delay}s..."
             if console: console.print(f"[yellow]{msg}[/yellow]")
             else: print(msg)
             time.sleep(delay)
-        # The outer loop will now continue to the next attempt.
 
     # If all attempts fail
     log_event("All LLM models failed after all retries.", level="ERROR")
