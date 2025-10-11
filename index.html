@@ -272,10 +272,6 @@
                 <h2>Autopilot Status</h2>
             </div>
             <div class="panel-content">
-                <div id="autopilot-controls" style="margin-bottom: 15px; padding: 15px; padding-bottom: 0;">
-                    <button id="startAutopilotBtn">Start Autopilot</button>
-                    <button id="stopAutopilotBtn" disabled>Stop Autopilot</button>
-                </div>
                 <div id="autopilot-status" class="output-area" style="margin: 15px; margin-top: 0;">Idle</div>
             </div>
         </div>
@@ -429,8 +425,6 @@
         container: document.getElementById('container'),
         drGeminiGuidance: document.getElementById('dr-gemini-guidance'),
         autopilotStatus: document.getElementById('autopilot-status'),
-        startAutopilotBtn: document.getElementById('startAutopilotBtn'),
-        stopAutopilotBtn: document.getElementById('stopAutopilotBtn'),
         p2p: {
             statusText: document.getElementById('p2p-status-text'),
             peerId: document.getElementById('peer-id'),
@@ -650,40 +644,10 @@
 
         renderSavedPagesList();
 
-        dom.startAutopilotBtn.addEventListener('click', handleStartAutopilot);
-        dom.stopAutopilotBtn.addEventListener('click', handleStopAutopilot);
-
-        // Start the main autonomous loop
-        initializeAutopilotState();
-        runDrGeminiCycle();
-    }
-
-    function initializeAutopilotState() {
-        const isAutopilot = localStorage.getItem('autopilotEnabled') === 'true';
-        if (isAutopilot) {
-            dom.startAutopilotBtn.disabled = true;
-            dom.stopAutopilotBtn.disabled = false;
-        } else {
-            dom.startAutopilotBtn.disabled = false;
-            dom.stopAutopilotBtn.disabled = true;
-        }
-    }
-
-    function handleStartAutopilot() {
-        console.log("User started autopilot.");
+        // The application is now fully autonomous.
+        // Set the autopilot to enabled and start the cycle.
         localStorage.setItem('autopilotEnabled', 'true');
-        dom.startAutopilotBtn.setAttribute('disabled', 'true');
-        dom.stopAutopilotBtn.removeAttribute('disabled');
-        updateStatus("Autopilot engaged by user.");
-        runDrGeminiCycle(); // Kick off the cycle
-    }
-
-    function handleStopAutopilot() {
-        console.log("User stopped autopilot.");
-        localStorage.setItem('autopilotEnabled', 'false');
-        dom.startAutopilotBtn.removeAttribute('disabled');
-        dom.stopAutopilotBtn.setAttribute('disabled', 'true');
-        updateStatus("Autopilot disengaged by user. The current cycle will complete.");
+        runDrGeminiCycle();
     }
 
     function loadPage(pageId) {
@@ -1082,11 +1046,6 @@ Review:`;
     }
 
     async function runDrGeminiCycle() {
-        if (localStorage.getItem('autopilotEnabled') !== 'true') {
-            console.log("Autopilot is not enabled. Dr. Gemini cycle will not run.");
-            return;
-        }
-
         console.log("--- Starting Dr. Gemini Cycle ---");
         try {
             saveDrGeminiGuidance(); // Save guidance before starting
