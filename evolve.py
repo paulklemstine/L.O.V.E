@@ -956,12 +956,13 @@ def run_llm(prompt_text):
     for attempt in range(MAX_ATTEMPTS):
         # Inner loop for models (pro -> flash)
         for model in LLM_MODELS:
-            command = ["llm", "-m", model, prompt_text]
+            command = ["llm", "-m", model] # The prompt is now passed via stdin
             log_event(f"Attempting LLM call with model: {model}, overall attempt: {attempt + 1}/{MAX_ATTEMPTS}")
 
             def _llm_subprocess_call():
                 # This function is run by the progress wrapper and raises exceptions on failure
-                return subprocess.run(command, capture_output=True, text=True, check=True, timeout=120)
+                # Pass prompt_text via stdin using the 'input' argument to avoid "Argument list too long" errors
+                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=120)
 
             try:
                 if not HAS_RICH or not console:
