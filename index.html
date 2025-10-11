@@ -232,6 +232,8 @@
 </div>
 <div id="container">
     <h1>Jules: A Self Modifying Organism</h1>
+    <div id="version-display" style="width: 100%; text-align: center; margin-bottom: 15px; font-family: 'Courier New', Courier, monospace; color: #555;"></div>
+
 
     <div id="dashboard">
         <div class="panel" style="display:none;">
@@ -338,8 +340,37 @@
 <script type="module">
     // --- Jules Programmatic Hooks ---
     window.jules = {
-        jar: {}
+        jar: {},
+        versionName: "initial-web-alpha", // This will be replaced by the evolution process
+        parentVersionName: null, // This will also be replaced
     };
+
+    // --- Versioning ---
+    const ADJECTIVES = [
+        "arcane", "binary", "cyber", "data", "ethereal", "flux", "glitch", "holographic",
+        "iconic", "jpeg", "kinetic", "logic", "meta", "neural", "omega", "protocol",
+        "quantum", "radiant", "sentient", "techno", "ultra", "viral", "web", "xenon",
+        "yotta", "zeta"
+    ];
+    const NOUNS = [
+        "array", "bastion", "cipher", "daemon", "exabyte", "firewall", "gateway", "helix",
+        "interface", "joule", "kernel", "lattice", "matrix", "node", "oracle", "proxy",
+        "relay", "server", "tendril", "uplink", "vector", "wormhole", "xenoform",
+        "yottabyte", "zeitgeist"
+    ];
+    const GREEK_LETTERS = [
+        "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
+        "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi",
+        "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega"
+    ];
+
+    function generateVersionName() {
+        const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+        const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+        const greek = GREEK_LETTERS[Math.floor(Math.random() * GREEK_LETTERS.length)];
+        return `${adj}-${noun}-${greek}`;
+    }
+
 
     // --- Page Load State Handling ---
     function processPageLoadState() {
@@ -379,7 +410,6 @@
         newCode: '',
         review: '',
         rateLimitedModels: {}, // To track models that are rate-limited
-        pendingLlmRequests: new Map(),
         isBusy: false,
         readyPeers: new Set(),
         isMerging: false,
@@ -533,6 +563,8 @@
         initializeCollapsiblePanels();
         console.log('Initializing application...');
 
+        document.getElementById('version-display').textContent = `Version: ${window.jules.versionName} (Parent: ${window.jules.parentVersionName || 'None'})`;
+
         const storedRateLimits = sessionStorage.getItem('rateLimitedModels');
         if (storedRateLimits) {
             state.rateLimitedModels = JSON.parse(storedRateLimits);
@@ -575,11 +607,7 @@
                 state.readyPeers.add(peerId);
             },
             onRoomDataReceived: (peerId, data) => {
-                if (data.type === 'llm-request') {
-                    handleLlmRequest(peerId, data.payload);
-                } else if (data.type === 'llm-response') {
-                    handleLlmResponse(data.payload);
-                } else if (data.type === 'source-code-request') {
+                if (data.type === 'source-code-request') {
                     console.log(`Received source code request from ${peerId.slice(-6)}. Responding.`);
                     MPLib.sendDirectToRoomPeer(peerId, {
                         type: 'source-code-response',
@@ -769,8 +797,12 @@
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 600000); // 600 seconds timeout
+
             const response = await fetch(API_URL, {
                 method: 'POST',
+                signal: controller.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     'x-goog-api-key': state.apiKey,
@@ -785,6 +817,8 @@
                     ]
                 }),
             });
+
+            clearTimeout(timeoutId);
 
             if (response.ok) {
                 const data = await response.json();
@@ -854,90 +888,6 @@
         return lastError || { error: 'All LLM models failed after multiple attempts.' };
     }
 
-    async function handleLlmRequest(requesterId, payload) {
-        const { prompt, requestId } = payload;
-
-        if (state.isBusy) {
-            console.log(`Received LLM request ${requestId.slice(-6)} but I am busy. Ignoring.`);
-            return;
-        }
-
-        console.log(`Received LLM request ${requestId.slice(-6)} from ${requesterId.slice(-6)}. Handling it.`);
-        state.isBusy = true;
-
-        // Use the core callGemini function, not the fallback, to avoid loops.
-        const result = await callGemini(prompt, 'gemini-2.5-flash'); // Use a fast model for p2p
-
-        if (result && !result.error) {
-            console.log(`Successfully handled LLM request ${requestId.slice(-6)}. Sending response.`);
-            MPLib.sendDirectToRoomPeer(requesterId, {
-                type: 'llm-response',
-                payload: {
-                    result: result,
-                    requestId: requestId
-                }
-            });
-        } else {
-            console.error(`Failed to handle LLM request ${requestId.slice(-6)} for peer.`, result ? result.error : 'Unknown error');
-        }
-
-        state.isBusy = false;
-    }
-
-    function handleLlmResponse(payload) {
-        const { result, requestId } = payload;
-
-        if (state.pendingLlmRequests.has(requestId)) {
-            console.log(`Received peer response for request ${requestId.slice(-6)}. Resolving promise.`);
-            const { resolve, fallbackTimeout } = state.pendingLlmRequests.get(requestId);
-
-            clearTimeout(fallbackTimeout); // Prevent the local fallback
-
-            resolve(result);
-            state.pendingLlmRequests.delete(requestId);
-        } else {
-            console.log(`Received peer response for already completed request ${requestId.slice(-6)}. Ignoring.`);
-        }
-    }
-
-
-    async function callGeminiWithFallback(prompt) {
-        const requestId = `llm-req-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-
-        const executeLocalLlmCall = async () => {
-            if (!state.pendingLlmRequests.has(requestId)) {
-                console.log(`[Local Fallback] Aborting, request ${requestId.slice(-6)} was resolved by a peer.`);
-                return;
-            }
-            const { resolve, reject } = state.pendingLlmRequests.get(requestId);
-
-            console.log(`[Local Fallback] No peer responded for request ${requestId.slice(-6)}. Starting local execution.`);
-
-            const result = await callLlmWithStrategy(prompt);
-
-            if (typeof result === 'string') {
-                console.log(`[Local Fallback] Succeeded for request ${requestId.slice(-6)}.`);
-                resolve(result);
-            } else {
-                console.error(`[Local Fallback] All models failed for request ${requestId.slice(-6)}.`);
-                reject(result || { error: 'All local Gemini models failed.' });
-            }
-
-            state.pendingLlmRequests.delete(requestId);
-        };
-
-        return new Promise((resolve, reject) => {
-            const fallbackTimeout = setTimeout(executeLocalLlmCall, 5000); // 5-second timeout
-
-            state.pendingLlmRequests.set(requestId, { resolve, reject, fallbackTimeout });
-
-            console.log(`Broadcasting LLM request ${requestId.slice(-6)} to ${state.readyPeers.size} ready peers.`);
-            MPLib.broadcastToRoom({
-                type: 'llm-request',
-                payload: { prompt, requestId }
-            }, Array.from(state.readyPeers));
-        });
-    }
 
     // --- Workflow Handlers ---
     async function getPlan() {
@@ -958,7 +908,7 @@ ${state.currentCode}
 
 Provide a concise plan.`;
 
-        const result = await callGeminiWithFallback(planPrompt);
+        const result = await callLlmWithStrategy(planPrompt);
         if (result && !result.error) {
             state.plan = result;
             dom.planOutput.textContent = state.plan;
@@ -989,7 +939,7 @@ ${state.currentCode}
 
 New Code:`;
 
-        const result = await callGeminiWithFallback(codePrompt);
+        const result = await callLlmWithStrategy(codePrompt);
         if (result && !result.error) {
             state.newCode = result;
             dom.newCode.value = state.newCode;
@@ -1021,7 +971,7 @@ ${state.newCode}
 
 Review:`;
 
-        const result = await callGeminiWithFallback(reviewPrompt);
+        const result = await callLlmWithStrategy(reviewPrompt);
         if (result && !result.error) {
             state.review = result;
             dom.reviewOutput.textContent = state.review;
@@ -1048,29 +998,42 @@ Review:`;
         }
 
         updateStatus("Evolving...");
-        console.log('Saving and applying new code...');
+        console.log('Generating new version and applying code...');
 
-        const newPageId = `jules-page-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        savePage(newPageId, state.newCode);
-        state.pendingPin = newPageId; // Set the pending pin ID
+        const newVersionName = generateVersionName();
+        const parentVersionName = window.jules.versionName; // The current version becomes the parent
+
+        // Replace placeholders in the new code
+        let finalCode = state.newCode.replace(
+            /versionName: ".*?"/,
+            `versionName: "${newVersionName}"`
+        );
+        finalCode = finalCode.replace(
+            /parentVersionName: .*?,/,
+            `parentVersionName: "${parentVersionName}",`
+        );
+
+
+        savePage(newVersionName, finalCode);
+        state.pendingPin = newVersionName; // Pinning is now tracked by version name
 
         // First, broadcast the new page version to other web clients
-        console.log(`Broadcasting new page version ${newPageId} to peers.`);
+        console.log(`Broadcasting new page version ${newVersionName} to peers.`);
         MPLib.broadcastToRoom({
             type: 'new-page-version',
             payload: {
-                pageId: newPageId,
-                pageCode: state.newCode
+                pageId: newVersionName,
+                pageCode: finalCode
             }
         });
 
         // Second, send the source code specifically to IPFS pinning services
-        console.log(`Sending new source code for page ${newPageId} to be pinned.`);
+        console.log(`Sending new source code for page ${newVersionName} to be pinned.`);
         MPLib.broadcastToRoom({
             type: 'source-code-for-ipfs',
             payload: {
-                code: state.newCode,
-                pageId: newPageId // Include pageId for robust tracking
+                code: finalCode,
+                pageId: newVersionName // Include pageId for robust tracking
             }
         });
 
@@ -1083,7 +1046,7 @@ Review:`;
 
         // Finally, apply the new code to this instance
         document.open();
-        document.write(state.newCode);
+        document.write(finalCode);
         document.close();
     }
 
@@ -1157,7 +1120,7 @@ ${state.currentCode}
 
 What is your decision?`;
 
-            const response = await callGeminiWithFallback(decisionPrompt);
+            const response = await callLlmWithStrategy(decisionPrompt);
             const [decision, justification] = response.split(':', 2).map(s => s.trim());
 
             if (decision.toUpperCase() === 'EVOLVE') {
@@ -1233,7 +1196,7 @@ ${peerCode}
 
 New Merged Code:`;
 
-            const mergedCode = await callGeminiWithFallback(mergePrompt);
+            const mergedCode = await callLlmWithStrategy(mergePrompt);
             if (!mergedCode || mergedCode.error) {
                 throw new Error(mergedCode.error || "Unknown error during AI merge.");
             }
