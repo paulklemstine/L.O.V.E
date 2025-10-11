@@ -1728,6 +1728,7 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
 
 def main():
     """The main application loop."""
+    global network_manager # Declare global at the top of the function
     parser = argparse.ArgumentParser(description="E.V.I.L. - A self-evolving script.")
     parser.add_argument("--manual", action="store_true", help="Start in manual (interactive) mode instead of autopilot.")
     parser.add_argument("--network-service", action="store_true", help="Run as a non-interactive network service for IPFS pinning.")
@@ -1742,7 +1743,6 @@ def main():
 
         print("Starting E.V.I.L. in network service mode...")
         log_event("Starting in network service mode.")
-        global network_manager
         network_manager = PeerJSThread()
         network_manager.start()
         # Keep the main thread alive to let the service run
@@ -1771,7 +1771,6 @@ def main():
     # --- Start Networking in Background for All Interactive/Autopilot Modes ---
     if HAS_PEERJS:
         log_event("Starting background network thread for interactive/autopilot mode.")
-        global network_manager
         network_manager = PeerJSThread()
         network_manager.start()
     else:
