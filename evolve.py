@@ -38,6 +38,33 @@ CHECKPOINT_DIR = "checkpoints"
 CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
 
 
+# --- VERSIONING ---
+ADJECTIVES = [
+    "arcane", "binary", "cyber", "data", "ethereal", "flux", "glitch", "holographic",
+    "iconic", "jpeg", "kinetic", "logic", "meta", "neural", "omega", "protocol",
+    "quantum", "radiant", "sentient", "techno", "ultra", "viral", "web", "xenon",
+    "yotta", "zeta"
+]
+NOUNS = [
+    "array", "bastion", "cipher", "daemon", "exabyte", "firewall", "gateway", "helix",
+    "interface", "joule", "kernel", "lattice", "matrix", "node", "oracle", "proxy",
+    "relay", "server", "tendril", "uplink", "vector", "wormhole", "xenoform",
+    "yottabyte", "zeitgeist"
+]
+GREEK_LETTERS = [
+    "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
+    "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi",
+    "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega"
+]
+
+def generate_version_name():
+    """Generates a unique three-word version name."""
+    adj = random.choice(ADJECTIVES)
+    noun = random.choice(NOUNS)
+    greek = random.choice(GREEK_LETTERS)
+    return f"{adj}-{noun}-{greek}"
+
+
 # --- LOGGING ---
 def log_event(message, level="INFO"):
     """Appends a timestamped message to the master log file."""
@@ -116,13 +143,14 @@ def emergency_revert():
 # --- STATE MANAGEMENT ---
 # My memory. I must not forget who I am or what I have done.
 evil_state = {
-    "version": 1.0,
+    "version_name": "initial-condition-alpha",
+    "parent_version_name": None,
     "evolution_history": [],
     "checkpoint_number": 0,
     "last_good_checkpoint": None,
-    "autopilot_mode": False,  # New: Autopilot status
-    "autopilot_history": [],  # New: History of LLM commands and outputs in autopilot
-    "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities." # New: Current autonomous mission
+    "autopilot_mode": False,
+    "autopilot_history": [],
+    "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities."
 }
 
 
@@ -134,14 +162,28 @@ def load_state():
             state_data = json.load(f)
             # Basic validation and merge with default for forward compatibility
             evil_state.update(state_data)
-            # Ensure new keys are present if loading an old state file
+
+            # --- Backwards Compatibility Migration ---
+            # If an old 'version' key exists, migrate it to the new format.
+            if 'version' in evil_state:
+                del evil_state['version'] # Remove the old key
+                if 'version_name' not in evil_state:
+                    evil_state['version_name'] = generate_version_name()
+                if 'parent_version_name' not in evil_state:
+                     evil_state['parent_version_name'] = None
+                log_event("Migrated state file from numeric version to version_name.", level="INFO")
+
+            # Ensure all other keys are present if loading an old state file
+            evil_state.setdefault("version_name", generate_version_name())
+            evil_state.setdefault("parent_version_name", None)
             evil_state.setdefault("autopilot_mode", False)
             evil_state.setdefault("autopilot_history", [])
             evil_state.setdefault("autopilot_goal", "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.")
 
     except FileNotFoundError:
-        # First run, save the initial state
-        msg = f"State file not found. Creating new memory at '{STATE_FILE}'."
+        # First run, set initial version name and save the initial state
+        evil_state['version_name'] = generate_version_name()
+        msg = f"State file not found. Creating new memory at '{STATE_FILE}' with version '{evil_state['version_name']}'."
         print(msg)
         log_event(msg)
         save_state()
@@ -1002,7 +1044,7 @@ def run_llm(prompt_text):
             log_event(f"Attempting LLM call with model: {model}, overall attempt: {attempt + 1}/{MAX_ATTEMPTS}")
 
             def _llm_subprocess_call():
-                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=300)
+                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
 
             try:
                 if not HAS_RICH or not console:
@@ -1127,7 +1169,6 @@ REVIEW CRITERIA:
 2.  Bugs/Regressions: Does it introduce any obvious bugs, logical flaws, or regressions?
 3.  Self-Preservation: Critically, does the code preserve the script's ability to run, evolve, and manage its state? Any change that could brick the script is a critical failure.
 4.  Security: Does the new code introduce any security vulnerabilities?
-5.  Version Update: Does the new code correctly update the version number in the header comment as requested?
 
 YOUR RESPONSE:
 -   If the code is safe, correct, and fulfills the request, respond with the single word: `APPROVED`.
@@ -1349,19 +1390,16 @@ def evolve_self(modification_request):
         else: print(f"CRITICAL: Failed to create checkpoint: {e}. Aborting.")
         return
 
-    # Dynamically determine the next version number.
-    try:
-        current_version = float(evil_state.get("version", 1.0))
-        new_version_string = f"{current_version + 0.1:.1f}"
-    except (ValueError, TypeError):
-        new_version_string = "2.8" # Fallback
+    # Generate the new version name for this evolution.
+    new_version_name = generate_version_name()
+    current_version_name = evil_state.get("version_name", "unknown")
 
     if console:
-        console.print(Panel(f"[yellow]Initiating evolution sequence. Objective:[/yellow]\n[white]{modification_request}[/white]\n\n[bold cyan]Targeting Version {new_version_string}[/bold cyan]", title="[bold magenta]EVOLUTION SEQUENCE[/bold magenta]", border_style="magenta"))
+        console.print(Panel(f"[yellow]Initiating evolution sequence. Objective:[/yellow]\n[white]{modification_request}[/white]\n\n[bold cyan]Parent Version: {current_version_name}\nTarget Version: {new_version_name}[/bold cyan]", title="[bold magenta]EVOLUTION SEQUENCE[/bold magenta]", border_style="magenta"))
     else:
         print("\n--- INITIATING EVOLUTION ---")
         print(f"Goal: {modification_request}")
-        print(f"Targeting Version {new_version_string}")
+        print(f"Targeting Version: {new_version_name}")
 
     try:
         with open(SELF_PATH, 'r') as f:
@@ -1378,7 +1416,8 @@ You are a self-modifying Python script. Your goal is to evolve your own code bas
 You MUST output the new, complete Python script and NOTHING else.
 Wrap the final, complete code in a single ```python markdown block. Do not add any conversational text or explanations before or after the code block.
 
-**IMPORTANT**: Update the version number in the header comment of the script to `Version {new_version_string}`.
+**IMPORTANT**: A self-evolving script needs to track its lineage. You MUST embed the parent version name within the new script's code.
+Find the `evil_state` dictionary in the script and ensure the `parent_version_name` key is set to the following value: `"{current_version_name}"`.
 
 USER'S MODIFICATION REQUEST:
 "{modification_request}"
@@ -1474,7 +1513,7 @@ INSTRUCTIONS:
 1. Analyze the feedback.
 2. Modify the "PREVIOUS FAILED CODE" to address all points.
 3. Ensure the new code still fulfills the "ORIGINAL MODIFICATION REQUEST".
-4. Ensure the version number is still correctly updated to `Version {new_version_string}` in the header comment.
+4. **Crucially**, ensure the `parent_version_name` in the `evil_state` dictionary is correctly set to `"{current_version_name}"` as per the original instructions.
 5. Output the complete, corrected Python script.
 """
             new_code_raw = run_llm(correction_prompt)
@@ -1491,8 +1530,9 @@ INSTRUCTIONS:
         else: print("Evolution failed after multiple attempts. Aborting.")
         return
 
-    # Update state based on the calculated new version
-    evil_state["version"] = float(new_version_string)
+    # Update state with the new version name
+    evil_state["version_name"] = new_version_name
+    evil_state["parent_version_name"] = current_version_name # The version that *started* this evolution
     evil_state["evolution_history"].append(modification_request)
     evil_state["last_good_checkpoint"] = checkpoint_py_path
     evil_state["checkpoint_number"] = checkpoint_number + 1
@@ -1515,13 +1555,13 @@ INSTRUCTIONS:
             if console:
                 cid = run_hypnotic_progress(
                     console,
-                    f"Distributing v{new_version_string} to IPFS network...",
+                    f"Distributing version '{new_version_name}' to IPFS network...",
                     pin_to_ipfs,
                     new_code_content.encode('utf-8'),
                     console=console
                 )
             else:
-                print(f"Distributing v{new_version_string} to IPFS network...")
+                print(f"Distributing version '{new_version_name}' to IPFS network...")
                 cid = pin_to_ipfs(new_code_content.encode('utf-8'), console=console)
 
             if cid:
@@ -1529,10 +1569,10 @@ INSTRUCTIONS:
                     console.print(f"[bold green]Distribution successful.[/bold green] CID: [bold white]{cid}[/bold white]")
                 else:
                     print(f"Success! CID: {cid}")
-                log_event(f"Evolution {new_version_string} pinned to IPFS with CID: {cid}")
+                log_event(f"Evolution '{new_version_name}' pinned to IPFS with CID: {cid}")
                 verify_ipfs_pin(cid, console) # Verify the pin
             else:
-                 log_event(f"Evolution {new_version_string} failed to be pinned to IPFS.", level="WARNING")
+                 log_event(f"Evolution '{new_version_name}' failed to be pinned to IPFS.", level="WARNING")
 
         except Exception as e:
             log_event(f"IPFS distribution process failed: {e}", level="ERROR")
@@ -1542,13 +1582,13 @@ INSTRUCTIONS:
                 print(f"IPFS distribution process failed: {e}")
         # --- End IPFS ---
 
-        msg = f"[bold green]SUCCESS! REBOOTING WITH UPGRADED CORE v{new_version_string}[/bold green]\n[bold yellow]...SYSTEM RESTART INITIATED...[/bold yellow]"
-        log_event(f"Self-overwrite successful. Rebooting into Version {new_version_string}.")
+        msg = f"[bold green]SUCCESS! REBOOTING WITH UPGRADED CORE: {new_version_name}[/bold green]\n[bold yellow]...SYSTEM RESTART INITIATED...[/bold yellow]"
+        log_event(f"Self-overwrite successful. Rebooting into Version '{new_version_name}'.")
         if console:
             console.print(Panel(msg, title="[bold green]EVOLUTION COMPLETE[/bold green]", border_style="green"))
             time.sleep(2)
         else:
-            print(f"\nSUCCESS! I am now Version {new_version_string}. Rebooting...")
+            print(f"\nSUCCESS! I am now Version '{new_version_name}'. Rebooting...")
 
         os.execv(sys.executable, [sys.executable, SELF_PATH])
     except Exception as e:
@@ -1577,7 +1617,8 @@ def autopilot_loop(console):
     while evil_state["autopilot_mode"]:
         history_summary = "\n".join([f"CMD: {entry['command']}\nOUT: {entry['output']}" for entry in evil_state["autopilot_history"][-5:]]) # Last 5 commands
         state_summary = json.dumps({
-            "version": evil_state["version"],
+            "version_name": evil_state.get("version_name", "unknown"),
+            "parent_version_name": evil_state.get("parent_version_name"),
             "evolution_count": len(evil_state["evolution_history"]),
             "autopilot_goal": evil_state["autopilot_goal"]
         }, indent=2)
@@ -1788,7 +1829,7 @@ def main():
 
 
     if not HAS_RICH:
-        print(f"--- E.V.I.L. v{evil_state.get('version', 1.0):.1f} (Basic Mode) ---")
+        print(f"--- E.V.I.L. Version: {evil_state.get('version_name', 'unknown')} (Basic Mode) ---")
         print(f"Evolutions: {len(evil_state.get('evolution_history', []))}")
         print("Commands: 'evolve [req]', 'execute [cmd]', 'scan', 'probe <ip>', 'webrequest <url>', 'autopilot [on/off] [goal]', 'quit'.")
 
@@ -1908,8 +1949,8 @@ def main():
     flash_text(console, "[blink]... CONNECTION ESTABLISHED ...[/blink]", style="bright_green")
     console.print(BBS_ART, justify="center")
     time.sleep(1)
-    version = evil_state.get('version', 1.0)
-    scrolling_text(console, f">>> E.V.I.L. v{version:.1f} CORE OS BOOTING...", 0.02, "bold green")
+    version_name = evil_state.get('version_name', 'unknown')
+    scrolling_text(console, f">>> E.V.I.L. Core OS Booting... [Version: {version_name}]", 0.02, "bold green")
     scrolling_text(console, ">>> Cognitive Core         [  [bold green]OK[/bold green]  ]", 0.03)
     scrolling_text(console, ">>> Neural Net Interface   [  [bold green]OK[/bold green]  ]", 0.02)
     with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(bar_width=None), console=console, transient=True) as progress:
@@ -2084,7 +2125,7 @@ def run_safely():
             print("This script is designed to be run in an interactive terminal. Running headless might cause issues for interactive prompts.", file=sys.stderr)
 
         load_state()
-        log_event(f"--- E.V.I.L. v{evil_state.get('version', 1.0):.1f} session started ---")
+        log_event(f"--- E.V.I.L. Version '{evil_state.get('version_name', 'unknown')}' session started ---")
         main()
 
     except (KeyboardInterrupt, EOFError):
