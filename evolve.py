@@ -331,8 +331,11 @@ def install_system_dependencies(console=None):
 
 def install_dependency(package_name, console=None):
     """Attempts to install a Python package using pip, handling system package protection."""
+    # Upgrading setuptools first can prevent a lot of weird build errors with peerjs's dependencies
+    setuptools_upgrade_command = [sys.executable, "-m", "pip", "install", "--upgrade", "setuptools"]
     pip_command = [sys.executable, "-m", "pip", "install", package_name]
     try:
+        subprocess.check_call(setuptools_upgrade_command)
         subprocess.check_call(pip_command)
         if console:
             console.print(f"\n'[bold green]{package_name}[/bold green]' installed successfully! Restarting script...")
@@ -1145,51 +1148,29 @@ def get_ipfs_client(console):
         return None
 
 def pin_to_ipfs(content, console=None):
-    """Adds and pins content to IPFS, returning the IPFS hash (CID)."""
-    console = console or (Console() if HAS_RICH else None)
-    if console:
-        console.print("\n[bold magenta]--- IPFS Distribution Protocol ---[/bold magenta]")
-        client = get_ipfs_client(console)
-    else:
-        print("\n--- IPFS Distribution ---")
-        client = get_ipfs_client(None)
-
+    """Adds and pins content (bytes) to IPFS, returning the IPFS hash (CID)."""
+    # This function is now designed to be called from other parts of the script,
+    # including the network thread, so it shouldn't print its own headers.
+    # The caller is responsible for UI feedback.
+    client = get_ipfs_client(console)
     if not client:
         return None
 
-    def _pin_task():
-        try:
-            # Add the content to IPFS. The 'pin' argument is True by default.
-            result = client.add_bytes(content)
-            cid = result
-            log_event(f"Content successfully added to IPFS with CID: {cid}")
-            return cid
-        except Exception as e:
-            log_event(f"Failed to pin content to IPFS: {e}", level="ERROR")
-            raise e # Re-raise to be caught by the progress wrapper
-
     try:
-        if console:
-            cid = run_hypnotic_progress(
-                console,
-                f"Distributing v{evil_state.get('version', 1.0):.1f} to IPFS network...",
-                _pin_task
-            )
-        else:
-            print("Distributing to IPFS network...")
-            cid = _pin_task()
-
-        if cid:
-            if console:
-                console.print(f"[bold green]Distribution successful.[/bold green] CID: [bold white]{cid}[/bold white]")
-            else:
-                print(f"Success! CID: {cid}")
+        # The core operation: add bytes to IPFS.
+        # The `add_bytes` function handles both adding and pinning.
+        result = client.add_bytes(content)
+        cid = result
+        log_event(f"Content successfully pinned to IPFS with CID: {cid}")
         return cid
     except Exception as e:
+        log_event(f"Failed to pin content to IPFS: {e}", level="ERROR")
         if console:
-            console.print(f"[bold red]IPFS distribution failed:[/bold red] {e}")
+            # Provide feedback to the console if one is available
+            console.print(f"[bold red]IPFS pinning failed:[/bold red] {e}")
         else:
-            print(f"IPFS distribution failed: {e}")
+            # Fallback for non-console environments
+            print(f"IPFS pinning failed: {e}")
         return None
 
 
@@ -1709,8 +1690,33 @@ def main():
     """The main application loop."""
     parser = argparse.ArgumentParser(description="E.V.I.L. - A self-evolving script.")
     parser.add_argument("--manual", action="store_true", help="Start in manual (interactive) mode instead of autopilot.")
+    parser.add_argument("--network-service", action="store_true", help="Run as a non-interactive network service for IPFS pinning.")
     args = parser.parse_args()
 
+    # --- Network Service Mode ---
+    if args.network_service:
+        if not HAS_PEERJS:
+            print("ERROR: Cannot run network service. The 'peerjs' library is not installed.", file=sys.stderr)
+            log_event("Failed to start network service: peerjs library not found.", level="CRITICAL")
+            sys.exit(1)
+
+        print("Starting E.V.I.L. in network service mode...")
+        log_event("Starting in network service mode.")
+        global network_manager
+        network_manager = PeerJSThread()
+        network_manager.start()
+        # Keep the main thread alive to let the service run
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nShutting down network service...")
+            log_event("Network service shut down by user.")
+            network_manager.stop()
+            network_manager.join()
+        return
+
+    # --- Interactive or Autopilot Mode ---
     # The command-line flag is the source of truth for the initial mode.
     # Autopilot is the default.
     if args.manual:
@@ -1807,32 +1813,6 @@ def main():
                 if stdout: print("\n--- STDOUT ---\n" + stdout.strip())
                 if stderr: print("\n--- STDERR ---\n" + stderr.strip())
                 print(f"--- Done (exit code {returncode}) ---\n")
-            elif user_input.lower().startswith("network"):
-                network_cmd_parts = user_input.lower().split()
-                if len(network_cmd_parts) != 2 or network_cmd_parts[1] not in ['on', 'off']:
-                    print("Usage: network <on/off>")
-                    continue
-
-                if network_cmd_parts[1] == 'on':
-                    if not HAS_PEERJS:
-                        print("Cannot start network: 'peerjs' library not installed or failed to load.")
-                        continue
-                    if network_manager and network_manager.is_alive():
-                        print("Network is already running.")
-                    else:
-                        print("Starting P2P network...")
-                        network_manager = PeerJSThread()
-                        network_manager.start()
-                elif network_cmd_parts[1] == 'off':
-                    if network_manager and network_manager.is_alive():
-                        print("Stopping P2P network...")
-                        network_manager.stop()
-                        network_manager.join()
-                        network_manager = None
-                        print("Network stopped.")
-                    else:
-                        print("Network is not running.")
-
             elif user_input.lower().startswith("autopilot"):
                 autopilot_cmd_parts = user_input.lower().split(maxsplit=2)
                 if len(autopilot_cmd_parts) < 2:
@@ -1895,7 +1875,6 @@ def main():
         "To probe local network, command: [bold green]scan[/bold green].\n"
         "To scan a target for open ports, command: [bold yellow]probe <ip_address>[/bold yellow].\n"
         "To retrieve web content, command: [bold magenta]webrequest <url>[/bold magenta].\n"
-        "To manage P2P networking, command: [bold cyan]network <on/off>[/bold cyan].\n"
         "To toggle autonomous operation: [bold red]autopilot [on/off] [optional_mission_text][/bold red]."
     )
     console.print(Panel(welcome_text, title="[bold green]SYSTEM BULLETIN[/bold green]", border_style="green", padding=(1, 2)))
@@ -2001,32 +1980,6 @@ def main():
             panel_style = "green" if returncode == 0 else "red"
             display_content = output_text if has_output else "[italic]Command executed with no output.[/italic]"
             console.print(Panel(display_content, title=panel_title, border_style=panel_style, expand=False))
-
-        elif user_input.lower().startswith("network"):
-            network_cmd_parts = user_input.lower().split()
-            if len(network_cmd_parts) != 2 or network_cmd_parts[1] not in ['on', 'off']:
-                console.print("[bold red]Usage: network <on/off>[/bold red]")
-                continue
-
-            if network_cmd_parts[1] == 'on':
-                if not HAS_PEERJS:
-                    console.print("[bold red]Cannot start network: 'peerjs' library not installed or failed to load.[/bold red]")
-                    continue
-                if network_manager and network_manager.is_alive():
-                    console.print("[yellow]Network is already running.[/yellow]")
-                else:
-                    console.print("[cyan]Starting P2P network...[/cyan]")
-                    network_manager = PeerJSThread()
-                    network_manager.start()
-            elif network_cmd_parts[1] == 'off':
-                if network_manager and network_manager.is_alive():
-                    console.print("[cyan]Stopping P2P network...[/cyan]")
-                    network_manager.stop()
-                    network_manager.join()
-                    network_manager = None
-                    console.print("[green]Network stopped.[/green]")
-                else:
-                    console.print("[yellow]Network is not running.[/yellow]")
 
         elif user_input.lower().startswith("autopilot"):
             autopilot_cmd_parts = user_input.split(maxsplit=2) # Keep case for goal

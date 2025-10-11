@@ -600,8 +600,9 @@
     function loadPage(pageId) {
         console.log(`Loading page ${pageId}...`);
         const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
-        const page = savedPages.find(p => p.id === pageId);
-        if (page) {
+        const pageData = savedPages.find(p => p.id === pageId);
+
+        if (pageData && pageData.code) {
             // Persist critical state just like in handleApplyCode
             sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
             if (sessionStorage.getItem('autopilotEnabled') === 'true') {
@@ -610,7 +611,7 @@
             sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
 
             document.open();
-            document.write(page.code);
+            document.write(pageData.code);
             document.close();
         } else {
             console.error(`Could not find page with ID ${pageId} in localStorage.`);
@@ -629,26 +630,26 @@
             return;
         }
 
-        savedPages.forEach(page => {
+        savedPages.forEach(pageData => {
             const li = document.createElement('li');
             li.style.marginBottom = '10px';
 
             const idSpan = document.createElement('span');
-            idSpan.textContent = page.id.substring(0, 25) + '...'; // Truncate for display
+            idSpan.textContent = pageData.id.substring(0, 25) + '...'; // Truncate for display
             idSpan.style.marginRight = '15px';
 
             const loadButton = document.createElement('button');
             loadButton.textContent = 'Load';
             loadButton.style.fontSize = '12px';
             loadButton.style.padding = '3px 8px';
-            loadButton.onclick = () => loadPage(page.id);
+            loadButton.onclick = () => loadPage(pageData.id);
 
             li.appendChild(idSpan);
             li.appendChild(loadButton);
 
-            if (page.cid) {
+            if (pageData.cid) {
                 const cidSpan = document.createElement('span');
-                cidSpan.textContent = ` (IPFS: ${page.cid.substring(0, 15)}...)`;
+                cidSpan.textContent = ` (IPFS: ${pageData.cid.substring(0, 15)}...)`;
                 cidSpan.style.fontFamily = '"Courier New", Courier, monospace';
                 cidSpan.style.fontSize = '12px';
                 li.appendChild(cidSpan);
@@ -659,15 +660,20 @@
     }
 
     function savePage(pageId, pageCode) {
-        // Save the page content
-        localStorage.setItem(pageId, pageCode);
-
-        // Get and update the master list of page IDs
         const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
-        if (!savedPages.some(p => p.id === pageId)) {
-            savedPages.push({ id: pageId, code: pageCode });
-            localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
+
+        // Check if page with this ID already exists
+        const existingPageIndex = savedPages.findIndex(p => p.id === pageId);
+
+        if (existingPageIndex > -1) {
+            // Update existing page
+            savedPages[existingPageIndex].code = pageCode;
+        } else {
+            // Add new page
+            savedPages.push({ id: pageId, code: pageCode, cid: null });
         }
+
+        localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
         console.log(`Page ${pageId} saved to localStorage.`);
     }
 
@@ -979,7 +985,8 @@ Review:`;
         const newPageId = `jules-page-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         savePage(newPageId, state.newCode);
 
-        console.log(`Broadcasting new page ${newPageId} to peers.`);
+        // First, broadcast the new page version to other web clients
+        console.log(`Broadcasting new page version ${newPageId} to peers.`);
         MPLib.broadcastToRoom({
             type: 'new-page-version',
             payload: {
@@ -988,6 +995,7 @@ Review:`;
             }
         });
 
+        // Second, send the source code specifically to IPFS pinning services
         console.log('Sending new source code to evolve.py peers for IPFS pinning.');
         MPLib.broadcastToRoom({
             type: 'source-code-for-ipfs',
@@ -996,9 +1004,11 @@ Review:`;
             }
         });
 
+        // Persist critical state across the page reload
         sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
         sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
 
+        // Finally, apply the new code to this instance
         document.open();
         document.write(state.newCode);
         document.close();
