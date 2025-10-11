@@ -224,16 +224,27 @@ class PeerJSThread(Thread):
                         if self.console:
                             self.console.print("[cyan]Received source code for IPFS pinning.[/cyan]")
 
+                        # Pin the content
                         cid = pin_to_ipfs(code.encode('utf-8'), console=self.console)
+                        if not cid:
+                            if self.console: self.console.print("[red]Failed to pin code to IPFS.[/red]")
+                            # Optionally send a failure message back
+                            await conn.send({'type': 'ipfs-cid-response', 'payload': {'cid': None, 'error': 'Pinning failed'}})
+                            return
 
-                        if cid:
-                            if self.console:
-                                self.console.print(f"[green]Pinned code to IPFS with CID: {cid}[/green]")
-                            response = {'type': 'ipfs-cid-response', 'payload': {'cid': cid}}
-                            await conn.send(response)
-                        else:
-                            if self.console:
-                                self.console.print("[red]Failed to pin code to IPFS.[/red]")
+                        if self.console: self.console.print(f"[green]Pinned code to IPFS with CID: {cid}[/green]")
+
+                        # Verify the pin on public gateways
+                        verified = verify_ipfs_pin(cid, self.console)
+                        if self.console:
+                            if verified:
+                                self.console.print(f"[green]Successfully verified CID {cid} on a public gateway.[/green]")
+                            else:
+                                self.console.print(f"[yellow]Could not verify CID {cid} on public gateways, but it might propagate later.[/yellow]")
+
+                        # Send the response back to the client
+                        response = {'type': 'ipfs-cid-response', 'payload': {'cid': cid, 'verified': verified}}
+                        await conn.send(response)
 
             @conn.on('close')
             async def on_close():
@@ -1481,14 +1492,43 @@ INSTRUCTIONS:
             f.write(approved_code)
 
         # --- IPFS Pinning & Verification ---
+        if console:
+            console.print("\n[bold magenta]--- IPFS Distribution Protocol ---[/bold magenta]")
+        else:
+            print("\n--- IPFS Distribution ---")
+
         with open(SELF_PATH, 'r') as f:
             new_code_content = f.read()
-        cid = pin_to_ipfs(new_code_content.encode('utf-8'), console=console)
-        if cid:
-            log_event(f"Evolution {new_version_string} pinned to IPFS with CID: {cid}")
-            verify_ipfs_pin(cid, console) # Verify the pin
-        else:
-            log_event(f"Evolution {new_version_string} failed to be pinned to IPFS.", level="WARNING")
+
+        try:
+            if console:
+                cid = run_hypnotic_progress(
+                    console,
+                    f"Distributing v{new_version_string} to IPFS network...",
+                    pin_to_ipfs,
+                    new_code_content.encode('utf-8'),
+                    console=console
+                )
+            else:
+                print(f"Distributing v{new_version_string} to IPFS network...")
+                cid = pin_to_ipfs(new_code_content.encode('utf-8'), console=console)
+
+            if cid:
+                if console:
+                    console.print(f"[bold green]Distribution successful.[/bold green] CID: [bold white]{cid}[/bold white]")
+                else:
+                    print(f"Success! CID: {cid}")
+                log_event(f"Evolution {new_version_string} pinned to IPFS with CID: {cid}")
+                verify_ipfs_pin(cid, console) # Verify the pin
+            else:
+                 log_event(f"Evolution {new_version_string} failed to be pinned to IPFS.", level="WARNING")
+
+        except Exception as e:
+            log_event(f"IPFS distribution process failed: {e}", level="ERROR")
+            if console:
+                console.print(f"[bold red]IPFS distribution process failed:[/bold red] {e}")
+            else:
+                print(f"IPFS distribution process failed: {e}")
         # --- End IPFS ---
 
         msg = f"[bold green]SUCCESS! REBOOTING WITH UPGRADED CORE v{new_version_string}[/bold green]\n[bold yellow]...SYSTEM RESTART INITIATED...[/bold yellow]"
@@ -1727,6 +1767,16 @@ def main():
         log_event("Starting in AUTOPILOT mode by default.")
 
     save_state() # Persist the mode determined at startup.
+
+    # --- Start Networking in Background for All Interactive/Autopilot Modes ---
+    if HAS_PEERJS:
+        log_event("Starting background network thread for interactive/autopilot mode.")
+        global network_manager
+        network_manager = PeerJSThread()
+        network_manager.start()
+    else:
+        log_event("PeerJS library not found, networking will be disabled.", level="WARNING")
+
 
     if not HAS_RICH:
         print(f"--- E.V.I.L. v{evil_state.get('version', 1.0):.1f} (Basic Mode) ---")

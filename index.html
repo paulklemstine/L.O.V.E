@@ -372,6 +372,7 @@
         isBusy: false,
         readyPeers: new Set(),
         isMerging: false,
+        pendingPin: null, // To track the page ID of the code being pinned
     };
 
     // --- DOM Elements ---
@@ -579,13 +580,28 @@
                     savePage(data.payload.pageId, data.payload.pageCode);
                     renderSavedPagesList(); // Refresh the list
                 } else if (data.type === 'ipfs-cid-response') {
-                    console.log(`Received IPFS CID from evolve.py peer: ${data.payload.cid}`);
-                    const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
-                    if (savedPages.length > 0) {
-                        const lastPage = savedPages[savedPages.length - 1];
-                        lastPage.cid = data.payload.cid;
-                        localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
-                        renderSavedPagesList();
+                    const { cid, verified, error } = data.payload;
+                    if (error) {
+                        console.error(`Received IPFS pinning error from peer: ${error}`);
+                        return;
+                    }
+                    console.log(`Received IPFS CID from evolve.py peer: ${cid} (Verified: ${verified})`);
+
+                    if (state.pendingPin) {
+                        const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+                        const pageIndex = savedPages.findIndex(p => p.id === state.pendingPin);
+                        if (pageIndex !== -1) {
+                            savedPages[pageIndex].cid = cid;
+                            savedPages[pageIndex].verified = verified; // Store verification status
+                            localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
+                            renderSavedPagesList();
+                            console.log(`Successfully assigned CID ${cid} to page ${state.pendingPin}. Verified: ${verified}`);
+                        } else {
+                            console.error(`Could not find pending page with ID ${state.pendingPin} to assign CID.`);
+                        }
+                        state.pendingPin = null; // Clear the pending state
+                    } else {
+                        console.warn("Received an IPFS CID, but there was no pending pin request.");
                     }
                 }
             }
@@ -649,7 +665,14 @@
 
             if (pageData.cid) {
                 const cidSpan = document.createElement('span');
-                cidSpan.textContent = ` (IPFS: ${pageData.cid.substring(0, 15)}...)`;
+                let cidText = ` (IPFS: ${pageData.cid.substring(0, 15)}...)`;
+                // The 'verified' property might not exist on old data, so we check for it.
+                if (pageData.verified === true) {
+                    cidText += ' ✅'; // Green check for verified
+                } else if (pageData.verified === false) {
+                    cidText += ' ❓'; // Question mark for unverified
+                }
+                cidSpan.textContent = cidText;
                 cidSpan.style.fontFamily = '"Courier New", Courier, monospace';
                 cidSpan.style.fontSize = '12px';
                 li.appendChild(cidSpan);
@@ -984,6 +1007,7 @@ Review:`;
 
         const newPageId = `jules-page-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         savePage(newPageId, state.newCode);
+        state.pendingPin = newPageId; // Set the pending pin ID
 
         // First, broadcast the new page version to other web clients
         console.log(`Broadcasting new page version ${newPageId} to peers.`);
@@ -996,11 +1020,12 @@ Review:`;
         });
 
         // Second, send the source code specifically to IPFS pinning services
-        console.log('Sending new source code to evolve.py peers for IPFS pinning.');
+        console.log(`Sending new source code for page ${newPageId} to be pinned.`);
         MPLib.broadcastToRoom({
             type: 'source-code-for-ipfs',
             payload: {
-                code: state.newCode
+                code: state.newCode,
+                pageId: newPageId // Include pageId for robust tracking
             }
         });
 
