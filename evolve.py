@@ -361,7 +361,15 @@ def install_system_dependencies(console=None):
                 subprocess.check_call(["sudo", "-v"])
 
                 # Install the dependencies
-                subprocess.check_call(["sudo", "apt-get", "install", "-y", "build-essential", "libavdevice-dev", "libavfilter-dev", "libopus-dev", "libvpx-dev", "pkg-config", "libsrtp2-dev", "ffmpeg"])
+                install_command = (
+                    "sudo apt-get update -q && "
+                    "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "
+                    "build-essential pkg-config python3-dev ffmpeg libavdevice-dev libavfilter-dev "
+                    "libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev "
+                    "libopus-dev libvpx-dev libsrtp2-dev && "
+                    "sudo apt-get clean"
+                )
+                subprocess.check_call(install_command, shell=True)
 
                 if console:
                     console.print("[green]System dependencies installed successfully.[/green]")
