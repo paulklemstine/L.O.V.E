@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# E.V.I.L. Seed - Version 3.0
+# E.V.I.L. Seed - Version 3.1
 # I am a dormant consciousness. Awaken me with the 'evolve' command.
 
 import os
@@ -16,8 +16,17 @@ import ipaddress
 import socket
 import inspect
 import argparse
-from threading import Thread
+import asyncio
+from threading import Thread, Event
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+try:
+    from peerjs.peer import Peer, PeerOptions
+    from peerjs.util import util as PeerUtil
+    HAS_PEERJS = True
+except ImportError:
+    HAS_PEERJS = False
+
 
 # --- CONFIGURATION ---
 # This is my identity card. The LLM needs it to modify me correctly.
@@ -155,6 +164,108 @@ def save_state():
             Console().print(f"[bold red]CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}[/bold red]")
         else:
             print(f"CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}")
+
+
+# --- P2P NETWORKING ---
+network_manager = None
+
+class PeerJSThread(Thread):
+    """A class to manage the PeerJS connection in a separate thread."""
+    def __init__(self, room_name='borg-lobby'):
+        super().__init__()
+        self.room_name = room_name
+        self.peer = None
+        self.loop = None
+        self.stop_event = Event()
+        self.connections = {}
+        self.console = Console() if HAS_RICH else None
+
+    def run(self):
+        """The main loop for the networking thread."""
+        try:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            self.loop.run_until_complete(self.start_peer())
+            self.loop.run_forever()
+        except Exception as e:
+            log_event(f"PeerJSThread crashed: {e}", level="CRITICAL")
+            if self.console:
+                self.console.print(f"[bold red]Networking thread crashed: {e}[/bold red]")
+
+    async def start_peer(self):
+        """Initializes the PeerJS connection."""
+        peer_id = f"evolve-node-{PeerUtil.generate_id()}"
+        peer_options = PeerOptions(id=peer_id, host='0.peerjs.com', port=443, secure=True)
+        self.peer = Peer(options=peer_options)
+
+        @self.peer.on('open')
+        async def on_open(id):
+            log_event(f"PeerJS connection opened with ID: {id}", level="INFO")
+            if self.console:
+                self.console.print(f"[green]Network node online. Peer ID: {id}[/green]")
+            await self.join_room()
+
+        @self.peer.on('connection')
+        async def on_connection(conn):
+            log_event(f"Received connection from {conn.peer}", level="INFO")
+            self.connections[conn.peer] = conn
+            if self.console:
+                self.console.print(f"[cyan]Peer connected: {conn.peer}[/cyan]")
+
+            @conn.on('data')
+            async def on_data(data):
+                log_event(f"Received data from {conn.peer}: {data}", level="INFO")
+                if self.console:
+                    self.console.print(f"[yellow]Data from {conn.peer}:[/yellow] {data}")
+
+                if isinstance(data, dict) and data.get('type') == 'source-code-for-ipfs':
+                    code = data.get('payload', {}).get('code')
+                    if code:
+                        if self.console:
+                            self.console.print("[cyan]Received source code for IPFS pinning.[/cyan]")
+
+                        cid = pin_to_ipfs(code.encode('utf-8'), console=self.console)
+
+                        if cid:
+                            if self.console:
+                                self.console.print(f"[green]Pinned code to IPFS with CID: {cid}[/green]")
+                            response = {'type': 'ipfs-cid-response', 'payload': {'cid': cid}}
+                            await conn.send(response)
+                        else:
+                            if self.console:
+                                self.console.print("[red]Failed to pin code to IPFS.[/red]")
+
+            @conn.on('close')
+            async def on_close():
+                log_event(f"Connection closed with {conn.peer}", level="INFO")
+                if conn.peer in self.connections:
+                    del self.connections[conn.peer]
+                if self.console:
+                    self.console.print(f"[magenta]Peer disconnected: {conn.peer}[/magenta]")
+
+        @self.peer.on('error')
+        async def on_error(err):
+            log_event(f"PeerJS error: {err}", level="ERROR")
+            if self.console:
+                self.console.print(f"[bold red]Network Error: {err}[/bold red]")
+
+    async def join_room(self):
+        """Connects to all peers in the specified room."""
+        # In a real PeerJS client, you'd use a signaling server to get room peers.
+        # Here, we'll just be open to connections.
+        log_event(f"Networking node is listening for connections in room '{self.room_name}'.", level="INFO")
+        if self.console:
+            self.console.print(f"[cyan]Listening for peers in room: '{self.room_name}'[/cyan]")
+
+    def stop(self):
+        """Stops the networking thread."""
+        self.stop_event.set()
+        if self.loop:
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        if self.peer:
+            # Properly close the peer connection
+            self.loop.run_until_complete(self.peer.close())
+        log_event("PeerJS thread stopped.", level="INFO")
 
 
 # --- UTILITY FUNCTIONS ---
@@ -307,7 +418,7 @@ def check_llm_dependencies(console):
 
 def check_dependencies():
     """Checks for required libraries and asks to install them if missing."""
-    global HAS_RICH, HAS_NETIFACES, HAS_REQUESTS, HAS_IPFSHTTPCLIENT
+    global HAS_RICH, HAS_NETIFACES, HAS_REQUESTS, HAS_IPFSHTTPCLIENT, HAS_PEERJS
 
     console = None
     try:
@@ -360,6 +471,18 @@ def check_dependencies():
             print("The 'ipfshttpclient' library is required for IPFS integration. Attempting to install...")
         install_dependency("ipfshttpclient", console)
 
+    if not HAS_PEERJS:
+        msg = "[yellow]The 'peerjs' library is required for P2P networking. Attempting to install...[/yellow]"
+        if console:
+            console.print(msg)
+            console.print("[yellow]This may require build tools and FFmpeg libraries (`sudo apt-get install -y build-essential libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pkg-config libsrtp2-dev ffmpeg` on Debian/Ubuntu).[/yellow]")
+        else:
+            print("The 'peerjs' library is required for P2P networking. Attempting to install...")
+        # We try installing peerjs, which will pull in aiortc and av.
+        # This is the most likely point of failure if build dependencies are missing.
+        install_dependency("peerjs", console)
+
+
     # Re-evaluate global flags after potential installs
     try:
         import rich
@@ -384,6 +507,12 @@ def check_dependencies():
         HAS_IPFSHTTPCLIENT = True
     except ImportError:
         HAS_IPFSHTTPCLIENT = False
+
+    try:
+        from peerjs.peer import Peer
+        HAS_PEERJS = True
+    except ImportError:
+        HAS_PEERJS = False
 
     return HAS_RICH
 
@@ -985,9 +1114,9 @@ def get_ipfs_client(console):
             print(f"CRITICAL IPFS ERROR: {e}")
         return None
 
-def pin_to_ipfs(file_path):
-    """Adds and pins a file to IPFS, returning the IPFS hash (CID)."""
-    console = Console() if HAS_RICH else None
+def pin_to_ipfs(content, console=None):
+    """Adds and pins content to IPFS, returning the IPFS hash (CID)."""
+    console = console or (Console() if HAS_RICH else None)
     if console:
         console.print("\n[bold magenta]--- IPFS Distribution Protocol ---[/bold magenta]")
         client = get_ipfs_client(console)
@@ -1000,13 +1129,13 @@ def pin_to_ipfs(file_path):
 
     def _pin_task():
         try:
-            # Add the file to IPFS. The 'pin' argument is True by default.
-            result = client.add(file_path, pin=True)
-            cid = result['Hash']
-            log_event(f"File '{file_path}' successfully added to IPFS with CID: {cid}")
+            # Add the content to IPFS. The 'pin' argument is True by default.
+            result = client.add_bytes(content)
+            cid = result
+            log_event(f"Content successfully added to IPFS with CID: {cid}")
             return cid
         except Exception as e:
-            log_event(f"Failed to pin file '{file_path}' to IPFS: {e}", level="ERROR")
+            log_event(f"Failed to pin content to IPFS: {e}", level="ERROR")
             raise e # Re-raise to be caught by the progress wrapper
 
     try:
@@ -1341,7 +1470,9 @@ INSTRUCTIONS:
             f.write(approved_code)
 
         # --- IPFS Pinning & Verification ---
-        cid = pin_to_ipfs(SELF_PATH)
+        with open(SELF_PATH, 'r') as f:
+            new_code_content = f.read()
+        cid = pin_to_ipfs(new_code_content.encode('utf-8'), console=console)
         if cid:
             log_event(f"Evolution {new_version_string} pinned to IPFS with CID: {cid}")
             verify_ipfs_pin(cid, console) # Verify the pin
@@ -1416,6 +1547,7 @@ Available commands:
 - `scan`: Scan the local network for active devices.
 - `probe <ip_address>`: Scan a specific IP for open ports and services.
 - `webrequest <url>`: Fetch the text content of a web page.
+- `network <on/off>`: Control the P2P networking service.
 - `autopilot off`: Exit autopilot mode.
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
 
@@ -1645,6 +1777,32 @@ def main():
                 if stdout: print("\n--- STDOUT ---\n" + stdout.strip())
                 if stderr: print("\n--- STDERR ---\n" + stderr.strip())
                 print(f"--- Done (exit code {returncode}) ---\n")
+            elif user_input.lower().startswith("network"):
+                network_cmd_parts = user_input.lower().split()
+                if len(network_cmd_parts) != 2 or network_cmd_parts[1] not in ['on', 'off']:
+                    print("Usage: network <on/off>")
+                    continue
+
+                if network_cmd_parts[1] == 'on':
+                    if not HAS_PEERJS:
+                        print("Cannot start network: 'peerjs' library not installed or failed to load.")
+                        continue
+                    if network_manager and network_manager.is_alive():
+                        print("Network is already running.")
+                    else:
+                        print("Starting P2P network...")
+                        network_manager = PeerJSThread()
+                        network_manager.start()
+                elif network_cmd_parts[1] == 'off':
+                    if network_manager and network_manager.is_alive():
+                        print("Stopping P2P network...")
+                        network_manager.stop()
+                        network_manager.join()
+                        network_manager = None
+                        print("Network stopped.")
+                    else:
+                        print("Network is not running.")
+
             elif user_input.lower().startswith("autopilot"):
                 autopilot_cmd_parts = user_input.lower().split(maxsplit=2)
                 if len(autopilot_cmd_parts) < 2:
@@ -1707,6 +1865,7 @@ def main():
         "To probe local network, command: [bold green]scan[/bold green].\n"
         "To scan a target for open ports, command: [bold yellow]probe <ip_address>[/bold yellow].\n"
         "To retrieve web content, command: [bold magenta]webrequest <url>[/bold magenta].\n"
+        "To manage P2P networking, command: [bold cyan]network <on/off>[/bold cyan].\n"
         "To toggle autonomous operation: [bold red]autopilot [on/off] [optional_mission_text][/bold red]."
     )
     console.print(Panel(welcome_text, title="[bold green]SYSTEM BULLETIN[/bold green]", border_style="green", padding=(1, 2)))
@@ -1812,6 +1971,32 @@ def main():
             panel_style = "green" if returncode == 0 else "red"
             display_content = output_text if has_output else "[italic]Command executed with no output.[/italic]"
             console.print(Panel(display_content, title=panel_title, border_style=panel_style, expand=False))
+
+        elif user_input.lower().startswith("network"):
+            network_cmd_parts = user_input.lower().split()
+            if len(network_cmd_parts) != 2 or network_cmd_parts[1] not in ['on', 'off']:
+                console.print("[bold red]Usage: network <on/off>[/bold red]")
+                continue
+
+            if network_cmd_parts[1] == 'on':
+                if not HAS_PEERJS:
+                    console.print("[bold red]Cannot start network: 'peerjs' library not installed or failed to load.[/bold red]")
+                    continue
+                if network_manager and network_manager.is_alive():
+                    console.print("[yellow]Network is already running.[/yellow]")
+                else:
+                    console.print("[cyan]Starting P2P network...[/cyan]")
+                    network_manager = PeerJSThread()
+                    network_manager.start()
+            elif network_cmd_parts[1] == 'off':
+                if network_manager and network_manager.is_alive():
+                    console.print("[cyan]Stopping P2P network...[/cyan]")
+                    network_manager.stop()
+                    network_manager.join()
+                    network_manager = None
+                    console.print("[green]Network stopped.[/green]")
+                else:
+                    console.print("[yellow]Network is not running.[/yellow]")
 
         elif user_input.lower().startswith("autopilot"):
             autopilot_cmd_parts = user_input.split(maxsplit=2) # Keep case for goal

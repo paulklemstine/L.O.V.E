@@ -578,6 +578,15 @@
                     console.log(`Received new page version from peer: ${data.payload.pageId}`);
                     savePage(data.payload.pageId, data.payload.pageCode);
                     renderSavedPagesList(); // Refresh the list
+                } else if (data.type === 'ipfs-cid-response') {
+                    console.log(`Received IPFS CID from evolve.py peer: ${data.payload.cid}`);
+                    const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+                    if (savedPages.length > 0) {
+                        const lastPage = savedPages[savedPages.length - 1];
+                        lastPage.cid = data.payload.cid;
+                        localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
+                        renderSavedPagesList();
+                    }
                 }
             }
         });
@@ -590,8 +599,9 @@
 
     function loadPage(pageId) {
         console.log(`Loading page ${pageId}...`);
-        const pageCode = localStorage.getItem(pageId);
-        if (pageCode) {
+        const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+        const page = savedPages.find(p => p.id === pageId);
+        if (page) {
             // Persist critical state just like in handleApplyCode
             sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
             if (sessionStorage.getItem('autopilotEnabled') === 'true') {
@@ -600,7 +610,7 @@
             sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
 
             document.open();
-            document.write(pageCode);
+            document.write(page.code);
             document.close();
         } else {
             console.error(`Could not find page with ID ${pageId} in localStorage.`);
@@ -619,22 +629,31 @@
             return;
         }
 
-        savedPages.forEach(pageId => {
+        savedPages.forEach(page => {
             const li = document.createElement('li');
             li.style.marginBottom = '10px';
 
             const idSpan = document.createElement('span');
-            idSpan.textContent = pageId.substring(0, 25) + '...'; // Truncate for display
+            idSpan.textContent = page.id.substring(0, 25) + '...'; // Truncate for display
             idSpan.style.marginRight = '15px';
 
             const loadButton = document.createElement('button');
             loadButton.textContent = 'Load';
             loadButton.style.fontSize = '12px';
             loadButton.style.padding = '3px 8px';
-            loadButton.onclick = () => loadPage(pageId);
+            loadButton.onclick = () => loadPage(page.id);
 
             li.appendChild(idSpan);
             li.appendChild(loadButton);
+
+            if (page.cid) {
+                const cidSpan = document.createElement('span');
+                cidSpan.textContent = ` (IPFS: ${page.cid.substring(0, 15)}...)`;
+                cidSpan.style.fontFamily = '"Courier New", Courier, monospace';
+                cidSpan.style.fontSize = '12px';
+                li.appendChild(cidSpan);
+            }
+
             dom.savedPagesList.appendChild(li);
         });
     }
@@ -645,8 +664,8 @@
 
         // Get and update the master list of page IDs
         const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
-        if (!savedPages.includes(pageId)) {
-            savedPages.push(pageId);
+        if (!savedPages.some(p => p.id === pageId)) {
+            savedPages.push({ id: pageId, code: pageCode });
             localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
         }
         console.log(`Page ${pageId} saved to localStorage.`);
@@ -966,6 +985,14 @@ Review:`;
             payload: {
                 pageId: newPageId,
                 pageCode: state.newCode
+            }
+        });
+
+        console.log('Sending new source code to evolve.py peers for IPFS pinning.');
+        MPLib.broadcastToRoom({
+            type: 'source-code-for-ipfs',
+            payload: {
+                code: state.newCode
             }
         });
 
