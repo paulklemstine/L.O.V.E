@@ -293,6 +293,42 @@ except ImportError:
     HAS_IPFSHTTPCLIENT = False
 
 
+def install_system_dependencies(console=None):
+    """Installs system-level dependencies for peerjs."""
+    if platform.system() == "Linux":
+        try:
+            # Check for debian-based systems
+            if os.path.exists("/etc/debian_version"):
+                if console:
+                    console.print("[cyan]Attempting to install system dependencies for PeerJS...[/cyan]")
+                else:
+                    print("Attempting to install system dependencies for PeerJS...")
+
+                # Try to get sudo permissions
+                subprocess.check_call(["sudo", "-v"])
+
+                # Install the dependencies
+                subprocess.check_call(["sudo", "apt-get", "install", "-y", "build-essential", "libavdevice-dev", "libavfilter-dev", "libopus-dev", "libvpx-dev", "pkg-config", "libsrtp2-dev", "ffmpeg"])
+
+                if console:
+                    console.print("[green]System dependencies installed successfully.[/green]")
+                else:
+                    print("System dependencies installed successfully.")
+                return True
+            else:
+                if console:
+                    console.print("[yellow]Could not detect a Debian-based system. Please install the following dependencies manually: build-essential, libavdevice-dev, libavfilter-dev, libopus-dev, libvpx-dev, pkg-config, libsrtp2-dev, ffmpeg[/yellow]")
+                else:
+                    print("Could not detect a Debian-based system. Please install the following dependencies manually: build-essential, libavdevice-dev, libavfilter-dev, libopus-dev, libvpx-dev, pkg-config, libsrtp2-dev, ffmpeg")
+                return False
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            if console:
+                console.print("[bold red]Failed to install system dependencies. Please install them manually.[/bold red]")
+            else:
+                print("Failed to install system dependencies. Please install them manually.")
+            return False
+    return True
+
 def install_dependency(package_name, console=None):
     """Attempts to install a Python package using pip, handling system package protection."""
     pip_command = [sys.executable, "-m", "pip", "install", package_name]
@@ -472,15 +508,8 @@ def check_dependencies():
         install_dependency("ipfshttpclient", console)
 
     if not HAS_PEERJS:
-        msg = "[yellow]The 'peerjs' library is required for P2P networking. Attempting to install...[/yellow]"
-        if console:
-            console.print(msg)
-            console.print("[yellow]This may require build tools and FFmpeg libraries (`sudo apt-get install -y build-essential libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pkg-config libsrtp2-dev ffmpeg` on Debian/Ubuntu).[/yellow]")
-        else:
-            print("The 'peerjs' library is required for P2P networking. Attempting to install...")
-        # We try installing peerjs, which will pull in aiortc and av.
-        # This is the most likely point of failure if build dependencies are missing.
-        install_dependency("peerjs", console)
+        if install_system_dependencies(console):
+            install_dependency("peerjs", console)
 
 
     # Re-evaluate global flags after potential installs
