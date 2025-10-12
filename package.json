@@ -1,0 +1,9 @@
+{
+  "name": "evil-bridge",
+  "version": "1.0.0",
+  "description": "PeerJS bridge for E.V.I.L.",
+  "main": "peer_bridge.js",
+  "dependencies": {
+    "@its-forked/peerjs-on-node": "^1.0.3"
+  }
+}

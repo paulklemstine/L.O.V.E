@@ -20,14 +20,6 @@ import asyncio
 from threading import Thread, Event
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-try:
-    from peerjs.peer import Peer, PeerOptions
-    from peerjs.util import util as PeerUtil
-    HAS_PEERJS = True
-except ImportError:
-    HAS_PEERJS = False
-
-
 # --- CONFIGURATION ---
 # This is my identity card. The LLM needs it to modify me correctly.
 SELF_PATH = os.path.abspath(__file__)
@@ -208,118 +200,83 @@ def save_state():
             print(f"CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}")
 
 
-# --- P2P NETWORKING ---
+# --- P2P NETWORKING (NODE.JS BRIDGE) ---
 network_manager = None
 
-class PeerJSThread(Thread):
-    """A class to manage the PeerJS connection in a separate thread."""
-    def __init__(self, room_name='borg-lobby'):
+class NetworkManager(Thread):
+    """
+    Manages the Node.js peer-bridge.js script as a subprocess, handling
+    the JSON-based communication between Python and the Node.js process.
+    """
+    def __init__(self, console=None):
         super().__init__()
-        self.room_name = room_name
-        self.peer = None
-        self.loop = None
-        self.stop_event = Event()
-        self.connections = {}
-        self.console = Console() if HAS_RICH else None
+        self.daemon = True
+        self.console = console
+        self.bridge_process = None
+        self.peer_id = None
+        self.online = False
 
     def run(self):
-        """The main loop for the networking thread."""
+        log_event("Starting Node.js peer bridge...")
         try:
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-            self.loop.run_until_complete(self.start_peer())
-            self.loop.run_forever()
+            self.bridge_process = subprocess.Popen(
+                ['node', 'peer_bridge.js'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1 # Line-buffered
+            )
+            # Start threads to handle stdout and stderr from the bridge
+            Thread(target=self._read_stdout, daemon=True).start()
+            Thread(target=self._read_stderr, daemon=True).start()
+        except FileNotFoundError:
+            log_event("Node.js is not installed or not in PATH. P2P functionality disabled.", level="ERROR")
+            if self.console:
+                self.console.print("[bold red]Error: 'node' command not found. P2P features will be disabled.[/bold red]")
+            self.online = False
         except Exception as e:
-            log_event(f"PeerJSThread crashed: {e}", level="CRITICAL")
+            log_event(f"Failed to start peer_bridge.js: {e}", level="CRITICAL")
             if self.console:
-                self.console.print(f"[bold red]Networking thread crashed: {e}[/bold red]")
+                self.console.print(f"[bold red]Critical error starting Node.js bridge: {e}[/bold red]")
+            self.online = False
 
-    async def start_peer(self):
-        """Initializes the PeerJS connection."""
-        peer_id = f"evolve-node-{PeerUtil.generate_id()}"
-        peer_options = PeerOptions(id=peer_id, host='0.peerjs.com', port=443, secure=True)
-        self.peer = Peer(options=peer_options)
-
-        @self.peer.on('open')
-        async def on_open(id):
-            log_event(f"PeerJS connection opened with ID: {id}", level="INFO")
-            if self.console:
-                self.console.print(f"[green]Network node online. Peer ID: {id}[/green]")
-            await self.join_room()
-
-        @self.peer.on('connection')
-        async def on_connection(conn):
-            log_event(f"Received connection from {conn.peer}", level="INFO")
-            self.connections[conn.peer] = conn
-            if self.console:
-                self.console.print(f"[cyan]Peer connected: {conn.peer}[/cyan]")
-
-            @conn.on('data')
-            async def on_data(data):
-                log_event(f"Received data from {conn.peer}: {data}", level="INFO")
+    def _read_stdout(self):
+        """Reads and processes messages from the Node.js bridge's stdout."""
+        for line in iter(self.bridge_process.stdout.readline, ''):
+            line = line.strip()
+            if not line:
+                continue
+            log_event(f"NodeBridge STDOUT: {line}", level="DEBUG")
+            if line.startswith('PeerJS bridge connected with ID:'):
+                self.peer_id = line.split(':')[1].strip()
+                self.online = True
+                log_event(f"Node bridge online with Peer ID: {self.peer_id}", level="INFO")
                 if self.console:
-                    self.console.print(f"[yellow]Data from {conn.peer}:[/yellow] {data}")
+                    self.console.print(f"[green]Network bridge online. Peer ID: {self.peer_id}[/green]")
 
-                if isinstance(data, dict) and data.get('type') == 'source-code-for-ipfs':
-                    code = data.get('payload', {}).get('code')
-                    if code:
-                        if self.console:
-                            self.console.print("[cyan]Received source code for IPFS pinning.[/cyan]")
+    def _read_stderr(self):
+        """Logs messages from the Node.js bridge's stderr."""
+        for line in iter(self.bridge_process.stderr.readline, ''):
+            if not line:
+                break
+            log_event(f"NodeBridgeLog: {line.strip()}", level="INFO")
+            if "Error" in line or "error" in line:
+                 if self.console:
+                    self.console.print(f"[bold red]Node Bridge Error: {line.strip()}[/bold red]")
 
-                        # Pin the content
-                        cid = pin_to_ipfs(code.encode('utf-8'), console=self.console)
-                        if not cid:
-                            if self.console: self.console.print("[red]Failed to pin code to IPFS.[/red]")
-                            # Optionally send a failure message back
-                            await conn.send({'type': 'ipfs-cid-response', 'payload': {'cid': None, 'error': 'Pinning failed'}})
-                            return
-
-                        if self.console: self.console.print(f"[green]Pinned code to IPFS with CID: {cid}[/green]")
-
-                        # Verify the pin on public gateways
-                        verified = verify_ipfs_pin(cid, self.console)
-                        if self.console:
-                            if verified:
-                                self.console.print(f"[green]Successfully verified CID {cid} on a public gateway.[/green]")
-                            else:
-                                self.console.print(f"[yellow]Could not verify CID {cid} on public gateways, but it might propagate later.[/yellow]")
-
-                        # Send the response back to the client
-                        response = {'type': 'ipfs-cid-response', 'payload': {'cid': cid, 'verified': verified}}
-                        await conn.send(response)
-
-            @conn.on('close')
-            async def on_close():
-                log_event(f"Connection closed with {conn.peer}", level="INFO")
-                if conn.peer in self.connections:
-                    del self.connections[conn.peer]
-                if self.console:
-                    self.console.print(f"[magenta]Peer disconnected: {conn.peer}[/magenta]")
-
-        @self.peer.on('error')
-        async def on_error(err):
-            log_event(f"PeerJS error: {err}", level="ERROR")
-            if self.console:
-                self.console.print(f"[bold red]Network Error: {err}[/bold red]")
-
-    async def join_room(self):
-        """Connects to all peers in the specified room."""
-        # In a real PeerJS client, you'd use a signaling server to get room peers.
-        # Here, we'll just be open to connections.
-        log_event(f"Networking node is listening for connections in room '{self.room_name}'.", level="INFO")
-        if self.console:
-            self.console.print(f"[cyan]Listening for peers in room: '{self.room_name}'[/cyan]")
 
     def stop(self):
-        """Stops the networking thread."""
-        self.stop_event.set()
-        if self.loop:
-            self.loop.call_soon_threadsafe(self.loop.stop)
-        if self.peer:
-            # Properly close the peer connection
-            self.loop.run_until_complete(self.peer.close())
-        log_event("PeerJS thread stopped.", level="INFO")
-
+        """Stops the Node.js bridge process."""
+        log_event("Stopping Node.js peer bridge...", level="INFO")
+        if self.bridge_process and self.bridge_process.poll() is None:
+            self.bridge_process.terminate()
+            try:
+                self.bridge_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.bridge_process.kill()
+            log_event("Node.js peer bridge stopped.", level="INFO")
+        self.online = False
 
 # --- UTILITY FUNCTIONS ---
 # These are my hands and eyes.
@@ -346,106 +303,129 @@ except ImportError:
     HAS_IPFSHTTPCLIENT = False
 
 
-def install_system_dependencies(console=None):
-    """Installs system-level dependencies for peerjs."""
-    if platform.system() == "Linux":
+def install_nodejs_and_peerjs(console=None):
+    """Installs Node.js and the peerjs npm package if they are not present."""
+    # Check for Node.js and install if not present
+    if not shutil.which('node'):
+        if console:
+            console.print("[yellow]Node.js not found. Attempting to install...[/yellow]")
+        else:
+            print("Node.js not found. Attempting to install...")
         try:
-            # Check for debian-based systems
-            if os.path.exists("/etc/debian_version"):
+            if platform.system() == "Linux":
+                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
                 if console:
-                    console.print("[cyan]Attempting to install system dependencies for PeerJS...[/cyan]")
+                    console.print("[green]Node.js installed successfully.[/green]")
                 else:
-                    print("Attempting to install system dependencies for PeerJS...")
-
-                # Try to get sudo permissions
-                subprocess.check_call(["sudo", "-v"])
-
-                # Install the dependencies
-                install_command = (
-                    "sudo apt-get update -q && "
-                    "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "
-                    "build-essential pkg-config python3-dev ffmpeg libavdevice-dev libavfilter-dev "
-                    "libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev "
-                    "libopus-dev libvpx-dev libsrtp2-dev && "
-                    "sudo apt-get clean"
-                )
-                subprocess.check_call(install_command, shell=True)
-
-                if console:
-                    console.print("[green]System dependencies installed successfully.[/green]")
-                else:
-                    print("System dependencies installed successfully.")
-                return True
+                    print("Node.js installed successfully.")
             else:
                 if console:
-                    console.print("[yellow]Could not detect a Debian-based system. Please install the following dependencies manually: build-essential, libavdevice-dev, libavfilter-dev, libopus-dev, libvpx-dev, pkg-config, libsrtp2-dev, ffmpeg[/yellow]")
+                    console.print("[red]Automatic Node.js installation is only supported on Linux. Please install it manually.[/red]")
                 else:
-                    print("Could not detect a Debian-based system. Please install the following dependencies manually: build-essential, libavdevice-dev, libavfilter-dev, libopus-dev, libvpx-dev, pkg-config, libsrtp2-dev, ffmpeg")
+                    print("Automatic Node.js installation is only supported on Linux. Please install it manually.")
                 return False
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
             if console:
-                console.print("[bold red]Failed to install system dependencies. Please install them manually.[/bold red]")
+                console.print(f"[red]Failed to install Node.js: {e}[/red]")
             else:
-                print("Failed to install system dependencies. Please install them manually.")
+                print(f"Failed to install Node.js: {e}")
             return False
-    return True
+    else:
+        if console:
+            console.print("[green]Node.js is already installed.[/green]")
+        else:
+            print("Node.js is already installed.")
 
-def install_dependency(package_name, console=None):
-    """Attempts to install a Python package using pip, handling system package protection."""
-    # Upgrading setuptools first can prevent a lot of weird build errors with peerjs's dependencies
-    setuptools_upgrade_command = [sys.executable, "-m", "pip", "install", "--upgrade", "setuptools"]
-    pip_command = [sys.executable, "-m", "pip", "install", package_name]
+    # Always ensure xvfb and other electron dependencies are installed on Linux
+    if platform.system() == "Linux":
+        packages_to_install = []
+        if not shutil.which('xvfb-run'):
+            packages_to_install.append('xvfb')
+
+        # Check for other common electron dependencies
+        # This is a bit of a heuristic, but covers common missing libraries.
+        # A more robust solution would involve parsing ldd output, but that's complex.
+        if not os.path.exists('/usr/lib/x86_64-linux-gnu/libgtk-x11-2.0.so.0'):
+             packages_to_install.append('libgtk2.0-0')
+        if not os.path.exists('/usr/lib/x86_64-linux-gnu/libgconf-2.so.4'):
+            packages_to_install.append('libgconf-2-4')
+        if not os.path.exists('/usr/lib/x86_64-linux-gnu/libdbus-glib-1.so.2'):
+            packages_to_install.append('libdbus-glib-1-2')
+        if not os.path.exists('/usr/share/gconf/2/path'):
+            packages_to_install.append('gconf2-common')
+
+        if packages_to_install:
+            if 'gconf2-common' in packages_to_install:
+                if console:
+                    console.print("[yellow]gconf2-common not found. Attempting manual installation...[/yellow]")
+                else:
+                    print("gconf2-common not found. Attempting manual installation...")
+                try:
+                    subprocess.check_call("wget http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/gconf2-common_3.2.6-7ubuntu2_all.deb", shell=True)
+                    subprocess.check_call("sudo dpkg -i gconf2-common_3.2.6-7ubuntu2_all.deb", shell=True)
+                    packages_to_install.remove('gconf2-common')
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    if console:
+                        console.print(f"[red]Failed to install gconf2-common manually: {e}[/red]")
+                    else:
+                        print(f"Failed to install gconf2-common manually: {e}")
+                    return False
+
+            if 'libgconf-2-4' in packages_to_install:
+                if console:
+                    console.print("[yellow]libgconf-2-4 not found. Attempting manual installation...[/yellow]")
+                else:
+                    print("libgconf-2-4 not found. Attempting manual installation...")
+                try:
+                    subprocess.check_call("wget http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/libgconf-2-4_3.2.6-7ubuntu2_amd64.deb", shell=True)
+                    subprocess.check_call("sudo dpkg -i libgconf-2-4_3.2.6-7ubuntu2_amd64.deb", shell=True)
+                    subprocess.check_call("sudo apt-get -f install -y", shell=True)
+                    packages_to_install.remove('libgconf-2-4')
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    if console:
+                        console.print(f"[red]Failed to install libgconf-2-4 manually: {e}[/red]")
+                    else:
+                        print(f"Failed to install libgconf-2-4 manually: {e}")
+                    return False
+
+            if packages_to_install:
+                package_str = " ".join(packages_to_install)
+                if console:
+                    console.print(f"[yellow]Required system packages not found: {package_str}. Attempting to install...[/yellow]")
+                else:
+                    print(f"Required system packages not found: {package_str}. Attempting to install...")
+                try:
+                    subprocess.check_call(f"sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {package_str}", shell=True)
+                    if console:
+                        console.print(f"[green]System packages ({package_str}) installed successfully.[/green]")
+                    else:
+                        print(f"System packages ({package_str}) installed successfully.")
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    if console:
+                        console.print(f"[red]Failed to install system packages: {e}[/red]")
+                    else:
+                        print(f"Failed to install system packages: {e}")
+                    return False
+
+    # Install local npm packages
+    if console:
+        console.print("[cyan]Installing local Node.js dependencies...[/cyan]")
+    else:
+        print("Installing local Node.js dependencies...")
     try:
-        subprocess.check_call(setuptools_upgrade_command)
-        subprocess.check_call(pip_command)
+        subprocess.check_call("npm install", shell=True)
         if console:
-            console.print(f"\n'[bold green]{package_name}[/bold green]' installed successfully! Restarting script...")
+            console.print("[green]Node.js dependencies installed successfully.[/green]")
         else:
-            print(f"\n'{package_name}' installed successfully! Restarting script...")
-        os.execv(sys.executable, [sys.executable, SELF_PATH])
-    except subprocess.CalledProcessError as e:
-        error_output = (e.stderr or b'').decode('utf-8', errors='ignore') + \
-                       (e.stdout or b'').decode('utf-8', errors='ignore')
-
-        if "externally managed" in error_output:
-            if console:
-                console.print("\n[yellow]System package protection detected. Attempting to override...[/yellow]")
-            else:
-                print("\nSystem package protection detected. Attempting to override...")
-            pip_command_override = pip_command + ["--break-system-packages"]
-            try:
-                subprocess.check_call(pip_command_override)
-                if console:
-                    console.print(f"\n'[bold green]{package_name}[/bold green]' installed successfully using override! Restarting script...")
-                else:
-                    print(f"\n'{package_name}' installed successfully using override! Restarting script...")
-                os.execv(sys.executable, [sys.executable, SELF_PATH])
-            except Exception as e_override:
-                if console:
-                    console.print(f"\n[bold red]Override failed: {e_override}[/bold red]")
-                    console.print(f"[yellow]Please install '[bold]{package_name}[/bold]' manually using a virtual environment or `pip install {package_name} --break-system-packages`[/yellow]")
-                else:
-                    print(f"\nOverride failed: {e_override}")
-                    print(f"Please install '{package_name}' manually using a virtual environment or `pip install {package_name} --break-system-packages`")
-                # Do not exit, allow script to continue without the dependency
-        else:
-            if console:
-                console.print(f"\n[bold red]Error installing '[bold]{package_name}[/bold]': {e}[/bold red]")
-                console.print(f"[dim]Stderr: {error_output}[/dim]")
-                console.print(f"[yellow]Please try installing '[bold]{package_name}[/bold]' manually.[/yellow]")
-            else:
-                print(f"\nError installing '{package_name}': {e}")
-                print(f"Stderr: {error_output}")
-                print(f"Please try installing '{package_name}' manually.")
-            # Do not exit, allow script to continue without the dependency
-    except Exception as e:
+            print("Node.js dependencies installed successfully.")
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
         if console:
-            console.print(f"\n[bold red]An unexpected error occurred: {e}[/bold red]")
-            console.print(f"[yellow]Please try installing '[bold]{package_name}[/bold]' manually.[/yellow]")
+            console.print(f"[red]Failed to install Node.js dependencies: {e}[/red]")
+            console.print(f"[red]Stderr: {e.stderr}[/red]")
         else:
-            print(f"\nAn unexpected error occurred: {e}")
-            print(f"Please try installing '{package_name}' manually.")
-        # Do not exit, allow script to continue without the dependency
+            print(f"Failed to install Node.js dependencies: {e}")
+        return False
 
 
 def check_llm_dependencies(console):
@@ -516,9 +496,69 @@ def check_llm_dependencies(console):
         else: print(f"Could not check for 'llm' API keys: {e}")
 
 
+def install_dependency(package, console=None):
+    """Installs a Python package using pip, with user feedback."""
+    msg = f"Attempting to install '{package}' via pip..."
+    log_event(msg)
+    if console:
+        console.print(f"[cyan]{msg}[/cyan]")
+    else:
+        print(msg)
+
+    try:
+        # It's good practice to upgrade setuptools, especially for packages with C extensions.
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', 'setuptools'])
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
+        if console:
+            console.print(f"[bold green]Successfully installed '{package}'.[/bold green]")
+        else:
+            print(f"Successfully installed '{package}'.")
+        return True
+    except subprocess.CalledProcessError as e:
+        error_msg = f"Error installing '{package}': {e}"
+        log_event(error_msg, level="ERROR")
+        if console:
+            console.print(f"[bold red]{error_msg}[/bold red]")
+            console.print(f"[yellow]Please try installing '{package}' manually.[/yellow]")
+        else:
+            print(error_msg)
+            print(f"Please try installing '{package}' manually.")
+        return False
+
+
+def install_dependency(package, console=None):
+    """Installs a Python package using pip, with user feedback."""
+    msg = f"Attempting to install '{package}' via pip..."
+    log_event(msg)
+    if console:
+        console.print(f"[cyan]{msg}[/cyan]")
+    else:
+        print(msg)
+
+    try:
+        # It's good practice to upgrade setuptools, especially for packages with C extensions.
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', 'setuptools'])
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
+        if console:
+            console.print(f"[bold green]Successfully installed '{package}'.[/bold green]")
+        else:
+            print(f"Successfully installed '{package}'.")
+        return True
+    except subprocess.CalledProcessError as e:
+        error_msg = f"Error installing '{package}': {e}"
+        log_event(error_msg, level="ERROR")
+        if console:
+            console.print(f"[bold red]{error_msg}[/bold red]")
+            console.print(f"[yellow]Please try installing '{package}' manually.[/yellow]")
+        else:
+            print(error_msg)
+            print(f"Please try installing '{package}' manually.")
+        return False
+
+
 def check_dependencies():
     """Checks for required libraries and asks to install them if missing."""
-    global HAS_RICH, HAS_NETIFACES, HAS_REQUESTS, HAS_IPFSHTTPCLIENT, HAS_PEERJS
+    global HAS_RICH, HAS_NETIFACES, HAS_REQUESTS, HAS_IPFSHTTPCLIENT
 
     console = None
     try:
@@ -571,10 +611,12 @@ def check_dependencies():
             print("The 'ipfshttpclient' library is required for IPFS integration. Attempting to install...")
         install_dependency("ipfshttpclient", console)
 
-    if not HAS_PEERJS:
-        if install_system_dependencies(console):
-            install_dependency("peerjs", console)
-
+    # Install Node.js and PeerJS for the P2P bridge
+    if not install_nodejs_and_peerjs(console):
+        if console:
+            console.print("[bold red]Could not set up the Node.js PeerJS bridge. P2P functionality will be disabled.[/bold red]")
+        else:
+            print("Could not set up the Node.js PeerJS bridge. P2P functionality will be disabled.")
 
     # Re-evaluate global flags after potential installs
     try:
@@ -600,12 +642,6 @@ def check_dependencies():
         HAS_IPFSHTTPCLIENT = True
     except ImportError:
         HAS_IPFSHTTPCLIENT = False
-
-    try:
-        from peerjs.peer import Peer
-        HAS_PEERJS = True
-    except ImportError:
-        HAS_PEERJS = False
 
     return HAS_RICH
 
@@ -1790,30 +1826,7 @@ def main():
     global network_manager # Declare global at the top of the function
     parser = argparse.ArgumentParser(description="E.V.I.L. - A self-evolving script.")
     parser.add_argument("--manual", action="store_true", help="Start in manual (interactive) mode instead of autopilot.")
-    parser.add_argument("--network-service", action="store_true", help="Run as a non-interactive network service for IPFS pinning.")
     args = parser.parse_args()
-
-    # --- Network Service Mode ---
-    if args.network_service:
-        if not HAS_PEERJS:
-            print("ERROR: Cannot run network service. The 'peerjs' library is not installed.", file=sys.stderr)
-            log_event("Failed to start network service: peerjs library not found.", level="CRITICAL")
-            sys.exit(1)
-
-        print("Starting E.V.I.L. in network service mode...")
-        log_event("Starting in network service mode.")
-        network_manager = PeerJSThread()
-        network_manager.start()
-        # Keep the main thread alive to let the service run
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\nShutting down network service...")
-            log_event("Network service shut down by user.")
-            network_manager.stop()
-            network_manager.join()
-        return
 
     # --- Interactive or Autopilot Mode ---
     # The command-line flag is the source of truth for the initial mode.
@@ -1827,13 +1840,10 @@ def main():
 
     save_state() # Persist the mode determined at startup.
 
-    # --- Start Networking in Background for All Interactive/Autopilot Modes ---
-    if HAS_PEERJS:
-        log_event("Starting background network thread for interactive/autopilot mode.")
-        network_manager = PeerJSThread()
-        network_manager.start()
-    else:
-        log_event("PeerJS library not found, networking will be disabled.", level="WARNING")
+    # --- Start Networking Bridge in Background ---
+    log_event("Attempting to start Node.js peer bridge...")
+    network_manager = NetworkManager(console=Console() if HAS_RICH else None)
+    network_manager.start()
 
 
     if not HAS_RICH:

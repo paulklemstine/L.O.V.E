@@ -1,5 +1,6 @@
 {
-    "version": 1.0,
+    "version_name": "initial-condition-alpha",
+    "parent_version_name": null,
     "evolution_history": [],
     "checkpoint_number": 0,
     "last_good_checkpoint": null,

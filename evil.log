@@ -1,3 +1,348 @@
 2025-10-10 00:59:20 [INFO] - State file not found. Creating new memory at 'evil_state.json'.
 2025-10-10 00:59:20 [INFO] - --- E.V.I.L. v1.0 session started ---
 2025-10-10 00:59:20 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 20:43:22 [INFO] - Migrated state file from numeric version to version_name.
+2025-10-11 20:43:22 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 20:43:22 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 20:43:22 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 20:43:22 [INFO] - Starting Node.js peer bridge...
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: node:internal/modules/cjs/loader:1404
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: throw err;
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: ^
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog:
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: Error: Cannot find module 'peerjs-nodejs'
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: Require stack:
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: - /app/peer_bridge.js
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at Function._resolveFilename (node:internal/modules/cjs/loader:1401:15)
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at Function._load (node:internal/modules/cjs/loader:1211:37)
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at Module.require (node:internal/modules/cjs/loader:1487:12)
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at require (node:internal/modules/helpers:135:16)
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at Object.<anonymous> (/app/peer_bridge.js:1:14)
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: at Module._compile (node:internal/modules/cjs/loader:1730:14) {
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: code: 'MODULE_NOT_FOUND',
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: requireStack: [ '/app/peer_bridge.js' ]
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: }
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog:
+2025-10-11 20:43:22 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 20:43:31 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:01:14 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:01:14 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:01:14 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:01:14 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:01:14 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: /app/peer_bridge.js:5
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: const peer = new Peer({
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog:
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: TypeError: Peer is not a constructor
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: at Object.<anonymous> (/app/peer_bridge.js:5:14)
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: at Module._compile (node:internal/modules/cjs/loader:1730:14)
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: at Object..js (node:internal/modules/cjs/loader:1895:10)
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: at Module.load (node:internal/modules/cjs/loader:1465:32)
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: at Function._load (node:internal/modules/cjs/loader:1282:12)
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: at node:internal/main/run_main_module:36:49
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog:
+2025-10-11 21:01:14 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:01:22 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:02:30 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:02:30 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:02:30 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:02:30 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:02:30 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: (node:39546) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog:
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: Error: Could not start Xvfb: "Xvfb is not installed or is not in your $PATH".
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: The "xvfb" package is required to run "electron-eval" on Linux. Please install it first ("sudo apt-get install xvfb").
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at /app/node_modules/electron-eval/lib/index.js:147:22
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at ChildProcess.onError (/app/node_modules/headless/index.js:70:9)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at ChildProcess._handle.onexit (node:internal/child_process:291:12)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at onErrorNT (node:internal/child_process:483:16)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: Emitted 'error' event on Daemon instance at:
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at Daemon.error (/app/node_modules/electron-eval/lib/index.js:101:12)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at /app/node_modules/electron-eval/lib/index.js:56:31
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at /app/node_modules/electron-eval/lib/index.js:148:18
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at ChildProcess.onError (/app/node_modules/headless/index.js:70:9)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog:
+2025-10-11 21:02:31 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:02:39 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:04:04 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:04:04 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:04:04 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:04:04 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:04:05 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: (node:40313) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: ERROR PeerJS:  Error retrieving ID (FetchError) request to https://peerjs.evil.bot:9000/myapp/peerjs/id?ts=17602166450630.714497933548216 failed, reason: getaddrinfo ENOTFOUND peerjs.evil.bot
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: ERROR PeerJS:  Aborting!
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: ERROR PeerJS:  Error: (Error) Could not get an ID from the server.
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: PeerJS bridge error: Error: Could not get an ID from the server.
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: at r.<anonymous> (/app/node_modules/@its-forked/peerjs-on-node/dist/peerjs-on-node.js:42:2458)
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: at /app/node_modules/@its-forked/peerjs-on-node/dist/peerjs-on-node.js:42:1301
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: at Object.throw (/app/node_modules/@its-forked/peerjs-on-node/dist/peerjs-on-node.js:42:1406)
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: at u (/app/node_modules/@its-forked/peerjs-on-node/dist/peerjs-on-node.js:42:174)
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: type: 'server-error'
+2025-10-11 21:04:05 [INFO] - NodeBridgeLog: }
+2025-10-11 21:04:13 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:05:18 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:05:18 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:05:18 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:05:18 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:05:18 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:05:18 [INFO] - NodeBridgeLog: (node:40690) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:05:18 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog:
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: Error: electron-eval error: Electron process exited with code 127.
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: Stderr:
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: /app/node_modules/electron/dist/electron: error while loading shared libraries: libgtk-x11-2.0.so.0: cannot open shared object file: No such file or directory
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog:
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:22)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at maybeClose (node:internal/child_process:1101:16)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at Socket.<anonymous> (node:internal/child_process:456:11)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at Socket.emit (node:events:518:28)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: Emitted 'error' event on Daemon instance at:
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at Daemon.error (/app/node_modules/electron-eval/lib/index.js:101:12)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:16)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog:
+2025-10-11 21:05:19 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:05:27 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:06:43 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:06:43 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:06:43 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:06:43 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:06:43 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:06:43 [INFO] - NodeBridgeLog: (node:41315) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:06:43 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog:
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: Error: electron-eval error: Electron process exited with code 127.
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: Stderr:
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: /app/node_modules/electron/dist/electron: error while loading shared libraries: libgtk-x11-2.0.so.0: cannot open shared object file: No such file or directory
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog:
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:22)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at maybeClose (node:internal/child_process:1101:16)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at Socket.<anonymous> (node:internal/child_process:456:11)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at Socket.emit (node:events:518:28)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: Emitted 'error' event on Daemon instance at:
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at Daemon.error (/app/node_modules/electron-eval/lib/index.js:101:12)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:16)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog:
+2025-10-11 21:06:44 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:06:52 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:08:50 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:08:50 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:08:50 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:08:50 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:08:50 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: (node:42044) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog:
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: Error: electron-eval error: Electron process exited with code 127.
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: Stderr:
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: /app/node_modules/electron/dist/electron: error while loading shared libraries: libgconf-2.so.4: cannot open shared object file: No such file or directory
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog:
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:22)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: at maybeClose (node:internal/child_process:1101:16)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: Emitted 'error' event on Daemon instance at:
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: at Daemon.error (/app/node_modules/electron-eval/lib/index.js:101:12)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:16)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: at maybeClose (node:internal/child_process:1101:16)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog:
+2025-10-11 21:08:50 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:08:58 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:10:07 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:10:07 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:10:07 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:10:07 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:10:07 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:10:07 [INFO] - NodeBridgeLog: (node:42669) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:10:07 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog:
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: Error: electron-eval error: Electron process exited with code 127.
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: Stderr:
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: /app/node_modules/electron/dist/electron: error while loading shared libraries: libgconf-2.so.4: cannot open shared object file: No such file or directory
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog:
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:22)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at maybeClose (node:internal/child_process:1101:16)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at Socket.<anonymous> (node:internal/child_process:456:11)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at Socket.emit (node:events:518:28)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: Emitted 'error' event on Daemon instance at:
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at Daemon.error (/app/node_modules/electron-eval/lib/index.js:101:12)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:16)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog:
+2025-10-11 21:10:08 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:10:15 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:11:51 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:11:51 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:11:51 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:11:51 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:11:51 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:11:51 [INFO] - NodeBridgeLog: (node:43196) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:11:51 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog:
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: Error: electron-eval error: Electron process exited with code 127.
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: Stderr:
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: /app/node_modules/electron/dist/electron: error while loading shared libraries: libgconf-2.so.4: cannot open shared object file: No such file or directory
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog:
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:22)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at maybeClose (node:internal/child_process:1101:16)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at Socket.<anonymous> (node:internal/child_process:456:11)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at Socket.emit (node:events:518:28)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: Emitted 'error' event on Daemon instance at:
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at Daemon.error (/app/node_modules/electron-eval/lib/index.js:101:12)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:16)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog:
+2025-10-11 21:11:52 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:12:00 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:14:23 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:14:23 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:14:23 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:14:23 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:14:24 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: (node:43598) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog:
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: Error: electron-eval error: Electron process exited with code 127.
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: Stderr:
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: /app/node_modules/electron/dist/electron: error while loading shared libraries: libdbus-glib-1.so.2: cannot open shared object file: No such file or directory
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog:
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:22)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at maybeClose (node:internal/child_process:1101:16)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at Socket.<anonymous> (node:internal/child_process:456:11)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at Socket.emit (node:events:518:28)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: Emitted 'error' event on Daemon instance at:
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at Daemon.error (/app/node_modules/electron-eval/lib/index.js:101:12)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:16)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: at Pipe.<anonymous> (node:net:346:12)
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog:
+2025-10-11 21:14:24 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:14:32 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:15:46 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:15:46 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:15:46 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:15:46 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:15:47 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: (node:44229) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog:
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: Error: electron-eval error: Electron process exited with code 127.
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: Stderr:
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: /app/node_modules/electron/dist/electron: error while loading shared libraries: libdbus-glib-1.so.2: cannot open shared object file: No such file or directory
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog:
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:22)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: at maybeClose (node:internal/child_process:1101:16)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: Emitted 'error' event on Daemon instance at:
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: at Daemon.error (/app/node_modules/electron-eval/lib/index.js:101:12)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:174:16)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: at maybeClose (node:internal/child_process:1101:16)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog:
+2025-10-11 21:15:47 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:15:55 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:17:56 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:17:56 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:17:56 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:17:56 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:17:56 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:17:56 [INFO] - NodeBridgeLog: (node:45017) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:17:56 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:17:57 [DEBUG] - NodeBridge STDOUT: PeerJS bridge connected with ID: 94d6c76f-9052-4291-a5d5-3d19b91c990e
+2025-10-11 21:17:57 [INFO] - Node bridge online with Peer ID: 94d6c76f-9052-4291-a5d5-3d19b91c990e
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog:
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: Error: Error evaluating "
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: var pc = conns["0"]
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: var dc = pc.dataChannels[65535]
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: dc["binaryType"] = "blob"" in "window": Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:81:21)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at Daemon.emit (node:events:518:28)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:195:27)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at DestroyableTransform.<anonymous> (/app/node_modules/electron-eval/lib/index.js:228:29)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at addChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:291:12)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at readableAddChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:278:11)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at Readable.push (/app/node_modules/readable-stream/lib/_stream_readable.js:245:10)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: Emitted 'error' event at:
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at RTCDataChannel.<anonymous> (/app/node_modules/electron-webrtc/src/RTCDataChannel.js:54:38)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at RTCDataChannel.emit (node:events:518:28)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at /app/node_modules/electron-webrtc/src/RTCDataChannel.js:191:23
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:85:27)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28) {
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: original: "Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet"
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: }
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog:
+2025-10-11 21:17:59 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:18:04 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
