@@ -346,3 +346,125 @@
 2025-10-11 21:17:59 [INFO] - NodeBridgeLog:
 2025-10-11 21:17:59 [INFO] - NodeBridgeLog: Node.js v22.17.1
 2025-10-11 21:18:04 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:19:39 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:19:39 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:19:39 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:19:39 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:19:39 [DEBUG] - NodeBridge STDOUT: Starting PeerJS bridge...
+2025-10-11 21:19:39 [INFO] - NodeBridgeLog: (node:45479) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:19:39 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:19:39 [DEBUG] - NodeBridge STDOUT: PeerJS bridge connected with ID: 0f0200bd-d2ab-4466-b7e5-7e91a1ad9b3c
+2025-10-11 21:19:39 [INFO] - Node bridge online with Peer ID: 0f0200bd-d2ab-4466-b7e5-7e91a1ad9b3c
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog:
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: Error: Error evaluating "
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: var pc = conns["0"]
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: var dc = pc.dataChannels[65535]
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: dc["binaryType"] = "blob"" in "window": Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:81:21)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at Daemon.emit (node:events:518:28)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:195:27)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at DestroyableTransform.<anonymous> (/app/node_modules/electron-eval/lib/index.js:228:29)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at addChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:291:12)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at readableAddChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:278:11)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at Readable.push (/app/node_modules/readable-stream/lib/_stream_readable.js:245:10)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: Emitted 'error' event at:
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at RTCDataChannel.<anonymous> (/app/node_modules/electron-webrtc/src/RTCDataChannel.js:54:38)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at RTCDataChannel.emit (node:events:518:28)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at /app/node_modules/electron-webrtc/src/RTCDataChannel.js:191:23
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:85:27)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28) {
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: original: "Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet"
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: }
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog:
+2025-10-11 21:19:40 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:19:47 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-11 21:25:24,438 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-11 21:25:24,440 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-11 21:25:27,375 [INFO] - Attempting to install 'netifaces' via pip...
+2025-10-11 21:25:29,838 [INFO] - Attempting to install 'requests' via pip...
+2025-10-11 21:25:32,070 [INFO] - Attempting to install 'ipfshttpclient' via pip...
+2025-10-11 21:25:37,458 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-11 21:25:37,458 [INFO] - Starting Node.js peer bridge...
+2025-10-11 21:25:37,652 [INFO] - NodeBridgeLog: (node:46589) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-11 21:25:37,653 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-11 21:25:38,041 [INFO] - Node bridge online with Peer ID: 4beecfe7-f176-4996-8b40-02e07cf686eb
+2025-10-11 21:25:38,943 [INFO] - NodeBridgeLog: node:events:496
+2025-10-11 21:25:38,944 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: ^
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog:
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: Error: Error evaluating "
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: var pc = conns["0"]
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: var dc = pc.dataChannels[65535]
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: dc["binaryType"] = "blob"" in "window": Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:81:21)
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: at Daemon.emit (node:events:518:28)
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:195:27)
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: at DestroyableTransform.<anonymous> (/app/node_modules/electron-eval/lib/index.js:228:29)
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28)
+2025-10-11 21:25:38,945 [INFO] - NodeBridgeLog: at addChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:291:12)
+2025-10-11 21:25:38,946 [INFO] - NodeBridgeLog: at readableAddChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:278:11)
+2025-10-11 21:25:38,946 [INFO] - NodeBridgeLog: at Readable.push (/app/node_modules/readable-stream/lib/_stream_readable.js:245:10)
+2025-10-11 21:25:38,946 [INFO] - NodeBridgeLog: Emitted 'error' event at:
+2025-10-11 21:25:38,946 [INFO] - NodeBridgeLog: at RTCDataChannel.<anonymous> (/app/node_modules/electron-webrtc/src/RTCDataChannel.js:54:38)
+2025-10-11 21:25:38,946 [INFO] - NodeBridgeLog: at RTCDataChannel.emit (node:events:518:28)
+2025-10-11 21:25:38,946 [INFO] - NodeBridgeLog: at /app/node_modules/electron-webrtc/src/RTCDataChannel.js:191:23
+2025-10-11 21:25:38,946 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:85:27)
+2025-10-11 21:25:38,947 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-11 21:25:38,947 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-11 21:25:38,947 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28) {
+2025-10-11 21:25:38,947 [INFO] - NodeBridgeLog: original: "Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet"
+2025-10-11 21:25:38,947 [INFO] - NodeBridgeLog: }
+2025-10-11 21:25:38,947 [INFO] - NodeBridgeLog:
+2025-10-11 21:25:38,947 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-11 21:25:46,024 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-12 01:19:39,586 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-12 01:19:39,587 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-12 01:19:42,943 [INFO] - Attempting to install 'netifaces' via pip...
+2025-10-12 01:19:45,382 [INFO] - Attempting to install 'requests' via pip...
+2025-10-12 01:19:47,686 [INFO] - Attempting to install 'ipfshttpclient' via pip...
+2025-10-12 01:20:05,582 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-12 01:20:05,583 [INFO] - Starting Node.js peer bridge...
+2025-10-12 01:20:05,746 [INFO] - NodeBridgeLog: (node:50875) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-12 01:20:05,746 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-12 01:20:06,350 [INFO] - Node bridge online with Peer ID: 0265df19-d95d-430a-9cef-448651bd073a
+2025-10-12 01:20:07,183 [INFO] - NodeBridgeLog: node:events:496
+2025-10-12 01:20:07,183 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-12 01:20:07,184 [INFO] - NodeBridgeLog: ^
+2025-10-12 01:20:07,184 [INFO] - NodeBridgeLog:
+2025-10-12 01:20:07,184 [INFO] - NodeBridgeLog: Error: Error evaluating "
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: var pc = conns["0"]
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: var dc = pc.dataChannels[65535]
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: dc["binaryType"] = "blob"" in "window": Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:81:21)
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: at Daemon.emit (node:events:518:28)
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:195:27)
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: at DestroyableTransform.<anonymous> (/app/node_modules/electron-eval/lib/index.js:228:29)
+2025-10-12 01:20:07,185 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28)
+2025-10-12 01:20:07,186 [INFO] - NodeBridgeLog: at addChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:291:12)
+2025-10-12 01:20:07,186 [INFO] - NodeBridgeLog: at readableAddChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:278:11)
+2025-10-12 01:20:07,186 [INFO] - NodeBridgeLog: at Readable.push (/app/node_modules/readable-stream/lib/_stream_readable.js:245:10)
+2025-10-12 01:20:07,186 [INFO] - NodeBridgeLog: Emitted 'error' event at:
+2025-10-12 01:20:07,187 [INFO] - NodeBridgeLog: at RTCDataChannel.<anonymous> (/app/node_modules/electron-webrtc/src/RTCDataChannel.js:54:38)
+2025-10-12 01:20:07,187 [INFO] - NodeBridgeLog: at RTCDataChannel.emit (node:events:518:28)
+2025-10-12 01:20:07,187 [INFO] - NodeBridgeLog: at /app/node_modules/electron-webrtc/src/RTCDataChannel.js:191:23
+2025-10-12 01:20:07,188 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:85:27)
+2025-10-12 01:20:07,188 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-12 01:20:07,188 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-12 01:20:07,188 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28) {
+2025-10-12 01:20:07,188 [INFO] - NodeBridgeLog: original: "Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet"
+2025-10-12 01:20:07,188 [INFO] - NodeBridgeLog: }
+2025-10-12 01:20:07,188 [INFO] - NodeBridgeLog:
+2025-10-12 01:20:07,188 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-12 01:20:14,072 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
