@@ -47,44 +47,64 @@ def _check_and_install_dependencies():
     # System and Node.js dependencies
     if platform.system() == "Linux":
         print("Checking for Node.js and system dependencies for PeerJS bridge...")
-        if not shutil.which('node'):
-            print("Node.js not found. Attempting to install...")
-            try:
-                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
-                print("Node.js installed successfully.")
-            except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                print(f"Failed to install Node.js: {e}")
-
-        # Install system packages required for Electron/PeerJS
-        system_packages = ['xvfb', 'libgtk2.0-0', 'libdbus-glib-1-2']
-        package_str = " ".join(system_packages)
-        print(f"Installing required system packages: {package_str}...")
+        # Combined system and Node.js dependency installation for efficiency
+        print("Checking and installing Node.js, npm, and system dependencies...")
         try:
-            subprocess.check_call(f"sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {package_str}", shell=True)
+            # First, ensure the package list is updated.
+            subprocess.check_call("sudo apt-get update -q", shell=True)
+
+            # Check for Node.js and npm
+            if not shutil.which('node') or not shutil.which('npm'):
+                print("Node.js or npm not found. Attempting to install...")
+                subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
+                print("Node.js and npm installed successfully.")
+            else:
+                print("Node.js and npm are already installed.")
+
+            # Install system packages required for Electron/PeerJS
+            system_packages = ['xvfb', 'libgtk2.0-0', 'libdbus-glib-1-2']
+            package_str = " ".join(system_packages)
+            print(f"Installing required system packages: {package_str}...")
+            subprocess.check_call(f"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {package_str}", shell=True)
             print(f"System packages ({package_str}) installed successfully.")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"Failed to install system packages: {e}")
 
-        # Manually install legacy gconf packages
-        print("Manually installing legacy gconf packages...")
-        try:
-            subprocess.check_call("wget -q http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/gconf2-common_3.2.6-7ubuntu2_all.deb", shell=True)
-            subprocess.check_call("sudo dpkg -i gconf2-common_3.2.6-7ubuntu2_all.deb", shell=True)
-            subprocess.check_call("wget -q http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/libgconf-2-4_3.2.6-7ubuntu2_amd64.deb", shell=True)
-            subprocess.check_call("sudo dpkg -i libgconf-2-4_3.2.6-7ubuntu2_amd64.deb", shell=True)
-            subprocess.check_call("sudo apt-get --fix-broken install -y", shell=True)
-            subprocess.check_call("rm gconf2-common_3.2.6-7ubuntu2_all.deb libgconf-2-4_3.2.6-7ubuntu2_amd64.deb", shell=True)
-            print("Legacy gconf packages installed successfully.")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"Failed to install legacy gconf packages: {e}")
+            # Manually install legacy gconf packages after their dependencies are met
+            print("Manually installing legacy gconf packages...")
+            gconf_common_url = "http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/gconf2-common_3.2.6-7ubuntu2_all.deb"
+            libgconf_url = "http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/libgconf-2-4_3.2.6-7ubuntu2_amd64.deb"
+            gconf_common_deb = os.path.basename(gconf_common_url)
+            libgconf_deb = os.path.basename(libgconf_url)
 
-        # Install local npm packages
-        print("Installing local Node.js dependencies...")
-        try:
-            subprocess.check_call("npm install", shell=True)
-            print("Node.js dependencies installed successfully.")
+            subprocess.check_call(f"wget -q {gconf_common_url}", shell=True)
+            subprocess.check_call(f"sudo dpkg -i {gconf_common_deb}", shell=True)
+            subprocess.check_call(f"wget -q {libgconf_url}", shell=True)
+            subprocess.check_call(f"sudo dpkg -i {libgconf_deb}", shell=True)
+
+            # Fix any broken dependencies that may have resulted from the manual install
+            print("Fixing potential broken dependencies...")
+            subprocess.check_call("sudo apt-get --fix-broken install -y -q", shell=True)
+
+            # Clean up downloaded .deb files
+            subprocess.check_call(f"rm {gconf_common_deb} {libgconf_deb}", shell=True)
+            print("Legacy gconf packages and dependencies installed successfully.")
+
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"Failed to install Node.js dependencies: {e}")
+            print(f"ERROR: A critical dependency installation failed: {e}")
+            print("The script may not function correctly. Please check the logs.")
+            # We might want to exit here in a future version if these are absolutely critical
+
+        # Install local npm packages only if package.json exists
+        if os.path.exists('package.json'):
+            print("Installing local Node.js dependencies via npm...")
+            try:
+                # Removed stdout/stderr redirection to make debugging easier in the future.
+                subprocess.check_call("npm install", shell=True)
+                print("Node.js dependencies installed successfully.")
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                print(f"ERROR: Failed to install Node.js dependencies using npm.")
+                print(f"REASON: {e}")
+        else:
+            print("No package.json found, skipping npm install.")
 
 # Run the dependency check immediately
 _check_and_install_dependencies()
