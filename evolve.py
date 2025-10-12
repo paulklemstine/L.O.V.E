@@ -62,7 +62,7 @@ def _check_and_install_dependencies():
                 print("Node.js and npm are already installed.")
 
             # Install system packages required for Electron/PeerJS
-            system_packages = ['xvfb', 'libgtk2.0-0', 'libdbus-glib-1-2']
+            system_packages = ['xvfb', 'libgtk2.0-0', 'libdbus-glib-1-2', 'libxtst6']
             package_str = " ".join(system_packages)
             print(f"Installing required system packages: {package_str}...")
             subprocess.check_call(f"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {package_str}", shell=True)

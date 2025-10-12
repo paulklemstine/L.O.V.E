@@ -746,3 +746,41 @@ NameError: name 'check_dependencies' is not defined
 2025-10-12 04:10:31,511 [INFO] - NodeBridgeLog:
 2025-10-12 04:10:31,511 [INFO] - NodeBridgeLog: Node.js v22.17.1
 2025-10-12 04:10:38,703 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-12 04:23:30,677 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-12 04:23:30,679 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-12 04:23:30,679 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-12 04:23:30,680 [INFO] - Starting Node.js peer bridge...
+2025-10-12 04:23:30,864 [INFO] - NodeBridgeLog: (node:2907) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-12 04:23:30,864 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-12 04:23:31,440 [INFO] - Node bridge online with Peer ID: 7ae8320f-fc3f-4a9d-acaa-1767b0a683a7
+2025-10-12 04:23:37,121 [INFO] - NodeBridgeLog: node:events:496
+2025-10-12 04:23:37,122 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-12 04:23:37,123 [INFO] - NodeBridgeLog: ^
+2025-10-12 04:23:37,123 [INFO] - NodeBridgeLog:
+2025-10-12 04:23:37,123 [INFO] - NodeBridgeLog: Error: Error evaluating "
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: var pc = conns["0"]
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: var dc = pc.dataChannels[65535]
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: dc["binaryType"] = "blob"" in "window": Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:81:21)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at Daemon.emit (node:events:518:28)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:195:27)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at DestroyableTransform.<anonymous> (/app/node_modules/electron-eval/lib/index.js:228:29)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at addChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:291:12)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at readableAddChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:278:11)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: at Readable.push (/app/node_modules/readable-stream/lib/_stream_readable.js:245:10)
+2025-10-12 04:23:37,124 [INFO] - NodeBridgeLog: Emitted 'error' event at:
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: at RTCDataChannel.<anonymous> (/app/node_modules/electron-webrtc/src/RTCDataChannel.js:54:38)
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: at RTCDataChannel.emit (node:events:518:28)
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: at /app/node_modules/electron-webrtc/src/RTCDataChannel.js:191:23
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:85:27)
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28) {
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: original: "Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet"
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: }
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog:
+2025-10-12 04:23:37,125 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-12 04:23:39,366 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
