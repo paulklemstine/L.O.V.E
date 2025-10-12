@@ -20,6 +20,9 @@ const MPLib = (() => {
     const pendingRoomConnections = new Set();
     const roomKnownPeerIds = new Set();
 
+    // --- Evolve Peer Connection State ---
+    let evolvePyPeerConnection = null;
+
     // --- Callbacks & Config ---
     const defaultConfig = {
         debugLevel: 0,
@@ -35,6 +38,7 @@ const MPLib = (() => {
         onRoomDataReceived: (peerId, data) => {},
         onRoomConnected: (id) => {},
         onRoomPeerReady: (peerId) => {},
+        onPinResponse: (data) => {}, // Callback for when evolve.py returns a pin result
     };
 
     function logMessage(message, type = 'info') {
@@ -461,7 +465,75 @@ const MPLib = (() => {
         getLocalRoomId: () => localRoomId,
         getRoomConnections: () => new Map(roomConnections),
         getRoomKnownPeerIds: () => new Set(roomKnownPeerIds),
+        connectToEvolvePeer,
+        sendCodeToEvolvePeer,
     };
+
+    // --- Evolve Peer Functions ---
+
+    /**
+     * Connects to a specific evolve.py peer instance.
+     * This is separate from the room logic.
+     */
+    function connectToEvolvePeer(targetPeerId) {
+        if (!masterPeer || masterPeer.destroyed) {
+            logMessage('Cannot connect to evolve peer: Master peer is not initialized.', 'error');
+            return;
+        }
+        if (evolvePyPeerConnection && evolvePyPeerConnection.open) {
+            logMessage(`Already connected to an evolve peer: ${evolvePyPeerConnection.peer}. Disconnecting first.`, 'warn');
+            evolvePyPeerConnection.close();
+        }
+
+        logMessage(`Attempting to connect to evolve.py peer: ${targetPeerId}`, 'info');
+        const conn = masterPeer.connect(targetPeerId, { reliable: true });
+
+        conn.on('open', () => {
+            logMessage(`Successfully connected to evolve.py peer: ${conn.peer}`, 'success');
+            evolvePyPeerConnection = conn;
+            // Setup listeners for this specific connection
+            setupEvolvePeerConnection(conn);
+        });
+
+        conn.on('error', (err) => {
+            logMessage(`Failed to connect to evolve.py peer ${targetPeerId}: ${err.message}`, 'error');
+        });
+    }
+
+    /**
+     * Sets up the data and close handlers for the connection to the evolve.py peer.
+     */
+    function setupEvolvePeerConnection(conn) {
+        conn.on('data', (data) => {
+            // Data received from the evolve.py peer
+            logMessage(`Received data from evolve.py peer: ${JSON.stringify(data)}`, 'info');
+            if (data.type === 'pin-response') {
+                // Pass the response to the main application via callback
+                config.onPinResponse(data);
+            }
+        });
+
+        conn.on('close', () => {
+            logMessage(`Connection to evolve.py peer ${conn.peer} closed.`, 'warn');
+            if (evolvePyPeerConnection && evolvePyPeerConnection.peer === conn.peer) {
+                evolvePyPeerConnection = null;
+            }
+        });
+    }
+
+    /**
+     * Sends the provided source code to the connected evolve.py peer.
+     */
+    function sendCodeToEvolvePeer(sourceCode) {
+        if (evolvePyPeerConnection && evolvePyPeerConnection.open) {
+            logMessage('Sending source code to evolve.py peer for IPFS pinning...', 'info');
+            evolvePyPeerConnection.send(sourceCode);
+        } else {
+            logMessage('Cannot send source code: Not connected to an evolve.py peer.', 'error');
+            config.onError('send-code', 'Not connected to an evolve.py peer.');
+        }
+    }
+
 
     return publicApi;
 })();

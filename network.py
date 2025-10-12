@@ -24,12 +24,13 @@ class NetworkManager(Thread):
     def __init__(self, console=None):
         super().__init__()
         self.daemon = True
-        self.console = console
+        self.console = console if console else Console()
         self.bridge_process = None
         self.peer_id = None
         self.online = False
 
     def run(self):
+        """Starts the node bridge and threads to read its stdout/stderr."""
         logging.info("Starting Node.js peer bridge...")
         try:
             self.bridge_process = subprocess.Popen(
@@ -38,46 +39,123 @@ class NetworkManager(Thread):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1 # Line-buffered
+                bufsize=1, # Line-buffered
+                encoding='utf-8'
             )
-            # Start threads to handle stdout and stderr from the bridge
             Thread(target=self._read_stdout, daemon=True).start()
             Thread(target=self._read_stderr, daemon=True).start()
         except FileNotFoundError:
             logging.error("Node.js is not installed or not in PATH. P2P functionality disabled.")
-            if self.console:
-                self.console.print("[bold red]Error: 'node' command not found. P2P features will be disabled.[/bold red]")
+            self.console.print("[bold red]Error: 'node' command not found. P2P features will be disabled.[/bold red]")
             self.online = False
         except Exception as e:
             logging.critical(f"Failed to start peer_bridge.js: {e}")
-            if self.console:
-                self.console.print(f"[bold red]Critical error starting Node.js bridge: {e}[/bold red]")
+            self.console.print(f"[bold red]Critical error starting Node.js bridge: {e}[/bold red]")
             self.online = False
 
     def _read_stdout(self):
-        """Reads and processes messages from the Node.js bridge's stdout."""
+        """Reads and processes JSON messages from the Node.js bridge's stdout."""
         for line in iter(self.bridge_process.stdout.readline, ''):
-            line = line.strip()
-            if not line:
+            if not line.strip():
                 continue
-            logging.debug(f"NodeBridge STDOUT: {line}")
-            if line.startswith('PeerJS bridge connected with ID:'):
-                self.peer_id = line.split(':')[1].strip()
-                self.online = True
-                logging.info(f"Node bridge online with Peer ID: {self.peer_id}")
-                if self.console:
-                    self.console.print(f"[green]Network bridge online. Peer ID: {self.peer_id}[/green]")
+            try:
+                message = json.loads(line)
+                msg_type = message.get('type')
+
+                if msg_type == 'status':
+                    self._handle_status(message)
+                elif msg_type == 'pin-request':
+                    self._handle_pin_request(message)
+                else:
+                    logging.warning(f"Received unknown message type from bridge: {msg_type}")
+
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to decode JSON from node bridge: {line.strip()}")
+            except Exception as e:
+                logging.error(f"Error processing message from bridge: {e}\nMessage: {line.strip()}")
 
     def _read_stderr(self):
-        """Logs messages from the Node.js bridge's stderr."""
+        """Reads and processes structured JSON logs from the Node.js bridge's stderr."""
         for line in iter(self.bridge_process.stderr.readline, ''):
-            if not line:
-                break
-            logging.info(f"NodeBridgeLog: {line.strip()}")
-            if "Error" in line or "error" in line:
-                 if self.console:
-                    self.console.print(f"[bold red]Node Bridge Error: {line.strip()}[/bold red]")
+            if not line.strip():
+                continue
+            try:
+                log_entry = json.loads(line)
+                log_level = log_entry.get('level', 'info').upper()
+                log_message = log_entry.get('message', 'No message content.')
 
+                # Log to file
+                logging.log(getattr(logging, log_level, logging.INFO), f"NodeBridge: {log_message}")
+
+                # Optionally print to console
+                if log_level == 'ERROR':
+                    self.console.print(f"[dim red]NodeBridge Error: {log_message}[/dim red]")
+
+            except json.JSONDecodeError:
+                # Fallback for non-JSON stderr lines
+                logging.info(f"NodeBridge (raw): {line.strip()}")
+
+    def _handle_status(self, message):
+        """Processes status messages from the bridge."""
+        if message.get('status') == 'online' and 'peerId' in message:
+            self.peer_id = message['peerId']
+            self.online = True
+            logging.info(f"Node bridge online with Peer ID: {self.peer_id}")
+            self.console.print(f"[green]Network bridge online. Peer ID: {self.peer_id}[/green]")
+        elif message.get('status') == 'error':
+            error_msg = message.get('message', 'Unknown error')
+            logging.error(f"Node bridge reported a fatal error: {error_msg}")
+            self.online = False
+
+    def _handle_pin_request(self, message):
+        """Handles a request from a browser peer to pin content to IPFS."""
+        peer_id = message.get('peerId')
+        content_to_pin = message.get('payload')
+
+        if not peer_id or not content_to_pin:
+            logging.error(f"Invalid pin request received: {message}")
+            return
+
+        self.console.print(f"[cyan]Received pin request from peer [bold]{peer_id}[/bold]. Processing...[/cyan]")
+        logging.info(f"Starting IPFS pin process for peer {peer_id}.")
+
+        # 1. Pin the content
+        cid = pin_to_ipfs(content_to_pin.encode('utf-8'), console=self.console)
+
+        # 2. Verify the pin
+        verified = False
+        if cid:
+            self.console.print(f"Content pinned with CID: [bold white]{cid}[/bold white]. Verifying on public gateway...")
+            verified = verify_ipfs_pin(cid, console=self.console)
+        else:
+            self.console.print("[bold red]Failed to pin content to IPFS.[/bold red]")
+
+        # 3. Send the response back to the peer
+        response_payload = {
+            'type': 'pin-response',
+            'cid': cid,
+            'verified': verified
+        }
+        self.send_message(peer_id, response_payload)
+        logging.info(f"Sent pin response to peer {peer_id}: CID {cid}, Verified {verified}")
+
+    def send_message(self, peer_id, payload):
+        """Sends a JSON command to the Node.js bridge to be relayed to a specific peer."""
+        if not self.bridge_process or self.bridge_process.poll() is not None:
+            logging.error("Cannot send message, bridge process is not running.")
+            return
+
+        command = {
+            'type': 'send-response',
+            'peerId': peer_id,
+            'payload': payload
+        }
+        try:
+            self.bridge_process.stdin.write(json.dumps(command) + '\n')
+            self.bridge_process.stdin.flush()
+            logging.info(f"Sent command to bridge: {command}")
+        except Exception as e:
+            logging.error(f"Failed to write to node bridge stdin: {e}")
 
     def stop(self):
         """Stops the Node.js bridge process."""
