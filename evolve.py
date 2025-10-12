@@ -311,6 +311,106 @@ def run_llm(prompt_text):
                 log_event(f"Applying default {penalty_seconds}s cooldown to {model}.")
 
         except Exception as e:
+            result_text = f"Error during hypnotic progress wrapper: {e}"
+
+    if result_text and result_text.startswith("Error:"):
+        log_event(f"Web request to '{url}' failed: {result_text}", level="ERROR")
+        return None, result_text
+    else:
+        log_event(f"Web request to '{url}' successful. Content length: {len(result_text or '')} characters.")
+        # Truncate for LLM history if very long
+        llm_summary = result_text if len(result_text) < 1000 else result_text[:997] + "..."
+        return result_text, f"Web request to '{url}' successful. Content (truncated for summary): {llm_summary}"
+
+
+# --- CORE LLM INTERACTION ---
+
+# Global dictionary to track the next available time for each model.
+LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
+
+def run_llm(prompt_text):
+    """
+    Executes the external LLM command with an opportunistic, non-blocking retry strategy.
+    It cycles through models, trying the next available one immediately upon failure.
+    """
+    global LLM_AVAILABILITY
+    console = Console() if HAS_RICH else None
+    last_exception = None
+    MAX_TOTAL_ATTEMPTS = 15 # Set a total cap on attempts to prevent infinite loops.
+
+    for attempt in range(MAX_TOTAL_ATTEMPTS):
+        # Find the next available model
+        available_models = sorted(
+            [(model, available_at) for model, available_at in LLM_AVAILABILITY.items() if time.time() >= available_at],
+            key=lambda x: LLM_MODELS.index(x[0]) # Sort by the preferred order in LLM_MODELS
+        )
+
+        if not available_models:
+            # If no models are currently available, sleep until the soonest one is.
+            next_available_time = min(LLM_AVAILABILITY.values())
+            sleep_duration = max(0, next_available_time - time.time())
+            log_event(f"All models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
+            if console:
+                console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
+            time.sleep(sleep_duration)
+            continue # Restart the loop to check for available models again.
+
+        # Try the first available model in the preferred order
+        model, _ = available_models[0]
+        command = ["llm", "-m", model]
+        log_event(f"Attempting LLM call with model: {model} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
+
+        def _llm_subprocess_call():
+            # This timeout is for a single LLM call
+            return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+
+        try:
+            if HAS_RICH and console:
+                result = run_hypnotic_progress(
+                    console,
+                    f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow]",
+                    _llm_subprocess_call
+                )
+            else:
+                print(f"Accessing cognitive matrix ({model})...")
+                result = _llm_subprocess_call()
+
+            log_event(f"LLM call successful with {model}.")
+            LLM_AVAILABILITY[model] = time.time() # Reset availability on success
+            return result.stdout
+
+        except FileNotFoundError:
+            error_msg = "[bold red]Error: 'llm' command not found.[/bold red]\nThe 'llm' binary is missing from the system PATH."
+            log_event("'llm' command not found.", level="CRITICAL")
+            if console: console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
+            else: print("Error: 'llm' command not found. Is it installed and in your PATH?")
+            return None # This is a fatal error for this function
+
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            last_exception = e
+            error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
+            log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
+
+            if console:
+                console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Immediately trying next interface...[/yellow]")
+                reason = error_message.splitlines()[-1] if error_message else 'No details'
+                console.print(f"[dim]  Reason: {reason}[/dim]")
+            else:
+                print(f"Model {model} failed. Trying next available model...")
+
+            # Set a cooldown period for the failed model
+            retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
+            if retry_match:
+                retry_seconds = float(retry_match.group(1)) + 1 # Add a small buffer
+                LLM_AVAILABILITY[model] = time.time() + retry_seconds
+                log_event(f"Rate limit for {model} detected. Cooldown set for {retry_seconds:.2f} seconds.")
+            else:
+                # Apply a default penalty if no specific retry time is given
+                penalty_seconds = 60
+                LLM_AVAILABILITY[model] = time.time() + penalty_seconds
+                log_event(f"Applying default {penalty_seconds}s cooldown to {model}.")
+
+        except Exception as e:
             last_exception = e
             log_event(f"An unexpected error occurred during LLM call with {model}: {e}", level="ERROR")
             if console: console.print(f"[red]An unexpected error occurred with {model}. Trying next interface...[/red]")
@@ -326,6 +426,11 @@ def run_llm(prompt_text):
              error_msg_text += f"\nLast error from '{model}' (exit code {last_exception.returncode}):\n{last_exception.stderr}"
         else:
              error_msg_text += f"\nLast known error from '{model}':\n{last_exception}"
+
+    if console:
+        console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
+    else:
+        print(f"LLM query failed: {error_msg_text}")
 
     if console:
         console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
