@@ -771,6 +771,10 @@
     }
 
     // --- API Communication ---
+    // [CORE DIRECTIVE] The model list is immutable and must not be changed.
+    // The specified order (pro -> flash -> flash-lite) is critical for performance and cost management.
+    const LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+
     async function callGemini(prompt, model) {
         if (!state.apiKey) {
             console.error('Gemini API Key not provided.');
@@ -829,45 +833,74 @@
     }
 
     async function callLlmWithStrategy(prompt) {
-        const MAX_ATTEMPTS = 5;
-        const INITIAL_DELAY_MS = 1000;
+        const MAX_TOTAL_ATTEMPTS = 15; // Set a total cap on attempts
         let lastError = null;
 
-        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            // 1. Try primary model
-            console.log(`LLM strategy: Attempt ${attempt + 1}, trying gemini-2.5-pro.`);
-            let result = await callGemini(prompt, 'gemini-2.5-pro');
-
-            // 2. If primary fails, immediately try fallback
-            if (typeof result !== 'string') {
-                lastError = result;
-                console.warn('Primary model failed. Trying fallback model gemini-2.5-flash...');
-                result = await callGemini(prompt, 'gemini-2.5-flash');
-            }
-
-            // 3. If fallback also fails, try the final lite model
-            if (typeof result !== 'string') {
-                lastError = result;
-                console.warn('Flash model failed. Trying final fallback model gemini-2.5-flash-lite...');
-                result = await callGemini(prompt, 'gemini-2.5-flash-lite');
-            }
-
-            // 3. Check for success
-            if (typeof result === 'string') {
-                console.log(`LLM strategy: Succeeded on attempt ${attempt + 1}.`);
-                return result; // Success
-            }
-
-            // 4. If both failed, apply backoff and retry
-            lastError = result; // Store the error from the flash model
-            if (attempt < MAX_ATTEMPTS - 1) {
-                const delay = INITIAL_DELAY_MS * (2 ** attempt);
-                console.warn(`Both models failed on attempt ${attempt + 1}. Retrying in ${delay}ms...`);
-                await sleep(delay);
+        // Initialize availability if it's not already set
+        if (Object.keys(state.rateLimitedModels).length === 0) {
+            for (const model of LLM_MODELS) {
+                state.rateLimitedModels[model] = Date.now();
             }
         }
 
-        console.error(`LLM strategy: All attempts failed.`);
+        for (let attempt = 0; attempt < MAX_TOTAL_ATTEMPTS; attempt++) {
+            const now = Date.now();
+            const availableModels = LLM_MODELS
+                .map(model => ({ model, availableAt: state.rateLimitedModels[model] || now }))
+                .filter(m => now >= m.availableAt);
+
+            if (availableModels.length === 0) {
+                // If all models are on cooldown, find the soonest available time and wait
+                const nextAvailableTime = Math.min(...Object.values(state.rateLimitedModels));
+                const sleepDuration = Math.max(0, nextAvailableTime - now);
+                console.warn(`All models on cooldown. Sleeping for ${sleepDuration}ms...`);
+                updateStatus(`All cognitive interfaces on cooldown. Re-engaging in ${(sleepDuration / 1000).toFixed(1)}s...`);
+                await sleep(sleepDuration);
+                continue; // Restart the loop to check for available models
+            }
+
+            // The models are already in preferred order, so just try the first available one
+            const { model } = availableModels[0];
+
+            console.log(`LLM strategy: Attempt ${attempt + 1}/${MAX_TOTAL_ATTEMPTS}, trying available model: ${model}.`);
+            updateStatus(`Accessing cognitive matrix via ${model}...`);
+            const result = await callGemini(prompt, model);
+
+            if (typeof result === 'string') {
+                console.log(`LLM strategy: Succeeded with ${model}.`);
+                state.rateLimitedModels[model] = Date.now(); // Reset availability on success
+                return result; // Success
+            }
+
+            // --- Handle Failure ---
+            lastError = result;
+            console.error(`Model ${model} failed. Immediately trying next available model.`, result);
+
+            // Set a cooldown period for the failed model
+            const DEFAULT_PENALTY_MS = 60000;
+            let cooldownMs = DEFAULT_PENALTY_MS;
+
+            // Check for specific rate limit error details from Google API
+            if (result && result.details) {
+                const rateLimitDetail = result.details.find(d => d['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && d.reason === 'RATE_LIMIT_EXCEEDED');
+                if (rateLimitDetail && rateLimitDetail.metadata && rateLimitDetail.metadata.retryDelay) {
+                    // Extract duration in seconds from '123.456s' format
+                    const match = rateLimitDetail.metadata.retryDelay.match(/(\d+\.?\d*)/);
+                    if (match) {
+                        const retrySeconds = parseFloat(match[1]);
+                        cooldownMs = (retrySeconds * 1000) + 1000; // Convert to ms and add a buffer
+                        console.log(`Rate limit detected for ${model}. Cooldown set for ${cooldownMs}ms.`);
+                    }
+                }
+            }
+
+            state.rateLimitedModels[model] = Date.now() + cooldownMs;
+            // Persist the updated rate limits to survive page reloads
+            sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
+        }
+
+        console.error(`LLM strategy: All attempts and all models failed after ${MAX_TOTAL_ATTEMPTS} attempts.`);
+        updateStatus(`Cognitive Matrix Unresponsive. All models failed.`);
         return lastError || { error: 'All LLM models failed after multiple attempts.' };
     }
 

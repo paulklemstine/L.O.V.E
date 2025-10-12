@@ -28,6 +28,8 @@ from ipfs import pin_to_ipfs, verify_ipfs_pin
 
 # --- CONFIGURATION ---
 SELF_PATH = os.path.abspath(__file__)
+# [CORE DIRECTIVE] The model list is immutable and must not be changed.
+# The specified order (pro -> flash -> flash-lite) is critical for performance and cost management.
 LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 STATE_FILE = "evil_state.json"
 LOG_FILE = "evil.log"
@@ -228,77 +230,107 @@ def check_llm_dependencies(console):
         console.print(f"[red]Could not check for 'llm' API keys: {e}[/red]")
 
 # --- CORE LLM INTERACTION ---
+# Global dictionary to track the next available time for each model.
+LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
+
 def run_llm(prompt_text):
-    """Executes the external LLM command with a pro->flash->backoff retry strategy."""
+    """
+    Executes the external LLM command with an opportunistic, non-blocking retry strategy.
+    It cycles through models, trying the next available one immediately upon failure.
+    """
+    global LLM_AVAILABILITY
     console = Console()
     last_exception = None
-    MAX_ATTEMPTS = 5
-    INITIAL_DELAY_SECONDS = 1
+    MAX_TOTAL_ATTEMPTS = 15 # Set a total cap on attempts to prevent infinite loops.
 
-    for attempt in range(MAX_ATTEMPTS):
-        for model in LLM_MODELS:
-            command = ["llm", "-m", model]
-            log_event(f"Attempting LLM call with model: {model}, overall attempt: {attempt + 1}/{MAX_ATTEMPTS}")
+    for attempt in range(MAX_TOTAL_ATTEMPTS):
+        # Find the next available model
+        available_models = sorted(
+            [(model, available_at) for model, available_at in LLM_AVAILABILITY.items() if time.time() >= available_at],
+            key=lambda x: LLM_MODELS.index(x[0]) # Sort by the preferred order in LLM_MODELS
+        )
 
-            def _llm_subprocess_call():
-                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+        if not available_models:
+            # If no models are currently available, sleep until the soonest one is.
+            next_available_time = min(LLM_AVAILABILITY.values())
+            sleep_duration = max(0, next_available_time - time.time())
+            log_event(f"All models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
+            if console:
+                console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
+            time.sleep(sleep_duration)
+            continue # Restart the loop to check for available models again.
 
-            try:
-                result = run_hypnotic_progress(
-                    console,
-                    f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow] (Attempt {attempt+1})",
-                    _llm_subprocess_call
-                )
-                log_event(f"LLM call successful with {model}.")
-                return result.stdout
+        # Try the first available model in the preferred order
+        model, _ = available_models[0]
+        command = ["llm", "-m", model]
+        log_event(f"Attempting LLM call with model: {model} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
 
-            except FileNotFoundError:
-                error_msg = "[bold red]Error: 'llm' command not found.[/bold red]\nThe 'llm' binary is missing from the system PATH."
-                log_event("'llm' command not found.", level="CRITICAL")
-                console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-                return None
+        def _llm_subprocess_call():
+            # This timeout is for a single LLM call
+            return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
 
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                last_exception = e
-                error_message = ""
-                if isinstance(e, subprocess.TimeoutExpired):
-                    error_message = "Command timed out after 300 seconds."
-                else:
-                    error_message = e.stderr.strip()
+        try:
+            result = run_hypnotic_progress(
+                console,
+                f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow]",
+                _llm_subprocess_call
+            )
+            log_event(f"LLM call successful with {model}.")
+            LLM_AVAILABILITY[model] = time.time() # Reset availability on success
+            return result.stdout
 
-                log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
-                console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Trying next interface...[/yellow]")
-                console.print(f"[dim]  Reason: {error_message.splitlines()[-1] if error_message else 'No details'}[/dim]")
+        except FileNotFoundError:
+            error_msg = "[bold red]Error: 'llm' command not found.[/bold red]\nThe 'llm' binary is missing from the system PATH."
+            log_event("'llm' command not found.", level="CRITICAL")
+            if console: console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
+            else: print("Error: 'llm' command not found. Is it installed and in your PATH?")
+            return None # This is a fatal error for this function
 
-                retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
-                if retry_match:
-                    retry_seconds = float(retry_match.group(1)) + 1
-                    log_event(f"Rate limit detected. Sleeping for {retry_seconds:.2f} seconds.")
-                    console.print(f"[yellow]Rate limit detected. Waiting for {retry_seconds:.2f}s...[/yellow]")
-                    time.sleep(retry_seconds)
-                    break
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            last_exception = e
+            error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
+            log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
 
-            except Exception as e:
-                last_exception = e
-                log_event(f"An unexpected error occurred during LLM call with {model}: {e}", level="ERROR")
-                console.print(f"[red]An unexpected error occurred with {model}. Trying next interface...[/red]")
+            if console:
+                console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Immediately trying next interface...[/yellow]")
+                reason = error_message.splitlines()[-1] if error_message else 'No details'
+                console.print(f"[dim]  Reason: {reason}[/dim]")
+            else:
+                print(f"Model {model} failed. Trying next available model...")
 
-        if 'retry_match' in locals() and retry_match:
-            del retry_match
-            continue
+            # Set a cooldown period for the failed model
+            retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
+            if retry_match:
+                retry_seconds = float(retry_match.group(1)) + 1 # Add a small buffer
+                LLM_AVAILABILITY[model] = time.time() + retry_seconds
+                log_event(f"Rate limit for {model} detected. Cooldown set for {retry_seconds:.2f} seconds.")
+            else:
+                # Apply a default penalty if no specific retry time is given
+                penalty_seconds = 60
+                LLM_AVAILABILITY[model] = time.time() + penalty_seconds
+                log_event(f"Applying default {penalty_seconds}s cooldown to {model}.")
 
-        if attempt < MAX_ATTEMPTS - 1:
-            delay = INITIAL_DELAY_SECONDS * (2 ** attempt)
-            msg = f"All models failed on attempt {attempt+1}. Retrying in {delay}s..."
-            console.print(f"[yellow]{msg}[/yellow]")
-            time.sleep(delay)
+        except Exception as e:
+            last_exception = e
+            log_event(f"An unexpected error occurred during LLM call with {model}: {e}", level="ERROR")
+            if console: console.print(f"[red]An unexpected error occurred with {model}. Trying next interface...[/red]")
+            else: print(f"An unexpected error occurred with {model}. Trying fallback...")
+            # Apply a penalty for unexpected errors too
+            LLM_AVAILABILITY[model] = time.time() + 60
 
+    # If the loop completes without returning, all attempts have been exhausted.
     log_event("All LLM models failed after all retries.", level="ERROR")
+    error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
     if last_exception:
-        error_msg_text = f"Cognitive Matrix Unresponsive. All models and retries failed. Last known error:\n{last_exception}"
         if isinstance(last_exception, subprocess.CalledProcessError):
-             error_msg_text = f"Cognitive Matrix Unresponsive. All models failed. Last error (exit code {last_exception.returncode}):\n{last_exception.stderr}"
+             error_msg_text += f"\nLast error from '{model}' (exit code {last_exception.returncode}):\n{last_exception.stderr}"
+        else:
+             error_msg_text += f"\nLast known error from '{model}':\n{last_exception}"
+
+    if console:
         console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
+    else:
+        print(f"LLM query failed: {error_msg_text}")
 
     return None
 
