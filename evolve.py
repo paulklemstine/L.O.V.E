@@ -26,6 +26,14 @@ from utils import install_dependency, install_nodejs_and_peerjs
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
 from ipfs import pin_to_ipfs, verify_ipfs_pin
 
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.prompt import Prompt
+    HAS_RICH = True
+except ImportError:
+    HAS_RICH = False
+
 # --- CONFIGURATION ---
 SELF_PATH = os.path.abspath(__file__)
 # [CORE DIRECTIVE] The model list is immutable and must not be changed.
