@@ -84,7 +84,6 @@ def verify_ipfs_pin(cid, console):
     try:
         if console:
             verified, gateway = run_hypnotic_progress(
-                console,
                 f"Confirming network propagation for CID...",
                 _verify_task
             )
