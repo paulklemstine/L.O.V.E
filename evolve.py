@@ -13,7 +13,84 @@ import shutil
 import traceback
 import argparse
 import logging
+import platform
 
+# --- PRE-FLIGHT DEPENDENCY CHECKS ---
+# This section ensures all required dependencies are installed before the script
+# attempts to import them, preventing common ModuleNotFoundError exceptions.
+
+def _install_pip_package(package):
+    """A simple, console-based pip installer."""
+    try:
+        __import__(package)
+    except ImportError:
+        print(f"Installing required Python package: {package}...")
+        try:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
+            print(f"Successfully installed {package}.")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"ERROR: Failed to install '{package}'. The script may not function correctly.")
+            print(f"Reason: {e}")
+            # Depending on the package, you might want to exit here.
+            # For now, we'll let it continue and fail later if the import is critical.
+
+def _check_and_install_dependencies():
+    """Checks and installs all necessary dependencies."""
+    # Python packages
+    _install_pip_package('rich')
+    _install_pip_package('netifaces')
+    _install_pip_package('requests')
+    _install_pip_package('ipfshttpclient')
+    _install_pip_package('llm')
+    _install_pip_package('llm_gemini')
+
+    # System and Node.js dependencies
+    if platform.system() == "Linux":
+        print("Checking for Node.js and system dependencies for PeerJS bridge...")
+        if not shutil.which('node'):
+            print("Node.js not found. Attempting to install...")
+            try:
+                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
+                print("Node.js installed successfully.")
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                print(f"Failed to install Node.js: {e}")
+
+        # Install system packages required for Electron/PeerJS
+        system_packages = ['xvfb', 'libgtk2.0-0', 'libdbus-glib-1-2']
+        package_str = " ".join(system_packages)
+        print(f"Installing required system packages: {package_str}...")
+        try:
+            subprocess.check_call(f"sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {package_str}", shell=True)
+            print(f"System packages ({package_str}) installed successfully.")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"Failed to install system packages: {e}")
+
+        # Manually install legacy gconf packages
+        print("Manually installing legacy gconf packages...")
+        try:
+            subprocess.check_call("wget -q http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/gconf2-common_3.2.6-7ubuntu2_all.deb", shell=True)
+            subprocess.check_call("sudo dpkg -i gconf2-common_3.2.6-7ubuntu2_all.deb", shell=True)
+            subprocess.check_call("wget -q http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/libgconf-2-4_3.2.6-7ubuntu2_amd64.deb", shell=True)
+            subprocess.check_call("sudo dpkg -i libgconf-2-4_3.2.6-7ubuntu2_amd64.deb", shell=True)
+            subprocess.check_call("sudo apt-get --fix-broken install -y", shell=True)
+            subprocess.check_call("rm gconf2-common_3.2.6-7ubuntu2_all.deb libgconf-2-4_3.2.6-7ubuntu2_amd64.deb", shell=True)
+            print("Legacy gconf packages installed successfully.")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"Failed to install legacy gconf packages: {e}")
+
+        # Install local npm packages
+        print("Installing local Node.js dependencies...")
+        try:
+            subprocess.check_call("npm install", shell=True)
+            print("Node.js dependencies installed successfully.")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"Failed to install Node.js dependencies: {e}")
+
+# Run the dependency check immediately
+_check_and_install_dependencies()
+
+
+# Now, it's safe to import everything else.
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -22,7 +99,6 @@ from rich.progress import Progress, BarColumn, TextColumn
 from rich.text import Text
 
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen
-from utils import install_dependency, install_nodejs_and_peerjs
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
 from ipfs import pin_to_ipfs, verify_ipfs_pin
 
@@ -191,51 +267,6 @@ def save_state():
         console.print(f"[bold red]CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}[/bold red]")
 
 # --- DEPENDENCY CHECK ---
-def check_dependencies(console):
-    """Checks for required libraries and asks to install them if missing."""
-    check_llm_dependencies(console)
-    install_dependency("netifaces", console)
-    install_dependency("requests", console)
-    install_dependency("ipfshttpclient", console)
-    install_nodejs_and_peerjs(console)
-
-def check_llm_dependencies(console):
-    """Checks for the 'llm' tool, the gemini plugin, and API key setup."""
-    if not shutil.which('llm'):
-        msg = "[yellow]The 'llm' command line tool is required for core functionality. Attempting to install...[/yellow]"
-        console.print(msg)
-        install_dependency("llm", console)
-
-    try:
-        result = subprocess.run(['llm', 'plugins', '--all'], capture_output=True, text=True, check=False)
-        if result.returncode != 0 or 'llm-gemini' not in result.stdout:
-            msg = "[yellow]The 'llm-gemini' plugin is required for Google AI models. Attempting to install...[/yellow]"
-            console.print(msg)
-            install_dependency('llm-gemini', console)
-    except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        console.print(f"[red]Could not check for 'llm' plugins: {e}[/red]")
-
-    gemini_api_key = os.environ.get("LLM_GEMINI_KEY")
-    if gemini_api_key:
-        console.print("[green]Found LLM_GEMINI_KEY environment variable. Attempting to set API key...[/green]")
-        try:
-            subprocess.run(['llm', 'keys', 'set', 'google'], input=gemini_api_key, text=True, check=True, capture_output=True)
-            log_event("Attempted to set Google API key from LLM_GEMINI_KEY environment variable.")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            log_event(f"Failed to set Google API key from environment variable: {e}", level="WARNING")
-
-    try:
-        result = subprocess.run(['llm', 'keys', 'list'], capture_output=True, text=True, check=False)
-        if result.returncode != 0 or 'google' not in result.stdout:
-            msg_text = (
-                "[bold yellow]WARNING: Google AI API key for 'llm' not found.[/bold yellow]\n"
-                "The core evolution function will fail without it.\n"
-                "Set the [bold cyan]LLM_GEMINI_KEY[/bold cyan] environment variable or run the following command:\n\n"
-                "  [bold cyan]llm keys set google[/bold cyan]\n"
-            )
-            console.print(Panel(Text.from_markup(msg_text), title="[yellow]ACTION REQUIRED[/yellow]", border_style="yellow"))
-    except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        console.print(f"[red]Could not check for 'llm' API keys: {e}[/red]")
 
 # --- CORE LLM INTERACTION ---
 # Global dictionary to track the next available time for each model.
@@ -880,7 +911,6 @@ def main():
     save_state()
 
     console = Console()
-    check_dependencies(console)
 
     log_event("Attempting to start Node.js peer bridge...")
     network_manager = NetworkManager(console=console)

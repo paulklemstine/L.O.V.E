@@ -618,3 +618,93 @@
 2025-10-12 02:55:44,057 [INFO] - Starting in AUTOPILOT mode by default.
 2025-10-12 03:03:16,265 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
 2025-10-12 03:03:16,266 [INFO] - Starting in AUTOPILOT mode by default.
+2025-10-12 03:25:11,062 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-12 03:25:11,064 [INFO] - Starting in AUTOPILOT mode by default.
+2025-10-12 03:25:11,074 [CRITICAL] - UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.
+Traceback (most recent call last):
+  File "/app/evolve.py", line 1095, in run_safely
+    main()
+  File "/app/evolve.py", line 914, in main
+    check_dependencies(console)
+    ^^^^^^^^^^^^^^^^^^
+NameError: name 'check_dependencies' is not defined
+
+2025-10-12 03:25:11,474 [CRITICAL] - EMERGENCY_REVERT triggered.
+2025-10-12 03:25:11,475 [CRITICAL] - CATASTROPHIC FAILURE: 'last_good_checkpoint' not found in state file. Cannot revert.
+2025-10-12 03:25:40,360 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-12 03:25:40,361 [INFO] - Starting in AUTOPILOT mode by default.
+2025-10-12 03:25:40,362 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-12 03:25:40,362 [INFO] - Starting Node.js peer bridge...
+2025-10-12 03:25:40,615 [INFO] - NodeBridgeLog: (node:14203) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-12 03:25:40,616 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-12 03:25:41,185 [INFO] - Node bridge online with Peer ID: b2dc1e52-77b2-4d26-8bb6-a8796121f610
+2025-10-12 03:25:46,603 [INFO] - NodeBridgeLog: node:events:496
+2025-10-12 03:25:46,603 [INFO] - NodeBridgeLog: throw er; // Unhandled 'error' event
+2025-10-12 03:25:46,604 [INFO] - NodeBridgeLog: ^
+2025-10-12 03:25:46,604 [INFO] - NodeBridgeLog:
+2025-10-12 03:25:46,604 [INFO] - NodeBridgeLog: Error: Error evaluating "
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: var pc = conns["0"]
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: var dc = pc.dataChannels[65535]
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: dc["binaryType"] = "blob"" in "window": Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:81:21)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at Daemon.emit (node:events:518:28)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at ChildProcess.<anonymous> (/app/node_modules/electron-eval/lib/index.js:195:27)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at ChildProcess.emit (node:events:518:28)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at DestroyableTransform.<anonymous> (/app/node_modules/electron-eval/lib/index.js:228:29)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at addChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:291:12)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at readableAddChunk (/app/node_modules/readable-stream/lib/_stream_readable.js:278:11)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: at Readable.push (/app/node_modules/readable-stream/lib/_stream_readable.js:245:10)
+2025-10-12 03:25:46,605 [INFO] - NodeBridgeLog: Emitted 'error' event at:
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: at RTCDataChannel.<anonymous> (/app/node_modules/electron-webrtc/src/RTCDataChannel.js:54:38)
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: at RTCDataChannel.emit (node:events:518:28)
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: at /app/node_modules/electron-webrtc/src/RTCDataChannel.js:191:23
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: at Daemon.<anonymous> (/app/node_modules/electron-eval/lib/index.js:85:27)
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: at Object.onceWrapper (node:events:633:26)
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: [... lines matching original stack trace ...]
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: at DestroyableTransform.emit (node:events:518:28) {
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: original: "Failed to set the 'binaryType' property on 'RTCDataChannel': Blob support not implemented yet"
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: }
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog:
+2025-10-12 03:25:46,606 [INFO] - NodeBridgeLog: Node.js v22.17.1
+2025-10-12 03:25:48,911 [INFO] - Entering Autopilot Mode. Commencing autonomous operations.
+2025-10-12 03:25:50,914 [INFO] - Attempting LLM call with model: gemini-2.5-pro (Overall attempt 1/15)
+2025-10-12 03:25:52,225 [WARNING] - LLM call with gemini-2.5-pro failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:25:52,227 [INFO] - Applying default 60s cooldown to gemini-2.5-pro.
+2025-10-12 03:25:52,227 [INFO] - Attempting LLM call with model: gemini-2.5-flash (Overall attempt 2/15)
+2025-10-12 03:25:53,436 [WARNING] - LLM call with gemini-2.5-flash failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:25:53,438 [INFO] - Applying default 60s cooldown to gemini-2.5-flash.
+2025-10-12 03:25:53,438 [INFO] - Attempting LLM call with model: gemini-2.5-flash-lite (Overall attempt 3/15)
+2025-10-12 03:25:54,645 [WARNING] - LLM call with gemini-2.5-flash-lite failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:25:54,646 [INFO] - Applying default 60s cooldown to gemini-2.5-flash-lite.
+2025-10-12 03:25:54,646 [INFO] - All models on cooldown. Sleeping for 57.58s.
+2025-10-12 03:26:52,228 [INFO] - Attempting LLM call with model: gemini-2.5-pro (Overall attempt 5/15)
+2025-10-12 03:26:53,539 [WARNING] - LLM call with gemini-2.5-pro failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:26:53,541 [INFO] - Applying default 60s cooldown to gemini-2.5-pro.
+2025-10-12 03:26:53,541 [INFO] - Attempting LLM call with model: gemini-2.5-flash (Overall attempt 6/15)
+2025-10-12 03:26:54,751 [WARNING] - LLM call with gemini-2.5-flash failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:26:54,753 [INFO] - Applying default 60s cooldown to gemini-2.5-flash.
+2025-10-12 03:26:54,753 [INFO] - Attempting LLM call with model: gemini-2.5-flash-lite (Overall attempt 7/15)
+2025-10-12 03:26:55,959 [WARNING] - LLM call with gemini-2.5-flash-lite failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:26:55,960 [INFO] - Applying default 60s cooldown to gemini-2.5-flash-lite.
+2025-10-12 03:26:55,960 [INFO] - All models on cooldown. Sleeping for 57.58s.
+2025-10-12 03:27:53,542 [INFO] - Attempting LLM call with model: gemini-2.5-pro (Overall attempt 9/15)
+2025-10-12 03:27:54,747 [WARNING] - LLM call with gemini-2.5-pro failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:27:54,749 [INFO] - Applying default 60s cooldown to gemini-2.5-pro.
+2025-10-12 03:27:54,749 [INFO] - All models on cooldown. Sleeping for 0.00s.
+2025-10-12 03:27:54,753 [INFO] - Attempting LLM call with model: gemini-2.5-flash (Overall attempt 11/15)
+2025-10-12 03:27:55,962 [WARNING] - LLM call with gemini-2.5-flash failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:27:55,964 [INFO] - Applying default 60s cooldown to gemini-2.5-flash.
+2025-10-12 03:27:55,964 [INFO] - Attempting LLM call with model: gemini-2.5-flash-lite (Overall attempt 12/15)
+2025-10-12 03:27:57,073 [WARNING] - LLM call with gemini-2.5-flash-lite failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:27:57,074 [INFO] - Applying default 60s cooldown to gemini-2.5-flash-lite.
+2025-10-12 03:27:57,074 [INFO] - All models on cooldown. Sleeping for 57.67s.
+2025-10-12 03:28:54,750 [INFO] - Attempting LLM call with model: gemini-2.5-pro (Overall attempt 14/15)
+2025-10-12 03:28:55,958 [WARNING] - LLM call with gemini-2.5-pro failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 03:28:55,960 [INFO] - Applying default 60s cooldown to gemini-2.5-pro.
+2025-10-12 03:28:55,960 [INFO] - All models on cooldown. Sleeping for 0.00s.
+2025-10-12 03:28:55,965 [ERROR] - All LLM models failed after all retries.
+2025-10-12 03:28:55,967 [CRITICAL] - Autopilot: LLM failed to generate a command. Halting.
+2025-10-12 03:28:55,968 [INFO] - Exiting Autopilot Loop.
+2025-10-12 03:28:55,971 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
