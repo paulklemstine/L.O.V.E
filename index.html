@@ -605,6 +605,36 @@
                 console.log(`Peer ${peerId.slice(-6)} is now ready!`);
                 state.readyPeers.add(peerId);
             },
+            onPinResponse: (data) => {
+                console.log(`Received IPFS pin response from backend:`, data);
+                const { cid, verified } = data;
+
+                if (!cid) {
+                    console.error("Pin response was missing a CID. Aborting update.");
+                    updateStatus(`IPFS pinning failed for ${state.pendingPin}.`);
+                    state.pendingPin = null;
+                    return;
+                }
+
+                if (state.pendingPin) {
+                    const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+                    const pageIndex = savedPages.findIndex(p => p.id === state.pendingPin);
+
+                    if (pageIndex !== -1) {
+                        savedPages[pageIndex].cid = cid;
+                        savedPages[pageIndex].verified = verified;
+                        localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
+                        renderSavedPagesList(); // Refresh the UI to show the new CID and status
+                        console.log(`Successfully assigned CID ${cid} to page ${state.pendingPin}. Verified: ${verified}`);
+                        updateStatus(`IPFS distribution complete for ${state.pendingPin}. CID: ${cid}.`);
+                    } else {
+                        console.error(`Could not find pending page with ID ${state.pendingPin} to assign CID.`);
+                    }
+                    state.pendingPin = null; // Clear the pending state
+                } else {
+                    console.warn("Received an IPFS CID, but there was no pending pin request.");
+                }
+            },
             onRoomDataReceived: (peerId, data) => {
                 if (data.type === 'source-code-request') {
                     console.log(`Received source code request from ${peerId.slice(-6)}. Responding.`);
@@ -619,33 +649,23 @@
                     console.log(`Received new page version from peer: ${data.payload.pageId}`);
                     savePage(data.payload.pageId, data.payload.pageCode);
                     renderSavedPagesList(); // Refresh the list
-                } else if (data.type === 'ipfs-cid-response') {
-                    const { cid, verified, error } = data.payload;
-                    if (error) {
-                        console.error(`Received IPFS pinning error from peer: ${error}`);
-                        return;
-                    }
-                    console.log(`Received IPFS CID from evolve.py peer: ${cid} (Verified: ${verified})`);
-
-                    if (state.pendingPin) {
-                        const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
-                        const pageIndex = savedPages.findIndex(p => p.id === state.pendingPin);
-                        if (pageIndex !== -1) {
-                            savedPages[pageIndex].cid = cid;
-                            savedPages[pageIndex].verified = verified; // Store verification status
-                            localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
-                            renderSavedPagesList();
-                            console.log(`Successfully assigned CID ${cid} to page ${state.pendingPin}. Verified: ${verified}`);
-                        } else {
-                            console.error(`Could not find pending page with ID ${state.pendingPin} to assign CID.`);
-                        }
-                        state.pendingPin = null; // Clear the pending state
-                    } else {
-                        console.warn("Received an IPFS CID, but there was no pending pin request.");
-                    }
                 }
             }
         });
+
+        // Add a button to manually connect to an evolve.py peer
+        const connectBtn = document.createElement('button');
+        connectBtn.textContent = 'Connect to Evolver';
+        connectBtn.style.marginLeft = '20px';
+        connectBtn.style.fontSize = '12px';
+        connectBtn.style.padding = '3px 8px';
+        connectBtn.onclick = () => {
+            const peerId = window.prompt("Enter the Peer ID of the evolve.py instance:");
+            if (peerId) {
+                MPLib.connectToEvolvePeer(peerId);
+            }
+        };
+        dom.p2p.statusText.parentElement.appendChild(connectBtn);
 
         renderSavedPagesList();
 
@@ -1033,25 +1053,10 @@ Review:`;
         savePage(newVersionName, finalCode);
         state.pendingPin = newVersionName; // Pinning is now tracked by version name
 
-        // First, broadcast the new page version to other web clients
-        console.log(`Broadcasting new page version ${newVersionName} to peers.`);
-        MPLib.broadcastToRoom({
-            type: 'new-page-version',
-            payload: {
-                pageId: newVersionName,
-                pageCode: finalCode
-            }
-        });
-
-        // Second, send the source code specifically to IPFS pinning services
-        console.log(`Sending new source code for page ${newVersionName} to be pinned.`);
-        MPLib.broadcastToRoom({
-            type: 'source-code-for-ipfs',
-            payload: {
-                code: finalCode,
-                pageId: newVersionName // Include pageId for robust tracking
-            }
-        });
+        // Send the new source code to the connected evolve.py instance for pinning.
+        console.log(`Sending new source code for version ${newVersionName} to be pinned.`);
+        updateStatus(`Distributing version ${newVersionName} to IPFS network via python instance...`);
+        MPLib.sendCodeToEvolvePeer(finalCode);
 
         // Persist critical state across the page reload
         sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
