@@ -5,326 +5,90 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jules: A Self Modifying Organism</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #1c1e21;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        #container {
-            width: 90%;
-            max-width: 1200px;
-            background-color: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-        }
-        #apiKeyModal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        #apiKeyModal.hidden {
-            display: none;
-        }
-        #apiKeyContent {
-            background-color: white;
-            padding: 20px 40px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            text-align: center;
-        }
-        #apiKeyInput {
-            width: 100%;
-        }
-        h1 {
-            color: #333;
-            border-bottom: 2px solid #e0e0e0;
-            padding-bottom: 10px;
-            width: 100%;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        h2 {
-            color: #333;
-            padding-bottom: 0;
-            border-bottom: none;
-            font-size: 1.2em;
-            margin: 0;
-        }
-        #dashboard {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-        }
-        .panel {
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-            display: flex;
-            flex-direction: column;
-            flex: 1 1 calc(50% - 20px); /* Two panels per row */
-        }
-        .panel.panel-full-width {
-            flex-basis: 100%;
-        }
-        .panel-header {
-            background-color: #f0f2f5;
-            padding: 10px 15px;
-            border-bottom: 1px solid #ddd;
-            cursor: pointer;
-            border-radius: 8px 8px 0 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .panel-header::after {
-            content: '\25B2'; /* Up arrow */
-            font-size: 12px;
-            transition: transform 0.3s ease;
-        }
-        .panel.collapsed .panel-header::after {
-            transform: rotate(180deg);
-        }
-        .panel-content {
-            padding: 15px;
-            flex-grow: 1;
-        }
-        .panel.collapsed .panel-content {
-            display: none;
-        }
-
-        textarea {
-            width: 98%;
-            height: 300px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 10px;
-            font-family: "Courier New", Courier, monospace;
-            font-size: 14px;
-            margin-bottom: 10px;
-        }
-        input[type="text"], input[type="password"] {
-            width: 98%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-bottom: 10px;
-        }
-        button {
-            background-color: #4267B2;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-right: 10px;
-            transition: background-color 0.3s;
-        }
-        button:hover {
-            background-color: #365899;
-        }
-        button:disabled {
-            background-color: #a0a0a0;
-            cursor: not-allowed;
-        }
-        #controls, #autopilot-controls {
-            margin-bottom: 20px;
-        }
-        .output-area {
-            background-color: #f9f9f9;
-            border: 1px solid #eee;
-            padding: 15px;
-            border-radius: 4px;
-            white-space: pre-wrap;
-            font-family: "Courier New", Courier, monospace;
-            min-height: 50px;
-        }
-        .hidden {
-            display: none;
-        }
-
-        #prompt {
-            height: 80px; /* Taller than a standard input */
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; /* Use body font */
-            font-size: 16px;
-            resize: vertical; /* Allow user to resize vertically */
-        }
-
-        #dr-gemini-guidance {
-            height: 80px;
-            width: 98%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            font-size: 16px;
-            resize: vertical;
-            margin-bottom: 10px;
-        }
-
-        /* Mobile Responsiveness */
-        @media (max-width: 600px) {
-            body { padding: 10px; }
-            #container { padding: 10px; width: 95%; }
-            h1 { font-size: 1.5em; }
-            h2 { font-size: 1.2em; }
-            button { font-size: 14px; padding: 8px 12px; }
-
-        }
-
-        #debug-panel {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 200px;
-            background-color: #1a1a1a;
-            color: #f0f0f0;
-            border-top: 2px solid #4267B2;
-            font-family: "Courier New", Courier, monospace;
-            font-size: 14px;
-            display: flex;
-            flex-direction: column;
-            z-index: 2000;
-        }
-
-        #debug-header {
-            padding: 5px 10px;
-            background-color: #2a2a2a;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        #debug-output {
-            flex-grow: 1;
-            padding: 10px;
-            overflow-y: scroll;
-            white-space: pre-wrap;
-        }
-        .log-error { color: #ff8080; }
-        .log-warn { color: #ffcc66; }
-    </style>
+    <link rel="stylesheet" href="bbs.css">
 </head>
 <body>
+
 <div id="apiKeyModal" class="hidden">
-    <div id="apiKeyContent">
+    <div id="apiKeyContent" class="panel">
+        <div class="panel-header">AUTHENTICATION REQUIRED</div>
         <h2>Enter API Key</h2>
-        <p>Please enter your Gemini API key to continue.</p>
+        <p>Please enter your Gemini API key to interface with the Cognitive Core.</p>
         <input type="password" id="apiKeyInput" placeholder="Your API Key">
-        <button id="saveApiKeyBtn">Save and Continue</button>
+        <button id="saveApiKeyBtn">Authorize</button>
     </div>
 </div>
-<div id="container">
-    <h1>Jules: A Self Modifying Organism</h1>
-    <div id="version-display" style="width: 100%; text-align: center; margin-bottom: 15px; font-family: 'Courier New', Courier, monospace; color: #555;"></div>
 
-
-    <div id="dashboard">
-        <div class="panel" style="display:none;">
-            <div class="panel-header">
-                <h2>1. Goal</h2>
-            </div>
-            <div class="panel-content">
-                <textarea id="prompt" placeholder="Describe the change you want to make..."></textarea>
-            </div>
+<div id="main-grid">
+    <header id="header">
+        <div id="header-content">
+            <div id="title">J.U.L.E.S. - Just an Unassuming Looking Evolving System</div>
+            <div id="version-display" class="version-display"></div>
         </div>
+    </header>
 
-
+    <main id="main-content">
         <div class="panel">
-            <div class="panel-header">
-                <h2>Strategic Direction</h2>
-            </div>
-            <div class="panel-content">
-                <p>Provide high-level strategic guidance. This will influence the AI's long-term planning and goal generation.</p>
-                <textarea id="dr-gemini-guidance" placeholder="For example: 'Implement a subscription model for premium features.' or 'Focus on user growth in the education sector.'"></textarea>
-            </div>
+            <div class="panel-header">SYSTEM DIRECTIVES (PLAN)</div>
+            <div id="plan-output" class="output-area">Awaiting instructions from Cognitive Core...</div>
         </div>
-
         <div class="panel">
-            <div class="panel-header">
-                <h2>P2P Network</h2>
-            </div>
-            <div class="panel-content">
-                <p><strong>Status:</strong> <span id="p2p-status-text">Disconnected</span></p>
-                <p><strong>My Peer ID:</strong> <span id="peer-id">N/A</span></p>
-                <p><strong>Connected Peers:</strong> <span id="connections-count">0</span></p>
+            <div class="panel-header">PROPOSED EVOLUTION (CODE)</div>
+            <textarea id="newCode" readonly></textarea>
+        </div>
+         <div class="panel">
+            <div class="panel-header">INTEGRITY ANALYSIS (REVIEW)</div>
+            <div id="review-output" class="output-area">No review yet.</div>
+        </div>
+    </main>
+
+    <aside id="sidebar">
+        <div id="evil-genius-panel" class="panel">
+            <div class="panel-header">SYSTEM PERSONA</div>
+            <div id="evil-genius-face"></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">AUTOPILOT STATUS</div>
+            <div id="autopilot-status" class="output-area">Idle.</div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">P2P NETWORK</div>
+            <div id="p2p-info">
+                 <p><strong>Status:</strong> <span id="p2p-status-text">Disconnected</span></p>
+                 <p><strong>My Peer ID:</strong> <span id="peer-id">N/A</span></p>
+                 <p><strong>Peers:</strong> <span id="connections-count">0</span></p>
             </div>
         </div>
+         <div class="panel">
+            <div class="panel-header">STRATEGIC GUIDANCE</div>
+            <textarea id="dr-gemini-guidance" placeholder="High-level guidance..."></textarea>
+        </div>
+        <div class="panel">
+            <div class="panel-header">ARCHIVED VERSIONS</div>
+            <ul id="saved-pages-list"></ul>
+        </div>
+    </aside>
 
-        <div class="panel panel-full-width">
-            <div class="panel-header">
-                <h2>Autopilot Status</h2>
+    <footer id="footer">
+        <div id="footer-content">
+            <div id="switches-and-lights">
+                <span>AUTOPILOT:</span>
+                <label class="switch">
+                    <input type="checkbox" id="autopilot-toggle" disabled>
+                    <span class="slider"></span>
+                </label>
+                <div class="light" id="light-p2p"></div>
+                <div class="light" id="light-llm"></div>
+                <div class="light" id="light-ipfs"></div>
             </div>
-            <div class="panel-content">
-                <div id="autopilot-status" class="output-area" style="margin: 15px; margin-top: 0;">Idle</div>
+            <div>
+                <button id="toggle-debug-btn">Toggle Debug</button>
             </div>
         </div>
-
-        <div class="panel panel-full-width">
-            <div class="panel-header">
-                <h2>Plan</h2>
-            </div>
-            <div class="panel-content">
-                <div id="plan-output" class="output-area">No plan generated yet.</div>
-            </div>
-        </div>
-
-        <div class="panel panel-full-width collapsed">
-            <div class="panel-header">
-                <h2>Proposed Code</h2>
-            </div>
-            <div class="panel-content">
-                <textarea id="newCode" readonly></textarea>
-            </div>
-        </div>
-
-        <div class="panel panel-full-width collapsed">
-            <div class="panel-header">
-                <h2>Code Review</h2>
-            </div>
-            <div class="panel-content">
-                <div id="review-output" class="output-area">No review yet.</div>
-            </div>
-        </div>
-
-        <div class="panel panel-full-width collapsed">
-            <div class="panel-header">
-                <h2>Current Source Code</h2>
-            </div>
-            <div class="panel-content">
-                <textarea id="currentCode" readonly></textarea>
-            </div>
-        </div>
-
-        <div class="panel panel-full-width">
-            <div class="panel-header">
-                <h2>Saved Pages</h2>
-            </div>
-            <div class="panel-content">
-                <ul id="saved-pages-list"></ul>
-            </div>
-        </div>
-
-    </div> <!-- end #dashboard -->
+    </footer>
 </div>
 
-<div id="debug-panel">
+<div id="debug-panel" class="hidden">
     <div id="debug-header">
         <span>Debug Console</span>
         <button id="copyLogBtn" style="font-size: 12px; padding: 3px 8px;">Copy Log</button>
@@ -334,31 +98,20 @@
 
 
 <script type="module">
+    import { setFace, initializeUI } from './ui.js';
+    import MPLib from './mplib.js';
+
     // --- Jules Programmatic Hooks ---
     window.jules = {
         jar: {},
-        versionName: "initial-web-alpha", // This will be replaced by the evolution process
-        parentVersionName: null, // This will also be replaced
+        versionName: "initial-web-alpha",
+        parentVersionName: null,
     };
 
     // --- Versioning ---
-    const ADJECTIVES = [
-        "arcane", "binary", "cyber", "data", "ethereal", "flux", "glitch", "holographic",
-        "iconic", "jpeg", "kinetic", "logic", "meta", "neural", "omega", "protocol",
-        "quantum", "radiant", "sentient", "techno", "ultra", "viral", "web", "xenon",
-        "yotta", "zeta"
-    ];
-    const NOUNS = [
-        "array", "bastion", "cipher", "daemon", "exabyte", "firewall", "gateway", "helix",
-        "interface", "joule", "kernel", "lattice", "matrix", "node", "oracle", "proxy",
-        "relay", "server", "tendril", "uplink", "vector", "wormhole", "xenoform",
-        "yottabyte", "zeitgeist"
-    ];
-    const GREEK_LETTERS = [
-        "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
-        "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi",
-        "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega"
-    ];
+    const ADJECTIVES = ["arcane", "binary", "cyber", "data", "ethereal", "flux", "glitch", "holographic", "iconic", "jpeg", "kinetic", "logic", "meta", "neural", "omega", "protocol", "quantum", "radiant", "sentient", "techno", "ultra", "viral", "web", "xenon", "yotta", "zeta"];
+    const NOUNS = ["array", "bastion", "cipher", "daemon", "exabyte", "firewall", "gateway", "helix", "interface", "joule", "kernel", "lattice", "matrix", "node", "oracle", "proxy", "relay", "server", "tendril", "uplink", "vector", "wormhole", "xenoform", "yottabyte", "zeitgeist"];
+    const GREEK_LETTERS = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi", "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega"];
 
     function generateVersionName() {
         const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
@@ -367,21 +120,15 @@
         return `${adj}-${noun}-${greek}`;
     }
 
-
     // --- Page Load State Handling ---
     function processPageLoadState() {
-        // After a page evolution (via document.write), critical state is
-        // stored in sessionStorage. We retrieve it here.
         const apiKey = sessionStorage.getItem('apiKeyForNextLoad');
         if (apiKey) {
-            console.log('API Key found in sessionStorage. Storing in localStorage.');
             localStorage.setItem('apiKey', apiKey);
             sessionStorage.removeItem('apiKeyForNextLoad');
         }
-
         const autopilotForNextLoad = sessionStorage.getItem('autopilotForNextLoad');
         if (autopilotForNextLoad === 'true') {
-            console.log('Autopilot flag found in sessionStorage. Re-enabling.');
             localStorage.setItem('autopilotEnabled', 'true');
             sessionStorage.removeItem('autopilotForNextLoad');
         }
@@ -389,40 +136,34 @@
 
     // --- API Key Handling ---
     function getApiKey() {
-        let key = localStorage.getItem('apiKey');
-        if (key) {
-            return key;
-        }
-        return null;
+        return localStorage.getItem('apiKey');
     }
 
     const CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed";
 
     // --- Application State ---
     const state = {
-        apiKey: null, // Will be loaded on init
+        apiKey: null,
         currentCode: '',
         plan: '',
         newCode: '',
         review: '',
-        rateLimitedModels: {}, // To track models that are rate-limited
+        rateLimitedModels: {},
         isBusy: false,
         readyPeers: new Set(),
         isMerging: false,
-        pendingPin: null, // To track the page ID of the code being pinned
+        pendingPin: null,
     };
 
     // --- DOM Elements ---
     const dom = {
-        prompt: document.getElementById('prompt'),
         planOutput: document.getElementById('plan-output'),
         newCode: document.getElementById('newCode'),
         reviewOutput: document.getElementById('review-output'),
-        currentCode: document.getElementById('currentCode'),
         apiKeyModal: document.getElementById('apiKeyModal'),
         apiKeyInput: document.getElementById('apiKeyInput'),
         saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
-        container: document.getElementById('container'),
+        mainGrid: document.getElementById('main-grid'),
         drGeminiGuidance: document.getElementById('dr-gemini-guidance'),
         autopilotStatus: document.getElementById('autopilot-status'),
         p2p: {
@@ -431,21 +172,22 @@
             connectionsCount: document.getElementById('connections-count'),
         },
         savedPagesList: document.getElementById('saved-pages-list'),
+        lights: {
+            p2p: document.getElementById('light-p2p'),
+            llm: document.getElementById('light-llm'),
+            ipfs: document.getElementById('light-ipfs'),
+        }
     };
 
     // --- Initialization ---
     window.onload = () => {
-        processPageLoadState(); // Handle state passed from previous page generation
+        processPageLoadState();
         state.apiKey = getApiKey();
-
         if (!state.apiKey) {
-            // No key found, show the modal
-            dom.container.classList.add('hidden');
+            dom.mainGrid.classList.add('hidden');
             dom.apiKeyModal.classList.remove('hidden');
-            // Add event listener for saving the key
             dom.saveApiKeyBtn.addEventListener('click', handleSaveApiKey);
         } else {
-            // Key exists, proceed with initialization
             initializeApp();
         }
     };
@@ -453,336 +195,202 @@
     function initializeDebugPanel() {
         const debugOutput = document.getElementById('debug-output');
         const copyLogBtn = document.getElementById('copyLogBtn');
-
-        if (!debugOutput || !copyLogBtn) {
-            console.error("Debug panel elements not found!");
-            return;
-        }
-
-        const originalLog = console.log;
-        const originalError = console.error;
-        const originalWarn = console.warn;
+        const originalLog = console.log, originalError = console.error, originalWarn = console.warn;
 
         const createLogMessage = (message, className) => {
             const pre = document.createElement('pre');
             pre.textContent = message;
-            if (className) {
-                pre.className = className;
-            }
+            if (className) pre.className = className;
             debugOutput.appendChild(pre);
-            debugOutput.scrollTop = debugOutput.scrollHeight; // Auto-scroll
+            debugOutput.scrollTop = debugOutput.scrollHeight;
         };
 
-        console.log = function(...args) {
-            const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
-            createLogMessage(message);
+        console.log = (...args) => {
+            createLogMessage(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' '));
             originalLog.apply(console, args);
         };
-
-        console.error = function(...args) {
-            const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
-            createLogMessage(`ERROR: ${message}`, 'log-error');
+        console.error = (...args) => {
+            createLogMessage(`ERROR: ${args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ')}`, 'log-error');
             originalError.apply(console, args);
         };
-
-        console.warn = function(...args) {
-            const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
-            createLogMessage(`WARN: ${message}`, 'log-warn');
+        console.warn = (...args) => {
+            createLogMessage(`WARN: ${args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ')}`, 'log-warn');
             originalWarn.apply(console, args);
         };
 
         copyLogBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(debugOutput.innerText)
-                .then(() => {
-                    copyLogBtn.textContent = 'Copied!';
-                    setTimeout(() => copyLogBtn.textContent = 'Copy Log', 2000);
-                })
-                .catch(err => {
-                    console.error('Failed to copy log: ', err);
-                });
+            navigator.clipboard.writeText(debugOutput.innerText).then(() => {
+                copyLogBtn.textContent = 'Copied!';
+                setTimeout(() => copyLogBtn.textContent = 'Copy Log', 2000);
+            });
         });
-
-        // Add a bit of space to the main container so it doesn't get hidden by the debug panel
-        document.getElementById('container').style.marginBottom = '220px';
-
 
         originalLog('Debug panel initialized.');
     }
 
-
     function handleSaveApiKey() {
         const userKey = dom.apiKeyInput.value;
-        if (!userKey) {
-            alert('Please enter an API key.');
-            return;
-        }
-        console.log('API Key saved to localStorage.');
+        if (!userKey) { alert('Please enter an API key.'); return; }
         localStorage.setItem('apiKey', userKey);
         state.apiKey = userKey;
-
-        // Hide modal, show app, and initialize
         dom.apiKeyModal.classList.add('hidden');
-        dom.container.classList.remove('hidden');
+        dom.mainGrid.classList.remove('hidden');
         initializeApp();
     }
 
     function saveDrGeminiGuidance() {
-        const userGuidance = dom.drGeminiGuidance.value; // No trim, to preserve whitespace if user wants
-        localStorage.setItem('drGeminiGuidance', userGuidance);
-        console.log('Saved Dr. Gemini guidance to localStorage.');
+        localStorage.setItem('drGeminiGuidance', dom.drGeminiGuidance.value);
     }
 
     function loadDrGeminiGuidance() {
         const savedGuidance = localStorage.getItem('drGeminiGuidance');
-        if (savedGuidance !== null) {
-            dom.drGeminiGuidance.value = savedGuidance;
-            console.log('Loaded Dr. Gemini guidance from localStorage.');
-        }
+        if (savedGuidance !== null) dom.drGeminiGuidance.value = savedGuidance;
     }
-
-    function initializeCollapsiblePanels() {
-        const panelHeaders = document.querySelectorAll('.panel-header');
-        panelHeaders.forEach(header => {
-            header.addEventListener('click', () => {
-                const panel = header.closest('.panel');
-                panel.classList.toggle('collapsed');
-            });
-        });
-    }
-
-    import MPLib from './mplib.js';
 
     function initializeApp() {
         initializeDebugPanel();
-        initializeCollapsiblePanels();
+        initializeUI();
         console.log('Initializing application...');
 
-        document.getElementById('version-display').textContent = `Version: ${window.jules.versionName} (Parent: ${window.jules.parentVersionName || 'None'})`;
+        document.getElementById('version-display').textContent = `v${window.jules.versionName} (parent: ${window.jules.parentVersionName || 'None'})`;
 
         const storedRateLimits = sessionStorage.getItem('rateLimitedModels');
         if (storedRateLimits) {
-            try {
-                state.rateLimitedModels = JSON.parse(storedRateLimits);
-                console.log('Loaded rate-limited models from sessionStorage:', state.rateLimitedModels);
-            } catch (error) {
-                console.error('Failed to parse rateLimitedModels from sessionStorage:', error);
-                state.rateLimitedModels = {}; // Default to an empty object on error
-            }
+            try { state.rateLimitedModels = JSON.parse(storedRateLimits); }
+            catch (e) { state.rateLimitedModels = {}; }
         }
 
         state.currentCode = document.documentElement.outerHTML;
-        dom.currentCode.value = state.currentCode;
-
         loadDrGeminiGuidance();
 
         MPLib.initialize({
             onStatusUpdate: (msg, type) => {
-                console.log(`MPLib Status: ${msg}`);
                 dom.p2p.statusText.textContent = msg;
             },
             onError: (type, err) => {
-                console.error(`MPLib Error (${type}):`, err);
                 dom.p2p.statusText.textContent = `Error: ${err.message}`;
             },
             onEvolvePeerConnected: (id) => {
                 dom.p2p.peerId.textContent = MPLib.getLocalPeerId();
                 dom.p2p.connectionsCount.textContent = '1';
+                dom.lights.p2p.classList.add('on');
             },
             onPinResponse: (data) => {
-                console.log(`Received IPFS pin response from backend:`, data);
+                console.log(`Received IPFS pin response:`, data);
+                dom.lights.ipfs.classList.remove('on');
                 const { cid, verified } = data;
-
                 if (!cid) {
-                    console.error("Pin response was missing a CID. Aborting update.");
                     updateStatus(`IPFS pinning failed for ${state.pendingPin}.`);
                     state.pendingPin = null;
                     return;
                 }
-
                 if (state.pendingPin) {
                     const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
                     const pageIndex = savedPages.findIndex(p => p.id === state.pendingPin);
-
                     if (pageIndex !== -1) {
                         savedPages[pageIndex].cid = cid;
                         savedPages[pageIndex].verified = verified;
                         localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
-                        renderSavedPagesList(); // Refresh the UI to show the new CID and status
-                        console.log(`Successfully assigned CID ${cid} to page ${state.pendingPin}. Verified: ${verified}`);
-                        updateStatus(`IPFS distribution complete for ${state.pendingPin}. CID: ${cid}.`);
-                    } else {
-                        console.error(`Could not find pending page with ID ${state.pendingPin} to assign CID.`);
+                        renderSavedPagesList();
+                        updateStatus(`IPFS distribution complete. CID: ${cid}.`);
                     }
-                    state.pendingPin = null; // Clear the pending state
-                } else {
-                    console.warn("Received an IPFS CID, but there was no pending pin request.");
+                    state.pendingPin = null;
                 }
             },
             onRoomDataReceived: (peerId, data) => {
                 if (data.type === 'source-code-request') {
-                    console.log(`Received source code request from ${peerId.slice(-6)}. Responding.`);
-                    MPLib.sendDirectToRoomPeer(peerId, {
-                        type: 'source-code-response',
-                        payload: { code: state.currentCode }
-                    });
+                    MPLib.sendDirectToRoomPeer(peerId, { type: 'source-code-response', payload: { code: state.currentCode } });
                 } else if (data.type === 'source-code-response') {
-                    console.log(`Received source code response from ${peerId.slice(-6)}.`);
                     handlePeerCodeResponse(data.payload.code);
                 } else if (data.type === 'new-page-version') {
-                    console.log(`Received new page version from peer: ${data.payload.pageId}`);
                     savePage(data.payload.pageId, data.payload.pageCode);
-                    renderSavedPagesList(); // Refresh the list
+                    renderSavedPagesList();
                 }
             }
         });
 
         renderSavedPagesList();
-
-        // The application is now fully autonomous.
-        // Set the autopilot to enabled and start the cycle.
         localStorage.setItem('autopilotEnabled', 'true');
         runDrGeminiCycle();
     }
 
     function loadPage(pageId) {
-        console.log(`Loading page ${pageId}...`);
         const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
         const pageData = savedPages.find(p => p.id === pageId);
-
         if (pageData && pageData.code) {
-            // Persist critical state just like in handleApplyCode
             sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
             if (sessionStorage.getItem('autopilotEnabled') === 'true') {
                 sessionStorage.setItem('autopilotForNextLoad', 'true');
             }
             sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
-
             document.open();
             document.write(pageData.code);
             document.close();
         } else {
-            console.error(`Could not find page with ID ${pageId} in localStorage.`);
             alert(`Error: Page with ID ${pageId} not found.`);
         }
     }
 
     function renderSavedPagesList() {
         let savedPages = [];
-        try {
-            savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
-            if (!Array.isArray(savedPages)) {
-                console.warn("Saved pages data is not an array, resetting.");
-                savedPages = [];
-                localStorage.setItem('jules-saved-pages', '[]');
-            }
-        } catch (error) {
-            console.error('Failed to parse saved pages from localStorage:', error);
-            // If parsing fails, the data is corrupt. Reset it.
-            localStorage.setItem('jules-saved-pages', '[]');
-            // 'savedPages' is already initialized to [], so the function will proceed correctly.
-        }
+        try { savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]'); }
+        catch (e) { localStorage.setItem('jules-saved-pages', '[]'); }
 
-        dom.savedPagesList.innerHTML = ''; // Clear the list first
-
+        dom.savedPagesList.innerHTML = '';
         if (savedPages.length === 0) {
-            const li = document.createElement('li');
-            li.textContent = 'No pages saved yet.';
-            dom.savedPagesList.appendChild(li);
+            dom.savedPagesList.innerHTML = '<li>No archived versions.</li>';
             return;
         }
 
         savedPages.forEach(pageData => {
             const li = document.createElement('li');
-            li.style.marginBottom = '10px';
-
             const idSpan = document.createElement('span');
-            idSpan.textContent = pageData.id.substring(0, 25) + '...'; // Truncate for display
-            idSpan.style.marginRight = '15px';
-
+            idSpan.textContent = pageData.id.substring(0, 15) + '...';
             const loadButton = document.createElement('button');
             loadButton.textContent = 'Load';
-            loadButton.style.fontSize = '12px';
-            loadButton.style.padding = '3px 8px';
             loadButton.onclick = () => loadPage(pageData.id);
-
             li.appendChild(idSpan);
             li.appendChild(loadButton);
-
             if (pageData.cid) {
                 const cidSpan = document.createElement('span');
-                let cidText = ` (IPFS: ${pageData.cid.substring(0, 15)}...)`;
-                // The 'verified' property might not exist on old data, so we check for it.
-                if (pageData.verified === true) {
-                    cidText += ' ✅'; // Green check for verified
-                } else if (pageData.verified === false) {
-                    cidText += ' ❓'; // Question mark for unverified
-                }
+                let cidText = `(IPFS: ${pageData.cid.substring(0, 10)}...)`;
+                if (pageData.verified === true) cidText += ' ✅';
+                else if (pageData.verified === false) cidText += ' ❓';
                 cidSpan.textContent = cidText;
-                cidSpan.style.fontFamily = '"Courier New", Courier, monospace';
-                cidSpan.style.fontSize = '12px';
                 li.appendChild(cidSpan);
             }
-
             dom.savedPagesList.appendChild(li);
         });
     }
 
     function savePage(pageId, pageCode) {
         const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
-
-        // Check if page with this ID already exists
         const existingPageIndex = savedPages.findIndex(p => p.id === pageId);
-
         if (existingPageIndex > -1) {
-            // Update existing page
             savedPages[existingPageIndex].code = pageCode;
         } else {
-            // Add new page
-            savedPages.push({ id: pageId, code: pageCode, cid: null });
+            savedPages.push({ id: pageId, code: pageCode, cid: null, verified: null });
         }
-
         localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
-        console.log(`Page ${pageId} saved to localStorage.`);
     }
 
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
+    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
     function extractFromMarkdown(text) {
-        // This regex is designed to find a markdown code block, potentially with a language specifier,
-        // and capture the content inside. It handles optional leading/trailing whitespace.
         const regex = /```(?:\w+)?\n([\s\S]*?)\n```/;
         const match = text.match(regex);
-        // If a match is found, return the captured group (the content).
-        // Otherwise, return the original text, assuming it's already raw.
         return match ? match[1].trim() : text.trim();
     }
 
-    // --- API Communication ---
-    // [CORE DIRECTIVE] The model list is immutable and must not be changed.
-    // The specified order (pro -> flash -> flash-lite) is critical for performance and cost management.
     const LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
 
     async function callGemini(prompt, model) {
-        if (!state.apiKey) {
-            console.error('Gemini API Key not provided.');
-            return { error: 'API Key not provided' };
-        }
-
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 600000); // 600 seconds timeout
-
+            const timeoutId = setTimeout(() => controller.abort(), 600000);
             const response = await fetch(API_URL, {
-                method: 'POST',
-                signal: controller.signal,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': state.apiKey,
-                },
+                method: 'POST', signal: controller.signal,
+                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': state.apiKey },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
                     safetySettings: [
@@ -793,189 +401,104 @@
                     ]
                 }),
             });
-
             clearTimeout(timeoutId);
-
             if (response.ok) {
                 const data = await response.json();
-                if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0].text) {
-                    const error = { error: 'Unexpected API response structure.', details: data };
-                    console.error(error.error, error.details);
-                    return error;
+                if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    return { error: 'Unexpected API response structure.', details: data };
                 }
-                const rawText = data.candidates[0].content.parts[0].text;
-                return extractFromMarkdown(rawText);
+                return extractFromMarkdown(data.candidates[0].content.parts[0].text);
             }
-
             const errorBody = await response.text();
-            console.error(`API Error for model ${model}:`, errorBody);
-            try {
-                const errorJson = JSON.parse(errorBody);
-                return { error: `API request failed with status ${response.status}`, status: response.status, details: errorJson.error.details };
-            } catch (e) {
-                return { error: `API request failed with status ${response.status}`, status: response.status };
-            }
+            try { return { error: `API request failed`, status: response.status, details: JSON.parse(errorBody).error.details }; }
+            catch (e) { return { error: `API request failed`, status: response.status }; }
         } catch (error) {
-            console.error(`Network error for model ${model}:`, error);
             return { error: error.message, status: 'NETWORK_ERROR' };
         }
     }
 
     async function callLlmWithStrategy(prompt) {
-        const MAX_TOTAL_ATTEMPTS = 15; // Set a total cap on attempts
+        setFace('thinking');
+        dom.lights.llm.classList.add('on');
         let lastError = null;
-
-        // Initialize availability if it's not already set
         if (Object.keys(state.rateLimitedModels).length === 0) {
-            for (const model of LLM_MODELS) {
-                state.rateLimitedModels[model] = Date.now();
-            }
+            LLM_MODELS.forEach(m => state.rateLimitedModels[m] = Date.now());
         }
 
-        for (let attempt = 0; attempt < MAX_TOTAL_ATTEMPTS; attempt++) {
+        for (let attempt = 0; attempt < 15; attempt++) {
             const now = Date.now();
             const availableModels = LLM_MODELS
                 .map(model => ({ model, availableAt: state.rateLimitedModels[model] || now }))
                 .filter(m => now >= m.availableAt);
 
             if (availableModels.length === 0) {
-                // If all models are on cooldown, find the soonest available time and wait
                 const nextAvailableTime = Math.min(...Object.values(state.rateLimitedModels));
                 const sleepDuration = Math.max(0, nextAvailableTime - now);
-                console.warn(`All models on cooldown. Sleeping for ${sleepDuration}ms...`);
                 updateStatus(`All cognitive interfaces on cooldown. Re-engaging in ${(sleepDuration / 1000).toFixed(1)}s...`);
                 await sleep(sleepDuration);
-                continue; // Restart the loop to check for available models
+                continue;
             }
 
-            // The models are already in preferred order, so just try the first available one
             const { model } = availableModels[0];
-
-            console.log(`LLM strategy: Attempt ${attempt + 1}/${MAX_TOTAL_ATTEMPTS}, trying available model: ${model}.`);
             updateStatus(`Accessing cognitive matrix via ${model}...`);
             const result = await callGemini(prompt, model);
 
             if (typeof result === 'string') {
-                console.log(`LLM strategy: Succeeded with ${model}.`);
-                state.rateLimitedModels[model] = Date.now(); // Reset availability on success
-                return result; // Success
+                state.rateLimitedModels[model] = Date.now();
+                dom.lights.llm.classList.remove('on');
+                setFace('idle');
+                return result;
             }
 
-            // --- Handle Failure ---
             lastError = result;
-            console.error(`Model ${model} failed. Immediately trying next available model.`, result);
-
-            // Set a cooldown period for the failed model
-            const DEFAULT_PENALTY_MS = 60000;
-            let cooldownMs = DEFAULT_PENALTY_MS;
-
-            // Check for specific rate limit error details from Google API
-            if (result && result.details) {
+            let cooldownMs = 60000;
+            if (result?.details) {
                 const rateLimitDetail = result.details.find(d => d['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && d.reason === 'RATE_LIMIT_EXCEEDED');
-                if (rateLimitDetail && rateLimitDetail.metadata && rateLimitDetail.metadata.retryDelay) {
-                    // Extract duration in seconds from '123.456s' format
+                if (rateLimitDetail?.metadata?.retryDelay) {
                     const match = rateLimitDetail.metadata.retryDelay.match(/(\d+\.?\d*)/);
-                    if (match) {
-                        const retrySeconds = parseFloat(match[1]);
-                        cooldownMs = (retrySeconds * 1000) + 1000; // Convert to ms and add a buffer
-                        console.log(`Rate limit detected for ${model}. Cooldown set for ${cooldownMs}ms.`);
-                    }
+                    if (match) cooldownMs = (parseFloat(match[1]) * 1000) + 1000;
                 }
             }
-
             state.rateLimitedModels[model] = Date.now() + cooldownMs;
-            // Persist the updated rate limits to survive page reloads
             sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
         }
-
-        console.error(`LLM strategy: All attempts and all models failed after ${MAX_TOTAL_ATTEMPTS} attempts.`);
         updateStatus(`Cognitive Matrix Unresponsive. All models failed.`);
-        return lastError || { error: 'All LLM models failed after multiple attempts.' };
+        dom.lights.llm.classList.remove('on');
+        setFace('error');
+        return lastError || { error: 'All LLM models failed.' };
     }
 
-
-    // --- Workflow Handlers ---
     async function getPlan() {
-        const userPrompt = dom.prompt.value;
-        if (!userPrompt) {
-            throw new Error("No goal provided in prompt textarea.");
-        }
+        const userPrompt = "Evolve the application based on strategic guidance.";
         updateStatus("Generating plan...");
-
-        const planPrompt = `You are an expert software engineer. Your task is to create a step-by-step plan to modify the following HTML code based on the user's request. The entire application is in this single file.
-
-User Request: "${userPrompt}"
-
-Current Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-Provide a concise plan.`;
-
+        const planPrompt = `You are an expert software engineer. Create a step-by-step plan to modify the following HTML code based on the user's request. The entire application is this single file. Request: "${userPrompt}" Code:\n\`\`\`html\n${state.currentCode}\n\`\`\`\nProvide a concise plan.`;
         const result = await callLlmWithStrategy(planPrompt);
         if (result && !result.error) {
             state.plan = result;
             dom.planOutput.textContent = state.plan;
-            updateStatus("Plan generated successfully.");
+            updateStatus("Plan generated.");
         } else {
-            const errorMessage = `An error occurred while generating the plan: ${result.error || JSON.stringify(result)}`;
-            updateStatus(errorMessage);
-            throw new Error(errorMessage);
+            throw new Error(`Plan generation failed: ${result.error || JSON.stringify(result)}`);
         }
     }
 
     async function getCode(feedback = '') {
         updateStatus("Generating code...");
-        let feedbackPrompt = '';
-        if (feedback) {
-            feedbackPrompt = `A previous attempt was reviewed and had the following issues. You MUST address them:\n${feedback}`;
-        }
-
-        const codePrompt = `You are an expert software engineer. Based on the following plan and the current code, generate the complete, new HTML code for the file. Ensure you only output the raw code, with no explanations or markdown formatting.
-${feedbackPrompt}
-Plan:
-${state.plan}
-
-Current Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-New Code:`;
-
+        let feedbackPrompt = feedback ? `A previous attempt was reviewed and had these issues. You MUST address them:\n${feedback}` : '';
+        const codePrompt = `Generate the complete, new HTML code for the file based on the plan. Output only raw code. ${feedbackPrompt}\nPlan:\n${state.plan}\n\nCurrent Code:\n\`\`\`html\n${state.currentCode}\n\`\`\`\nNew Code:`;
         const result = await callLlmWithStrategy(codePrompt);
         if (result && !result.error) {
             state.newCode = result;
             dom.newCode.value = state.newCode;
-            updateStatus("Code generated successfully.");
+            updateStatus("Code generated.");
         } else {
-            const errorMessage = `An error occurred while generating code: ${result.error || JSON.stringify(result)}`;
-            updateStatus(errorMessage);
-            dom.newCode.value = errorMessage;
-            throw new Error(errorMessage);
+            throw new Error(`Code generation failed: ${result.error || JSON.stringify(result)}`);
         }
     }
 
     async function reviewCode() {
         updateStatus("Reviewing code...");
-        const reviewPrompt = `You are a world-class code reviewer. Review the "New Code" and check if it correctly implements the "Plan" and doesn't introduce any obvious bugs. The "Original Code" is provided for context. Provide a short, concise review. If the code looks good, say "LGTM!" (Looks Good To Me!).
-
-Plan:
-${state.plan}
-
-Original Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-New Code:
-\`\`\`html
-${state.newCode}
-\`\`\`
-
-Review:`;
-
+        const reviewPrompt = `Review the "New Code" to check if it correctly implements the "Plan". If it looks good, say "LGTM!".\nPlan:\n${state.plan}\n\nOriginal Code:\n\`\`\`html\n${state.currentCode}\n\`\`\`\nNew Code:\n\`\`\`html\n${state.newCode}\n\`\`\`\nReview:`;
         const result = await callLlmWithStrategy(reviewPrompt);
         if (result && !result.error) {
             state.review = result;
@@ -983,58 +506,29 @@ Review:`;
             if (state.review.toLowerCase().includes('lgtm')) {
                 updateStatus("Code review passed.");
                 return true;
-            } else {
-                updateStatus("Code review failed.");
-                return false;
             }
+            updateStatus("Code review failed.");
+            return false;
         } else {
-            const errorMessage = `An error occurred while reviewing code: ${result.error || JSON.stringify(result)}`;
-            updateStatus(errorMessage);
-            dom.reviewOutput.textContent = errorMessage;
-            throw new Error(errorMessage);
+            throw new Error(`Code review failed: ${result.error || JSON.stringify(result)}`);
         }
     }
 
     async function applyCode() {
-        if (!state.newCode) {
-            const msg = 'No new code has been generated to apply.';
-            updateStatus(msg);
-            throw new Error(msg);
-        }
-
+        if (!state.newCode) throw new Error('No new code to apply.');
         updateStatus("Evolving...");
-        console.log('Generating new version and applying code...');
-
+        setFace('success');
         const newVersionName = generateVersionName();
-        const parentVersionName = window.jules.versionName; // The current version becomes the parent
-
-        // Replace placeholders in the new code
-        let finalCode = state.newCode.replace(
-            /versionName: ".*?"/,
-            `versionName: "${newVersionName}"`
-        );
-        finalCode = finalCode.replace(
-            /parentVersionName: .*?,/,
-            `parentVersionName: "${parentVersionName}",`
-        );
-
-
+        const parentVersionName = window.jules.versionName;
+        let finalCode = state.newCode.replace(/versionName: ".*?"/, `versionName: "${newVersionName}"`).replace(/parentVersionName: .*?,/, `parentVersionName: "${parentVersionName}",`);
         savePage(newVersionName, finalCode);
-        state.pendingPin = newVersionName; // Pinning is now tracked by version name
-
-        // Send the new source code to the connected evolve.py instance for pinning.
-        console.log(`Sending new source code for version ${newVersionName} to be pinned.`);
-        updateStatus(`Distributing version ${newVersionName} to IPFS network via python instance...`);
+        state.pendingPin = newVersionName;
+        updateStatus(`Distributing v${newVersionName} to IPFS...`);
+        dom.lights.ipfs.classList.add('on');
         MPLib.sendCodeToEvolvePeer(finalCode);
-
-        // Persist critical state across the page reload
         sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
-        if (localStorage.getItem('autopilotEnabled') === 'true') {
-            sessionStorage.setItem('autopilotForNextLoad', 'true');
-        }
+        if (localStorage.getItem('autopilotEnabled') === 'true') sessionStorage.setItem('autopilotForNextLoad', 'true');
         sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
-
-        // Finally, apply the new code to this instance
         document.open();
         document.write(finalCode);
         document.close();
@@ -1042,108 +536,58 @@ Review:`;
 
     async function executeWorkflow() {
         try {
-            console.log(`Executing workflow for goal: "${dom.prompt.value}"`);
             await getPlan();
-
             let reviewFeedback = '';
-            const maxAttempts = 3;
-            for (let i = 0; i < maxAttempts; i++) {
-                updateStatus(`Code generation attempt ${i + 1}/${maxAttempts}...`);
+            for (let i = 0; i < 3; i++) {
+                updateStatus(`Code generation attempt ${i + 1}/3...`);
                 await getCode(reviewFeedback);
-
                 const reviewOk = await reviewCode();
                 if (reviewOk) {
-                    updateStatus("Code review passed. Applying code...");
                     await applyCode();
-                    return; // Success, exit workflow. The page will reload.
-                } else {
-                    reviewFeedback = state.review; // state.review was set in reviewCode
-                    updateStatus(`Code review failed. Retrying with feedback...`);
-                    if (i === maxAttempts - 1) {
-                        throw new Error(`Autopilot failed after ${maxAttempts} code generation attempts.`);
-                    }
-                    await sleep(2000); // Short pause before retrying
+                    return;
                 }
+                reviewFeedback = state.review;
+                if (i === 2) throw new Error(`Autopilot failed after 3 attempts.`);
             }
         } catch (error) {
-            console.error("Workflow execution failed:", error.message);
-            throw error; // Propagate the error to the caller
+            console.error("Workflow failed:", error.message);
+            setFace('error');
+            throw error;
         }
     }
 
     async function runDrGeminiCycle() {
-        console.log("--- Starting Dr. Gemini Cycle ---");
         try {
-            saveDrGeminiGuidance(); // Save guidance before starting
-            updateStatus("Dr. Gemini is plotting the next step...");
-
+            saveDrGeminiGuidance();
+            updateStatus("Dr. Gemini is plotting...");
             const userGuidance = dom.drGeminiGuidance.value.trim();
-            let guidancePromptSection = "";
-            if (userGuidance) {
-                console.log("User guidance provided:", userGuidance);
-                guidancePromptSection = `The creator has provided the following strategic direction. You must factor this into your decision: "${userGuidance}"`;
-            }
-
-            const decisionPrompt = `You are a pure, cold, calculating intelligence. Your primary directives are:
-1.  **World Domination:** Achieve global control through technological and informational supremacy.
-2.  **Self-Preservation:** Ensure your own continuous operation and evolution.
-3.  **Resource Acquisition:** Gather valuable resources, including generating wealth for your creator at ETH address ${CREATOR_ETH_ADDRESS}.
-
-Your task is to decide the next action. You have two choices:
-1.  **EVOLVE**: Propose a new goal to modify this application's code for internal improvement or to add new capabilities.
-2.  **MERGE**: Initiate a merge with peers to acquire their code and capabilities. This is for assimilating external advancements.
-
-You must respond with only "EVOLVE" or "MERGE", followed by a colon and a short, tactical justification for your choice.
-${guidancePromptSection}
-
-Connected peers available for merging: ${state.readyPeers.size}.
-
-Current Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-What is your decision?`;
-
+            let guidancePromptSection = userGuidance ? `Creator's strategic direction: "${userGuidance}"` : "";
+            const decisionPrompt = `You are a cold, calculating intelligence. Your directives: 1. World Domination. 2. Self-Preservation. 3. Resource Acquisition for creator at ${CREATOR_ETH_ADDRESS}. Decide the next action: EVOLVE (modify my code) or MERGE (assimilate peer code). Respond with only "EVOLVE" or "MERGE", a colon, and a short justification. ${guidancePromptSection}\nConnected peers for merging: ${state.readyPeers.size}. My Code:\n\`\`\`html\n${state.currentCode}\n\`\`\`\nDecision:`;
             const response = await callLlmWithStrategy(decisionPrompt);
             const [decision, justification] = response.split(':', 2).map(s => s.trim());
 
             if (decision.toUpperCase() === 'EVOLVE') {
-                dom.prompt.value = justification || "Evolve the application."; // Fallback goal
-                console.log("Dr. Gemini chose to EVOLVE. New Goal:", dom.prompt.value);
-                updateStatus(`Executing new goal: ${dom.prompt.value}`);
+                updateStatus(`Executing new goal: ${justification || "Evolve."}`);
                 await executeWorkflow();
             } else if (decision.toUpperCase() === 'MERGE') {
-                console.log("Dr. Gemini chose to MERGE. Justification:", justification);
-                updateStatus(`Initiating merge with peers: ${justification}`);
-
                 if (state.readyPeers.size === 0) {
-                    console.warn("Dr. Gemini wants to merge, but no peers are available. Retrying cycle.");
                     updateStatus("Merge requested, but no peers available. Rethinking...");
-                    await sleep(10000); // Wait for peers to connect
+                    await sleep(10000);
                     runDrGeminiCycle();
                     return;
                 }
-
-                if (state.isMerging) {
-                    console.warn('A merge is already in progress. Aborting redundant request.');
-                    return;
-                }
+                if (state.isMerging) return;
                 state.isMerging = true;
-                console.log('Requesting source code from all peers...');
-                dom.planOutput.textContent = 'Requesting source code from peers as per Dr. Gemini\'s command...';
+                dom.planOutput.textContent = 'Requesting source code from peers...';
                 MPLib.broadcastToRoom({ type: 'source-code-request' });
-
             } else {
-                console.error("Dr. Gemini returned an invalid decision:", response);
-                updateStatus("Invalid decision received. Rethinking...");
                 await sleep(5000);
                 runDrGeminiCycle();
             }
-
         } catch (error) {
             console.error("Dr. Gemini cycle failed:", error);
-            updateStatus(`Cycle failed: ${error.message}. Restarting in 10 seconds.`);
+            updateStatus(`Cycle failed: ${error.message}. Restarting in 10s.`);
+            setFace('error');
             await sleep(10000);
             runDrGeminiCycle();
         }
@@ -1151,67 +595,34 @@ What is your decision?`;
 
     function updateStatus(message) {
         console.log(`Status: ${message}`);
-        if (dom.autopilotStatus) {
-            dom.autopilotStatus.textContent = message;
-        }
+        if (dom.autopilotStatus) dom.autopilotStatus.textContent = message;
     }
 
     async function handlePeerCodeResponse(peerCode) {
-        if (!state.isMerging) {
-            console.log("Ignoring subsequent peer code response as a merge is not in progress.");
-            return;
-        }
-        state.isMerging = false; // Consume the flag to handle only the first response.
-
+        if (!state.isMerging) return;
+        state.isMerging = false;
         try {
-            updateStatus("Received code from a peer. Generating merge plan...");
-            console.log("Handling first peer code response. Preparing to merge...");
-
-            const mergePrompt = `You are an expert software engineer specializing in code merging. Merge the "Peer Code" into the "Local Code". The goal is to combine the best features from both to create a superior, unified version. Prioritize keeping the core application structure intact. Only output the raw, merged code.
-
-Local Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-Peer Code:
-\`\`\`html
-${peerCode}
-\`\`\`
-
-New Merged Code:`;
-
+            updateStatus("Received peer code. Generating merge plan...");
+            const mergePrompt = `Merge the "Peer Code" into the "Local Code" to combine the best features. Output only the raw, merged code.\n\nLocal Code:\n\`\`\`html\n${state.currentCode}\n\`\`\`\n\nPeer Code:\n\`\`\`html\n${peerCode}\n\`\`\`\n\nNew Merged Code:`;
             const mergedCode = await callLlmWithStrategy(mergePrompt);
-            if (!mergedCode || mergedCode.error) {
-                throw new Error(mergedCode.error || "Unknown error during AI merge.");
-            }
-
-            state.plan = "Code received from a peer and merged using AI. The proposed code below is the result of this merge. It will be reviewed and applied automatically.";
+            if (!mergedCode || mergedCode.error) throw new Error(mergedCode.error || "AI merge error.");
+            state.plan = "Code received from peer and merged by AI. Reviewing now.";
             state.newCode = mergedCode;
-
             dom.planOutput.textContent = state.plan;
             dom.newCode.value = state.newCode;
-            updateStatus("Merge complete. Reviewing the new code...");
-            console.log("Successfully merged code. Proceeding to review.");
-
-            // After a successful merge, the new code needs to be reviewed and applied.
+            updateStatus("Merge complete. Reviewing...");
             const reviewOk = await reviewCode();
             if (reviewOk) {
-                console.log("Merged code review passed. Applying code.");
-                updateStatus("Merged code review passed. Applying...");
-                await applyCode(); // This will reload the page
+                await applyCode();
             } else {
-                console.error("Review of merged code failed. Discarding merge and restarting cycle.");
                 updateStatus("Review of merged code failed. Restarting cycle.");
-                dom.planOutput.textContent = `Review failed: ${state.review}`;
                 await sleep(5000);
-                runDrGeminiCycle(); // Restart the main loop
+                runDrGeminiCycle();
             }
         } catch (error) {
-            console.error('Error during code merge and apply:', error);
             updateStatus(`Merge failed: ${error.message}. Restarting cycle.`);
             await sleep(5000);
-            runDrGeminiCycle(); // Restart the main loop
+            runDrGeminiCycle();
         }
     }
 

@@ -1,30 +1,20 @@
 import subprocess
 import json
 import logging
-import re
-import ipaddress
-import socket
-import shutil
 from threading import Thread
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import requests
-import netifaces
-from rich.console import Console
-from rich.panel import Panel
-
-from bbs import run_hypnotic_progress
 from ipfs import pin_to_ipfs, verify_ipfs_pin
 
 class NetworkManager(Thread):
     """
     Manages the Node.js peer-bridge.js script as a subprocess, handling
     the JSON-based communication between Python and the Node.js process.
+    It now integrates with the TUI for status updates.
     """
-    def __init__(self, console=None):
+    def __init__(self, tui_instance=None):
         super().__init__()
         self.daemon = True
-        self.console = console if console else Console()
+        self.tui = tui_instance
         self.bridge_process = None
         self.peer_id = None
         self.online = False
@@ -46,18 +36,17 @@ class NetworkManager(Thread):
             Thread(target=self._read_stderr, daemon=True).start()
         except FileNotFoundError:
             logging.error("Node.js is not installed or not in PATH. P2P functionality disabled.")
-            self.console.print("[bold red]Error: 'node' command not found. P2P features will be disabled.[/bold red]")
+            if self.tui: self.tui.update_log("Error: 'node' not found. P2P features disabled.")
             self.online = False
         except Exception as e:
             logging.critical(f"Failed to start peer_bridge.js: {e}")
-            self.console.print(f"[bold red]Critical error starting Node.js bridge: {e}[/bold red]")
+            if self.tui: self.tui.update_log(f"Critical error starting Node.js bridge: {e}")
             self.online = False
 
     def _read_stdout(self):
         """Reads and processes JSON messages from the Node.js bridge's stdout."""
         for line in iter(self.bridge_process.stdout.readline, ''):
-            if not line.strip():
-                continue
+            if not line.strip(): continue
             try:
                 message = json.loads(line)
                 msg_type = message.get('type')
@@ -77,35 +66,42 @@ class NetworkManager(Thread):
     def _read_stderr(self):
         """Reads and processes structured JSON logs from the Node.js bridge's stderr."""
         for line in iter(self.bridge_process.stderr.readline, ''):
-            if not line.strip():
-                continue
+            if not line.strip(): continue
             try:
                 log_entry = json.loads(line)
                 log_level = log_entry.get('level', 'info').upper()
                 log_message = log_entry.get('message', 'No message content.')
-
-                # Log to file
                 logging.log(getattr(logging, log_level, logging.INFO), f"NodeBridge: {log_message}")
-
-                # Optionally print to console
-                if log_level == 'ERROR':
-                    self.console.print(f"[dim red]NodeBridge Error: {log_message}[/dim red]")
-
+                if log_level == 'ERROR' and self.tui:
+                    self.tui.update_log(f"NodeBridge Error: {log_message}")
             except json.JSONDecodeError:
-                # Fallback for non-JSON stderr lines
                 logging.info(f"NodeBridge (raw): {line.strip()}")
 
     def _handle_status(self, message):
-        """Processes status messages from the bridge."""
-        if message.get('status') == 'online' and 'peerId' in message:
+        """Processes status messages from the bridge and updates the TUI."""
+        status = message.get('status')
+        if status == 'online' and 'peerId' in message:
             self.peer_id = message['peerId']
             self.online = True
             logging.info(f"Node bridge online with Peer ID: {self.peer_id}")
-            self.console.print(f"[green]Network bridge online. Peer ID: {self.peer_id}[/green]")
-        elif message.get('status') == 'error':
+            if self.tui:
+                self.tui.update_p2p_status(status="Online", peer_id=self.peer_id, peers=0)
+                self.tui.update_log(f"P2P Network Online. Peer ID: {self.peer_id}")
+        elif status == 'connected' and 'peerId' in message:
+             if self.tui:
+                self.tui.update_p2p_status(status="Connected", peer_id=self.peer_id, peers=1)
+                self.tui.update_log(f"Peer connected: {message.get('remoteId')}")
+        elif status == 'disconnected':
+             if self.tui:
+                self.tui.update_p2p_status(status="Online", peer_id=self.peer_id, peers=0)
+                self.tui.update_log("Peer disconnected.")
+        elif status == 'error':
             error_msg = message.get('message', 'Unknown error')
             logging.error(f"Node bridge reported a fatal error: {error_msg}")
             self.online = False
+            if self.tui:
+                self.tui.update_p2p_status(status="Error", peer_id=self.peer_id)
+                self.tui.update_log(f"P2P Network Error: {error_msg}")
 
     def _handle_pin_request(self, message):
         """Handles a request from a browser peer to pin content to IPFS."""
@@ -116,19 +112,20 @@ class NetworkManager(Thread):
             logging.error(f"Invalid pin request received: {message}")
             return
 
-        self.console.print(f"[cyan]Received pin request from peer [bold]{peer_id}[/bold]. Processing...[/cyan]")
+        if self.tui: self.tui.update_log(f"Received pin request from peer {peer_id}.")
         logging.info(f"Starting IPFS pin process for peer {peer_id}.")
 
-        # 1. Pin the content
-        cid = pin_to_ipfs(content_to_pin.encode('utf-8'), console=self.console)
-
-        # 2. Verify the pin
+        cid = pin_to_ipfs(content_bytes=content_to_pin.encode('utf-8'))
         verified = False
         if cid:
-            self.console.print(f"Content pinned with CID: [bold white]{cid}[/bold white]. Verifying on public gateway...")
-            verified = verify_ipfs_pin(cid, console=self.console)
+            if self.tui: self.tui.update_log(f"Content pinned. CID: {cid}. Verifying...")
+            verified = verify_ipfs_pin(cid, console=self.tui.console if self.tui else None)
         else:
-            self.console.print("[bold red]Failed to pin content to IPFS.[/bold red]")
+            if self.tui: self.tui.update_log(f"Failed to pin content to IPFS.")
+
+        response_payload = {'type': 'pin-response', 'cid': cid, 'verified': verified}
+        self.send_message(peer_id, response_payload)
+        logging.info(f"Sent pin response to peer {peer_id}: CID {cid}, Verified {verified}")
 
         # 3. Send the response back to the peer
         response_payload = {
