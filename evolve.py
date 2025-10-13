@@ -43,6 +43,7 @@ def _check_and_install_dependencies():
     _install_pip_package('ipfshttpclient')
     _install_pip_package('llm')
     _install_pip_package('llm_gemini')
+    _install_pip_package('llm-huggingface')
 
     # System and Node.js dependencies
     if platform.system() == "Linux":
@@ -134,7 +135,7 @@ except ImportError:
 SELF_PATH = os.path.abspath(__file__)
 # [CORE DIRECTIVE] The model list is immutable and must not be changed.
 # The specified order (pro -> flash -> flash-lite) is critical for performance and cost management.
-LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+LLM_MODELS = ["failspy/llama-3-70B-Instruct-abliterated", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 STATE_FILE = "evil_state.json"
 LOG_FILE = "evil.log"
 CHECKPOINT_DIR = "checkpoints"
@@ -349,6 +350,12 @@ def run_llm(prompt_text):
             last_exception = e
             error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
             log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
+
+            if "No such model" in error_message and "failspy" in model:
+                console.print(f"[bold red]Hugging Face model '{model}' not found or failed to load. Removing from session and falling back.[/bold red]")
+                LLM_MODELS.remove(model)
+                del LLM_AVAILABILITY[model]
+                continue
 
             if console:
                 console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Immediately trying next interface...[/yellow]")
