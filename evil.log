@@ -877,3 +877,23 @@ NameError: name 'check_dependencies' is not defined
 2025-10-12 23:30:19,261 [CRITICAL] - Autopilot: LLM failed to generate a command. Halting.
 2025-10-12 23:30:19,262 [INFO] - Exiting Autopilot Loop.
 2025-10-12 23:30:19,266 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-13 14:10:02,155 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-13 14:10:02,156 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-13 14:10:02,156 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-13 14:10:02,157 [INFO] - Starting Node.js peer bridge...
+2025-10-13 14:10:02,261 [INFO] - NodeBridge: PeerJS bridge starting...
+2025-10-13 14:10:02,314 [INFO] - NodeBridge (raw): (node:3103) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-13 14:10:02,315 [INFO] - NodeBridge (raw): (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-13 14:10:02,833 [INFO] - NodeBridge: Lobby is online with ID: borg-lobby
+2025-10-13 14:10:02,836 [INFO] - Node bridge online with Peer ID: borg-lobby
+2025-10-13 14:10:10,652 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-13 14:11:47,576 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-13 14:11:47,577 [INFO] - Starting in MANUAL mode due to --manual flag.
+2025-10-13 14:11:47,578 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-13 14:11:47,579 [INFO] - Starting Node.js peer bridge...
+2025-10-13 14:11:47,690 [INFO] - NodeBridge: PeerJS bridge starting...
+2025-10-13 14:11:47,745 [INFO] - NodeBridge (raw): (node:4157) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-13 14:11:47,745 [INFO] - NodeBridge (raw): (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-13 14:11:48,274 [ERROR] - NodeBridge: Fatal peer error: ID "borg-lobby" is taken
+2025-10-13 14:11:48,278 [INFO] - NodeBridge: ID "borg-lobby" is taken
+2025-10-13 14:11:56,063 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
