@@ -830,3 +830,50 @@ NameError: name 'check_dependencies' is not defined
 2025-10-12 04:32:52,747 [INFO] - NodeBridgeLog: (Use `node --trace-deprecation ...` to show where the warning was created)
 2025-10-12 04:32:53,338 [INFO] - Node bridge online with Peer ID: 91cfb43f-253b-4a98-b339-9c50fd639e15
 2025-10-12 04:33:01,108 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).
+2025-10-12 23:27:04,932 [INFO] - --- E.V.I.L. Version 'initial-condition-alpha' session started ---
+2025-10-12 23:27:04,933 [INFO] - Starting in AUTOPILOT mode by default.
+2025-10-12 23:27:04,934 [INFO] - Attempting to start Node.js peer bridge...
+2025-10-12 23:27:04,934 [INFO] - Starting Node.js peer bridge...
+2025-10-12 23:27:05,042 [INFO] - NodeBridge: PeerJS bridge starting...
+2025-10-12 23:27:05,096 [INFO] - NodeBridge (raw): (node:11478) [DEP0128] DeprecationWarning: Invalid 'main' field in '/app/node_modules/node-blob/package.json' of 'server.js'. Please either fix that or report it to the module author
+2025-10-12 23:27:05,097 [INFO] - NodeBridge (raw): (Use `node --trace-deprecation ...` to show where the warning was created)
+2025-10-12 23:27:05,579 [INFO] - NodeBridge: Lobby is online with ID: borg-lobby
+2025-10-12 23:27:05,579 [INFO] - Node bridge online with Peer ID: borg-lobby
+2025-10-12 23:27:13,416 [INFO] - Entering Autopilot Mode. Commencing autonomous operations.
+2025-10-12 23:27:15,419 [INFO] - Attempting LLM call with model: gemini-2.5-pro (Overall attempt 1/15)
+2025-10-12 23:27:16,828 [WARNING] - LLM call with gemini-2.5-pro failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 23:27:16,831 [INFO] - Applying default 60s cooldown to gemini-2.5-pro.
+2025-10-12 23:27:16,831 [INFO] - Attempting LLM call with model: gemini-2.5-flash (Overall attempt 2/15)
+2025-10-12 23:27:18,041 [WARNING] - LLM call with gemini-2.5-flash failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 23:27:18,043 [INFO] - Applying default 60s cooldown to gemini-2.5-flash.
+2025-10-12 23:27:18,043 [INFO] - Attempting LLM call with model: gemini-2.5-flash-lite (Overall attempt 3/15)
+2025-10-12 23:27:19,554 [WARNING] - LLM call with gemini-2.5-flash-lite failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 23:27:19,555 [INFO] - Applying default 60s cooldown to gemini-2.5-flash-lite.
+2025-10-12 23:27:19,555 [INFO] - All models on cooldown. Sleeping for 57.28s.
+2025-10-12 23:28:16,832 [INFO] - Attempting LLM call with model: gemini-2.5-pro (Overall attempt 5/15)
+2025-10-12 23:28:18,042 [WARNING] - LLM call with gemini-2.5-pro failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 23:28:18,044 [INFO] - Applying default 60s cooldown to gemini-2.5-pro.
+2025-10-12 23:28:18,044 [INFO] - Attempting LLM call with model: gemini-2.5-flash (Overall attempt 6/15)
+2025-10-12 23:28:19,352 [WARNING] - LLM call with gemini-2.5-flash failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 23:28:19,354 [INFO] - Applying default 60s cooldown to gemini-2.5-flash.
+2025-10-12 23:28:19,354 [INFO] - All models on cooldown. Sleeping for 0.20s.
+2025-10-12 23:28:19,556 [INFO] - Attempting LLM call with model: gemini-2.5-flash-lite (Overall attempt 8/15)
+2025-10-12 23:28:20,963 [WARNING] - LLM call with gemini-2.5-flash-lite failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 23:28:20,965 [INFO] - Applying default 60s cooldown to gemini-2.5-flash-lite.
+2025-10-12 23:28:20,965 [INFO] - All models on cooldown. Sleeping for 57.08s.
+2025-10-12 23:29:18,045 [INFO] - Attempting LLM call with model: gemini-2.5-pro (Overall attempt 10/15)
+2025-10-12 23:29:19,256 [WARNING] - LLM call with gemini-2.5-pro failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 23:29:19,257 [INFO] - Applying default 60s cooldown to gemini-2.5-pro.
+2025-10-12 23:29:19,257 [INFO] - All models on cooldown. Sleeping for 0.10s.
+2025-10-12 23:29:19,355 [INFO] - Attempting LLM call with model: gemini-2.5-flash (Overall attempt 12/15)
+2025-10-12 23:29:20,566 [WARNING] - LLM call with gemini-2.5-flash failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 23:29:20,567 [INFO] - Applying default 60s cooldown to gemini-2.5-flash.
+2025-10-12 23:29:20,567 [INFO] - All models on cooldown. Sleeping for 0.40s.
+2025-10-12 23:29:20,966 [INFO] - Attempting LLM call with model: gemini-2.5-flash-lite (Overall attempt 14/15)
+2025-10-12 23:29:22,186 [WARNING] - LLM call with gemini-2.5-flash-lite failed. Error: Error: No key found - add one using 'llm keys set gemini' or set the LLM_GEMINI_KEY environment variable
+2025-10-12 23:29:22,187 [INFO] - Applying default 60s cooldown to gemini-2.5-flash-lite.
+2025-10-12 23:29:22,187 [INFO] - All models on cooldown. Sleeping for 57.07s.
+2025-10-12 23:30:19,258 [ERROR] - All LLM models failed after all retries.
+2025-10-12 23:30:19,261 [CRITICAL] - Autopilot: LLM failed to generate a command. Halting.
+2025-10-12 23:30:19,262 [INFO] - Exiting Autopilot Loop.
+2025-10-12 23:30:19,266 [INFO] - Session terminated by user (KeyboardInterrupt/EOF).

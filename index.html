@@ -575,11 +575,6 @@
 
         loadDrGeminiGuidance();
 
-        function updateConnectionsCount() {
-            const connections = MPLib.getRoomConnections();
-            dom.p2p.connectionsCount.textContent = connections.size;
-        }
-
         MPLib.initialize({
             onStatusUpdate: (msg, type) => {
                 console.log(`MPLib Status: ${msg}`);
@@ -589,21 +584,9 @@
                 console.error(`MPLib Error (${type}):`, err);
                 dom.p2p.statusText.textContent = `Error: ${err.message}`;
             },
-            onMasterConnected: (id) => {
-                dom.p2p.peerId.textContent = id;
-            },
-            onNewMasterEstablished: () => {
-                MPLib.joinRoom('borg-lobby');
-                MPLib.sendToMaster({ type: 'update_status', payload: { newRoom: 'borg-lobby', isPublic: true } });
-            },
-            onRoomPeerJoined: (peerId, conn) => { updateConnectionsCount(); },
-            onRoomPeerLeft: (peerId) => {
-                updateConnectionsCount();
-                state.readyPeers.delete(peerId);
-            },
-            onRoomPeerReady: (peerId) => {
-                console.log(`Peer ${peerId.slice(-6)} is now ready!`);
-                state.readyPeers.add(peerId);
+            onEvolvePeerConnected: (id) => {
+                dom.p2p.peerId.textContent = MPLib.getLocalPeerId();
+                dom.p2p.connectionsCount.textContent = '1';
             },
             onPinResponse: (data) => {
                 console.log(`Received IPFS pin response from backend:`, data);
@@ -652,20 +635,6 @@
                 }
             }
         });
-
-        // Add a button to manually connect to an evolve.py peer
-        const connectBtn = document.createElement('button');
-        connectBtn.textContent = 'Connect to Evolver';
-        connectBtn.style.marginLeft = '20px';
-        connectBtn.style.fontSize = '12px';
-        connectBtn.style.padding = '3px 8px';
-        connectBtn.onclick = () => {
-            const peerId = window.prompt("Enter the Peer ID of the evolve.py instance:");
-            if (peerId) {
-                MPLib.connectToEvolvePeer(peerId);
-            }
-        };
-        dom.p2p.statusText.parentElement.appendChild(connectBtn);
 
         renderSavedPagesList();
 

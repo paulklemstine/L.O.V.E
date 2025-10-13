@@ -1,80 +1,79 @@
 const { Peer } = require('@its-forked/peerjs-on-node');
 const readline = require('readline');
 
-// This script acts as a bridge between the Python application (evolve.py)
-// and the P2P network, allowing Python to interact with browser-based peers.
+// --- Constants ---
+const API_KEY = 'peerjs';
+const LOBBY_ID = 'borg-lobby';
 
-console.log('PeerJS bridge starting...');
+// --- State ---
+let peer = null;
+const connections = new Map(); // Stores direct connections from browser peers
 
-const peer = new Peer();
-const connections = new Map(); // Store active connections by peer ID
+function logToPython(message, level = 'info') {
+    const logObject = { type: 'log', level, message };
+    console.error(JSON.stringify(logObject));
+}
 
-// 1. PeerJS Event Handling
-// ------------------------
+logToPython('PeerJS bridge starting...', 'info');
 
-peer.on('open', (id) => {
-    // Notify Python that the bridge is online and what its Peer ID is.
-    // Python will capture this from stdout.
-    console.log(JSON.stringify({ type: 'status', status: 'online', peerId: id }));
-});
+function initializePeer() {
+    peer = new Peer(LOBBY_ID, { key: API_KEY });
 
-peer.on('error', (err) => {
-    // Notify Python of any fatal errors.
-    console.error(JSON.stringify({ type: 'status', status: 'error', message: err.message }));
-    process.exit(1);
-});
-
-peer.on('connection', (conn) => {
-    // A new browser peer has connected to us.
-    logToPython(`Connection established with peer: ${conn.peer}`);
-    connections.set(conn.peer, conn); // Store the connection object
-
-    conn.on('data', (data) => {
-        // Data received from a browser peer (e.g., a request to pin source code).
-        // We forward this data to the Python script for processing.
-        logToPython(`Data received from ${conn.peer}`);
-        const messageToPython = {
-            type: 'pin-request',
-            peerId: conn.peer,
-            payload: data // The data is expected to be the HTML source code
-        };
-        // The Python script will be listening to stdout for this JSON.
-        console.log(JSON.stringify(messageToPython));
+    peer.on('open', (id) => {
+        logToPython(`Lobby is online with ID: ${id}`, 'success');
+        console.log(JSON.stringify({ type: 'status', status: 'online', peerId: id }));
     });
 
-    conn.on('close', () => {
-        // The connection was closed.
-        logToPython(`Connection closed with peer: ${conn.peer}`);
-        connections.delete(conn.peer);
+    peer.on('connection', (conn) => {
+        logToPython(`Peer connected to lobby: ${conn.peer}`);
+        connections.set(conn.peer, conn);
+
+        // Announce capability to the newly connected peer
+        conn.on('open', () => {
+            conn.send({
+                type: 'capability-announcement',
+                payload: { capability: 'evolve.py' }
+            });
+        });
+
+        conn.on('data', (data) => {
+            if(data.type === 'pin-request') {
+                logToPython(`Pin request received from ${conn.peer}`);
+                const messageToPython = {
+                    type: 'pin-request',
+                    peerId: conn.peer,
+                    payload: data.payload
+                };
+                console.log(JSON.stringify(messageToPython));
+            }
+        });
+
+        conn.on('close', () => {
+            logToPython(`Peer disconnected from lobby: ${conn.peer}`);
+            connections.delete(conn.peer);
+        });
     });
 
-    conn.on('error', (err) => {
-        // An error occurred on this specific connection.
-        logToPython(`Connection error with ${conn.peer}: ${err.message}`, 'error');
-        connections.delete(conn.peer); // Clean up on error
+    peer.on('error', (err) => {
+        // If the ID is taken, it's a critical error because we can't be the lobby.
+        logToPython(`Fatal peer error: ${err.message}`, 'error');
+        console.error(JSON.stringify({ type: 'status', status: 'error', message: err.message }));
+        process.exit(1);
     });
-});
+}
 
-// 2. Python Communication Handling
-// --------------------------------
-
-// Create an interface to read commands from Python's stdin.
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     terminal: false
 });
 
-// Listen for lines from the Python script.
 rl.on('line', (line) => {
     try {
         const command = JSON.parse(line);
-        logToPython(`Received command from Python: ${command.type}`);
-
         if (command.type === 'send-response' && command.peerId && command.payload) {
             const targetConn = connections.get(command.peerId);
             if (targetConn && targetConn.open) {
-                // We found the target peer's connection, so send the payload.
                 targetConn.send(command.payload);
                 logToPython(`Relayed response to peer: ${command.peerId}`);
             } else {
@@ -86,26 +85,12 @@ rl.on('line', (line) => {
     }
 });
 
-// 3. Utility and Cleanup
-// ----------------------
-
-function logToPython(message, level = 'info') {
-    // A structured logging format for Python to distinguish logs from data.
-    const logObject = {
-        type: 'log',
-        level: level,
-        message: message
-    };
-    // Use console.error for logs to keep stdout clean for primary data.
-    console.error(JSON.stringify(logObject));
-}
-
-// Gracefully shut down on SIGINT (Ctrl+C).
 process.on('SIGINT', () => {
     logToPython('PeerJS bridge shutting down...');
-    peer.destroy();
+    if (peer) peer.destroy();
     process.exit(0);
 });
 
-// Keep the process alive.
+initializePeer();
+
 setInterval(() => {}, 1000 * 60);
