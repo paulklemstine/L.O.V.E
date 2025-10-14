@@ -174,7 +174,7 @@ _configure_llm_api_key()
 
 import requests
 # Now, it's safe to import everything else.
-from utils import get_git_repo_info, list_directory, get_file_content, get_process_list
+from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -351,8 +351,10 @@ evil_state = {
     "knowledge_base": {
         "network_map": {
             "last_scan": None,
-            "hosts": {}
+            "hosts": {},
+            "self_interfaces": {}
         },
+        "process_intel": [],
         "file_system_intel": {
             "last_browse": None,
             "interesting_files": []
@@ -410,11 +412,16 @@ def load_state(ipfs_cid=None):
             evil_state.setdefault("autopilot_mode", False)
             evil_state.setdefault("autopilot_history", [])
             evil_state.setdefault("autopilot_goal", "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.")
-            evil_state.setdefault("knowledge_base", {
-                "network_map": {"last_scan": None, "hosts": {}},
-                "file_system_intel": {"last_browse": None, "interesting_files": []},
-                "webrequest_cache": {}
-            })
+            kb = evil_state.setdefault("knowledge_base", {})
+            nm = kb.setdefault("network_map", {})
+            nm.setdefault("last_scan", None)
+            nm.setdefault("hosts", {})
+            nm.setdefault("self_interfaces", {})
+            kb.setdefault("process_intel", [])
+            fsi = kb.setdefault("file_system_intel", {})
+            fsi.setdefault("last_browse", None)
+            fsi.setdefault("interesting_files", [])
+            kb.setdefault("webrequest_cache", {})
 
 
     except FileNotFoundError:
@@ -1205,12 +1212,19 @@ Example: `execute cat /home/user/documents/secrets.txt`
         elif llm_command.lower().strip() == 'ps':
             content, error = get_process_list()
             command_output = content if content else error
+            if content:
+                parsed_processes = parse_ps_output(content)
+                evil_state['knowledge_base']['process_intel'] = parsed_processes
+                save_state(console)
             display_output = (command_output[:1000] + '...') if len(command_output) > 1000 else command_output
             console.print(Panel(display_output, title="[bold green]AUTOPILOT PS[/bold green]", border_style="green"))
             action_taken = True
 
         elif llm_command.lower().strip() == 'ifconfig':
-            _details, command_output = get_network_interfaces(autopilot_mode=True)
+            details, command_output = get_network_interfaces(autopilot_mode=True)
+            if details:
+                evil_state['knowledge_base']['network_map']['self_interfaces'] = details
+                save_state(console)
             console.print(Panel(command_output, title="[bold green]AUTOPILOT IFCONFIG[/bold green]", border_style="green"))
             action_taken = True
 
@@ -1439,6 +1453,9 @@ def main(args):
             if error:
                 console.print(Panel(error, title="[bold red]PROCESS INFO ERROR[/bold red]", border_style="red"))
             else:
+                parsed_processes = parse_ps_output(content)
+                evil_state['knowledge_base']['process_intel'] = parsed_processes
+                save_state(console)
                 # Truncate for display if too long
                 display_content = content
                 if len(content.splitlines()) > 50:
@@ -1450,15 +1467,17 @@ def main(args):
             if error:
                 console.print(Panel(error, title="[bold red]NETWORK INFO ERROR[/bold red]", border_style="red"))
             else:
+                evil_state['knowledge_base']['network_map']['self_interfaces'] = details
+                save_state(console)
                 display_text = Text()
                 for iface, data in details.items():
                     display_text.append(f"IFace: [bold white]{iface}[/bold white]", style="yellow")
                     display_text.append(f"  MAC: [cyan]{data['mac']}[/cyan]\n")
-                    if data['ipv4']:
-                        display_text.append(f"  IPv4: [green]{data['ipv4']['address']}[/green]")
-                        display_text.append(f" (Mask: {data['ipv4']['netmask']}, Bcast: {data['ipv4']['broadcast']})\n")
-                    if data['ipv6']:
-                        display_text.append(f"  IPv6: [green]{data['ipv6']['address']}[/green]\n")
+                    if data['ipv4'] and data['ipv4'].get('addr'):
+                        display_text.append(f"  IPv4: [green]{data['ipv4']['addr']}[/green]")
+                        display_text.append(f" (Mask: {data['ipv4'].get('netmask', 'N/A')}, Bcast: {data['ipv4'].get('broadcast', 'N/A')})\n")
+                    if data['ipv6'] and data['ipv6'].get('addr'):
+                        display_text.append(f"  IPv6: [green]{data['ipv6']['addr']}[/green]\n")
                 console.print(Panel(display_text, title="[bold cyan]Network Interfaces[/bold cyan]", border_style="cyan"))
 
 
