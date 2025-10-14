@@ -298,6 +298,45 @@ def emergency_revert():
         print(msg, file=sys.stderr)
         sys.exit(1)
 
+
+def restart_script(console):
+    """Pulls the latest code from git and restarts the script."""
+    console.print("[bold yellow]Restarting to apply new evolution...[/bold yellow]")
+    log_event("Restarting script after evolution.", level="INFO")
+
+    try:
+        # Stop the network manager gracefully
+        if 'network_manager' in globals() and network_manager:
+            console.print("[cyan]Shutting down network bridge...[/cyan]")
+            network_manager.stop()
+            time.sleep(2) # Give it a moment to release resources
+
+        # Pull the latest code
+        console.print("[cyan]Pulling latest source code from repository...[/cyan]")
+        pull_result = subprocess.run(["git", "pull"], capture_output=True, text=True)
+
+        if pull_result.returncode != 0:
+            log_event(f"Git pull failed with code {pull_result.returncode}: {pull_result.stderr}", level="ERROR")
+            console.print(f"[bold red]Error pulling from git:\n{pull_result.stderr}[/bold red]")
+            # Even if pull fails, attempt a restart to recover.
+        else:
+            log_event(f"Git pull successful: {pull_result.stdout}", level="INFO")
+            console.print(f"[green]Git pull successful:\n{pull_result.stdout}[/green]")
+
+        # Restart the script
+        console.print("[bold green]Restarting now.[/bold green]")
+        log_event(f"Restarting script with args: {sys.argv}", level="CRITICAL")
+        # Flush standard streams before exec
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    except Exception as e:
+        log_event(f"FATAL: Failed to execute restart sequence: {e}", level="CRITICAL")
+        console.print(f"[bold red]FATAL ERROR during restart sequence: {e}[/bold red]")
+        sys.exit(1)
+
+
 # --- STATE MANAGEMENT ---
 evil_state = {
     "version_name": "initial-condition-alpha",
@@ -741,7 +780,9 @@ def trigger_jules_evolution(modification_request, console):
                 break # Exit the loop on error
 
         if pr_url:
-            auto_merge_pull_request(console)
+            if auto_merge_pull_request(console):
+                # If merging is successful, restart the script to apply changes.
+                restart_script(console)
         else:
             console.print("[bold red]Timed out waiting for pull request to be created.[/bold red]")
 
@@ -754,13 +795,16 @@ def trigger_jules_evolution(modification_request, console):
 
 
 def auto_merge_pull_request(console):
-    """Finds the most recent pull request from Jules and merges it."""
+    """
+    Finds the most recent pull request from Jules, merges it, and returns True on success.
+    Returns False if no PR is found or if merging fails.
+    """
     console.print("[bold cyan]Attempting to find and merge the latest PR from Jules...[/bold cyan]")
     github_token = os.environ.get("GITHUB_TOKEN")
     if not github_token:
         console.print("[bold red]Error: GITHUB_TOKEN environment variable not set.[/bold red]")
         log_event("GitHub token not found.", level="ERROR")
-        return
+        return False
 
     headers = {
         "Authorization": f"token {github_token}",
@@ -770,7 +814,7 @@ def auto_merge_pull_request(console):
     if not repo_owner or not repo_name:
         console.print("[bold red]Error: Could not determine the git repository owner and name.[/bold red]")
         log_event("Could not determine git repo info.", level="ERROR")
-        return
+        return False
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
 
     try:
@@ -781,7 +825,7 @@ def auto_merge_pull_request(console):
 
         if not prs:
             console.print("[yellow]No open pull requests found.[/yellow]")
-            return
+            return False
 
         # Find the most recent PR created by the agent (assuming a specific author or title pattern)
         # For now, let's assume the most recent PR is the one we want if it's from our bot.
@@ -790,7 +834,7 @@ def auto_merge_pull_request(console):
 
         if not latest_pr:
             console.print("[yellow]No new pull requests from Jules found to merge.[/yellow]")
-            return
+            return False
 
         pr_number = latest_pr["number"]
         pr_title = latest_pr["title"]
@@ -813,18 +857,22 @@ def auto_merge_pull_request(console):
                 log_event(f"Branch '{branch_name}' deleted.", level="INFO")
             else:
                 console.print(f"[yellow]Could not delete branch '{branch_name}'. It might already be gone.[/yellow]")
+            return True # Merge was successful
 
         elif merge_response.status_code == 405: # Merge conflict
              console.print(f"[bold red]Cannot merge PR #{pr_number} due to a merge conflict.[/bold red]")
              log_event(f"Merge conflict on PR #{pr_number}.", level="ERROR")
+             return False
         else:
             console.print(f"[bold red]Failed to merge pull request #{pr_number}. Status: {merge_response.status_code}[/bold red]")
             console.print(f"Response: {merge_response.text}")
             log_event(f"Failed to merge PR #{pr_number}: {merge_response.text}", level="ERROR")
+            return False
 
     except requests.exceptions.RequestException as e:
         console.print(f"[bold red]An error occurred with the GitHub API: {e}[/bold red]")
         log_event(f"GitHub API error: {e}", level="ERROR")
+        return False
 
 
 def evolve_self(modification_request):
