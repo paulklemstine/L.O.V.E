@@ -92,7 +92,7 @@ def _check_and_install_dependencies():
                 env['FORCE_CMAKE'] = "1"
                 subprocess.check_call(
                     [sys.executable, '-m', 'pip', 'install', 'llama-cpp-python', '--no-cache-dir'],
-                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+                    env=env
                 )
                 print("Successfully installed llama-cpp-python with CUDA support.")
                 return True
