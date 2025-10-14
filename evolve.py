@@ -1171,13 +1171,22 @@ def autopilot_loop(console):
         kb_summary = "Knowledge Base is empty."
         if evil_state.get("knowledge_base"):
             kb = evil_state["knowledge_base"]
-            network_hosts = list(kb.get("network_map", {}).get("hosts", {}).keys())
+            network_map = kb.get("network_map", {}).get("hosts", {})
             interesting_files = kb.get("file_system_intel", {}).get("interesting_files", [])
             cached_requests = list(kb.get("webrequest_cache", {}).keys())
 
             summary_parts = []
-            if network_hosts:
-                summary_parts.append(f"- Discovered Hosts: {', '.join(network_hosts)}")
+            if network_map:
+                host_details = []
+                for ip, data in network_map.items():
+                    vuln_count = sum(len(p.get("vulnerabilities", [])) for p in data.get("ports", {}).values())
+                    if vuln_count > 0:
+                        host_details.append(f"{ip} ({vuln_count} vulnerabilities)")
+                    else:
+                        host_details.append(ip)
+                if host_details:
+                    summary_parts.append(f"- Discovered Hosts: {', '.join(host_details)}")
+
             if interesting_files:
                 summary_parts.append(f"- Interesting Files Found: {', '.join(interesting_files)}")
             if cached_requests:
@@ -1216,7 +1225,7 @@ Available commands:
 - `evolve [modification request]`: Evolve my own source code. If no request, I will generate one.
 - `execute <shell command>`: Run a shell command on the host system.
 - `scan`: Scan the local network for active devices.
-- `probe <ip_address>`: Scan a specific IP for open ports and services.
+- `probe <ip_address>`: Perform a deep scan on a specific IP for open ports, services, and known vulnerabilities (CVEs). This is your primary tool for assessing targets.
 - `webrequest <url>`: Fetch the text content of a web page.
 - `ls <path>`: List files in a directory.
 - `cat <file_path>`: Show the content of a file.
@@ -1225,7 +1234,7 @@ Available commands:
 - `autopilot off`: Exit autopilot mode.
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
 
-Considering your directives, the mission, the knowledge base, and recent history, what is the single, next command I should execute?
+Considering your directives, the mission, the knowledge base, and recent history, what is the single, next command I should execute? Prioritize actions that leverage discovered vulnerabilities or gather more intelligence on high-value targets.
 Output ONLY the command string, without any other text, explanations, or markdown.
 Example: `probe 192.168.1.101`
 Example: `execute cat /home/user/documents/secrets.txt`
@@ -1543,20 +1552,25 @@ def main(args):
             if open_ports is not None: # probe_target returns None on IP validation failure
                 if ports_data:
                     display_content = Text(f"Probe of {target_ip} complete. Port details from knowledge base:\n\n", style="yellow")
-                    # Sort by port number, which are now string keys
                     sorted_ports = sorted(ports_data.items(), key=lambda item: int(item[0]))
                     for port_str, info in sorted_ports:
                         service = info.get('service', 'unknown')
-                        banner = info.get('banner', '')
-                        sanitized_banner = banner.replace('[', r'\[')
+                        service_info = info.get('service_info', '')
+                        vulns = info.get('vulnerabilities', [])
 
-                        display_content.append(f"  - [bold white]Port {port_str:<5}[/bold white] -> [cyan]{service}[/cyan]\n")
-                        if banner:
-                            display_content.append(f"    [dim italic]Banner: {sanitized_banner}[/dim italic]\n")
+                        display_content.append(f"  - [bold white]Port {port_str:<5}[/bold white] -> [cyan]{service}[/cyan]")
+                        if service_info:
+                            display_content.append(f" ({service_info})")
+                        display_content.append("\n")
+
+                        if vulns:
+                            display_content.append("    [bold red]Vulnerabilities:[/bold red]\n")
+                            for vuln in vulns:
+                                sanitized_vuln = vuln.replace('[', r'\[')
+                                display_content.append(f"      - [red]{sanitized_vuln}[/red]\n")
 
                     console.print(Panel(display_content, title="[bold yellow]PROBE RESULTS[/bold yellow]", border_style="yellow"))
                 else:
-                    # Use the original output string if no ports were found
                     console.print(Panel(f"[green]{output_str}[/green]", title="[bold green]PROBE COMPLETE: TARGET SECURE[/bold green]", border_style="green"))
 
         elif user_input.lower().startswith("webrequest "):
