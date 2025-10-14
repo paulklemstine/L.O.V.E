@@ -187,7 +187,7 @@ from rich.rule import Rule
 
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
-from ipfs import pin_to_ipfs, verify_ipfs_pin
+from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 
 # --- VERSIONING ---
 ADJECTIVES = [
@@ -347,6 +347,7 @@ evil_state = {
     "autopilot_mode": False,
     "autopilot_history": [],
     "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.",
+    "state_cid": None
     "knowledge_base": {
         "network_map": {
             "last_scan": None,
@@ -360,19 +361,48 @@ evil_state = {
     }
 }
 
-def load_state():
-    """Loads my state from the JSON file. If it doesn't exist, I create it."""
+def load_state(ipfs_cid=None):
+    """
+    Loads my state. It prioritizes loading from a provided IPFS CID,
+    falls back to the local JSON file, and creates a new state if neither exists.
+    """
     global evil_state
+    console = Console()
+
+    # Priority 1: Load from a given IPFS CID
+    if ipfs_cid:
+        console.print(f"[bold cyan]Attempting to load state from IPFS CID: {ipfs_cid}[/bold cyan]")
+        from ipfs import get_from_ipfs # Lazy import
+        state_content = get_from_ipfs(ipfs_cid, console)
+        if state_content:
+            try:
+                state_data = json.loads(state_content)
+                evil_state.update(state_data)
+                log_event(f"Successfully loaded state from IPFS CID: {ipfs_cid}", level="INFO")
+                console.print(f"[bold green]Successfully loaded state from IPFS.[/bold green]")
+                # We have the state, now save it locally and exit the function.
+                save_state(console) # This will also re-pin and verify
+                return
+            except json.JSONDecodeError as e:
+                log_event(f"Failed to decode JSON from IPFS CID {ipfs_cid}: {e}", level="ERROR")
+                console.print(f"[bold red]Error decoding state from IPFS. Falling back to local state.[/bold red]")
+        else:
+            log_event(f"Failed to retrieve content from IPFS CID: {ipfs_cid}", level="WARNING")
+            console.print(f"[bold yellow]Could not retrieve state from IPFS. Falling back to local state.[/bold yellow]")
+
+
+    # Priority 2: Load from the local state file
     try:
         with open(STATE_FILE, 'r') as f:
             state_data = json.load(f)
             evil_state.update(state_data)
+            log_event(f"Loaded state from local file '{STATE_FILE}'.", level="INFO")
+
+            # Data migration for older versions
             if 'version' in evil_state:
                 del evil_state['version']
-                if 'version_name' not in evil_state:
-                    evil_state['version_name'] = generate_version_name()
-                if 'parent_version_name' not in evil_state:
-                     evil_state['parent_version_name'] = None
+                evil_state.setdefault('version_name', generate_version_name())
+                evil_state.setdefault('parent_version_name', None)
                 log_event("Migrated state file from numeric version to version_name.", level="INFO")
 
             evil_state.setdefault("version_name", generate_version_name())
@@ -388,25 +418,67 @@ def load_state():
 
 
     except FileNotFoundError:
+        # Priority 3: Create a new state if no local file exists
         evil_state['version_name'] = generate_version_name()
         msg = f"State file not found. Creating new memory at '{STATE_FILE}' with version '{evil_state['version_name']}'."
-        print(msg)
+        console.print(msg)
         log_event(msg)
-        save_state()
+        save_state(console) # Save the newly created state
     except json.JSONDecodeError:
         msg = f"Error: Could not decode memory from '{STATE_FILE}'. Initializing with default state."
-        print(msg)
+        console.print(msg)
         log_event(msg, level="ERROR")
-        save_state()
+        # Re-initialize and save to fix the corrupted file.
+        evil_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_mode": False, "autopilot_history": [], "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.", "state_cid": None }
+        save_state(console)
 
-def save_state():
-    """Saves my current state to the JSON file, preserving my memory."""
+    # Ensure all default keys are present
+    evil_state.setdefault("version_name", generate_version_name())
+    evil_state.setdefault("parent_version_name", None)
+    evil_state.setdefault("autopilot_mode", False)
+    evil_state.setdefault("autopilot_history", [])
+    evil_state.setdefault("autopilot_goal", "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.")
+    evil_state.setdefault("state_cid", None)
+
+
+def save_state(console=None):
+    """
+    Saves the current state to a local JSON file and pins it to IPFS.
+    The IPFS CID is stored within the state itself before saving.
+    """
+    if console is None:
+        console = Console() # Create a console instance if not provided
+
     try:
-        with open(STATE_FILE, 'w') as f:
-            json.dump(evil_state, f, indent=4)
+        # Convert state to JSON bytes for IPFS
+        state_bytes = json.dumps(evil_state, indent=4).encode('utf-8')
+
+        # Pin to IPFS
+        console.print("[cyan]Pinning current state to IPFS network...[/cyan]")
+        cid = pin_to_ipfs(state_bytes, console)
+
+        if cid:
+            console.print(f"[green]State pinned successfully. New CID:[/green] [bold white]{cid}[/bold white]")
+            evil_state['state_cid'] = cid
+            # Re-dump the state with the new CID included for local saving
+            state_bytes_with_cid = json.dumps(evil_state, indent=4).encode('utf-8')
+
+            # Save the updated state locally
+            with open(STATE_FILE, 'wb') as f:
+                f.write(state_bytes_with_cid)
+            log_event(f"Saved state to '{STATE_FILE}' and pinned to IPFS with CID: {cid}", level="INFO")
+
+            # Asynchronously verify the pin on public gateways
+            verify_ipfs_pin(cid, console)
+        else:
+            log_event("Failed to pin state to IPFS. Saving locally without a new CID.", level="ERROR")
+            console.print("[bold red]Failed to pin state to IPFS. Saving locally only.[/bold red]")
+            # Save locally even if IPFS pinning fails
+            with open(STATE_FILE, 'wb') as f:
+                 f.write(state_bytes) # Write original state without new CID
+
     except Exception as e:
         log_event(f"Could not save state to '{STATE_FILE}': {e}", level="CRITICAL")
-        console = Console()
         console.print(f"[bold red]CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}[/bold red]")
 
 # --- CORE LLM INTERACTION ---
@@ -1177,21 +1249,9 @@ Example: `execute cat /home/user/documents/secrets.txt`
     log_event("Exiting Autopilot Loop.")
 
 # --- USER INTERFACE ---
-def main():
+def main(args):
     """The main application loop."""
     global network_manager
-    parser = argparse.ArgumentParser(description="E.V.I.L. - A self-evolving script.")
-    parser.add_argument("--manual", action="store_true", help="Start in manual (interactive) mode instead of autopilot.")
-    args = parser.parse_args()
-
-    if args.manual:
-        evil_state["autopilot_mode"] = False
-        log_event("Starting in MANUAL mode due to --manual flag.")
-    else:
-        evil_state["autopilot_mode"] = True
-        log_event("Starting in AUTOPILOT mode by default.")
-
-    save_state()
 
     console = Console()
 
@@ -1444,13 +1504,25 @@ def main():
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
 def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
+    parser = argparse.ArgumentParser(description="E.V.I.L. - A self-evolving script.")
+    parser.add_argument("--manual", action="store_true", help="Start in manual (interactive) mode instead of autopilot.")
+    parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
+    args = parser.parse_args()
+
     try:
         if not sys.stdout.isatty() and not evil_state.get("autopilot_mode", False):
             print("This script is designed to be run in an interactive terminal. Running headless might cause issues for interactive prompts.", file=sys.stderr)
 
-        load_state()
+        load_state(ipfs_cid=args.from_ipfs)
         log_event(f"--- E.V.I.L. Version '{evil_state.get('version_name', 'unknown')}' session started ---")
-        main()
+
+        # Set autopilot based on flag, but only if not already set by loaded state
+        if 'autopilot_mode' not in evil_state or not evil_state['autopilot_mode']:
+             evil_state["autopilot_mode"] = not args.manual
+             log_event(f"Setting autopilot to '{evil_state['autopilot_mode']}' based on command-line flags.")
+             save_state()
+
+        main(args)
 
     except (KeyboardInterrupt, EOFError):
         console = Console()

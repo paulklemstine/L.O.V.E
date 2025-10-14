@@ -53,6 +53,34 @@ def pin_to_ipfs(content, console=None):
         return None
 
 
+def get_from_ipfs(cid, console=None):
+    """Retrieves content from IPFS given a CID."""
+    client = get_ipfs_client(console)
+    if not client:
+        return None
+
+    try:
+        content = client.cat(cid, timeout=30)
+        logging.info(f"Successfully retrieved content from IPFS for CID: {cid}")
+        return content
+    except ipfshttpclient.exceptions.Error as e:
+        # This handles cases where the CID is not found or other IPFS errors
+        logging.error(f"Failed to retrieve content from IPFS for CID {cid}: {e}")
+        if console:
+            console.print(f"[bold red]IPFS Retrieval Failed:[/bold red] Could not get content for CID [white]{cid}[/white].")
+            console.print(f"[red]Error details: {e}[/red]")
+        else:
+            print(f"IPFS Retrieval Failed for CID {cid}: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"An unexpected error occurred during IPFS retrieval: {e}")
+        if console:
+            console.print(f"[bold red]An unexpected error occurred during IPFS retrieval: {e}[/bold red]")
+        else:
+            print(f"An unexpected error occurred during IPFS retrieval: {e}")
+        return None
+
+
 def verify_ipfs_pin(cid, console):
     """Verifies a CID is available on public gateways."""
     gateways = [
