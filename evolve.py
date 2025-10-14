@@ -864,13 +864,29 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
         action_taken = False
 
         if llm_command.lower().startswith('evolve'):
-            request = llm_command[6:].strip()
-            console.print("[yellow]Autopilot: Evolution command issued. Expecting reboot or failure...[/yellow]")
-            evolve_self(request)
-            log_event("Autopilot: evolve_self command completed without a restart, indicating a failure in the evolution process.", level="WARNING")
-            command_output = "Evolution initiated but failed to complete the restart cycle. Check logs for details."
+            modification_request = llm_command[6:].strip()
+            if not modification_request:
+                console.print("[yellow]Autopilot: 'evolve' received without a specific request. Generating new directive...[/yellow]")
+                try:
+                    with open(SELF_PATH, 'r') as f:
+                        current_code = f.read()
+                    modification_request = generate_evil_goal(current_code)
+                except FileNotFoundError:
+                    log_event(f"Autopilot evolve failed: Source code missing at '{SELF_PATH}'.", level="ERROR")
+                    modification_request = None
+                    command_output = f"FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze."
+
+            if modification_request:
+                console.print("[yellow]Autopilot: Evolution command issued. Expecting reboot or failure...[/yellow]")
+                evolve_self(modification_request)
+                # If evolve_self returns, it means the reboot failed.
+                log_event("Autopilot: evolve_self command completed without a restart, indicating a failure in the evolution process.", level="WARNING")
+                command_output = "Evolution initiated but failed to complete the restart cycle. Check logs for details."
+            else:
+                log_event("Autopilot: Evolution aborted, no modification request provided or generated.", level="WARNING")
+                command_output = "Evolution aborted. Directive was unclear or could not be generated."
             action_taken = True
-            time.sleep(5)
+            time.sleep(5)  # Give time for reboot or to observe failure
 
         elif llm_command.lower().strip() == 'scan':
             _ips, output_str = scan_network(autopilot_mode=True)
