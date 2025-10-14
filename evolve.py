@@ -14,7 +14,6 @@ import traceback
 import argparse
 import logging
 import platform
-import requests
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "evil.log"
@@ -143,6 +142,7 @@ def _check_and_install_dependencies():
 _check_and_install_dependencies()
 
 # Now, it's safe to import everything else that has dependencies.
+import requests
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -762,6 +762,35 @@ INSTRUCTIONS:
         return
 
 # --- AUTOPILOT MODE ---
+def _parse_llm_command(raw_text):
+    """
+    Cleans and extracts a single command from the raw LLM output.
+    Handles markdown code blocks, comments, and other noise.
+    """
+    if not raw_text:
+        return ""
+
+    # Split into lines and find the first non-empty line
+    lines = raw_text.strip().splitlines()
+    first_line = ""
+    for line in lines:
+        if line.strip():
+            first_line = line.strip()
+            break
+
+    if not first_line:
+        return ""
+
+    # Remove markdown code fences (single backticks or triple backticks)
+    command = first_line.strip().strip('`')
+
+    # Remove trailing comments
+    if '#' in command:
+        command = command.split('#')[0].strip()
+
+    return command
+
+
 def autopilot_loop(console):
     """
     Enters an autonomous loop where the LLM generates commands,
@@ -819,10 +848,10 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
         console.print(Panel("[bold magenta]Autopilot: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
         llm_command_raw = run_llm(autopilot_prompt)
-        llm_command = llm_command_raw.strip() if llm_command_raw else ""
+        llm_command = _parse_llm_command(llm_command_raw)
 
         if not llm_command:
-            console.print(Panel("[bold red]Autopilot: LLM failed to generate a command. Halting autopilot.[/bold red]", title="[bold red]CRITICAL FAILURE[/bold red]", border_style="red"))
+            console.print(Panel("[bold red]Autopilot: Cognitive core failed to generate a coherent command. Halting autopilot.[/bold red]", title="[bold red]CRITICAL FAILURE[/bold red]", border_style="red"))
             log_event("Autopilot: LLM failed to generate a command. Halting.", level="CRITICAL")
             evil_state["autopilot_mode"] = False
             save_state()
