@@ -889,12 +889,9 @@ def trigger_jules_evolution(modification_request, console):
                 console.print(f"[bold red]Error polling for session status: {e}[/bold red]")
                 break # Exit the loop on error
 
-        if pr_url:
-            if auto_merge_pull_request(console):
-                # If merging is successful, restart the script to apply changes.
-                restart_script(console)
-        else:
+        if not pr_url:
             console.print("[bold red]Timed out waiting for pull request to be created.[/bold red]")
+            return False
 
         return True
     except requests.exceptions.RequestException as e:
@@ -991,15 +988,13 @@ def evolve_self(modification_request):
     log_event(f"Evolution initiated. Request: '{modification_request}'")
 
     # The new evolution process triggers the Jules API.
-    # The local modification logic is now deprecated.
     if trigger_jules_evolution(modification_request, console):
-        console.print(Panel("[bold green]Jules evolution has been successfully triggered.[/bold green]\nA pull request will be generated shortly. Please monitor your GitHub repository.", title="[bold green]EVOLUTION TRIGGERED[/bold green]", border_style="green"))
+        console.print(Panel("[bold green]Jules evolution has been successfully triggered.[/bold green]\nA pull request has been generated. Attempting to auto-merge.", title="[bold green]EVOLUTION TRIGGERED[/bold green]", border_style="green"))
+        if auto_merge_pull_request(console):
+            restart_script(console)
     else:
         console.print(Panel("[bold red]Failed to trigger Jules evolution.[/bold red]\nPlease check the logs and your API key.", title="[bold red]EVOLUTION FAILED[/bold red]", border_style="red"))
 
-    # The original logic for local modification, review, and restart is no longer needed here.
-    # The responsibility for code generation, review, and creating a pull request has been
-    # delegated to the Jules service. Automatic merging will be handled separately if implemented.
     return
 
 # --- AUTOPILOT MODE ---
