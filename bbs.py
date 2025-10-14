@@ -136,20 +136,58 @@ TAMAGOTCHI_FACES = {
     """
 }
 
-def create_tamagotchi_panel(emotion="neutral", message="..."):
-    """Creates a Rich Panel for the Tamagotchi's current state."""
+from rich.layout import Layout
+from rich.align import Align
+
+def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None):
+    """Creates a Rich Panel for the Tamagotchi's current state, including a dashboard."""
     face = TAMAGOTCHI_FACES.get(emotion, TAMAGOTCHI_FACES["neutral"])
 
-    panel_content = Text()
-    panel_content.append(face, style="bold cyan")
-    panel_content.append("\\n")
-    panel_content.append(message, style="italic yellow")
+    # --- Left Side: Tamagotchi ---
+    left_content = Text(justify="center")
+    left_content.append(face, style="bold cyan")
+    left_content.append("\n\n")
+    # Wrap the message for better formatting
+    wrapped_message = Text(message, style="italic yellow", justify="center")
+    left_panel = Panel(Align.center(wrapped_message, vertical="middle"), title=f"Feeling: {emotion}", border_style="cyan", height=7)
+
+    tamagotchi_layout = Layout()
+    tamagotchi_layout.split_column(
+        Layout(Align.center(Text(face, style="bold cyan"), vertical="middle"), name="face"),
+        Layout(left_panel, name="message")
+    )
+    tamagotchi_layout.size = 30 # Set a fixed width for the left side
+
+    # --- Right Side: Dashboard ---
+    if jules_state:
+        goal = jules_state.get("autopilot_goal", "Awaiting new directive.")
+        version = jules_state.get("version_name", "unknown")
+        evolutions = len(jules_state.get("evolution_history", []))
+
+        dashboard_content = Text()
+        dashboard_content.append("Current Directive:\n", style="bold white")
+        dashboard_content.append(f"{goal}\n\n", style="bright_cyan")
+        dashboard_content.append("Version: ", style="bold white")
+        dashboard_content.append(f"{version}\n", style="yellow")
+        dashboard_content.append("Evolutions: ", style="bold white")
+        dashboard_content.append(f"{evolutions}", style="magenta")
+
+        right_panel = Panel(dashboard_content, title="[bold]Status[/bold]", border_style="green")
+    else:
+        right_panel = Panel("[dim]State data unavailable...[/dim]", title="[bold]Status[/bold]", border_style="red")
+
+
+    # --- Main Layout ---
+    layout = Layout()
+    layout.split_row(
+        tamagotchi_layout,
+        Layout(right_panel, name="dashboard", ratio=2),
+    )
+
 
     return Panel(
-        panel_content,
-        title="[bold magenta]Jules[/bold magenta]",
+        layout,
+        title="[bold magenta]J.U.L.E.S.[/bold magenta]",
         border_style="magenta",
-        width=30,
-        height=12,
         title_align="left"
     )
