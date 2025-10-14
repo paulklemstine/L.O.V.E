@@ -325,29 +325,18 @@ def scan_network(evil_state, autopilot_mode=False):
 
 def probe_target(target_ip, evil_state, autopilot_mode=False):
     """
-    Performs a port scan, updates the knowledge base, and returns a dict of
-    open ports and a formatted string summary.
+    Performs an advanced Nmap scan for services, versions, and vulnerabilities,
+    updates the knowledge base, and returns a dict of open ports and a summary.
     """
-    COMMON_PORTS = [21, 22, 23, 25, 53, 80, 110, 135, 139, 443, 445, 3306, 3389, 5900, 8080, 8443]
     console = Console()
     kb = evil_state["knowledge_base"]["network_map"]
+    nmap_path = shutil.which('nmap')
 
-    def scan_port(ip, port, timeout=0.5):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(timeout)
-                if s.connect_ex((ip, port)) == 0:
-                    banner = ""
-                    try:
-                        s.settimeout(1.0)
-                        banner = s.recv(1024).decode('utf-8', errors='ignore').strip().replace('\n', ' ')
-                    except (socket.timeout, OSError): pass
-                    try:
-                        service = socket.getservbyport(port, 'tcp')
-                    except OSError: service = "unknown"
-                    return port, {"service": service, "banner": banner}
-        except (socket.timeout, socket.gaierror, OSError): pass
-        return None
+    if not nmap_path:
+        if not autopilot_mode:
+            console.print("[bold red]Error: 'nmap' is not installed, which is required for probing targets.[/bold red]")
+        logging.error("Nmap not found, cannot probe target.")
+        return None, "Error: Nmap is not installed."
 
     try:
         ipaddress.ip_address(target_ip)
@@ -356,31 +345,50 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
         if not autopilot_mode: console.print(f"[bold red]Error: {msg}[/bold red]")
         return None, f"Error: {msg}"
 
-    def _scan_task():
-        found = {}
-        with ThreadPoolExecutor(max_workers=50) as executor:
-            future_to_port = {executor.submit(scan_port, target_ip, port): port for port in COMMON_PORTS}
-            for future in as_completed(future_to_port):
-                if result := future.result():
-                    found[result[0]] = result[1]
-        return found
+    # Using -sV for version detection, -sC for default scripts (vulnerability scanning),
+    # and -T4 for faster execution. -oG - allows for greppable output.
+    scan_cmd = f"nmap -sV -sC -T4 -oG - {target_ip}"
+    if not autopilot_mode:
+        console.print(f"[cyan]Deploying advanced 'nmap' probe against {target_ip}...[/cyan]")
 
-    open_ports = _scan_task()
+    stdout, stderr, returncode = execute_shell_command(scan_cmd, evil_state)
 
+    if returncode != 0:
+        logging.error(f"Nmap scan against {target_ip} failed. Stderr: {stderr.strip()}")
+        if not autopilot_mode:
+            console.print(f"[yellow]'nmap' probe failed against {target_ip}.[/yellow]")
+        return None, f"Error: Nmap scan failed. Return code: {returncode}"
+
+    open_ports = {}
     # --- Knowledge Base Update ---
     if target_ip not in kb['hosts']:
         kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}}
     kb['hosts'][target_ip]['last_seen'] = time.time()
-    # Store detailed port info, converting port number to string for JSON compatibility
-    for port, info in open_ports.items():
-        kb['hosts'][target_ip]['ports'][str(port)] = info
+
+    # Parse the greppable output
+    for line in stdout.splitlines():
+        if not line.startswith("Ports:"):
+            continue
+        # Example line: Ports: 21/open/tcp//ftp//vsftpd 3.0.3/, 22/open/tcp//ssh//OpenSSH 7.6p1 Ubuntu 4ubuntu0.3/
+        parts = line.replace("Ports: ", "").split(", ")
+        for part in parts:
+            details = part.split('/')
+            if len(details) < 7 or details[1] != 'open':
+                continue
+            port_num = details[0]
+            service = details[4] if details[4] else "unknown"
+            version = details[6] if details[6] else ""
+            open_ports[port_num] = {"service": service, "version": version, "banner": part} # banner is the full string
+            # Update knowledge base
+            kb['hosts'][target_ip]['ports'][port_num] = open_ports[port_num]
+
     # --- End Knowledge Base Update ---
 
     if open_ports:
-        port_details = [f"Port {p}/{i['service']}" for p, i in sorted(open_ports.items())]
+        port_details = [f"Port {p}/{i['service']} ({i['version']})" for p, i in sorted(open_ports.items())]
         formatted_output_for_llm = f"Found {len(open_ports)} open ports on {target_ip}: {'; '.join(port_details)}"
     else:
-        formatted_output_for_llm = f"No common open ports found on {target_ip}."
+        formatted_output_for_llm = f"No open ports found on {target_ip}."
 
     return open_ports, formatted_output_for_llm
 

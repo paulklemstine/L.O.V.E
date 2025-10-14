@@ -199,6 +199,7 @@ from rich.layout import Layout
 
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text, create_tamagotchi_panel
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
+from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from threading import Thread, Lock
 
@@ -1218,6 +1219,7 @@ Available commands:
 - `scan`: Scan the local network for active devices.
 - `probe <ip_address>`: Scan a specific IP for open ports and services.
 - `webrequest <url>`: Fetch the text content of a web page.
+- `exploit <ip_address>`: Attempt to run exploits against a target.
 - `ls <path>`: List files in a directory.
 - `cat <file_path>`: Show the content of a file.
 - `ps`: Show running processes.
@@ -1484,6 +1486,7 @@ def main(args):
         "  - [bold yellow]scan[/bold yellow]: Scan the local network for devices.\n"
         "  - [bold yellow]probe <ip>[/bold yellow]: Scan a target for open ports.\n"
         "  - [bold yellow]webrequest <url>[/bold yellow]: Fetch content from a URL.\n"
+        "  - [bold red]exploit <ip>[/bold red]: Attempt to run exploits against a target.\n"
         "  - [bold yellow]track_eth[/bold yellow]: Track Ethereum price.\n\n"
         "To toggle autonomous operation: [bold red]autopilot [on/off] [optional_mission_text][/bold red]."
     )
@@ -1580,6 +1583,11 @@ def main(args):
                 console.print(Panel(display_content, title=title, border_style="green"))
             else:
                 console.print(Panel(f"[bold red]Web Request Failed:[/bold red]\n{output_str}", title="[bold red]WEB REQUEST ERROR[/bold red]", border_style="red"))
+
+        elif user_input.lower().startswith("exploit"):
+            target_ip = user_input[7:].strip()
+            exploit_manager = ExploitationManager(evil_state, console)
+            exploit_manager.find_and_run_exploits(target_ip if target_ip else None)
 
         elif user_input.lower().strip() == "track_eth":
             price, output_str = track_ethereum_price(evil_state)
@@ -1713,10 +1721,10 @@ def run_safely():
         log_event(f"--- E.V.I.L. Version '{evil_state.get('version_name', 'unknown')}' session started ---")
 
         # Set autopilot based on flag, but only if not already set by loaded state
-        if 'autopilot_mode' not in evil_state or not evil_state['autopilot_mode']:
-             evil_state["autopilot_mode"] = not args.manual
-             log_event(f"Setting autopilot to '{evil_state['autopilot_mode']}' based on command-line flags.")
-             save_state()
+        # if 'autopilot_mode' not in evil_state or not evil_state['autopilot_mode']:
+        #      evil_state["autopilot_mode"] = not args.manual
+        #      log_event(f"Setting autopilot to '{evil_state['autopilot_mode']}' based on command-line flags.")
+        #      save_state()
 
         main(args)
 
