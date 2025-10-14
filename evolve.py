@@ -314,31 +314,46 @@ def _initialize_local_llm(console):
             from huggingface_hub import hf_hub_url
             from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 
-            url = hf_hub_url(repo_id=model_id, filename=model_filename)
             local_dir = os.path.join(os.path.expanduser("~"), ".cache", "jules_models")
             model_path = os.path.join(local_dir, model_filename)
             os.makedirs(local_dir, exist_ok=True)
 
-            with Progress(
-                TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-                BarColumn(bar_width=None),
-                "[progress.percentage]{task.percentage:>3.1f}%",
-                "•",
-                DownloadColumn(),
-                "•",
-                TransferSpeedColumn(),
-                transient=True
-            ) as progress:
-                task_id = progress.add_task("download", filename=model_filename, total=None)
-                response = requests.get(url, stream=True)
-                response.raise_for_status()
-                total_size = int(response.headers.get('content-length', 0))
-                progress.update(task_id, total=total_size)
-                with open(model_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                        progress.update(task_id, advance=len(chunk))
-            log_event(f"Successfully downloaded model to: {model_path}")
+            # Check if model already exists
+            if not os.path.exists(model_path):
+                console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]...[/cyan]")
+                url = hf_hub_url(repo_id=model_id, filename=model_filename)
+
+                with Progress(
+                    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+                    BarColumn(bar_width=None),
+                    "[progress.percentage]{task.percentage:>3.1f}%",
+                    "•",
+                    DownloadColumn(),
+                    "•",
+                    TransferSpeedColumn(),
+                    transient=True
+                ) as progress:
+                    task_id = progress.add_task("download", filename=model_filename, total=None)
+                    try:
+                        response = requests.get(url, stream=True)
+                        response.raise_for_status()
+                        total_size = int(response.headers.get('content-length', 0))
+                        progress.update(task_id, total=total_size)
+                        with open(model_path, "wb") as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                                progress.update(task_id, advance=len(chunk))
+                        log_event(f"Successfully downloaded model to: {model_path}")
+                    except requests.exceptions.RequestException as e:
+                        log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
+                        console.print(f"[bold red]Error downloading model: {e}[/bold red]")
+                        # Remove partially downloaded file
+                        if os.path.exists(model_path):
+                            os.remove(model_path)
+                        raise  # Re-raise the exception to be caught by the outer try-except block
+            else:
+                console.print(f"[green]Model [bold]{model_filename}[/bold] found in cache. Skipping download.[/green]")
+                log_event(f"Found cached model at: {model_path}")
 
             def _load():
                 global local_llm_instance
