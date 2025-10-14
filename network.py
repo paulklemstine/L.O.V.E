@@ -226,8 +226,8 @@ class NetworkManager(Thread):
             return
 
         command = {
-            'type': 'send-response',
-            'peerId': peer_id,
+            'type': 'p2p-send',
+            'peer': peer_id,
             'payload': payload
         }
         try:
