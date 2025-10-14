@@ -347,7 +347,7 @@ evil_state = {
     "autopilot_mode": False,
     "autopilot_history": [],
     "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.",
-    "state_cid": None
+    "state_cid": None,
     "knowledge_base": {
         "network_map": {
             "last_scan": None,
