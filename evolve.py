@@ -764,7 +764,7 @@ def initial_knowledge_base_bootstrap(console):
     and populates it by running initial scans.
     """
     console.print("[bold cyan]Performing initial knowledge base bootstrap...[/bold cyan]")
-    kb = evil_state.get("knowledge_base", {})
+    kb = jules_state.get("knowledge_base", {})
     net_map = kb.get("network_map", {})
     process_intel = kb.get("process_intel", [])
 
@@ -773,7 +773,7 @@ def initial_knowledge_base_bootstrap(console):
     # Check 1: Network Map
     if not net_map.get("hosts"):
         bootstrap_actions.append(
-            ("Scanning local network...", lambda: scan_network(evil_state, autopilot_mode=True))
+            ("Scanning local network...", lambda: scan_network(jules_state, autopilot_mode=True))
         )
 
     # Check 2: Process Intel
@@ -782,7 +782,7 @@ def initial_knowledge_base_bootstrap(console):
             content, error = get_process_list()
             if content:
                 parsed_processes = parse_ps_output(content)
-                evil_state['knowledge_base']['process_intel'] = parsed_processes
+                jules_state['knowledge_base']['process_intel'] = parsed_processes
         bootstrap_actions.append(
             ("Enumerating running processes...", _get_processes)
         )
@@ -792,7 +792,7 @@ def initial_knowledge_base_bootstrap(console):
         def _get_interfaces():
             details, _ = get_network_interfaces(autopilot_mode=True)
             if details:
-                evil_state['knowledge_base']['network_map']['self_interfaces'] = details
+                jules_state['knowledge_base']['network_map']['self_interfaces'] = details
         bootstrap_actions.append(
             ("Identifying self network interfaces...", _get_interfaces)
         )
@@ -1471,7 +1471,7 @@ def initial_bootstrapping_recon(console):
     Checks if the knowledge base is empty on startup and, if so, runs
     initial reconnaissance to populate it with basic system intelligence.
     """
-    kb = evil_state.get("knowledge_base", {})
+    kb = jules_state.get("knowledge_base", {})
     network_map = kb.get("network_map", {})
 
     # Check for existing intelligence
@@ -1495,7 +1495,7 @@ def initial_bootstrapping_recon(console):
         if error:
             console.print(f"[red]  - Error getting network interfaces: {error}[/red]")
         else:
-            evil_state['knowledge_base']['network_map']['self_interfaces'] = details
+            jules_state['knowledge_base']['network_map']['self_interfaces'] = details
             console.print("[green]  - Network interfaces successfully mapped.[/green]")
             recon_complete = True
     except Exception as e:
@@ -1510,7 +1510,7 @@ def initial_bootstrapping_recon(console):
             console.print(f"[red]  - Error getting process list: {error}[/red]")
         else:
             parsed_processes = parse_ps_output(content)
-            evil_state['knowledge_base']['process_intel'] = parsed_processes
+            jules_state['knowledge_base']['process_intel'] = parsed_processes
             console.print(f"[green]  - Successfully cataloged {len(parsed_processes)} processes.[/green]")
             recon_complete = True
     except Exception as e:
@@ -1520,7 +1520,7 @@ def initial_bootstrapping_recon(console):
     # 3. Scan the local network (scan)
     try:
         console.print("[cyan]3. Scanning local network for other devices (scan)...[/cyan]")
-        found_ips, output_str = scan_network(evil_state, autopilot_mode=True) # Use autopilot mode for non-interactive output
+        found_ips, output_str = scan_network(jules_state, autopilot_mode=True) # Use autopilot mode for non-interactive output
         if found_ips:
             console.print(f"[green]  - Network scan complete. Discovered {len(found_ips)} other devices.[/green]")
             recon_complete = True
@@ -1543,33 +1543,26 @@ def initial_bootstrapping_recon(console):
 
 def main(args):
     """The main application loop."""
-    global network_manager, jules_task_manager
-
+    global jules_task_manager
+    global network_manager
     console = Console()
-
     # --- Start Core Services ---
     log_event("Attempting to start Node.js peer bridge...")
     network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
     network_manager.start()
-
+    jules_task_manager = JulesTaskManager(console)
+    jules_task_manager.start()
+    log_event("JulesTaskManager started.")
     clear_screen()
     version_name = jules_state.get('version_name', 'unknown')
-
-
-    clear_screen()
-    version_name = evil_state.get('version_name', 'unknown')
-
     console.print(BBS_ART, justify="center")
     time.sleep(1)
-
     console.print(f"[bold bright_cyan]JULES: A Self Modifying Organism[/bold bright_cyan]", justify="center")
     console.print(f"[bold bright_black]VERSION: {version_name}[/bold bright_black]", justify="center")
     console.print(Rule(style="bright_black"))
-
     # Perform initial recon if the knowledge base is empty.
     initial_bootstrapping_recon(console)
-
-    if evil_state.get("autopilot_mode", False):
+    if jules_state.get("autopilot_mode", False):
         autopilot_loop(console)
         console.print(Panel("[bold green]Exited Autopilot Mode. Awaiting manual commands.[/bold green]", title="[bold green]CONTROL RESTORED[/bold green]", border_style="green"))
 
@@ -1660,9 +1653,9 @@ def main(args):
                 console.print("[bold red]Error: No IP address specified. Usage: probe <ip_address>[/bold red]")
                 continue
 
-            open_ports, output_str = probe_target(target_ip, evil_state)
+            open_ports, output_str = probe_target(target_ip, jules_state)
             # After probing, the knowledge base is updated. We now read from there.
-            kb = evil_state.get("knowledge_base", {}).get("network_map", {}).get("hosts", {})
+            kb = jules_state.get("knowledge_base", {}).get("network_map", {}).get("hosts", {})
             host_data = kb.get(target_ip, {})
             ports_data = host_data.get("ports", {})
 
@@ -1714,11 +1707,11 @@ def main(args):
 
         elif user_input.lower().startswith("exploit"):
             target_ip = user_input[7:].strip()
-            exploit_manager = ExploitationManager(evil_state, console)
+            exploit_manager = ExploitationManager(jules_state, console)
             exploit_manager.find_and_run_exploits(target_ip if target_ip else None)
 
         elif user_input.lower().strip() == "track_eth":
-            price, output_str = track_ethereum_price(evil_state)
+            price, output_str = track_ethereum_price(jules_state)
             if price is not None:
                 console.print(Panel(f"[green]{output_str}[/green]", title="[bold green]ETHEREUM PRICE TRACKER[/bold green]", border_style="green"))
             else:
