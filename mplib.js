@@ -67,6 +67,8 @@ const MPLib = (() => {
                 config.onPinResponse(data);
             } else if (data.type === 'capability-announcement' && data.payload.capability === 'evolve.py') {
                 logMessage('Lobby confirmed evolve.py capability.', 'success');
+            } else if (data.type === 'creator-command') {
+                config.onRoomDataReceived(conn.peer, data);
             }
         });
 
