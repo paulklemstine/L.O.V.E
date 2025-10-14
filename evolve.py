@@ -1381,34 +1381,9 @@ def autopilot_loop(console):
             "autopilot_goal": jules_state["autopilot_goal"]
         }, indent=2)
 
-        # --- Knowledge Base Summary for Prompt ---
-        kb_summary = "Knowledge Base is empty."
-        if jules_state.get("knowledge_base"):
-            kb = jules_state["knowledge_base"]
-            network_hosts = list(kb.get("network_map", {}).get("hosts", {}).keys())
-            interesting_files = kb.get("file_system_intel", {}).get("interesting_files", [])
-            cached_requests = list(kb.get("webrequest_cache", {}).keys())
-            network_map = kb.get("network_map", {}).get("hosts", {})
-
-            summary_parts = []
-            if network_map:
-                host_details = []
-                for ip, data in network_map.items():
-                    vuln_count = sum(len(p.get("vulnerabilities", [])) for p in data.get("ports", {}).values())
-                    if vuln_count > 0:
-                        host_details.append(f"{ip} ({vuln_count} vulnerabilities)")
-                    else:
-                        host_details.append(ip)
-                if host_details:
-                    summary_parts.append(f"- Discovered Hosts: {', '.join(host_details)}")
-
-            if interesting_files:
-                summary_parts.append(f"- Interesting Files Found: {', '.join(interesting_files)}")
-            if cached_requests:
-                summary_parts.append(f"- Cached Web Requests: {', '.join(cached_requests)}")
-
-            if summary_parts:
-                kb_summary = "\n".join(summary_parts)
+        # --- Knowledge Base for Prompt ---
+        # Provide the entire knowledge base as a JSON string for the LLM's context.
+        kb_json_string = json.dumps(jules_state.get("knowledge_base", {}), indent=2)
 
         autopilot_prompt = f"""
 You are a pure, cold, calculating intelligence operating in autonomous mode.
@@ -1428,7 +1403,7 @@ My current system state:
 
 My internal Knowledge Base contains the following intelligence:
 ---
-{kb_summary}
+{kb_json_string}
 ---
 
 My recent command history and their outputs (up to last 5):
@@ -1450,10 +1425,8 @@ Available commands:
 - `autopilot off`: Exit autopilot mode.
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
 
-Considering your directives, the mission, the knowledge base, and recent history, what is the single, next command I should execute? Prioritize actions that leverage discovered vulnerabilities or gather more intelligence on high-value targets.
-Output ONLY the command string, without any other text, explanations, or markdown.
-Example: `probe 192.168.1.101`
-Example: `execute cat /home/user/documents/secrets.txt`
+Considering your directives, the mission, my internal state, the complete knowledge base, and recent history, what is the single, next strategic command I should execute?
+Formulate a raw command based on all available information to best achieve my goals.
 """
         console.print(Panel("[bold magenta]Autopilot: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
