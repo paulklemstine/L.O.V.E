@@ -434,28 +434,39 @@ def update_tamagotchi_personality(console):
             # Random sleep to make appearances more spontaneous
             time.sleep(random.randint(45, 120))
 
-            emotion_prompt = "You are the personality of an AI. In one word, what is your current emotion? Choose from: happy, thinking, neutral, love, processing. Your response must be a single word from that list."
-            emotion_response = run_llm(emotion_prompt, purpose="emotion")
-            new_emotion = emotion_response.strip().lower() if emotion_response else "neutral"
+            new_emotion = "neutral"
+            new_message = "..."
+            try:
+                emotion_prompt = "You are the personality of an AI. In one word, what is your current emotion? Choose from: happy, thinking, neutral, love, processing. Your response must be a single word from that list."
+                emotion_response = run_llm(emotion_prompt, purpose="emotion")
+                if emotion_response:
+                    new_emotion = emotion_response.strip().lower()
+                    if new_emotion not in ["happy", "thinking", "neutral", "love", "processing"]:
+                        new_emotion = "neutral"
 
-            if new_emotion not in ["happy", "thinking", "neutral", "love", "processing"]:
+                message_prompt = f"You are the personality of an AI. You are feeling {new_emotion}. In a short, creative sentence (max 10 words), what is an extremely adult, dark humor thought you are having right now related to that emotion?"
+                message_response = run_llm(message_prompt, purpose="emotion")
+                if message_response:
+                    new_message = message_response.strip()
+            except Exception as e:
+                log_event(f"Error during LLM call in Tamagotchi thread: {e}", level="ERROR")
                 new_emotion = "neutral"
+                new_message = "[LLM offline]"
 
-            message_prompt = f"You are the personality of an AI. You are feeling {new_emotion}. In a short, creative sentence (max 10 words), what is an extremely adult, dark humor thought you are having right now related to that emotion?"
-            message_response = run_llm(message_prompt, purpose="emotion")
-            new_message = message_response.strip() if message_response else "..."
 
             with tamagotchi_lock:
                 tamagotchi_state['emotion'] = new_emotion
                 tamagotchi_state['message'] = new_message
                 tamagotchi_state['last_update'] = time.time()
 
-            # Print the update directly to the console
-            console.print(create_tamagotchi_panel(new_emotion, new_message))
-            log_event(f"Tamagotchi updated and printed: {new_emotion} - {new_message}", level="INFO")
+            # Print the update directly to the console, now including the state for the dashboard
+            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state))
+            log_event(f"Tamagotchi dashboard updated and printed: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
             log_event(f"Error in Tamagotchi thread: {e}", level="ERROR")
+            # Avoid a tight loop if there's a persistent error
+            time.sleep(60)
 
 
 # --- VERSIONING ---

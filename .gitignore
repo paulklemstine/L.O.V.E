@@ -9,3 +9,7 @@ checkpoints/
 
 # IDE specific
 .idea/
+
+# State and logs
+jules_state.json
+*.log
