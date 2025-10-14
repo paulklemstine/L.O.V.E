@@ -196,7 +196,7 @@ from rich.console import Group
 from rich.rule import Rule
 
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text, create_tamagotchi_panel
-from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
+from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from threading import Thread, Lock
 
@@ -1486,7 +1486,8 @@ def main(args):
         "For network reconnaissance:\n"
         "  - [bold yellow]scan[/bold yellow]: Scan the local network for devices.\n"
         "  - [bold yellow]probe <ip>[/bold yellow]: Scan a target for open ports.\n"
-        "  - [bold yellow]webrequest <url>[/bold yellow]: Fetch content from a URL.\n\n"
+        "  - [bold yellow]webrequest <url>[/bold yellow]: Fetch content from a URL.\n"
+        "  - [bold yellow]track_eth[/bold yellow]: Track Ethereum price.\n\n"
         "To toggle autonomous operation: [bold red]autopilot [on/off] [optional_mission_text][/bold red]."
     )
     console.print(Panel(welcome_text, title="[bold green]SYSTEM COMMANDS[/bold green]", border_style="green", padding=(1, 2)))
@@ -1582,6 +1583,13 @@ def main(args):
                 console.print(Panel(display_content, title=title, border_style="green"))
             else:
                 console.print(Panel(f"[bold red]Web Request Failed:[/bold red]\n{output_str}", title="[bold red]WEB REQUEST ERROR[/bold red]", border_style="red"))
+
+        elif user_input.lower().strip() == "track_eth":
+            price, output_str = track_ethereum_price(evil_state)
+            if price is not None:
+                console.print(Panel(f"[green]{output_str}[/green]", title="[bold green]ETHEREUM PRICE TRACKER[/bold green]", border_style="green"))
+            else:
+                console.print(Panel(f"[bold red]{output_str}[/bold red]", title="[bold red]ETHEREUM PRICE TRACKER ERROR[/bold red]", border_style="red"))
 
         elif user_input.lower().startswith("execute "):
             command_to_run = user_input[8:].strip()
