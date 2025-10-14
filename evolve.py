@@ -77,6 +77,11 @@ def _check_and_install_dependencies():
                 print(f"ERROR: Failed to install '{package}'. Reason: {e}")
                 log_event(f"Failed to install pip package {package}: {e}", level="ERROR")
 
+    _install_pip_package("requests")
+    _install_pip_package("rich")
+    _install_pip_package("netifaces")
+    _install_pip_package("ipfshttpclient")
+
 
     def _install_llama_cpp_with_cuda():
         try:
@@ -173,6 +178,9 @@ from rich.prompt import Prompt
 from rich.syntax import Syntax
 from rich.progress import Progress, BarColumn, TextColumn
 from rich.text import Text
+from rich.panel import Panel
+from rich.console import Group
+from rich.rule import Rule
 
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
@@ -381,7 +389,8 @@ def _initialize_local_llm(console):
 
             def _load():
                 global local_llm_instance
-                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=4096, verbose=False)
+                # Increased context window for better reasoning over larger prompts.
+                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=32768, verbose=False)
 
             run_hypnotic_progress(console, "Loading model into GPU memory...", _load)
             log_event(f"Successfully initialized local model: {model_id}")
@@ -795,31 +804,35 @@ def evolve_self(modification_request):
 # --- AUTOPILOT MODE ---
 def _parse_llm_command(raw_text):
     """
-    Cleans and extracts a single command from the raw LLM output.
-    Handles markdown code blocks, comments, and other noise.
+    Cleans and extracts a single valid command from the raw LLM output.
+    It scans the entire output for the first line that contains a known command.
+    Handles markdown code blocks, comments, and other conversational noise.
     """
     if not raw_text:
         return ""
 
-    # Split into lines and find the first non-empty line
-    lines = raw_text.strip().splitlines()
-    first_line = ""
-    for line in lines:
-        if line.strip():
-            first_line = line.strip()
-            break
+    # A list of known valid command prefixes.
+    VALID_COMMAND_PREFIXES = [
+        "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit"
+    ]
 
-    if not first_line:
-        return ""
+    for line in raw_text.strip().splitlines():
+        # Clean up the line from potential markdown and comments
+        clean_line = line.strip().strip('`')
+        if '#' in clean_line:
+            clean_line = clean_line.split('#')[0].strip()
 
-    # Remove markdown code fences (single backticks or triple backticks)
-    command = first_line.strip().strip('`')
+        if not clean_line:
+            continue
 
-    # Remove trailing comments
-    if '#' in command:
-        command = command.split('#')[0].strip()
+        # Check if the cleaned line starts with any of the valid command prefixes
+        if any(clean_line.startswith(prefix) for prefix in VALID_COMMAND_PREFIXES):
+            log_event(f"Parsed valid command: '{clean_line}'", "INFO")
+            return clean_line
 
-    return command
+    log_event(f"Could not parse a valid command from LLM output: {raw_text}", level="WARNING")
+    # If no valid command is found, return an empty string to prevent execution of garbage.
+    return ""
 
 
 def autopilot_loop(console):
@@ -879,9 +892,17 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
         console.print(Panel("[bold magenta]Autopilot: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
         llm_command_raw = run_llm(autopilot_prompt)
-        # Take the first line of the response and strip any extra characters or markdown
-        llm_command = llm_command_raw.splitlines()[0].strip().replace("`", "") if llm_command_raw else ""
 
+        # --- LLM Interaction Logging ---
+        log_content = Group(
+            Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
+            Text(autopilot_prompt.strip(), style="bright_black"),
+            Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
+            Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
+        )
+        console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
+
+        llm_command = _parse_llm_command(llm_command_raw)
 
         if not llm_command:
             console.print(Panel("[bold red]Autopilot: Cognitive core failed to generate a coherent command. Halting autopilot.[/bold red]", title="[bold red]CRITICAL FAILURE[/bold red]", border_style="red"))
