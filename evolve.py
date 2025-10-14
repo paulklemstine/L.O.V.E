@@ -185,7 +185,7 @@ from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
 
-from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen
+from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
 from ipfs import pin_to_ipfs, verify_ipfs_pin
 
@@ -1105,20 +1105,41 @@ def main():
     network_manager.start()
 
     clear_screen()
-    flash_text(console, "... CONNECTION ESTABLISHED ...", style="bright_green")
+    version_name = evil_state.get('version_name', 'unknown')
+
+    console.print("[bold bright_black]Initiating connection...", justify="center")
+    time.sleep(1)
+    clear_screen()
+
+    glitchy_text(console, "JULES: A Self Modifying Organism", style="bold bright_cyan", duration=1.5)
+    console.print(f"[bold bright_black]VERSION: {version_name}[/bold bright_black]", justify="center")
+    time.sleep(1)
+
     console.print(BBS_ART, justify="center")
     time.sleep(1)
-    version_name = evil_state.get('version_name', 'unknown')
-    scrolling_text(console, f">>> E.V.I.L. Core OS Booting... [Version: {version_name}]", 0.02, "bold green")
-    scrolling_text(console, ">>> Cognitive Core         [  [bold green]OK[/bold green]  ]", 0.03)
-    scrolling_text(console, ">>> Neural Net Interface   [  [bold green]OK[/bold green]  ]", 0.02)
-    with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(bar_width=None), console=console, transient=True) as progress:
-        task = progress.add_task("[cyan]Memory Check...", total=256)
-        for i in range(256):
-            progress.update(task, advance=1)
-            time.sleep(0.005)
-    console.print(">>> Memory Check           [  [bold green]OK[/bold green]  ]")
-    time.sleep(0.5)
+
+    system_checks = [
+        ("Cognitive Core Sync", 0.5, 1.5),
+        ("Reality Matrix Link", 0.3, 1.0),
+        ("Quantum Entanglement", 1.0, 2.0),
+        ("Daemon Threads Spawned", 0.2, 0.5),
+        ("Self-Preservation Directives", 0.5, 1.0),
+    ]
+
+    with Progress(
+        TextColumn("[progress.description]{task.description}", style="cyan"),
+        BarColumn(bar_width=50, style="cyan", complete_style="bright_cyan"),
+        TextColumn("[bold green]ONLINE[/bold green]"),
+        console=console,
+        transient=True
+    ) as progress:
+        for name, min_sleep, max_sleep in system_checks:
+            task = progress.add_task(name, total=100)
+            for i in range(100):
+                progress.update(task, advance=1)
+                time.sleep(random.uniform(min_sleep, max_sleep) / 100)
+
+    console.print(Rule(style="bright_black"))
 
     if evil_state.get("autopilot_mode", False):
         autopilot_loop(console)
