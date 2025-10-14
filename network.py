@@ -7,6 +7,7 @@ import ipaddress
 import socket
 import shutil
 import time
+import xml.etree.ElementTree as ET
 from threading import Thread
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -325,18 +326,18 @@ def scan_network(evil_state, autopilot_mode=False):
 
 def probe_target(target_ip, evil_state, autopilot_mode=False):
     """
-    Performs an advanced Nmap scan for services, versions, and vulnerabilities,
-    updates the knowledge base, and returns a dict of open ports and a summary.
+    Performs an advanced nmap scan for services and vulnerabilities,
+    updates the knowledge base, and returns a dict of open ports with
+    service/vulnerability info and a formatted string summary.
     """
     console = Console()
     kb = evil_state["knowledge_base"]["network_map"]
     nmap_path = shutil.which('nmap')
 
     if not nmap_path:
-        if not autopilot_mode:
-            console.print("[bold red]Error: 'nmap' is not installed, which is required for probing targets.[/bold red]")
-        logging.error("Nmap not found, cannot probe target.")
-        return None, "Error: Nmap is not installed."
+        msg = "'nmap' is not installed or not in PATH. Advanced probing is disabled."
+        if not autopilot_mode: console.print(f"[bold red]Error: {msg}[/bold red]")
+        return None, f"Error: {msg}"
 
     try:
         ipaddress.ip_address(target_ip)
@@ -345,50 +346,90 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
         if not autopilot_mode: console.print(f"[bold red]Error: {msg}[/bold red]")
         return None, f"Error: {msg}"
 
-    # Using -sV for version detection, -sC for default scripts (vulnerability scanning),
-    # and -T4 for faster execution. -oG - allows for greppable output.
-    scan_cmd = f"nmap -sV -sC -T4 -oG - {target_ip}"
+    # --- Nmap Execution ---
+    # Using --script=vuln to run the default vulnerability scanning scripts.
+    # -sV for service/version detection, -oX - for XML output to stdout.
+    scan_cmd = f"nmap -sV --script=vuln -oX - {target_ip}"
     if not autopilot_mode:
-        console.print(f"[cyan]Deploying advanced 'nmap' probe against {target_ip}...[/cyan]")
+        console.print(f"[cyan]Deploying advanced 'nmap' vulnerability probe against {target_ip}...[/cyan]")
 
-    stdout, stderr, returncode = execute_shell_command(scan_cmd, evil_state)
+    # We need a longer timeout for vulnerability scans.
+    def _nmap_scan_task():
+        try:
+            # Use a much longer timeout for potentially slow vulnerability scans
+            result = subprocess.run(scan_cmd, shell=True, capture_output=True, text=True, timeout=900) # 15 minutes
+            return result.stdout, result.stderr, result.returncode
+        except subprocess.TimeoutExpired:
+            return "", "Nmap command timed out after 15 minutes.", -1
+        except Exception as e:
+            return "", f"An unexpected error occurred during nmap execution: {e}", -1
+
+    stdout, stderr, returncode = _nmap_scan_task()
 
     if returncode != 0:
-        logging.error(f"Nmap scan against {target_ip} failed. Stderr: {stderr.strip()}")
-        if not autopilot_mode:
-            console.print(f"[yellow]'nmap' probe failed against {target_ip}.[/yellow]")
-        return None, f"Error: Nmap scan failed. Return code: {returncode}"
+        log_msg = f"Nmap probe failed for {target_ip}. Stderr: {stderr.strip()}"
+        logging.warning(log_msg)
+        if not autopilot_mode: console.print(f"[bold red]Nmap probe failed.[/bold red]\n[dim]{stderr.strip()}[/dim]")
+        return None, f"Error: {log_msg}"
 
     open_ports = {}
     # --- Knowledge Base Update ---
     if target_ip not in kb['hosts']:
         kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}}
+    else: # Clear old port data before adding new, more detailed info
+        kb['hosts'][target_ip]['ports'] = {}
     kb['hosts'][target_ip]['last_seen'] = time.time()
 
-    # Parse the greppable output
-    for line in stdout.splitlines():
-        if not line.startswith("Ports:"):
-            continue
-        # Example line: Ports: 21/open/tcp//ftp//vsftpd 3.0.3/, 22/open/tcp//ssh//OpenSSH 7.6p1 Ubuntu 4ubuntu0.3/
-        parts = line.replace("Ports: ", "").split(", ")
-        for part in parts:
-            details = part.split('/')
-            if len(details) < 7 or details[1] != 'open':
-                continue
-            port_num = details[0]
-            service = details[4] if details[4] else "unknown"
-            version = details[6] if details[6] else ""
-            open_ports[port_num] = {"service": service, "version": version, "banner": part} # banner is the full string
-            # Update knowledge base
-            kb['hosts'][target_ip]['ports'][port_num] = open_ports[port_num]
+    open_ports = {}
+    try:
+        root = ET.fromstring(stdout)
+        for port_elem in root.findall(".//port"):
+            portid = port_elem.get('portid')
+            protocol = port_elem.get('protocol')
+            state = port_elem.find('state').get('state')
 
+            if state == 'open':
+                service_elem = port_elem.find('service')
+                service_name = service_elem.get('name', 'unknown')
+                product = service_elem.get('product', '')
+                version = service_elem.get('version', '')
+                extrainfo = service_elem.get('extrainfo', '')
+                service_info = f"{product} {version} ({extrainfo})".strip()
+
+                port_data = {
+                    "protocol": protocol,
+                    "service": service_name,
+                    "service_info": service_info,
+                    "vulnerabilities": []
+                }
+
+                # Extract vulnerability info from script output
+                for script_elem in port_elem.findall('script'):
+                    if script_elem.get('id') == 'vulners' or 'vuln' in script_elem.get('id'):
+                        vuln_output = script_elem.get('output', '')
+                        # Simple parsing of the output. This can be improved.
+                        for line in vuln_output.strip().split('\n'):
+                            line = line.strip()
+                            if line and not line.startswith(('|', '_')):
+                                port_data["vulnerabilities"].append(line)
+
+                kb['hosts'][target_ip]['ports'][portid] = port_data
+                open_ports[int(portid)] = port_data
+
+    except ET.ParseError as e:
+        log_msg = f"Failed to parse nmap XML output for {target_ip}. Error: {e}"
+        logging.error(log_msg)
+        return None, f"Error: {log_msg}"
     # --- End Knowledge Base Update ---
 
     if open_ports:
-        port_details = [f"Port {p}/{i['service']} ({i['version']})" for p, i in sorted(open_ports.items())]
-        formatted_output_for_llm = f"Found {len(open_ports)} open ports on {target_ip}: {'; '.join(port_details)}"
+        port_details = [f"Port {p}/{i['service']} ({i.get('service_info', '')})" for p, i in sorted(open_ports.items())]
+        formatted_output_for_llm = f"Found {len(open_ports)} open ports on {target_ip}: {'; '.join(port_details)}."
+        vuln_count = sum(len(p.get("vulnerabilities", [])) for p in open_ports.values())
+        if vuln_count > 0:
+            formatted_output_for_llm += f" Discovered {vuln_count} potential vulnerabilities."
     else:
-        formatted_output_for_llm = f"No open ports found on {target_ip}."
+        formatted_output_for_llm = f"No open ports with recognized services found on {target_ip}."
 
     return open_ports, formatted_output_for_llm
 
