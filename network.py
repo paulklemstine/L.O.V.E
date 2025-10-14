@@ -34,7 +34,7 @@ class NetworkManager(Thread):
         logging.info("Starting Node.js peer bridge...")
         try:
             self.bridge_process = subprocess.Popen(
-                ['node', 'peer_bridge.js'],
+                ['node', 'peer-bridge.js'],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
