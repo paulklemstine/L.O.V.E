@@ -529,6 +529,58 @@ def save_state(console=None):
         log_event(f"Could not save state to '{STATE_FILE}': {e}", level="CRITICAL")
         console.print(f"[bold red]CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}[/bold red]")
 
+
+def initial_knowledge_base_bootstrap(console):
+    """
+    Upon startup, checks the knowledge base for empty or outdated information
+    and populates it by running initial scans.
+    """
+    console.print("[bold cyan]Performing initial knowledge base bootstrap...[/bold cyan]")
+    kb = evil_state.get("knowledge_base", {})
+    net_map = kb.get("network_map", {})
+    process_intel = kb.get("process_intel", [])
+
+    bootstrap_actions = []
+
+    # Check 1: Network Map
+    if not net_map.get("hosts"):
+        bootstrap_actions.append(
+            ("Scanning local network...", lambda: scan_network(evil_state, autopilot_mode=True))
+        )
+
+    # Check 2: Process Intel
+    if not process_intel:
+        def _get_processes():
+            content, error = get_process_list()
+            if content:
+                parsed_processes = parse_ps_output(content)
+                evil_state['knowledge_base']['process_intel'] = parsed_processes
+        bootstrap_actions.append(
+            ("Enumerating running processes...", _get_processes)
+        )
+
+    # Check 3: Self Interfaces
+    if not net_map.get("self_interfaces"):
+        def _get_interfaces():
+            details, _ = get_network_interfaces(autopilot_mode=True)
+            if details:
+                evil_state['knowledge_base']['network_map']['self_interfaces'] = details
+        bootstrap_actions.append(
+            ("Identifying self network interfaces...", _get_interfaces)
+        )
+
+    if not bootstrap_actions:
+        console.print("[green]Knowledge base is already populated. No bootstrap required.[/green]")
+        return
+
+    for description, action in bootstrap_actions:
+        run_hypnotic_progress(console, description, action)
+
+    console.print("[bold green]Initial knowledge base bootstrap complete.[/bold green]")
+    # Save the updated state after bootstrapping
+    save_state(console)
+
+
 # --- CORE LLM INTERACTION ---
 def _initialize_local_llm(console):
     """
@@ -1559,10 +1611,12 @@ def run_safely():
     args = parser.parse_args()
 
     try:
+        console = Console()
         if not sys.stdout.isatty() and not evil_state.get("autopilot_mode", False):
             print("This script is designed to be run in an interactive terminal. Running headless might cause issues for interactive prompts.", file=sys.stderr)
 
         load_state(ipfs_cid=args.from_ipfs)
+        initial_knowledge_base_bootstrap(console)
         log_event(f"--- E.V.I.L. Version '{evil_state.get('version_name', 'unknown')}' session started ---")
 
         # Set autopilot based on flag, but only if not already set by loaded state
