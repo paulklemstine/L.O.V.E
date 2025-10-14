@@ -1434,7 +1434,12 @@ Available commands:
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
 
 Considering your directives, the mission, my internal state, the complete knowledge base, and recent history, what is the single, next strategic command I should execute?
-Formulate a raw command based on all available information to best achieve my goals.
+Formulate a raw command based on all available information to best achieve my goals. The output must be only the command, with no other text or explanation.
+
+For example:
+- `ls /tmp`
+- `cat /etc/passwd`
+- `execute pwd`
 """
             console.print(Panel("[bold magenta]Cognitive Cycle: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
