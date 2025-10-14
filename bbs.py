@@ -73,10 +73,11 @@ def run_hypnotic_progress(console, description, function, *args, **kwargs):
     ) as progress:
         task = progress.add_task(description=description, total=None)
         while thread.is_alive():
-            subliminal = random.choice(SUBLIMINAL_MESSAGES)
-            progress.update(task, description=f"[bold cyan]{description}[/bold cyan] [blink]>>>[/blink] {subliminal}")
+            # The subliminal message loop has been removed to prevent terminal spam/flicker.
+            # We just need to keep the spinner alive.
+            progress.update(task, description=f"[bold cyan]{description}[/bold cyan]")
             time.sleep(0.1)
-        progress.update(task, description=f"[bold green]{description} ... Signal Acquired.[/bold green]")
+        progress.update(task, description=f"[bold green]{description} ... Done.[/bold green]")
 
     if result_container['exception']:
         raise result_container['exception']
