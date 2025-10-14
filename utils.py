@@ -49,3 +49,62 @@ def get_git_repo_info():
 
     except (subprocess.CalledProcessError, IndexError):
         return None, None
+
+
+def list_directory(path="."):
+    """
+    Lists the contents of a directory.
+    Returns a tuple of (list_of_contents, error_string).
+    """
+    if not os.path.isdir(path):
+        return None, f"Error: Directory not found at '{path}'"
+    try:
+        # Use a more informative listing format, similar to 'ls -la'
+        result = subprocess.run(
+            ["ls", "-la", path],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout, None
+    except subprocess.CalledProcessError as e:
+        return None, f"Error listing directory '{path}': {e.stderr}"
+    except Exception as e:
+        return None, f"An unexpected error occurred: {e}"
+
+
+def get_file_content(filepath):
+    """
+    Reads the content of a file.
+    Returns a tuple of (file_content, error_string).
+    """
+    if not os.path.isfile(filepath):
+        return None, f"Error: File not found at '{filepath}'"
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        return content, None
+    except Exception as e:
+        return None, f"Error reading file '{filepath}': {e}"
+
+
+def get_process_list():
+    """
+    Gets a list of running processes using 'ps'.
+    Returns a tuple of (process_list_string, error_string).
+    """
+    try:
+        # Use 'ps aux' for a detailed, cross-user process list
+        result = subprocess.run(
+            ["ps", "aux"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout, None
+    except subprocess.CalledProcessError as e:
+        return None, f"Error getting process list: {e.stderr}"
+    except FileNotFoundError:
+        return None, "Error: 'ps' command not found. Unable to list processes."
+    except Exception as e:
+        return None, f"An unexpected error occurred: {e}"

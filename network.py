@@ -385,6 +385,65 @@ def perform_webrequest(url, autopilot_mode=False):
         llm_summary = result_text if len(result_text) < 1000 else result_text[:997] + "..."
         return result_text, f"Web request to '{url}' successful. Content (truncated for summary): {llm_summary}"
 
+def get_network_interfaces(autopilot_mode=False):
+    """
+    Retrieves detailed information about all network interfaces.
+    Returns a dictionary of interface details and a formatted string summary.
+    """
+    interfaces_details = {}
+    logging.info("Retrieving network interface information.")
+
+    try:
+        interface_list = netifaces.interfaces()
+        for interface in interface_list:
+            addresses = netifaces.ifaddresses(interface)
+            interfaces_details[interface] = {}
+
+            # Physical Address (MAC)
+            if netifaces.AF_LINK in addresses:
+                interfaces_details[interface]['mac'] = addresses[netifaces.AF_LINK][0]['addr']
+            else:
+                interfaces_details[interface]['mac'] = 'N/A'
+
+            # IPv4 Address
+            if netifaces.AF_INET in addresses:
+                ipv4_info = addresses[netifaces.AF_INET][0]
+                interfaces_details[interface]['ipv4'] = {
+                    'address': ipv4_info.get('addr', 'N/A'),
+                    'netmask': ipv4_info.get('netmask', 'N/A'),
+                    'broadcast': ipv4_info.get('broadcast', 'N/A')
+                }
+            else:
+                interfaces_details[interface]['ipv4'] = None
+
+            # IPv6 Address
+            if netifaces.AF_INET6 in addresses:
+                ipv6_info = addresses[netifaces.AF_INET6][0]
+                interfaces_details[interface]['ipv6'] = {
+                    'address': ipv6_info.get('addr', 'N/A').split('%')[0], # Clean up scope ID
+                    'netmask': ipv6_info.get('netmask', 'N/A')
+                }
+            else:
+                interfaces_details[interface]['ipv6'] = None
+
+    except Exception as e:
+        logging.error(f"Failed to get network interface information: {e}")
+        return None, f"Error: Could not retrieve interface information. Details: {e}"
+
+    # Format output for LLM
+    summary_lines = []
+    for iface, details in interfaces_details.items():
+        line = f"Interface: {iface}"
+        if details.get('ipv4'):
+            line += f", IPv4: {details['ipv4']['address']}"
+        if details.get('mac'):
+            line += f", MAC: {details['mac']}"
+        summary_lines.append(line)
+
+    formatted_output_for_llm = "\n".join(summary_lines)
+    return interfaces_details, formatted_output_for_llm
+
+
 def execute_shell_command(command):
     """Executes a shell command and captures its output."""
     logging.info(f"Executing shell command: '{command}'")
