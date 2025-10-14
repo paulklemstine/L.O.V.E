@@ -573,7 +573,7 @@ def run_llm(prompt_text, purpose="general"):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
     - 'goal_generation': Prioritizes local, uncensored models.
-    - 'review', 'autopilot', 'general': Prioritizes powerful, reasoning models.
+    - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
     """
     global LLM_AVAILABILITY, local_llm_instance
     console = Console()
@@ -587,7 +587,7 @@ def run_llm(prompt_text, purpose="general"):
         # Prioritize local ablated models for creative/unrestricted tasks
         llm_models_priority = local_model_ids + GEMINI_MODELS
         log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Gemini.", level="INFO")
-    else:
+    else: # Covers 'review', 'autopilot', 'general', and 'analyze_source'
         # Prioritize Gemini for reasoning tasks
         llm_models_priority = GEMINI_MODELS + local_model_ids
         log_event(f"Running LLM for purpose '{purpose}'. Priority: Gemini -> Local.", level="INFO")
@@ -783,7 +783,7 @@ A good goal leverages the information in the knowledge base. For example, if you
 
 State the goal clearly and concisely as a single command. Do not wrap your answer in quotes or markdown. Just give me the raw command.
 """
-    goal = run_llm(goal_prompt, purpose="goal_generation")
+    goal = run_llm(goal_prompt, purpose="analyze_source")
 
     if goal and goal.strip():
         console.print(Panel(f"[cyan]Optimal path calculated. New directive:[/cyan]\n\n[bold white]{goal.strip()}[/bold white]", title="[bold green]NEW DIRECTIVE RECEIVED[/bold green]", border_style="green"))
