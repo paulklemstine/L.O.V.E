@@ -1263,6 +1263,7 @@ def autopilot_loop(console):
             network_hosts = list(kb.get("network_map", {}).get("hosts", {}).keys())
             interesting_files = kb.get("file_system_intel", {}).get("interesting_files", [])
             cached_requests = list(kb.get("webrequest_cache", {}).keys())
+            network_map = kb.get("network_map", {}).get("hosts", {})
 
             summary_parts = []
             if network_map:
