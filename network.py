@@ -234,7 +234,7 @@ def scan_network(evil_state, autopilot_mode=False):
     kb['last_scan'] = time.time()
     for ip in found_ips:
         if ip not in kb['hosts']:
-            kb['hosts'][ip] = {"last_seen": time.time(), "open_ports": {}}
+            kb['hosts'][ip] = {"last_seen": time.time(), "ports": {}}
         else:
             kb['hosts'][ip]['last_seen'] = time.time()
     # --- End Knowledge Base Update ---
@@ -289,9 +289,11 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
 
     # --- Knowledge Base Update ---
     if target_ip not in kb['hosts']:
-        kb['hosts'][target_ip] = {"last_seen": time.time(), "open_ports": {}}
+        kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}}
     kb['hosts'][target_ip]['last_seen'] = time.time()
-    kb['hosts'][target_ip]['open_ports'].update(open_ports)
+    # Store detailed port info, converting port number to string for JSON compatibility
+    for port, info in open_ports.items():
+        kb['hosts'][target_ip]['ports'][str(port)] = info
     # --- End Knowledge Base Update ---
 
     if open_ports:

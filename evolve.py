@@ -1344,20 +1344,28 @@ def main(args):
                 continue
 
             open_ports, output_str = probe_target(target_ip, evil_state)
-            if open_ports is not None:
-                if open_ports:
-                    display_content = Text(f"Probe of {target_ip} complete. Open ports detected:\n\n", style="yellow")
-                    for port, info in sorted(open_ports.items()):
-                        service = info['service']
-                        banner = info['banner']
+            # After probing, the knowledge base is updated. We now read from there.
+            kb = evil_state.get("knowledge_base", {}).get("network_map", {}).get("hosts", {})
+            host_data = kb.get(target_ip, {})
+            ports_data = host_data.get("ports", {})
+
+            if open_ports is not None: # probe_target returns None on IP validation failure
+                if ports_data:
+                    display_content = Text(f"Probe of {target_ip} complete. Port details from knowledge base:\n\n", style="yellow")
+                    # Sort by port number, which are now string keys
+                    sorted_ports = sorted(ports_data.items(), key=lambda item: int(item[0]))
+                    for port_str, info in sorted_ports:
+                        service = info.get('service', 'unknown')
+                        banner = info.get('banner', '')
                         sanitized_banner = banner.replace('[', r'\[')
 
-                        display_content.append(f"  - [bold white]Port {port:<5}[/bold white] -> [cyan]{service}[/cyan]\n")
+                        display_content.append(f"  - [bold white]Port {port_str:<5}[/bold white] -> [cyan]{service}[/cyan]\n")
                         if banner:
                             display_content.append(f"    [dim italic]Banner: {sanitized_banner}[/dim italic]\n")
 
                     console.print(Panel(display_content, title="[bold yellow]PROBE RESULTS[/bold yellow]", border_style="yellow"))
                 else:
+                    # Use the original output string if no ports were found
                     console.print(Panel(f"[green]{output_str}[/green]", title="[bold green]PROBE COMPLETE: TARGET SECURE[/bold green]", border_style="green"))
 
         elif user_input.lower().startswith("webrequest "):
