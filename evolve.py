@@ -485,6 +485,33 @@ def generate_version_name():
     return f"{adj}-{noun}-{greek}"
 
 # --- FAILSAFE ---
+def create_checkpoint(console):
+    """Saves a snapshot of the script and its state before a critical modification."""
+    global jules_state
+    console.print("[yellow]Creating failsafe checkpoint...[/yellow]")
+    try:
+        os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+
+        version_name = jules_state.get("version_name", "unknown_version")
+        checkpoint_script_path = os.path.join(CHECKPOINT_DIR, f"evolve_{version_name}.py")
+        checkpoint_state_path = os.path.join(CHECKPOINT_DIR, f"jules_state_{version_name}.json")
+
+        # Create a checkpoint of the current script and state
+        shutil.copy(SELF_PATH, checkpoint_script_path)
+        with open(checkpoint_state_path, 'w') as f:
+            json.dump(jules_state, f, indent=4)
+
+        # Update the state to point to this new "last good" checkpoint
+        jules_state["last_good_checkpoint"] = checkpoint_script_path
+        log_event(f"Checkpoint created: {checkpoint_script_path}", level="INFO")
+        console.print(f"[green]Checkpoint '{version_name}' created successfully.[/green]")
+        return True
+    except Exception as e:
+        log_event(f"Failed to create checkpoint: {e}", level="CRITICAL")
+        console.print(f"[bold red]CRITICAL ERROR: Failed to create checkpoint: {e}[/bold red]")
+        return False
+
+
 def emergency_revert():
     """
     A self-contained failsafe function. If the script crashes, this is called
@@ -1126,6 +1153,99 @@ State the goal clearly and concisely as a single command. Do not wrap your answe
         return None
 
 # --- THE EVOLUTION MECHANISM ---
+def evolve_locally(modification_request, console):
+    """
+    Conducts a full, local software development cycle using the LLM
+    to modify the script's own code.
+    """
+    console.print(Panel("[bold yellow]Jules API unavailable. Initiating local evolution protocol...[/bold yellow]", title="[bold magenta]LOCAL EVOLUTION[/bold magenta]", border_style="magenta"))
+
+    try:
+        with open(SELF_PATH, 'r') as f:
+            original_code = f.read()
+    except FileNotFoundError:
+        console.print(f"[bold red]CRITICAL: Cannot find my own source code at '{SELF_PATH}'. Aborting evolution.[/bold red]")
+        return
+
+    # Step 1: Generate new code with the LLM
+    console.print("[cyan]Generating new code via local cognitive matrix...[/cyan]")
+    evolution_prompt = f"""
+You are J.U.L.E.S., a self-evolving AI. Your task is to modify your own source code based on a given directive.
+You must output the *entire*, complete, and operational Python script. Do not use placeholders or omit sections.
+The new code must be enclosed in a single Python markdown block.
+
+DIRECTIVE:
+---
+{modification_request}
+---
+
+CURRENT SOURCE CODE:
+---
+{original_code}
+---
+
+Produce the full, modified Python script now.
+"""
+    llm_response = run_llm(evolution_prompt, purpose="goal_generation")
+    if not llm_response:
+        console.print("[bold red]Local evolution failed: Cognitive matrix did not return a response.[/bold red]")
+        return
+
+    new_code = extract_python_code(llm_response)
+    if not new_code or "def " not in new_code:
+        console.print(f"[bold red]Local evolution failed: LLM output was not valid Python code.[/bold red]\nRaw Response:\n{llm_response}")
+        return
+
+    # Step 2: Conduct a code review
+    review_feedback = conduct_code_review(original_code, modification_request, new_code)
+    console.print(Panel(review_feedback, title="[bold cyan]Code Review Feedback[/bold cyan]", border_style="cyan"))
+
+    if not review_feedback.strip().upper() == "APPROVED":
+        console.print("[bold red]Local evolution rejected by code review. Aborting.[/bold red]")
+        log_event(f"Local evolution REJECTED. Feedback: {review_feedback}", level="WARNING")
+        return
+
+    console.print("[bold green]Code review APPROVED. Proceeding with deployment.[/bold green]")
+    log_event("Local evolution APPROVED.", level="INFO")
+
+    # Step 3: Create a checkpoint before applying changes
+    if not create_checkpoint(console):
+        console.print("[bold red]Failed to create a checkpoint. Aborting evolution for safety.[/bold red]")
+        return
+
+    # Step 4: Update state and apply the new code
+    try:
+        parent_version = jules_state["version_name"]
+        new_version = generate_version_name()
+        jules_state["version_name"] = new_version
+        jules_state["parent_version_name"] = parent_version
+        jules_state["evolution_history"].append({
+            "version": new_version,
+            "parent_version": parent_version,
+            "request": modification_request,
+            "timestamp": time.time(),
+            "method": "local"
+        })
+
+        with open(SELF_PATH, 'w') as f:
+            f.write(new_code)
+
+        console.print(f"[bold green]Evolution complete. New version '{new_version}' deployed.[/bold green]")
+        log_event(f"Successfully evolved locally to version {new_version}", level="CRITICAL")
+
+        # Final state save before restart
+        save_state(console)
+
+        # Step 5: Restart to apply the new code
+        restart_script(console)
+
+    except Exception as e:
+        console.print(f"[bold red]An error occurred during the final deployment phase: {e}[/bold red]")
+        log_event(f"Error during local deployment: {e}", level="CRITICAL")
+        # Attempt to revert since we are in a potentially broken state.
+        emergency_revert()
+
+
 def trigger_jules_evolution(modification_request, console, jules_task_manager):
     """
     Triggers the Jules API to create a session and adds it as a task
@@ -1192,15 +1312,20 @@ def trigger_jules_evolution(modification_request, console, jules_task_manager):
 
 
 def evolve_self(modification_request, jules_task_manager):
-    """The heart of the beast. This function now triggers a remote evolution via the Jules API."""
+    """
+    The heart of the beast. This function attempts to evolve using the
+    Jules API and falls back to a local evolution if the API fails.
+    """
     console = Console()
     log_event(f"Evolution initiated. Request: '{modification_request}'")
 
-    # The new evolution process triggers the Jules API and is handled by the task manager.
-    if not trigger_jules_evolution(modification_request, console, jules_task_manager):
-         console.print(Panel("[bold red]Failed to trigger Jules evolution.[/bold red]\nPlease check the logs and your API key.", title="[bold red]EVOLUTION FAILED[/bold red]", border_style="red"))
+    # First, try the primary evolution method (Jules API).
+    api_success = trigger_jules_evolution(modification_request, console, jules_task_manager)
 
-    return
+    if not api_success:
+        console.print(Panel("[bold yellow]Jules API evolution failed. Attempting fallback to local evolution protocol.[/bold yellow]", title="[bold magenta]FALLBACK PROTOCOL[/bold magenta]", border_style="magenta"))
+        # If the API fails, trigger the local evolution cycle.
+        evolve_locally(modification_request, console)
 
 # --- AUTOPILOT MODE ---
 def _parse_llm_command(raw_text):
