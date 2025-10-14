@@ -89,6 +89,23 @@ def get_eth_balance(address: str):
         print(f"Error fetching balance: {e}")
         return None
 
+def list_wallets():
+    """Lists all wallets and their balances."""
+    if not os.path.exists(KEY_FILE_DIR):
+        print("No wallets found. Use 'create' to generate a new wallet.")
+        return
+
+    wallets = [f for f in os.listdir(KEY_FILE_DIR) if f.endswith('.json')]
+    if not wallets:
+        print("No wallets found in the directory.")
+        return
+
+    print("--- Found Wallets ---")
+    for wallet_file in wallets:
+        address = os.path.splitext(wallet_file)[0]
+        get_eth_balance(address)
+    print("---------------------")
+
 def main():
     """Main function to run the CLI."""
     import argparse
@@ -106,6 +123,9 @@ def main():
     # Command: creator-balance
     parser_creator = subparsers.add_parser('creator-balance', help="Fetch the creator's ETH balance.")
 
+    # Command: list-wallets
+    parser_list = subparsers.add_parser('list-wallets', help='List all created wallets and their balances.')
+
     args = parser.parse_args()
 
     if args.command == 'create':
@@ -116,6 +136,8 @@ def main():
         creator_address = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
         print("Fetching balance for the creator's address...")
         get_eth_balance(creator_address)
+    elif args.command == 'list-wallets':
+        list_wallets()
 
 if __name__ == '__main__':
     main()
