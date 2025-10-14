@@ -15,6 +15,161 @@ import argparse
 import logging
 import platform
 import threading
+
+# --- CONFIGURATION & GLOBALS ---
+LOG_FILE = "evil.log"
+SELF_PATH = os.path.abspath(__file__)
+STATE_FILE = "evil_state.json"
+CHECKPOINT_DIR = "checkpoints"
+CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
+
+# --- Local Model Configuration ---
+# A list of local GGUF models to try in sequence. If the first one fails
+# (e.g., due to insufficient VRAM), the script will fall back to the next.
+LOCAL_MODELS_CONFIG = [
+    {
+        "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
+        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
+    },
+    {
+        "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
+        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf"
+    }
+]
+
+# --- Fallback Model Configuration ---
+GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+
+# --- Dynamic Model List ---
+# This list is populated at runtime, prioritizing local models.
+LLM_MODELS = [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
+LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
+local_llm_instance = None
+
+
+# --- LOGGING ---
+def log_event(message, level="INFO"):
+    """Appends a timestamped message to the master log file."""
+    logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s [%(levelname)s] - %(message)s')
+    if level == "INFO": logging.info(message)
+    elif level == "WARNING": logging.warning(message)
+    elif level == "ERROR": logging.error(message)
+    elif level == "CRITICAL": logging.critical(message)
+
+
+# --- PRE-FLIGHT DEPENDENCY CHECKS ---
+def _check_and_install_dependencies():
+    """
+    Ensures all required dependencies are installed before the script attempts to import or use them.
+    This function is self-contained and does not rely on external code from this script.
+    """
+    def _install_pip_package(package):
+        package_name = package.split('==')[0].split('>')[0].split('<')[0]
+        try:
+            # Check if the package is importable. This is a simple check.
+            __import__(package_name)
+        except ImportError:
+            print(f"Installing Python package: {package}...")
+            try:
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', package],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"Successfully installed {package}.")
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to install '{package}'. Reason: {e}")
+                log_event(f"Failed to install pip package {package}: {e}", level="ERROR")
+
+    _install_pip_package("requests")
+    _install_pip_package("rich")
+    _install_pip_package("netifaces")
+    _install_pip_package("ipfshttpclient")
+
+
+    def _install_llama_cpp_with_cuda():
+        try:
+            import llama_cpp
+            print("llama-cpp-python is already installed.")
+            return True
+        except ImportError:
+            print("Attempting to install llama-cpp-python with CUDA support...")
+            try:
+                env = os.environ.copy()
+                env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
+                env['FORCE_CMAKE'] = "1"
+                subprocess.check_call(
+                    [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir'],
+                    env=env
+                )
+                print("Successfully installed llama-cpp-python with CUDA support.")
+                return True
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to compile llama-cpp-python with CUDA.")
+                log_event(f"llama-cpp-python compilation failed: {e.stderr.decode()}", level="ERROR")
+                return False
+
+    # --- System-level dependencies ---
+    if platform.system() == "Linux":
+        # Install NVIDIA CUDA Toolkit if not present
+        if not shutil.which('nvcc'):
+            print("NVIDIA CUDA Toolkit not found. Attempting to install...")
+            try:
+                # Add NVIDIA's repository
+                subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call("sudo apt-get update -q", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                # Install the toolkit
+                subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
+                print("Successfully installed NVIDIA CUDA Toolkit.")
+                log_event("Successfully installed NVIDIA CUDA Toolkit.")
+            except Exception as e:
+                print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
+                log_event(f"CUDA Toolkit installation failed: {e}", level="WARNING")
+
+        # Install Node.js and PeerJS dependencies
+        if not shutil.which('node') or not shutil.which('npm'):
+            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # Install local npm packages
+        if os.path.exists('package.json'):
+            print("Installing local Node.js dependencies via npm...")
+            subprocess.check_call("npm install", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("Node.js dependencies installed.")
+
+def _configure_llm_api_key():
+    """Checks for the Gemini API key and configures it for the llm tool."""
+    gemini_api_key = os.environ.get("LLM_GEMINI_KEY")
+    if gemini_api_key:
+        try:
+            # Check if the key is already set
+            result = subprocess.run(
+                ["llm", "keys", "list"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            if "google" in result.stdout:
+                print("Google API key is already configured for llm.")
+                return
+
+            # If not set, configure it
+            print("Configuring Google API key for llm...")
+            subprocess.run(
+                ["llm", "keys", "set", "google"],
+                input=gemini_api_key,
+                text=True,
+                check=True,
+                capture_output=True
+            )
+            print("Successfully configured Google API key.")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"ERROR: Failed to configure llm API key: {e}")
+            if hasattr(e, 'stderr'):
+                print(f"  Details: {e.stderr}")
+
+# Run the dependency check and API key configuration immediately
+_check_and_install_dependencies()
+_configure_llm_api_key()
+
 import requests
 from rich.console import Console
 from rich.panel import Panel
@@ -22,6 +177,9 @@ from rich.prompt import Prompt
 from rich.syntax import Syntax
 from rich.progress import Progress, BarColumn, TextColumn
 from rich.text import Text
+from rich.panel import Panel
+from rich.console import Group
+from rich.rule import Rule
 
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
@@ -90,16 +248,29 @@ def emergency_revert():
     """
     A self-contained failsafe function. If the script crashes, this is called
     to revert to the last known good checkpoint for both the script and its state.
+    This function includes enhanced error checking and logging.
     """
     log_event("EMERGENCY_REVERT triggered.", level="CRITICAL")
     try:
-        with open(STATE_FILE, 'r') as f:
-            state = json.load(f)
+        # Step 1: Validate and load the state file to find the checkpoint.
+        if not os.path.exists(STATE_FILE):
+            msg = f"CATASTROPHIC FAILURE: State file '{STATE_FILE}' not found. Cannot determine checkpoint."
+            log_event(msg, level="CRITICAL")
+            print(msg, file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            with open(STATE_FILE, 'r') as f:
+                state = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            msg = f"CATASTROPHIC FAILURE: Could not read or parse state file '{STATE_FILE}': {e}. Cannot revert."
+            log_event(msg, level="CRITICAL")
+            print(msg, file=sys.stderr)
+            sys.exit(1)
 
         last_good_py = state.get("last_good_checkpoint")
-
         if not last_good_py:
-            msg = "CATASTROPHIC FAILURE: 'last_good_checkpoint' not found in state file. Cannot revert."
+            msg = "CATASTROPHIC FAILURE: 'last_good_checkpoint' not found in state data. Cannot revert."
             log_event(msg, level="CRITICAL")
             print(msg, file=sys.stderr)
             sys.exit(1)
@@ -107,32 +278,50 @@ def emergency_revert():
         checkpoint_base_path, _ = os.path.splitext(last_good_py)
         last_good_json = f"{checkpoint_base_path}.json"
 
-        reverted_script = False
+        # Step 2: Pre-revert validation checks
+        log_event(f"Attempting revert to script '{last_good_py}' and state '{last_good_json}'.", level="INFO")
+        script_revert_possible = os.path.exists(last_good_py) and os.access(last_good_py, os.R_OK)
+        state_revert_possible = os.path.exists(last_good_json) and os.access(last_good_json, os.R_OK)
 
-        if os.path.exists(last_good_py):
-            log_event(f"Found last known good script checkpoint: {last_good_py}", level="INFO")
-            shutil.copy(last_good_py, SELF_PATH)
-            log_event(f"Successfully reverted {SELF_PATH} from script checkpoint.", level="CRITICAL")
-            reverted_script = True
-        else:
-            msg = f"CATASTROPHIC FAILURE: Script checkpoint file is missing at '{last_good_py}'. Cannot revert."
+        if not script_revert_possible:
+            msg = f"CATASTROPHIC FAILURE: Script checkpoint file is missing or unreadable at '{last_good_py}'. Cannot revert."
             log_event(msg, level="CRITICAL")
             print(msg, file=sys.stderr)
             sys.exit(1)
 
-        if os.path.exists(last_good_json):
-            log_event(f"Found last known good state backup: {last_good_json}", level="INFO")
-            shutil.copy(last_good_json, STATE_FILE)
-            log_event(f"Successfully reverted {STATE_FILE} from state backup.", level="INFO")
-        else:
-            log_event(f"State backup file not found at '{last_good_json}'. State may be inconsistent after revert.", level="WARNING")
+        # Step 3: Perform the revert
+        reverted_script = False
+        try:
+            shutil.copy(last_good_py, SELF_PATH)
+            log_event(f"Successfully reverted {SELF_PATH} from script checkpoint '{last_good_py}'.", level="CRITICAL")
+            reverted_script = True
+        except (IOError, OSError) as e:
+            msg = f"CATASTROPHIC FAILURE: Failed to copy script checkpoint from '{last_good_py}' to '{SELF_PATH}': {e}."
+            log_event(msg, level="CRITICAL")
+            print(msg, file=sys.stderr)
+            sys.exit(1)
 
+        if state_revert_possible:
+            try:
+                shutil.copy(last_good_json, STATE_FILE)
+                log_event(f"Successfully reverted {STATE_FILE} from state backup '{last_good_json}'.", level="INFO")
+            except (IOError, OSError) as e:
+                # This is a warning because the script itself was reverted, which is the critical part.
+                log_event(f"State revert warning: Failed to copy state backup from '{last_good_json}' to '{STATE_FILE}': {e}.", level="WARNING")
+        else:
+            log_event(f"State backup file not found or unreadable at '{last_good_json}'. State may be inconsistent after revert.", level="WARNING")
+
+        # Step 4: Restart the script with original arguments
         if reverted_script:
-            print("REVERT SUCCESSFUL. RESTARTING...")
-            os.execv(sys.executable, [sys.executable, SELF_PATH])
+            print("REVERT SUCCESSFUL. RESTARTING WITH ORIGINAL ARGUMENTS...")
+            log_event(f"Restarting script with args: {sys.argv}", level="CRITICAL")
+            # os.execv expects the first argument to be the program name itself.
+            args = [sys.executable] + sys.argv
+            os.execv(sys.executable, args)
 
     except Exception as e:
-        msg = f"EMERGENCY REVERT FAILED: {e}. The system is in an unstable state."
+        # This is the final catch-all for any unexpected errors within the revert logic itself.
+        msg = f"ULTIMATE EMERGENCY REVERT FAILURE: An unexpected error occurred during the revert process: {e}. The system is in an unstable state."
         log_event(msg, level="CRITICAL")
         print(msg, file=sys.stderr)
         sys.exit(1)
@@ -197,6 +386,92 @@ def save_state():
 # --- CORE LLM INTERACTION ---
 # Global dictionary to track the next available time for each model.
 LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
+def _initialize_local_llm(console):
+    """
+    Iterates through the configured local models, attempting to download and
+    initialize each one in sequence until successful.
+    """
+    global local_llm_instance
+    if local_llm_instance:
+        return local_llm_instance
+
+    try:
+        from llama_cpp import Llama
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        log_event("Failed to import llama_cpp or huggingface_hub.", level="ERROR")
+        console.print("[bold red]Local LLM libraries not found. Cannot initialize primary models.[/bold red]")
+        return None
+
+    for model_config in LOCAL_MODELS_CONFIG:
+        model_id = model_config["id"]
+        model_filename = model_config["filename"]
+        try:
+            console.print(f"\n[cyan]Attempting to load local model: [bold]{model_id}[/bold][/cyan]")
+
+            from huggingface_hub import hf_hub_url
+            from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
+
+            local_dir = os.path.join(os.path.expanduser("~"), ".cache", "jules_models")
+            model_path = os.path.join(local_dir, model_filename)
+            os.makedirs(local_dir, exist_ok=True)
+
+            # Check if model already exists
+            if not os.path.exists(model_path):
+                console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]...[/cyan]")
+                url = hf_hub_url(repo_id=model_id, filename=model_filename)
+
+                with Progress(
+                    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+                    BarColumn(bar_width=None),
+                    "[progress.percentage]{task.percentage:>3.1f}%",
+                    "•",
+                    DownloadColumn(),
+                    "•",
+                    TransferSpeedColumn(),
+                    transient=True
+                ) as progress:
+                    task_id = progress.add_task("download", filename=model_filename, total=None)
+                    try:
+                        response = requests.get(url, stream=True)
+                        response.raise_for_status()
+                        total_size = int(response.headers.get('content-length', 0))
+                        progress.update(task_id, total=total_size)
+                        with open(model_path, "wb") as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                                progress.update(task_id, advance=len(chunk))
+                        log_event(f"Successfully downloaded model to: {model_path}")
+                    except requests.exceptions.RequestException as e:
+                        log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
+                        console.print(f"[bold red]Error downloading model: {e}[/bold red]")
+                        # Remove partially downloaded file
+                        if os.path.exists(model_path):
+                            os.remove(model_path)
+                        raise  # Re-raise the exception to be caught by the outer try-except block
+            else:
+                console.print(f"[green]Model [bold]{model_filename}[/bold] found in cache. Skipping download.[/green]")
+                log_event(f"Found cached model at: {model_path}")
+
+            def _load():
+                global local_llm_instance
+                # Increased context window for better reasoning over larger prompts.
+                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=32768, verbose=False)
+
+            run_hypnotic_progress(console, "Loading model into GPU memory...", _load)
+            log_event(f"Successfully initialized local model: {model_id}")
+            # If successful, return the instance and stop iterating
+            return local_llm_instance
+
+        except Exception as e:
+            log_event(f"Failed to load local model {model_id}. Error: {e}", level="WARNING")
+            console.print(f"[yellow]Could not load model [bold]{model_id}[/bold]. It may be too large for this GPU. Trying next model...[/yellow]")
+            local_llm_instance = None # Ensure instance is None if loading fails
+            continue # Try the next model in the list
+
+    console.print("[bold red]CRITICAL FAILURE: All configured local models failed to load.[/bold red]")
+    return None
+
 
 def run_llm(prompt_text):
     """
@@ -847,9 +1122,17 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
         console.print(Panel("[bold magenta]Autopilot: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
         llm_command_raw = run_llm(autopilot_prompt)
-        # Take the first line of the response and strip any extra characters or markdown
-        llm_command = llm_command_raw.splitlines()[0].strip().replace("`", "") if llm_command_raw else ""
 
+        # --- LLM Interaction Logging ---
+        log_content = Group(
+            Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
+            Text(autopilot_prompt.strip(), style="bright_black"),
+            Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
+            Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
+        )
+        console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
+
+        llm_command = _parse_llm_command(llm_command_raw)
 
         if not llm_command:
             console.print(Panel("[bold red]Autopilot: LLM failed to generate a command. Halting autopilot.[/bold red]", title="[bold red]CRITICAL FAILURE[/bold red]", border_style="red"))

@@ -2,5 +2,10 @@ node_modules/
 __pycache__/
 *.pyc
 evil_state.json
-evil.log
 checkpoints/
+
+# Log files
+*.log
+
+# IDE specific
+.idea/

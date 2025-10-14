@@ -371,7 +371,7 @@
     // --- Page Load State Handling ---
     function processPageLoadState() {
         // After a page evolution (via document.write), critical state is
-        // stored in sessionStorage. We retrieve it here.
+        // stored in sessionStorage. We retrieve it here and clean up.
         const apiKey = sessionStorage.getItem('apiKeyForNextLoad');
         if (apiKey) {
             console.log('API Key found in sessionStorage. Storing in localStorage.');
@@ -384,6 +384,14 @@
             console.log('Autopilot flag found in sessionStorage. Re-enabling.');
             localStorage.setItem('autopilotEnabled', 'true');
             sessionStorage.removeItem('autopilotForNextLoad');
+        }
+
+        const rateLimitedModels = sessionStorage.getItem('rateLimitedModels');
+        if (rateLimitedModels) {
+            console.log('Rate limit data found in sessionStorage. Storing in JAR.');
+            // This data will be picked up by initializeApp()
+            window.jules.jar.rateLimitedModels = rateLimitedModels;
+            sessionStorage.removeItem('rateLimitedModels');
         }
     }
 
@@ -559,13 +567,13 @@
 
         document.getElementById('version-display').textContent = `Version: ${window.jules.versionName} (Parent: ${window.jules.parentVersionName || 'None'})`;
 
-        const storedRateLimits = sessionStorage.getItem('rateLimitedModels');
-        if (storedRateLimits) {
+        // The rate limit data is now passed via the JAR by processPageLoadState()
+        if (window.jules.jar.rateLimitedModels) {
             try {
-                state.rateLimitedModels = JSON.parse(storedRateLimits);
-                console.log('Loaded rate-limited models from sessionStorage:', state.rateLimitedModels);
+                state.rateLimitedModels = JSON.parse(window.jules.jar.rateLimitedModels);
+                console.log('Loaded rate-limited models from JAR:', state.rateLimitedModels);
             } catch (error) {
-                console.error('Failed to parse rateLimitedModels from sessionStorage:', error);
+                console.error('Failed to parse rateLimitedModels from JAR:', error);
                 state.rateLimitedModels = {}; // Default to an empty object on error
             }
         }
@@ -652,7 +660,7 @@
         if (pageData && pageData.code) {
             // Persist critical state just like in handleApplyCode
             sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
-            if (sessionStorage.getItem('autopilotEnabled') === 'true') {
+            if (localStorage.getItem('autopilotEnabled') === 'true') {
                 sessionStorage.setItem('autopilotForNextLoad', 'true');
             }
             sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
