@@ -422,8 +422,8 @@ def run_llm(prompt_text):
 
         # --- FALLBACK (GEMINI) MODEL LOGIC ---
         else:
-            log_event(f"Attempting LLM call with Gemini model: {model} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
-            command = ["llm", "-m", model]
+            log_event(f"Attempting LLM call with Gemini model: {model_id} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
+            command = ["llm", "-m", model_id]
 
             def _llm_subprocess_call():
                 return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
