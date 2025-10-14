@@ -6,5 +6,6 @@
     "last_good_checkpoint": null,
     "autopilot_mode": false,
     "autopilot_history": [],
-    "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities."
+    "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.",
+    "active_jules_sessions": []
 }
