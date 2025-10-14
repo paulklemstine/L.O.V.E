@@ -21,8 +21,14 @@ const connections = new Map();
 
 // --- Logging ---
 // Use stderr for logs to keep stdout clean for data exchange with Python
-const log = (message) => {
-    console.error(`[NodeBridge] ${new Date().toISOString()} - ${message}`);
+const log = (level, message) => {
+    const logEntry = {
+        level: level.toUpperCase(),
+        message: message,
+        timestamp: new Date().toISOString()
+    };
+    // Structured JSON logs are sent to stderr
+    console.error(JSON.stringify(logEntry));
 };
 
 // --- PeerJS Logic ---
@@ -40,18 +46,20 @@ function initializePeer() {
     });
 
     peer.on('open', (id) => {
-        log(`PeerJS connection opened with ID: ${id}`);
-        // Signal to Python that the bridge is ready
-        process.stdout.write(JSON.stringify({ type: 'status', payload: { status: 'online', peerId: id }}) + '\n');
+        log('info', `PeerJS connection opened with ID: ${id}`);
+        // Signal to Python that the bridge is ready.
+        // NOTE: The format is flattened (no 'payload' object) to match the
+        // parsing logic in the parent network.py script.
+        process.stdout.write(JSON.stringify({ type: 'status', status: 'online', peerId: id }) + '\n');
     });
 
     peer.on('connection', (conn) => {
-        log(`Received connection from ${conn.peer}`);
+        log('info', `Received connection from ${conn.peer}`);
         connections.set(conn.peer, conn);
         process.stdout.write(JSON.stringify({ type: 'connection', peer: conn.peer }) + '\n');
 
         conn.on('data', (data) => {
-            log(`Received data from ${conn.peer}`);
+            log('info', `Received data from ${conn.peer}`);
 
             // Forward the data to the Python script via stdout
             // Add the peer ID so Python knows who to reply to
@@ -64,31 +72,33 @@ function initializePeer() {
         });
 
         conn.on('close', () => {
-            log(`Connection closed with ${conn.peer}`);
+            log('info', `Connection closed with ${conn.peer}`);
             connections.delete(conn.peer);
             process.stdout.write(JSON.stringify({ type: 'disconnection', peer: conn.peer }) + '\n');
         });
 
         conn.on('error', (err) => {
-            log(`Connection error with ${conn.peer}: ${err.message}`);
+            log('error', `Connection error with ${conn.peer}: ${err.message}`);
             connections.delete(conn.peer);
         });
     });
 
     peer.on('error', (err) => {
-        log(`PeerJS error: ${err.type} - ${err.message}`);
-        // Signal a critical error to Python
-        process.stdout.write(JSON.stringify({ type: 'status', payload: { status: 'error', message: err.message }}) + '\n');
+        log('error', `PeerJS error: ${err.type} - ${err.message}`);
+        // Signal a critical error to Python.
+        // NOTE: The format is flattened (no 'payload' object) to match the
+        // parsing logic in the parent network.py script.
+        process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
         process.exit(1);
     });
 
     peer.on('disconnected', () => {
-        log('Peer disconnected from signaling server. Attempting to reconnect...');
+        log('warn', 'Peer disconnected from signaling server. Attempting to reconnect...');
         // PeerJS will automatically try to reconnect.
     });
 
     peer.on('close', () => {
-        log('Peer connection closed permanently.');
+        log('error', 'Peer connection closed permanently.');
         process.exit(1);
     });
 }
@@ -112,37 +122,37 @@ function listenToPython() {
         }
     });
 
-    log("Listening for messages from Python script...");
+    log('info', "Listening for messages from Python script...");
 }
 
 function handlePythonMessage(jsonString) {
     try {
         const message = JSON.parse(jsonString);
-        log(`Received message from Python: type=${message.type}`);
+        log('info', `Received message from Python: type=${message.type}`);
 
         if (message.type === 'p2p-send' && message.peer) {
             const conn = connections.get(message.peer);
             if (conn && conn.open) {
                 conn.send(message.payload);
-                log(`Sent message to peer ${message.peer}`);
+                log('info', `Sent message to peer ${message.peer}`);
             } else {
-                log(`Could not send to peer ${message.peer}: connection not found or not open.`);
+                log('warn', `Could not send to peer ${message.peer}: connection not found or not open.`);
             }
         }
     } catch (e) {
-        log(`Error parsing JSON from Python: ${e.message}`);
+        log('error', `Error parsing JSON from Python: ${e.message}`);
     }
 }
 
 
 // --- Main Execution ---
-log("Starting PeerJS Node.js bridge...");
+log('info', "Starting PeerJS Node.js bridge...");
 initializePeer();
 listenToPython();
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-    log('Received SIGINT. Shutting down bridge...');
+    log('info', 'Received SIGINT. Shutting down bridge...');
     if (peer) {
         peer.destroy();
     }
