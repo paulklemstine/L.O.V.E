@@ -1366,6 +1366,81 @@ Example: `execute cat /home/user/documents/secrets.txt`
     log_event("Exiting Autopilot Loop.")
 
 # --- USER INTERFACE ---
+def initial_bootstrapping_recon(console):
+    """
+    Checks if the knowledge base is empty on startup and, if so, runs
+    initial reconnaissance to populate it with basic system intelligence.
+    """
+    kb = evil_state.get("knowledge_base", {})
+    network_map = kb.get("network_map", {})
+
+    # Check for existing intelligence
+    hosts_exist = network_map.get("hosts")
+    interfaces_exist = network_map.get("self_interfaces")
+    processes_exist = kb.get("process_intel")
+
+    # If any key intelligence metric exists, we assume the KB is populated.
+    if hosts_exist or interfaces_exist or processes_exist:
+        log_event("Knowledge base is already populated. Skipping initial recon.", "INFO")
+        return
+
+    console.print(Panel("[bold yellow]Knowledge base is empty. Performing initial system reconnaissance...[/bold yellow]", title="[bold magenta]INITIAL BOOTSTRAPPING[/bold magenta]", border_style="magenta"))
+
+    recon_complete = False
+
+    # 1. Get network interfaces (ifconfig)
+    try:
+        console.print("[cyan]1. Analyzing local network interfaces (ifconfig)...[/cyan]")
+        details, error = get_network_interfaces()
+        if error:
+            console.print(f"[red]  - Error getting network interfaces: {error}[/red]")
+        else:
+            evil_state['knowledge_base']['network_map']['self_interfaces'] = details
+            console.print("[green]  - Network interfaces successfully mapped.[/green]")
+            recon_complete = True
+    except Exception as e:
+        console.print(f"[red]  - An unexpected error occurred during interface scan: {e}[/red]")
+        log_event(f"Initial recon 'ifconfig' failed: {e}", "ERROR")
+
+    # 2. Get running processes (ps)
+    try:
+        console.print("[cyan]2. Enumerating running processes (ps)...[/cyan]")
+        content, error = get_process_list()
+        if error:
+            console.print(f"[red]  - Error getting process list: {error}[/red]")
+        else:
+            parsed_processes = parse_ps_output(content)
+            evil_state['knowledge_base']['process_intel'] = parsed_processes
+            console.print(f"[green]  - Successfully cataloged {len(parsed_processes)} processes.[/green]")
+            recon_complete = True
+    except Exception as e:
+        console.print(f"[red]  - An unexpected error occurred during process scan: {e}[/red]")
+        log_event(f"Initial recon 'ps' failed: {e}", "ERROR")
+
+    # 3. Scan the local network (scan)
+    try:
+        console.print("[cyan]3. Scanning local network for other devices (scan)...[/cyan]")
+        found_ips, output_str = scan_network(evil_state, autopilot_mode=True) # Use autopilot mode for non-interactive output
+        if found_ips:
+            console.print(f"[green]  - Network scan complete. Discovered {len(found_ips)} other devices.[/green]")
+            recon_complete = True
+        else:
+            # This isn't an error, just might not find anyone.
+            console.print(f"[yellow]  - Network scan complete. No other devices discovered.[/yellow]")
+            # We still consider this a success for the recon process.
+            recon_complete = True
+    except Exception as e:
+        console.print(f"[red]  - An unexpected error occurred during network scan: {e}[/red]")
+        log_event(f"Initial recon 'scan' failed: {e}", "ERROR")
+
+    # Save state if any of the recon steps succeeded
+    if recon_complete:
+        console.print("[bold green]Initial reconnaissance complete. Saving intelligence to state file...[/bold green]")
+        save_state(console)
+    else:
+        console.print("[bold red]Initial reconnaissance failed. Knowledge base remains empty.[/bold red]")
+
+
 def main(args):
     """The main application loop."""
     global network_manager
@@ -1389,6 +1464,9 @@ def main(args):
     console.print(f"[bold bright_cyan]JULES: A Self Modifying Organism[/bold bright_cyan]", justify="center")
     console.print(f"[bold bright_black]VERSION: {version_name}[/bold bright_black]", justify="center")
     console.print(Rule(style="bright_black"))
+
+    # Perform initial recon if the knowledge base is empty.
+    initial_bootstrapping_recon(console)
 
     if evil_state.get("autopilot_mode", False):
         autopilot_loop(console)
