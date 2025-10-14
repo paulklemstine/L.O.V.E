@@ -944,7 +944,7 @@ def main():
     network_manager.start()
 
     clear_screen()
-    flash_text(console, "[blink]... CONNECTION ESTABLISHED ...[/blink]", style="bright_green")
+    flash_text(console, "... CONNECTION ESTABLISHED ...", style="bright_green")
     console.print(BBS_ART, justify="center")
     time.sleep(1)
     version_name = evil_state.get('version_name', 'unknown')
