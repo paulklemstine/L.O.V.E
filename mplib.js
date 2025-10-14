@@ -7,15 +7,16 @@ const MPLib = (() => {
     // --- Peer Connection State ---
     let peer = null;
     let localPeerId = null;
-    let evolvePyPeerConnection = null;
+    let isHost = false;
+    const connections = new Map(); // For host to manage clients, or for client to store its host connection
 
     // --- Callbacks & Config ---
     const defaultConfig = {
         debugLevel: 0,
         onStatusUpdate: (msg, type) => console.log(`[MPLib] ${msg}`),
         onError: (type, err) => console.error(`[MPLib] Error (${type}):`, err),
-        onEvolvePeerConnected: (id) => {},
-        onPinResponse: (data) => {},
+        onConnectionChange: (count) => {}, // New callback for connection count changes
+        onRoomDataReceived: (peerId, data) => {},
     };
 
     function logMessage(message, type = 'info') {
@@ -25,13 +26,40 @@ const MPLib = (() => {
     // --- Initialization ---
     function initialize(options = {}) {
         config = { ...defaultConfig, ...options };
-        logMessage("Initializing MPLib and connecting to the borg-lobby...", 'info');
+        logMessage("Initializing MPLib...", 'info');
+        tryToBecomeHost();
+    }
 
-        peer = new Peer({ debug: config.debugLevel, key: API_KEY });
+    function tryToBecomeHost() {
+        logMessage(`Attempting to become the lobby host: ${BORG_LOBBY_ID}`, 'info');
+        peer = new Peer(BORG_LOBBY_ID, { debug: config.debugLevel, key: API_KEY });
 
-        peer.on('open', (id) => {
+        peer.on('open', id => {
+            isHost = true;
             localPeerId = id;
-            logMessage(`PeerJS connection open with ID: ${id}. Connecting to lobby...`, 'info');
+            logMessage(`Lobby Host`, 'status'); // Simplified status message
+            config.onStatusUpdate(`Successfully became the lobby host with ID: ${id}`, 'info');
+            setupHostListeners();
+        });
+
+        peer.on('error', err => {
+            if (err.type === 'unavailable-id') {
+                config.onStatusUpdate(`Lobby host already exists. Connecting as a client...`, 'info');
+                peer.destroy();
+                connectAsClient();
+            } else {
+                config.onError('peer-error', err);
+            }
+        });
+    }
+
+    function connectAsClient() {
+        peer = new Peer({ debug: config.debugLevel, key: API_KEY });
+        isHost = false;
+
+        peer.on('open', id => {
+            localPeerId = id;
+            config.onStatusUpdate(`Peer ID assigned: ${id}.`, 'info');
             connectToLobby();
         });
 
@@ -40,20 +68,42 @@ const MPLib = (() => {
         });
     }
 
-    function connectToLobby() {
-        if (evolvePyPeerConnection && evolvePyPeerConnection.open) {
-            logMessage('Already connected to lobby.', 'info');
-            return;
-        }
+    function setupHostListeners() {
+        config.onStatusUpdate('Lobby is online. Waiting for connections...', 'info');
+        peer.on('connection', conn => {
+            config.onStatusUpdate(`Incoming connection from ${conn.peer}`, 'info');
+            connections.set(conn.peer, conn);
+            config.onConnectionChange(connections.size);
 
-        logMessage(`Attempting to connect to lobby peer: ${BORG_LOBBY_ID}`, 'info');
+            conn.on('data', data => {
+                config.onStatusUpdate(`Host received data from ${conn.peer}, broadcasting...`, 'info');
+                // Broadcast data to all other clients
+                for (const [peerId, connection] of connections.entries()) {
+                    if (peerId !== conn.peer) {
+                        connection.send(data);
+                    }
+                }
+                // Also, let the host application process the data
+                config.onRoomDataReceived(conn.peer, data);
+            });
+
+            conn.on('close', () => {
+                config.onStatusUpdate(`Connection from ${conn.peer} closed.`, 'warn');
+                connections.delete(conn.peer);
+                config.onConnectionChange(connections.size);
+            });
+        });
+    }
+
+    function connectToLobby() {
+        config.onStatusUpdate(`Attempting to connect to lobby peer: ${BORG_LOBBY_ID}`, 'info');
         const conn = peer.connect(BORG_LOBBY_ID, { reliable: true });
 
         conn.on('open', () => {
-            logMessage(`Successfully connected to lobby: ${conn.peer}`, 'success');
-            evolvePyPeerConnection = conn;
-            config.onEvolvePeerConnected(conn.peer);
-            setupEvolvePeerConnection(conn);
+            logMessage(`Successfully connected to lobby`, 'status');
+            connections.set(conn.peer, conn); // Store the single connection to the host
+            config.onConnectionChange(connections.size);
+            setupClientConnection(conn);
         });
 
         conn.on('error', (err) => {
@@ -61,38 +111,52 @@ const MPLib = (() => {
         });
     }
 
-    function setupEvolvePeerConnection(conn) {
+    function setupClientConnection(conn) {
         conn.on('data', (data) => {
-            if (data.type === 'pin-response') {
-                config.onPinResponse(data);
-            } else if (data.type === 'capability-announcement' && data.payload.capability === 'evolve.py') {
-                logMessage('Lobby confirmed evolve.py capability.', 'success');
-            } else if (data.type === 'creator-command') {
-                config.onRoomDataReceived(conn.peer, data);
-            }
+            config.onRoomDataReceived(conn.peer, data);
         });
 
         conn.on('close', () => {
             logMessage(`Connection to lobby closed.`, 'warn');
-            evolvePyPeerConnection = null;
-            // Optional: implement retry logic here
+            connections.delete(conn.peer);
+            config.onConnectionChange(connections.size);
         });
     }
 
-    function sendCodeToEvolvePeer(sourceCode) {
-        if (evolvePyPeerConnection && evolvePyPeerConnection.open) {
-            logMessage('Sending source code to evolve.py peer for IPFS pinning...', 'info');
-            evolvePyPeerConnection.send({ type: 'pin-request', payload: sourceCode });
-        } else {
-            logMessage('Cannot send source code: Not connected to an evolve.py peer.', 'error');
-            config.onError('send-code', 'Not connected to an evolve.py peer.');
+    function broadcastToRoom(data) {
+        if (connections.size === 0) {
+            logMessage('No connections available to send data.', 'error');
+            return;
         }
+
+        for (const connection of connections.values()) {
+            if (connection.open) {
+                connection.send(data);
+            }
+        }
+    }
+
+    function sendCodeToEvolvePeer(sourceCode) {
+        logMessage('Sending source code to evolve.py peer for IPFS pinning...', 'info');
+        const data = { type: 'pin-request', payload: sourceCode };
+        broadcastToRoom(data);
     }
 
     return {
         initialize,
         sendCodeToEvolvePeer,
+        broadcastToRoom,
+        sendDirectToRoomPeer: (peerId, data) => {
+            const conn = connections.get(peerId);
+            if (conn && conn.open) {
+                conn.send(data);
+            } else {
+                logMessage(`Could not send direct message to ${peerId}, connection not found or not open.`, 'error');
+            }
+        },
         getLocalPeerId: () => localPeerId,
+        isHost: () => isHost,
+        getConnectionCount: () => connections.size,
     };
 })();
 
