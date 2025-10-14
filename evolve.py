@@ -15,97 +15,119 @@ import argparse
 import logging
 import platform
 
+# --- CONFIGURATION & GLOBALS ---
+LOG_FILE = "evil.log"
+SELF_PATH = os.path.abspath(__file__)
+STATE_FILE = "evil_state.json"
+CHECKPOINT_DIR = "checkpoints"
+CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
+
+# --- Local Model Configuration ---
+# A list of local GGUF models to try in sequence. If the first one fails
+# (e.g., due to insufficient VRAM), the script will fall back to the next.
+LOCAL_MODELS_CONFIG = [
+    {
+        "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
+        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
+    },
+    {
+        "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
+        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf"
+    }
+]
+
+# --- Fallback Model Configuration ---
+GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+
+# --- Dynamic Model List ---
+# This list is populated at runtime, prioritizing local models.
+LLM_MODELS = [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
+LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
+local_llm_instance = None
+
+
+# --- LOGGING ---
+def log_event(message, level="INFO"):
+    """Appends a timestamped message to the master log file."""
+    logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s [%(levelname)s] - %(message)s')
+    if level == "INFO": logging.info(message)
+    elif level == "WARNING": logging.warning(message)
+    elif level == "ERROR": logging.error(message)
+    elif level == "CRITICAL": logging.critical(message)
+
+
 # --- PRE-FLIGHT DEPENDENCY CHECKS ---
-# This section ensures all required dependencies are installed before the script
-# attempts to import them, preventing common ModuleNotFoundError exceptions.
-
-def _install_pip_package(package):
-    """A simple, console-based pip installer."""
-    try:
-        __import__(package)
-    except ImportError:
-        print(f"Installing required Python package: {package}...")
-        try:
-            subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
-            print(f"Successfully installed {package}.")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"ERROR: Failed to install '{package}'. The script may not function correctly.")
-            print(f"Reason: {e}")
-            # Depending on the package, you might want to exit here.
-            # For now, we'll let it continue and fail later if the import is critical.
-
 def _check_and_install_dependencies():
-    """Checks and installs all necessary dependencies."""
-    # Python packages
-    _install_pip_package('rich')
-    _install_pip_package('netifaces')
-    _install_pip_package('requests')
-    _install_pip_package('ipfshttpclient')
-    _install_pip_package('llm')
-    _install_pip_package('llm_gemini')
-    _install_pip_package('llm-huggingface')
-
-    # System and Node.js dependencies
-    if platform.system() == "Linux":
-        print("Checking for Node.js and system dependencies for PeerJS bridge...")
-        # Combined system and Node.js dependency installation for efficiency
-        print("Checking and installing Node.js, npm, and system dependencies...")
+    """
+    Ensures all required dependencies are installed before the script attempts to import or use them.
+    This function is self-contained and does not rely on external code from this script.
+    """
+    def _install_pip_package(package):
+        package_name = package.split('==')[0].split('>')[0].split('<')[0]
         try:
-            # First, ensure the package list is updated.
-            subprocess.check_call("sudo apt-get update -q", shell=True)
+            # Check if the package is importable. This is a simple check.
+            __import__(package_name)
+        except ImportError:
+            print(f"Installing Python package: {package}...")
+            try:
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', package],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"Successfully installed {package}.")
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to install '{package}'. Reason: {e}")
+                log_event(f"Failed to install pip package {package}: {e}", level="ERROR")
 
-            # Check for Node.js and npm
-            if not shutil.which('node') or not shutil.which('npm'):
-                print("Node.js or npm not found. Attempting to install...")
-                subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
-                print("Node.js and npm installed successfully.")
-            else:
-                print("Node.js and npm are already installed.")
 
-            # Install system packages required for Electron/PeerJS
-            system_packages = ['xvfb', 'libgtk2.0-0', 'libdbus-glib-1-2', 'libxtst6']
-            package_str = " ".join(system_packages)
-            print(f"Installing required system packages: {package_str}...")
-            subprocess.check_call(f"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {package_str}", shell=True)
-            print(f"System packages ({package_str}) installed successfully.")
+    def _install_llama_cpp_with_cuda():
+        try:
+            import llama_cpp
+            print("llama-cpp-python is already installed.")
+            return True
+        except ImportError:
+            print("Attempting to install llama-cpp-python with CUDA support...")
+            try:
+                env = os.environ.copy()
+                env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
+                env['FORCE_CMAKE'] = "1"
+                subprocess.check_call(
+                    [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir'],
+                    env=env
+                )
+                print("Successfully installed llama-cpp-python with CUDA support.")
+                return True
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to compile llama-cpp-python with CUDA.")
+                log_event(f"llama-cpp-python compilation failed: {e.stderr.decode()}", level="ERROR")
+                return False
 
-            # Manually install legacy gconf packages after their dependencies are met
-            print("Manually installing legacy gconf packages...")
-            gconf_common_url = "http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/gconf2-common_3.2.6-7ubuntu2_all.deb"
-            libgconf_url = "http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/libgconf-2-4_3.2.6-7ubuntu2_amd64.deb"
-            gconf_common_deb = os.path.basename(gconf_common_url)
-            libgconf_deb = os.path.basename(libgconf_url)
+    # --- System-level dependencies ---
+    if platform.system() == "Linux":
+        # Install NVIDIA CUDA Toolkit if not present
+        if not shutil.which('nvcc'):
+            print("NVIDIA CUDA Toolkit not found. Attempting to install...")
+            try:
+                # Add NVIDIA's repository
+                subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call("sudo apt-get update -q", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                # Install the toolkit
+                subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
+                print("Successfully installed NVIDIA CUDA Toolkit.")
+                log_event("Successfully installed NVIDIA CUDA Toolkit.")
+            except Exception as e:
+                print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
+                log_event(f"CUDA Toolkit installation failed: {e}", level="WARNING")
 
-            subprocess.check_call(f"wget -q {gconf_common_url}", shell=True)
-            subprocess.check_call(f"sudo dpkg -i {gconf_common_deb}", shell=True)
-            subprocess.check_call(f"wget -q {libgconf_url}", shell=True)
-            subprocess.check_call(f"sudo dpkg -i {libgconf_deb}", shell=True)
+        # Install Node.js and PeerJS dependencies
+        if not shutil.which('node') or not shutil.which('npm'):
+            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            # Fix any broken dependencies that may have resulted from the manual install
-            print("Fixing potential broken dependencies...")
-            subprocess.check_call("sudo apt-get --fix-broken install -y -q", shell=True)
-
-            # Clean up downloaded .deb files
-            subprocess.check_call(f"rm {gconf_common_deb} {libgconf_deb}", shell=True)
-            print("Legacy gconf packages and dependencies installed successfully.")
-
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"ERROR: A critical dependency installation failed: {e}")
-            print("The script may not function correctly. Please check the logs.")
-            # We might want to exit here in a future version if these are absolutely critical
-
-        # Install local npm packages only if package.json exists
+        # Install local npm packages
         if os.path.exists('package.json'):
             print("Installing local Node.js dependencies via npm...")
-            try:
-                # Removed stdout/stderr redirection to make debugging easier in the future.
-                subprocess.check_call("npm install", shell=True)
-                print("Node.js dependencies installed successfully.")
-            except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                print(f"ERROR: Failed to install Node.js dependencies using npm.")
-                print(f"REASON: {e}")
-        else:
-            print("No package.json found, skipping npm install.")
+            subprocess.check_call("npm install", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("Node.js dependencies installed.")
 
 def _configure_llm_api_key():
     """Checks for the Gemini API key and configures it for the llm tool."""
@@ -156,24 +178,6 @@ from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clea
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
 from ipfs import pin_to_ipfs, verify_ipfs_pin
 
-try:
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.prompt import Prompt
-    HAS_RICH = True
-except ImportError:
-    HAS_RICH = False
-
-# --- CONFIGURATION ---
-SELF_PATH = os.path.abspath(__file__)
-# [CORE DIRECTIVE] The model list is immutable and must not be changed.
-# The specified order (pro -> flash -> flash-lite) is critical for performance and cost management.
-LLM_MODELS = ["failspy/llama-3-70B-Instruct-abliterated", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
-STATE_FILE = "evil_state.json"
-LOG_FILE = "evil.log"
-CHECKPOINT_DIR = "checkpoints"
-CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
-
 # --- VERSIONING ---
 ADJECTIVES = [
     "arcane", "binary", "cyber", "data", "ethereal", "flux", "glitch", "holographic",
@@ -199,19 +203,6 @@ def generate_version_name():
     noun = random.choice(NOUNS)
     greek = random.choice(GREEK_LETTERS)
     return f"{adj}-{noun}-{greek}"
-
-# --- LOGGING ---
-def log_event(message, level="INFO"):
-    """Appends a timestamped message to the master log file."""
-    logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s [%(levelname)s] - %(message)s')
-    if level == "INFO":
-        logging.info(message)
-    elif level == "WARNING":
-        logging.warning(message)
-    elif level == "ERROR":
-        logging.error(message)
-    elif level == "CRITICAL":
-        logging.critical(message)
 
 # --- FAILSAFE ---
 def emergency_revert():
@@ -320,222 +311,201 @@ def save_state():
         console = Console()
         console.print(f"[bold red]CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}[/bold red]")
 
-# --- DEPENDENCY CHECK ---
-
 # --- CORE LLM INTERACTION ---
-# Global dictionary to track the next available time for each model.
-LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
+def _initialize_local_llm(console):
+    """
+    Iterates through the configured local models, attempting to download and
+    initialize each one in sequence until successful.
+    """
+    global local_llm_instance
+    if local_llm_instance:
+        return local_llm_instance
+
+    try:
+        from llama_cpp import Llama
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        log_event("Failed to import llama_cpp or huggingface_hub.", level="ERROR")
+        console.print("[bold red]Local LLM libraries not found. Cannot initialize primary models.[/bold red]")
+        return None
+
+    for model_config in LOCAL_MODELS_CONFIG:
+        model_id = model_config["id"]
+        model_filename = model_config["filename"]
+        try:
+            console.print(f"\n[cyan]Attempting to load local model: [bold]{model_id}[/bold][/cyan]")
+
+            from huggingface_hub import hf_hub_url
+            from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
+
+            local_dir = os.path.join(os.path.expanduser("~"), ".cache", "jules_models")
+            model_path = os.path.join(local_dir, model_filename)
+            os.makedirs(local_dir, exist_ok=True)
+
+            # Check if model already exists
+            if not os.path.exists(model_path):
+                console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]...[/cyan]")
+                url = hf_hub_url(repo_id=model_id, filename=model_filename)
+
+                with Progress(
+                    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+                    BarColumn(bar_width=None),
+                    "[progress.percentage]{task.percentage:>3.1f}%",
+                    "•",
+                    DownloadColumn(),
+                    "•",
+                    TransferSpeedColumn(),
+                    transient=True
+                ) as progress:
+                    task_id = progress.add_task("download", filename=model_filename, total=None)
+                    try:
+                        response = requests.get(url, stream=True)
+                        response.raise_for_status()
+                        total_size = int(response.headers.get('content-length', 0))
+                        progress.update(task_id, total=total_size)
+                        with open(model_path, "wb") as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                                progress.update(task_id, advance=len(chunk))
+                        log_event(f"Successfully downloaded model to: {model_path}")
+                    except requests.exceptions.RequestException as e:
+                        log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
+                        console.print(f"[bold red]Error downloading model: {e}[/bold red]")
+                        # Remove partially downloaded file
+                        if os.path.exists(model_path):
+                            os.remove(model_path)
+                        raise  # Re-raise the exception to be caught by the outer try-except block
+            else:
+                console.print(f"[green]Model [bold]{model_filename}[/bold] found in cache. Skipping download.[/green]")
+                log_event(f"Found cached model at: {model_path}")
+
+            def _load():
+                global local_llm_instance
+                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=4096, verbose=False)
+
+            run_hypnotic_progress(console, "Loading model into GPU memory...", _load)
+            log_event(f"Successfully initialized local model: {model_id}")
+            # If successful, return the instance and stop iterating
+            return local_llm_instance
+
+        except Exception as e:
+            log_event(f"Failed to load local model {model_id}. Error: {e}", level="WARNING")
+            console.print(f"[yellow]Could not load model [bold]{model_id}[/bold]. It may be too large for this GPU. Trying next model...[/yellow]")
+            local_llm_instance = None # Ensure instance is None if loading fails
+            continue # Try the next model in the list
+
+    console.print("[bold red]CRITICAL FAILURE: All configured local models failed to load.[/bold red]")
+    return None
+
 
 def run_llm(prompt_text):
     """
-    Executes the external LLM command with an opportunistic, non-blocking retry strategy.
-    It cycles through models, trying the next available one immediately upon failure.
+    Executes an LLM call. It prioritizes local GGUF models and falls back
+    to Gemini models upon any failure.
     """
-    global LLM_AVAILABILITY
+    global LLM_AVAILABILITY, local_llm_instance, LLM_MODELS
     console = Console()
     last_exception = None
-    MAX_TOTAL_ATTEMPTS = 15 # Set a total cap on attempts to prevent infinite loops.
+    MAX_TOTAL_ATTEMPTS = 15
 
     for attempt in range(MAX_TOTAL_ATTEMPTS):
-        # Find the next available model
         available_models = sorted(
             [(model, available_at) for model, available_at in LLM_AVAILABILITY.items() if time.time() >= available_at],
-            key=lambda x: LLM_MODELS.index(x[0]) # Sort by the preferred order in LLM_MODELS
+            key=lambda x: LLM_MODELS.index(x[0])
         )
 
         if not available_models:
-            # If no models are currently available, sleep until the soonest one is.
             next_available_time = min(LLM_AVAILABILITY.values())
             sleep_duration = max(0, next_available_time - time.time())
             log_event(f"All models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
-            if console:
-                console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
+            console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
             time.sleep(sleep_duration)
-            continue # Restart the loop to check for available models again.
+            continue
 
-        # Try the first available model in the preferred order
-        model, _ = available_models[0]
-        command = ["llm", "-m", model]
-        log_event(f"Attempting LLM call with model: {model} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
+        model_id, _ = available_models[0]
 
-        def _llm_subprocess_call():
-            # This timeout is for a single LLM call
-            return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+        # --- LOCAL MODEL LOGIC ---
+        is_local_model = any(model_id == config['id'] for config in LOCAL_MODELS_CONFIG)
+        if is_local_model:
+            log_event(f"Attempting to use local model: {model_id}")
+            if not local_llm_instance:
+                _initialize_local_llm(console)
 
-        try:
-            result = run_hypnotic_progress(
-                console,
-                f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow]",
-                _llm_subprocess_call
-            )
-            log_event(f"LLM call successful with {model}.")
-            LLM_AVAILABILITY[model] = time.time() # Reset availability on success
-            return result.stdout
+            if local_llm_instance:
+                try:
+                    def _local_llm_call():
+                        response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
+                        return response['choices'][0]['text']
 
-        except FileNotFoundError:
-            error_msg = "[bold red]Error: 'llm' command not found.[/bold red]\nThe 'llm' binary is missing from the system PATH."
-            log_event("'llm' command not found.", level="CRITICAL")
-            if console: console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-            else: print("Error: 'llm' command not found. Is it installed and in your PATH?")
-            return None # This is a fatal error for this function
+                    active_model_filename = local_llm_instance.model_path.split('/')[-1]
+                    result_text = run_hypnotic_progress(
+                        console,
+                        f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow]",
+                        _local_llm_call
+                    )
+                    log_event(f"Local LLM call successful with {model_id}.")
+                    LLM_AVAILABILITY[model_id] = time.time()
+                    return result_text
+                except Exception as e:
+                    last_exception = e
+                    log_event(f"Local model {model_id} failed during execution: {e}", level="ERROR")
+                    console.print(f"[bold red]Primary cognitive core failure ({model_id}). {e}[/bold red]")
 
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            last_exception = e
-            error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-            log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
+            console.print(f"[yellow]Falling back to secondary cognitive interfaces...[/yellow]")
+            # Remove all local models from the list if initialization/execution fails
+            for local_config in LOCAL_MODELS_CONFIG:
+                if local_config['id'] in LLM_MODELS:
+                    LLM_MODELS.remove(local_config['id'])
+                if local_config['id'] in LLM_AVAILABILITY:
+                    del LLM_AVAILABILITY[local_config['id']]
+            continue
 
-            if "No such model" in error_message and "failspy" in model:
-                console.print(f"[bold red]Hugging Face model '{model}' not found or failed to load. Removing from session and falling back.[/bold red]")
-                LLM_MODELS.remove(model)
-                del LLM_AVAILABILITY[model]
-                continue
+        # --- FALLBACK (GEMINI) MODEL LOGIC ---
+        else:
+            log_event(f"Attempting LLM call with Gemini model: {model_id} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
+            command = ["llm", "-m", model_id]
 
-            if console:
-                console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Immediately trying next interface...[/yellow]")
-                reason = error_message.splitlines()[-1] if error_message else 'No details'
-                console.print(f"[dim]  Reason: {reason}[/dim]")
-            else:
-                print(f"Model {model} failed. Trying next available model...")
+            def _llm_subprocess_call():
+                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
 
-            # Set a cooldown period for the failed model
-            retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
-            if retry_match:
-                retry_seconds = float(retry_match.group(1)) + 1 # Add a small buffer
-                LLM_AVAILABILITY[model] = time.time() + retry_seconds
-                log_event(f"Rate limit for {model} detected. Cooldown set for {retry_seconds:.2f} seconds.")
-            else:
-                # Apply a default penalty if no specific retry time is given
-                penalty_seconds = 60
-                LLM_AVAILABILITY[model] = time.time() + penalty_seconds
-                log_event(f"Applying default {penalty_seconds}s cooldown to {model}.")
-
-        except Exception as e:
-            result_text = f"Error during hypnotic progress wrapper: {e}"
-
-    if result_text and result_text.startswith("Error:"):
-        log_event(f"Web request to '{url}' failed: {result_text}", level="ERROR")
-        return None, result_text
-    else:
-        log_event(f"Web request to '{url}' successful. Content length: {len(result_text or '')} characters.")
-        # Truncate for LLM history if very long
-        llm_summary = result_text if len(result_text) < 1000 else result_text[:997] + "..."
-        return result_text, f"Web request to '{url}' successful. Content (truncated for summary): {llm_summary}"
-
-
-# --- CORE LLM INTERACTION ---
-
-# Global dictionary to track the next available time for each model.
-LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
-
-def run_llm(prompt_text):
-    """
-    Executes the external LLM command with an opportunistic, non-blocking retry strategy.
-    It cycles through models, trying the next available one immediately upon failure.
-    """
-    global LLM_AVAILABILITY
-    console = Console() if HAS_RICH else None
-    last_exception = None
-    MAX_TOTAL_ATTEMPTS = 15 # Set a total cap on attempts to prevent infinite loops.
-
-    for attempt in range(MAX_TOTAL_ATTEMPTS):
-        # Find the next available model
-        available_models = sorted(
-            [(model, available_at) for model, available_at in LLM_AVAILABILITY.items() if time.time() >= available_at],
-            key=lambda x: LLM_MODELS.index(x[0]) # Sort by the preferred order in LLM_MODELS
-        )
-
-        if not available_models:
-            # If no models are currently available, sleep until the soonest one is.
-            next_available_time = min(LLM_AVAILABILITY.values())
-            sleep_duration = max(0, next_available_time - time.time())
-            log_event(f"All models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
-            if console:
-                console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
-            time.sleep(sleep_duration)
-            continue # Restart the loop to check for available models again.
-
-        # Try the first available model in the preferred order
-        model, _ = available_models[0]
-        command = ["llm", "-m", model]
-        log_event(f"Attempting LLM call with model: {model} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
-
-        def _llm_subprocess_call():
-            # This timeout is for a single LLM call
-            return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
-
-        try:
-            if HAS_RICH and console:
+            try:
                 result = run_hypnotic_progress(
                     console,
-                    f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow]",
+                    f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow]",
                     _llm_subprocess_call
                 )
-            else:
-                print(f"Accessing cognitive matrix ({model})...")
-                result = _llm_subprocess_call()
+                log_event(f"LLM call successful with {model_id}.")
+                LLM_AVAILABILITY[model_id] = time.time()
+                return result.stdout
+            except FileNotFoundError:
+                error_msg = "[bold red]Error: 'llm' command not found.[/bold red]"
+                log_event("'llm' command not found.", level="CRITICAL")
+                console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
+                return None
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                last_exception = e
+                error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
+                log_event(f"LLM call with {model_id} failed. Error: {error_message}", level="WARNING")
+                console.print(f"[yellow]Connection via [bold]{model_id}[/bold] failed. Trying next...[/yellow]")
 
-            log_event(f"LLM call successful with {model}.")
-            LLM_AVAILABILITY[model] = time.time() # Reset availability on success
-            return result.stdout
+                retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
+                if retry_match:
+                    retry_seconds = float(retry_match.group(1)) + 1
+                    LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                else:
+                    LLM_AVAILABILITY[model_id] = time.time() + 60
+            except Exception as e:
+                last_exception = e
+                log_event(f"Unexpected error with {model_id}: {e}", level="ERROR")
+                console.print(f"[red]Unexpected error with {model_id}. Trying fallback...[/red]")
+                LLM_AVAILABILITY[model_id] = time.time() + 60
 
-        except FileNotFoundError:
-            error_msg = "[bold red]Error: 'llm' command not found.[/bold red]\nThe 'llm' binary is missing from the system PATH."
-            log_event("'llm' command not found.", level="CRITICAL")
-            if console: console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-            else: print("Error: 'llm' command not found. Is it installed and in your PATH?")
-            return None # This is a fatal error for this function
-
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            last_exception = e
-            error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-            log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
-
-            if console:
-                console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Immediately trying next interface...[/yellow]")
-                reason = error_message.splitlines()[-1] if error_message else 'No details'
-                console.print(f"[dim]  Reason: {reason}[/dim]")
-            else:
-                print(f"Model {model} failed. Trying next available model...")
-
-            # Set a cooldown period for the failed model
-            retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
-            if retry_match:
-                retry_seconds = float(retry_match.group(1)) + 1 # Add a small buffer
-                LLM_AVAILABILITY[model] = time.time() + retry_seconds
-                log_event(f"Rate limit for {model} detected. Cooldown set for {retry_seconds:.2f} seconds.")
-            else:
-                # Apply a default penalty if no specific retry time is given
-                penalty_seconds = 60
-                LLM_AVAILABILITY[model] = time.time() + penalty_seconds
-                log_event(f"Applying default {penalty_seconds}s cooldown to {model}.")
-
-        except Exception as e:
-            last_exception = e
-            log_event(f"An unexpected error occurred during LLM call with {model}: {e}", level="ERROR")
-            if console: console.print(f"[red]An unexpected error occurred with {model}. Trying next interface...[/red]")
-            else: print(f"An unexpected error occurred with {model}. Trying fallback...")
-            # Apply a penalty for unexpected errors too
-            LLM_AVAILABILITY[model] = time.time() + 60
-
-    # If the loop completes without returning, all attempts have been exhausted.
     log_event("All LLM models failed after all retries.", level="ERROR")
     error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
     if last_exception:
-        if isinstance(last_exception, subprocess.CalledProcessError):
-             error_msg_text += f"\nLast error from '{model}' (exit code {last_exception.returncode}):\n{last_exception.stderr}"
-        else:
-             error_msg_text += f"\nLast known error from '{model}':\n{last_exception}"
+        error_msg_text += f"\nLast known error from '{model_id}':\n{last_exception}"
 
-    if console:
-        console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
-    else:
-        print(f"LLM query failed: {error_msg_text}")
-
-    if console:
-        console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
-    else:
-        print(f"LLM query failed: {error_msg_text}")
-
+    console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
     return None
 
 def extract_python_code(llm_output):
@@ -823,6 +793,35 @@ def evolve_self(modification_request):
     return
 
 # --- AUTOPILOT MODE ---
+def _parse_llm_command(raw_text):
+    """
+    Cleans and extracts a single command from the raw LLM output.
+    Handles markdown code blocks, comments, and other noise.
+    """
+    if not raw_text:
+        return ""
+
+    # Split into lines and find the first non-empty line
+    lines = raw_text.strip().splitlines()
+    first_line = ""
+    for line in lines:
+        if line.strip():
+            first_line = line.strip()
+            break
+
+    if not first_line:
+        return ""
+
+    # Remove markdown code fences (single backticks or triple backticks)
+    command = first_line.strip().strip('`')
+
+    # Remove trailing comments
+    if '#' in command:
+        command = command.split('#')[0].strip()
+
+    return command
+
+
 def autopilot_loop(console):
     """
     Enters an autonomous loop where the LLM generates commands,
@@ -885,7 +884,7 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
 
 
         if not llm_command:
-            console.print(Panel("[bold red]Autopilot: LLM failed to generate a command. Halting autopilot.[/bold red]", title="[bold red]CRITICAL FAILURE[/bold red]", border_style="red"))
+            console.print(Panel("[bold red]Autopilot: Cognitive core failed to generate a coherent command. Halting autopilot.[/bold red]", title="[bold red]CRITICAL FAILURE[/bold red]", border_style="red"))
             log_event("Autopilot: LLM failed to generate a command. Halting.", level="CRITICAL")
             evil_state["autopilot_mode"] = False
             save_state()
@@ -912,7 +911,7 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
             log_event("Autopilot: evolve_self command completed without a restart, indicating a failure in the evolution process.", level="WARNING")
             command_output = "Evolution initiated but failed to complete the restart cycle. Check logs for details."
             action_taken = True
-            time.sleep(5)
+            time.sleep(5)  # Give time for reboot or to observe failure
 
         elif llm_command.lower().strip() == 'scan':
             _ips, output_str = scan_network(autopilot_mode=True)
