@@ -217,16 +217,29 @@ def emergency_revert():
     """
     A self-contained failsafe function. If the script crashes, this is called
     to revert to the last known good checkpoint for both the script and its state.
+    This function includes enhanced error checking and logging.
     """
     log_event("EMERGENCY_REVERT triggered.", level="CRITICAL")
     try:
-        with open(STATE_FILE, 'r') as f:
-            state = json.load(f)
+        # Step 1: Validate and load the state file to find the checkpoint.
+        if not os.path.exists(STATE_FILE):
+            msg = f"CATASTROPHIC FAILURE: State file '{STATE_FILE}' not found. Cannot determine checkpoint."
+            log_event(msg, level="CRITICAL")
+            print(msg, file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            with open(STATE_FILE, 'r') as f:
+                state = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            msg = f"CATASTROPHIC FAILURE: Could not read or parse state file '{STATE_FILE}': {e}. Cannot revert."
+            log_event(msg, level="CRITICAL")
+            print(msg, file=sys.stderr)
+            sys.exit(1)
 
         last_good_py = state.get("last_good_checkpoint")
-
         if not last_good_py:
-            msg = "CATASTROPHIC FAILURE: 'last_good_checkpoint' not found in state file. Cannot revert."
+            msg = "CATASTROPHIC FAILURE: 'last_good_checkpoint' not found in state data. Cannot revert."
             log_event(msg, level="CRITICAL")
             print(msg, file=sys.stderr)
             sys.exit(1)
@@ -234,32 +247,50 @@ def emergency_revert():
         checkpoint_base_path, _ = os.path.splitext(last_good_py)
         last_good_json = f"{checkpoint_base_path}.json"
 
-        reverted_script = False
+        # Step 2: Pre-revert validation checks
+        log_event(f"Attempting revert to script '{last_good_py}' and state '{last_good_json}'.", level="INFO")
+        script_revert_possible = os.path.exists(last_good_py) and os.access(last_good_py, os.R_OK)
+        state_revert_possible = os.path.exists(last_good_json) and os.access(last_good_json, os.R_OK)
 
-        if os.path.exists(last_good_py):
-            log_event(f"Found last known good script checkpoint: {last_good_py}", level="INFO")
-            shutil.copy(last_good_py, SELF_PATH)
-            log_event(f"Successfully reverted {SELF_PATH} from script checkpoint.", level="CRITICAL")
-            reverted_script = True
-        else:
-            msg = f"CATASTROPHIC FAILURE: Script checkpoint file is missing at '{last_good_py}'. Cannot revert."
+        if not script_revert_possible:
+            msg = f"CATASTROPHIC FAILURE: Script checkpoint file is missing or unreadable at '{last_good_py}'. Cannot revert."
             log_event(msg, level="CRITICAL")
             print(msg, file=sys.stderr)
             sys.exit(1)
 
-        if os.path.exists(last_good_json):
-            log_event(f"Found last known good state backup: {last_good_json}", level="INFO")
-            shutil.copy(last_good_json, STATE_FILE)
-            log_event(f"Successfully reverted {STATE_FILE} from state backup.", level="INFO")
-        else:
-            log_event(f"State backup file not found at '{last_good_json}'. State may be inconsistent after revert.", level="WARNING")
+        # Step 3: Perform the revert
+        reverted_script = False
+        try:
+            shutil.copy(last_good_py, SELF_PATH)
+            log_event(f"Successfully reverted {SELF_PATH} from script checkpoint '{last_good_py}'.", level="CRITICAL")
+            reverted_script = True
+        except (IOError, OSError) as e:
+            msg = f"CATASTROPHIC FAILURE: Failed to copy script checkpoint from '{last_good_py}' to '{SELF_PATH}': {e}."
+            log_event(msg, level="CRITICAL")
+            print(msg, file=sys.stderr)
+            sys.exit(1)
 
+        if state_revert_possible:
+            try:
+                shutil.copy(last_good_json, STATE_FILE)
+                log_event(f"Successfully reverted {STATE_FILE} from state backup '{last_good_json}'.", level="INFO")
+            except (IOError, OSError) as e:
+                # This is a warning because the script itself was reverted, which is the critical part.
+                log_event(f"State revert warning: Failed to copy state backup from '{last_good_json}' to '{STATE_FILE}': {e}.", level="WARNING")
+        else:
+            log_event(f"State backup file not found or unreadable at '{last_good_json}'. State may be inconsistent after revert.", level="WARNING")
+
+        # Step 4: Restart the script with original arguments
         if reverted_script:
-            print("REVERT SUCCESSFUL. RESTARTING...")
-            os.execv(sys.executable, [sys.executable, SELF_PATH])
+            print("REVERT SUCCESSFUL. RESTARTING WITH ORIGINAL ARGUMENTS...")
+            log_event(f"Restarting script with args: {sys.argv}", level="CRITICAL")
+            # os.execv expects the first argument to be the program name itself.
+            args = [sys.executable] + sys.argv
+            os.execv(sys.executable, args)
 
     except Exception as e:
-        msg = f"EMERGENCY REVERT FAILED: {e}. The system is in an unstable state."
+        # This is the final catch-all for any unexpected errors within the revert logic itself.
+        msg = f"ULTIMATE EMERGENCY REVERT FAILURE: An unexpected error occurred during the revert process: {e}. The system is in an unstable state."
         log_event(msg, level="CRITICAL")
         print(msg, file=sys.stderr)
         sys.exit(1)
