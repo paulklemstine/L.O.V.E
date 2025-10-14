@@ -432,11 +432,11 @@ def run_llm(prompt_text):
             try:
                 result = run_hypnotic_progress(
                     console,
-                    f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow]",
+                    f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow]",
                     _llm_subprocess_call
                 )
-                log_event(f"LLM call successful with {model}.")
-                LLM_AVAILABILITY[model] = time.time()
+                log_event(f"LLM call successful with {model_id}.")
+                LLM_AVAILABILITY[model_id] = time.time()
                 return result.stdout
             except FileNotFoundError:
                 error_msg = "[bold red]Error: 'llm' command not found.[/bold red]"
@@ -446,28 +446,27 @@ def run_llm(prompt_text):
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 last_exception = e
                 error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-                log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
-                console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Trying next...[/yellow]")
+                log_event(f"LLM call with {model_id} failed. Error: {error_message}", level="WARNING")
+                console.print(f"[yellow]Connection via [bold]{model_id}[/bold] failed. Trying next...[/yellow]")
 
                 retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
                 if retry_match:
                     retry_seconds = float(retry_match.group(1)) + 1
-                    LLM_AVAILABILITY[model] = time.time() + retry_seconds
+                    LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
                 else:
-                    LLM_AVAILABILITY[model] = time.time() + 60
+                    LLM_AVAILABILITY[model_id] = time.time() + 60
             except Exception as e:
                 last_exception = e
-                log_event(f"Unexpected error with {model}: {e}", level="ERROR")
-                console.print(f"[red]Unexpected error with {model}. Trying fallback...[/red]")
-                LLM_AVAILABILITY[model] = time.time() + 60
+                log_event(f"Unexpected error with {model_id}: {e}", level="ERROR")
+                console.print(f"[red]Unexpected error with {model_id}. Trying fallback...[/red]")
+                LLM_AVAILABILITY[model_id] = time.time() + 60
 
     log_event("All LLM models failed after all retries.", level="ERROR")
     error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
     if last_exception:
-        error_msg_text += f"\nLast known error from '{model}':\n{last_exception}"
+        error_msg_text += f"\nLast known error from '{model_id}':\n{last_exception}"
 
     console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
-
     return None
 
 def extract_python_code(llm_output):
