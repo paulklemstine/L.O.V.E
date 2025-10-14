@@ -8,22 +8,31 @@ from rich.text import Text
 from threading import Thread
 
 BBS_ART = """
-[bold bright_green]
-              .o+o.
-             / \\`o'
-            /   \\
-           /     \\
-      +--./  !!!  \\.--+
-      |  ;  (o_o)  ;  |
-      |  '. \\_-_/ ,'  |
-      |    '-...-'    |
-      |      \\_/      |
-      +--..__ | __..--+
-            .' '.
-           /     \\
-          /       \\
-         /         \\
-[bold white]    E . V . I . L .    O N L I N E[/bold white][/bold bright_green]
+[bold bright_cyan]
+                  ...................................
+            ...............................................
+        .........................................................
+    .............                                     ...............
+  ........     ...........                        ...........     ........
+ ......    ....    ...........                ...........    ....    ......
+......   ..    ....    ...........        ...........    ....    ..   ......
+ ...... ..   ..    ....    ........... ...........    ....    ..   .. ......
+  ...... ..   ..    ....    ....... .......    ....    ..   .. ......
+   ....... ..   ..    ....    ... ...    ....    ..   .. .......
+    ........ ..   ..    ....    .    ....    ..   .. ........
+      ........ ..   ..    ....     ....    ..   .. ........
+         ........ ..   ..    .... ....    ..   .. ........
+            ........ ..   ..    .    ..   .. ........
+               ........ ..   ..   ..   .. ........
+                  ........ ..   .  .. ........
+                      ....... .. .. .......
+                         ....... .......
+                             .........
+                             ... . ...
+                             . ..... .
+                             . ..... .
+                               . . .
+[/bold bright_cyan]
 """
 
 SUBLIMINAL_MESSAGES = [
@@ -51,6 +60,26 @@ def flash_text(console, text, count=3, delay=0.2, style="bold red"):
         time.sleep(delay)
         clear_screen()
         time.sleep(delay)
+
+def glitchy_text(console, text, style="bold white", duration=1.0, glitch_chars=10):
+    """
+    Displays text with a "glitch" effect, where characters rapidly change
+    before settling on the final text.
+    """
+    final_text = Text(text, style=style)
+    start_time = time.time()
+
+    while time.time() - start_time < duration:
+        glitched = Text("", style=style)
+        for i, char in enumerate(text):
+            if random.random() > (time.time() - start_time) / duration:
+                glitched.append(random.choice("!@#$%^&*()_+-=[]{}|;':,.<>/?"), style="random")
+            else:
+                glitched.append(char)
+        console.print(glitched, end="\\r")
+        time.sleep(0.05)
+
+    console.print(final_text)
 
 def run_hypnotic_progress(console, description, function, *args, **kwargs):
     """Runs a function in a thread while displaying a hypnotic, flashing progress bar."""

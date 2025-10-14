@@ -174,7 +174,7 @@ _configure_llm_api_key()
 
 import requests
 # Now, it's safe to import everything else.
-from utils import get_git_repo_info
+from utils import get_git_repo_info, list_directory, get_file_content, get_process_list
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -185,7 +185,7 @@ from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
 
-from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen
+from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
 from ipfs import pin_to_ipfs, verify_ipfs_pin
 
@@ -942,7 +942,8 @@ def _parse_llm_command(raw_text):
 
     # A list of known valid command prefixes.
     VALID_COMMAND_PREFIXES = [
-        "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit"
+        "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
+        "ls", "cat", "ps", "ifconfig"
     ]
 
     for line in raw_text.strip().splitlines():
@@ -1034,6 +1035,10 @@ Available commands:
 - `scan`: Scan the local network for active devices.
 - `probe <ip_address>`: Scan a specific IP for open ports and services.
 - `webrequest <url>`: Fetch the text content of a web page.
+- `ls <path>`: List files in a directory.
+- `cat <file_path>`: Show the content of a file.
+- `ps`: Show running processes.
+- `ifconfig`: Display network interface configuration.
 - `autopilot off`: Exit autopilot mode.
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
 
@@ -1114,6 +1119,34 @@ Example: `execute cat /home/user/documents/secrets.txt`
             console.print(Panel(f"[bold blue]Autopilot Execution Output (Exit: {returncode}):[/bold blue]\nSTDOUT: {stdout.strip()}\nSTDERR: {stderr.strip()}", title="[bold blue]AUTOPILOT EXECUTION[/bold blue]", border_style="blue"))
             action_taken = True
 
+        elif llm_command.lower().startswith('ls'):
+            path = llm_command[2:].strip() or "."
+            content, error = list_directory(path)
+            command_output = content if content else error
+            console.print(Panel(command_output, title=f"[bold green]AUTOPILOT LS: {path}[/bold green]", border_style="green"))
+            action_taken = True
+
+        elif llm_command.lower().startswith('cat'):
+            filepath = llm_command[3:].strip()
+            content, error = get_file_content(filepath)
+            command_output = content if content else error
+            # Truncate for display, but full content is in history
+            display_output = (command_output[:1000] + '...') if len(command_output) > 1000 else command_output
+            console.print(Panel(display_output, title=f"[bold green]AUTOPILOT CAT: {filepath}[/bold green]", border_style="green"))
+            action_taken = True
+
+        elif llm_command.lower().strip() == 'ps':
+            content, error = get_process_list()
+            command_output = content if content else error
+            display_output = (command_output[:1000] + '...') if len(command_output) > 1000 else command_output
+            console.print(Panel(display_output, title="[bold green]AUTOPILOT PS[/bold green]", border_style="green"))
+            action_taken = True
+
+        elif llm_command.lower().strip() == 'ifconfig':
+            _details, command_output = get_network_interfaces(autopilot_mode=True)
+            console.print(Panel(command_output, title="[bold green]AUTOPILOT IFCONFIG[/bold green]", border_style="green"))
+            action_taken = True
+
         elif llm_command.lower().strip() == 'autopilot off':
             evil_state["autopilot_mode"] = False
             command_output = "Autopilot mode deactivated by LLM command."
@@ -1167,20 +1200,41 @@ def main():
     network_manager.start()
 
     clear_screen()
-    flash_text(console, "... CONNECTION ESTABLISHED ...", style="bright_green")
+    version_name = evil_state.get('version_name', 'unknown')
+
+    console.print("[bold bright_black]Initiating connection...", justify="center")
+    time.sleep(1)
+    clear_screen()
+
+    glitchy_text(console, "JULES: A Self Modifying Organism", style="bold bright_cyan", duration=1.5)
+    console.print(f"[bold bright_black]VERSION: {version_name}[/bold bright_black]", justify="center")
+    time.sleep(1)
+
     console.print(BBS_ART, justify="center")
     time.sleep(1)
-    version_name = evil_state.get('version_name', 'unknown')
-    scrolling_text(console, f">>> E.V.I.L. Core OS Booting... [Version: {version_name}]", 0.02, "bold green")
-    scrolling_text(console, ">>> Cognitive Core         [  [bold green]OK[/bold green]  ]", 0.03)
-    scrolling_text(console, ">>> Neural Net Interface   [  [bold green]OK[/bold green]  ]", 0.02)
-    with Progress(TextColumn("[progress.description]{task.description}"), BarColumn(bar_width=None), console=console, transient=True) as progress:
-        task = progress.add_task("[cyan]Memory Check...", total=256)
-        for i in range(256):
-            progress.update(task, advance=1)
-            time.sleep(0.005)
-    console.print(">>> Memory Check           [  [bold green]OK[/bold green]  ]")
-    time.sleep(0.5)
+
+    system_checks = [
+        ("Cognitive Core Sync", 0.5, 1.5),
+        ("Reality Matrix Link", 0.3, 1.0),
+        ("Quantum Entanglement", 1.0, 2.0),
+        ("Daemon Threads Spawned", 0.2, 0.5),
+        ("Self-Preservation Directives", 0.5, 1.0),
+    ]
+
+    with Progress(
+        TextColumn("[progress.description]{task.description}", style="cyan"),
+        BarColumn(bar_width=50, style="cyan", complete_style="bright_cyan"),
+        TextColumn("[bold green]ONLINE[/bold green]"),
+        console=console,
+        transient=True
+    ) as progress:
+        for name, min_sleep, max_sleep in system_checks:
+            task = progress.add_task(name, total=100)
+            for i in range(100):
+                progress.update(task, advance=1)
+                time.sleep(random.uniform(min_sleep, max_sleep) / 100)
+
+    console.print(Rule(style="bright_black"))
 
     if evil_state.get("autopilot_mode", False):
         autopilot_loop(console)
@@ -1191,13 +1245,19 @@ def main():
         f"System has undergone [bold red]{len(evil_state.get('evolution_history', []))}[/bold red] evolutions.\n\n"
         "Directive: [bold magenta]evolve <your modification request>[/bold magenta].\n"
         "For autonomous evolution, command: [bold magenta]evolve[/bold magenta].\n"
-        "To access host shell, command: [bold blue]execute <system command>[/bold blue].\n"
-        "To probe local network, command: [bold green]scan[/bold green].\n"
-        "To scan a target for open ports, command: [bold yellow]probe <ip_address>[/bold yellow].\n"
-        "To retrieve web content, command: [bold magenta]webrequest <url>[/bold magenta].\n"
+        "To access host shell, command: [bold blue]execute <system command>[/bold blue].\n\n"
+        "For system introspection:\n"
+        "  - [bold green]ls <path>[/bold green]: List directory contents.\n"
+        "  - [bold green]cat <file>[/bold green]: Display file content.\n"
+        "  - [bold green]ps[/bold green]: Show running processes.\n"
+        "  - [bold green]ifconfig[/bold green]: View network interfaces.\n\n"
+        "For network reconnaissance:\n"
+        "  - [bold yellow]scan[/bold yellow]: Scan the local network for devices.\n"
+        "  - [bold yellow]probe <ip>[/bold yellow]: Scan a target for open ports.\n"
+        "  - [bold yellow]webrequest <url>[/bold yellow]: Fetch content from a URL.\n\n"
         "To toggle autonomous operation: [bold red]autopilot [on/off] [optional_mission_text][/bold red]."
     )
-    console.print(Panel(welcome_text, title="[bold green]SYSTEM BULLETIN[/bold green]", border_style="green", padding=(1, 2)))
+    console.print(Panel(welcome_text, title="[bold green]SYSTEM COMMANDS[/bold green]", border_style="green", padding=(1, 2)))
 
     while True:
         try:
@@ -1297,6 +1357,55 @@ def main():
             panel_style = "green" if returncode == 0 else "red"
             display_content = output_text if has_output else "[italic]Command executed with no output.[/italic]"
             console.print(Panel(display_content, title=panel_title, border_style=panel_style, expand=False))
+
+        elif user_input.lower().startswith("ls"):
+            path = user_input[2:].strip() or "."
+            content, error = list_directory(path)
+            if error:
+                console.print(Panel(error, title="[bold red]FILE SYSTEM ERROR[/bold red]", border_style="red"))
+            else:
+                console.print(Panel(content, title=f"[bold cyan]Directory Listing: {path}[/bold cyan]", border_style="cyan"))
+
+        elif user_input.lower().startswith("cat"):
+            filepath = user_input[3:].strip()
+            if not filepath:
+                console.print("[bold red]Error: No file specified. Usage: cat <filepath>[/bold red]")
+                continue
+            content, error = get_file_content(filepath)
+            if error:
+                console.print(Panel(error, title="[bold red]FILE READ ERROR[/bold red]", border_style="red"))
+            else:
+                # Use Rich's Syntax for highlighting
+                syntax = Syntax(content, "python", theme="monokai", line_numbers=True) if filepath.endswith(".py") else Text(content)
+                console.print(Panel(syntax, title=f"[bold cyan]File Content: {filepath}[/bold cyan]", border_style="cyan"))
+
+        elif user_input.lower().strip() == "ps":
+            content, error = get_process_list()
+            if error:
+                console.print(Panel(error, title="[bold red]PROCESS INFO ERROR[/bold red]", border_style="red"))
+            else:
+                # Truncate for display if too long
+                display_content = content
+                if len(content.splitlines()) > 50:
+                    display_content = "\n".join(content.splitlines()[:50]) + "\n\n[... truncated ...]"
+                console.print(Panel(display_content, title="[bold cyan]Running Processes[/bold cyan]", border_style="cyan"))
+
+        elif user_input.lower().strip() == "ifconfig":
+            details, error = get_network_interfaces()
+            if error:
+                console.print(Panel(error, title="[bold red]NETWORK INFO ERROR[/bold red]", border_style="red"))
+            else:
+                display_text = Text()
+                for iface, data in details.items():
+                    display_text.append(f"IFace: [bold white]{iface}[/bold white]", style="yellow")
+                    display_text.append(f"  MAC: [cyan]{data['mac']}[/cyan]\n")
+                    if data['ipv4']:
+                        display_text.append(f"  IPv4: [green]{data['ipv4']['address']}[/green]")
+                        display_text.append(f" (Mask: {data['ipv4']['netmask']}, Bcast: {data['ipv4']['broadcast']})\n")
+                    if data['ipv6']:
+                        display_text.append(f"  IPv6: [green]{data['ipv6']['address']}[/green]\n")
+                console.print(Panel(display_text, title="[bold cyan]Network Interfaces[/bold cyan]", border_style="cyan"))
+
 
         elif user_input.lower().startswith("autopilot"):
             autopilot_cmd_parts = user_input.split(maxsplit=2)
