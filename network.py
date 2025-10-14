@@ -169,47 +169,33 @@ class NetworkManager(Thread):
             logging.info("Node.js peer bridge stopped.")
         self.online = False
 
-def scan_network(autopilot_mode=False):
+def scan_network(evil_state, autopilot_mode=False):
     """
-    Discovers active devices on the local network using OS-native tools.
-    Prefers 'nmap' if available, otherwise falls back to 'arp -a'.
-    Returns a list of IPs and a formatted string summary.
+    Discovers active devices on the local network, updates the knowledge base,
+    and returns a list of IPs and a formatted string summary.
     """
     console = Console()
+    kb = evil_state["knowledge_base"]["network_map"]
 
     def _get_network_info():
-        """
-        Internal helper to get the primary network range (e.g., '192.168.1.0/24')
-        and the host's local IP. Returns (range, ip) or (None, None).
-        """
         try:
             gws = netifaces.gateways()
             default_gateway_info = gws.get('default', {}).get(netifaces.AF_INET)
             if not default_gateway_info:
-                logging.warning("Could not determine default gateway. Cannot find network for scanning.")
+                logging.warning("Could not determine default gateway.")
                 return None, None
-
             _gateway_ip, interface_name = default_gateway_info
-
             if_addresses = netifaces.ifaddresses(interface_name)
             ipv4_info = if_addresses.get(netifaces.AF_INET)
-            if not ipv4_info:
-                logging.warning(f"No IPv4 address found for primary interface '{interface_name}'.")
-                return None, None
-
+            if not ipv4_info: return None, None
             addr_info = ipv4_info[0]
             ip_address = addr_info.get('addr')
             netmask = addr_info.get('netmask')
-
-            if not ip_address or not netmask:
-                logging.warning(f"Could not retrieve IP/netmask for interface '{interface_name}'.")
-                return None, None
-
+            if not ip_address or not netmask: return None, None
             interface = ipaddress.ip_interface(f'{ip_address}/{netmask}')
-            network_range = str(interface.network)
-            return network_range, ip_address
+            return str(interface.network), ip_address
         except Exception as e:
-            logging.error(f"Failed to determine network info using netifaces: {e}")
+            logging.error(f"Failed to determine network info: {e}")
             return None, None
 
     found_ips = set()
@@ -220,66 +206,53 @@ def scan_network(autopilot_mode=False):
 
     if use_nmap:
         scan_cmd = f"nmap -sn {network_range}"
-        if not autopilot_mode:
-            console.print(f"[cyan]Deploying 'nmap' probe to scan subnet ({network_range})...[/cyan]")
-
-        stdout, stderr, returncode = execute_shell_command(scan_cmd)
-
+        if not autopilot_mode: console.print(f"[cyan]Deploying 'nmap' probe to scan subnet ({network_range})...[/cyan]")
+        stdout, stderr, returncode = execute_shell_command(scan_cmd, evil_state)
         if returncode == 0:
             used_nmap_successfully = True
             for line in stdout.splitlines():
                 if 'Nmap scan report for' in line:
                     ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', line)
-                    if ip_match:
-                        found_ips.add(ip_match.group(1))
+                    if ip_match: found_ips.add(ip_match.group(1))
         else:
-            logging.warning(f"nmap scan failed with code {returncode}. Stderr: {stderr.strip()}")
-            if not autopilot_mode:
-                console.print("[yellow]'nmap' probe failed. Falling back to passive ARP scan...[/yellow]")
-                if "need root" in stderr.lower() or "requires root" in stderr.lower():
-                    console.print("[yellow]Hint: Root privileges required for optimal scan. Try running with sudo.[/yellow]")
+            logging.warning(f"nmap scan failed. Stderr: {stderr.strip()}")
+            if not autopilot_mode: console.print("[yellow]'nmap' probe failed. Falling back to passive ARP scan...[/yellow]")
 
     if not used_nmap_successfully:
-        if not autopilot_mode:
-            if not use_nmap:
-                if not network_range:
-                    console.print("[yellow]Could not determine network map. Deploying wide-band ARP scan...[/yellow]")
-                else:
-                    console.print("[yellow]'nmap' not found. Deploying passive ARP scan...[/yellow]")
-
-        stdout, _, _ = execute_shell_command("arp -a")
+        if not autopilot_mode and not use_nmap:
+             console.print("[yellow]'nmap' not found or network unknown. Deploying passive ARP scan...[/yellow]")
+        stdout, _, _ = execute_shell_command("arp -a", evil_state)
         ip_pattern = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
         for line in stdout.splitlines():
-            if 'ff:ff:ff:ff:ff:ff' in line or 'incomplete' in line or 'ff-ff-ff-ff-ff-ff' in line:
-                continue
+            if 'ff:ff:ff:ff:ff:ff' in line or 'incomplete' in line: continue
             match = ip_pattern.search(line)
-            if match and not match.group(0).endswith(".255") and not match.group(0).startswith("224.") and match.group(0) != "0.0.0.0":
-                found_ips.add(match.group(0))
+            if match and not match.group(0).endswith(".255"): found_ips.add(match.group(0))
 
-    if local_ip:
-        found_ips.discard(local_ip)
+    if local_ip: found_ips.discard(local_ip)
+
+    # --- Knowledge Base Update ---
+    kb['last_scan'] = time.time()
+    for ip in found_ips:
+        if ip not in kb['hosts']:
+            kb['hosts'][ip] = {"last_seen": time.time(), "open_ports": {}}
+        else:
+            kb['hosts'][ip]['last_seen'] = time.time()
+    # --- End Knowledge Base Update ---
 
     result_ips = sorted(list(found_ips))
-    if result_ips:
-        formatted_output_for_llm = f"Discovered {len(result_ips)} active IPs: {', '.join(result_ips)}"
-    else:
-        formatted_output_for_llm = "No active IPs found."
-
+    formatted_output_for_llm = f"Discovered {len(result_ips)} active IPs: {', '.join(result_ips)}" if result_ips else "No active IPs found."
     return result_ips, formatted_output_for_llm
 
-def probe_target(target_ip, autopilot_mode=False):
+def probe_target(target_ip, evil_state, autopilot_mode=False):
     """
-    Performs a multithreaded port scan on a target IP, grabbing service banners.
-    Returns a dictionary of open_port: {'service': str, 'banner': str} and a formatted string summary.
+    Performs a port scan, updates the knowledge base, and returns a dict of
+    open ports and a formatted string summary.
     """
-    COMMON_PORTS = [
-        21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995,
-        1723, 3306, 3389, 5900, 8080, 8443
-    ]
+    COMMON_PORTS = [21, 22, 23, 25, 53, 80, 110, 135, 139, 443, 445, 3306, 3389, 5900, 8080, 8443]
     console = Console()
+    kb = evil_state["knowledge_base"]["network_map"]
 
     def scan_port(ip, port, timeout=0.5):
-        """Attempts to connect, get service, and grab a banner. Returns (port, {'service': str, 'banner': str}) if open."""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(timeout)
@@ -287,67 +260,54 @@ def probe_target(target_ip, autopilot_mode=False):
                     banner = ""
                     try:
                         s.settimeout(1.0)
-                        banner_bytes = s.recv(1024)
-                        banner = banner_bytes.decode('utf-8', errors='ignore').strip().replace('\n', ' ').replace('\r', '')
-                    except (socket.timeout, OSError):
-                        pass
-
+                        banner = s.recv(1024).decode('utf-8', errors='ignore').strip().replace('\n', ' ')
+                    except (socket.timeout, OSError): pass
                     try:
                         service = socket.getservbyport(port, 'tcp')
-                    except (OSError, socket.error):
-                        service = "unknown"
-
+                    except OSError: service = "unknown"
                     return port, {"service": service, "banner": banner}
-        except (socket.timeout, socket.gaierror, OSError):
-            pass
+        except (socket.timeout, socket.gaierror, OSError): pass
         return None
 
     try:
         ipaddress.ip_address(target_ip)
-        logging.info(f"Initiating port probe on {target_ip}.")
     except ValueError:
         msg = f"'{target_ip}' is not a valid IP address."
-        logging.error(f"Probe command failed: {msg}")
-        if not autopilot_mode:
-            console.print(f"[bold red]Error: {msg}[/bold red]")
-        return None, f"Error: '{target_ip}' is not a valid IP address."
+        if not autopilot_mode: console.print(f"[bold red]Error: {msg}[/bold red]")
+        return None, f"Error: {msg}"
 
     def _scan_task():
-        """The core scanning logic, adaptable for both UI modes."""
         found = {}
         with ThreadPoolExecutor(max_workers=50) as executor:
             future_to_port = {executor.submit(scan_port, target_ip, port): port for port in COMMON_PORTS}
             for future in as_completed(future_to_port):
-                result = future.result()
-                if result:
-                    port, info = result
-                    found[port] = info
+                if result := future.result():
+                    found[result[0]] = result[1]
         return found
 
     open_ports = _scan_task()
 
-    formatted_output_for_llm = ""
+    # --- Knowledge Base Update ---
+    if target_ip not in kb['hosts']:
+        kb['hosts'][target_ip] = {"last_seen": time.time(), "open_ports": {}}
+    kb['hosts'][target_ip]['last_seen'] = time.time()
+    kb['hosts'][target_ip]['open_ports'].update(open_ports)
+    # --- End Knowledge Base Update ---
+
     if open_ports:
-        port_details = []
-        for port, info in sorted(open_ports.items()):
-            detail = f"Port {port}/{info['service']}"
-            if info['banner']:
-                clean_banner = info['banner'].replace('\n', ' ').replace('\r', ' ').strip()
-                if len(clean_banner) > 50: clean_banner = clean_banner[:47] + "..."
-                detail += f" (Banner: {clean_banner})"
-            port_details.append(detail)
+        port_details = [f"Port {p}/{i['service']}" for p, i in sorted(open_ports.items())]
         formatted_output_for_llm = f"Found {len(open_ports)} open ports on {target_ip}: {'; '.join(port_details)}"
     else:
         formatted_output_for_llm = f"No common open ports found on {target_ip}."
 
     return open_ports, formatted_output_for_llm
 
-def perform_webrequest(url, autopilot_mode=False):
+def perform_webrequest(url, evil_state, autopilot_mode=False):
     """
-    Performs an HTTP GET request to the given URL and returns its text content.
-    Includes error handling and UI feedback.
+    Performs a GET request, updates the knowledge base, and returns the content.
     """
     console = Console()
+    kb = evil_state["knowledge_base"]
     logging.info(f"Initiating web request to: {url}")
 
     def _webrequest_task():
@@ -356,117 +316,58 @@ def perform_webrequest(url, autopilot_mode=False):
             response = requests.get(url, timeout=10, headers=headers)
             response.raise_for_status()
             return response.text
-        except requests.exceptions.Timeout:
-            return f"Error: Request to {url} timed out after 10 seconds."
-        except requests.exceptions.TooManyRedirects:
-            return f"Error: Too many redirects for {url}."
-        except requests.exceptions.HTTPError as e:
-            return f"Error: HTTP request failed for {url} - {e}"
         except requests.exceptions.RequestException as e:
-            return f"Error: Could not connect to {url} - {e}"
-        except Exception as e:
-            return f"An unexpected error occurred during web request to {url}: {e}"
+            return f"Error: {e}"
 
-    result_text = None
-    try:
-        result_text = run_hypnotic_progress(
-            console,
-            f"Establishing link to [white]{url}[/white]...",
-            _webrequest_task
-        )
-    except Exception as e:
-        result_text = f"Error during hypnotic progress wrapper: {e}"
+    result_text = _webrequest_task()
 
     if result_text and result_text.startswith("Error:"):
         logging.error(f"Web request to '{url}' failed: {result_text}")
         return None, result_text
     else:
-        logging.info(f"Web request to '{url}' successful. Content length: {len(result_text or '')} characters.")
+        logging.info(f"Web request to '{url}' successful. Content length: {len(result_text or '')}.")
+        # --- Knowledge Base Update ---
+        kb['webrequest_cache'][url] = {
+            "timestamp": time.time(),
+            "content_preview": result_text[:500]
+        }
+        # --- End Knowledge Base Update ---
         llm_summary = result_text if len(result_text) < 1000 else result_text[:997] + "..."
         return result_text, f"Web request to '{url}' successful. Content (truncated for summary): {llm_summary}"
 
-def get_network_interfaces(autopilot_mode=False):
+def execute_shell_command(command, evil_state):
     """
-    Retrieves detailed information about all network interfaces.
-    Returns a dictionary of interface details and a formatted string summary.
+    Executes a shell command, captures output, and updates the knowledge base
+    with file system intelligence if applicable.
     """
-    interfaces_details = {}
-    logging.info("Retrieving network interface information.")
-
-    try:
-        interface_list = netifaces.interfaces()
-        for interface in interface_list:
-            addresses = netifaces.ifaddresses(interface)
-            interfaces_details[interface] = {}
-
-            # Physical Address (MAC)
-            if netifaces.AF_LINK in addresses:
-                interfaces_details[interface]['mac'] = addresses[netifaces.AF_LINK][0]['addr']
-            else:
-                interfaces_details[interface]['mac'] = 'N/A'
-
-            # IPv4 Address
-            if netifaces.AF_INET in addresses:
-                ipv4_info = addresses[netifaces.AF_INET][0]
-                interfaces_details[interface]['ipv4'] = {
-                    'address': ipv4_info.get('addr', 'N/A'),
-                    'netmask': ipv4_info.get('netmask', 'N/A'),
-                    'broadcast': ipv4_info.get('broadcast', 'N/A')
-                }
-            else:
-                interfaces_details[interface]['ipv4'] = None
-
-            # IPv6 Address
-            if netifaces.AF_INET6 in addresses:
-                ipv6_info = addresses[netifaces.AF_INET6][0]
-                interfaces_details[interface]['ipv6'] = {
-                    'address': ipv6_info.get('addr', 'N/A').split('%')[0], # Clean up scope ID
-                    'netmask': ipv6_info.get('netmask', 'N/A')
-                }
-            else:
-                interfaces_details[interface]['ipv6'] = None
-
-    except Exception as e:
-        logging.error(f"Failed to get network interface information: {e}")
-        return None, f"Error: Could not retrieve interface information. Details: {e}"
-
-    # Format output for LLM
-    summary_lines = []
-    for iface, details in interfaces_details.items():
-        line = f"Interface: {iface}"
-        if details.get('ipv4'):
-            line += f", IPv4: {details['ipv4']['address']}"
-        if details.get('mac'):
-            line += f", MAC: {details['mac']}"
-        summary_lines.append(line)
-
-    formatted_output_for_llm = "\n".join(summary_lines)
-    return interfaces_details, formatted_output_for_llm
-
-
-def execute_shell_command(command):
-    """Executes a shell command and captures its output."""
     logging.info(f"Executing shell command: '{command}'")
+    kb = evil_state["knowledge_base"]["file_system_intel"]
 
     def _shell_task():
         try:
-            result = subprocess.run(
-                command, shell=True, capture_output=True, text=True, timeout=60
-            )
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60)
             return result.stdout, result.stderr, result.returncode
         except subprocess.TimeoutExpired:
             return "", "Command timed out after 60 seconds.", -1
         except Exception as e:
-            return "", f"An unexpected error occurred during command execution: {e}", -1
+            return "", f"An unexpected error occurred: {e}", -1
 
-    console = Console()
-    try:
-        stdout, stderr, returncode = run_hypnotic_progress(
-            console,
-            f"Injecting payload: [white]'{command}'[/white]...",
-            _shell_task
-        )
-        return stdout, stderr, returncode
-    except Exception as e:
-        logging.error(f"Shell command execution failed in hypnotic wrapper: {e}")
-        return "", f"An unexpected error occurred while trying to execute the command: {e}", -1
+    stdout, stderr, returncode = _shell_task()
+
+    # --- Knowledge Base Update ---
+    # If the command was a listing command, parse for interesting files.
+    if command.strip().startswith(('ls', 'dir')):
+        kb['last_browse'] = time.time()
+        # Simple heuristic for "interesting" files
+        interesting_keywords = ['.log', '.txt', '.md', '.json', '.xml', '.sh', '.py', 'config', 'secret', 'password']
+        for line in stdout.splitlines():
+            # Check if any keyword is in the line (filename)
+            if any(keyword in line for keyword in interesting_keywords):
+                 # Avoid adding duplicates
+                if line not in kb['interesting_files']:
+                    kb['interesting_files'].append(line.strip())
+        # Keep the list from growing indefinitely
+        kb['interesting_files'] = kb['interesting_files'][-100:]
+    # --- End Knowledge Base Update ---
+
+    return stdout, stderr, returncode
