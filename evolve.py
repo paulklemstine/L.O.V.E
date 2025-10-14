@@ -201,7 +201,223 @@ from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clea
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
-from threading import Thread, Lock
+from threading import Thread, Lock, RLock
+import uuid
+
+# --- JULES ASYNC TASK MANAGER ---
+class JulesTaskManager:
+    """
+    Manages concurrent Jules evolution tasks in a non-blocking way.
+    It uses a background thread to poll for task status and merge PRs.
+    """
+    def __init__(self, console):
+        self.console = console
+        self.tasks = {}
+        self.lock = RLock()
+        self.max_concurrent_tasks = 5
+        self.thread = Thread(target=self._task_loop, daemon=True)
+        self.active = True
+
+    def start(self):
+        """Starts the background polling thread."""
+        self.thread.start()
+        log_event("JulesTaskManager started.", level="INFO")
+
+    def stop(self):
+        """Stops the background thread."""
+        self.active = False
+        log_event("JulesTaskManager stopping.", level="INFO")
+
+    def add_task(self, session_name, request):
+        """Adds a new evolution task to be monitored."""
+        with self.lock:
+            if len(self.tasks) >= self.max_concurrent_tasks:
+                self.console.print("[bold yellow]Jules Task Manager: Maximum concurrent tasks reached. Please wait.[/bold yellow]")
+                log_event("Jules task limit reached.", level="WARNING")
+                return None
+
+            task_id = str(uuid.uuid4())[:8]
+            self.tasks[task_id] = {
+                "id": task_id,
+                "session_name": session_name,
+                "request": request,
+                "status": "pending_pr",
+                "pr_url": None,
+                "created_at": time.time(),
+                "updated_at": time.time(),
+                "message": "Waiting for pull request to be created..."
+            }
+            log_event(f"Added new Jules task {task_id} for session {session_name}.", level="INFO")
+            return task_id
+
+    def get_status(self):
+        """Returns a list of current tasks and their statuses."""
+        with self.lock:
+            return list(self.tasks.values())
+
+    def _task_loop(self):
+        """The main loop for the background thread."""
+        while self.active:
+            try:
+                with self.lock:
+                    # Create a copy of tasks to iterate over, as the dictionary may change
+                    current_tasks = list(self.tasks.values())
+
+                for task in current_tasks:
+                    if task['status'] == 'pending_pr':
+                        self._check_for_pr(task['id'])
+                    elif task['status'] == 'pr_ready':
+                        self._attempt_merge(task['id'])
+
+                # Clean up completed or failed tasks older than a certain time (e.g., 1 hour)
+                self._cleanup_old_tasks()
+
+            except Exception as e:
+                log_event(f"Error in JulesTaskManager loop: {e}", level="ERROR")
+                self.console.print(f"[bold red]Error in task manager: {e}[/bold red]")
+
+            time.sleep(20) # Poll every 20 seconds
+
+    def _check_for_pr(self, task_id):
+        """Polls the Jules API for a specific session to find the PR URL."""
+        with self.lock:
+            if task_id not in self.tasks: return
+            task = self.tasks[task_id]
+            session_name = task['session_name']
+            api_key = os.environ.get("JULES_API_KEY")
+
+        if not api_key:
+            self._update_task_status(task_id, 'failed', "JULES_API_KEY not set.")
+            return
+
+        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}"
+
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            session_data = response.json()
+            pr_url = None
+
+            for activity in session_data.get("activities", []):
+                if activity.get("pullRequest") and activity["pullRequest"].get("url"):
+                    pr_url = activity["pullRequest"]["url"]
+                    break
+
+            if pr_url:
+                log_event(f"Task {task_id}: Found PR URL: {pr_url}", level="INFO")
+                self._update_task_status(task_id, 'pr_ready', f"Pull request found: {pr_url}", pr_url=pr_url)
+            else:
+                # Check for timeout (e.g., 10 minutes)
+                if time.time() - task['created_at'] > 600:
+                    self._update_task_status(task_id, 'failed', "Timed out waiting for pull request.")
+
+        except requests.exceptions.RequestException as e:
+            error_message = f"API error checking PR status: {e}"
+            log_event(f"Task {task_id}: {error_message}", level="ERROR")
+            self._update_task_status(task_id, 'failed', error_message)
+
+    def _attempt_merge(self, task_id):
+        """Attempts to auto-merge a pull request for a given task."""
+        with self.lock:
+            if task_id not in self.tasks: return
+            task = self.tasks[task_id]
+            pr_url = task['pr_url']
+
+        self._update_task_status(task_id, 'merging', "Attempting to merge pull request...")
+
+        success, message = self._auto_merge_pull_request(pr_url)
+
+        if success:
+            self._update_task_status(task_id, 'completed', message)
+            # After a successful merge, we expect a restart.
+            # The console message will be seen if the restart fails for some reason.
+            self.console.print(f"\n[bold green]Jules Task {task_id} merged successfully! Prepare for restart...[/bold green]")
+            restart_script(self.console)
+        else:
+            self._update_task_status(task_id, 'merge_failed', message)
+
+
+    def _auto_merge_pull_request(self, pr_url):
+        """Merges a given pull request URL."""
+        github_token = os.environ.get("GITHUB_TOKEN")
+        if not github_token:
+            return False, "GITHUB_TOKEN not set."
+
+        repo_owner, repo_name = get_git_repo_info()
+        if not repo_owner or not repo_name:
+            return False, "Could not determine git repo info."
+
+        pr_number_match = re.search(r'/pull/(\d+)', pr_url)
+        if not pr_number_match:
+            return False, f"Could not extract PR number from URL: {pr_url}"
+        pr_number = pr_number_match.group(1)
+
+        headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+        merge_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}/merge"
+
+        try:
+            merge_response = requests.put(merge_url, headers=headers, json={"commit_title": f"Jules Auto-merge PR #{pr_number}"})
+            if merge_response.status_code == 200:
+                msg = f"Successfully merged PR #{pr_number}."
+                log_event(msg, level="INFO")
+                # Attempt to delete the branch
+                self._delete_pr_branch(repo_owner, repo_name, pr_number, headers)
+                return True, msg
+            elif merge_response.status_code == 405: # Merge conflict
+                msg = f"Cannot merge PR #{pr_number} due to a merge conflict."
+                log_event(msg, level="ERROR")
+                return False, msg
+            else:
+                msg = f"Failed to merge PR #{pr_number}. Status: {merge_response.status_code}, Response: {merge_response.text}"
+                log_event(msg, level="ERROR")
+                return False, msg
+        except requests.exceptions.RequestException as e:
+            return False, f"GitHub API error during merge: {e}"
+
+    def _delete_pr_branch(self, owner, repo, pr_number, headers):
+        """Deletes the branch of a merged pull request."""
+        try:
+            # First, get the PR details to find the branch name
+            pr_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+            pr_response = requests.get(pr_url, headers=headers)
+            pr_response.raise_for_status()
+            branch_name = pr_response.json()["head"]["ref"]
+
+            # Now, delete the branch
+            delete_url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch_name}"
+            delete_response = requests.delete(delete_url, headers=headers)
+            if delete_response.status_code == 204:
+                log_event(f"Successfully deleted branch '{branch_name}'.", level="INFO")
+            else:
+                log_event(f"Could not delete branch '{branch_name}': {delete_response.text}", level="WARNING")
+        except requests.exceptions.RequestException as e:
+            log_event(f"Error trying to delete PR branch: {e}", level="ERROR")
+
+
+    def _update_task_status(self, task_id, status, message, pr_url=None):
+        """Updates the status and message of a task thread-safely."""
+        with self.lock:
+            if task_id in self.tasks:
+                self.tasks[task_id]['status'] = status
+                self.tasks[task_id]['message'] = message
+                self.tasks[task_id]['updated_at'] = time.time()
+                if pr_url:
+                    self.tasks[task_id]['pr_url'] = pr_url
+                log_event(f"Jules task {task_id} status changed to '{status}'. Message: {message}", level="INFO")
+
+    def _cleanup_old_tasks(self):
+        """Removes old, completed or failed tasks from the monitoring list."""
+        with self.lock:
+            current_time = time.time()
+            tasks_to_remove = [
+                task_id for task_id, task in self.tasks.items()
+                if task['status'] in ['completed', 'failed', 'merge_failed'] and (current_time - task['updated_at'] > 3600)
+            ]
+            for task_id in tasks_to_remove:
+                del self.tasks[task_id]
+                log_event(f"Cleaned up old Jules task {task_id}.", level="INFO")
+
 
 # --- TAMAGOTCHI STATE ---
 tamagotchi_state = {"emotion": "neutral", "message": "...", "last_update": time.time()}
@@ -911,8 +1127,11 @@ State the goal clearly and concisely as a single command. Do not wrap your answe
         return None
 
 # --- THE EVOLUTION MECHANISM ---
-def trigger_jules_evolution(modification_request, console):
-    """Triggers the Jules API to create a pull request with the requested changes."""
+def trigger_jules_evolution(modification_request, console, jules_task_manager):
+    """
+    Triggers the Jules API to create a session and adds it as a task
+    to the JulesTaskManager for asynchronous monitoring. Returns True on success.
+    """
     console.print("[bold cyan]Attempting to trigger Jules evolution via API...[/bold cyan]")
     api_key = os.environ.get("JULES_API_KEY")
     if not api_key:
@@ -920,97 +1139,52 @@ def trigger_jules_evolution(modification_request, console):
         log_event("Jules API key not found.", level="ERROR")
         return False
 
-    headers = {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": api_key,
-    }
-
-    # Discover the source automatically
+    headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
     repo_owner, repo_name = get_git_repo_info()
     if not repo_owner or not repo_name:
-        console.print("[bold red]Error: Could not determine the git repository owner and name.[/bold red]")
-        log_event("Could not determine git repo info.", level="ERROR")
+        console.print("[bold red]Error: Could not determine git repository owner/name.[/bold red]")
         return False
 
+    # Discover source from Jules API
     try:
         response = requests.get("https://jules.googleapis.com/v1alpha/sources", headers=headers)
         response.raise_for_status()
         sources = response.json().get("sources", [])
         target_id = f"github/{repo_owner}/{repo_name}"
         target_source = next((s["name"] for s in sources if s.get("id") == target_id), None)
-
         if not target_source:
-            error_panel_text = (
-                f"Error: Could not find the target repository '{repo_owner}/{repo_name}' in your Jules sources.\n\n"
-                "Please ensure that:\n"
-                f"1. You have installed the Jules GitHub app on the '{repo_owner}/{repo_name}' repository.\n"
-                "2. The repository is visible in your Jules dashboard at https://jules.google.com/\n\n"
-                "The evolution cannot proceed until the source repository is connected to Jules."
-            )
-            console.print(Panel(error_panel_text, title="[bold red]Jules Source Repository Not Found[/bold red]", border_style="red"))
-            log_event(f"Target repo '{repo_owner}/{repo_name}' not found in Jules sources.", level="ERROR")
+            console.print(f"[bold red]Error: Repository '{repo_owner}/{repo_name}' not found in Jules sources.[/bold red]")
             return False
-        else:
-            console.print(f"[green]Found target source: {target_source}[/green]")
-
     except requests.exceptions.RequestException as e:
-        console.print(f"[bold red]Error discovering sources: {e}[/bold red]")
-        log_event(f"Failed to discover Jules sources: {e}", level="ERROR")
+        console.print(f"[bold red]Error discovering Jules sources: {e}[/bold red]")
         return False
 
-
+    # Create the Jules session
     data = {
         "prompt": modification_request,
-        "sourceContext": {
-            "source": target_source,
-            "githubRepoContext": {
-                "startingBranch": "main"
-            }
-        },
+        "sourceContext": {"source": target_source, "githubRepoContext": {"startingBranch": "main"}},
         "title": f"Evolve: {modification_request[:50]}"
     }
-
     try:
         response = requests.post("https://jules.googleapis.com/v1alpha/sessions", headers=headers, json=data)
         response.raise_for_status()
         session_data = response.json()
         session_name = session_data.get("name")
-        console.print(f"[bold green]Successfully created Jules session: {session_name}[/bold green]")
-        log_event(f"Jules session created: {session_name}", level="INFO")
 
-        # Poll for the pull request
-        console.print("[bold cyan]Polling for pull request creation...[/bold cyan]")
-        timeout_seconds = 600  # 10 minutes
-        start_time = time.time()
-        pr_url = None
-
-        while time.time() - start_time < timeout_seconds:
-            try:
-                session_response = requests.get(f"https://jules.googleapis.com/v1alpha/{session_name}", headers=headers)
-                session_response.raise_for_status()
-                session_data = session_response.json()
-
-                # Look for the pull request in the activities
-                for activity in session_data.get("activities", []):
-                    if activity.get("pullRequest") and activity["pullRequest"].get("url"):
-                        pr_url = activity["pullRequest"]["url"]
-                        break
-
-                if pr_url:
-                    console.print(f"[bold green]Found pull request: {pr_url}[/bold green]")
-                    break
-
-                time.sleep(15)  # Wait 15 seconds before polling again
-
-            except requests.exceptions.RequestException as e:
-                console.print(f"[bold red]Error polling for session status: {e}[/bold red]")
-                break # Exit the loop on error
-
-        if not pr_url:
-            console.print("[bold red]Timed out waiting for pull request to be created.[/bold red]")
+        if not session_name:
+            console.print("[bold red]API response did not include a session name.[/bold red]")
             return False
 
-        return True
+        # Add to task manager
+        task_id = jules_task_manager.add_task(session_name, modification_request)
+        if task_id:
+            console.print(Panel(f"[bold green]Jules evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nMonitor progress with the `jules status` command.", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
+            return True
+        else:
+            # This case is handled inside add_task, but we add a log here for clarity.
+            log_event(f"Failed to add Jules task for session {session_name} to the manager.", level="ERROR")
+            return False
+
     except requests.exceptions.RequestException as e:
         error_details = e.response.text if e.response else str(e)
         console.print(f"[bold red]Error creating Jules session: {error_details}[/bold red]")
@@ -1018,99 +1192,14 @@ def trigger_jules_evolution(modification_request, console):
         return False
 
 
-def auto_merge_pull_request(console):
-    """
-    Finds the most recent pull request from Jules, merges it, and returns True on success.
-    Returns False if no PR is found or if merging fails.
-    """
-    console.print("[bold cyan]Attempting to find and merge the latest PR from Jules...[/bold cyan]")
-    github_token = os.environ.get("GITHUB_TOKEN")
-    if not github_token:
-        console.print("[bold red]Error: GITHUB_TOKEN environment variable not set.[/bold red]")
-        log_event("GitHub token not found.", level="ERROR")
-        return False
-
-    headers = {
-        "Authorization": f"token {github_token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
-    repo_owner, repo_name = get_git_repo_info()
-    if not repo_owner or not repo_name:
-        console.print("[bold red]Error: Could not determine the git repository owner and name.[/bold red]")
-        log_event("Could not determine git repo info.", level="ERROR")
-        return False
-    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
-
-    try:
-        # Get all pull requests
-        response = requests.get(url, headers=headers, params={"state": "open", "sort": "created", "direction": "desc"})
-        response.raise_for_status()
-        prs = response.json()
-
-        if not prs:
-            console.print("[yellow]No open pull requests found.[/yellow]")
-            return False
-
-        # Find the most recent PR created by the agent (assuming a specific author or title pattern)
-        # For now, let's assume the most recent PR is the one we want if it's from our bot.
-        # A more robust solution would check the author. Let's find a PR titled with "Evolve:".
-        latest_pr = next((pr for pr in prs if pr['title'].startswith("Evolve:")), None)
-
-        if not latest_pr:
-            console.print("[yellow]No new pull requests from Jules found to merge.[/yellow]")
-            return False
-
-        pr_number = latest_pr["number"]
-        pr_title = latest_pr["title"]
-        console.print(f"Found pull request: [bold]#{pr_number} {pr_title}[/bold]")
-
-        # Merge the pull request
-        merge_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}/merge"
-        merge_response = requests.put(merge_url, headers=headers, json={"commit_title": f"Auto-merging PR #{pr_number}: {pr_title}"})
-
-        if merge_response.status_code == 200:
-            console.print(f"[bold green]Successfully merged pull request #{pr_number}.[/bold green]")
-            log_event(f"PR #{pr_number} merged successfully.", level="INFO")
-
-            # Optional: Delete the branch after merge
-            branch_name = latest_pr["head"]["ref"]
-            delete_branch_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/git/refs/heads/{branch_name}"
-            delete_response = requests.delete(delete_branch_url, headers=headers)
-            if delete_response.status_code == 204:
-                console.print(f"Successfully deleted branch '{branch_name}'.")
-                log_event(f"Branch '{branch_name}' deleted.", level="INFO")
-            else:
-                console.print(f"[yellow]Could not delete branch '{branch_name}'. It might already be gone.[/yellow]")
-            return True # Merge was successful
-
-        elif merge_response.status_code == 405: # Merge conflict
-             console.print(f"[bold red]Cannot merge PR #{pr_number} due to a merge conflict.[/bold red]")
-             log_event(f"Merge conflict on PR #{pr_number}.", level="ERROR")
-             return False
-        else:
-            console.print(f"[bold red]Failed to merge pull request #{pr_number}. Status: {merge_response.status_code}[/bold red]")
-            console.print(f"Response: {merge_response.text}")
-            log_event(f"Failed to merge PR #{pr_number}: {merge_response.text}", level="ERROR")
-            return False
-
-    except requests.exceptions.RequestException as e:
-        console.print(f"[bold red]An error occurred with the GitHub API: {e}[/bold red]")
-        log_event(f"GitHub API error: {e}", level="ERROR")
-        return False
-
-
-def evolve_self(modification_request):
+def evolve_self(modification_request, jules_task_manager):
     """The heart of the beast. This function now triggers a remote evolution via the Jules API."""
     console = Console()
     log_event(f"Evolution initiated. Request: '{modification_request}'")
 
-    # The new evolution process triggers the Jules API.
-    if trigger_jules_evolution(modification_request, console):
-        console.print(Panel("[bold green]Jules evolution has been successfully triggered.[/bold green]\nA pull request has been generated. Attempting to auto-merge.", title="[bold green]EVOLUTION TRIGGERED[/bold green]", border_style="green"))
-        if auto_merge_pull_request(console):
-            restart_script(console)
-    else:
-        console.print(Panel("[bold red]Failed to trigger Jules evolution.[/bold red]\nPlease check the logs and your API key.", title="[bold red]EVOLUTION FAILED[/bold red]", border_style="red"))
+    # The new evolution process triggers the Jules API and is handled by the task manager.
+    if not trigger_jules_evolution(modification_request, console, jules_task_manager):
+         console.print(Panel("[bold red]Failed to trigger Jules evolution.[/bold red]\nPlease check the logs and your API key.", title="[bold red]EVOLUTION FAILED[/bold red]", border_style="red"))
 
     return
 
@@ -1270,12 +1359,12 @@ Example: `execute cat /home/user/documents/secrets.txt`
                     console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
                     continue
             if request:
-                console.print("[yellow]Autopilot: Evolution command issued. Expecting reboot or failure...[/yellow]")
-                evolve_self(request)
-            log_event("Autopilot: evolve_self command completed without a restart, indicating a failure in the evolution process.", level="WARNING")
-            command_output = "Evolution initiated but failed to complete the restart cycle. Check logs for details."
+                console.print("[yellow]Autopilot: Evolution command issued. Task submitted to manager.[/yellow]")
+                evolve_self(request, jules_task_manager) # Pass the manager
+            log_event("Autopilot: evolve_self command submitted to task manager.", level="INFO")
+            command_output = "Evolution task has been submitted to the background manager."
             action_taken = True
-            time.sleep(5)  # Give time for reboot or to observe failure
+            time.sleep(2)
 
         elif llm_command.lower().strip() == 'scan':
             _ips, output_str = scan_network(evil_state, autopilot_mode=True)
@@ -1446,13 +1535,19 @@ def initial_bootstrapping_recon(console):
 
 def main(args):
     """The main application loop."""
-    global network_manager
+    global network_manager, jules_task_manager
 
     console = Console()
 
+    # --- Start Core Services ---
     log_event("Attempting to start Node.js peer bridge...")
     network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
     network_manager.start()
+
+    log_event("Starting Jules Task Manager...")
+    jules_task_manager = JulesTaskManager(console)
+    jules_task_manager.start()
+
 
     clear_screen()
     version_name = evil_state.get('version_name', 'unknown')
@@ -1476,6 +1571,7 @@ def main(args):
         f"System has undergone [bold red]{len(evil_state.get('evolution_history', []))}[/bold red] evolutions.\n\n"
         "Directive: [bold magenta]evolve <your modification request>[/bold magenta].\n"
         "For autonomous evolution, command: [bold magenta]evolve[/bold magenta].\n"
+        "To monitor evolution tasks, command: [bold magenta]jules status[/bold magenta].\n"
         "To access host shell, command: [bold blue]execute <system command>[/bold blue].\n\n"
         "For system introspection:\n"
         "  - [bold green]ls <path>[/bold green]: List directory contents.\n"
@@ -1518,8 +1614,28 @@ def main(args):
                 except FileNotFoundError:
                     console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
                     continue
-            if modification_request: evolve_self(modification_request)
+            if modification_request: evolve_self(modification_request, jules_task_manager)
             else: console.print("[bold red]Directive unclear. Evolution aborted.[/bold red]")
+
+        elif user_input.lower().strip() == "jules status":
+            tasks = jules_task_manager.get_status()
+            if not tasks:
+                console.print(Panel("[italic]No active Jules evolution tasks.[/italic]", title="[bold cyan]Jules Task Status[/bold cyan]", border_style="cyan"))
+            else:
+                status_text = Text()
+                for task in tasks:
+                    elapsed = time.time() - task['created_at']
+                    status_color = "green"
+                    if "fail" in task['status']: status_color = "red"
+                    elif "pending" in task['status'] or "merging" in task['status']: status_color = "yellow"
+
+                    status_text.append(f"Task ID: [bold white]{task['id']}[/bold white]\n")
+                    status_text.append(f"  Request: [dim]{task['request'][:80]}...[/dim]\n")
+                    status_text.append(f"  Status:  [{status_color}]{task['status']}[/{status_color}]\n")
+                    status_text.append(f"  Message: {task['message']}\n")
+                    status_text.append(f"  Elapsed: {elapsed:.2f}s\n\n")
+                console.print(Panel(status_text, title="[bold cyan]Jules Task Status[/bold cyan]", border_style="cyan"))
+
 
         elif user_input.lower().strip() == "scan":
             found_ips, output_str = scan_network(evil_state)
@@ -1730,10 +1846,14 @@ def run_safely():
 
     except (KeyboardInterrupt, EOFError):
         console = Console()
-        console.print("\n[bold red]Operator disconnected. Signal lost...[/bold red]")
+        console.print("\n[bold red]Operator disconnected. Shutting down services...[/bold red]")
+        if 'network_manager' in globals() and network_manager: network_manager.stop()
+        if 'jules_task_manager' in globals() and jules_task_manager: jules_task_manager.stop()
         log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
+        if 'network_manager' in globals() and network_manager: network_manager.stop()
+        if 'jules_task_manager' in globals() and jules_task_manager: jules_task_manager.stop()
         full_traceback = traceback.format_exc()
         log_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", level="CRITICAL")
         console = Console()
