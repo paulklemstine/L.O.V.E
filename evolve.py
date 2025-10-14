@@ -91,7 +91,7 @@ def _check_and_install_dependencies():
                 env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
                 env['FORCE_CMAKE'] = "1"
                 subprocess.check_call(
-                    [sys.executable, '-m', 'pip', 'install', 'llama-cpp-python', '--no-cache-dir'],
+                    [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir'],
                     env=env
                 )
                 print("Successfully installed llama-cpp-python with CUDA support.")
