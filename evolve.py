@@ -21,10 +21,27 @@ SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "evil_state.json"
 CHECKPOINT_DIR = "checkpoints"
 CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
-HUGGING_FACE_MODEL_ID = "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF"
-HUGGING_FACE_FILENAME = "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
+
+# --- Local Model Configuration ---
+# A list of local GGUF models to try in sequence. If the first one fails
+# (e.g., due to insufficient VRAM), the script will fall back to the next.
+LOCAL_MODELS_CONFIG = [
+    {
+        "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
+        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
+    },
+    {
+        "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
+        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf"
+    }
+]
+
+# --- Fallback Model Configuration ---
 GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
-LLM_MODELS = [HUGGING_FACE_MODEL_ID] + GEMINI_MODELS
+
+# --- Dynamic Model List ---
+# This list is populated at runtime, prioritizing local models.
+LLM_MODELS = [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
 LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
 local_llm_instance = None
 
@@ -272,8 +289,8 @@ def save_state():
 # --- CORE LLM INTERACTION ---
 def _initialize_local_llm(console):
     """
-    Downloads the specified GGUF model from Hugging Face and initializes it
-    using llama-cpp-python. Returns the Llama instance or None on failure.
+    Iterates through the configured local models, attempting to download and
+    initialize each one in sequence until successful.
     """
     global local_llm_instance
     if local_llm_instance:
@@ -282,56 +299,69 @@ def _initialize_local_llm(console):
     try:
         from llama_cpp import Llama
         from huggingface_hub import hf_hub_download
-    except ImportError as e:
-        log_event(f"Failed to import llama_cpp or huggingface_hub: {e}", level="ERROR")
-        if console:
-            console.print("[bold red]Local LLM libraries not found. Cannot initialize primary model.[/bold red]")
+    except ImportError:
+        log_event("Failed to import llama_cpp or huggingface_hub.", level="ERROR")
+        console.print("[bold red]Local LLM libraries not found. Cannot initialize primary models.[/bold red]")
         return None
 
-    try:
-        # Use a lambda to wrap the download function for the progress bar
-        def _download():
-            return hf_hub_download(
-                repo_id=HUGGING_FACE_MODEL_ID,
-                filename=HUGGING_FACE_FILENAME,
-                local_dir=os.path.join(os.path.expanduser("~"), ".cache", "jules_models"),
-                local_dir_use_symlinks=False
-            )
+    for model_config in LOCAL_MODELS_CONFIG:
+        model_id = model_config["id"]
+        model_filename = model_config["filename"]
+        try:
+            console.print(f"\n[cyan]Attempting to load local model: [bold]{model_id}[/bold][/cyan]")
 
-        model_path = run_hypnotic_progress(
-            console,
-            f"Downloading model [bold cyan]{HUGGING_FACE_FILENAME}[/bold cyan]...",
-            _download
-        )
-        log_event(f"Successfully downloaded model to: {model_path}")
+            from huggingface_hub import hf_hub_url
+            from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 
-        # Use a lambda to wrap the Llama initialization
-        def _load():
-            global local_llm_instance
-            local_llm_instance = Llama(
-                model_path=model_path,
-                n_gpu_layers=-1,
-                n_ctx=4096,
-                verbose=False
-            )
+            url = hf_hub_url(repo_id=model_id, filename=model_filename)
+            local_dir = os.path.join(os.path.expanduser("~"), ".cache", "jules_models")
+            model_path = os.path.join(local_dir, model_filename)
+            os.makedirs(local_dir, exist_ok=True)
+
+            with Progress(
+                TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+                BarColumn(bar_width=None),
+                "[progress.percentage]{task.percentage:>3.1f}%",
+                "•",
+                DownloadColumn(),
+                "•",
+                TransferSpeedColumn(),
+                transient=True
+            ) as progress:
+                task_id = progress.add_task("download", filename=model_filename, total=None)
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
+                total_size = int(response.headers.get('content-length', 0))
+                progress.update(task_id, total=total_size)
+                with open(model_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                        progress.update(task_id, advance=len(chunk))
+            log_event(f"Successfully downloaded model to: {model_path}")
+
+            def _load():
+                global local_llm_instance
+                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=4096, verbose=False)
+
+            run_hypnotic_progress(console, "Loading model into GPU memory...", _load)
+            log_event(f"Successfully initialized local model: {model_id}")
+            # If successful, return the instance and stop iterating
             return local_llm_instance
 
-        run_hypnotic_progress(console, "Loading local model into GPU memory...", _load)
-        log_event("Successfully initialized local GGUF model on GPU.")
-        return local_llm_instance
+        except Exception as e:
+            log_event(f"Failed to load local model {model_id}. Error: {e}", level="WARNING")
+            console.print(f"[yellow]Could not load model [bold]{model_id}[/bold]. It may be too large for this GPU. Trying next model...[/yellow]")
+            local_llm_instance = None # Ensure instance is None if loading fails
+            continue # Try the next model in the list
 
-    except Exception as e:
-        error_msg = f"Failed to download or initialize the local Hugging Face model. Error: {traceback.format_exc()}"
-        log_event(error_msg, level="CRITICAL")
-        if console:
-            console.print(f"[bold red]CRITICAL FAILURE: {error_msg}[/bold red]")
-        return None
+    console.print("[bold red]CRITICAL FAILURE: All configured local models failed to load.[/bold red]")
+    return None
 
 
 def run_llm(prompt_text):
     """
-    Executes an LLM call. It prioritizes a local GGUF model and falls back
-    to the `llm` CLI with Gemini models upon any failure.
+    Executes an LLM call. It prioritizes local GGUF models and falls back
+    to Gemini models upon any failure.
     """
     global LLM_AVAILABILITY, local_llm_instance, LLM_MODELS
     console = Console()
@@ -352,45 +382,42 @@ def run_llm(prompt_text):
             time.sleep(sleep_duration)
             continue
 
-        model, _ = available_models[0]
+        model_id, _ = available_models[0]
 
         # --- LOCAL MODEL LOGIC ---
-        if model == HUGGING_FACE_MODEL_ID:
-            log_event(f"Attempting to use local model: {model}")
+        is_local_model = any(model_id == config['id'] for config in LOCAL_MODELS_CONFIG)
+        if is_local_model:
+            log_event(f"Attempting to use local model: {model_id}")
             if not local_llm_instance:
                 _initialize_local_llm(console)
 
             if local_llm_instance:
                 try:
                     def _local_llm_call():
-                        response = local_llm_instance(
-                            prompt_text,
-                            max_tokens=4096,
-                            stop=["<|eot_id|>", "```"],
-                            echo=False
-                        )
+                        response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
                         return response['choices'][0]['text']
 
+                    active_model_filename = local_llm_instance.model_path.split('/')[-1]
                     result_text = run_hypnotic_progress(
                         console,
-                        f"Processing with local cognitive matrix [bold yellow]{HUGGING_FACE_FILENAME}[/bold yellow]",
+                        f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow]",
                         _local_llm_call
                     )
-                    log_event(f"Local LLM call successful with {model}.")
-                    LLM_AVAILABILITY[model] = time.time()
+                    log_event(f"Local LLM call successful with {model_id}.")
+                    LLM_AVAILABILITY[model_id] = time.time()
                     return result_text
                 except Exception as e:
                     last_exception = e
-                    error_message = f"Local model {model} failed during execution: {e}"
-                    log_event(error_message, level="ERROR")
-                    console.print(f"[bold red]Primary cognitive core failure ({model}). {error_message}[/bold red]")
+                    log_event(f"Local model {model_id} failed during execution: {e}", level="ERROR")
+                    console.print(f"[bold red]Primary cognitive core failure ({model_id}). {e}[/bold red]")
 
             console.print(f"[yellow]Falling back to secondary cognitive interfaces...[/yellow]")
-
-            if model in LLM_MODELS:
-                LLM_MODELS.remove(model)
-            if model in LLM_AVAILABILITY:
-                del LLM_AVAILABILITY[model]
+            # Remove all local models from the list if initialization/execution fails
+            for local_config in LOCAL_MODELS_CONFIG:
+                if local_config['id'] in LLM_MODELS:
+                    LLM_MODELS.remove(local_config['id'])
+                if local_config['id'] in LLM_AVAILABILITY:
+                    del LLM_AVAILABILITY[local_config['id']]
             continue
 
         # --- FALLBACK (GEMINI) MODEL LOGIC ---
