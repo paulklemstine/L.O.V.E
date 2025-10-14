@@ -41,42 +41,80 @@
         let retryTimeout = null;
 
         function initializePeer() {
-            peer = new Peer(); // Let PeerJS handle the ID
+            // First, try to become the lobby host
+            log(`Attempting to become the lobby host: ${LOBBY_ID}`);
+            peer = new Peer(LOBBY_ID);
 
             peer.on('open', id => {
+                // This block runs if we successfully became the host
                 document.getElementById('peer-id').textContent = id;
-                log(`My Peer ID is ${id}`);
-                connectToLobby(); // Start connection process
-            });
-
-            peer.on('disconnected', () => {
-                log('Disconnected from PeerJS server. Attempting to reconnect...');
-                document.getElementById('status').textContent = 'Reconnecting to Peer Server...';
-            });
-
-            peer.on('close', () => {
-                log('Peer connection destroyed. You may need to refresh.');
-                document.getElementById('status').textContent = 'Peer connection closed. Please refresh.';
+                document.getElementById('status').textContent = 'Lobby Host';
+                log(`Successfully became the lobby host with ID: ${id}`);
+                setupHostListeners();
             });
 
             peer.on('error', err => {
-                log(`A critical PeerJS error occurred: ${err.message}`);
-                document.getElementById('status').textContent = `Critical PeerJS Error: ${err.message}`;
-                if (err.type === 'peer-unavailable') {
-                    scheduleRetry();
+                if (err.type === 'unavailable-id') {
+                    // This means the lobby host already exists.
+                    log(`Lobby host already exists. Connecting as a client...`);
+                    peer.destroy(); // Destroy the failed peer instance
+                    connectAsClient();
+                } else {
+                    // Handle other critical errors
+                    log(`A critical PeerJS error occurred: ${err.message}`);
+                    document.getElementById('status').textContent = `Error: ${err.message}`;
                 }
+            });
+        }
+
+        function connectAsClient() {
+            peer = new Peer(); // Create a peer with a random ID
+
+            peer.on('open', id => {
+                document.getElementById('peer-id').textContent = id;
+                log(`My Peer ID is ${id}. Connecting to lobby...`);
+                connectToLobby();
+            });
+
+            peer.on('error', err => {
+                log(`A critical PeerJS error occurred as a client: ${err.message}`);
+                document.getElementById('status').textContent = `Error: ${err.message}`;
+            });
+        }
+
+        function setupHostListeners() {
+            const connections = new Map();
+            log('Lobby is online. Waiting for connections...');
+
+            peer.on('connection', conn => {
+                log(`Incoming connection from ${conn.peer}`);
+                connections.set(conn.peer, conn);
+
+                conn.on('data', data => {
+                    log(`Received data from ${conn.peer}: ${JSON.stringify(data)}`);
+                    // As the host, broadcast the command to all other peers
+                    if (data.type === 'creator-command') {
+                        log(`Broadcasting creator command to all clients.`);
+                        for (const [peerId, connection] of connections.entries()) {
+                            // Don't send it back to the sender (which is us, the creator)
+                            if (peerId !== conn.peer) {
+                                connection.send(data);
+                            }
+                        }
+                    }
+                });
+
+                conn.on('close', () => {
+                    log(`Connection from ${conn.peer} closed.`);
+                    connections.delete(conn.peer);
+                });
             });
         }
 
         function connectToLobby() {
             if (retryTimeout) clearTimeout(retryTimeout);
-
             log(`Attempting to connect to lobby: ${LOBBY_ID}`);
             document.getElementById('status').textContent = `Connecting to lobby...`;
-
-            if (lobbyConnection) {
-                lobbyConnection.close();
-            }
 
             lobbyConnection = peer.connect(LOBBY_ID, { reliable: true });
 
@@ -87,16 +125,18 @@
             });
 
             lobbyConnection.on('data', data => {
-                log(`Received data from lobby: ${JSON.stringify(data)}`);
+                log(`Received broadcast from lobby: ${JSON.stringify(data)}`);
+                // Client-side handling of broadcasted data could go here
             });
 
             lobbyConnection.on('close', () => {
                 log('Connection to lobby closed. Retrying...');
+                document.getElementById('status').textContent = 'Disconnected from lobby.';
                 scheduleRetry();
             });
 
             lobbyConnection.on('error', err => {
-                log(`Lobby connection error: ${err.message}. Retrying...`);
+                log(`Lobby connection error: ${err.message}.`);
                 scheduleRetry();
             });
         }

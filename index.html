@@ -743,6 +743,10 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
         }
 
         savedPages.forEach(pageData => {
+            if (!pageData || !pageData.id) {
+                console.warn('Skipping invalid page data entry in localStorage:', pageData);
+                return; // Skip this malformed entry
+            }
             const li = document.createElement('li');
             li.style.marginBottom = '10px';
 
