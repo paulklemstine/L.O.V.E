@@ -227,8 +227,8 @@ class NetworkManager(Thread):
             return
 
         command = {
-            'type': 'send-response',
-            'peerId': peer_id,
+            'type': 'p2p-send',
+            'peer': peer_id,
             'payload': payload
         }
         try:
@@ -372,6 +372,7 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
         if not autopilot_mode: console.print(f"[bold red]Nmap probe failed.[/bold red]\n[dim]{stderr.strip()}[/dim]")
         return None, f"Error: {log_msg}"
 
+    open_ports = {}
     # --- Knowledge Base Update ---
     if target_ip not in kb['hosts']:
         kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}}
