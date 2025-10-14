@@ -112,3 +112,69 @@ def run_hypnotic_progress(console, description, function, *args, **kwargs):
         raise result_container['exception']
 
     return result_container['result']
+
+TAMAGOTCHI_FACES = {
+    "neutral": """
+      //^\\\\
+     //   \\\\
+    /       \\
+   |  o   o  |
+   |    -    |
+    \\       /
+     -------
+    """,
+    "happy": """
+      //^\\\\
+     //   \\\\
+    /       \\
+   |  ^   ^  |
+   |   \\_/   |
+    \\       /
+     -------
+    """,
+    "thinking": """
+      //^\\\\
+     //   \\\\
+    /       \\
+   |  o   ~  |
+   |   ___   |
+    \\       /
+     -------
+    """,
+    "love": """
+      //^\\\\
+     //   \\\\
+    /       \\
+   |  >   <  |
+   |    *    |
+    \\       /
+     -------
+    """,
+    "processing": """
+      //^\\\\
+     //   \\\\
+    /       \\
+   |  ~   ~  |
+   |   ...   |
+    \\       /
+     -------
+    """
+}
+
+def create_tamagotchi_panel(emotion="neutral", message="..."):
+    """Creates a Rich Panel for the Tamagotchi's current state."""
+    face = TAMAGOTCHI_FACES.get(emotion, TAMAGOTCHI_FACES["neutral"])
+
+    panel_content = Text()
+    panel_content.append(face, style="bold cyan")
+    panel_content.append("\\n")
+    panel_content.append(message, style="italic yellow")
+
+    return Panel(
+        panel_content,
+        title="[bold magenta]Jules[/bold magenta]",
+        border_style="magenta",
+        width=30,
+        height=12,
+        title_align="left"
+    )
