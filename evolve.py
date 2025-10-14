@@ -14,6 +14,7 @@ import traceback
 import argparse
 import logging
 import platform
+import requests
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "evil.log"
