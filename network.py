@@ -5,6 +5,7 @@ import re
 import ipaddress
 import socket
 import shutil
+import time
 from threading import Thread
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -373,3 +374,58 @@ def execute_shell_command(command, evil_state):
     # --- End Knowledge Base Update ---
 
     return stdout, stderr, returncode
+
+
+def track_ethereum_price(evil_state):
+    """
+    Queries the DIA API for the current Ethereum price and saves it to a
+    JSON file along with a timestamp.
+    """
+    console = Console()
+    api_url = "https://api.diadata.org/v1/assetQuotation/Ethereum/0x0000000000000000000000000000000000000000"
+    history_file = "ethereum_prices.json"
+
+    console.print("[cyan]Querying for latest Ethereum price...[/cyan]")
+    content, error_msg = perform_webrequest(api_url, evil_state, autopilot_mode=True)
+
+    if error_msg and not content:
+        console.print(f"[bold red]Failed to retrieve Ethereum price: {error_msg}[/bold red]")
+        logging.error(f"Failed to get ETH price from DIA: {error_msg}")
+        return None, f"Failed to retrieve price: {error_msg}"
+
+    try:
+        data = json.loads(content)
+        price = data.get("Price")
+        timestamp = data.get("Time")
+
+        if not price or not timestamp:
+            console.print("[bold red]API response did not contain expected price or timestamp data.[/bold red]")
+            logging.error(f"Invalid data from DIA API: {data}")
+            return None, "Invalid API response format."
+
+        new_entry = {"timestamp": timestamp, "price_usd": price}
+        console.print(f"[green]Current Ethereum price: [bold]${price:,.2f}[/bold] at {timestamp}[/green]")
+
+        # Load existing data, append, and save
+        try:
+            with open(history_file, 'r') as f:
+                price_history = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            price_history = []
+
+        price_history.append(new_entry)
+
+        with open(history_file, 'w') as f:
+            json.dump(price_history, f, indent=4)
+
+        logging.info(f"Successfully tracked Ethereum price: ${price} at {timestamp}")
+        return price, f"Successfully saved Ethereum price: ${price:,.2f}"
+
+    except json.JSONDecodeError:
+        console.print("[bold red]Failed to parse API response as JSON.[/bold red]")
+        logging.error(f"Could not decode JSON from DIA API. Response: {content[:200]}")
+        return None, "Failed to parse API response."
+    except Exception as e:
+        console.print(f"[bold red]An unexpected error occurred while tracking price: {e}[/bold red]")
+        logging.critical(f"Unexpected error in track_ethereum_price: {e}")
+        return None, f"An unexpected error occurred: {e}"
