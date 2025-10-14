@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jules: A Self Modifying Organism</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsrsasign@11.1.0/lib/jsrsasign.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/11.1.0/jsrsasign-all-min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -622,19 +622,21 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
 
         MPLib.initialize({
             onStatusUpdate: (msg, type) => {
-                console.log(`MPLib Status: ${msg}`);
-                dom.p2p.statusText.textContent = msg;
-                if (msg === 'Peer ID assigned') {
-                    MPLib.connectToPeer('borg-lobby');
+                if (type === 'status') {
+                    dom.p2p.statusText.textContent = msg;
                 }
+                dom.p2p.peerId.textContent = MPLib.getLocalPeerId() || 'N/A';
+                console.log(`MPLib Status Update: ${msg} (Type: ${type})`);
             },
             onError: (type, err) => {
                 console.error(`MPLib Error (${type}):`, err);
                 dom.p2p.statusText.textContent = `Error: ${err.message}`;
             },
-            onEvolvePeerConnected: (id) => {
-                dom.p2p.peerId.textContent = MPLib.getLocalPeerId();
-                dom.p2p.connectionsCount.textContent = '1';
+            onConnectionChange: (count) => {
+                dom.p2p.connectionsCount.textContent = count;
+                if (count > 0 && !MPLib.isHost()) {
+                    state.readyPeers.add(MPLib.getLocalPeerId());
+                }
             },
             onPinResponse: (data) => {
                 console.log(`Received IPFS pin response from backend:`, data);
