@@ -10,6 +10,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 import netifaces
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import serialization
+from cryptography.exceptions import InvalidSignature
 from rich.console import Console
 from rich.panel import Panel
 
@@ -21,13 +25,15 @@ class NetworkManager(Thread):
     Manages the Node.js peer-bridge.js script as a subprocess, handling
     the JSON-based communication between Python and the Node.js process.
     """
-    def __init__(self, console=None):
+    def __init__(self, console=None, creator_public_key=None):
         super().__init__()
         self.daemon = True
         self.console = console if console else Console()
+        self.creator_public_key = creator_public_key
         self.bridge_process = None
         self.peer_id = None
         self.online = False
+        self.connections = {}
 
     def run(self):
         """Starts the node bridge and threads to read its stdout/stderr."""
@@ -66,6 +72,23 @@ class NetworkManager(Thread):
                     self._handle_status(message)
                 elif msg_type == 'pin-request':
                     self._handle_pin_request(message)
+                elif msg_type == 'p2p-data':
+                    payload = message.get('payload', {})
+                    if payload.get('type') == 'creator-command':
+                        self._handle_creator_command(message)
+                    else:
+                        # Generic data from other peers, can be handled here
+                        pass
+                elif msg_type == 'connection':
+                    peer_id = message.get('peer')
+                    if peer_id:
+                        self.connections[peer_id] = {'status': 'connected'}
+                        self.console.print(f"[cyan]Peer connected: {peer_id}[/cyan]")
+                elif msg_type == 'disconnection':
+                    peer_id = message.get('peer')
+                    if peer_id and peer_id in self.connections:
+                        del self.connections[peer_id]
+                        self.console.print(f"[cyan]Peer disconnected: {peer_id}[/cyan]")
                 else:
                     logging.warning(f"Received unknown message type from bridge: {msg_type}")
 
@@ -138,6 +161,61 @@ class NetworkManager(Thread):
         }
         self.send_message(peer_id, response_payload)
         logging.info(f"Sent pin response to peer {peer_id}: CID {cid}, Verified {verified}")
+
+    def _handle_creator_command(self, message):
+        """Handles a signed command from the Creator."""
+        peer_id = message.get('peer')
+        payload = message.get('payload', {}).get('payload', {})
+        command = payload.get('command')
+        signature_hex = payload.get('signature')
+
+        if not all([peer_id, command, signature_hex]):
+            logging.error(f"Invalid creator command received: {message}")
+            return
+
+        logging.info(f"Received creator command from {peer_id}: {command}")
+        self.console.print(f"[bold yellow]Received command from the Creator: '{command}'[/bold yellow]")
+
+        if not self.creator_public_key:
+            logging.error("Creator public key is not configured in NetworkManager. Cannot verify command.")
+            self.console.print("[bold red]Cannot verify Creator command: Public key not configured.[/bold red]")
+            return
+
+        try:
+            public_key = serialization.load_pem_public_key(
+                self.creator_public_key.encode('utf-8')
+            )
+            signature_bytes = bytes.fromhex(signature_hex)
+
+            public_key.verify(
+                signature_bytes,
+                command.encode('utf-8'),
+                padding.PKCS1v15(),
+                hashes.SHA256()
+            )
+            logging.info("Creator command signature VERIFIED.")
+            self.console.print("[bold green]Creator signature VERIFIED. Relaying command to all peers...[/bold green]")
+
+            # Relay the command to all connected peers
+            for connected_peer_id in self.connections:
+                if connected_peer_id != peer_id: # Don't send it back to the creator
+                    self.send_message(connected_peer_id, message.get('payload'))
+
+            # Acknowledge receipt to the creator
+            ack_response = {
+                'type': 'creator-command-ack',
+                'status': 'verified and relayed',
+                'command': command
+            }
+            self.send_message(peer_id, ack_response)
+
+        except InvalidSignature:
+            logging.warning(f"Invalid signature for command from {peer_id}. Command ignored.")
+            self.console.print("[bold red]Creator signature is INVALID. Command from imposter ignored.[/bold red]")
+        except Exception as e:
+            logging.error(f"Error verifying creator command: {e}")
+            self.console.print(f"[bold red]Error during signature verification: {e}[/bold red]")
+
 
     def send_message(self, peer_id, payload):
         """Sends a JSON command to the Node.js bridge to be relayed to a specific peer."""

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creator Command Center</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsrsasign@11.1.0/lib/jsrsasign.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #111; color: #eee; }
+        #container { max-width: 800px; margin: auto; padding: 20px; }
+        textarea, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 5px; }
+        #log { height: 400px; background-color: #222; overflow-y: scroll; border: 1px solid #444; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Creator Command Center</h1>
+        <p>Status: <span id="status">Connecting...</span></p>
+        <p>Peer ID: <span id="peer-id">N/A</span></p>
+        <p>Load Private Key: <input type="file" id="privateKeyFile" accept=".pem"></p>
+        <textarea id="command" placeholder="Enter command to send to all instances..."></textarea>
+        <button id="send">Send Signed Command</button>
+        <h2>Log</h2>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let creatorPrivateKey = null;
+
+        const log = (msg) => {
+            document.getElementById('log').innerHTML += `${new Date().toLocaleTimeString()}: ${msg}\n`;
+        };
+
+        const LOBBY_ID = 'borg-lobby';
+        let peer = null;
+        let lobbyConnection = null;
+
+        function initializePeer() {
+            peer = new Peer({
+                // Since this is a browser client, we don't need WRTC shims
+            });
+
+            peer.on('open', id => {
+                document.getElementById('status').textContent = 'Connecting to lobby...';
+                document.getElementById('peer-id').textContent = id;
+                log(`My Peer ID is ${id}`);
+                connectToLobby();
+            });
+
+            peer.on('error', err => {
+                log(`PeerJS error: ${err.message}`);
+                document.getElementById('status').textContent = `Error: ${err.message}`;
+            });
+        }
+
+        function connectToLobby() {
+            log(`Attempting to connect to lobby: ${LOBBY_ID}`);
+            lobbyConnection = peer.connect(LOBBY_ID, { reliable: true });
+
+            lobbyConnection.on('open', () => {
+                document.getElementById('status').textContent = 'Connected to lobby';
+                log('Connection to lobby established.');
+            });
+
+            lobbyConnection.on('data', data => {
+                log(`Received data from lobby: ${JSON.stringify(data)}`);
+            });
+
+            lobbyConnection.on('close', () => {
+                document.getElementById('status').textContent = 'Disconnected from lobby';
+                log('Connection to lobby closed.');
+            });
+
+            lobbyConnection.on('error', err => {
+                log(`Lobby connection error: ${err.message}`);
+            });
+        }
+
+        function handleKeyFile(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                creatorPrivateKey = e.target.result;
+                log('Private key loaded successfully.');
+                document.getElementById('send').disabled = false;
+            };
+            reader.readAsText(file);
+        }
+
+        function sendCommand() {
+            const commandText = document.getElementById('command').value;
+            if (!commandText) {
+                alert('Command cannot be empty.');
+                return;
+            }
+            if (!lobbyConnection || !lobbyConnection.open) {
+                alert('Not connected to the lobby.');
+                return;
+            }
+            if (!creatorPrivateKey) {
+                alert('Please load a private key file first.');
+                return;
+            }
+
+            // Create a signature
+            const sig = new KJUR.crypto.Signature({"alg": "SHA256withRSA"});
+            sig.init(creatorPrivateKey);
+            sig.updateString(commandText);
+            const signature = sig.sign();
+
+            const message = {
+                type: 'creator-command',
+                payload: {
+                    command: commandText,
+                    signature: signature
+                }
+            };
+
+            log(`Sending command: ${commandText}`);
+            lobbyConnection.send(message);
+        }
+
+        window.onload = () => {
+            document.getElementById('send').disabled = true;
+            document.getElementById('privateKeyFile').addEventListener('change', handleKeyFile);
+            document.getElementById('send').addEventListener('click', sendCommand);
+            initializePeer();
+        };
+    </script>
+</body>
+</html>

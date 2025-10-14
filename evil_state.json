@@ -11,12 +11,14 @@
     "knowledge_base": {
         "network_map": {
             "last_scan": null,
-            "hosts": {}
+            "hosts": {},
+            "self_interfaces": {}
         },
         "file_system_intel": {
             "last_browse": null,
             "interesting_files": []
         },
-        "webrequest_cache": {}
+        "webrequest_cache": {},
+        "process_intel": []
     }
 }
