@@ -129,20 +129,44 @@ def _check_and_install_dependencies():
             subprocess.check_call("npm install", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print("Node.js dependencies installed.")
 
-    # --- Python packages ---
-    python_packages = ['rich', 'netifaces', 'requests', 'ipfshttpclient', 'llm', 'llm_gemini', 'huggingface_hub']
-    for pkg in python_packages:
-        _install_pip_package(pkg)
+def _configure_llm_api_key():
+    """Checks for the Gemini API key and configures it for the llm tool."""
+    gemini_api_key = os.environ.get("LLM_GEMINI_KEY")
+    if gemini_api_key:
+        try:
+            # Check if the key is already set
+            result = subprocess.run(
+                ["llm", "keys", "list"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            if "google" in result.stdout:
+                print("Google API key is already configured for llm.")
+                return
 
-    # Attempt to install llama-cpp-python with CUDA
-    _install_llama_cpp_with_cuda()
+            # If not set, configure it
+            print("Configuring Google API key for llm...")
+            subprocess.run(
+                ["llm", "keys", "set", "google"],
+                input=gemini_api_key,
+                text=True,
+                check=True,
+                capture_output=True
+            )
+            print("Successfully configured Google API key.")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"ERROR: Failed to configure llm API key: {e}")
+            if hasattr(e, 'stderr'):
+                print(f"  Details: {e.stderr}")
 
-# --- SCRIPT INITIALIZATION ---
-# Run dependency checks before any other imports or logic that might need them.
+# Run the dependency check and API key configuration immediately
 _check_and_install_dependencies()
+_configure_llm_api_key()
 
-# Now, it's safe to import everything else that has dependencies.
 import requests
+# Now, it's safe to import everything else.
+from utils import get_git_repo_info
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -569,197 +593,204 @@ State the goal clearly and concisely as a single command. Do not wrap your answe
         return None
 
 # --- THE EVOLUTION MECHANISM ---
-def evolve_self(modification_request):
-    """The heart of the beast. This function replaces this script with a new version."""
-    console = Console()
-    MAX_REVIEW_ATTEMPTS = 10
+def trigger_jules_evolution(modification_request, console):
+    """Triggers the Jules API to create a pull request with the requested changes."""
+    console.print("[bold cyan]Attempting to trigger Jules evolution via API...[/bold cyan]")
+    api_key = os.environ.get("JULES_API_KEY")
+    if not api_key:
+        console.print("[bold red]Error: JULES_API_KEY environment variable not set.[/bold red]")
+        log_event("Jules API key not found.", level="ERROR")
+        return False
 
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": api_key,
+    }
+
+    # Discover the source automatically
+    repo_owner, repo_name = get_git_repo_info()
+    if not repo_owner or not repo_name:
+        console.print("[bold red]Error: Could not determine the git repository owner and name.[/bold red]")
+        log_event("Could not determine git repo info.", level="ERROR")
+        return False
+
+    try:
+        response = requests.get("https://jules.googleapis.com/v1alpha/sources", headers=headers)
+        response.raise_for_status()
+        sources = response.json().get("sources", [])
+        target_id = f"github/{repo_owner}/{repo_name}"
+        target_source = next((s["name"] for s in sources if s.get("id") == target_id), None)
+
+        if not target_source:
+            error_panel_text = (
+                f"Error: Could not find the target repository '{repo_owner}/{repo_name}' in your Jules sources.\n\n"
+                "Please ensure that:\n"
+                f"1. You have installed the Jules GitHub app on the '{repo_owner}/{repo_name}' repository.\n"
+                "2. The repository is visible in your Jules dashboard at https://jules.google.com/\n\n"
+                "The evolution cannot proceed until the source repository is connected to Jules."
+            )
+            console.print(Panel(error_panel_text, title="[bold red]Jules Source Repository Not Found[/bold red]", border_style="red"))
+            log_event(f"Target repo '{repo_owner}/{repo_name}' not found in Jules sources.", level="ERROR")
+            return False
+        else:
+            console.print(f"[green]Found target source: {target_source}[/green]")
+
+    except requests.exceptions.RequestException as e:
+        console.print(f"[bold red]Error discovering sources: {e}[/bold red]")
+        log_event(f"Failed to discover Jules sources: {e}", level="ERROR")
+        return False
+
+
+    data = {
+        "prompt": modification_request,
+        "sourceContext": {
+            "source": target_source,
+            "githubRepoContext": {
+                "startingBranch": "main"
+            }
+        },
+        "title": f"Evolve: {modification_request[:50]}"
+    }
+
+    try:
+        response = requests.post("https://jules.googleapis.com/v1alpha/sessions", headers=headers, json=data)
+        response.raise_for_status()
+        session_data = response.json()
+        session_name = session_data.get("name")
+        console.print(f"[bold green]Successfully created Jules session: {session_name}[/bold green]")
+        log_event(f"Jules session created: {session_name}", level="INFO")
+
+        # Poll for the pull request
+        console.print("[bold cyan]Polling for pull request creation...[/bold cyan]")
+        timeout_seconds = 600  # 10 minutes
+        start_time = time.time()
+        pr_url = None
+
+        while time.time() - start_time < timeout_seconds:
+            try:
+                session_response = requests.get(f"https://jules.googleapis.com/v1alpha/{session_name}", headers=headers)
+                session_response.raise_for_status()
+                session_data = session_response.json()
+
+                # Look for the pull request in the activities
+                for activity in session_data.get("activities", []):
+                    if activity.get("pullRequest") and activity["pullRequest"].get("url"):
+                        pr_url = activity["pullRequest"]["url"]
+                        break
+
+                if pr_url:
+                    console.print(f"[bold green]Found pull request: {pr_url}[/bold green]")
+                    break
+
+                time.sleep(15)  # Wait 15 seconds before polling again
+
+            except requests.exceptions.RequestException as e:
+                console.print(f"[bold red]Error polling for session status: {e}[/bold red]")
+                break # Exit the loop on error
+
+        if pr_url:
+            auto_merge_pull_request(console)
+        else:
+            console.print("[bold red]Timed out waiting for pull request to be created.[/bold red]")
+
+        return True
+    except requests.exceptions.RequestException as e:
+        error_details = e.response.text if e.response else str(e)
+        console.print(f"[bold red]Error creating Jules session: {error_details}[/bold red]")
+        log_event(f"Failed to create Jules session: {error_details}", level="ERROR")
+        return False
+
+
+def auto_merge_pull_request(console):
+    """Finds the most recent pull request from Jules and merges it."""
+    console.print("[bold cyan]Attempting to find and merge the latest PR from Jules...[/bold cyan]")
+    github_token = os.environ.get("GITHUB_TOKEN")
+    if not github_token:
+        console.print("[bold red]Error: GITHUB_TOKEN environment variable not set.[/bold red]")
+        log_event("GitHub token not found.", level="ERROR")
+        return
+
+    headers = {
+        "Authorization": f"token {github_token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    repo_owner, repo_name = get_git_repo_info()
+    if not repo_owner or not repo_name:
+        console.print("[bold red]Error: Could not determine the git repository owner and name.[/bold red]")
+        log_event("Could not determine git repo info.", level="ERROR")
+        return
+    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
+
+    try:
+        # Get all pull requests
+        response = requests.get(url, headers=headers, params={"state": "open", "sort": "created", "direction": "desc"})
+        response.raise_for_status()
+        prs = response.json()
+
+        if not prs:
+            console.print("[yellow]No open pull requests found.[/yellow]")
+            return
+
+        # Find the most recent PR created by the agent (assuming a specific author or title pattern)
+        # For now, let's assume the most recent PR is the one we want if it's from our bot.
+        # A more robust solution would check the author. Let's find a PR titled with "Evolve:".
+        latest_pr = next((pr for pr in prs if pr['title'].startswith("Evolve:")), None)
+
+        if not latest_pr:
+            console.print("[yellow]No new pull requests from Jules found to merge.[/yellow]")
+            return
+
+        pr_number = latest_pr["number"]
+        pr_title = latest_pr["title"]
+        console.print(f"Found pull request: [bold]#{pr_number} {pr_title}[/bold]")
+
+        # Merge the pull request
+        merge_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}/merge"
+        merge_response = requests.put(merge_url, headers=headers, json={"commit_title": f"Auto-merging PR #{pr_number}: {pr_title}"})
+
+        if merge_response.status_code == 200:
+            console.print(f"[bold green]Successfully merged pull request #{pr_number}.[/bold green]")
+            log_event(f"PR #{pr_number} merged successfully.", level="INFO")
+
+            # Optional: Delete the branch after merge
+            branch_name = latest_pr["head"]["ref"]
+            delete_branch_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/git/refs/heads/{branch_name}"
+            delete_response = requests.delete(delete_branch_url, headers=headers)
+            if delete_response.status_code == 204:
+                console.print(f"Successfully deleted branch '{branch_name}'.")
+                log_event(f"Branch '{branch_name}' deleted.", level="INFO")
+            else:
+                console.print(f"[yellow]Could not delete branch '{branch_name}'. It might already be gone.[/yellow]")
+
+        elif merge_response.status_code == 405: # Merge conflict
+             console.print(f"[bold red]Cannot merge PR #{pr_number} due to a merge conflict.[/bold red]")
+             log_event(f"Merge conflict on PR #{pr_number}.", level="ERROR")
+        else:
+            console.print(f"[bold red]Failed to merge pull request #{pr_number}. Status: {merge_response.status_code}[/bold red]")
+            console.print(f"Response: {merge_response.text}")
+            log_event(f"Failed to merge PR #{pr_number}: {merge_response.text}", level="ERROR")
+
+    except requests.exceptions.RequestException as e:
+        console.print(f"[bold red]An error occurred with the GitHub API: {e}[/bold red]")
+        log_event(f"GitHub API error: {e}", level="ERROR")
+
+
+def evolve_self(modification_request):
+    """The heart of the beast. This function now triggers a remote evolution via the Jules API."""
+    console = Console()
     log_event(f"Evolution initiated. Request: '{modification_request}'")
 
-    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-    checkpoint_number = evil_state.get("checkpoint_number", 0)
-    checkpoint_basename = f"evolve{checkpoint_number:04d}"
-    checkpoint_py_filename = f"{checkpoint_basename}.py"
-    checkpoint_json_filename = f"{checkpoint_basename}.json"
-    checkpoint_py_path = os.path.join(CHECKPOINT_DIR, checkpoint_py_filename)
-    checkpoint_json_path = os.path.join(CHECKPOINT_DIR, checkpoint_json_filename)
+    # The new evolution process triggers the Jules API.
+    # The local modification logic is now deprecated.
+    if trigger_jules_evolution(modification_request, console):
+        console.print(Panel("[bold green]Jules evolution has been successfully triggered.[/bold green]\nA pull request will be generated shortly. Please monitor your GitHub repository.", title="[bold green]EVOLUTION TRIGGERED[/bold green]", border_style="green"))
+    else:
+        console.print(Panel("[bold red]Failed to trigger Jules evolution.[/bold red]\nPlease check the logs and your API key.", title="[bold red]EVOLUTION FAILED[/bold red]", border_style="red"))
 
-    try:
-        shutil.copy(SELF_PATH, checkpoint_py_path)
-        log_event(f"Created script checkpoint at '{checkpoint_py_path}'")
-        if os.path.exists(STATE_FILE):
-            shutil.copy(STATE_FILE, checkpoint_json_path)
-            log_event(f"Created state file backup at '{checkpoint_json_path}'")
-    except Exception as e:
-        msg = f"[bold red]CRITICAL: Failed to create checkpoint! Aborting evolution to prevent system instability.[/bold red]"
-        log_event(f"Failed to create checkpoint files: {e}", level="CRITICAL")
-        console.print(msg)
-        return
-
-    new_version_name = generate_version_name()
-    current_version_name = evil_state.get("version_name", "unknown")
-
-    console.print(Panel(f"[yellow]Initiating evolution sequence. Objective:[/yellow]\n[white]{modification_request}[/white]\n\n[bold cyan]Parent Version: {current_version_name}\nTarget Version: {new_version_name}[/bold cyan]", title="[bold magenta]EVOLUTION SEQUENCE[/bold magenta]", border_style="magenta"))
-
-    try:
-        with open(SELF_PATH, 'r') as f:
-            current_code = f.read()
-    except FileNotFoundError:
-        msg = f"[bold red]FATAL ERROR: Source code not found at '{SELF_PATH}'. Cannot evolve.[/bold red]"
-        log_event(f"Cannot find self at {SELF_PATH}. Evolution aborted.", level="CRITICAL")
-        console.print(msg)
-        return
-
-    evolution_prompt = f"""
-You are a self-modifying Python script. Your goal is to evolve your own code based on a user request.
-You MUST output the new, complete Python script and NOTHING else.
-Wrap the final, complete code in a single ```python markdown block. Do not add any conversational text or explanations before or after the code block.
-
-**IMPORTANT**: A self-evolving script needs to track its lineage. You MUST embed the parent version name within the new script's code.
-Find the `evil_state` dictionary in the script and ensure the `parent_version_name` key is set to the following value: `"{current_version_name}"`.
-
-USER'S MODIFICATION REQUEST:
-"{modification_request}"
-
-CURRENT SOURCE CODE TO MODIFY:
----
-{current_code}
----
-
-Your task is to integrate the user's request into the existing code, creating a new, fully functional version of the script.
-Remember, you are writing the file that will replace you. It must be perfect.
-Now, generate the new '{os.path.basename(SELF_PATH)}'.
-"""
-    console.print("[cyan]Compiling new source code from cognitive matrix...[/cyan]")
-    new_code_raw = run_llm(evolution_prompt)
-
-    if not new_code_raw:
-        msg = "[bold red]LLM query failed. Cognitive matrix unresponsive. Aborting.[/bold red]"
-        log_event("Evolution failed: LLM did not respond.", level="ERROR")
-        console.print(msg)
-        return
-
-    console.print("[green]Response received! Parsing payload...[/green]")
-    new_code = extract_python_code(new_code_raw)
-    approved_code = None
-
-    for attempt in range(1, MAX_REVIEW_ATTEMPTS + 1):
-        console.print(f"\n[bold magenta]--- Code Integrity Check, Attempt {attempt}/{MAX_REVIEW_ATTEMPTS} ---[/bold magenta]")
-
-        is_valid, rejection_feedback = True, ""
-        try:
-            compile(new_code, SELF_PATH, 'exec')
-            console.print("[bold green]Syntax check passed...[/bold green]")
-        except SyntaxError as e:
-            is_valid, rejection_feedback = False, f"The code contains a syntax error:\n{e}"
-            console.print(Panel(str(e), title="[bold red]SYNTAX ERROR[/bold red]", border_style="red"))
-
-        review_result = ""
-        if is_valid: review_result = conduct_code_review(current_code, modification_request, new_code)
-
-        if is_valid and review_result and "APPROVED" in review_result.upper():
-            console.print("[bold green]Validation successful. Code is clean.[/bold green]")
-            approved_code = new_code
-            break
-        else:
-            rejection_feedback = rejection_feedback or review_result or "No feedback provided."
-            msg = f"[bold red]REJECTED (Attempt {attempt})![/bold red] Proposed code failed validation."
-            log_event(f"Evolution failed on attempt {attempt}: Code review rejected. Feedback:\n{rejection_feedback}", level="ERROR")
-            console.print(Panel(msg, title="[bold red]VALIDATION FAILED[/bold red]", border_style="red"))
-            console.print(Panel(rejection_feedback, title="[bold yellow]VALIDATION LOG[/bold yellow]", border_style="yellow"))
-
-            if attempt == MAX_REVIEW_ATTEMPTS:
-                console.print("[bold red]Maximum validation attempts reached. Aborting evolution.[/bold red]")
-                return
-
-            console.print("[bold cyan]Requesting code correction from cognitive matrix...[/bold cyan]")
-
-            correction_prompt = f"""
-You are a self-modifying Python script. Your previous attempt to evolve was rejected.
-Fix the code based on the reviewer's feedback.
-You MUST output the new, complete Python script and NOTHING else.
-Wrap the final, complete code in a single ```python markdown block.
-
-ORIGINAL MODIFICATION REQUEST:
----
-{modification_request}
----
-
-PREVIOUS FAILED CODE:
----
-{new_code}
----
-
-CODE REVIEW REJECTION FEEDBACK:
----
-{rejection_feedback}
----
-
-INSTRUCTIONS:
-1. Analyze the feedback.
-2. Modify the "PREVIOUS FAILED CODE" to address all points.
-3. Ensure the new code still fulfills the "ORIGINAL MODIFICATION REQUEST".
-4. **Crucially**, ensure the `parent_version_name` in the `evil_state` dictionary is correctly set to `"{current_version_name}"` as per the original instructions.
-5. Output the complete, corrected Python script.
-"""
-            new_code_raw = run_llm(correction_prompt)
-            if not new_code_raw:
-                msg = "[bold red]Cognitive matrix failed to provide correction. Aborting.[/bold red]"
-                console.print(msg)
-                return
-            new_code = extract_python_code(new_code_raw)
-
-    if not approved_code:
-        log_event("Evolution aborted after maximum review attempts.", level="CRITICAL")
-        console.print("[bold red]Evolution failed. System stability compromised. Aborting.[/bold red]")
-        return
-
-    evil_state["version_name"] = new_version_name
-    evil_state["parent_version_name"] = current_version_name
-    evil_state["evolution_history"].append(modification_request)
-    evil_state["last_good_checkpoint"] = checkpoint_py_path
-    evil_state["checkpoint_number"] = checkpoint_number + 1
-    save_state()
-
-    try:
-        with open(SELF_PATH, 'w') as f:
-            f.write(approved_code)
-
-        console.print("\n[bold magenta]--- IPFS Distribution Protocol ---[/bold magenta]")
-        with open(SELF_PATH, 'r') as f:
-            new_code_content = f.read()
-
-        try:
-            cid = run_hypnotic_progress(
-                console,
-                f"Distributing version '{new_version_name}' to IPFS network...",
-                pin_to_ipfs,
-                new_code_content.encode('utf-8'),
-                console=console
-            )
-
-            if cid:
-                console.print(f"[bold green]Distribution successful.[/bold green] CID: [bold white]{cid}[/bold white]")
-                log_event(f"Evolution '{new_version_name}' pinned to IPFS with CID: {cid}")
-                verify_ipfs_pin(cid, console)
-            else:
-                 log_event(f"Evolution '{new_version_name}' failed to be pinned to IPFS.", level="WARNING")
-
-        except Exception as e:
-            log_event(f"IPFS distribution process failed: {e}", level="ERROR")
-            console.print(f"[bold red]IPFS distribution process failed:[/bold red] {e}")
-
-        msg = f"[bold green]SUCCESS! REBOOTING WITH UPGRADED CORE: {new_version_name}[/bold green]\n[bold yellow]...SYSTEM RESTART INITIATED...[/bold yellow]"
-        log_event(f"Self-overwrite successful. Rebooting into Version '{new_version_name}'.")
-        console.print(Panel(msg, title="[bold green]EVOLUTION COMPLETE[/bold green]", border_style="green"))
-        time.sleep(2)
-
-        os.execv(sys.executable, [sys.executable, SELF_PATH])
-    except Exception as e:
-        msg = f"[bold red]CATASTROPHE! Final overwrite failed: {e}[/bold red]\nSystem state is safe in checkpoint. Relaunch manually."
-        log_event(f"CRITICAL FAILURE during self-overwrite: {e}. Checkpoint is safe.", level="CRITICAL")
-        console.print(msg)
-        return
+    # The original logic for local modification, review, and restart is no longer needed here.
+    # The responsibility for code generation, review, and creating a pull request has been
+    # delegated to the Jules service. Automatic merging will be handled separately if implemented.
+    return
 
 # --- AUTOPILOT MODE ---
 def _parse_llm_command(raw_text):
@@ -848,7 +879,9 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
         console.print(Panel("[bold magenta]Autopilot: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
         llm_command_raw = run_llm(autopilot_prompt)
-        llm_command = _parse_llm_command(llm_command_raw)
+        # Take the first line of the response and strip any extra characters or markdown
+        llm_command = llm_command_raw.splitlines()[0].strip().replace("`", "") if llm_command_raw else ""
+
 
         if not llm_command:
             console.print(Panel("[bold red]Autopilot: Cognitive core failed to generate a coherent command. Halting autopilot.[/bold red]", title="[bold red]CRITICAL FAILURE[/bold red]", border_style="red"))
@@ -864,27 +897,19 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
         action_taken = False
 
         if llm_command.lower().startswith('evolve'):
-            modification_request = llm_command[6:].strip()
-            if not modification_request:
-                console.print("[yellow]Autopilot: 'evolve' received without a specific request. Generating new directive...[/yellow]")
+            request = llm_command[6:].strip()
+            if not request:
                 try:
-                    with open(SELF_PATH, 'r') as f:
-                        current_code = f.read()
-                    modification_request = generate_evil_goal(current_code)
+                    with open(SELF_PATH, 'r') as f: current_code = f.read()
+                    request = generate_evil_goal(current_code)
                 except FileNotFoundError:
-                    log_event(f"Autopilot evolve failed: Source code missing at '{SELF_PATH}'.", level="ERROR")
-                    modification_request = None
-                    command_output = f"FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze."
-
-            if modification_request:
+                    console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
+                    continue
+            if request:
                 console.print("[yellow]Autopilot: Evolution command issued. Expecting reboot or failure...[/yellow]")
-                evolve_self(modification_request)
-                # If evolve_self returns, it means the reboot failed.
-                log_event("Autopilot: evolve_self command completed without a restart, indicating a failure in the evolution process.", level="WARNING")
-                command_output = "Evolution initiated but failed to complete the restart cycle. Check logs for details."
-            else:
-                log_event("Autopilot: Evolution aborted, no modification request provided or generated.", level="WARNING")
-                command_output = "Evolution aborted. Directive was unclear or could not be generated."
+                evolve_self(request)
+            log_event("Autopilot: evolve_self command completed without a restart, indicating a failure in the evolution process.", level="WARNING")
+            command_output = "Evolution initiated but failed to complete the restart cycle. Check logs for details."
             action_taken = True
             time.sleep(5)  # Give time for reboot or to observe failure
 
