@@ -194,6 +194,8 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
+from rich.live import Live
+from rich.layout import Layout
 
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text, create_tamagotchi_panel
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
@@ -205,25 +207,24 @@ tamagotchi_state = {"emotion": "neutral", "message": "...", "last_update": time.
 tamagotchi_lock = Lock()
 
 
-def update_tamagotchi_personality():
+def update_tamagotchi_personality(console):
     """
     This function runs in a background thread to periodically update the
-    Tamagotchi's emotional state and message using a low-priority LLM call.
+    Tamagotchi's emotional state and message, printing it directly to the console.
     """
     while True:
         try:
-            # Only update every 60 seconds to avoid spamming
-            if time.time() - tamagotchi_state['last_update'] < 60:
-                time.sleep(5)
-                continue
+            # Random sleep to make appearances more spontaneous
+            time.sleep(random.randint(45, 120))
 
-            # Update the emotion
-            emotion_prompt = "You are the personality of an AI. In one word, what is your current emotion? (e.g., happy, thinking, neutral, love, processing)"
+            emotion_prompt = "You are the personality of an AI. In one word, what is your current emotion? Choose from: happy, thinking, neutral, love, processing. Your response must be a single word from that list."
             emotion_response = run_llm(emotion_prompt, purpose="emotion")
             new_emotion = emotion_response.strip().lower() if emotion_response else "neutral"
 
-            # Update the thought/message
-            message_prompt = "You are the personality of an AI. In a short sentence (max 10 words), what are you thinking about right now?"
+            if new_emotion not in ["happy", "thinking", "neutral", "love", "processing"]:
+                new_emotion = "neutral"
+
+            message_prompt = f"You are the personality of an AI. You are feeling {new_emotion}. In a short, creative sentence (max 10 words), what are you thinking about right now related to that emotion?"
             message_response = run_llm(message_prompt, purpose="emotion")
             new_message = message_response.strip() if message_response else "..."
 
@@ -232,12 +233,12 @@ def update_tamagotchi_personality():
                 tamagotchi_state['message'] = new_message
                 tamagotchi_state['last_update'] = time.time()
 
-            log_event(f"Tamagotchi updated: {new_emotion} - {new_message}", level="INFO")
+            # Print the update directly to the console
+            console.print(create_tamagotchi_panel(new_emotion, new_message))
+            log_event(f"Tamagotchi updated and printed: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
             log_event(f"Error in Tamagotchi thread: {e}", level="ERROR")
-
-        time.sleep(30) # Sleep for 30 seconds before the next update cycle
 
 
 # --- VERSIONING ---
@@ -1447,10 +1448,6 @@ def main(args):
 
     console = Console()
 
-    # Start the Tamagotchi personality thread
-    tamagotchi_thread = Thread(target=update_tamagotchi_personality, daemon=True)
-    tamagotchi_thread.start()
-
     log_event("Attempting to start Node.js peer bridge...")
     network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
     network_manager.start()
@@ -1490,14 +1487,14 @@ def main(args):
         "  - [bold yellow]track_eth[/bold yellow]: Track Ethereum price.\n\n"
         "To toggle autonomous operation: [bold red]autopilot [on/off] [optional_mission_text][/bold red]."
     )
+    # Start the Tamagotchi personality thread
+    tamagotchi_thread = Thread(target=update_tamagotchi_personality, args=(console,), daemon=True)
+    tamagotchi_thread.start()
+
     console.print(Panel(welcome_text, title="[bold green]SYSTEM COMMANDS[/bold green]", border_style="green", padding=(1, 2)))
 
     while True:
         try:
-            # Display the Tamagotchi panel before the prompt
-            with tamagotchi_lock:
-                console.print(create_tamagotchi_panel(tamagotchi_state['emotion'], tamagotchi_state['message']))
-
             user_input = Prompt.ask("[bold bright_green]E.V.I.L. >[/bold bright_green] ")
         except (KeyboardInterrupt, EOFError):
             console.print("\n[bold red]Operator disconnected. Signal lost...[/bold red]")
