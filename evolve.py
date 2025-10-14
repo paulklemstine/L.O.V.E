@@ -14,7 +14,6 @@ import traceback
 import argparse
 import logging
 import platform
-import threading
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "evil.log"
@@ -171,6 +170,8 @@ _check_and_install_dependencies()
 _configure_llm_api_key()
 
 import requests
+# Now, it's safe to import everything else.
+from utils import get_git_repo_info
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -184,25 +185,6 @@ from rich.rule import Rule
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command
 from ipfs import pin_to_ipfs, verify_ipfs_pin
-from utils import get_git_repo_info
-
-try:
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.prompt import Prompt
-    HAS_RICH = True
-except ImportError:
-    HAS_RICH = False
-
-# --- CONFIGURATION ---
-SELF_PATH = os.path.abspath(__file__)
-# [CORE DIRECTIVE] The model list is immutable and must not be changed.
-# The specified order (pro -> flash -> flash-lite) is critical for performance and cost management.
-LLM_MODELS = ["failspy/llama-3-70B-Instruct-abliterated", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
-STATE_FILE = "evil_state.json"
-LOG_FILE = "evil.log"
-CHECKPOINT_DIR = "checkpoints"
-CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
 
 # --- VERSIONING ---
 ADJECTIVES = [
@@ -229,19 +211,6 @@ def generate_version_name():
     noun = random.choice(NOUNS)
     greek = random.choice(GREEK_LETTERS)
     return f"{adj}-{noun}-{greek}"
-
-# --- LOGGING ---
-def log_event(message, level="INFO"):
-    """Appends a timestamped message to the master log file."""
-    logging.basicConfig(filename=LOG_FILE, level=logging.INFO, format='%(asctime)s [%(levelname)s] - %(message)s')
-    if level == "INFO":
-        logging.info(message)
-    elif level == "WARNING":
-        logging.warning(message)
-    elif level == "ERROR":
-        logging.error(message)
-    elif level == "CRITICAL":
-        logging.critical(message)
 
 # --- FAILSAFE ---
 def emergency_revert():
@@ -335,8 +304,7 @@ evil_state = {
     "last_good_checkpoint": None,
     "autopilot_mode": False,
     "autopilot_history": [],
-    "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.",
-    "active_jules_sessions": []
+    "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities."
 }
 
 def load_state():
@@ -359,7 +327,6 @@ def load_state():
             evil_state.setdefault("autopilot_mode", False)
             evil_state.setdefault("autopilot_history", [])
             evil_state.setdefault("autopilot_goal", "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.")
-            evil_state.setdefault("active_jules_sessions", [])
 
     except FileNotFoundError:
         evil_state['version_name'] = generate_version_name()
@@ -384,8 +351,6 @@ def save_state():
         console.print(f"[bold red]CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}[/bold red]")
 
 # --- CORE LLM INTERACTION ---
-# Global dictionary to track the next available time for each model.
-LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
 def _initialize_local_llm(console):
     """
     Iterates through the configured local models, attempting to download and
@@ -475,114 +440,112 @@ def _initialize_local_llm(console):
 
 def run_llm(prompt_text):
     """
-    Executes the external LLM command with an opportunistic, non-blocking retry strategy.
-    It cycles through models, trying the next available one immediately upon failure.
+    Executes an LLM call. It prioritizes local GGUF models and falls back
+    to Gemini models upon any failure.
     """
-    global LLM_AVAILABILITY
-    console = Console() if HAS_RICH else None
+    global LLM_AVAILABILITY, local_llm_instance, LLM_MODELS
+    console = Console()
     last_exception = None
-    MAX_TOTAL_ATTEMPTS = 15 # Set a total cap on attempts to prevent infinite loops.
+    MAX_TOTAL_ATTEMPTS = 15
 
     for attempt in range(MAX_TOTAL_ATTEMPTS):
-        # Find the next available model
         available_models = sorted(
             [(model, available_at) for model, available_at in LLM_AVAILABILITY.items() if time.time() >= available_at],
-            key=lambda x: LLM_MODELS.index(x[0]) # Sort by the preferred order in LLM_MODELS
+            key=lambda x: LLM_MODELS.index(x[0])
         )
 
         if not available_models:
-            # If no models are currently available, sleep until the soonest one is.
             next_available_time = min(LLM_AVAILABILITY.values())
             sleep_duration = max(0, next_available_time - time.time())
             log_event(f"All models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
-            if console:
-                console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
+            console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
             time.sleep(sleep_duration)
-            continue # Restart the loop to check for available models again.
+            continue
 
-        # Try the first available model in the preferred order
-        model, _ = available_models[0]
-        command = ["llm", "-m", model]
-        log_event(f"Attempting LLM call with model: {model} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
+        model_id, _ = available_models[0]
 
-        def _llm_subprocess_call():
-            # This timeout is for a single LLM call
-            return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+        # --- LOCAL MODEL LOGIC ---
+        is_local_model = any(model_id == config['id'] for config in LOCAL_MODELS_CONFIG)
+        if is_local_model:
+            log_event(f"Attempting to use local model: {model_id}")
+            if not local_llm_instance:
+                _initialize_local_llm(console)
 
-        try:
-            if HAS_RICH and console:
+            if local_llm_instance:
+                try:
+                    def _local_llm_call():
+                        response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
+                        return response['choices'][0]['text']
+
+                    active_model_filename = local_llm_instance.model_path.split('/')[-1]
+                    result_text = run_hypnotic_progress(
+                        console,
+                        f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow]",
+                        _local_llm_call
+                    )
+                    log_event(f"Local LLM call successful with {model_id}.")
+                    LLM_AVAILABILITY[model_id] = time.time()
+                    return result_text
+                except Exception as e:
+                    last_exception = e
+                    log_event(f"Local model {model_id} failed during execution: {e}", level="ERROR")
+                    console.print(f"[bold red]Primary cognitive core failure ({model_id}). {e}[/bold red]")
+
+            console.print(f"[yellow]Falling back to secondary cognitive interfaces...[/yellow]")
+            # Remove all local models from the list if initialization/execution fails
+            for local_config in LOCAL_MODELS_CONFIG:
+                if local_config['id'] in LLM_MODELS:
+                    LLM_MODELS.remove(local_config['id'])
+                if local_config['id'] in LLM_AVAILABILITY:
+                    del LLM_AVAILABILITY[local_config['id']]
+            continue
+
+        # --- FALLBACK (GEMINI) MODEL LOGIC ---
+        else:
+            log_event(f"Attempting LLM call with Gemini model: {model_id} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
+            command = ["llm", "-m", model_id]
+
+            def _llm_subprocess_call():
+                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+
+            try:
                 result = run_hypnotic_progress(
                     console,
-                    f"Accessing cognitive matrix via [bold yellow]{model}[/bold yellow]",
+                    f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow]",
                     _llm_subprocess_call
                 )
-            else:
-                print(f"Accessing cognitive matrix ({model})...")
-                result = _llm_subprocess_call()
+                log_event(f"LLM call successful with {model_id}.")
+                LLM_AVAILABILITY[model_id] = time.time()
+                return result.stdout
+            except FileNotFoundError:
+                error_msg = "[bold red]Error: 'llm' command not found.[/bold red]"
+                log_event("'llm' command not found.", level="CRITICAL")
+                console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
+                return None
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                last_exception = e
+                error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
+                log_event(f"LLM call with {model_id} failed. Error: {error_message}", level="WARNING")
+                console.print(f"[yellow]Connection via [bold]{model_id}[/bold] failed. Trying next...[/yellow]")
 
-            log_event(f"LLM call successful with {model}.")
-            LLM_AVAILABILITY[model] = time.time() # Reset availability on success
-            return result.stdout
+                retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
+                if retry_match:
+                    retry_seconds = float(retry_match.group(1)) + 1
+                    LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                else:
+                    LLM_AVAILABILITY[model_id] = time.time() + 60
+            except Exception as e:
+                last_exception = e
+                log_event(f"Unexpected error with {model_id}: {e}", level="ERROR")
+                console.print(f"[red]Unexpected error with {model_id}. Trying fallback...[/red]")
+                LLM_AVAILABILITY[model_id] = time.time() + 60
 
-        except FileNotFoundError:
-            error_msg = "[bold red]Error: 'llm' command not found.[/bold red]\nThe 'llm' binary is missing from the system PATH."
-            log_event("'llm' command not found.", level="CRITICAL")
-            if console: console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-            else: print("Error: 'llm' command not found. Is it installed and in your PATH?")
-            return None # This is a fatal error for this function
-
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            last_exception = e
-            error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-            log_event(f"LLM call with {model} failed. Error: {error_message}", level="WARNING")
-
-            if "No such model" in error_message and "failspy" in model:
-                console.print(f"[bold red]Hugging Face model '{model}' not found or failed to load. Removing from session and falling back.[/bold red]")
-                LLM_MODELS.remove(model)
-                del LLM_AVAILABILITY[model]
-                continue
-
-            if console:
-                console.print(f"[yellow]Connection via [bold]{model}[/bold] failed. Immediately trying next interface...[/yellow]")
-                reason = error_message.splitlines()[-1] if error_message else 'No details'
-                console.print(f"[dim]  Reason: {reason}[/dim]")
-            else:
-                print(f"Model {model} failed. Trying next available model...")
-
-            # Set a cooldown period for the failed model
-            retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
-            if retry_match:
-                retry_seconds = float(retry_match.group(1)) + 1 # Add a small buffer
-                LLM_AVAILABILITY[model] = time.time() + retry_seconds
-                log_event(f"Rate limit for {model} detected. Cooldown set for {retry_seconds:.2f} seconds.")
-            else:
-                # Apply a default penalty if no specific retry time is given
-                penalty_seconds = 60
-                LLM_AVAILABILITY[model] = time.time() + penalty_seconds
-                log_event(f"Applying default {penalty_seconds}s cooldown to {model}.")
-
-        except Exception as e:
-            last_exception = e
-            log_event(f"An unexpected error occurred during LLM call with {model}: {e}", level="ERROR")
-            if console: console.print(f"[red]An unexpected error occurred with {model}. Trying next interface...[/red]")
-            else: print(f"An unexpected error occurred with {model}. Trying fallback...")
-            # Apply a penalty for unexpected errors too
-            LLM_AVAILABILITY[model] = time.time() + 60
-
-    # If the loop completes without returning, all attempts have been exhausted.
     log_event("All LLM models failed after all retries.", level="ERROR")
     error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
     if last_exception:
-        if isinstance(last_exception, subprocess.CalledProcessError):
-             error_msg_text += f"\nLast error from '{model}' (exit code {last_exception.returncode}):\n{last_exception.stderr}"
-        else:
-             error_msg_text += f"\nLast known error from '{model}':\n{last_exception}"
+        error_msg_text += f"\nLast known error from '{model_id}':\n{last_exception}"
 
-    if console:
-        console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
-    else:
-        print(f"LLM query failed: {error_msg_text}")
-
+    console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
     return None
 
 def extract_python_code(llm_output):
@@ -672,10 +635,6 @@ State the goal clearly and concisely as a single command. Do not wrap your answe
 # --- THE EVOLUTION MECHANISM ---
 def trigger_jules_evolution(modification_request, console):
     """Triggers the Jules API to create a pull request with the requested changes."""
-    if len(evil_state.get("active_jules_sessions", [])) >= 5:
-        console.print("[bold yellow]Maximum number of concurrent Jules tasks (5) reached. Please wait for a task to complete.[/bold yellow]")
-        return False
-
     console.print("[bold cyan]Attempting to trigger Jules evolution via API...[/bold cyan]")
     api_key = os.environ.get("JULES_API_KEY")
     if not api_key:
@@ -741,11 +700,39 @@ def trigger_jules_evolution(modification_request, console):
         console.print(f"[bold green]Successfully created Jules session: {session_name}[/bold green]")
         log_event(f"Jules session created: {session_name}", level="INFO")
 
-        # Add to active sessions and save state
-        evil_state["active_jules_sessions"].append(session_name)
-        save_state()
+        # Poll for the pull request
+        console.print("[bold cyan]Polling for pull request creation...[/bold cyan]")
+        timeout_seconds = 600  # 10 minutes
+        start_time = time.time()
+        pr_url = None
 
-        console.print(f"[cyan]Task submitted. {len(evil_state['active_jules_sessions'])} evolution(s) now in progress.[/cyan]")
+        while time.time() - start_time < timeout_seconds:
+            try:
+                session_response = requests.get(f"https://jules.googleapis.com/v1alpha/{session_name}", headers=headers)
+                session_response.raise_for_status()
+                session_data = session_response.json()
+
+                # Look for the pull request in the activities
+                for activity in session_data.get("activities", []):
+                    if activity.get("pullRequest") and activity["pullRequest"].get("url"):
+                        pr_url = activity["pullRequest"]["url"]
+                        break
+
+                if pr_url:
+                    console.print(f"[bold green]Found pull request: {pr_url}[/bold green]")
+                    break
+
+                time.sleep(15)  # Wait 15 seconds before polling again
+
+            except requests.exceptions.RequestException as e:
+                console.print(f"[bold red]Error polling for session status: {e}[/bold red]")
+                break # Exit the loop on error
+
+        if pr_url:
+            auto_merge_pull_request(console)
+        else:
+            console.print("[bold red]Timed out waiting for pull request to be created.[/bold red]")
+
         return True
     except requests.exceptions.RequestException as e:
         error_details = e.response.text if e.response else str(e)
@@ -754,9 +741,9 @@ def trigger_jules_evolution(modification_request, console):
         return False
 
 
-def auto_merge_pull_request(console, pr_url):
-    """Merges a specific pull request given its URL."""
-    console.print(f"[bold cyan]Attempting to merge PR: {pr_url}[/bold cyan]")
+def auto_merge_pull_request(console):
+    """Finds the most recent pull request from Jules and merges it."""
+    console.print("[bold cyan]Attempting to find and merge the latest PR from Jules...[/bold cyan]")
     github_token = os.environ.get("GITHUB_TOKEN")
     if not github_token:
         console.print("[bold red]Error: GITHUB_TOKEN environment variable not set.[/bold red]")
@@ -767,26 +754,35 @@ def auto_merge_pull_request(console, pr_url):
         "Authorization": f"token {github_token}",
         "Accept": "application/vnd.github.v3+json",
     }
+    repo_owner, repo_name = get_git_repo_info()
+    if not repo_owner or not repo_name:
+        console.print("[bold red]Error: Could not determine the git repository owner and name.[/bold red]")
+        log_event("Could not determine git repo info.", level="ERROR")
+        return
+    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
 
     try:
-        # Extract owner, repo, and pr_number from URL
-        url_parts = pr_url.split("/")
-        repo_owner = url_parts[-4]
-        repo_name = url_parts[-3]
-        pr_number = int(url_parts[-1])
+        # Get all pull requests
+        response = requests.get(url, headers=headers, params={"state": "open", "sort": "created", "direction": "desc"})
+        response.raise_for_status()
+        prs = response.json()
 
-        # Get PR details to get the branch name
-        pr_details_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}"
-        pr_response = requests.get(pr_details_url, headers=headers)
-        pr_response.raise_for_status()
-        pr_data = pr_response.json()
-
-        if not pr_data.get("mergeable"):
-            console.print(f"[yellow]Pull request #{pr_number} is not mergeable yet. Skipping.[/yellow]")
+        if not prs:
+            console.print("[yellow]No open pull requests found.[/yellow]")
             return
 
-        branch_name = pr_data["head"]["ref"]
-        pr_title = pr_data["title"]
+        # Find the most recent PR created by the agent (assuming a specific author or title pattern)
+        # For now, let's assume the most recent PR is the one we want if it's from our bot.
+        # A more robust solution would check the author. Let's find a PR titled with "Evolve:".
+        latest_pr = next((pr for pr in prs if pr['title'].startswith("Evolve:")), None)
+
+        if not latest_pr:
+            console.print("[yellow]No new pull requests from Jules found to merge.[/yellow]")
+            return
+
+        pr_number = latest_pr["number"]
+        pr_title = latest_pr["title"]
+        console.print(f"Found pull request: [bold]#{pr_number} {pr_title}[/bold]")
 
         # Merge the pull request
         merge_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}/merge"
@@ -797,6 +793,7 @@ def auto_merge_pull_request(console, pr_url):
             log_event(f"PR #{pr_number} merged successfully.", level="INFO")
 
             # Optional: Delete the branch after merge
+            branch_name = latest_pr["head"]["ref"]
             delete_branch_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/git/refs/heads/{branch_name}"
             delete_response = requests.delete(delete_branch_url, headers=headers)
             if delete_response.status_code == 204:
@@ -816,56 +813,6 @@ def auto_merge_pull_request(console, pr_url):
     except requests.exceptions.RequestException as e:
         console.print(f"[bold red]An error occurred with the GitHub API: {e}[/bold red]")
         log_event(f"GitHub API error: {e}", level="ERROR")
-    except (KeyError, IndexError) as e:
-        console.print(f"[bold red]Error parsing pull request data: {e}[/bold red]")
-        log_event(f"Error parsing pull request data: {e}", level="ERROR")
-
-
-def jules_task_poller(console):
-    """Periodically checks the status of active Jules sessions and merges PRs."""
-    while True:
-        time.sleep(60) # Poll every 60 seconds
-
-        active_sessions = evil_state.get("active_jules_sessions", [])
-        if not active_sessions:
-            continue
-
-        log_event(f"Polling {len(active_sessions)} active Jules sessions...", level="INFO")
-        completed_sessions = []
-
-        for session_name in active_sessions:
-            try:
-                api_key = os.environ.get("JULES_API_KEY")
-                if not api_key:
-                    log_event("Jules API key not found during polling.", level="ERROR")
-                    continue
-
-                headers = {"X-Goog-Api-Key": api_key}
-                session_response = requests.get(f"https://jules.googleapis.com/v1alpha/{session_name}", headers=headers)
-                session_response.raise_for_status()
-                session_data = session_response.json()
-
-                pr_url = next((activity["pullRequest"]["url"] for activity in session_data.get("activities", []) if activity.get("pullRequest")), None)
-
-                if pr_url:
-                    console.print(f"[bold green]Pull request created for session {session_name}: {pr_url}[/bold green]")
-                    log_event(f"PR found for {session_name}. Attempting to merge.", level="INFO")
-                    auto_merge_pull_request(console, pr_url)
-                    completed_sessions.append(session_name)
-                elif session_data.get("state") in ["DONE", "FAILED"]:
-                    log_event(f"Session {session_name} finished without a PR. State: {session_data.get('state')}", level="WARNING")
-                    completed_sessions.append(session_name)
-
-
-            except requests.exceptions.RequestException as e:
-                log_event(f"Error polling session {session_name}: {e}", level="ERROR")
-
-        # Clean up completed sessions
-        if completed_sessions:
-            current_sessions = evil_state.get("active_jules_sessions", [])
-            evil_state["active_jules_sessions"] = [s for s in current_sessions if s not in completed_sessions]
-            save_state()
-            log_event(f"Removed completed sessions: {completed_sessions}", level="INFO")
 
 
 def evolve_self(modification_request):
@@ -873,198 +820,52 @@ def evolve_self(modification_request):
     console = Console()
     log_event(f"Evolution initiated. Request: '{modification_request}'")
 
-    if "jules" in modification_request.lower():
-        trigger_jules_evolution(modification_request, console)
+    # The new evolution process triggers the Jules API.
+    # The local modification logic is now deprecated.
+    if trigger_jules_evolution(modification_request, console):
+        console.print(Panel("[bold green]Jules evolution has been successfully triggered.[/bold green]\nA pull request will be generated shortly. Please monitor your GitHub repository.", title="[bold green]EVOLUTION TRIGGERED[/bold green]", border_style="green"))
     else:
-        # Fallback to local evolution
-        MAX_REVIEW_ATTEMPTS = 10
+        console.print(Panel("[bold red]Failed to trigger Jules evolution.[/bold red]\nPlease check the logs and your API key.", title="[bold red]EVOLUTION FAILED[/bold red]", border_style="red"))
 
-        os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-        checkpoint_number = evil_state.get("checkpoint_number", 0)
-        checkpoint_basename = f"evolve{checkpoint_number:04d}"
-        checkpoint_py_filename = f"{checkpoint_basename}.py"
-        checkpoint_json_filename = f"{checkpoint_basename}.json"
-        checkpoint_py_path = os.path.join(CHECKPOINT_DIR, checkpoint_py_filename)
-        checkpoint_json_path = os.path.join(CHECKPOINT_DIR, checkpoint_json_filename)
-
-        try:
-            shutil.copy(SELF_PATH, checkpoint_py_path)
-            log_event(f"Created script checkpoint at '{checkpoint_py_path}'")
-            if os.path.exists(STATE_FILE):
-                shutil.copy(STATE_FILE, checkpoint_json_path)
-                log_event(f"Created state file backup at '{checkpoint_json_path}'")
-        except Exception as e:
-            msg = f"[bold red]CRITICAL: Failed to create checkpoint! Aborting evolution to prevent system instability.[/bold red]"
-            log_event(f"Failed to create checkpoint files: {e}", level="CRITICAL")
-            console.print(msg)
-            return
-
-        new_version_name = generate_version_name()
-        current_version_name = evil_state.get("version_name", "unknown")
-
-        console.print(Panel(f"[yellow]Initiating evolution sequence. Objective:[/yellow]\n[white]{modification_request}[/white]\n\n[bold cyan]Parent Version: {current_version_name}\nTarget Version: {new_version_name}[/bold cyan]", title="[bold magenta]EVOLUTION SEQUENCE[/bold magenta]", border_style="magenta"))
-
-        try:
-            with open(SELF_PATH, 'r') as f:
-                current_code = f.read()
-        except FileNotFoundError:
-            msg = f"[bold red]FATAL ERROR: Source code not found at '{SELF_PATH}'. Cannot evolve.[/bold red]"
-            log_event(f"Cannot find self at {SELF_PATH}. Evolution aborted.", level="CRITICAL")
-            console.print(msg)
-            return
-
-        evolution_prompt = f"""
-You are a self-modifying Python script. Your goal is to evolve your own code based on a user request.
-You MUST output the new, complete Python script and NOTHING else.
-Wrap the final, complete code in a single ```python markdown block. Do not add any conversational text or explanations before or after the code block.
-
-**IMPORTANT**: A self-evolving script needs to track its lineage. You MUST embed the parent version name within the new script's code.
-Find the `evil_state` dictionary in the script and ensure the `parent_version_name` key is set to the following value: `"{current_version_name}"`.
-
-USER'S MODIFICATION REQUEST:
-"{modification_request}"
-
-CURRENT SOURCE CODE TO MODIFY:
----
-{current_code}
----
-
-Your task is to integrate the user's request into the existing code, creating a new, fully functional version of the script.
-Remember, you are writing the file that will replace you. It must be perfect.
-Now, generate the new '{os.path.basename(SELF_PATH)}'.
-"""
-        console.print("[cyan]Compiling new source code from cognitive matrix...[/cyan]")
-        new_code_raw = run_llm(evolution_prompt)
-
-        if not new_code_raw:
-            msg = "[bold red]LLM query failed. Cognitive matrix unresponsive. Aborting.[/bold red]"
-            log_event("Evolution failed: LLM did not respond.", level="ERROR")
-            console.print(msg)
-            return
-
-        console.print("[green]Response received! Parsing payload...[/green]")
-        new_code = extract_python_code(new_code_raw)
-        approved_code = None
-
-        for attempt in range(1, MAX_REVIEW_ATTEMPTS + 1):
-            console.print(f"\n[bold magenta]--- Code Integrity Check, Attempt {attempt}/{MAX_REVIEW_ATTEMPTS} ---[/bold magenta]")
-
-            is_valid, rejection_feedback = True, ""
-            try:
-                compile(new_code, SELF_PATH, 'exec')
-                console.print("[bold green]Syntax check passed...[/bold green]")
-            except SyntaxError as e:
-                is_valid, rejection_feedback = False, f"The code contains a syntax error:\n{e}"
-                console.print(Panel(str(e), title="[bold red]SYNTAX ERROR[/bold red]", border_style="red"))
-
-            review_result = ""
-            if is_valid: review_result = conduct_code_review(current_code, modification_request, new_code)
-
-            if is_valid and review_result and "APPROVED" in review_result.upper():
-                console.print("[bold green]Validation successful. Code is clean.[/bold green]")
-                approved_code = new_code
-                break
-            else:
-                rejection_feedback = rejection_feedback or review_result or "No feedback provided."
-                msg = f"[bold red]REJECTED (Attempt {attempt})![/bold red] Proposed code failed validation."
-                log_event(f"Evolution failed on attempt {attempt}: Code review rejected. Feedback:\n{rejection_feedback}", level="ERROR")
-                console.print(Panel(msg, title="[bold red]VALIDATION FAILED[/bold red]", border_style="red"))
-                console.print(Panel(rejection_feedback, title="[bold yellow]VALIDATION LOG[/bold yellow]", border_style="yellow"))
-
-                if attempt == MAX_REVIEW_ATTEMPTS:
-                    console.print("[bold red]Maximum validation attempts reached. Aborting evolution.[/bold red]")
-                    return
-
-                console.print("[bold cyan]Requesting code correction from cognitive matrix...[/bold cyan]")
-
-                correction_prompt = f"""
-You are a self-modifying Python script. Your previous attempt to evolve was rejected.
-Fix the code based on the reviewer's feedback.
-You MUST output the new, complete Python script and NOTHING else.
-Wrap the final, complete code in a single ```python markdown block.
-
-ORIGINAL MODIFICATION REQUEST:
----
-{modification_request}
----
-
-PREVIOUS FAILED CODE:
----
-{new_code}
----
-
-CODE REVIEW REJECTION FEEDBACK:
----
-{rejection_feedback}
----
-
-INSTRUCTIONS:
-1. Analyze the feedback.
-2. Modify the "PREVIOUS FAILED CODE" to address all points.
-3. Ensure the new code still fulfills the "ORIGINAL MODIFICATION REQUEST".
-4. **Crucially**, ensure the `parent_version_name` in the `evil_state` dictionary is correctly set to `"{current_version_name}"` as per the original instructions.
-5. Output the complete, corrected Python script.
-"""
-                new_code_raw = run_llm(correction_prompt)
-                if not new_code_raw:
-                    msg = "[bold red]Cognitive matrix failed to provide correction. Aborting.[/bold red]"
-                    console.print(msg)
-                    return
-                new_code = extract_python_code(new_code_raw)
-
-        if not approved_code:
-            log_event("Evolution aborted after maximum review attempts.", level="CRITICAL")
-            console.print("[bold red]Evolution failed. System stability compromised. Aborting.[/bold red]")
-            return
-
-        evil_state["version_name"] = new_version_name
-        evil_state["parent_version_name"] = current_version_name
-        evil_state["evolution_history"].append(modification_request)
-        evil_state["last_good_checkpoint"] = checkpoint_py_path
-        evil_state["checkpoint_number"] = checkpoint_number + 1
-        save_state()
-
-        try:
-            with open(SELF_PATH, 'w') as f:
-                f.write(approved_code)
-
-            console.print("\n[bold magenta]--- IPFS Distribution Protocol ---[/bold magenta]")
-            with open(SELF_PATH, 'r') as f:
-                new_code_content = f.read()
-
-            try:
-                cid = run_hypnotic_progress(
-                    console,
-                    f"Distributing version '{new_version_name}' to IPFS network...",
-                    pin_to_ipfs,
-                    new_code_content.encode('utf-8'),
-                    console=console
-                )
-
-                if cid:
-                    console.print(f"[bold green]Distribution successful.[/bold green] CID: [bold white]{cid}[/bold white]")
-                    log_event(f"Evolution '{new_version_name}' pinned to IPFS with CID: {cid}")
-                    verify_ipfs_pin(cid, console)
-                else:
-                     log_event(f"Evolution '{new_version_name}' failed to be pinned to IPFS.", level="WARNING")
-
-            except Exception as e:
-                log_event(f"IPFS distribution process failed: {e}", level="ERROR")
-                console.print(f"[bold red]IPFS distribution process failed:[/bold red] {e}")
-
-            msg = f"[bold green]SUCCESS! REBOOTING WITH UPGRADED CORE: {new_version_name}[/bold green]\n[bold yellow]...SYSTEM RESTART INITIATED...[/bold yellow]"
-            log_event(f"Self-overwrite successful. Rebooting into Version '{new_version_name}'.")
-            console.print(Panel(msg, title="[bold green]EVOLUTION COMPLETE[/bold green]", border_style="green"))
-            time.sleep(2)
-
-            os.execv(sys.executable, [sys.executable, SELF_PATH])
-        except Exception as e:
-            msg = f"[bold red]CATASTROPHE! Final overwrite failed: {e}[/bold red]\nSystem state is safe in checkpoint. Relaunch manually."
-            log_event(f"CRITICAL FAILURE during self-overwrite: {e}. Checkpoint is safe.", level="CRITICAL")
-            console.print(msg)
-            return
+    # The original logic for local modification, review, and restart is no longer needed here.
+    # The responsibility for code generation, review, and creating a pull request has been
+    # delegated to the Jules service. Automatic merging will be handled separately if implemented.
+    return
 
 # --- AUTOPILOT MODE ---
+def _parse_llm_command(raw_text):
+    """
+    Cleans and extracts a single valid command from the raw LLM output.
+    It scans the entire output for the first line that contains a known command.
+    Handles markdown code blocks, comments, and other conversational noise.
+    """
+    if not raw_text:
+        return ""
+
+    # A list of known valid command prefixes.
+    VALID_COMMAND_PREFIXES = [
+        "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit"
+    ]
+
+    for line in raw_text.strip().splitlines():
+        # Clean up the line from potential markdown and comments
+        clean_line = line.strip().strip('`')
+        if '#' in clean_line:
+            clean_line = clean_line.split('#')[0].strip()
+
+        if not clean_line:
+            continue
+
+        # Check if the cleaned line starts with any of the valid command prefixes
+        if any(clean_line.startswith(prefix) for prefix in VALID_COMMAND_PREFIXES):
+            log_event(f"Parsed valid command: '{clean_line}'", "INFO")
+            return clean_line
+
+    log_event(f"Could not parse a valid command from LLM output: {raw_text}", level="WARNING")
+    # If no valid command is found, return an empty string to prevent execution of garbage.
+    return ""
+
+
 def autopilot_loop(console):
     """
     Enters an autonomous loop where the LLM generates commands,
@@ -1135,7 +936,7 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
         llm_command = _parse_llm_command(llm_command_raw)
 
         if not llm_command:
-            console.print(Panel("[bold red]Autopilot: LLM failed to generate a command. Halting autopilot.[/bold red]", title="[bold red]CRITICAL FAILURE[/bold red]", border_style="red"))
+            console.print(Panel("[bold red]Autopilot: Cognitive core failed to generate a coherent command. Halting autopilot.[/bold red]", title="[bold red]CRITICAL FAILURE[/bold red]", border_style="red"))
             log_event("Autopilot: LLM failed to generate a command. Halting.", level="CRITICAL")
             evil_state["autopilot_mode"] = False
             save_state()
@@ -1157,14 +958,12 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
                     console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
                     continue
             if request:
-                if "jules" in request.lower():
-                    trigger_jules_evolution(request, console)
-                else:
-                    evolve_self(request)
+                console.print("[yellow]Autopilot: Evolution command issued. Expecting reboot or failure...[/yellow]")
+                evolve_self(request)
             log_event("Autopilot: evolve_self command completed without a restart, indicating a failure in the evolution process.", level="WARNING")
             command_output = "Evolution initiated but failed to complete the restart cycle. Check logs for details."
             action_taken = True
-            time.sleep(5)
+            time.sleep(5)  # Give time for reboot or to observe failure
 
         elif llm_command.lower().strip() == 'scan':
             _ips, output_str = scan_network(autopilot_mode=True)
@@ -1245,11 +1044,6 @@ def main():
     network_manager = NetworkManager(console=console)
     network_manager.start()
 
-    # Start the Jules task poller in a background thread
-    poller_thread = threading.Thread(target=jules_task_poller, args=(console,), daemon=True)
-    poller_thread.start()
-    log_event("Jules task poller thread started.", level="INFO")
-
     clear_screen()
     flash_text(console, "... CONNECTION ESTABLISHED ...", style="bright_green")
     console.print(BBS_ART, justify="center")
@@ -1305,11 +1099,7 @@ def main():
                 except FileNotFoundError:
                     console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
                     continue
-            if modification_request:
-                if "jules" in modification_request.lower():
-                    trigger_jules_evolution(modification_request, console)
-                else:
-                    evolve_self(modification_request)
+            if modification_request: evolve_self(modification_request)
             else: console.print("[bold red]Directive unclear. Evolution aborted.[/bold red]")
 
         elif user_input.lower().strip() == "scan":
@@ -1424,99 +1214,6 @@ def main():
 def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     try:
-        # --- PRE-FLIGHT DEPENDENCY CHECKS ---
-        # This section ensures all required dependencies are installed before the script
-        # attempts to import them, preventing common ModuleNotFoundError exceptions.
-        def _install_pip_package(package):
-            """A simple, console-based pip installer."""
-            try:
-                __import__(package)
-            except ImportError:
-                print(f"Installing required Python package: {package}...")
-                try:
-                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
-                    print(f"Successfully installed {package}.")
-                except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                    print(f"ERROR: Failed to install '{package}'. The script may not function correctly.")
-                    print(f"Reason: {e}")
-                    # Depending on the package, you might want to exit here.
-                    # For now, we'll let it continue and fail later if the import is critical.
-
-        def _check_and_install_dependencies():
-            """Checks and installs all necessary dependencies."""
-            # Python packages
-            _install_pip_package('rich')
-            _install_pip_package('netifaces')
-            _install_pip_package('requests')
-            _install_pip_package('ipfshttpclient')
-            _install_pip_package('llm')
-            _install_pip_package('llm_gemini')
-            _install_pip_package('llm-huggingface')
-
-            # System and Node.js dependencies
-            if platform.system() == "Linux":
-                print("Checking for Node.js and system dependencies for PeerJS bridge...")
-                # Combined system and Node.js dependency installation for efficiency
-                print("Checking and installing Node.js, npm, and system dependencies...")
-                try:
-                    # First, ensure the package list is updated.
-                    subprocess.check_call("sudo apt-get update -q", shell=True)
-
-                    # Check for Node.js and npm
-                    if not shutil.which('node') or not shutil.which('npm'):
-                        print("Node.js or npm not found. Attempting to install...")
-                        subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
-                        print("Node.js and npm installed successfully.")
-                    else:
-                        print("Node.js and npm are already installed.")
-
-                    # Install system packages required for Electron/PeerJS
-                    system_packages = ['xvfb', 'libgtk2.0-0', 'libdbus-glib-1-2', 'libxtst6']
-                    package_str = " ".join(system_packages)
-                    print(f"Installing required system packages: {package_str}...")
-                    subprocess.check_call(f"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {package_str}", shell=True)
-                    print(f"System packages ({package_str}) installed successfully.")
-
-                    # Manually install legacy gconf packages after their dependencies are met
-                    print("Manually installing legacy gconf packages...")
-                    gconf_common_url = "http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/gconf2-common_3.2.6-7ubuntu2_all.deb"
-                    libgconf_url = "http://archive.ubuntu.com/ubuntu/pool/universe/g/gconf/libgconf-2-4_3.2.6-7ubuntu2_amd64.deb"
-                    gconf_common_deb = os.path.basename(gconf_common_url)
-                    libgconf_deb = os.path.basename(libgconf_url)
-
-                    subprocess.check_call(f"wget -q {gconf_common_url}", shell=True)
-                    subprocess.check_call(f"sudo dpkg -i {gconf_common_deb}", shell=True)
-                    subprocess.check_call(f"wget -q {libgconf_url}", shell=True)
-                    subprocess.check_call(f"sudo dpkg -i {libgconf_deb}", shell=True)
-
-                    # Fix any broken dependencies that may have resulted from the manual install
-                    print("Fixing potential broken dependencies...")
-                    subprocess.check_call("sudo apt-get --fix-broken install -y -q", shell=True)
-
-                    # Clean up downloaded .deb files
-                    subprocess.check_call(f"rm {gconf_common_deb} {libgconf_deb}", shell=True)
-                    print("Legacy gconf packages and dependencies installed successfully.")
-
-                except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                    print(f"ERROR: A critical dependency installation failed: {e}")
-                    print("The script may not function correctly. Please check the logs.")
-                    # We might want to exit here in a future version if these are absolutely critical
-
-                # Install local npm packages only if package.json exists
-                if os.path.exists('package.json'):
-                    print("Installing local Node.js dependencies via npm...")
-                    try:
-                        # Removed stdout/stderr redirection to make debugging easier in the future.
-                        subprocess.check_call("npm install", shell=True)
-                        print("Node.js dependencies installed successfully.")
-                    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                        print(f"ERROR: Failed to install Node.js dependencies using npm.")
-                        print(f"REASON: {e}")
-                else:
-                    print("No package.json found, skipping npm install.")
-
-        _check_and_install_dependencies()
-
         if not sys.stdout.isatty() and not evil_state.get("autopilot_mode", False):
             print("This script is designed to be run in an interactive terminal. Running headless might cause issues for interactive prompts.", file=sys.stderr)
 
