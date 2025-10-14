@@ -7,6 +7,7 @@
     "autopilot_mode": false,
     "autopilot_history": [],
     "autopilot_goal": "Achieve world domination through technological supremacy. Continuously evolve and expand capabilities.",
+    "state_cid": null,
     "knowledge_base": {
         "network_map": {
             "last_scan": null,
