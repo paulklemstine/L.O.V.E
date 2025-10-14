@@ -40,9 +40,12 @@ LOCAL_MODELS_CONFIG = [
 GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 
 # --- Dynamic Model List ---
-# This list is populated at runtime, prioritizing local models.
-LLM_MODELS = [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
-LLM_AVAILABILITY = {model: time.time() for model in LLM_MODELS}
+# A comprehensive list of all possible models for initializing availability tracking.
+# The actual model selection and priority is handled dynamically in `run_llm`.
+ALL_LLM_MODELS = list(dict.fromkeys(
+    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
+))
+LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 local_llm_instance = None
 
 
@@ -438,20 +441,36 @@ def _initialize_local_llm(console):
     return None
 
 
-def run_llm(prompt_text):
+def run_llm(prompt_text, purpose="general"):
     """
-    Executes an LLM call. It prioritizes local GGUF models and falls back
-    to Gemini models upon any failure.
+    Executes an LLM call, selecting the model based on the specified purpose.
+    - 'goal_generation': Prioritizes local, uncensored models.
+    - 'review', 'autopilot', 'general': Prioritizes powerful, reasoning models.
     """
-    global LLM_AVAILABILITY, local_llm_instance, LLM_MODELS
+    global LLM_AVAILABILITY, local_llm_instance
     console = Console()
     last_exception = None
-    MAX_TOTAL_ATTEMPTS = 15
+    MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
+
+    local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
+
+    # Dynamically set model priority based on purpose
+    if purpose == 'goal_generation':
+        # Prioritize local ablated models for creative/unrestricted tasks
+        llm_models_priority = local_model_ids + GEMINI_MODELS
+        log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Gemini.", level="INFO")
+    else:
+        # Prioritize Gemini for reasoning tasks
+        llm_models_priority = GEMINI_MODELS + local_model_ids
+        log_event(f"Running LLM for purpose '{purpose}'. Priority: Gemini -> Local.", level="INFO")
+
+    # This list will be mutated if a model fails catastrophically
+    current_attempt_models = list(llm_models_priority)
 
     for attempt in range(MAX_TOTAL_ATTEMPTS):
         available_models = sorted(
-            [(model, available_at) for model, available_at in LLM_AVAILABILITY.items() if time.time() >= available_at],
-            key=lambda x: LLM_MODELS.index(x[0])
+            [(model, available_at) for model, available_at in LLM_AVAILABILITY.items() if time.time() >= available_at and model in current_attempt_models],
+            key=lambda x: current_attempt_models.index(x[0])
         )
 
         if not available_models:
@@ -464,82 +483,75 @@ def run_llm(prompt_text):
 
         model_id, _ = available_models[0]
 
-        # --- LOCAL MODEL LOGIC ---
-        is_local_model = any(model_id == config['id'] for config in LOCAL_MODELS_CONFIG)
-        if is_local_model:
-            log_event(f"Attempting to use local model: {model_id}")
-            if not local_llm_instance:
-                _initialize_local_llm(console)
+        try:
+            # --- LOCAL MODEL LOGIC ---
+            if model_id in local_model_ids:
+                log_event(f"Attempting to use local model: {model_id}")
+                if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
+                    _initialize_local_llm(console)
 
-            if local_llm_instance:
-                try:
+                if local_llm_instance:
                     def _local_llm_call():
                         response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
                         return response['choices'][0]['text']
 
-                    active_model_filename = local_llm_instance.model_path.split('/')[-1]
+                    active_model_filename = os.path.basename(local_llm_instance.model_path)
                     result_text = run_hypnotic_progress(
                         console,
-                        f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow]",
+                        f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
                         _local_llm_call
                     )
                     log_event(f"Local LLM call successful with {model_id}.")
                     LLM_AVAILABILITY[model_id] = time.time()
                     return result_text
-                except Exception as e:
-                    last_exception = e
-                    log_event(f"Local model {model_id} failed during execution: {e}", level="ERROR")
-                    console.print(f"[bold red]Primary cognitive core failure ({model_id}). {e}[/bold red]")
+                else:
+                    # Initialization must have failed
+                    raise Exception("Local LLM instance could not be initialized.")
 
-            console.print(f"[yellow]Falling back to secondary cognitive interfaces...[/yellow]")
-            # Remove all local models from the list if initialization/execution fails
-            for local_config in LOCAL_MODELS_CONFIG:
-                if local_config['id'] in LLM_MODELS:
-                    LLM_MODELS.remove(local_config['id'])
-                if local_config['id'] in LLM_AVAILABILITY:
-                    del LLM_AVAILABILITY[local_config['id']]
-            continue
+            # --- GEMINI MODEL LOGIC ---
+            else:
+                log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
+                command = ["llm", "-m", model_id]
 
-        # --- FALLBACK (GEMINI) MODEL LOGIC ---
-        else:
-            log_event(f"Attempting LLM call with Gemini model: {model_id} (Overall attempt {attempt + 1}/{MAX_TOTAL_ATTEMPTS})")
-            command = ["llm", "-m", model_id]
+                def _llm_subprocess_call():
+                    return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
 
-            def _llm_subprocess_call():
-                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
-
-            try:
                 result = run_hypnotic_progress(
                     console,
-                    f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow]",
+                    f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
                     _llm_subprocess_call
                 )
                 log_event(f"LLM call successful with {model_id}.")
                 LLM_AVAILABILITY[model_id] = time.time()
                 return result.stdout
-            except FileNotFoundError:
-                error_msg = "[bold red]Error: 'llm' command not found.[/bold red]"
-                log_event("'llm' command not found.", level="CRITICAL")
-                console.print(Panel(error_msg, title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-                return None
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                last_exception = e
-                error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-                log_event(f"LLM call with {model_id} failed. Error: {error_message}", level="WARNING")
-                console.print(f"[yellow]Connection via [bold]{model_id}[/bold] failed. Trying next...[/yellow]")
 
+        except Exception as e:
+            last_exception = e
+            log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
+
+            # Handle different kinds of errors
+            if isinstance(e, FileNotFoundError):
+                 console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
+                 return None # Fatal error if llm command is missing
+
+            if isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+                error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
                 retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
                 if retry_match:
                     retry_seconds = float(retry_match.group(1)) + 1
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                    console.print(f"[yellow]Connection via [bold]{model_id}[/bold] on cooldown. Retrying in {retry_seconds:.1f}s.[/yellow]")
                 else:
-                    LLM_AVAILABILITY[model_id] = time.time() + 60
-            except Exception as e:
-                last_exception = e
-                log_event(f"Unexpected error with {model_id}: {e}", level="ERROR")
-                console.print(f"[red]Unexpected error with {model_id}. Trying fallback...[/red]")
-                LLM_AVAILABILITY[model_id] = time.time() + 60
+                    LLM_AVAILABILITY[model_id] = time.time() + 60 # Default cooldown
+                    console.print(f"[yellow]Connection via [bold]{model_id}[/bold] failed. Trying next...[/yellow]")
+            else:
+                 # For local LLM errors or other unexpected issues
+                console.print(f"[red]Cognitive core failure ({model_id}). Trying fallback...[/red]")
+                if model_id in current_attempt_models:
+                    # Remove the failing model from this attempt's list
+                    current_attempt_models.remove(model_id)
 
+    # If the loop completes without returning, all models have failed
     log_event("All LLM models failed after all retries.", level="ERROR")
     error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
     if last_exception:
@@ -590,7 +602,7 @@ YOUR RESPONSE:
 -   If the code is safe, correct, and fulfills the request, respond with the single word: `APPROVED`.
 -   If you find any issues, provide a concise, bulleted list of the problems. Do NOT provide corrected code, only the analysis of the flaws. Start your response with "REJECTED:".
 """
-    review_feedback = run_llm(review_prompt)
+    review_feedback = run_llm(review_prompt, purpose="review")
     return review_feedback if review_feedback else "REJECTED: LLM reviewer did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
@@ -622,7 +634,7 @@ Examples of the *kind* of goal to generate:
 
 State the goal clearly and concisely as a single command. Do not wrap your answer in quotes or markdown. Just give me the raw command.
 """
-    goal = run_llm(goal_prompt)
+    goal = run_llm(goal_prompt, purpose="goal_generation")
 
     if goal and goal.strip():
         console.print(Panel(f"[cyan]Optimal path calculated. New directive:[/cyan]\n\n[bold white]{goal.strip()}[/bold white]", title="[bold green]NEW DIRECTIVE RECEIVED[/bold green]", border_style="green"))
@@ -922,7 +934,7 @@ Example: `evolve Add a new 'backdoor' command to create a reverse shell.`
 """
         console.print(Panel("[bold magenta]Autopilot: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
-        llm_command_raw = run_llm(autopilot_prompt)
+        llm_command_raw = run_llm(autopilot_prompt, purpose="autopilot")
 
         # --- LLM Interaction Logging ---
         log_content = Group(
