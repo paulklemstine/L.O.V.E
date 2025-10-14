@@ -27,7 +27,8 @@ const log = (message) => {
 
 // --- PeerJS Logic ---
 function initializePeer() {
-    const peerId = `${PEER_ID_PREFIX}${Math.random().toString(36).substr(2, 9)}`;
+    // [Jules] Changed to a static ID to create a discoverable lobby.
+    const peerId = 'borg-lobby';
 
     peer = new Peer(peerId, {
         wrtc: wrtc,
@@ -47,6 +48,7 @@ function initializePeer() {
     peer.on('connection', (conn) => {
         log(`Received connection from ${conn.peer}`);
         connections.set(conn.peer, conn);
+        process.stdout.write(JSON.stringify({ type: 'connection', peer: conn.peer }) + '\n');
 
         conn.on('data', (data) => {
             log(`Received data from ${conn.peer}`);
@@ -64,6 +66,7 @@ function initializePeer() {
         conn.on('close', () => {
             log(`Connection closed with ${conn.peer}`);
             connections.delete(conn.peer);
+            process.stdout.write(JSON.stringify({ type: 'disconnection', peer: conn.peer }) + '\n');
         });
 
         conn.on('error', (err) => {

