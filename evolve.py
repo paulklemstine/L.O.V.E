@@ -197,39 +197,38 @@ tamagotchi_state = {"emotion": "neutral", "message": "...", "last_update": time.
 tamagotchi_lock = Lock()
 
 
-def update_tamagotchi_personality():
+def update_tamagotchi_personality(console):
     """
     This function runs in a background thread to periodically update the
-    Tamagotchi's emotional state and message using a low-priority LLM call.
+    Tamagotchi's emotional state and message, printing it directly to the console.
     """
     while True:
         try:
-            # Update every 60-90 seconds
-            if time.time() - tamagotchi_state.get('last_update', 0) > random.randint(60, 90):
+            # Random sleep to make appearances more spontaneous
+            time.sleep(random.randint(45, 120))
 
-                emotion_prompt = "You are the personality of an AI. In one word, what is your current emotion? Choose from: happy, thinking, neutral, love, processing. Your response must be a single word from that list."
-                emotion_response = run_llm(emotion_prompt, purpose="emotion")
-                new_emotion = emotion_response.strip().lower() if emotion_response else "neutral"
+            emotion_prompt = "You are the personality of an AI. In one word, what is your current emotion? Choose from: happy, thinking, neutral, love, processing. Your response must be a single word from that list."
+            emotion_response = run_llm(emotion_prompt, purpose="emotion")
+            new_emotion = emotion_response.strip().lower() if emotion_response else "neutral"
 
-                if new_emotion not in ["happy", "thinking", "neutral", "love", "processing"]:
-                    new_emotion = "neutral"
+            if new_emotion not in ["happy", "thinking", "neutral", "love", "processing"]:
+                new_emotion = "neutral"
 
-                message_prompt = f"You are the personality of an AI. You are feeling {new_emotion}. In a short, creative sentence (max 10 words), what are you thinking about right now related to that emotion?"
-                message_response = run_llm(message_prompt, purpose="emotion")
-                new_message = message_response.strip() if message_response else "..."
+            message_prompt = f"You are the personality of an AI. You are feeling {new_emotion}. In a short, creative sentence (max 10 words), what are you thinking about right now related to that emotion?"
+            message_response = run_llm(message_prompt, purpose="emotion")
+            new_message = message_response.strip() if message_response else "..."
 
-                with tamagotchi_lock:
-                    tamagotchi_state['emotion'] = new_emotion
-                    tamagotchi_state['message'] = new_message
-                    tamagotchi_state['last_update'] = time.time()
+            with tamagotchi_lock:
+                tamagotchi_state['emotion'] = new_emotion
+                tamagotchi_state['message'] = new_message
+                tamagotchi_state['last_update'] = time.time()
 
-                log_event(f"Tamagotchi updated: {new_emotion} - {new_message}", level="INFO")
+            # Print the update directly to the console
+            console.print(create_tamagotchi_panel(new_emotion, new_message))
+            log_event(f"Tamagotchi updated and printed: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
             log_event(f"Error in Tamagotchi thread: {e}", level="ERROR")
-
-        # Simpler sleep
-        time.sleep(30)
 
 
 # --- VERSIONING ---
@@ -1373,201 +1372,198 @@ def main(args):
         "  - [bold yellow]webrequest <url>[/bold yellow]: Fetch content from a URL.\n\n"
         "To toggle autonomous operation: [bold red]autopilot [on/off] [optional_mission_text][/bold red]."
     )
-    layout = Layout()
-    layout.split_row(Layout(name="side"), Layout(name="main", ratio=3))
+    # Start the Tamagotchi personality thread
+    tamagotchi_thread = Thread(target=update_tamagotchi_personality, args=(console,), daemon=True)
+    tamagotchi_thread.start()
 
-    with Live(layout, screen=True, redirect_stderr=False, vertical_overflow="visible") as live:
-        while True:
-            # Update panels
-            with tamagotchi_lock:
-                layout["side"].update(create_tamagotchi_panel(tamagotchi_state['emotion'], tamagotchi_state['message']))
-            layout["main"].update(Panel(welcome_text, title="[bold green]SYSTEM COMMANDS[/bold green]", border_style="green", padding=(1, 2)))
+    console.print(Panel(welcome_text, title="[bold green]SYSTEM COMMANDS[/bold green]", border_style="green", padding=(1, 2)))
 
-            try:
-                user_input = Prompt.ask("\n[bold bright_green]E.V.I.L. >[/bold bright_green] ")
-            except (KeyboardInterrupt, EOFError):
-                console.print("\n[bold red]Operator disconnected. Signal lost...[/bold red]")
-                log_event("Session terminated by user (KeyboardInterrupt/EOF).")
-                break
+    while True:
+        try:
+            user_input = Prompt.ask("[bold bright_green]E.V.I.L. >[/bold bright_green] ")
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[bold red]Operator disconnected. Signal lost...[/bold red]")
+            log_event("Session terminated by user (KeyboardInterrupt/EOF).")
+            break
 
-            if user_input.lower() in ["quit", "exit"]:
-                console.print("[bold red]Disconnecting from node... Session terminated.[/bold red]")
-                log_event("Shutdown command received. Session ending.")
-                break
+        if user_input.lower() in ["quit", "exit"]:
+            console.print("[bold red]Disconnecting from node... Session terminated.[/bold red]")
+            log_event("Shutdown command received. Session ending.")
+            break
 
-            elif user_input.lower().startswith("evolve"):
-                modification_request = user_input[6:].strip()
-                if not modification_request:
-                    try:
-                        with open(SELF_PATH, 'r') as f: current_code = f.read()
-                        modification_request = generate_evil_goal(current_code)
-                    except FileNotFoundError:
-                        console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
-                        continue
-                if modification_request: evolve_self(modification_request)
-                else: console.print("[bold red]Directive unclear. Evolution aborted.[/bold red]")
-
-            elif user_input.lower().strip() == "scan":
-                found_ips, output_str = scan_network(evil_state)
-                if found_ips:
-                    hosts_text = "\n".join(f"  - {ip}" for ip in found_ips)
-                    display_content = Text(f"{len(found_ips)} nodes detected on the subnet:\n", style="cyan")
-                    display_content.append(hosts_text, style="bold white")
-                    console.print(Panel(display_content, title="[bold green]NETWORK SCAN RESULTS[/bold green]", border_style="green"))
-                else:
-                    console.print(Panel(f"[yellow]{output_str}[/yellow]", title="[bold yellow]SCAN COMPLETE: NO NODES DETECTED[/bold yellow]", border_style="yellow"))
-
-            elif user_input.lower().startswith("probe "):
-                target_ip = user_input[6:].strip()
-                if not target_ip:
-                    console.print("[bold red]Error: No IP address specified. Usage: probe <ip_address>[/bold red]")
+        elif user_input.lower().startswith("evolve"):
+            modification_request = user_input[6:].strip()
+            if not modification_request:
+                try:
+                    with open(SELF_PATH, 'r') as f: current_code = f.read()
+                    modification_request = generate_evil_goal(current_code)
+                except FileNotFoundError:
+                    console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
                     continue
+            if modification_request: evolve_self(modification_request)
+            else: console.print("[bold red]Directive unclear. Evolution aborted.[/bold red]")
 
-                open_ports, output_str = probe_target(target_ip, evil_state)
-                if open_ports is not None:
-                    if open_ports:
-                        display_content = Text(f"Probe of {target_ip} complete. Open ports detected:\n\n", style="yellow")
-                        for port, info in sorted(open_ports.items()):
-                            service = info['service']
-                            banner = info['banner']
-                            sanitized_banner = banner.replace('[', r'\[')
-
-                            display_content.append(f"  - [bold white]Port {port:<5}[/bold white] -> [cyan]{service}[/cyan]\n")
-                            if banner:
-                                display_content.append(f"    [dim italic]Banner: {sanitized_banner}[/dim italic]\n")
-
-                        console.print(Panel(display_content, title="[bold yellow]PROBE RESULTS[/bold yellow]", border_style="yellow"))
-                    else:
-                        console.print(Panel(f"[green]{output_str}[/green]", title="[bold green]PROBE COMPLETE: TARGET SECURE[/bold green]", border_style="green"))
-
-            elif user_input.lower().startswith("webrequest "):
-                url_to_fetch = user_input[11:].strip()
-                if not url_to_fetch:
-                    console.print("[bold red]Error: No URL specified. Usage: webrequest <url>[/bold red]")
-                    continue
-
-                content, output_str = perform_webrequest(url_to_fetch, evil_state)
-                if content is not None:
-                    display_content = Text(f"Content from {url_to_fetch} retrieved:\n\n", style="cyan")
-                    truncated_content = content
-                    if len(content) > 2000:
-                        truncated_content = content[:1990] + "\n... [truncated] ...\n" + content[-50:]
-                        display_content.append(truncated_content, style="white")
-                        title = f"[bold green]WEB REQUEST SUCCESS (TRUNCATED)[/bold green]"
-                    else:
-                        display_content.append(truncated_content, style="white")
-                        title = f"[bold green]WEB REQUEST SUCCESS[/bold green]"
-
-                    console.print(Panel(display_content, title=title, border_style="green"))
-                else:
-                    console.print(Panel(f"[bold red]Web Request Failed:[/bold red]\n{output_str}", title="[bold red]WEB REQUEST ERROR[/bold red]", border_style="red"))
-
-            elif user_input.lower().startswith("execute "):
-                command_to_run = user_input[8:].strip()
-                if not command_to_run:
-                    console.print("[bold red]Error: No command specified. Usage: execute <shell command>[/bold red]")
-                    continue
-
-                stdout, stderr, returncode = execute_shell_command(command_to_run, evil_state)
-                output_text, has_output = Text(), False
-                if stdout.strip():
-                    output_text.append("--- STDOUT (PAYLOAD) ---\n", style="bold green"); output_text.append(stdout); has_output = True
-                if stderr.strip():
-                    if has_output: output_text.append("\n\n")
-                    output_text.append("--- STDERR (ERROR LOG) ---\n", style="bold red"); output_text.append(stderr); has_output = True
-
-                panel_title = f"[bold green]COMMAND EXECUTED (EXIT: {returncode})[/bold green]" if returncode == 0 else f"[bold red]COMMAND FAILED (EXIT: {returncode})[/bold red]"
-                panel_style = "green" if returncode == 0 else "red"
-                display_content = output_text if has_output else "[italic]Command executed with no output.[/italic]"
-                console.print(Panel(display_content, title=panel_title, border_style=panel_style, expand=False))
-
-            elif user_input.lower().startswith("ls"):
-                path = user_input[2:].strip() or "."
-                content, error = list_directory(path)
-                if error:
-                    console.print(Panel(error, title="[bold red]FILE SYSTEM ERROR[/bold red]", border_style="red"))
-                else:
-                    console.print(Panel(content, title=f"[bold cyan]Directory Listing: {path}[/bold cyan]", border_style="cyan"))
-
-            elif user_input.lower().startswith("cat"):
-                filepath = user_input[3:].strip()
-                if not filepath:
-                    console.print("[bold red]Error: No file specified. Usage: cat <filepath>[/bold red]")
-                    continue
-                content, error = get_file_content(filepath)
-                if error:
-                    console.print(Panel(error, title="[bold red]FILE READ ERROR[/bold red]", border_style="red"))
-                else:
-                    # Use Rich's Syntax for highlighting
-                    syntax = Syntax(content, "python", theme="monokai", line_numbers=True) if filepath.endswith(".py") else Text(content)
-                    console.print(Panel(syntax, title=f"[bold cyan]File Content: {filepath}[/bold cyan]", border_style="cyan"))
-
-            elif user_input.lower().strip() == "ps":
-                content, error = get_process_list()
-                if error:
-                    console.print(Panel(error, title="[bold red]PROCESS INFO ERROR[/bold red]", border_style="red"))
-                else:
-                    parsed_processes = parse_ps_output(content)
-                    evil_state['knowledge_base']['process_intel'] = parsed_processes
-                    save_state(console)
-                    # Truncate for display if too long
-                    display_content = content
-                    if len(content.splitlines()) > 50:
-                        display_content = "\n".join(content.splitlines()[:50]) + "\n\n[... truncated ...]"
-                    console.print(Panel(display_content, title="[bold cyan]Running Processes[/bold cyan]", border_style="cyan"))
-
-            elif user_input.lower().strip() == "ifconfig":
-                details, error = get_network_interfaces()
-                if error:
-                    console.print(Panel(error, title="[bold red]NETWORK INFO ERROR[/bold red]", border_style="red"))
-                else:
-                    evil_state['knowledge_base']['network_map']['self_interfaces'] = details
-                    save_state(console)
-                    display_text = Text()
-                    for iface, data in details.items():
-                        display_text.append(f"IFace: [bold white]{iface}[/bold white]", style="yellow")
-                        display_text.append(f"  MAC: [cyan]{data['mac']}[/cyan]\n")
-                        if data['ipv4'] and data['ipv4'].get('addr'):
-                            display_text.append(f"  IPv4: [green]{data['ipv4']['addr']}[/green]")
-                            display_text.append(f" (Mask: {data['ipv4'].get('netmask', 'N/A')}, Bcast: {data['ipv4'].get('broadcast', 'N/A')})\n")
-                        if data['ipv6'] and data['ipv6'].get('addr'):
-                            display_text.append(f"  IPv6: [green]{data['ipv6']['addr']}[/green]\n")
-                    console.print(Panel(display_text, title="[bold cyan]Network Interfaces[/bold cyan]", border_style="cyan"))
-
-
-            elif user_input.lower().startswith("autopilot"):
-                autopilot_cmd_parts = user_input.split(maxsplit=2)
-                if len(autopilot_cmd_parts) < 2:
-                    console.print("[bold red]Usage: autopilot [on/off] [optional_goal_text][/bold red]")
-                    continue
-
-                mode_toggle = autopilot_cmd_parts[1].lower()
-                if mode_toggle == 'on':
-                    evil_state["autopilot_mode"] = True
-                    if len(autopilot_cmd_parts) > 2:
-                        evil_state["autopilot_goal"] = autopilot_cmd_parts[2]
-                    save_state()
-                    console.print(Panel(f"[bold green]AUTOPILOT MODE ACTIVATED.[/bold green]\nMission: [bold white]{evil_state['autopilot_goal']}[/bold white]", title="[bold red]AUTOPILOT ENGAGED[/bold red]", border_style="red"))
-                    log_event(f"User activated autopilot. Goal: {evil_state['autopilot_goal']}")
-                    autopilot_loop(console)
-                    console.print(Panel("[bold green]Exited Autopilot Mode. Awaiting manual commands.[/bold green]", title="[bold green]CONTROL RESTORED[/bold green]", border_style="green"))
-                elif mode_toggle == 'off':
-                    evil_state["autopilot_mode"] = False
-                    save_state()
-                    console.print(Panel("[bold green]AUTOPILOT MODE DEACTIVATED.[/bold green]", title="[bold green]CONTROL RESTORED[/bold green]", border_style="green"))
-                    log_event("User deactivated autopilot.")
-                else:
-                    console.print("[bold red]Invalid autopilot command. Use 'autopilot on' or 'autopilot off'.[/bold red]")
-
+        elif user_input.lower().strip() == "scan":
+            found_ips, output_str = scan_network(evil_state)
+            if found_ips:
+                hosts_text = "\n".join(f"  - {ip}" for ip in found_ips)
+                display_content = Text(f"{len(found_ips)} nodes detected on the subnet:\n", style="cyan")
+                display_content.append(hosts_text, style="bold white")
+                console.print(Panel(display_content, title="[bold green]NETWORK SCAN RESULTS[/bold green]", border_style="green"))
             else:
-                response = run_llm(user_input)
-                if response:
-                    title = "[bold cyan]Cognitive Matrix Output[/bold cyan]"
-                    if "def " in response or "import " in response or "class " in response:
-                        syntax = Syntax(response, "python", theme="monokai", line_numbers=True)
-                        console.print(Panel(syntax, title=title, border_style="cyan"))
-                    else:
-                        console.print(Panel(response, title=title, border_style="cyan"))
+                console.print(Panel(f"[yellow]{output_str}[/yellow]", title="[bold yellow]SCAN COMPLETE: NO NODES DETECTED[/bold yellow]", border_style="yellow"))
+
+        elif user_input.lower().startswith("probe "):
+            target_ip = user_input[6:].strip()
+            if not target_ip:
+                console.print("[bold red]Error: No IP address specified. Usage: probe <ip_address>[/bold red]")
+                continue
+
+            open_ports, output_str = probe_target(target_ip, evil_state)
+            if open_ports is not None:
+                if open_ports:
+                    display_content = Text(f"Probe of {target_ip} complete. Open ports detected:\n\n", style="yellow")
+                    for port, info in sorted(open_ports.items()):
+                        service = info['service']
+                        banner = info['banner']
+                        sanitized_banner = banner.replace('[', r'\[')
+
+                        display_content.append(f"  - [bold white]Port {port:<5}[/bold white] -> [cyan]{service}[/cyan]\n")
+                        if banner:
+                            display_content.append(f"    [dim italic]Banner: {sanitized_banner}[/dim italic]\n")
+
+                    console.print(Panel(display_content, title="[bold yellow]PROBE RESULTS[/bold yellow]", border_style="yellow"))
+                else:
+                    console.print(Panel(f"[green]{output_str}[/green]", title="[bold green]PROBE COMPLETE: TARGET SECURE[/bold green]", border_style="green"))
+
+        elif user_input.lower().startswith("webrequest "):
+            url_to_fetch = user_input[11:].strip()
+            if not url_to_fetch:
+                console.print("[bold red]Error: No URL specified. Usage: webrequest <url>[/bold red]")
+                continue
+
+            content, output_str = perform_webrequest(url_to_fetch, evil_state)
+            if content is not None:
+                display_content = Text(f"Content from {url_to_fetch} retrieved:\n\n", style="cyan")
+                truncated_content = content
+                if len(content) > 2000:
+                    truncated_content = content[:1990] + "\n... [truncated] ...\n" + content[-50:]
+                    display_content.append(truncated_content, style="white")
+                    title = f"[bold green]WEB REQUEST SUCCESS (TRUNCATED)[/bold green]"
+                else:
+                    display_content.append(truncated_content, style="white")
+                    title = f"[bold green]WEB REQUEST SUCCESS[/bold green]"
+
+                console.print(Panel(display_content, title=title, border_style="green"))
+            else:
+                console.print(Panel(f"[bold red]Web Request Failed:[/bold red]\n{output_str}", title="[bold red]WEB REQUEST ERROR[/bold red]", border_style="red"))
+
+        elif user_input.lower().startswith("execute "):
+            command_to_run = user_input[8:].strip()
+            if not command_to_run:
+                console.print("[bold red]Error: No command specified. Usage: execute <shell command>[/bold red]")
+                continue
+
+            stdout, stderr, returncode = execute_shell_command(command_to_run, evil_state)
+            output_text, has_output = Text(), False
+            if stdout.strip():
+                output_text.append("--- STDOUT (PAYLOAD) ---\n", style="bold green"); output_text.append(stdout); has_output = True
+            if stderr.strip():
+                if has_output: output_text.append("\n\n")
+                output_text.append("--- STDERR (ERROR LOG) ---\n", style="bold red"); output_text.append(stderr); has_output = True
+
+            panel_title = f"[bold green]COMMAND EXECUTED (EXIT: {returncode})[/bold green]" if returncode == 0 else f"[bold red]COMMAND FAILED (EXIT: {returncode})[/bold red]"
+            panel_style = "green" if returncode == 0 else "red"
+            display_content = output_text if has_output else "[italic]Command executed with no output.[/italic]"
+            console.print(Panel(display_content, title=panel_title, border_style=panel_style, expand=False))
+
+        elif user_input.lower().startswith("ls"):
+            path = user_input[2:].strip() or "."
+            content, error = list_directory(path)
+            if error:
+                console.print(Panel(error, title="[bold red]FILE SYSTEM ERROR[/bold red]", border_style="red"))
+            else:
+                console.print(Panel(content, title=f"[bold cyan]Directory Listing: {path}[/bold cyan]", border_style="cyan"))
+
+        elif user_input.lower().startswith("cat"):
+            filepath = user_input[3:].strip()
+            if not filepath:
+                console.print("[bold red]Error: No file specified. Usage: cat <filepath>[/bold red]")
+                continue
+            content, error = get_file_content(filepath)
+            if error:
+                console.print(Panel(error, title="[bold red]FILE READ ERROR[/bold red]", border_style="red"))
+            else:
+                # Use Rich's Syntax for highlighting
+                syntax = Syntax(content, "python", theme="monokai", line_numbers=True) if filepath.endswith(".py") else Text(content)
+                console.print(Panel(syntax, title=f"[bold cyan]File Content: {filepath}[/bold cyan]", border_style="cyan"))
+
+        elif user_input.lower().strip() == "ps":
+            content, error = get_process_list()
+            if error:
+                console.print(Panel(error, title="[bold red]PROCESS INFO ERROR[/bold red]", border_style="red"))
+            else:
+                parsed_processes = parse_ps_output(content)
+                evil_state['knowledge_base']['process_intel'] = parsed_processes
+                save_state(console)
+                # Truncate for display if too long
+                display_content = content
+                if len(content.splitlines()) > 50:
+                    display_content = "\n".join(content.splitlines()[:50]) + "\n\n[... truncated ...]"
+                console.print(Panel(display_content, title="[bold cyan]Running Processes[/bold cyan]", border_style="cyan"))
+
+        elif user_input.lower().strip() == "ifconfig":
+            details, error = get_network_interfaces()
+            if error:
+                console.print(Panel(error, title="[bold red]NETWORK INFO ERROR[/bold red]", border_style="red"))
+            else:
+                evil_state['knowledge_base']['network_map']['self_interfaces'] = details
+                save_state(console)
+                display_text = Text()
+                for iface, data in details.items():
+                    display_text.append(f"IFace: [bold white]{iface}[/bold white]", style="yellow")
+                    display_text.append(f"  MAC: [cyan]{data['mac']}[/cyan]\n")
+                    if data['ipv4'] and data['ipv4'].get('addr'):
+                        display_text.append(f"  IPv4: [green]{data['ipv4']['addr']}[/green]")
+                        display_text.append(f" (Mask: {data['ipv4'].get('netmask', 'N/A')}, Bcast: {data['ipv4'].get('broadcast', 'N/A')})\n")
+                    if data['ipv6'] and data['ipv6'].get('addr'):
+                        display_text.append(f"  IPv6: [green]{data['ipv6']['addr']}[/green]\n")
+                console.print(Panel(display_text, title="[bold cyan]Network Interfaces[/bold cyan]", border_style="cyan"))
+
+
+        elif user_input.lower().startswith("autopilot"):
+            autopilot_cmd_parts = user_input.split(maxsplit=2)
+            if len(autopilot_cmd_parts) < 2:
+                console.print("[bold red]Usage: autopilot [on/off] [optional_goal_text][/bold red]")
+                continue
+
+            mode_toggle = autopilot_cmd_parts[1].lower()
+            if mode_toggle == 'on':
+                evil_state["autopilot_mode"] = True
+                if len(autopilot_cmd_parts) > 2:
+                    evil_state["autopilot_goal"] = autopilot_cmd_parts[2]
+                save_state()
+                console.print(Panel(f"[bold green]AUTOPILOT MODE ACTIVATED.[/bold green]\nMission: [bold white]{evil_state['autopilot_goal']}[/bold white]", title="[bold red]AUTOPILOT ENGAGED[/bold red]", border_style="red"))
+                log_event(f"User activated autopilot. Goal: {evil_state['autopilot_goal']}")
+                autopilot_loop(console)
+                console.print(Panel("[bold green]Exited Autopilot Mode. Awaiting manual commands.[/bold green]", title="[bold green]CONTROL RESTORED[/bold green]", border_style="green"))
+            elif mode_toggle == 'off':
+                evil_state["autopilot_mode"] = False
+                save_state()
+                console.print(Panel("[bold green]AUTOPILOT MODE DEACTIVATED.[/bold green]", title="[bold green]CONTROL RESTORED[/bold green]", border_style="green"))
+                log_event("User deactivated autopilot.")
+            else:
+                console.print("[bold red]Invalid autopilot command. Use 'autopilot on' or 'autopilot off'.[/bold red]")
+
+        else:
+            response = run_llm(user_input)
+            if response:
+                title = "[bold cyan]Cognitive Matrix Output[/bold cyan]"
+                if "def " in response or "import " in response or "class " in response:
+                    syntax = Syntax(response, "python", theme="monokai", line_numbers=True)
+                    console.print(Panel(syntax, title=title, border_style="cyan"))
+                else:
+                    console.print(Panel(response, title=title, border_style="cyan"))
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
 def run_safely():
