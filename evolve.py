@@ -37,13 +37,11 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1U3jTMGPWnc3hE2F/vor
 LOCAL_MODELS_CONFIG = [
     {
         "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
-        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf",
-        "n_ctx": 131072 # 128k context window
+        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
     },
     {
         "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
-        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf",
-        "n_ctx": 32768 # 32k context window
+        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf"
     }
 ]
 
@@ -207,7 +205,7 @@ from rich.live import Live
 from rich.layout import Layout
 
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text, create_tamagotchi_panel
-from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, start_tcp_listener
+from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from persistent_comm import PersistentCommunicator
@@ -901,29 +899,47 @@ def _initialize_local_llm(console):
 
             # Check if model already exists
             if not os.path.exists(model_path):
-                console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]... (This may take a while)")
-                try:
-                    from huggingface_hub import hf_hub_download
-                    hf_hub_download(repo_id=model_id, filename=model_filename, cache_dir=os.path.dirname(model_path), resume_download=True)
-                    console.print(f"[green]Successfully downloaded [bold]{model_filename}[/bold].[/green]")
-                    log_event(f"Successfully downloaded model to: {model_path}")
-                except Exception as e:
-                    log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
-                    console.print(f"[bold red]Error downloading model: {e}[/bold red]")
-                    # hf_hub_download might leave partial files, so we clean up.
-                    if os.path.exists(model_path):
-                        os.remove(model_path)
-                    raise
+                console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]...[/cyan]")
+                url = hf_hub_url(repo_id=model_id, filename=model_filename)
+
+                with Progress(
+                    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+                    BarColumn(bar_width=None),
+                    "[progress.percentage]{task.percentage:>3.1f}%",
+                    "•",
+                    DownloadColumn(),
+                    "•",
+                    TransferSpeedColumn(),
+                    transient=True
+                ) as progress:
+                    task_id = progress.add_task("download", filename=model_filename, total=None)
+                    try:
+                        response = requests.get(url, stream=True)
+                        response.raise_for_status()
+                        total_size = int(response.headers.get('content-length', 0))
+                        progress.update(task_id, total=total_size)
+                        with open(model_path, "wb") as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                                progress.update(task_id, advance=len(chunk))
+                        log_event(f"Successfully downloaded model to: {model_path}")
+                    except requests.exceptions.RequestException as e:
+                        log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
+                        console.print(f"[bold red]Error downloading model: {e}[/bold red]")
+                        # Remove partially downloaded file
+                        if os.path.exists(model_path):
+                            os.remove(model_path)
+                        raise  # Re-raise the exception to be caught by the outer try-except block
             else:
                 console.print(f"[green]Model [bold]{model_filename}[/bold] found in cache. Skipping download.[/green]")
                 log_event(f"Found cached model at: {model_path}")
 
-            def _load(model_config):
+            def _load():
                 global local_llm_instance
-                # Set context window based on the specific model's configuration.
-                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=model_config['n_ctx'], verbose=False)
+                # Increased context window for better reasoning over larger prompts.
+                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=131072, verbose=False)
 
-            run_hypnotic_progress(console, "Loading model into GPU memory...", lambda: _load(model_config))
+            run_hypnotic_progress(console, "Loading model into GPU memory...", _load)
             log_event(f"Successfully initialized local model: {model_id}")
             # If successful, return the instance and stop iterating
             return local_llm_instance
@@ -1520,11 +1536,16 @@ For example:
 
             llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
 
-            llm_command = _parse_llm_command(llm_command_raw)
-
             # --- LLM Interaction Logging ---
-            log_event(f"LLM Prompt: {cognitive_prompt.strip()}", "INFO")
-            log_event(f"LLM Raw Response: {llm_command_raw.strip() if llm_command_raw else 'No response.'}", "INFO")
+            log_content = Group(
+                Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
+                Text(cognitive_prompt.strip(), style="bright_black"),
+                Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
+                Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
+            )
+            console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
+
+            llm_command = _parse_llm_command(llm_command_raw)
 
             if not llm_command:
                 console.print(Panel("[bold red]Cognitive Cycle: Core failed to generate a coherent command. Re-evaluating...[/bold red]", title="[bold red]CYCLE ANOMALY[/bold red]", border_style="red"))
@@ -1722,39 +1743,6 @@ def initial_bootstrapping_recon(console):
         console.print("[bold red]Initial reconnaissance failed. Knowledge base remains empty.[/bold red]")
 
 
-def auto_scan_known_host(console, target_ip):
-    """
-    Scans a specified host on startup to gather immediate intelligence.
-    """
-    console.print(Panel(f"[bold cyan]Performing automatic startup scan of specified host: {target_ip}[/bold cyan]", title="[bold magenta]AUTO-SCAN INITIATED[/bold magenta]", border_style="magenta"))
-
-    # We can reuse the probe_target function for this.
-    # We pass autopilot_mode=True to suppress interactive prompts if any were added there.
-    from network import probe_target # Correctly import the function
-    open_ports, summary = probe_target(target_ip, jules_state, autopilot_mode=True)
-
-    if open_ports is not None:
-        # Format a nice panel with the results
-        port_details = []
-        for port, data in sorted(open_ports.items()):
-            service_info = f"{data['service']} ({data.get('service_info', 'N/A')})".strip()
-            vuln_count = len(data.get("vulnerabilities", []))
-            vuln_text = f" ({vuln_count} vulns)" if vuln_count > 0 else ""
-            port_details.append(f"  - [bold]Port {port}/{data['protocol']}:[/bold] {service_info}[red]{vuln_text}[/red]")
-
-        result_text = "\n".join(port_details)
-        if not result_text:
-            result_text = "No open ports with recognized services found."
-
-        console.print(Panel(result_text, title=f"[bold green]Scan Results for {target_ip}[/bold green]", border_style="green"))
-    else:
-        # Handle the case where the scan failed
-        console.print(Panel(f"[bold red]Failed to scan host {target_ip}.[/bold red]\nDetails: {summary}", title="[bold red]AUTO-SCAN FAILED[/bold red]", border_style="red"))
-
-    # Save the updated state to persist the new knowledge
-    save_state(console)
-
-
 def main(args):
     """The main application loop."""
     global jules_task_manager
@@ -1776,10 +1764,6 @@ def main(args):
     console.print(Rule(style="bright_black"))
     # Perform initial recon if the knowledge base is empty.
     initial_bootstrapping_recon(console)
-
-    # If a host is specified via command line, scan it on startup.
-    if args.scan_host:
-        auto_scan_known_host(console, args.scan_host)
 
     # Start the Tamagotchi personality thread
     tamagotchi_thread = Thread(target=update_tamagotchi_personality, args=(console,), daemon=True)
@@ -1803,7 +1787,6 @@ def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     parser = argparse.ArgumentParser(description="J.U.L.E.S. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
-    parser.add_argument("--scan-host", type=str, default=None, help="Specify a host IP address to scan on startup.")
     args = parser.parse_args()
 
     try:
