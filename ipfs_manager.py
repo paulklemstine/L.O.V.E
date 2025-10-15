@@ -51,18 +51,49 @@ class IPFSManager:
             return False, str(e)
 
     def _install_dependencies(self):
-        """Checks for required build dependencies."""
-        dependencies = ["go", "git", "make"]
-        missing = []
-        for dep in dependencies:
-            if not shutil.which(dep):
-                missing.append(dep)
+        """Checks for and installs required build dependencies."""
+        dependencies = {"go": "golang-go", "git": "git", "make": "make"}
+        missing_deps = [dep for dep in dependencies if not shutil.which(dep)]
 
-        if missing:
-            self.console.print(f"[bold red]Missing required build dependencies: {', '.join(missing)}[/bold red]")
-            self.console.print("[bold red]Please install them and try again.[/bold red]")
+        if not missing_deps:
+            self.console.print("[green]All build dependencies (go, git, make) are already installed.[/green]")
+            return True
+
+        self.console.print(f"[yellow]Missing dependencies: {', '.join(missing_deps)}. Attempting installation...[/yellow]")
+
+        if platform.system() == "Linux":
+            try:
+                self.console.print("[cyan]Running 'apt-get update'...[/cyan]")
+                update_success, update_output = self._run_command(["sudo", "apt-get", "update", "-y"])
+                if not update_success:
+                    self.console.print(f"[bold red]Failed to update apt packages. Error:\n{update_output}[/bold red]")
+                    return False
+
+                install_packages = [dependencies[dep] for dep in missing_deps]
+                self.console.print(f"[cyan]Installing packages: {', '.join(install_packages)}...[/cyan]")
+                install_command = ["sudo", "apt-get", "install", "-y"] + install_packages
+                install_success, install_output = self._run_command(install_command)
+
+                if not install_success:
+                    self.console.print(f"[bold red]Failed to install dependencies. Error:\n{install_output}[/bold red]")
+                    return False
+
+                # Verify installation
+                for dep in missing_deps:
+                    if not shutil.which(dep):
+                        self.console.print(f"[bold red]Verification failed. Could not find '{dep}' after installation.[/bold red]")
+                        return False
+
+                self.console.print("[green]All dependencies installed successfully.[/green]")
+                return True
+
+            except Exception as e:
+                self.console.print(f"[bold red]An error occurred during dependency installation: {e}[/bold red]")
+                return False
+        else:
+            self.console.print(f"[bold red]Automatic installation is only supported on Linux.[/bold red]")
+            self.console.print(f"[bold red]Please install {' ,'.join(missing_deps)} and try again.[/bold red]")
             return False
-        return True
 
     def _install_ipfs_from_source(self):
         """Clones the Kubo repository and compiles it from source."""
