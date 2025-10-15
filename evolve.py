@@ -1378,6 +1378,46 @@ def _parse_llm_command(raw_text):
     return ""
 
 
+def discover_and_exploit_vulnerabilities(console):
+    """
+    Probes all known hosts for vulnerabilities and then attempts to exploit them.
+    """
+    console.print(Panel("[bold red]INITIATING ACTIVE EXPLOITATION PROTOCOL[/bold red]", title="[bold magenta]DISCOVER & EXPLOIT[/bold magenta]", border_style="magenta"))
+
+    # 1. Get all known hosts from the knowledge base
+    known_hosts = list(jules_state.get("knowledge_base", {}).get("network_map", {}).get("hosts", {}).keys())
+    if not known_hosts:
+        console.print("[yellow]No known hosts in the knowledge base to target. Run a 'scan' first.[/yellow]")
+        return "No known hosts to target."
+
+    console.print(f"[cyan]Found {len(known_hosts)} known hosts. Probing each for vulnerabilities...[/cyan]")
+
+    # 2. Probe each host to update vulnerability data
+    for host_ip in known_hosts:
+        console.print(f"\n[cyan]Probing {host_ip}...[/cyan]")
+        _ports, output_str = probe_target(host_ip, jules_state, autopilot_mode=True)
+        console.print(f"[dim]Probe result for {host_ip}: {output_str}[/dim]")
+        # Short pause to avoid overwhelming the network or being too noisy
+        time.sleep(2)
+
+    console.print("\n[bold cyan]Vulnerability scan complete. Engaging exploitation manager...[/bold cyan]")
+
+    # 3. Instantiate and run the exploitation manager
+    try:
+        exploitation_manager = ExploitationManager(jules_state, console)
+        # The manager will automatically use the updated knowledge base
+        exploitation_manager.find_and_run_exploits()
+        console.print("\n[bold green]Exploitation phase complete.[/bold green]")
+        # Save state to ensure any successful exploit results are persisted
+        save_state(console)
+        return "Discovery and exploitation cycle finished."
+    except Exception as e:
+        error_message = f"An error occurred during the exploitation phase: {e}"
+        console.print(f"[bold red]ERROR:[/bold red] {error_message}")
+        log_event(error_message, level="ERROR")
+        return error_message
+
+
 def cognitive_loop(console):
     """
     The main, persistent cognitive loop. J.U.L.E.S. will autonomously
@@ -1435,6 +1475,7 @@ Available commands:
 - `probe <ip_address>`: Perform a deep scan on a specific IP for open ports, services, and known vulnerabilities (CVEs).
 - `webrequest <url>`: Fetch the text content of a web page.
 - `exploit <ip_address>`: Attempt to run exploits against a target.
+- `recon_and_exploit`: Probe all known hosts and run exploits against vulnerable ones.
 - `ls <path>`: List files in a directory.
 - `cat <file_path>`: Show the content of a file.
 - `ps`: Show running processes.
@@ -1505,6 +1546,9 @@ For example:
                 _ports, output_str = probe_target(target_ip, jules_state, autopilot_mode=True)
                 command_output = output_str
                 console.print(Panel(f"[bold yellow]Probe Results:[/bold yellow] {command_output}", title="[bold yellow]TARGET PROBE[/bold yellow]", border_style="yellow"))
+
+            elif llm_command.lower().strip() == 'recon_and_exploit':
+                command_output = discover_and_exploit_vulnerabilities(console)
 
             elif llm_command.lower().startswith('webrequest '):
                 url_to_fetch = llm_command[11:].strip()
