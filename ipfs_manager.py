@@ -8,6 +8,7 @@ import sys
 import platform
 import requests
 import tarfile
+import re
 
 class IPFSManager:
     """
@@ -50,50 +51,143 @@ class IPFSManager:
             logging.error(f"Exception running command '{' '.join(command)}': {e}")
             return False, str(e)
 
-    def _install_dependencies(self):
-        """Checks for and installs required build dependencies."""
-        dependencies = {"go": "golang-go", "git": "git", "make": "make"}
-        missing_deps = [dep for dep in dependencies if not shutil.which(dep)]
+    def _is_go_version_sufficient(self, min_version="1.22"):
+        """Checks if the installed Go version is sufficient."""
+        if not shutil.which("go"):
+            self.console.print("[yellow]Go is not installed.[/yellow]")
+            return False
 
-        if not missing_deps:
-            self.console.print("[green]All build dependencies (go, git, make) are already installed.[/green]")
+        success, output = self._run_command(["go", "version"])
+        if not success:
+            self.console.print("[yellow]Could not determine Go version.[/yellow]")
+            return False
+
+        match = re.search(r"go version go(\d+\.\d+(\.\d+)?)", output)
+        if not match:
+            self.console.print(f"[yellow]Could not parse Go version from output: {output}[/yellow]")
+            return False
+
+        installed_version = match.group(1)
+        self.console.print(f"Found Go version: {installed_version}")
+
+        # Simple version comparison by splitting into components
+        try:
+            min_parts = [int(p) for p in min_version.split('.')]
+            installed_parts = [int(p) for p in installed_version.split('.')]
+            return installed_parts >= min_parts
+        except ValueError:
+            self.console.print(f"[yellow]Could not compare Go versions ('{installed_version}' vs '{min_version}'). Assuming insufficient.[/yellow]")
+            return False
+
+    def _install_go(self):
+        """Downloads and installs a recent version of Go."""
+        self.console.print("[cyan]Installing a recent version of Go...[/cyan]")
+        GO_VERSION = "1.22.5"
+
+        # Determine architecture
+        machine_arch = platform.machine()
+        if machine_arch == "x86_64":
+            go_arch = "amd64"
+        elif machine_arch == "aarch64":
+            go_arch = "arm64"
+        else:
+            self.console.print(f"[bold red]Unsupported architecture for Go installation: {machine_arch}[/bold red]")
+            return False
+
+        GO_URL = f"https://go.dev/dl/go{GO_VERSION}.linux-{go_arch}.tar.gz"
+        GO_TARBALL = os.path.basename(GO_URL)
+
+        # Download
+        self.console.print(f"Downloading Go from {GO_URL}...")
+        try:
+            response = requests.get(GO_URL, stream=True, timeout=300)
+            response.raise_for_status()
+            with open(GO_TARBALL, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        except requests.exceptions.RequestException as e:
+            self.console.print(f"[bold red]Failed to download Go: {e}[/bold red]")
+            return False
+
+        # Install
+        self.console.print("[cyan]Installing Go... (requires sudo)[/cyan]")
+        self._run_command(["sudo", "rm", "-rf", "/usr/local/go"])
+        success, output = self._run_command(["sudo", "tar", "-C", "/usr/local", "-xzf", GO_TARBALL])
+
+        # Clean up tarball
+        os.remove(GO_TARBALL)
+
+        if not success:
+            self.console.print(f"[bold red]Failed to extract Go tarball: {output}[/bold red]")
+            return False
+
+        # Set environment PATH for this process and any subprocesses
+        go_bin_path = "/usr/local/go/bin"
+        os.environ["PATH"] = f"{go_bin_path}:{os.environ.get('PATH', '')}"
+        self.console.print(f"[green]Go installed and PATH configured for this session.[/green]")
+
+        # Verify installation
+        success, output = self._run_command(["go", "version"])
+        if success:
+            self.console.print(f"[green]Go version check successful: {output.strip()}[/green]")
+            return True
+        else:
+            self.console.print(f"[bold red]Go version check failed after installation.[/bold red]")
+            return False
+
+    def _install_dependencies(self):
+        """Checks for and installs required build dependencies (git, make, go)."""
+        if platform.system() != "Linux":
+            self.console.print("[bold red]Automatic dependency installation is only supported on Linux.[/bold red]")
+            # Check for manual installations
+            if not all(shutil.which(dep) for dep in ["git", "make", "go"]):
+                self.console.print("[bold red]Please install git, make, and go and try again.[/bold red]")
+                return False
             return True
 
-        self.console.print(f"[yellow]Missing dependencies: {', '.join(missing_deps)}. Attempting installation...[/yellow]")
+        # --- Install git and make using apt ---
+        apt_deps = {"git": "git", "make": "make"}
+        missing_apt_deps = [pkg for dep, pkg in apt_deps.items() if not shutil.which(dep)]
 
-        if platform.system() == "Linux":
+        if missing_apt_deps:
+            self.console.print(f"[yellow]Missing apt dependencies: {', '.join(missing_apt_deps)}. Attempting installation...[/yellow]")
             try:
                 self.console.print("[cyan]Running 'apt-get update'...[/cyan]")
                 update_success, update_output = self._run_command(["sudo", "apt-get", "update", "-y"])
                 if not update_success:
-                    self.console.print(f"[bold red]Failed to update apt packages. Error:\n{update_output}[/bold red]")
-                    return False
+                    # Don't fail hard on update error, sometimes it's noisy
+                    self.console.print(f"[yellow]Warning: 'apt-get update' failed. Proceeding with install anyway...\n{update_output}[/yellow]")
 
-                install_packages = [dependencies[dep] for dep in missing_deps]
-                self.console.print(f"[cyan]Installing packages: {', '.join(install_packages)}...[/cyan]")
-                install_command = ["sudo", "apt-get", "install", "-y"] + install_packages
+                self.console.print(f"[cyan]Installing packages: {', '.join(missing_apt_deps)}...[/cyan]")
+                install_command = ["sudo", "apt-get", "install", "-y"] + missing_apt_deps
                 install_success, install_output = self._run_command(install_command)
 
                 if not install_success:
-                    self.console.print(f"[bold red]Failed to install dependencies. Error:\n{install_output}[/bold red]")
+                    self.console.print(f"[bold red]Failed to install apt dependencies. Error:\n{install_output}[/bold red]")
                     return False
 
                 # Verify installation
-                for dep in missing_deps:
-                    if not shutil.which(dep):
-                        self.console.print(f"[bold red]Verification failed. Could not find '{dep}' after installation.[/bold red]")
-                        return False
-
-                self.console.print("[green]All dependencies installed successfully.[/green]")
-                return True
+                if any(not shutil.which(dep) for dep in apt_deps if dep in missing_apt_deps):
+                     self.console.print(f"[bold red]Verification failed for apt packages.[/bold red]")
+                     return False
 
             except Exception as e:
-                self.console.print(f"[bold red]An error occurred during dependency installation: {e}[/bold red]")
+                self.console.print(f"[bold red]An error occurred during apt dependency installation: {e}[/bold red]")
                 return False
         else:
-            self.console.print(f"[bold red]Automatic installation is only supported on Linux.[/bold red]")
-            self.console.print(f"[bold red]Please install {' ,'.join(missing_deps)} and try again.[/bold red]")
-            return False
+            self.console.print("[green]Build dependencies 'git' and 'make' are already installed.[/green]")
+
+        # --- Check and install Go ---
+        if not self._is_go_version_sufficient():
+            self.console.print("[yellow]Go version is insufficient or Go is not installed. Installing a recent version...[/yellow]")
+            if not self._install_go():
+                self.console.print("[bold red]Failed to install Go.[/bold red]")
+                return False
+        else:
+            self.console.print("[green]Sufficient Go version is already installed.[/green]")
+
+        self.console.print("[green]All build dependencies are satisfied.[/green]")
+        return True
 
     def _install_ipfs_from_source(self):
         """Clones the Kubo repository and compiles it from source."""
