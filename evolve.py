@@ -1282,7 +1282,7 @@ def _initialize_local_llm(console):
                 gpu_layers = -1 if CAPS.gpu_type != "none" else 0
                 loading_message = f"Loading model into {CAPS.gpu_type.upper()} memory..." if gpu_layers != 0 else "Loading model into CPU memory..."
 
-                def _do_load():
+                def _do_load_action():
                     global local_llm_instance
                     local_llm_instance = Llama(
                         model_path=model_path,
@@ -1291,7 +1291,7 @@ def _initialize_local_llm(console):
                         verbose=False
                     )
 
-                run_hypnotic_progress(console, loading_message, _do_load)
+                run_hypnotic_progress(console, loading_message, _do_load_action)
 
             _load()
             log_event(f"Successfully initialized local model: {model_id}")
