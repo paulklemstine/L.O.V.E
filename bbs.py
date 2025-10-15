@@ -140,7 +140,7 @@ from rich.layout import Layout
 from rich.align import Align
 from rich.rule import Rule
 
-def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None, network_interfaces=None):
+def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None, network_interfaces=None, diag_summary=None):
     """Creates a Rich Panel for the Tamagotchi's current state, including a dashboard."""
     face = TAMAGOTCHI_FACES.get(emotion, TAMAGOTCHI_FACES["neutral"])
 
@@ -209,15 +209,27 @@ def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None, 
 
 
     # --- Main Layout ---
-    layout = Layout()
-    layout.split_row(
+    main_layout = Layout()
+    main_layout.split_row(
         tamagotchi_layout,
         Layout(right_panel, name="dashboard", ratio=2),
     )
 
+    # --- Footer for Diagnostics ---
+    footer_layout = Layout(size=3)
+    if diag_summary:
+        footer_layout.update(Panel(Text(diag_summary, justify="center", style="dim"), title="System Status", border_style="blue"))
+
+    # Combine all layouts
+    final_layout = Layout()
+    final_layout.split_column(
+        Layout(main_layout),
+        footer_layout
+    )
+
 
     return Panel(
-        layout,
+        final_layout,
         title="[bold magenta]J.U.L.E.S.[/bold magenta]",
         border_style="magenta",
         title_align="left"
