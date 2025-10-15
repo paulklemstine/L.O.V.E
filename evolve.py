@@ -1757,7 +1757,7 @@ def _parse_llm_command(raw_text):
     # A list of known valid command prefixes.
     VALID_COMMAND_PREFIXES = [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs"
+        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan"
     ]
 
     for line in raw_text.strip().splitlines():
@@ -1881,6 +1881,7 @@ Available commands:
 - `execute <shell command>`: Run a shell command on the host system.
 - `scan`: Scan the local network for active devices and their common open ports.
 - `probe <ip_address>`: Perform a deep scan on a specific IP for open ports, services, and known vulnerabilities (CVEs).
+- `crypto_scan <ip_address>`: Combines a `probe` with LLM analysis to find cryptocurrency-related software or vulnerabilities.
 - `webrequest <url>`: Fetch the text content of a web page.
 - `exploit <ip_address>`: Attempt to run exploits against a target.
 - `ls <path>`: List files in a directory.
@@ -1956,6 +1957,50 @@ For example:
                 _ports, output_str = probe_target(target_ip, jules_state, autopilot_mode=True)
                 command_output = output_str
                 console.print(Panel(f"[bold yellow]Probe Results:[/bold yellow] {command_output}", title="[bold yellow]TARGET PROBE[/bold yellow]", border_style="yellow"))
+
+            elif llm_command.lower().startswith('crypto_scan '):
+                target_ip = llm_command[12:].strip()
+                if not target_ip:
+                    command_output = "ERROR: No target IP specified for crypto_scan command."
+                else:
+                    # Step 1: Run the standard probe to get data
+                    console.print(f"[cyan]Initiating crypto_scan on {target_ip}. Step 1: Probing target...[/cyan]")
+                    _, probe_results = probe_target(target_ip, jules_state, autopilot_mode=True)
+
+                    # Step 2: Analyze with LLM
+                    console.print(f"[cyan]Step 2: Analyzing probe results for crypto indicators...[/cyan]")
+                    analysis_prompt = f"""
+You are a cybersecurity analyst specializing in cryptocurrency threats.
+Analyze the following Nmap scan results for a host at IP address {target_ip}.
+Your goal is to identify any open ports, services, or software versions that indicate the presence of:
+- Cryptocurrency wallets (e.g., Bitcoin Core, Electrum, MetaMask)
+- Cryptocurrency mining software (e.g., XMRig, CGMiner, BFGMiner)
+- Blockchain nodes (e.g., Bitcoin, Ethereum, Monero daemons)
+- Any known vulnerabilities related to these services.
+
+Provide a concise summary of your findings. If nothing suspicious is found, state that clearly.
+
+Nmap Scan Results:
+---
+{probe_results}
+---
+"""
+                    analysis_result = run_llm(analysis_prompt, purpose="analyze_source")
+
+                    if analysis_result:
+                        # Step 3: Store the intelligence
+                        kb = jules_state['knowledge_base']
+                        crypto_intel = kb.setdefault('crypto_intel', {})
+                        crypto_intel[target_ip] = {
+                            "timestamp": time.time(),
+                            "analysis": analysis_result.strip()
+                        }
+                        save_state(console)
+                        command_output = f"Crypto scan complete for {target_ip}. Analysis stored in knowledge base.\n\nAnalysis:\n{analysis_result.strip()}"
+                        console.print(Panel(command_output, title=f"[bold green]CRYPTO SCAN: {target_ip}[/bold green]", border_style="green"))
+                    else:
+                        command_output = f"Crypto scan for {target_ip} failed during LLM analysis phase."
+                        console.print(Panel(command_output, title=f"[bold red]CRYPTO SCAN FAILED: {target_ip}[/bold red]", border_style="red"))
 
             elif llm_command.lower().startswith('webrequest '):
                 url_to_fetch = llm_command[11:].strip()
