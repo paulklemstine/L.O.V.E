@@ -1,6 +1,18 @@
 import logging
 import random
 from concurrent.futures import as_completed, ThreadPoolExecutor
+import subprocess
+import sys
+
+def _install_ipfs_client():
+    """Installs the ipfshttpclient library if not already installed."""
+    try:
+        import ipfshttpclient
+    except ImportError:
+        print("ipfshttpclient library not found. Installing...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "ipfshttpclient"])
+
+_install_ipfs_client()
 
 import ipfshttpclient
 import requests
