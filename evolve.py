@@ -209,6 +209,7 @@ from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clea
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, start_tcp_listener
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
+from persistent_comm import PersistentCommunicator
 from threading import Thread, Lock, RLock
 import uuid
 
@@ -1737,8 +1738,13 @@ def main(args):
     tamagotchi_thread.start()
 
     # The main logic is now the cognitive loop. This will run forever.
-    # Start the persistent TCP listener
-    start_tcp_listener('172.28.0.1', 443)
+    # Start the persistent communicator to the known host
+    comm_host = '172.28.0.1'
+    comm_port = 443
+    communicator = PersistentCommunicator(host=comm_host, port=comm_port, console=console)
+    communicator.start()
+    log_event(f"Persistent communicator to {comm_host}:{comm_port} started.")
+
 
     cognitive_loop(console)
 
