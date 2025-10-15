@@ -50,83 +50,67 @@ class IPFSManager:
             logging.error(f"Exception running command '{' '.join(command)}': {e}")
             return False, str(e)
 
-    def _get_platform_arch(self):
-        """Determines the platform and architecture for downloading the correct binary."""
-        system = platform.system().lower()
-        arch = platform.machine().lower()
+    def _install_dependencies(self):
+        """Checks for required build dependencies."""
+        dependencies = ["go", "git", "make"]
+        missing = []
+        for dep in dependencies:
+            if not shutil.which(dep):
+                missing.append(dep)
 
-        if arch == "x86_64":
-            arch = "amd64"
-        elif arch == "aarch64":
-            arch = "arm64"
+        if missing:
+            self.console.print(f"[bold red]Missing required build dependencies: {', '.join(missing)}[/bold red]")
+            self.console.print("[bold red]Please install them and try again.[/bold red]")
+            return False
+        return True
 
-        if system not in ["linux", "darwin"]:
-            self.console.print(f"[bold red]Unsupported OS: {system}. IPFS auto-install might fail.[/bold red]")
-            return None
+    def _install_ipfs_from_source(self):
+        """Clones the Kubo repository and compiles it from source."""
+        self.console.print("[cyan]Installing IPFS by compiling from source...[/cyan]")
 
-        return f"{system}-{arch}"
+        if not self._install_dependencies():
+            return False
+
+        # 2. Clone the Kubo repository
+        kubo_source_dir = os.path.abspath("./kubo_source")
+        if os.path.exists(kubo_source_dir):
+            self.console.print(f"[yellow]Kubo source directory already exists at {kubo_source_dir}. Removing it.[/yellow]")
+            shutil.rmtree(kubo_source_dir)
+
+        self.console.print("[cyan]Cloning Kubo repository...[/cyan]")
+        success, output = self._run_command(["git", "clone", "https://github.com/ipfs/kubo.git", kubo_source_dir])
+        if not success:
+            self.console.print(f"[bold red]Failed to clone Kubo repository. Error:\n{output}[/bold red]")
+            return False
+
+        # 3. Compile
+        self.console.print("[cyan]Compiling Kubo... (This may take a while)[/cyan]")
+        success, output = self._run_command(["make", "build"], cwd=kubo_source_dir)
+        if not success:
+            self.console.print(f"[bold red]Failed to compile Kubo. Error:\n{output}[/bold red]")
+            return False
+
+        # 4. Move the binary
+        compiled_binary_path = os.path.join(kubo_source_dir, "cmd", "ipfs", "ipfs")
+        if not os.path.exists(compiled_binary_path):
+            self.console.print(f"[bold red]Compiled binary not found at {compiled_binary_path}[/bold red]")
+            return False
+
+        os.makedirs(self.bin_dir, exist_ok=True)
+        if os.path.exists(self.bin_path):
+            os.remove(self.bin_path)
+        shutil.move(compiled_binary_path, self.bin_path)
+
+        os.chmod(self.bin_path, 0o755)
+
+        shutil.rmtree(kubo_source_dir)
+
+        self.console.print(f"[green]IPFS binary compiled and installed successfully to {self.bin_path}[/green]")
+        return True
 
     def _install_ipfs(self):
-        """Downloads and extracts the latest pre-compiled IPFS binary."""
-        self.console.print("[cyan]Installing latest IPFS binary by direct download...[/cyan]")
-
-        platform_arch = self._get_platform_arch()
-        if not platform_arch:
-            return False
-
-        # 1. Find the latest version and download URL
-        try:
-            self.console.print("[cyan]Finding latest Kubo version...[/cyan]")
-            response = requests.get(f"{self.dist_url}/kubo/versions")
-            response.raise_for_status()
-            latest_version = response.text.strip().split("\n")[-1]
-            self.console.print(f"[green]Latest version found: {latest_version}[/green]")
-
-            archive_name = f"kubo_{latest_version}_{platform_arch}.tar.gz"
-            download_url = f"{self.dist_url}/kubo/{latest_version}/{archive_name}"
-
-        except requests.RequestException as e:
-            self.console.print(f"[bold red]Failed to get latest IPFS version: {e}[/bold red]")
-            return False
-
-        # 2. Download the archive
-        self.console.print(f"[cyan]Downloading from {download_url}...[/cyan]")
-        tar_path = os.path.join(self.bin_dir, archive_name)
-        os.makedirs(self.bin_dir, exist_ok=True)
-
-        try:
-            with requests.get(download_url, stream=True) as r:
-                r.raise_for_status()
-                with open(tar_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        f.write(chunk)
-        except requests.RequestException as e:
-            self.console.print(f"[bold red]Failed to download IPFS binary: {e}[/bold red]")
-            return False
-
-        # 3. Extract the binary
-        self.console.print(f"[cyan]Extracting {archive_name}...[/cyan]")
-        try:
-            with tarfile.open(tar_path, "r:gz") as tar:
-                tar.extractall(path=self.bin_dir)
-
-            # The binary is inside a 'kubo' directory after extraction
-            extracted_dir = os.path.join(self.bin_dir, "kubo")
-            shutil.move(os.path.join(extracted_dir, "ipfs"), self.bin_path)
-
-            # Clean up
-            os.remove(tar_path)
-            shutil.rmtree(extracted_dir)
-
-            # Make the binary executable
-            os.chmod(self.bin_path, 0o755)
-
-        except (tarfile.TarError, FileNotFoundError, OSError) as e:
-            self.console.print(f"[bold red]Failed to extract IPFS binary: {e}[/bold red]")
-            return False
-
-        self.console.print(f"[green]IPFS binary installed successfully to {self.bin_path}[/green]")
-        return True
+        """Installs IPFS by compiling it from source."""
+        return self._install_ipfs_from_source()
 
     def start_daemon(self):
         """Initializes the repo and starts the IPFS daemon."""
