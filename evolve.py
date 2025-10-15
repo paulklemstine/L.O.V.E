@@ -1359,7 +1359,7 @@ def initial_knowledge_base_bootstrap(console):
 def _initialize_local_llm(console):
     """
     Iterates through the configured local models, attempting to download and
-    initialize each one in sequence until successful.
+    initialize each one in sequence. If all fail, it triggers self-correction.
     """
     global local_llm_instance
     if local_llm_instance:
@@ -1372,6 +1372,9 @@ def _initialize_local_llm(console):
         log_event("Failed to import llama_cpp or huggingface_hub.", level="ERROR")
         console.print("[bold red]Local LLM libraries not found. Cannot initialize primary models.[/bold red]")
         return None
+
+    last_error_traceback = ""
+    last_failed_model_id = ""
 
     for model_config in LOCAL_MODELS_CONFIG:
         model_id = model_config["id"]
@@ -1386,20 +1389,13 @@ def _initialize_local_llm(console):
             model_path = os.path.join(local_dir, model_filename)
             os.makedirs(local_dir, exist_ok=True)
 
-            # Check if model already exists
             if not os.path.exists(model_path):
                 console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]...[/cyan]")
                 url = hf_hub_url(repo_id=model_id, filename=model_filename)
-
                 with Progress(
                     TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-                    BarColumn(bar_width=None),
-                    "[progress.percentage]{task.percentage:>3.1f}%",
-                    "•",
-                    DownloadColumn(),
-                    "•",
-                    TransferSpeedColumn(),
-                    transient=True
+                    BarColumn(bar_width=None), "[progress.percentage]{task.percentage:>3.1f}%", "•",
+                    DownloadColumn(), "•", TransferSpeedColumn(), transient=True
                 ) as progress:
                     task_id = progress.add_task("download", filename=model_filename, total=None)
                     try:
@@ -1415,43 +1411,65 @@ def _initialize_local_llm(console):
                     except requests.exceptions.RequestException as e:
                         log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
                         console.print(f"[bold red]Error downloading model: {e}[/bold red]")
-                        # Remove partially downloaded file
-                        if os.path.exists(model_path):
-                            os.remove(model_path)
-                        raise  # Re-raise the exception to be caught by the outer try-except block
+                        if os.path.exists(model_path): os.remove(model_path)
+                        raise
             else:
                 console.print(f"[green]Model [bold]{model_filename}[/bold] found in cache. Skipping download.[/green]")
                 log_event(f"Found cached model at: {model_path}")
 
             def _load():
                 global local_llm_instance
-                # Set n_gpu_layers to -1 to offload all layers to GPU if available, otherwise 0 for CPU.
                 gpu_layers = -1 if CAPS.gpu_type != "none" else 0
                 loading_message = f"Loading model into {CAPS.gpu_type.upper()} memory..." if gpu_layers != 0 else "Loading model into CPU memory..."
-
                 def _do_load_action():
                     global local_llm_instance
-                    local_llm_instance = Llama(
-                        model_path=model_path,
-                        n_gpu_layers=gpu_layers,
-                        n_ctx=131072, # Increased context window
-                        verbose=False
-                    )
-
+                    local_llm_instance = Llama(model_path=model_path, n_gpu_layers=gpu_layers, n_ctx=131072, verbose=False)
                 run_hypnotic_progress(console, loading_message, _do_load_action)
-
             _load()
             log_event(f"Successfully initialized local model: {model_id}")
-            # If successful, return the instance and stop iterating
             return local_llm_instance
 
         except Exception as e:
-            log_event(f"Failed to load local model {model_id}. Error: {e}", level="WARNING")
-            console.print(f"[yellow]Could not load model [bold]{model_id}[/bold]. It may be too large for this GPU. Trying next model...[/yellow]")
-            local_llm_instance = None # Ensure instance is None if loading fails
-            continue # Try the next model in the list
+            last_error_traceback = traceback.format_exc()
+            last_failed_model_id = model_id
+            log_event(f"Failed to load local model {model_id}. Error: {last_error_traceback}", level="WARNING")
+            console.print(f"[yellow]Could not load model [bold]{model_id}[/bold]. Error: {e}. Trying next model...[/yellow]")
+            local_llm_instance = None
+            continue
 
-    console.print("[bold red]CRITICAL FAILURE: All configured local models failed to load.[/bold red]")
+    # --- Self-Correction Trigger ---
+    # If the loop completes and no model was loaded, trigger self-healing.
+    if not local_llm_instance:
+        log_event(f"All local models failed to load. Triggering self-correction based on last error from '{last_failed_model_id}'.", level="CRITICAL")
+        error_panel = Panel(
+            f"[bold]Model Loading Failure:[/bold] {last_failed_model_id}\n\n[bold]Reason:[/bold] All configured local models failed to initialize. The last error is provided below.\n\n[bold]Last Traceback:[/bold]\n{last_error_traceback}",
+            title="[bold red]FATAL: ALL MODELS FAILED TO LOAD[/bold red]", border_style="red", expand=True
+        )
+        console.print(error_panel)
+        console.print("[bold magenta]Engaging self-correction protocol...[/bold magenta]")
+
+        modification_request = f"""
+A critical and unhandled exception occurred while trying to load the last attempted local model, '{last_failed_model_id}'.
+This has halted my ability to use any local models. All previous models in the configuration list also failed.
+
+**Full Error Traceback from the last attempt:**
+---
+{last_error_traceback}
+---
+
+**Corrective Action Required:**
+You must analyze the final traceback above to diagnose the root cause of the error. The problem could be anything from a CUDA memory issue, a misconfigured file path, a dependency problem, or a bug in the loading logic itself.
+
+Your task is to modify the `_initialize_local_llm` function in `evolve.py` to fix this specific error.
+- If it's a memory error, you might need to adjust the `n_gpu_layers` parameter in the `Llama()` call.
+- If it's a file path error, you might need to correct how `model_path` is constructed or used.
+- If it's another type of error, use your analytical skills to devise the correct code modification.
+
+Provide a complete and correct implementation of the `_initialize_local_llm` function with the necessary fix. I will use your response to hot-swap my own code and attempt to recover.
+"""
+        evolve_locally(modification_request, console)
+        return None
+
     return None
 
 
