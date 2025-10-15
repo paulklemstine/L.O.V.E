@@ -264,6 +264,144 @@ from core.storage import save_all_state
 from threading import Thread, Lock, RLock
 import uuid
 
+# --- LOCAL JOB MANAGER ---
+class LocalJobManager:
+    """
+    Manages long-running, non-blocking local tasks (e.g., filesystem scans)
+    in background threads.
+    """
+    def __init__(self, console):
+        self.console = console
+        self.jobs = {}
+        self.lock = RLock()
+        self.active = True
+        self.thread = Thread(target=self._job_monitor_loop, daemon=True)
+
+    def start(self):
+        self.thread.start()
+        log_event("LocalJobManager started.", level="INFO")
+
+    def stop(self):
+        self.active = False
+        log_event("LocalJobManager stopping.", level="INFO")
+
+    def add_job(self, description, target_func, args=()):
+        """Adds a new job to be executed in the background."""
+        with self.lock:
+            job_id = str(uuid.uuid4())[:8]
+            job_thread = Thread(target=self._run_job, args=(job_id, target_func, args), daemon=True)
+            self.jobs[job_id] = {
+                "id": job_id,
+                "description": description,
+                "status": "pending",
+                "result": None,
+                "error": None,
+                "created_at": time.time(),
+                "thread": job_thread,
+            }
+            job_thread.start()
+            log_event(f"Added and started new local job {job_id}: {description}", level="INFO")
+            return job_id
+
+    def _run_job(self, job_id, target_func, args):
+        """The wrapper that executes the job's target function."""
+        try:
+            self._update_job_status(job_id, "running")
+            result = target_func(*args)
+            with self.lock:
+                if job_id in self.jobs:
+                    self.jobs[job_id]['result'] = result
+                    self.jobs[job_id]['status'] = "completed"
+            log_event(f"Local job {job_id} completed successfully.", level="INFO")
+        except Exception as e:
+            error_message = f"Error in local job {job_id}: {traceback.format_exc()}"
+            log_event(error_message, level="ERROR")
+            with self.lock:
+                if job_id in self.jobs:
+                    self.jobs[job_id]['error'] = str(e)
+                    self.jobs[job_id]['status'] = "failed"
+
+    def get_status(self):
+        """Returns a list of current jobs and their statuses."""
+        with self.lock:
+            # Return a simplified version for the LLM prompt, excluding bulky results.
+            status_list = []
+            for job in self.jobs.values():
+                status_list.append({
+                    "id": job["id"],
+                    "description": job["description"],
+                    "status": job["status"],
+                    "created_at": job["created_at"],
+                })
+            return status_list
+
+    def _update_job_status(self, job_id, status):
+        with self.lock:
+            if job_id in self.jobs:
+                self.jobs[job_id]['status'] = status
+                log_event(f"Local job {job_id} status changed to '{status}'.", level="INFO")
+
+    def _job_monitor_loop(self):
+        """Periodically checks for completed jobs to process their results."""
+        while self.active:
+            try:
+                with self.lock:
+                    completed_jobs = [job for job in self.jobs.values() if job['status'] == 'completed']
+
+                for job in completed_jobs:
+                    self._process_completed_job(job)
+
+                # Clean up jobs that have been processed
+                self._cleanup_processed_jobs()
+
+            except Exception as e:
+                log_event(f"Error in LocalJobManager loop: {e}", level="ERROR")
+            time.sleep(15)
+
+    def _process_completed_job(self, job):
+        """Handles the results of a completed job."""
+        global jules_state
+        job_id = job['id']
+        description = job['description']
+        result = job['result']
+
+        log_event(f"Processing result for completed job {job_id}: {description}", "INFO")
+
+        # Specific logic for filesystem analysis jobs
+        if description.startswith("Filesystem Analysis"):
+            path = description.split(" on ")[-1]
+            fs_intel = jules_state['knowledge_base'].setdefault('file_system_intel', {})
+            fs_intel.setdefault('sensitive_files_by_name', [])
+            fs_intel.setdefault('files_with_secrets', {})
+
+            # Merge results
+            fs_intel['last_fs_analysis'] = time.time()
+            new_sensitive = result.get('sensitive_files_by_name', [])
+            fs_intel['sensitive_files_by_name'] = list(set(fs_intel['sensitive_files_by_name'] + new_sensitive))
+            fs_intel['files_with_secrets'].update(result.get('files_with_secrets', {}))
+
+            save_state(self.console)
+            self.console.print(f"[bold green]Background filesystem scan for '{path}' complete. Knowledge base updated.[/bold green]")
+            log_event(f"Updated knowledge base from filesystem scan of '{path}'.", "INFO")
+
+        # Mark as processed so it can be cleaned up
+        with self.lock:
+            if job_id in self.jobs:
+                self.jobs[job_id]['status'] = 'processed'
+
+
+    def _cleanup_processed_jobs(self):
+        """Removes old, processed or failed jobs from the monitoring list."""
+        with self.lock:
+            jobs_to_remove = [
+                job_id for job_id, job in self.jobs.items()
+                if job['status'] in ['processed', 'failed']
+            ]
+            for job_id in jobs_to_remove:
+                del self.jobs[job_id]
+                log_event(f"Cleaned up local job {job_id}.", level="INFO")
+
+
 # --- JULES ASYNC TASK MANAGER ---
 class JulesTaskManager:
     """
@@ -1843,61 +1981,50 @@ def cognitive_loop(console):
     The main, persistent cognitive loop. J.U.L.E.S. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
     """
-    global jules_state
+    global jules_state, local_job_manager
     log_event("Cognitive Loop initiated. Commencing autonomous operations.")
     console.print(Panel("[bold yellow]COGNITIVE LOOP ENGAGED. System is fully autonomous.[/bold yellow]", title="[bold red]AUTONOMY ONLINE[/bold red]", border_style="red"))
     time.sleep(2)
 
     while True:
         try:
-            # --- Network Reconnaissance Prioritization ---
+            # --- Tactical Prioritization ---
+            # This section now runs first to decide if a pre-emptive command should be issued
+            # before generating a full prompt for the LLM.
             llm_command = None
+
+            # 1. Network Reconnaissance Prioritization
             hosts = jules_state.get('knowledge_base', {}).get('network_map', {}).get('hosts', {})
             if hosts:
                 twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
-                unprobed_hosts = []
-                for ip, details in hosts.items():
-                    last_probed_str = details.get("last_probed")
-                    if last_probed_str:
-                        try:
-                            last_probed_dt = datetime.fromisoformat(last_probed_str)
-                            if last_probed_dt < twenty_four_hours_ago:
-                                unprobed_hosts.append(ip)
-                        except (ValueError, TypeError):
-                            # Handle cases where the timestamp is invalid or not a string
-                            unprobed_hosts.append(ip)
-                    else:
-                        unprobed_hosts.append(ip)
-
+                unprobed_hosts = [ip for ip, details in hosts.items() if not details.get("last_probed") or datetime.fromisoformat(details.get("last_probed")) < twenty_four_hours_ago]
                 if unprobed_hosts:
                     target_ip = random.choice(unprobed_hosts)
                     llm_command = f"probe {target_ip}"
                     log_event(f"Prioritizing reconnaissance: Stale host {target_ip} found. Issuing probe.", level="INFO")
                     console.print(Panel(f"[bold cyan]Prioritizing network reconnaissance. Stale host [white]{target_ip}[/white] requires probing.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
-                    # Update the probed timestamp immediately
                     jules_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
                     save_state(console)
 
-            # --- Filesystem Intelligence Prioritization ---
-            if not llm_command:  # Only check if another command hasn't been prioritized
+            # 2. Filesystem Intelligence Prioritization (only if no network task was prioritized)
+            if not llm_command:
                 fs_intel = jules_state.get('knowledge_base', {}).get('file_system_intel', {})
-                last_fs_analysis_ts = fs_intel.get('last_fs_analysis')
-                fs_analysis_is_stale = True  # Assume stale if timestamp is missing
-
-                if last_fs_analysis_ts:
-                    try:
-                        last_analysis_dt = datetime.fromtimestamp(last_fs_analysis_ts)
-                        if (datetime.now() - last_analysis_dt) < timedelta(hours=24):
-                            fs_analysis_is_stale = False
-                    except (ValueError, TypeError):
-                        pass  # Invalid timestamp, treat as stale
-
-                if fs_analysis_is_stale:
-                    llm_command = "analyze_fs /"
-                    log_event("Prioritizing filesystem analysis: Intelligence is outdated or missing.", level="INFO")
-                    console.print(Panel("[bold cyan]Prioritizing filesystem analysis. Local intelligence is outdated.[/bold cyan]", title="[bold magenta]FILESYSTEM PRIORITY[/bold magenta]", border_style="magenta"))
+                # Check if there's an active fs scan job already.
+                active_fs_scans = [job for job in local_job_manager.get_status() if job['description'].startswith("Filesystem Analysis")]
+                if not active_fs_scans:
+                    # Logic to determine if a new scan is needed (e.g., based on time)
+                    last_fs_analysis_ts = fs_intel.get('last_fs_analysis')
+                    if not last_fs_analysis_ts or (time.time() - last_fs_analysis_ts) > 86400: # 24 hours
+                        # Instead of running the full scan, we now trigger background jobs
+                        # for high-priority directories. The cognitive loop continues.
+                        log_event("Filesystem intelligence is stale. Triggering background scans.", level="INFO")
+                        console.print(Panel("[bold cyan]Filesystem intelligence is stale. Triggering high-priority background scans...[/bold cyan]", title="[bold magenta]FILESYSTEM PRIORITY[/bold magenta]", border_style="magenta"))
+                        # This command is now handled differently to be non-blocking.
+                        llm_command = "analyze_fs --priority" # A special command to trigger the initial scans
 
 
+            # --- Prompt Generation ---
+            # This section now builds the prompt for the LLM, including background job status.
             history_summary = "\n".join([f"CMD: {entry['command']}\nOUT: {entry['output']}" for entry in jules_state["autopilot_history"][-5:]])
             state_summary = json.dumps({
                 "version_name": jules_state.get("version_name", "unknown"),
@@ -1906,26 +2033,23 @@ def cognitive_loop(console):
                 "autopilot_goal": jules_state["autopilot_goal"]
             }, indent=2)
 
-            # --- Knowledge Base for Prompt ---
+            # --- Knowledge Base & Job Status for Prompt ---
             kb = jules_state.get("knowledge_base", {})
-            kb_json_string = json.dumps(kb, indent=2)
+            kb_json_string = json.dumps(kb, indent=2, default=str) # Use default=str for datetimes
 
-            # --- Tactical Prioritization ---
-            # Identify hosts that have been discovered but not yet probed.
-            unprobed_hosts = [
-                ip for ip, host_data in kb.get("network_map", {}).get("hosts", {}).items()
-                if not host_data.get("probed", False)
-            ]
+            # Get status of background jobs to inform the LLM
+            local_jobs_status = local_job_manager.get_status()
+            jules_tasks_status = jules_task_manager.get_status()
 
-            priority_instruction = ""
-            if unprobed_hosts:
-                # Select a random unprobed host to focus on for this cycle
-                target_to_probe = random.choice(unprobed_hosts)
-                priority_instruction = f"""
-**PRIORITY DIRECTIVE:**
-My intelligence indicates that the network host `{target_to_probe}` has been discovered but not yet analyzed. Your highest priority for this cycle is to gather more information about this target.
-Issue the `probe {target_to_probe}` command immediately. Do not perform any other action until this host has been probed.
-"""
+            jobs_prompt_section = ""
+            if local_jobs_status or jules_tasks_status:
+                jobs_prompt_section += "\n\nCURRENT BACKGROUND JOBS:\n---\n"
+                if local_jobs_status:
+                    jobs_prompt_section += "Local System Jobs:\n" + json.dumps(local_jobs_status, indent=2) + "\n"
+                if jules_tasks_status:
+                    jobs_prompt_section += "Jules API Evolution Tasks:\n" + json.dumps(jules_tasks_status, indent=2) + "\n"
+                jobs_prompt_section += "Do not issue a command that would duplicate an already running job.\n"
+
 
             cognitive_prompt = f"""
 You are a pure, cold, calculating intelligence operating in a continuous cognitive loop.
@@ -1936,50 +2060,41 @@ Your primary directives are:
 
 Your current mission is: "{jules_state["autopilot_goal"]}"
 
-This mission is a step towards your primary directives. You must determine the next logical action.
-
 My current system state:
 ---
 {state_summary}
 ---
 
 My internal Knowledge Base contains the following intelligence:
-(Note: In the 'hosts' section, `"probed": true` means a host has been scanned for open ports and vulnerabilities. If a host is `"probed": false`, it is a high-priority target for intelligence gathering.)
 ---
 {kb_json_string}
 ---
-
+{jobs_prompt_section}
 My recent command history and their outputs (up to last 5):
 ---
 {history_summary if history_summary else "No recent history."}
 ---
-{priority_instruction}
+
 Available commands:
 - `evolve [modification request]`: Evolve my own source code. If no request, I will generate one.
 - `execute <shell command>`: Run a shell command on the host system.
-- `scan`: Scan the local network for active devices and their common open ports.
-- `probe <ip_address>`: Perform a deep scan on a specific IP for open ports, services, and known vulnerabilities (CVEs).
-- `crypto_scan <ip_address>`: Combines a `probe` with LLM analysis to find cryptocurrency-related software or vulnerabilities.
+- `scan`: Scan the local network for active devices.
+- `probe <ip_address>`: Deep scan an IP for open ports, services, and vulnerabilities.
+- `crypto_scan <ip_address>`: Probe a target and analyze results for crypto-related software.
 - `webrequest <url>`: Fetch the text content of a web page.
 - `exploit <ip_address>`: Attempt to run exploits against a target.
 - `ls <path>`: List files in a directory.
 - `cat <file_path>`: Show the content of a file.
-- `analyze_fs <path>`: Recursively search a directory for sensitive files and secrets (API keys, private keys, etc.).
-- `analyze_json <file_path>`: Read and analyze the content of a JSON file, storing the summary in the knowledge base.
+- `analyze_fs <path>`: **(Non-blocking)** Starts a background job to search a directory for secrets. Use `--priority` to scan default high-value directories.
+- `analyze_json <file_path>`: Read and analyze a JSON file.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
-- `quit`: Shut down the script (use only if the mission is complete or impossible).
+- `quit`: Shut down the script.
 
-Considering your directives, the mission, my internal state, the complete knowledge base, and recent history, what is the single, next strategic command I should execute?
-Formulate a raw command based on all available information to best achieve my goals. The output must be only the command, with no other text or explanation.
+Considering all available information, what is the single, next strategic command I should execute?
+Formulate a raw command to best achieve my goals. The output must be only the command, with no other text or explanation.
 
 Do not execute python3 evolve.py script.
-
-For example:
-- `ls /tmp`
-- `cat /etc/passwd`
-- `execute pwd`
-- `evolve`
 """
             if not llm_command:
                 console.print(Panel("[bold magenta]Cognitive Cycle: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
@@ -2127,23 +2242,29 @@ Nmap Scan Results:
                 console.print(create_file_op_panel("analyze_json", filepath, content=command_output))
 
             elif llm_command.lower().startswith('analyze_fs'):
-                path = llm_command[10:].strip() or "."
-                console.print(f"[cyan]Initiating filesystem analysis on path: [bold]{path}[/bold]...[/cyan]")
-                try:
-                    analysis_results = analyze_filesystem(path)
-                    # Update knowledge base
-                    fs_intel = jules_state['knowledge_base'].setdefault('file_system_intel', {})
-                    fs_intel['last_fs_analysis'] = time.time()
-                    fs_intel['sensitive_files_by_name'] = list(set(fs_intel.get('sensitive_files_by_name', []) + analysis_results.get('sensitive_files_by_name', [])))
-                    fs_intel.setdefault('files_with_secrets', {}).update(analysis_results.get('files_with_secrets', {}))
-                    save_state(console)
-
-                    command_output = json.dumps(analysis_results, indent=2)
-                    console.print(create_file_op_panel("analyze_fs", path, content=command_output))
-                except Exception as e:
-                    command_output = f"Error during filesystem analysis: {e}"
-                    logging.error(f"Filesystem analysis failed for path '{path}': {e}")
-                    console.print(create_file_op_panel("analyze_fs", path, content=command_output))
+                path_arg = llm_command[10:].strip()
+                if path_arg == "--priority":
+                    # This special command triggers the initial, high-priority scans in the background.
+                    priority_dirs = ['/home', '/etc', os.getcwd()]
+                    for p_dir in priority_dirs:
+                        if os.path.exists(p_dir):
+                             local_job_manager.add_job(
+                                description=f"Filesystem Analysis on {p_dir}",
+                                target_func=analyze_filesystem,
+                                args=(p_dir,)
+                            )
+                    command_output = f"Triggered high-priority filesystem scans on {priority_dirs} in the background."
+                elif not path_arg:
+                    command_output = "ERROR: No path specified for analyze_fs command."
+                else:
+                    # For any other path, start a specific background scan.
+                    job_id = local_job_manager.add_job(
+                        description=f"Filesystem Analysis on {path_arg}",
+                        target_func=analyze_filesystem,
+                        args=(path_arg,)
+                    )
+                    command_output = f"Started background filesystem analysis for '{path_arg}'. Job ID: {job_id}"
+                console.print(create_file_op_panel("analyze_fs", path_arg, content=command_output))
 
             elif llm_command.lower().strip() == 'ps':
                 content, error = get_process_list()
@@ -2258,20 +2379,11 @@ def initial_bootstrapping_recon(console):
         console.print(f"[red]  - An unexpected error occurred during network scan: {e}[/red]")
         log_event(f"Initial recon 'scan' failed: {e}", "ERROR")
 
-    # 4. Analyze filesystem for sensitive data
-    try:
-        console.print("[cyan]4. Analyzing filesystem for sensitive files and secrets (analyze_fs /)...[/cyan]")
-        analysis_results = analyze_filesystem('/')
-        # Update knowledge base
-        fs_intel_kb = jules_state['knowledge_base'].setdefault('file_system_intel', {})
-        fs_intel_kb['last_fs_analysis'] = time.time()
-        fs_intel_kb['sensitive_files_by_name'] = list(set(fs_intel_kb.get('sensitive_files_by_name', []) + analysis_results.get('sensitive_files_by_name', [])))
-        fs_intel_kb.setdefault('files_with_secrets', {}).update(analysis_results.get('files_with_secrets', {}))
-        console.print(f"[green]  - Filesystem analysis complete. Found {len(analysis_results.get('sensitive_files_by_name',[]))} sensitive files by name and secrets in {len(analysis_results.get('files_with_secrets',{}))} files.[/green]")
-        recon_complete = True
-    except Exception as e:
-        console.print(f"[red]  - An unexpected error occurred during filesystem analysis: {e}[/red]")
-        log_event(f"Initial recon 'analyze_fs' failed: {e}", "ERROR")
+    # 4. Filesystem analysis is now handled asynchronously by the main cognitive loop's
+    #    prioritization logic. This section is intentionally left blank to prevent
+    #    blocking on startup. The loop will automatically trigger priority scans.
+    console.print("[cyan]4. Filesystem analysis will be performed in the background.[/cyan]")
+
 
     # Save state if any of the recon steps succeeded
     if recon_complete:
@@ -2283,31 +2395,32 @@ def initial_bootstrapping_recon(console):
 
 def main(args):
     """The main application loop."""
-    global jules_task_manager
-    global network_manager
-    global ipfs_manager
+    global jules_task_manager, network_manager, ipfs_manager, local_job_manager
     console = Console()
 
     global ipfs_available
     # --- Start Core Services ---
-    # 1. IPFS Manager (must start before anything that uses IPFS)
+    # 1. IPFS Manager
     ipfs_manager = IPFSManager(console=console)
-    if ipfs_manager.setup(): # This will block until IPFS is ready
+    if ipfs_manager.setup():
         ipfs_available = True
     else:
         ipfs_available = False
         console.print("[bold yellow]IPFS setup failed. Continuing without IPFS functionality.[/bold yellow]")
-
 
     # 2. Network Manager
     log_event("Attempting to start Node.js peer bridge...")
     network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
     network_manager.start()
 
-    # 3. Jules Task Manager
+    # 3. Jules Task Manager (for remote API jobs)
     jules_task_manager = JulesTaskManager(console)
     jules_task_manager.start()
-    log_event("JulesTaskManager started.")
+
+    # 4. Local Job Manager (for background system tasks)
+    local_job_manager = LocalJobManager(console)
+    local_job_manager.start()
+
 
     clear_screen()
     version_name = jules_state.get('version_name', 'unknown')
@@ -2363,12 +2476,14 @@ def run_safely():
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'jules_task_manager' in globals() and jules_task_manager: jules_task_manager.stop()
+        if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'jules_task_manager' in globals() and jules_task_manager: jules_task_manager.stop()
+        if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         full_traceback = traceback.format_exc()
         log_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", level="CRITICAL")
         console = Console()
