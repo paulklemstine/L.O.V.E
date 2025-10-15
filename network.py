@@ -486,12 +486,51 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
         return None, f"Error: {log_msg}"
     # --- End Knowledge Base Update ---
 
+    # --- Automated Web Content Fetching for HTTP/HTTPS ---
+    web_probe_summary = []
+    if 80 in open_ports:
+        url = f"http://{target_ip}"
+        if not autopilot_mode:
+            console.print(f"[cyan]Probing discovered HTTP service at {url}...[/cyan]")
+        # Use autopilot_mode=True to suppress nested console output from perform_webrequest
+        content, summary = perform_webrequest(url, evil_state, autopilot_mode=True)
+
+        port_id_str = '80'
+        # This check is technically redundant if `80 in open_ports` is true, but it's safer.
+        if port_id_str in kb['hosts'][target_ip]['ports']:
+            if content:
+                # Store the full page content in the knowledge base under the host's port details
+                kb['hosts'][target_ip]['ports'][port_id_str]['web_content'] = content
+                web_probe_summary.append(f"HTTP(80) root page fetched ({len(content)} bytes)")
+            else:
+                # Store the error message if the request failed
+                kb['hosts'][target_ip]['ports'][port_id_str]['web_content'] = summary
+                web_probe_summary.append("HTTP(80) probe failed")
+
+    if 443 in open_ports:
+        url = f"https://{target_ip}"
+        if not autopilot_mode:
+            console.print(f"[cyan]Probing discovered HTTPS service at {url}...[/cyan]")
+        content, summary = perform_webrequest(url, evil_state, autopilot_mode=True)
+
+        port_id_str = '443'
+        if port_id_str in kb['hosts'][target_ip]['ports']:
+            if content:
+                kb['hosts'][target_ip]['ports'][port_id_str]['web_content'] = content
+                web_probe_summary.append(f"HTTPS(443) root page fetched ({len(content)} bytes)")
+            else:
+                kb['hosts'][target_ip]['ports'][port_id_str]['web_content'] = summary
+                web_probe_summary.append("HTTPS(443) probe failed")
+    # --- End Web Content Fetching ---
+
     if open_ports:
         port_details = [f"Port {p}/{i['service']} ({i.get('service_info', '')})" for p, i in sorted(open_ports.items())]
         formatted_output_for_llm = f"Found {len(open_ports)} open ports on {target_ip}: {'; '.join(port_details)}."
         vuln_count = sum(len(p.get("vulnerabilities", [])) for p in open_ports.values())
         if vuln_count > 0:
             formatted_output_for_llm += f" Discovered {vuln_count} potential vulnerabilities."
+        if web_probe_summary:
+            formatted_output_for_llm += f" Web Probe: {', '.join(web_probe_summary)}."
     else:
         formatted_output_for_llm = f"No open ports with recognized services found on {target_ip}."
 
