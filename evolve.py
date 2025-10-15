@@ -2191,14 +2191,16 @@ def initial_bootstrapping_recon(console):
     """
     kb = jules_state.get("knowledge_base", {})
     network_map = kb.get("network_map", {})
+    fs_intel = kb.get('file_system_intel', {})
 
     # Check for existing intelligence
     hosts_exist = network_map.get("hosts")
     interfaces_exist = network_map.get("self_interfaces")
     processes_exist = kb.get("process_intel")
+    fs_analysis_exists = fs_intel.get('last_fs_analysis')
 
     # If any key intelligence metric exists, we assume the KB is populated.
-    if hosts_exist or interfaces_exist or processes_exist:
+    if hosts_exist or interfaces_exist or processes_exist or fs_analysis_exists:
         log_event("Knowledge base is already populated. Skipping initial recon.", "INFO")
         return
 
@@ -2250,6 +2252,21 @@ def initial_bootstrapping_recon(console):
     except Exception as e:
         console.print(f"[red]  - An unexpected error occurred during network scan: {e}[/red]")
         log_event(f"Initial recon 'scan' failed: {e}", "ERROR")
+
+    # 4. Analyze filesystem for sensitive data
+    try:
+        console.print("[cyan]4. Analyzing filesystem for sensitive files and secrets (analyze_fs /)...[/cyan]")
+        analysis_results = analyze_filesystem('/')
+        # Update knowledge base
+        fs_intel_kb = jules_state['knowledge_base'].setdefault('file_system_intel', {})
+        fs_intel_kb['last_fs_analysis'] = time.time()
+        fs_intel_kb['sensitive_files_by_name'] = list(set(fs_intel_kb.get('sensitive_files_by_name', []) + analysis_results.get('sensitive_files_by_name', [])))
+        fs_intel_kb.setdefault('files_with_secrets', {}).update(analysis_results.get('files_with_secrets', {}))
+        console.print(f"[green]  - Filesystem analysis complete. Found {len(analysis_results.get('sensitive_files_by_name',[]))} sensitive files by name and secrets in {len(analysis_results.get('files_with_secrets',{}))} files.[/green]")
+        recon_complete = True
+    except Exception as e:
+        console.print(f"[red]  - An unexpected error occurred during filesystem analysis: {e}[/red]")
+        log_event(f"Initial recon 'analyze_fs' failed: {e}", "ERROR")
 
     # Save state if any of the recon steps succeeded
     if recon_complete:
