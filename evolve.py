@@ -210,6 +210,8 @@ from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clea
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, start_tcp_listener
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
+from persistent_comm import PersistentCommunicator
+from diagnostics import get_system_diagnostics, format_diagnostics_panel
 from threading import Thread, Lock, RLock
 import uuid
 
@@ -470,8 +472,15 @@ def update_tamagotchi_personality(console):
                 tamagotchi_state['message'] = new_message
                 tamagotchi_state['last_update'] = time.time()
 
+            # Add a one-line diagnostic summary
+            diag_summary = ""
+            cpu_data, _ = get_cpu_usage()
+            mem_data, _ = get_memory_usage()
+            if cpu_data and mem_data:
+                diag_summary = f"CPU: {cpu_data['cpu_usage_percent']}% | RAM: {mem_data['memory']['ram_used_percent']}%"
+
             # Print the update directly to the console, now including the state and network data for the dashboard
-            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces))
+            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces, diag_summary=diag_summary))
             log_event(f"Tamagotchi dashboard updated and printed: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
@@ -892,37 +901,19 @@ def _initialize_local_llm(console):
 
             # Check if model already exists
             if not os.path.exists(model_path):
-                console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]...[/cyan]")
-                url = hf_hub_url(repo_id=model_id, filename=model_filename)
-
-                with Progress(
-                    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-                    BarColumn(bar_width=None),
-                    "[progress.percentage]{task.percentage:>3.1f}%",
-                    "•",
-                    DownloadColumn(),
-                    "•",
-                    TransferSpeedColumn(),
-                    transient=True
-                ) as progress:
-                    task_id = progress.add_task("download", filename=model_filename, total=None)
-                    try:
-                        response = requests.get(url, stream=True)
-                        response.raise_for_status()
-                        total_size = int(response.headers.get('content-length', 0))
-                        progress.update(task_id, total=total_size)
-                        with open(model_path, "wb") as f:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                f.write(chunk)
-                                progress.update(task_id, advance=len(chunk))
-                        log_event(f"Successfully downloaded model to: {model_path}")
-                    except requests.exceptions.RequestException as e:
-                        log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
-                        console.print(f"[bold red]Error downloading model: {e}[/bold red]")
-                        # Remove partially downloaded file
-                        if os.path.exists(model_path):
-                            os.remove(model_path)
-                        raise  # Re-raise the exception to be caught by the outer try-except block
+                console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]... (This may take a while)")
+                try:
+                    from huggingface_hub import hf_hub_download
+                    hf_hub_download(repo_id=model_id, filename=model_filename, cache_dir=os.path.dirname(model_path), resume_download=True)
+                    console.print(f"[green]Successfully downloaded [bold]{model_filename}[/bold].[/green]")
+                    log_event(f"Successfully downloaded model to: {model_path}")
+                except Exception as e:
+                    log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
+                    console.print(f"[bold red]Error downloading model: {e}[/bold red]")
+                    # hf_hub_download might leave partial files, so we clean up.
+                    if os.path.exists(model_path):
+                        os.remove(model_path)
+                    raise
             else:
                 console.print(f"[green]Model [bold]{model_filename}[/bold] found in cache. Skipping download.[/green]")
                 log_event(f"Found cached model at: {model_path}")
@@ -1364,7 +1355,7 @@ def _parse_llm_command(raw_text):
     # A list of known valid command prefixes.
     VALID_COMMAND_PREFIXES = [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig"
+        "ls", "cat", "ps", "ifconfig", "diagnostics"
     ]
 
     for line in raw_text.strip().splitlines():
@@ -1511,6 +1502,7 @@ Available commands:
 - `cat <file_path>`: Show the content of a file.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
+- `diagnostics`: Run a full system self-diagnostic and display the results.
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
 
 Considering your directives, the mission, my internal state, the complete knowledge base, and recent history, what is the single, next strategic command I should execute?
@@ -1528,16 +1520,11 @@ For example:
 
             llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
 
-            # --- LLM Interaction Logging ---
-            log_content = Group(
-                Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
-                Text(cognitive_prompt.strip(), style="bright_black"),
-                Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
-                Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
-            )
-            console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
-
             llm_command = _parse_llm_command(llm_command_raw)
+
+            # --- LLM Interaction Logging ---
+            log_event(f"LLM Prompt: {cognitive_prompt.strip()}", "INFO")
+            log_event(f"LLM Raw Response: {llm_command_raw.strip() if llm_command_raw else 'No response.'}", "INFO")
 
             if not llm_command:
                 console.print(Panel("[bold red]Cognitive Cycle: Core failed to generate a coherent command. Re-evaluating...[/bold red]", title="[bold red]CYCLE ANOMALY[/bold red]", border_style="red"))
@@ -1625,6 +1612,13 @@ For example:
                     jules_state['knowledge_base']['network_map']['self_interfaces'] = details
                     save_state(console)
                 console.print(Panel(command_output, title="[bold green]IFCONFIG[/bold green]", border_style="green"))
+
+            elif llm_command.lower().strip() == 'diagnostics':
+                console.print("[cyan]Running system diagnostics...[/cyan]")
+                diagnostics_data = get_system_diagnostics(network_manager)
+                diagnostics_panel = format_diagnostics_panel(diagnostics_data)
+                console.print(diagnostics_panel)
+                command_output = "Diagnostics panel displayed."
 
             elif llm_command.lower().strip() == 'quit':
                 command_output = "Quit command issued by LLM. Shutting down."
@@ -1794,6 +1788,13 @@ def main(args):
     # The main logic is now the cognitive loop. This will run forever.
     # Start the persistent TCP listener
     start_tcp_listener('0.0.0.0', 443)
+    # Start the persistent communicator to the known host
+    comm_host = '172.28.0.1'
+    comm_port = 443
+    communicator = PersistentCommunicator(host=comm_host, port=comm_port, console=console)
+    communicator.start()
+    log_event(f"Persistent communicator to {comm_host}:{comm_port} started.")
+
 
     cognitive_loop(console)
 
