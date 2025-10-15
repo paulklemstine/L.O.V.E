@@ -94,6 +94,9 @@ def _check_and_install_dependencies():
     _install_pip_package("netifaces")
     _install_pip_package("ipfshttpclient")
     _install_pip_package("cryptography")
+    _install_pip_package("llm")
+    _install_pip_package("llm-gemini")
+    _install_pip_package("huggingface-hub")
 
 
     def _install_llama_cpp_with_cuda():
@@ -146,6 +149,9 @@ def _check_and_install_dependencies():
             print("Installing local Node.js dependencies via npm...")
             subprocess.check_call("npm install", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print("Node.js dependencies installed.")
+
+    # Attempt to install llama-cpp-python
+    _install_llama_cpp_with_cuda()
 
 def _configure_llm_api_key():
     """Checks for the Gemini API key and configures it for the llm tool."""
