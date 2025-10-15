@@ -92,16 +92,47 @@ def _check_and_install_dependencies():
     """
     Ensures all required dependencies are installed before the script attempts to import or use them.
     This function is self-contained and does not rely on external code from this script.
+    The order of operations is critical: System dependencies, then Pip packages, then complex builds.
     """
+    # --- Step 1: System-level dependencies (Linux only) ---
+    if CAPS.os == "Linux" and not CAPS.is_termux:
+        # Install build tools FIRST, as they are needed for compiling pip packages.
+        try:
+            print("Ensuring build tools (build-essential, python3-dev) are installed...")
+            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("Build tools check complete.")
+        except Exception as e:
+            print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
+            log_event(f"Failed to install build-essential/python3-dev: {e}", level="WARNING")
+
+        # Install NVIDIA CUDA Toolkit if not present
+        if not shutil.which('nvcc'):
+            print("NVIDIA CUDA Toolkit not found. Attempting to install...")
+            try:
+                subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call("sudo apt-get update -q", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
+                print("Successfully installed NVIDIA CUDA Toolkit.")
+                log_event("Successfully installed NVIDIA CUDA Toolkit.")
+            except Exception as e:
+                print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
+                log_event(f"CUDA Toolkit installation failed: {e}", level="WARNING")
+
+        # Install Node.js and PeerJS dependencies
+        if not shutil.which('node') or not shutil.which('npm'):
+            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # --- Step 2: Python Package Installation ---
     def _install_pip_package(package, upgrade=False):
         package_name = package.split('==')[0].split('>')[0].split('<')[0]
-        # For non-upgrade cases, check if it's already there.
         if not upgrade:
             try:
                 __import__(package_name)
-                return # Already installed
+                return
             except ImportError:
-                pass # Not installed, proceed to install
+                pass
 
         print(f"Installing Python package: {package}...")
         install_command = [sys.executable, '-m', 'pip', 'install', package]
@@ -109,11 +140,15 @@ def _check_and_install_dependencies():
             install_command.append('--upgrade')
 
         try:
+            # We suppress output here to keep the console clean for successful installs.
+            # The CalledProcessError exception will still trigger on failure.
             subprocess.check_call(install_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print(f"Successfully installed {package}.")
         except subprocess.CalledProcessError as e:
             print(f"ERROR: Failed to install '{package}'. Reason: {e}")
             log_event(f"Failed to install pip package {package}: {e}", level="ERROR")
+            # For debugging, one could re-run with output enabled:
+            # subprocess.check_call(install_command)
 
     _install_pip_package("requests")
     _install_pip_package("rich")
@@ -124,7 +159,7 @@ def _check_and_install_dependencies():
     _install_pip_package("llm-gemini")
     _install_pip_package("huggingface-hub")
 
-
+    # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
         """Installs llama-cpp-python, setting build flags based on detected hardware."""
         try:
@@ -144,7 +179,6 @@ def _check_and_install_dependencies():
                 env['CMAKE_ARGS'] = "-DGGML_METAL=on"
             else:
                 print("Attempting to install llama-cpp-python for CPU...")
-                # No special CMAKE_ARGS needed for CPU-only build
 
             try:
                 subprocess.check_call(install_args, env=env)
@@ -158,38 +192,13 @@ def _check_and_install_dependencies():
                 log_event(error_message, level="ERROR")
                 return False
 
-    # --- System-level dependencies ---
-    # This block is skipped on Termux, as the setup.sh script handles it via `pkg`.
-    if CAPS.os == "Linux" and not CAPS.is_termux:
-        # Install NVIDIA CUDA Toolkit if not present
-        if not shutil.which('nvcc'):
-            print("NVIDIA CUDA Toolkit not found. Attempting to install...")
-            try:
-                # Add NVIDIA's repository
-                subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.check_call("sudo apt-get update -q", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                # Install the toolkit
-                subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
-                print("Successfully installed NVIDIA CUDA Toolkit.")
-                log_event("Successfully installed NVIDIA CUDA Toolkit.")
-            except Exception as e:
-                print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
-                log_event(f"CUDA Toolkit installation failed: {e}", level="WARNING")
-
-        # Install Node.js and PeerJS dependencies
-        if not shutil.which('node') or not shutil.which('npm'):
-            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-        # Install local npm packages
-        if os.path.exists('package.json'):
-            print("Installing local Node.js dependencies via npm...")
-            subprocess.check_call("npm install", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print("Node.js dependencies installed.")
-
-    # Attempt to install llama-cpp-python
     _install_llama_cpp()
+
+    # --- Step 4: Node.js Project Dependencies ---
+    if os.path.exists('package.json'):
+        print("Installing local Node.js dependencies via npm...")
+        subprocess.check_call("npm install", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("Node.js dependencies installed.")
 
 def _configure_llm_api_key():
     """Checks for the Gemini API key and configures it for the llm tool."""
