@@ -5,7 +5,8 @@
   "main": "peer_bridge.js",
   "dependencies": {
     "peerjs": "^1.5.4",
-    "@roamhq/wrtc": "^0.5.2"
+    "@roamhq/wrtc": "^0.5.2",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "patch-package": "^8.0.0"
