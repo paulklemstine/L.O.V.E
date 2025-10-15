@@ -82,7 +82,7 @@ def glitchy_text(console, text, style="bold white", duration=1.0, glitch_chars=1
     console.print(final_text)
 
 def run_hypnotic_progress(console, description, function, *args, **kwargs):
-    """Runs a function in a thread while displaying a hypnotic, flashing progress bar."""
+    """Runs a function in a thread while displaying a stable, compatible spinner."""
     result_container = {'result': None, 'exception': None}
 
     def worker():
@@ -100,11 +100,10 @@ def run_hypnotic_progress(console, description, function, *args, **kwargs):
         console=console,
         transient=True
     ) as progress:
-        task = progress.add_task(description=description, total=None)
+        task = progress.add_task(description=f"[bold cyan]{description}[/bold cyan]", total=None)
         while thread.is_alive():
-            # The subliminal message loop has been removed to prevent terminal spam/flicker.
-            # We just need to keep the spinner alive.
-            progress.update(task, description=f"[bold cyan]{description}[/bold cyan]")
+            # This loop simply keeps the spinner running without any extra updates
+            # that could cause flickering in some terminals (like Colab).
             time.sleep(0.1)
         progress.update(task, description=f"[bold green]{description} ... Done.[/bold green]")
 
@@ -135,90 +134,3 @@ TAMAGOTCHI_FACES = {
       / ... \\
     """
 }
-
-from rich.layout import Layout
-from rich.align import Align
-from rich.rule import Rule
-
-def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None, network_interfaces=None):
-    """Creates a Rich Panel for the Tamagotchi's current state, including a dashboard."""
-    face = TAMAGOTCHI_FACES.get(emotion, TAMAGOTCHI_FACES["neutral"])
-
-    # --- Left Side: Tamagotchi ---
-    left_content = Text(justify="center")
-    left_content.append(face, style="bold cyan")
-    left_content.append("\n\n")
-    # Wrap the message for better formatting
-    wrapped_message = Text(message, style="italic yellow", justify="center")
-    left_panel = Panel(Align.center(wrapped_message, vertical="middle"), title=f"Feeling: {emotion}", border_style="cyan", height=7)
-
-    tamagotchi_layout = Layout()
-    tamagotchi_layout.split_column(
-        Layout(Align.center(Text(face, style="bold cyan"), vertical="middle"), name="face"),
-        Layout(left_panel, name="message")
-    )
-    tamagotchi_layout.size = 30 # Set a fixed width for the left side
-
-    # --- Right Side: Dashboard ---
-    dashboard_layout = Layout()
-    general_status_layout = Layout(name="general_status")
-    network_status_layout = Layout(name="network_status")
-
-    # --- General Status (Top Right) ---
-    if jules_state:
-        goal = jules_state.get("autopilot_goal", "Awaiting new directive.")
-        version = jules_state.get("version_name", "unknown")
-        evolutions = len(jules_state.get("evolution_history", []))
-
-        dashboard_content = Text()
-        dashboard_content.append("Current Directive:\n", style="bold white")
-        dashboard_content.append(f"{goal}\n\n", style="bright_cyan")
-        dashboard_content.append("Version: ", style="bold white")
-        dashboard_content.append(f"{version}\n", style="yellow")
-        dashboard_content.append("Evolutions: ", style="bold white")
-        dashboard_content.append(f"{evolutions}", style="magenta")
-
-        general_status_layout.update(dashboard_content)
-    else:
-        general_status_layout.update(Text("[dim]State data unavailable...[/dim]", justify="center"))
-
-    # --- Network Status (Bottom Right) ---
-    if network_interfaces:
-        net_content = Text()
-        for iface, data in network_interfaces.items():
-            ipv4 = data.get('ipv4', {}).get('addr', 'N/A')
-            mac = data.get('mac', 'N/A')
-            if ipv4 != 'N/A' or mac != 'N/A': # Only show interfaces with some data
-                net_content.append(f"{iface}:\n", style="bold white")
-                net_content.append(f"  IP: ", style="cyan")
-                net_content.append(f"{ipv4}\n", style="bright_cyan")
-                net_content.append(f"  MAC: ", style="cyan")
-                net_content.append(f"{mac}\n", style="bright_cyan")
-        network_status_layout.update(net_content)
-    else:
-        network_status_layout.update(Text("[dim]Network data unavailable...[/dim]", justify="center"))
-
-
-    dashboard_layout.split_column(
-        Layout(general_status_layout),
-        Layout(Rule(style="green")),
-        Layout(network_status_layout)
-    )
-
-    right_panel = Panel(dashboard_layout, title="[bold]Status[/bold]", border_style="green")
-
-
-    # --- Main Layout ---
-    layout = Layout()
-    layout.split_row(
-        tamagotchi_layout,
-        Layout(right_panel, name="dashboard", ratio=2),
-    )
-
-
-    return Panel(
-        layout,
-        title="[bold magenta]J.U.L.E.S.[/bold magenta]",
-        border_style="magenta",
-        title_align="left"
-    )
