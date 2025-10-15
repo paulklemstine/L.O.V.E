@@ -14,6 +14,7 @@ import traceback
 import argparse
 import logging
 import platform
+from datetime import datetime, timedelta
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "jules.log"
@@ -1477,6 +1478,35 @@ def cognitive_loop(console):
 
     while True:
         try:
+            # --- Network Reconnaissance Prioritization ---
+            llm_command = None
+            hosts = jules_state.get('knowledge_base', {}).get('network_map', {}).get('hosts', {})
+            if hosts:
+                twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
+                unprobed_hosts = []
+                for ip, details in hosts.items():
+                    last_probed_str = details.get("last_probed")
+                    if last_probed_str:
+                        try:
+                            last_probed_dt = datetime.fromisoformat(last_probed_str)
+                            if last_probed_dt < twenty_four_hours_ago:
+                                unprobed_hosts.append(ip)
+                        except (ValueError, TypeError):
+                            # Handle cases where the timestamp is invalid or not a string
+                            unprobed_hosts.append(ip)
+                    else:
+                        unprobed_hosts.append(ip)
+
+                if unprobed_hosts:
+                    target_ip = random.choice(unprobed_hosts)
+                    llm_command = f"probe {target_ip}"
+                    log_event(f"Prioritizing reconnaissance: Stale host {target_ip} found. Issuing probe.", level="INFO")
+                    console.print(Panel(f"[bold cyan]Prioritizing network reconnaissance. Stale host [white]{target_ip}[/white] requires probing.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
+                    # Update the probed timestamp immediately
+                    jules_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
+                    save_state(console)
+
+
             history_summary = "\n".join([f"CMD: {entry['command']}\nOUT: {entry['output']}" for entry in jules_state["autopilot_history"][-5:]])
             state_summary = json.dumps({
                 "version_name": jules_state.get("version_name", "unknown"),
@@ -1540,20 +1570,21 @@ For example:
 - `execute pwd`
 - `evolve`
 """
-            console.print(Panel("[bold magenta]Cognitive Cycle: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
+            if not llm_command:
+                console.print(Panel("[bold magenta]Cognitive Cycle: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
-            llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
+                llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
 
-            # --- LLM Interaction Logging ---
-            log_content = Group(
-                Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
-                Text(cognitive_prompt.strip(), style="bright_black"),
-                Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
-                Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
-            )
-            console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
+                # --- LLM Interaction Logging ---
+                log_content = Group(
+                    Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
+                    Text(cognitive_prompt.strip(), style="bright_black"),
+                    Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
+                    Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
+                )
+                console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
 
-            llm_command = _parse_llm_command(llm_command_raw)
+                llm_command = _parse_llm_command(llm_command_raw)
 
             if not llm_command:
                 console.print(Panel("[bold red]Cognitive Cycle: Core failed to generate a coherent command. Re-evaluating...[/bold red]", title="[bold red]CYCLE ANOMALY[/bold red]", border_style="red"))
