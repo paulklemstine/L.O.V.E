@@ -21,7 +21,6 @@ class IPFSManager:
         self.bin_path = os.path.abspath(bin_path)
         self.log_file = "ipfs.log"
         self.daemon_process = None
-        self.required_version = "0.7.0"
         self.kubo_repo_url = "https://github.com/ipfs/kubo.git"
         self.kubo_dir = os.path.abspath("./kubo")
 
@@ -70,26 +69,12 @@ class IPFSManager:
             self.console.print("[bold red]Go installation not automated for this OS. Please install Go manually.[/bold red]")
             return False
 
-    def _check_ipfs_binary(self):
-        """Checks if the correct IPFS binary exists and is the right version."""
-        if not os.path.exists(self.bin_path):
-            return False
-
-        self.console.print(f"[cyan]Found existing IPFS binary at {self.bin_path}. Verifying version...[/cyan]")
-        success, output = self._run_command([self.bin_path, "version"])
-        if success and f"ipfs version {self.required_version}" in output:
-            self.console.print(f"[green]IPFS version {self.required_version} confirmed.[/green]")
-            return True
-
-        self.console.print(f"[yellow]Incorrect IPFS version found. Expected {self.required_version}.[/yellow]")
-        return False
-
     def _install_ipfs(self):
-        """Clones, checks out, and builds the IPFS binary from source."""
+        """Clones and builds the latest IPFS binary from source."""
         if not self._check_go_installed():
             return False
 
-        self.console.print(f"[cyan]Installing IPFS version {self.required_version} from source...[/cyan]")
+        self.console.print(f"[cyan]Installing latest IPFS version from source...[/cyan]")
 
         # Clean up old artifacts if they exist
         if os.path.exists(self.kubo_dir):
@@ -98,19 +83,12 @@ class IPFSManager:
 
         # 1. Clone the repo
         self.console.print(f"[cyan]Cloning {self.kubo_repo_url}...[/cyan]")
-        success, _ = self._run_command(["git", "clone", self.kubo_repo_url, self.kubo_dir])
+        success, _ = self._run_command(["git", "clone", "--depth", "1", self.kubo_repo_url, self.kubo_dir])
         if not success:
             self.console.print("[bold red]Failed to clone kubo repository.[/bold red]")
             return False
 
-        # 2. Check out the specific tag
-        self.console.print(f"[cyan]Checking out tag v{self.required_version}...[/cyan]")
-        success, _ = self._run_command(["git", "checkout", f"v{self.required_version}"], cwd=self.kubo_dir)
-        if not success:
-            self.console.print(f"[bold red]Failed to checkout tag v{self.required_version}.[/bold red]")
-            return False
-
-        # 3. Build the binary
+        # 2. Build the binary
         self.console.print("[cyan]Compiling IPFS binary with 'go build'...[/cyan]")
         # The output of 'go build' is 'kubo' in the cmd directory.
         build_command = ["go", "build", "-o", self.bin_path, "./cmd/ipfs"]
@@ -192,11 +170,13 @@ class IPFSManager:
         Orchestrates the checking, installation, and running of the daemon.
         """
         self.console.print("[bold magenta]=== IPFS Self-Management Initialized ===[/bold magenta]")
-        if not self._check_ipfs_binary():
-            self.console.print("[yellow]IPFS binary not found or version is incorrect.[/yellow]")
+        if not os.path.exists(self.bin_path):
+            self.console.print("[yellow]IPFS binary not found. Proceeding with installation.[/yellow]")
             if not self._install_ipfs():
                 self.console.print("[bold red]FATAL: IPFS installation failed. Cannot continue.[/bold red]")
                 sys.exit(1)
+        else:
+            self.console.print("[green]IPFS binary found. Skipping installation.[/green]")
 
         if not self.start_daemon():
             self.console.print("[bold red]FATAL: Could not start the IPFS daemon. Cannot continue.[/bold red]")
