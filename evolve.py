@@ -192,6 +192,13 @@ def _configure_llm_api_key():
             if hasattr(e, 'stderr'):
                 print(f"  Details: {e.stderr}")
 
+
+# --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
+# Run dependency checks immediately, before any other imports that might fail.
+_check_and_install_dependencies()
+_configure_llm_api_key()
+
+
 import requests
 # Now, it's safe to import everything else.
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
@@ -1712,10 +1719,6 @@ def run_safely():
     args = parser.parse_args()
 
     try:
-        # Run dependency checks after parsing args and before main logic
-        _check_and_install_dependencies()
-        _configure_llm_api_key()
-
         # Load the state first, which might contain the autopilot_mode setting
         load_state(ipfs_cid=args.from_ipfs)
         log_event(f"--- J.U.L.E.S. Version '{jules_state.get('version_name', 'unknown')}' session started ---")
