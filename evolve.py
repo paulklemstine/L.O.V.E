@@ -212,8 +212,6 @@ from network import NetworkManager, scan_network, probe_target, perform_webreque
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from ipfs_manager import IPFSManager
-from persistent_comm import PersistentCommunicator
-from diagnostics import get_system_diagnostics, format_diagnostics_panel
 from threading import Thread, Lock, RLock
 import uuid
 
@@ -1697,21 +1695,6 @@ def main(args):
     tamagotchi_thread.start()
 
     # The main logic is now the cognitive loop. This will run forever.
-    # Start the persistent TCP listener
-    # start_tcp_listener('0.0.0.0', 443) # This seems redundant, removing for now
-    # Start the persistent communicator to the known host
-    comm_host = '172.28.0.1'
-    comm_port = 443
-    communicator = PersistentCommunicator(host=comm_host, port=comm_port, console=console)
-    communicator.start()
-    log_event(f"Persistent communicator to {comm_host}:{comm_port} started.")
-
-    # Start the persistent TCP listener for real-time communication
-    # listener_host = '0.0.0.0'
-    # listener_port = 443
-    # start_tcp_listener(host=listener_host, port=listener_port, evil_state=jules_state)
-    # log_event(f"Persistent TCP listener started on {listener_host}:{listener_port}.")
-
     cognitive_loop(console)
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
