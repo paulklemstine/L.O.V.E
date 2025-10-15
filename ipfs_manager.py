@@ -255,6 +255,12 @@ class IPFSManager:
                 self.console.print(f"[bold red]Failed to initialize IPFS repository. Error:\n{output}[/bold red]")
                 return False
 
+        # Configure ports to non-default values to avoid conflicts
+        self.console.print("[cyan]Configuring IPFS API and Gateway ports to avoid conflicts...[/cyan]")
+        self._run_command([self.bin_path, "config", "Addresses.API", "/ip4/127.0.0.1/tcp/5002"], env=env)
+        self._run_command([self.bin_path, "config", "Addresses.Gateway", "/ip4/127.0.0.1/tcp/8888"], env=env)
+
+
         # 2. Start the daemon
         self.console.print("[cyan]Starting IPFS daemon in the background...[/cyan]")
         try:
