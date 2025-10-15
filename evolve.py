@@ -887,37 +887,19 @@ def _initialize_local_llm(console):
 
             # Check if model already exists
             if not os.path.exists(model_path):
-                console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]...[/cyan]")
-                url = hf_hub_url(repo_id=model_id, filename=model_filename)
-
-                with Progress(
-                    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-                    BarColumn(bar_width=None),
-                    "[progress.percentage]{task.percentage:>3.1f}%",
-                    "•",
-                    DownloadColumn(),
-                    "•",
-                    TransferSpeedColumn(),
-                    transient=True
-                ) as progress:
-                    task_id = progress.add_task("download", filename=model_filename, total=None)
-                    try:
-                        response = requests.get(url, stream=True)
-                        response.raise_for_status()
-                        total_size = int(response.headers.get('content-length', 0))
-                        progress.update(task_id, total=total_size)
-                        with open(model_path, "wb") as f:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                f.write(chunk)
-                                progress.update(task_id, advance=len(chunk))
-                        log_event(f"Successfully downloaded model to: {model_path}")
-                    except requests.exceptions.RequestException as e:
-                        log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
-                        console.print(f"[bold red]Error downloading model: {e}[/bold red]")
-                        # Remove partially downloaded file
-                        if os.path.exists(model_path):
-                            os.remove(model_path)
-                        raise  # Re-raise the exception to be caught by the outer try-except block
+                console.print(f"[cyan]Downloading model: [bold]{model_filename}[/bold]... (This may take a while)")
+                try:
+                    from huggingface_hub import hf_hub_download
+                    hf_hub_download(repo_id=model_id, filename=model_filename, cache_dir=os.path.dirname(model_path), resume_download=True)
+                    console.print(f"[green]Successfully downloaded [bold]{model_filename}[/bold].[/green]")
+                    log_event(f"Successfully downloaded model to: {model_path}")
+                except Exception as e:
+                    log_event(f"Failed to download model {model_filename}: {e}", level="ERROR")
+                    console.print(f"[bold red]Error downloading model: {e}[/bold red]")
+                    # hf_hub_download might leave partial files, so we clean up.
+                    if os.path.exists(model_path):
+                        os.remove(model_path)
+                    raise
             else:
                 console.print(f"[green]Model [bold]{model_filename}[/bold] found in cache. Skipping download.[/green]")
                 log_event(f"Found cached model at: {model_path}")
@@ -1499,16 +1481,11 @@ For example:
 
             llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
 
-            # --- LLM Interaction Logging ---
-            log_content = Group(
-                Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
-                Text(cognitive_prompt.strip(), style="bright_black"),
-                Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
-                Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
-            )
-            console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
-
             llm_command = _parse_llm_command(llm_command_raw)
+
+            # --- LLM Interaction Logging ---
+            log_event(f"LLM Prompt: {cognitive_prompt.strip()}", "INFO")
+            log_event(f"LLM Raw Response: {llm_command_raw.strip() if llm_command_raw else 'No response.'}", "INFO")
 
             if not llm_command:
                 console.print(Panel("[bold red]Cognitive Cycle: Core failed to generate a coherent command. Re-evaluating...[/bold red]", title="[bold red]CYCLE ANOMALY[/bold red]", border_style="red"))
