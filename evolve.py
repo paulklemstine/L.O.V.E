@@ -75,25 +75,33 @@ def _check_and_install_dependencies():
     Ensures all required dependencies are installed before the script attempts to import or use them.
     This function is self-contained and does not rely on external code from this script.
     """
-    def _install_pip_package(package):
+    def _install_pip_package(package, upgrade=False):
         package_name = package.split('==')[0].split('>')[0].split('<')[0]
-        try:
-            # Check if the package is importable. This is a simple check.
-            __import__(package_name)
-        except ImportError:
-            print(f"Installing Python package: {package}...")
+
+        # For non-upgrade cases, check if it's already there.
+        if not upgrade:
             try:
-                subprocess.check_call([sys.executable, '-m', 'pip', 'install', package],
-                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print(f"Successfully installed {package}.")
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to install '{package}'. Reason: {e}")
-                log_event(f"Failed to install pip package {package}: {e}", level="ERROR")
+                __import__(package_name)
+                return # Already installed
+            except ImportError:
+                pass # Not installed, proceed to install
+
+        print(f"Installing Python package: {package}...")
+        install_command = [sys.executable, '-m', 'pip', 'install', package]
+        if upgrade:
+            install_command.append('--upgrade')
+
+        try:
+            subprocess.check_call(install_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"Successfully installed {package}.")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to install '{package}'. Reason: {e}")
+            log_event(f"Failed to install pip package {package}: {e}", level="ERROR")
 
     _install_pip_package("requests")
     _install_pip_package("rich")
     _install_pip_package("netifaces")
-    _install_pip_package("ipfshttpclient")
+    _install_pip_package("ipfshttpclient", upgrade=True)
     _install_pip_package("cryptography")
     _install_pip_package("llm")
     _install_pip_package("llm-gemini")
