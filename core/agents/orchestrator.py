@@ -31,22 +31,17 @@ class Orchestrator:
         )
         print("Orchestrator is ready.")
 
-    def execute_goal(self, goal: str):
+    async def execute_goal(self, goal: str):
         """
-        Takes a high-level goal and manages the entire process of planning,
-        tool use, and execution to achieve it.
-
-        Args:
-            goal: The high-level goal for the agent to accomplish.
-
-        Returns:
-            The final result of the execution.
+        Asynchronously takes a high-level goal and manages the entire process
+        of planning, tool use, and execution to achieve it.
         """
         if not isinstance(goal, str) or not goal:
             print("Error: Goal must be a non-empty string.")
             return
 
-        result = self.execution_engine.execute_plan(goal)
+        # Await the asynchronous execution of the plan
+        result = await self.execution_engine.execute_plan(goal)
 
         print("\n--- Orchestrator Final Report ---")
         print(f"Goal: {goal}")

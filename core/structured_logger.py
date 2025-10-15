@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 class StructuredEventLogger:
     def __init__(self, log_dir="logs"):
@@ -17,7 +17,7 @@ class StructuredEventLogger:
             data: A dictionary containing event-specific data.
         """
         log_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "event_type": event_type,
             "data": data
         }

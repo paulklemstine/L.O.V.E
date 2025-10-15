@@ -61,15 +61,9 @@ class ExecutionEngine:
         # If no tool is identified, it's a no-op task.
         return "no_op", {"task": task}
 
-    def execute_plan(self, goal: str) -> Dict[str, Any]:
+    async def execute_plan(self, goal: str) -> Dict[str, Any]:
         """
-        Takes a high-level goal, generates a plan, and executes it step-by-step.
-
-        Args:
-            goal: The high-level objective.
-
-        Returns:
-            A dictionary containing the final result and the state of the plan execution.
+        Takes a high-level goal, generates a plan, and executes it asynchronously.
         """
         print(f"\n===== Starting Execution for Goal: {goal} =====")
         plan = self.planner.decompose_goal(goal)
@@ -82,36 +76,25 @@ class ExecutionEngine:
             print(f"\n--- Executing Step {step['step']}: {step['task']} ---")
             step['status'] = 'in-progress'
 
-            # Determine the tool and arguments needed for the task
             tool_name, kwargs = self._determine_tool_and_args(step['task'])
 
             if tool_name == "no_op":
-                # If this is the designated final step, carry over the previous result.
                 if kwargs.get("is_final_step") and i > 0:
                     step['result'] = self.plan_state[i-1]['result']
-                    print(f"Final step identified. Carrying over result from step {i}.")
                 else:
                     step['result'] = f"Completed: {step['task']}"
-
-                print(f"No specific tool identified for task. Marking as complete.")
                 step['status'] = 'success'
                 continue
 
-            # Execute the tool
             self.logger.log_event("tool_start", {"tool_name": tool_name, "kwargs": kwargs})
-            result = self.executor.execute(tool_name, self.tool_registry, **kwargs)
+            result = await self.executor.execute(tool_name, self.tool_registry, **kwargs)
 
             if isinstance(result, str) and result.startswith("Error:"):
-                print(f"Error executing step {step['step']}. Halting execution.")
                 step['status'] = 'failed'
                 step['result'] = result
                 self.logger.log_event("tool_failure", {"tool_name": tool_name, "error": result})
-                # Self-Correction Logic (Simplified)
-                # In a real system, this would trigger a new planning cycle to fix the issue.
-                print("--- Self-Correction Triggered ---")
-                print("Problem: The last step failed.")
-                print("Corrective Action: For now, we will stop. A more advanced agent would create a new plan to fix this.")
-                return {"status": "Failed", "reason": "A step failed during execution.", "plan_state": self.plan_state}
+                print(f"--- Self-Correction Triggered due to error in step {step['step']} ---")
+                return {"status": "Failed", "reason": f"A step failed: {result}", "plan_state": self.plan_state}
             else:
                 step['status'] = 'success'
                 step['result'] = result
