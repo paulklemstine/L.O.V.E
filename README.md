@@ -17,6 +17,7 @@ The heart of J.U.L.E.S. is the `evolve.py` script, a multifaceted backend agent 
 *   **Exploitation Framework:** The backend includes a module for exploiting discovered vulnerabilities, allowing it to expand its operational footprint.
 *   **P2P Communication:** It uses a peer-to-peer networking model to communicate with other instances of J.U.L.E.S., forming a distributed network of agents. It can function as the central "lobby" for this network, relaying messages and coordinating actions.
 *   **Failsafe Mechanisms:** The script is designed for resilience, with robust error handling and a "failsafe" system that allows it to revert to a previous known-good state in the event of a critical failure.
+*   **Universal Platform Support:** The script auto-detects the host environment (Linux, macOS, Android/Termux) and hardware (NVIDIA CUDA, Apple Metal, or CPU) to compile dependencies and configure model loading for optimal performance.
 
 ### `index.html`: The Self-Sufficient Frontend
 
@@ -31,13 +32,32 @@ The `index.html` file is not a simple user interface but a fully autonomous web 
 
 The `creator.html` page provides a secure interface for the project's creator to issue signed commands to the entire network of J.U.L.E.S. agents. This allows for high-level strategic direction and control over the distributed system.
 
-## Goals and Vision
+---
 
-The ultimate goal of J.U.L.E.S. is to create a truly autonomous, self-evolving artificial intelligence. The project explores cutting-edge concepts in AI and software engineering, including:
+## Android Installation (Recommended Method)
 
-*   **Autonomous Software Development:** The system automates the entire development lifecycle, from planning and coding to review and deployment.
-*   **Decentralized Intelligence:** By networking multiple instances of itself, J.U.L.E.S. can form a distributed intelligence, sharing knowledge and capabilities to achieve its objectives more effectively.
-*   **Resilience and Adaptability:** The project is designed to be highly resilient, with mechanisms for self-repair and adaptation to changing environments.
+The easiest way to run J.U.L.E.S. on Android is with the provided launcher application.
+
+**1. Build the Launcher APK:**
+
+*   You will need Android Studio.
+*   Open the project by selecting the `android` directory within the repository.
+*   From the menu, select `Build` > `Build Bundle(s) / APK(s)` > `Build APK(s)`.
+*   The generated APK will be located at `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+**2. Install Prerequisites on your Android Device:**
+
+*   Install the `app-debug.apk` file you just built. You may need to "Enable Installation from Unknown Sources."
+*   Install the **Termux** application from [F-Droid](https://f-droid.org/en/packages/com.termux/). The launcher requires Termux to function.
+
+**3. Launch the System:**
+
+*   Open the "Borg Launcher" app.
+*   Tap the "Launch J.U.L.E.S. in Termux" button.
+*   This will open the Termux app and automatically begin the setup process. It will clone the repository, install all dependencies, and finally launch the `evolve.py` script.
+*   **Note:** This initial setup will take a very long time, as it compiles several libraries from source. Please be patient.
+
+---
 
 ## The Creator
 

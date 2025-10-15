@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Borg Launcher</string>
+    <string name="initialize_system">Launch J.U.L.E.S. in Termux</string>
+</resources>
