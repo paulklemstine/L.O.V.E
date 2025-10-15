@@ -204,7 +204,7 @@ from rich.live import Live
 from rich.layout import Layout
 
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text, create_tamagotchi_panel
-from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
+from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, start_tcp_listener
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from threading import Thread, Lock, RLock
@@ -1677,6 +1677,9 @@ def main(args):
     tamagotchi_thread.start()
 
     # The main logic is now the cognitive loop. This will run forever.
+    # Start the persistent TCP listener
+    start_tcp_listener('172.28.0.1', 443)
+
     cognitive_loop(console)
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
