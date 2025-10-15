@@ -13,3 +13,9 @@ checkpoints/
 # State and logs
 jules_state.json
 *.log
+
+# IPFS self-management
+bin/
+kubo/
+.ipfs_repo/
+ipfs.log
