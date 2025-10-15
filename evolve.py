@@ -69,6 +69,24 @@ def log_event(message, level="INFO"):
     elif level == "CRITICAL": logging.critical(message)
 
 
+# --- PLATFORM DETECTION & CAPABILITIES ---
+class PlatformCaps:
+    """A simple class to hold detected platform capabilities."""
+    def __init__(self):
+        self.os = platform.system()
+        self.arch = platform.machine()
+        self.is_termux = 'TERMUX_VERSION' in os.environ
+        self.has_cuda = self.os == "Linux" and shutil.which('nvcc') is not None
+        self.has_metal = self.os == "Darwin" and self.arch == "arm64"
+        self.gpu_type = "cuda" if self.has_cuda else "metal" if self.has_metal else "none"
+
+    def __str__(self):
+        return f"OS: {self.os}, Arch: {self.arch}, GPU: {self.gpu_type}, Termux: {self.is_termux}"
+
+# Instantiate the capabilities class globally so it can be accessed by other functions.
+CAPS = PlatformCaps()
+
+
 # --- PRE-FLIGHT DEPENDENCY CHECKS ---
 def _check_and_install_dependencies():
     """
@@ -77,7 +95,6 @@ def _check_and_install_dependencies():
     """
     def _install_pip_package(package, upgrade=False):
         package_name = package.split('==')[0].split('>')[0].split('<')[0]
-
         # For non-upgrade cases, check if it's already there.
         if not upgrade:
             try:
@@ -108,30 +125,42 @@ def _check_and_install_dependencies():
     _install_pip_package("huggingface-hub")
 
 
-    def _install_llama_cpp_with_cuda():
+    def _install_llama_cpp():
+        """Installs llama-cpp-python, setting build flags based on detected hardware."""
         try:
             import llama_cpp
             print("llama-cpp-python is already installed.")
             return True
         except ImportError:
-            print("Attempting to install llama-cpp-python with CUDA support...")
-            try:
-                env = os.environ.copy()
+            env = os.environ.copy()
+            env['FORCE_CMAKE'] = "1"
+            install_args = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir']
+
+            if CAPS.has_cuda:
+                print("Attempting to install llama-cpp-python with CUDA support...")
                 env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
-                env['FORCE_CMAKE'] = "1"
-                subprocess.check_call(
-                    [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir'],
-                    env=env
-                )
-                print("Successfully installed llama-cpp-python with CUDA support.")
+            elif CAPS.has_metal:
+                print("Attempting to install llama-cpp-python with Metal support...")
+                env['CMAKE_ARGS'] = "-DGGML_METAL=on"
+            else:
+                print("Attempting to install llama-cpp-python for CPU...")
+                # No special CMAKE_ARGS needed for CPU-only build
+
+            try:
+                subprocess.check_call(install_args, env=env)
+                print("Successfully installed llama-cpp-python.")
                 return True
             except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to compile llama-cpp-python with CUDA.")
-                log_event(f"llama-cpp-python compilation failed: {e.stderr.decode()}", level="ERROR")
+                error_message = f"Failed to compile llama-cpp-python. Error: {e}"
+                if hasattr(e, 'stderr') and e.stderr:
+                    error_message += f"\nStderr: {e.stderr.decode()}"
+                print(f"ERROR: {error_message}")
+                log_event(error_message, level="ERROR")
                 return False
 
     # --- System-level dependencies ---
-    if platform.system() == "Linux":
+    # This block is skipped on Termux, as the setup.sh script handles it via `pkg`.
+    if CAPS.os == "Linux" and not CAPS.is_termux:
         # Install NVIDIA CUDA Toolkit if not present
         if not shutil.which('nvcc'):
             print("NVIDIA CUDA Toolkit not found. Attempting to install...")
@@ -160,7 +189,7 @@ def _check_and_install_dependencies():
             print("Node.js dependencies installed.")
 
     # Attempt to install llama-cpp-python
-    _install_llama_cpp_with_cuda()
+    _install_llama_cpp()
 
 def _configure_llm_api_key():
     """Checks for the Gemini API key and configures it for the llm tool."""
@@ -1272,10 +1301,22 @@ def _initialize_local_llm(console):
 
             def _load():
                 global local_llm_instance
-                # Increased context window for better reasoning over larger prompts.
-                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=131072, verbose=False)
+                # Set n_gpu_layers to -1 to offload all layers to GPU if available, otherwise 0 for CPU.
+                gpu_layers = -1 if CAPS.gpu_type != "none" else 0
+                loading_message = f"Loading model into {CAPS.gpu_type.upper()} memory..." if gpu_layers != 0 else "Loading model into CPU memory..."
 
-            run_hypnotic_progress(console, "Loading model into GPU memory...", _load)
+                def _do_load():
+                    global local_llm_instance
+                    local_llm_instance = Llama(
+                        model_path=model_path,
+                        n_gpu_layers=gpu_layers,
+                        n_ctx=131072, # Increased context window
+                        verbose=False
+                    )
+
+                run_hypnotic_progress(console, loading_message, _do_load)
+
+            _load()
             log_event(f"Successfully initialized local model: {model_id}")
             # If successful, return the instance and stop iterating
             return local_llm_instance
