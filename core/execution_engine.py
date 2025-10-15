@@ -54,6 +54,10 @@ class ExecutionEngine:
                 path = "/mnt/data/article2.txt"
             return "read_file", {"path": path}
 
+        # If the task is to produce a report, it's a no-op that signals completion.
+        if "produce a final summary" in task_lower:
+            return "no_op", {"task": task, "is_final_step": True}
+
         # If no tool is identified, it's a no-op task.
         return "no_op", {"task": task}
 
@@ -82,9 +86,15 @@ class ExecutionEngine:
             tool_name, kwargs = self._determine_tool_and_args(step['task'])
 
             if tool_name == "no_op":
+                # If this is the designated final step, carry over the previous result.
+                if kwargs.get("is_final_step") and i > 0:
+                    step['result'] = self.plan_state[i-1]['result']
+                    print(f"Final step identified. Carrying over result from step {i}.")
+                else:
+                    step['result'] = f"Completed: {step['task']}"
+
                 print(f"No specific tool identified for task. Marking as complete.")
                 step['status'] = 'success'
-                step['result'] = f"Completed: {step['task']}"
                 continue
 
             # Execute the tool
