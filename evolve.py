@@ -37,11 +37,13 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1U3jTMGPWnc3hE2F/vor
 LOCAL_MODELS_CONFIG = [
     {
         "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
-        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
+        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf",
+        "n_ctx": 131072 # 128k context window
     },
     {
         "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
-        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf"
+        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf",
+        "n_ctx": 32768 # 32k context window
     }
 ]
 
@@ -920,12 +922,12 @@ def _initialize_local_llm(console):
                 console.print(f"[green]Model [bold]{model_filename}[/bold] found in cache. Skipping download.[/green]")
                 log_event(f"Found cached model at: {model_path}")
 
-            def _load():
+            def _load(model_config):
                 global local_llm_instance
-                # Increased context window for better reasoning over larger prompts.
-                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=131072, verbose=False)
+                # Set context window based on the specific model's configuration.
+                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=model_config['n_ctx'], verbose=False)
 
-            run_hypnotic_progress(console, "Loading model into GPU memory...", _load)
+            run_hypnotic_progress(console, "Loading model into GPU memory...", lambda: _load(model_config))
             log_event(f"Successfully initialized local model: {model_id}")
             # If successful, return the instance and stop iterating
             return local_llm_instance
