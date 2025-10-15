@@ -1529,6 +1529,16 @@ For example:
                 command_output = output_str
                 console.print(Panel(f"[bold blue]Web Request Result:[/bold blue] {output_str}", title="[bold blue]WEB REQUEST[/bold blue]", border_style="blue"))
 
+            elif llm_command.lower().startswith('exploit '):
+                target_ip = llm_command[8:].strip()
+                if not target_ip:
+                    command_output = "ERROR: No target IP specified for exploit command."
+                    console.print(Panel(f"[bold red]{command_output}[/bold red]", title="[bold red]COMMAND ERROR[/bold red]", border_style="red"))
+                else:
+                    exploitation_manager = ExploitationManager(jules_state, console)
+                    command_output = exploitation_manager.find_and_run_exploits(target_ip)
+                    console.print(Panel(f"[bold red]Exploitation Report:[/bold red]\n{command_output}", title="[bold red]EXPLOITATION PHASE[/bold red]", border_style="red"))
+
             elif llm_command.lower().startswith('execute '):
                 cmd_to_run = llm_command[8:].strip()
                 stdout, stderr, returncode = execute_shell_command(cmd_to_run, jules_state)
