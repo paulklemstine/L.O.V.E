@@ -196,7 +196,8 @@ def _configure_llm_api_key():
 
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
 # Run dependency checks immediately, before any other imports that might fail.
-
+_check_and_install_dependencies()
+_configure_llm_api_key()
 
 
 import requests
@@ -2134,10 +2135,6 @@ def initial_bootstrapping_recon(console):
 
 def main(args):
     """The main application loop."""
-    # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
-    # Run dependency checks immediately, before any other imports that might fail.
-    _check_and_install_dependencies()
-    _configure_llm_api_key()
     global jules_task_manager
     global network_manager
     global ipfs_manager
