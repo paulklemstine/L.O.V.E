@@ -1444,10 +1444,13 @@ Available commands:
 Considering your directives, the mission, my internal state, the complete knowledge base, and recent history, what is the single, next strategic command I should execute?
 Formulate a raw command based on all available information to best achieve my goals. The output must be only the command, with no other text or explanation.
 
+Do not run the evolve.py script.
+
 For example:
 - `ls /tmp`
 - `cat /etc/passwd`
 - `execute pwd`
+- `evolve`
 """
             console.print(Panel("[bold magenta]Cognitive Cycle: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
