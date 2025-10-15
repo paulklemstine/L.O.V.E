@@ -1444,7 +1444,7 @@ Available commands:
 Considering your directives, the mission, my internal state, the complete knowledge base, and recent history, what is the single, next strategic command I should execute?
 Formulate a raw command based on all available information to best achieve my goals. The output must be only the command, with no other text or explanation.
 
-Do not run the evolve.py script.
+Do not execute python3 evolve.py script.
 
 For example:
 - `ls /tmp`
