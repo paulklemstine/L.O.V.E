@@ -393,6 +393,8 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
     Performs an advanced nmap scan for services and vulnerabilities,
     updates the knowledge base, and returns a dict of open ports with
     service/vulnerability info and a formatted string summary.
+
+    Note: This function is called by the 'probe' and 'crypto_scan' commands.
     """
     console = Console()
     kb = evil_state["knowledge_base"]["network_map"]
@@ -428,7 +430,16 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
         except Exception as e:
             return "", f"An unexpected error occurred during nmap execution: {e}", -1
 
-    stdout, stderr, returncode = _nmap_scan_task()
+    if autopilot_mode:
+        stdout, stderr, returncode = _nmap_scan_task()
+    else:
+        # Wrap the synchronous, long-running scan in a visual progress indicator
+        # to show the user that the application has not hung.
+        stdout, stderr, returncode = run_hypnotic_progress(
+            console,
+            f"Probing {target_ip}...",
+            _nmap_scan_task
+        )
 
     if returncode != 0:
         log_msg = f"Nmap probe failed for {target_ip}. Stderr: {stderr.strip()}"
