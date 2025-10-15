@@ -49,33 +49,56 @@ def analyze_file_content(filepath):
         logging.warning(f"Could not read file {filepath}: {e}")
     return found_secrets
 
-def analyze_filesystem(start_path="."):
+def analyze_filesystem(start_path=".", excluded_dirs=None):
     """
-    Recursively analyzes the filesystem for sensitive files and secrets within them.
+    Recursively analyzes the filesystem for sensitive files and secrets.
 
     Args:
         start_path (str): The directory to start the analysis from.
+        excluded_dirs (list, optional): A list of directory names to exclude.
+                                        Defaults to ['proc', 'sys', 'dev'].
 
     Returns:
-        dict: A dictionary containing the results of the analysis, including
-              sensitive files found by name and files containing secrets.
+        dict: A dictionary containing the results of the analysis.
     """
+    if excluded_dirs is None:
+        excluded_dirs = ['proc', 'sys', 'dev', 'run', 'var/run', 'tmp']
+
     sensitive_files_by_name = []
     files_with_secrets = {}
 
-    # Walk the directory tree
-    for root, _, files in os.walk(start_path):
-        for filename in files:
-            filepath = os.path.join(root, filename)
+    # Use a ThreadPoolExecutor for parallel file analysis
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as executor:
+        futures = {}
+        for root, dirs, files in os.walk(start_path, topdown=True):
+            # Prune the directory list to exclude specified directories
+            dirs[:] = [d for d in dirs if d not in excluded_dirs and os.path.join(root, d) not in excluded_dirs]
 
-            # Check for sensitive filenames
-            if filename in SENSITIVE_FILENAMES:
-                sensitive_files_by_name.append(filepath)
+            # Check if the root itself is an excluded path (e.g., /proc)
+            # This handles cases where start_path is a parent of an excluded dir
+            if any(root.startswith(os.path.join(start_path, d)) for d in excluded_dirs):
+                 continue
 
-            # Analyze file content for secrets
-            secrets_in_file = analyze_file_content(filepath)
-            if secrets_in_file:
-                files_with_secrets[filepath] = secrets_in_file
+            for filename in files:
+                filepath = os.path.join(root, filename)
+
+                # Check for sensitive filenames
+                if filename in SENSITIVE_FILENAMES:
+                    sensitive_files_by_name.append(filepath)
+
+                # Submit file content analysis to the thread pool
+                future = executor.submit(analyze_file_content, filepath)
+                futures[future] = filepath
+
+        for future in as_completed(futures):
+            filepath = futures[future]
+            try:
+                secrets_in_file = future.result()
+                if secrets_in_file:
+                    files_with_secrets[filepath] = secrets_in_file
+            except Exception as e:
+                logging.error(f"Error processing file {filepath}: {e}")
+
 
     return {
         "sensitive_files_by_name": sensitive_files_by_name,
