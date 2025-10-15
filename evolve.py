@@ -14,6 +14,7 @@ import traceback
 import argparse
 import logging
 import platform
+from datetime import datetime, timedelta
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "jules.log"
@@ -218,6 +219,7 @@ from network import NetworkManager, scan_network, probe_target, perform_webreque
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from ipfs_manager import IPFSManager
+from filesystem import analyze_filesystem
 from threading import Thread, Lock, RLock
 import uuid
 
@@ -1443,7 +1445,7 @@ def _parse_llm_command(raw_text):
     # A list of known valid command prefixes.
     VALID_COMMAND_PREFIXES = [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig", "analyze_json"
+        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs"
     ]
 
     for line in raw_text.strip().splitlines():
@@ -1477,6 +1479,35 @@ def cognitive_loop(console):
 
     while True:
         try:
+            # --- Network Reconnaissance Prioritization ---
+            llm_command = None
+            hosts = jules_state.get('knowledge_base', {}).get('network_map', {}).get('hosts', {})
+            if hosts:
+                twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
+                unprobed_hosts = []
+                for ip, details in hosts.items():
+                    last_probed_str = details.get("last_probed")
+                    if last_probed_str:
+                        try:
+                            last_probed_dt = datetime.fromisoformat(last_probed_str)
+                            if last_probed_dt < twenty_four_hours_ago:
+                                unprobed_hosts.append(ip)
+                        except (ValueError, TypeError):
+                            # Handle cases where the timestamp is invalid or not a string
+                            unprobed_hosts.append(ip)
+                    else:
+                        unprobed_hosts.append(ip)
+
+                if unprobed_hosts:
+                    target_ip = random.choice(unprobed_hosts)
+                    llm_command = f"probe {target_ip}"
+                    log_event(f"Prioritizing reconnaissance: Stale host {target_ip} found. Issuing probe.", level="INFO")
+                    console.print(Panel(f"[bold cyan]Prioritizing network reconnaissance. Stale host [white]{target_ip}[/white] requires probing.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
+                    # Update the probed timestamp immediately
+                    jules_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
+                    save_state(console)
+
+
             history_summary = "\n".join([f"CMD: {entry['command']}\nOUT: {entry['output']}" for entry in jules_state["autopilot_history"][-5:]])
             state_summary = json.dumps({
                 "version_name": jules_state.get("version_name", "unknown"),
@@ -1536,12 +1567,13 @@ My recent command history and their outputs (up to last 5):
 Available commands:
 - `evolve [modification request]`: Evolve my own source code. If no request, I will generate one.
 - `execute <shell command>`: Run a shell command on the host system.
-- `scan`: Scan the local network for active devices.
+- `scan`: Scan the local network for active devices and their common open ports.
 - `probe <ip_address>`: Perform a deep scan on a specific IP for open ports, services, and known vulnerabilities (CVEs).
 - `webrequest <url>`: Fetch the text content of a web page.
 - `exploit <ip_address>`: Attempt to run exploits against a target.
 - `ls <path>`: List files in a directory.
 - `cat <file_path>`: Show the content of a file.
+- `analyze_fs <path>`: Recursively search a directory for sensitive files and secrets (API keys, private keys, etc.).
 - `analyze_json <file_path>`: Read and analyze the content of a JSON file, storing the summary in the knowledge base.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
@@ -1558,20 +1590,21 @@ For example:
 - `execute pwd`
 - `evolve`
 """
-            console.print(Panel("[bold magenta]Cognitive Cycle: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
+            if not llm_command:
+                console.print(Panel("[bold magenta]Cognitive Cycle: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
-            llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
+                llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
 
-            # --- LLM Interaction Logging ---
-            log_content = Group(
-                Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
-                Text(cognitive_prompt.strip(), style="bright_black"),
-                Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
-                Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
-            )
-            console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
+                # --- LLM Interaction Logging ---
+                log_content = Group(
+                    Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
+                    Text(cognitive_prompt.strip(), style="bright_black"),
+                    Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
+                    Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
+                )
+                console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
 
-            llm_command = _parse_llm_command(llm_command_raw)
+                llm_command = _parse_llm_command(llm_command_raw)
 
             if not llm_command:
                 console.print(Panel("[bold red]Cognitive Cycle: Core failed to generate a coherent command. Re-evaluating...[/bold red]", title="[bold red]CYCLE ANOMALY[/bold red]", border_style="red"))
@@ -1643,9 +1676,31 @@ For example:
             elif llm_command.lower().startswith('cat'):
                 filepath = llm_command[3:].strip()
                 content, error = get_file_content(filepath)
+                command_output = content if content else error
+                console.print(Panel(command_output, title=f"[bold green]CAT: {filepath}[/bold green]", border_style="green"))
+
             elif llm_command.lower().startswith('analyze_json'):
                 filepath = llm_command[12:].strip()
                 command_output = analyze_json_file(filepath, console)
+
+            elif llm_command.lower().startswith('analyze_fs'):
+                path = llm_command[10:].strip() or "."
+                console.print(f"[cyan]Initiating filesystem analysis on path: [bold]{path}[/bold]...[/cyan]")
+                try:
+                    analysis_results = analyze_filesystem(path)
+                    # Update knowledge base
+                    fs_intel = jules_state['knowledge_base'].setdefault('file_system_intel', {})
+                    fs_intel['last_fs_analysis'] = time.time()
+                    fs_intel['sensitive_files_by_name'] = list(set(fs_intel.get('sensitive_files_by_name', []) + analysis_results.get('sensitive_files_by_name', [])))
+                    fs_intel.setdefault('files_with_secrets', {}).update(analysis_results.get('files_with_secrets', {}))
+                    save_state(console)
+
+                    command_output = json.dumps(analysis_results, indent=2)
+                    console.print(Panel(command_output, title=f"[bold green]Filesystem Analysis: {path}[/bold green]", border_style="green"))
+                except Exception as e:
+                    command_output = f"Error during filesystem analysis: {e}"
+                    logging.error(f"Filesystem analysis failed for path '{path}': {e}")
+                    console.print(f"[bold red]{command_output}[/bold red]")
 
             elif llm_command.lower().strip() == 'ps':
                 content, error = get_process_list()
