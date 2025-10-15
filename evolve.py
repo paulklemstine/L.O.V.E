@@ -195,8 +195,7 @@ def _configure_llm_api_key():
 
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
 # Run dependency checks immediately, before any other imports that might fail.
-_check_and_install_dependencies()
-_configure_llm_api_key()
+
 
 
 import requests
@@ -1361,6 +1360,77 @@ def evolve_self(modification_request, jules_task_manager):
         evolve_locally(modification_request, console)
 
 # --- AUTOPILOT MODE ---
+def analyze_json_file(filepath, console):
+    """
+    Reads a JSON file, uses an LLM to analyze its content, and stores
+    the analysis in the knowledge base.
+    """
+    global jules_state
+    console.print(f"[cyan]Analyzing JSON file: [bold]{filepath}[/bold]...[/cyan]")
+    log_event(f"Attempting to analyze JSON file: {filepath}", "INFO")
+
+    content, error = get_file_content(filepath)
+    if error:
+        console.print(f"[bold red]Error reading file: {error}[/bold red]")
+        log_event(f"Failed to read file {filepath}: {error}", "ERROR")
+        return f"Error reading file: {error}"
+
+    try:
+        # Validate that the content is actually JSON
+        json.loads(content)
+        # To avoid overwhelming the LLM, we'll send a snippet if it's too large
+        content_for_llm = content
+        if len(content_for_llm) > 10000: # Approx 2.5k tokens
+            content_for_llm = content[:10000] + "\\n..."
+    except json.JSONDecodeError:
+        error_msg = f"File '{filepath}' is not a valid JSON file."
+        console.print(f"[bold red]{error_msg}[/bold red]")
+        log_event(error_msg, "ERROR")
+        return error_msg
+
+    analysis_prompt = f"""
+You are a data analysis expert. Below is the content of a JSON file.
+Your task is to provide a structured summary of its contents.
+Focus on the overall structure, the types of data present, the number of records, and any key fields or patterns you identify.
+Do not just repeat the data; provide a high-level, insightful analysis.
+
+JSON Content:
+---
+{content_for_llm}
+---
+
+Provide your structured summary below.
+"""
+
+    analysis_result = run_llm(analysis_prompt, purpose="analyze_source")
+
+    if not analysis_result:
+        error_msg = f"LLM analysis failed for file '{filepath}'."
+        console.print(f"[bold red]{error_msg}[/bold red]")
+        log_event(error_msg, "ERROR")
+        return error_msg
+
+    # Ensure the 'analyses' key exists in the knowledge base
+    fs_intel = jules_state['knowledge_base'].setdefault('file_system_intel', {})
+    fs_intel.setdefault("last_browse", None)
+    fs_intel.setdefault("interesting_files", [])
+    analyses = fs_intel.setdefault('analyses', {})
+    analyses[filepath] = {
+        "timestamp": time.time(),
+        "summary": analysis_result.strip()
+    }
+
+    # Also add it to interesting_files if it's not already there
+    if filepath not in fs_intel.get('interesting_files', []):
+        fs_intel.setdefault('interesting_files', []).append(filepath)
+
+    save_state(console)
+    success_msg = f"Successfully analyzed and stored intelligence for '{filepath}'."
+    console.print(f"[bold green]{success_msg}[/bold green]")
+    log_event(success_msg, "INFO")
+    return analysis_result.strip()
+
+
 def _parse_llm_command(raw_text):
     """
     Cleans and extracts a single valid command from the raw LLM output.
@@ -1373,7 +1443,7 @@ def _parse_llm_command(raw_text):
     # A list of known valid command prefixes.
     VALID_COMMAND_PREFIXES = [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig"
+        "ls", "cat", "ps", "ifconfig", "analyze_json"
     ]
 
     for line in raw_text.strip().splitlines():
@@ -1454,6 +1524,7 @@ Available commands:
 - `exploit <ip_address>`: Attempt to run exploits against a target.
 - `ls <path>`: List files in a directory.
 - `cat <file_path>`: Show the content of a file.
+- `analyze_json <file_path>`: Read and analyze the content of a JSON file, storing the summary in the knowledge base.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
@@ -1544,9 +1615,9 @@ For example:
             elif llm_command.lower().startswith('cat'):
                 filepath = llm_command[3:].strip()
                 content, error = get_file_content(filepath)
-                command_output = content if content else error
-                display_output = (command_output[:1000] + '...') if len(command_output) > 1000 else command_output
-                console.print(Panel(display_output, title=f"[bold green]CAT: {filepath}[/bold green]", border_style="green"))
+            elif llm_command.lower().startswith('analyze_json'):
+                filepath = llm_command[12:].strip()
+                command_output = analyze_json_file(filepath, console)
 
             elif llm_command.lower().strip() == 'ps':
                 content, error = get_process_list()
@@ -1669,6 +1740,10 @@ def initial_bootstrapping_recon(console):
 
 def main(args):
     """The main application loop."""
+    # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
+    # Run dependency checks immediately, before any other imports that might fail.
+    _check_and_install_dependencies()
+    _configure_llm_api_key()
     global jules_task_manager
     global network_manager
     global ipfs_manager
