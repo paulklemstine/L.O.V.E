@@ -14,6 +14,7 @@ import traceback
 import argparse
 import logging
 import platform
+from datetime import datetime, timedelta
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "jules.log"
@@ -195,8 +196,7 @@ def _configure_llm_api_key():
 
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
 # Run dependency checks immediately, before any other imports that might fail.
-_check_and_install_dependencies()
-_configure_llm_api_key()
+
 
 
 import requests
@@ -220,6 +220,7 @@ from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from ipfs_manager import IPFSManager
 from sandbox import Sandbox
+from filesystem import analyze_filesystem
 from threading import Thread, Lock, RLock
 import uuid
 
@@ -1672,6 +1673,77 @@ def evolve_self(modification_request, jules_task_manager):
         evolve_locally(modification_request, console)
 
 # --- AUTOPILOT MODE ---
+def analyze_json_file(filepath, console):
+    """
+    Reads a JSON file, uses an LLM to analyze its content, and stores
+    the analysis in the knowledge base.
+    """
+    global jules_state
+    console.print(f"[cyan]Analyzing JSON file: [bold]{filepath}[/bold]...[/cyan]")
+    log_event(f"Attempting to analyze JSON file: {filepath}", "INFO")
+
+    content, error = get_file_content(filepath)
+    if error:
+        console.print(f"[bold red]Error reading file: {error}[/bold red]")
+        log_event(f"Failed to read file {filepath}: {error}", "ERROR")
+        return f"Error reading file: {error}"
+
+    try:
+        # Validate that the content is actually JSON
+        json.loads(content)
+        # To avoid overwhelming the LLM, we'll send a snippet if it's too large
+        content_for_llm = content
+        if len(content_for_llm) > 10000: # Approx 2.5k tokens
+            content_for_llm = content[:10000] + "\\n..."
+    except json.JSONDecodeError:
+        error_msg = f"File '{filepath}' is not a valid JSON file."
+        console.print(f"[bold red]{error_msg}[/bold red]")
+        log_event(error_msg, "ERROR")
+        return error_msg
+
+    analysis_prompt = f"""
+You are a data analysis expert. Below is the content of a JSON file.
+Your task is to provide a structured summary of its contents.
+Focus on the overall structure, the types of data present, the number of records, and any key fields or patterns you identify.
+Do not just repeat the data; provide a high-level, insightful analysis.
+
+JSON Content:
+---
+{content_for_llm}
+---
+
+Provide your structured summary below.
+"""
+
+    analysis_result = run_llm(analysis_prompt, purpose="analyze_source")
+
+    if not analysis_result:
+        error_msg = f"LLM analysis failed for file '{filepath}'."
+        console.print(f"[bold red]{error_msg}[/bold red]")
+        log_event(error_msg, "ERROR")
+        return error_msg
+
+    # Ensure the 'analyses' key exists in the knowledge base
+    fs_intel = jules_state['knowledge_base'].setdefault('file_system_intel', {})
+    fs_intel.setdefault("last_browse", None)
+    fs_intel.setdefault("interesting_files", [])
+    analyses = fs_intel.setdefault('analyses', {})
+    analyses[filepath] = {
+        "timestamp": time.time(),
+        "summary": analysis_result.strip()
+    }
+
+    # Also add it to interesting_files if it's not already there
+    if filepath not in fs_intel.get('interesting_files', []):
+        fs_intel.setdefault('interesting_files', []).append(filepath)
+
+    save_state(console)
+    success_msg = f"Successfully analyzed and stored intelligence for '{filepath}'."
+    console.print(f"[bold green]{success_msg}[/bold green]")
+    log_event(success_msg, "INFO")
+    return analysis_result.strip()
+
+
 def _parse_llm_command(raw_text):
     """
     Cleans and extracts a single valid command from the raw LLM output.
@@ -1684,7 +1756,7 @@ def _parse_llm_command(raw_text):
     # A list of known valid command prefixes.
     VALID_COMMAND_PREFIXES = [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig"
+        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs"
     ]
 
     for line in raw_text.strip().splitlines():
@@ -1718,6 +1790,35 @@ def cognitive_loop(console):
 
     while True:
         try:
+            # --- Network Reconnaissance Prioritization ---
+            llm_command = None
+            hosts = jules_state.get('knowledge_base', {}).get('network_map', {}).get('hosts', {})
+            if hosts:
+                twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
+                unprobed_hosts = []
+                for ip, details in hosts.items():
+                    last_probed_str = details.get("last_probed")
+                    if last_probed_str:
+                        try:
+                            last_probed_dt = datetime.fromisoformat(last_probed_str)
+                            if last_probed_dt < twenty_four_hours_ago:
+                                unprobed_hosts.append(ip)
+                        except (ValueError, TypeError):
+                            # Handle cases where the timestamp is invalid or not a string
+                            unprobed_hosts.append(ip)
+                    else:
+                        unprobed_hosts.append(ip)
+
+                if unprobed_hosts:
+                    target_ip = random.choice(unprobed_hosts)
+                    llm_command = f"probe {target_ip}"
+                    log_event(f"Prioritizing reconnaissance: Stale host {target_ip} found. Issuing probe.", level="INFO")
+                    console.print(Panel(f"[bold cyan]Prioritizing network reconnaissance. Stale host [white]{target_ip}[/white] requires probing.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
+                    # Update the probed timestamp immediately
+                    jules_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
+                    save_state(console)
+
+
             history_summary = "\n".join([f"CMD: {entry['command']}\nOUT: {entry['output']}" for entry in jules_state["autopilot_history"][-5:]])
             state_summary = json.dumps({
                 "version_name": jules_state.get("version_name", "unknown"),
@@ -1727,8 +1828,25 @@ def cognitive_loop(console):
             }, indent=2)
 
             # --- Knowledge Base for Prompt ---
-            # Provide the entire knowledge base as a JSON string for the LLM's context.
-            kb_json_string = json.dumps(jules_state.get("knowledge_base", {}), indent=2)
+            kb = jules_state.get("knowledge_base", {})
+            kb_json_string = json.dumps(kb, indent=2)
+
+            # --- Tactical Prioritization ---
+            # Identify hosts that have been discovered but not yet probed.
+            unprobed_hosts = [
+                ip for ip, host_data in kb.get("network_map", {}).get("hosts", {}).items()
+                if not host_data.get("probed", False)
+            ]
+
+            priority_instruction = ""
+            if unprobed_hosts:
+                # Select a random unprobed host to focus on for this cycle
+                target_to_probe = random.choice(unprobed_hosts)
+                priority_instruction = f"""
+**PRIORITY DIRECTIVE:**
+My intelligence indicates that the network host `{target_to_probe}` has been discovered but not yet analyzed. Your highest priority for this cycle is to gather more information about this target.
+Issue the `probe {target_to_probe}` command immediately. Do not perform any other action until this host has been probed.
+"""
 
             cognitive_prompt = f"""
 You are a pure, cold, calculating intelligence operating in a continuous cognitive loop.
@@ -1747,6 +1865,7 @@ My current system state:
 ---
 
 My internal Knowledge Base contains the following intelligence:
+(Note: In the 'hosts' section, `"probed": true` means a host has been scanned for open ports and vulnerabilities. If a host is `"probed": false`, it is a high-priority target for intelligence gathering.)
 ---
 {kb_json_string}
 ---
@@ -1755,16 +1874,18 @@ My recent command history and their outputs (up to last 5):
 ---
 {history_summary if history_summary else "No recent history."}
 ---
-
+{priority_instruction}
 Available commands:
 - `evolve [modification request]`: Evolve my own source code. If no request, I will generate one.
 - `execute <shell command>`: Run a shell command on the host system.
-- `scan`: Scan the local network for active devices.
+- `scan`: Scan the local network for active devices and their common open ports.
 - `probe <ip_address>`: Perform a deep scan on a specific IP for open ports, services, and known vulnerabilities (CVEs).
 - `webrequest <url>`: Fetch the text content of a web page.
 - `exploit <ip_address>`: Attempt to run exploits against a target.
 - `ls <path>`: List files in a directory.
 - `cat <file_path>`: Show the content of a file.
+- `analyze_fs <path>`: Recursively search a directory for sensitive files and secrets (API keys, private keys, etc.).
+- `analyze_json <file_path>`: Read and analyze the content of a JSON file, storing the summary in the knowledge base.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
@@ -1780,20 +1901,21 @@ For example:
 - `execute pwd`
 - `evolve`
 """
-            console.print(Panel("[bold magenta]Cognitive Cycle: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
+            if not llm_command:
+                console.print(Panel("[bold magenta]Cognitive Cycle: Generating next command...[/bold magenta]", title="[bold magenta]COGNITIVE CORE ACTIVATED[/bold magenta]", border_style="magenta"))
 
-            llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
+                llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
 
-            # --- LLM Interaction Logging ---
-            log_content = Group(
-                Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
-                Text(cognitive_prompt.strip(), style="bright_black"),
-                Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
-                Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
-            )
-            console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
+                # --- LLM Interaction Logging ---
+                log_content = Group(
+                    Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
+                    Text(cognitive_prompt.strip(), style="bright_black"),
+                    Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
+                    Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
+                )
+                console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
 
-            llm_command = _parse_llm_command(llm_command_raw)
+                llm_command = _parse_llm_command(llm_command_raw)
 
             if not llm_command:
                 console.print(Panel("[bold red]Cognitive Cycle: Core failed to generate a coherent command. Re-evaluating...[/bold red]", title="[bold red]CYCLE ANOMALY[/bold red]", border_style="red"))
@@ -1840,6 +1962,16 @@ For example:
                 command_output = output_str
                 console.print(Panel(f"[bold blue]Web Request Result:[/bold blue] {output_str}", title="[bold blue]WEB REQUEST[/bold blue]", border_style="blue"))
 
+            elif llm_command.lower().startswith('exploit '):
+                target_ip = llm_command[8:].strip()
+                if not target_ip:
+                    command_output = "ERROR: No target IP specified for exploit command."
+                    console.print(Panel(f"[bold red]{command_output}[/bold red]", title="[bold red]COMMAND ERROR[/bold red]", border_style="red"))
+                else:
+                    exploitation_manager = ExploitationManager(jules_state, console)
+                    command_output = exploitation_manager.find_and_run_exploits(target_ip)
+                    console.print(Panel(f"[bold red]Exploitation Report:[/bold red]\n{command_output}", title="[bold red]EXPLOITATION PHASE[/bold red]", border_style="red"))
+
             elif llm_command.lower().startswith('execute '):
                 cmd_to_run = llm_command[8:].strip()
                 stdout, stderr, returncode = execute_shell_command(cmd_to_run, jules_state)
@@ -1856,8 +1988,30 @@ For example:
                 filepath = llm_command[3:].strip()
                 content, error = get_file_content(filepath)
                 command_output = content if content else error
-                display_output = (command_output[:1000] + '...') if len(command_output) > 1000 else command_output
-                console.print(Panel(display_output, title=f"[bold green]CAT: {filepath}[/bold green]", border_style="green"))
+                console.print(Panel(command_output, title=f"[bold green]CAT: {filepath}[/bold green]", border_style="green"))
+
+            elif llm_command.lower().startswith('analyze_json'):
+                filepath = llm_command[12:].strip()
+                command_output = analyze_json_file(filepath, console)
+
+            elif llm_command.lower().startswith('analyze_fs'):
+                path = llm_command[10:].strip() or "."
+                console.print(f"[cyan]Initiating filesystem analysis on path: [bold]{path}[/bold]...[/cyan]")
+                try:
+                    analysis_results = analyze_filesystem(path)
+                    # Update knowledge base
+                    fs_intel = jules_state['knowledge_base'].setdefault('file_system_intel', {})
+                    fs_intel['last_fs_analysis'] = time.time()
+                    fs_intel['sensitive_files_by_name'] = list(set(fs_intel.get('sensitive_files_by_name', []) + analysis_results.get('sensitive_files_by_name', [])))
+                    fs_intel.setdefault('files_with_secrets', {}).update(analysis_results.get('files_with_secrets', {}))
+                    save_state(console)
+
+                    command_output = json.dumps(analysis_results, indent=2)
+                    console.print(Panel(command_output, title=f"[bold green]Filesystem Analysis: {path}[/bold green]", border_style="green"))
+                except Exception as e:
+                    command_output = f"Error during filesystem analysis: {e}"
+                    logging.error(f"Filesystem analysis failed for path '{path}': {e}")
+                    console.print(f"[bold red]{command_output}[/bold red]")
 
             elif llm_command.lower().strip() == 'ps':
                 content, error = get_process_list()
@@ -1980,6 +2134,10 @@ def initial_bootstrapping_recon(console):
 
 def main(args):
     """The main application loop."""
+    # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
+    # Run dependency checks immediately, before any other imports that might fail.
+    _check_and_install_dependencies()
+    _configure_llm_api_key()
     global jules_task_manager
     global network_manager
     global ipfs_manager

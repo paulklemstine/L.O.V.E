@@ -252,11 +252,12 @@ class NetworkManager(Thread):
 
 def scan_network(evil_state, autopilot_mode=False):
     """
-    Discovers active devices on the local network, updates the knowledge base,
-    and returns a list of IPs and a formatted string summary.
+    Discovers active devices on the local network, performs a fast port scan on them,
+    updates the knowledge base, and returns a list of IPs and a formatted string summary.
     """
     console = Console()
     kb = evil_state["knowledge_base"]["network_map"]
+    nmap_path = shutil.which('nmap')
 
     def _get_network_info():
         try:
@@ -279,50 +280,113 @@ def scan_network(evil_state, autopilot_mode=False):
             logging.error(f"Failed to determine network info: {e}")
             return None, None
 
-    found_ips = set()
     network_range, local_ip = _get_network_info()
-    nmap_path = shutil.which('nmap')
-    use_nmap = nmap_path and network_range
-    used_nmap_successfully = False
 
-    if use_nmap:
-        scan_cmd = f"nmap -sn {network_range}"
-        if not autopilot_mode: console.print(f"[cyan]Deploying 'nmap' probe to scan subnet ({network_range})...[/cyan]")
-        stdout, stderr, returncode = execute_shell_command(scan_cmd, evil_state)
-        if returncode == 0:
-            used_nmap_successfully = True
-            for line in stdout.splitlines():
-                if 'Nmap scan report for' in line:
-                    ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', line)
-                    if ip_match: found_ips.add(ip_match.group(1))
-        else:
-            logging.warning(f"nmap scan failed. Stderr: {stderr.strip()}")
-            if not autopilot_mode: console.print("[yellow]'nmap' probe failed. Falling back to passive ARP scan...[/yellow]")
+    if not nmap_path:
+        logging.warning("'nmap' not found. Network scanning capabilities will be limited to ARP.")
+        if not autopilot_mode:
+            console.print("[bold yellow]Warning: 'nmap' not found. Cannot perform port scans. Falling back to ARP scan for host discovery.[/bold yellow]")
 
-    if not used_nmap_successfully:
-        if not autopilot_mode and not use_nmap:
-             console.print("[yellow]'nmap' not found or network unknown. Deploying passive ARP scan...[/yellow]")
+        # Fallback to ARP-based discovery
         stdout, _, _ = execute_shell_command("arp -a", evil_state)
         ip_pattern = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
+        found_ips = set()
         for line in stdout.splitlines():
             if 'ff:ff:ff:ff:ff:ff' in line or 'incomplete' in line: continue
             match = ip_pattern.search(line)
-            if match and not match.group(0).endswith(".255"): found_ips.add(match.group(0))
+            if match and not match.group(0).endswith(".255"):
+                found_ips.add(match.group(0))
+        if local_ip:
+            found_ips.discard(local_ip)
 
-    if local_ip: found_ips.discard(local_ip)
+        # Update knowledge base for ARP-discovered hosts
+        kb['last_scan'] = time.time()
+        for ip in found_ips:
+            if ip not in kb['hosts']:
+                kb['hosts'][ip] = {"last_seen": time.time(), "ports": {}}
+            else:
+                kb['hosts'][ip]['last_seen'] = time.time()
+
+        result_ips = sorted(list(found_ips))
+        formatted_output_for_llm = f"Discovered {len(result_ips)} active IPs via ARP: {', '.join(result_ips)}. Port scan was skipped as nmap is not available."
+        return result_ips, formatted_output_for_llm
+
+
+    # --- Enhanced Nmap Scan ---
+    if not network_range:
+        msg = "Could not determine network range for scanning."
+        logging.error(msg)
+        if not autopilot_mode: console.print(f"[bold red]{msg}[/bold red]")
+        return [], msg
+
+    # -sn: Ping Scan (host discovery)
+    # -T4: Aggressive timing template for faster scans
+    # --top-ports 20: Scan the 20 most common TCP ports
+    # -oX -: Output in XML format to stdout
+    scan_cmd = f"nmap -sn -T4 --top-ports 20 -oX - {network_range}"
+    if not autopilot_mode:
+        console.print(f"[cyan]Deploying enhanced 'nmap' discovery and port scan on subnet ({network_range})...[/cyan]")
+
+    stdout, stderr, returncode = execute_shell_command(scan_cmd, evil_state)
+
+    if returncode != 0:
+        log_msg = f"Nmap scan failed. Stderr: {stderr.strip()}"
+        logging.warning(log_msg)
+        if not autopilot_mode: console.print(f"[bold red]Nmap scan failed.[/bold red]\n[dim]{stderr.strip()}[/dim]")
+        return [], log_msg
 
     # --- Knowledge Base Update ---
     kb['last_scan'] = time.time()
     for ip in found_ips:
         if ip not in kb['hosts']:
-            kb['hosts'][ip] = {"last_seen": time.time(), "ports": {}}
+            kb['hosts'][ip] = {"last_seen": time.time(), "ports": {}, "probed": False}
         else:
             kb['hosts'][ip]['last_seen'] = time.time()
+    hosts_summary = []
+
+    try:
+        root = ET.fromstring(stdout)
+        for host_elem in root.findall(".//host[status[@state='up']]"):
+            ip_address = host_elem.find("address[@addrtype='ipv4']").get("addr")
+            if ip_address == local_ip:
+                continue
+
+            if ip_address not in kb['hosts']:
+                kb['hosts'][ip_address] = {"last_seen": time.time(), "ports": {}}
+            else:
+                kb['hosts'][ip_address]['last_seen'] = time.time()
+                # Clear previous port data as this scan provides a fresh look
+                kb['hosts'][ip_address]['ports'] = {}
+
+            open_ports = []
+            for port_elem in host_elem.findall(".//port[state[@state='open']]"):
+                portid = port_elem.get('portid')
+                service_elem = port_elem.find('service')
+                service_name = service_elem.get('name', 'unknown')
+
+                kb['hosts'][ip_address]['ports'][portid] = {
+                    "protocol": port_elem.get('protocol'),
+                    "service": service_name,
+                    "service_info": "", # Fast scan doesn't provide version info
+                    "vulnerabilities": []
+                }
+                open_ports.append(f"{portid}/{service_name}")
+
+            if open_ports:
+                hosts_summary.append(f"{ip_address} (Ports: {', '.join(open_ports)})")
+            else:
+                hosts_summary.append(f"{ip_address} (No common ports open)")
+
+    except ET.ParseError as e:
+        log_msg = f"Failed to parse nmap XML output. Error: {e}"
+        logging.error(log_msg)
+        return [], log_msg
     # --- End Knowledge Base Update ---
 
-    result_ips = sorted(list(found_ips))
-    formatted_output_for_llm = f"Discovered {len(result_ips)} active IPs: {', '.join(result_ips)}" if result_ips else "No active IPs found."
-    return result_ips, formatted_output_for_llm
+    result_ips = [re.search(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", s).group(1) for s in hosts_summary]
+    formatted_output_for_llm = f"Discovered {len(hosts_summary)} active hosts. Summary: {'; '.join(hosts_summary)}" if hosts_summary else "No active hosts found."
+
+    return sorted(result_ips), formatted_output_for_llm
 
 def probe_target(target_ip, evil_state, autopilot_mode=False):
     """
@@ -375,10 +439,12 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
     open_ports = {}
     # --- Knowledge Base Update ---
     if target_ip not in kb['hosts']:
-        kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}}
-    else: # Clear old port data before adding new, more detailed info
-        kb['hosts'][target_ip]['ports'] = {}
+        kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}, "probed": False}
+
+    # Clear old port data and update metadata
+    kb['hosts'][target_ip]['ports'] = {}
     kb['hosts'][target_ip]['last_seen'] = time.time()
+    kb['hosts'][target_ip]['probed'] = True # Mark as probed
 
     open_ports = {}
     try:
