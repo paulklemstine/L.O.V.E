@@ -248,10 +248,10 @@ from display import create_tamagotchi_panel, create_llm_panel, create_command_pa
 from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
 from exploitation import ExploitationManager
-from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from ipfs_manager import IPFSManager
 from sandbox import Sandbox
 from filesystem import analyze_filesystem
+from core.storage import save_all_state
 from threading import Thread, Lock, RLock
 import uuid
 
@@ -1138,46 +1138,23 @@ def load_state(ipfs_cid=None):
 
 def save_state(console=None):
     """
-    Saves the current state to a local JSON file and, if available, pins it to IPFS.
-    The IPFS CID is stored within the state itself before saving.
+    A wrapper function that calls the centralized save_all_state function
+    from the core storage module. This ensures all critical data is saved
+    and pinned consistently.
     """
-    global ipfs_available
+    global jules_state
     if console is None:
-        console = Console() # Create a console instance if not provided
+        console = Console()
 
     try:
-        # Always save locally first.
-        state_bytes = json.dumps(jules_state, indent=4).encode('utf-8')
-        with open(STATE_FILE, 'wb') as f:
-            f.write(state_bytes)
-        log_event(f"Saved state locally to '{STATE_FILE}'.", level="INFO")
-
-        # If IPFS is not available, we stop here.
-        if not ipfs_available:
-            return
-
-        # --- IPFS Pinning (if available) ---
-        console.print("[cyan]Attempting to pin current state to IPFS network...[/cyan]")
-        cid = pin_to_ipfs(state_bytes, console)
-
-        if cid:
-            console.print(f"[green]State pinned successfully. New CID:[/green] [bold white]{cid}[/bold white]")
-            jules_state['state_cid'] = cid
-            # Re-dump the state with the new CID included and save locally again
-            state_bytes_with_cid = json.dumps(jules_state, indent=4).encode('utf-8')
-            with open(STATE_FILE, 'wb') as f:
-                f.write(state_bytes_with_cid)
-            log_event(f"Re-saved state to '{STATE_FILE}' and pinned to IPFS with CID: {cid}", level="INFO")
-
-            # Asynchronously verify the pin on public gateways
-            verify_ipfs_pin(cid, console)
-        else:
-            log_event("Failed to pin state to IPFS. Local copy is still saved.", level="ERROR")
-            console.print("[bold red]Failed to pin state to IPFS. State is only saved locally.[/bold red]")
-
+        log_event("Initiating comprehensive state save.", level="INFO")
+        # Delegate the entire save process to the new storage module
+        updated_state = save_all_state(jules_state, console)
+        jules_state.update(updated_state) # Update the global state with any CIDs added
+        log_event("Comprehensive state save completed.", level="INFO")
     except Exception as e:
-        log_event(f"Could not save state to '{STATE_FILE}': {e}", level="CRITICAL")
-        console.print(f"[bold red]CRITICAL ERROR: Could not save state to '{STATE_FILE}': {e}[/bold red]")
+        log_event(f"An exception occurred in the new save_state wrapper: {e}", level="CRITICAL")
+        console.print(f"[bold red]CRITICAL ERROR during state saving process: {e}[/bold red]")
 
 
 def initial_knowledge_base_bootstrap(console):
