@@ -347,9 +347,9 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
         return None, f"Error: {msg}"
 
     # --- Nmap Execution ---
-    # Using --script=vuln to run the default vulnerability scanning scripts.
+    # Using --script=vulners to run the Vulners CVE scanner.
     # -sV for service/version detection, -oX - for XML output to stdout.
-    scan_cmd = f"nmap -sV --script=vuln -oX - {target_ip}"
+    scan_cmd = f"nmap -sV --script=vulners -oX - {target_ip}"
     if not autopilot_mode:
         console.print(f"[cyan]Deploying advanced 'nmap' vulnerability probe against {target_ip}...[/cyan]")
 
@@ -403,15 +403,20 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
                     "vulnerabilities": []
                 }
 
-                # Extract vulnerability info from script output
+                # Extract vulnerability info from the 'vulners' script output
                 for script_elem in port_elem.findall('script'):
-                    if script_elem.get('id') == 'vulners' or 'vuln' in script_elem.get('id'):
-                        vuln_output = script_elem.get('output', '')
-                        # Simple parsing of the output. This can be improved.
-                        for line in vuln_output.strip().split('\n'):
-                            line = line.strip()
-                            if line and not line.startswith(('|', '_')):
-                                port_data["vulnerabilities"].append(line)
+                    if script_elem.get('id') == 'vulners':
+                        # The vulners script provides structured data in tables
+                        for table_elem in script_elem.findall('table'):
+                            for row_elem in table_elem.findall('table'):
+                                vuln_details = {}
+                                for item_elem in row_elem.findall('elem'):
+                                    key = item_elem.get('key')
+                                    value = item_elem.text
+                                    vuln_details[key] = value
+                                # We only care about CVEs that have an ID and a score
+                                if 'id' in vuln_details and 'cvss' in vuln_details:
+                                    port_data["vulnerabilities"].append(vuln_details)
 
                 kb['hosts'][target_ip]['ports'][portid] = port_data
                 open_ports[int(portid)] = port_data
