@@ -219,6 +219,7 @@ from network import NetworkManager, scan_network, probe_target, perform_webreque
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from ipfs_manager import IPFSManager
+from sandbox import Sandbox
 from threading import Thread, Lock, RLock
 import uuid
 
@@ -263,7 +264,8 @@ class JulesTaskManager:
                 "pr_url": None,
                 "created_at": time.time(),
                 "updated_at": time.time(),
-                "message": "Waiting for pull request to be created..."
+                "message": "Waiting for pull request to be created...",
+                "last_activity_name": None
             }
             log_event(f"Added new Jules task {task_id} for session {session_name}.", level="INFO")
             return task_id
@@ -284,8 +286,12 @@ class JulesTaskManager:
                 for task in current_tasks:
                     if task['status'] == 'pending_pr':
                         self._check_for_pr(task['id'])
+                    elif task['status'] == 'streaming':
+                        self._stream_task_output(task['id'])
                     elif task['status'] == 'pr_ready':
                         self._attempt_merge(task['id'])
+                    elif task['status'] == 'tests_failed':
+                        self._trigger_self_correction(task['id'])
 
                 # Clean up completed or failed tasks older than a certain time (e.g., 1 hour)
                 self._cleanup_old_tasks()
@@ -296,8 +302,112 @@ class JulesTaskManager:
 
             time.sleep(20) # Poll every 20 seconds
 
+    def _stream_task_output(self, task_id):
+        """Streams the live output of a Jules session to the console."""
+        with self.lock:
+            if task_id not in self.tasks: return
+            task = self.tasks[task_id]
+            session_name = task['session_name']
+            api_key = os.environ.get("JULES_API_KEY")
+            last_activity_name = task.get("last_activity_name")
+
+        if not api_key:
+            self._update_task_status(task_id, 'failed', "JULES_API_KEY not set.")
+            return
+
+        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        # The `alt=sse` parameter is what enables Server-Sent Events (SSE) for streaming.
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}?alt=sse"
+
+        try:
+            with requests.get(url, headers=headers, stream=True) as response:
+                response.raise_for_status()
+                self.console.print(f"[bold cyan]Connecting to Jules live stream for task {task_id}...[/bold cyan]")
+                for line in response.iter_lines():
+                    if line:
+                        decoded_line = line.decode('utf-8')
+                        if decoded_line.startswith('data: '):
+                            try:
+                                data = json.loads(decoded_line[6:])
+                                activity = data.get("activity", {})
+                                activity_name = activity.get("name")
+                                # This check prevents re-printing old activities.
+                                if activity_name != last_activity_name:
+                                    self._handle_stream_activity(task_id, activity)
+                                    with self.lock:
+                                        self.tasks[task_id]["last_activity_name"] = activity_name
+                            except json.JSONDecodeError:
+                                log_event(f"Task {task_id}: Could not decode SSE data: {decoded_line}", level="WARNING")
+
+        except requests.exceptions.RequestException as e:
+            error_message = f"API error during streaming: {e}"
+            log_event(f"Task {task_id}: {error_message}", level="ERROR")
+            # If streaming fails, we go back to polling.
+            self._update_task_status(task_id, 'pending_pr', "Streaming failed. Reverting to polling.")
+
+
+    def _handle_stream_activity(self, task_id, activity):
+        """Processes a single activity event from the SSE stream."""
+        # Extract relevant information from the activity payload.
+        state = activity.get("state", "STATE_UNSPECIFIED")
+        tool_code = activity.get("toolCode")
+        tool_output = activity.get("toolOutput")
+        pull_request = activity.get("pullRequest")
+        human_interaction = activity.get("humanInteraction")
+
+        # Display the activity in the console.
+        if tool_code:
+            self.console.print(Panel(Syntax(tool_code, "python", theme="monokai"), title=f"Jules Task {task_id}: Tool Call", border_style="green"))
+        if tool_output:
+            output_text = tool_output.get("output", "")
+            self.console.print(Panel(output_text, title=f"Jules Task {task_id}: Tool Output", border_style="cyan"))
+
+        # Check for state changes and user interaction requests.
+        if human_interaction and state == "AWAITING_HUMAN_INTERACTION":
+            self._handle_interaction_request(task_id, human_interaction)
+        elif pull_request and pull_request.get("url"):
+            pr_url = pull_request["url"]
+            log_event(f"Task {task_id}: Found PR URL via stream: {pr_url}", level="INFO")
+            self._update_task_status(task_id, 'pr_ready', f"Pull request created: {pr_url}", pr_url=pr_url)
+        elif state == "COMPLETED":
+            self.console.print(f"[bold green]Jules Task {task_id} completed.[/bold green]")
+
+
+    def _handle_interaction_request(self, task_id, interaction_request):
+        """Handles a request for human interaction by using an LLM to respond."""
+        self.console.print(Panel("[bold yellow]Jules requires feedback. Generating response...[/bold yellow]", title=f"Jules Task {task_id}: Interaction Required", border_style="yellow"))
+
+        # Formulate a prompt for the LLM to decide on the feedback.
+        interaction_prompt = f"The AI development agent, Jules, is asking for feedback. Based on its previous actions and the current request, provide a helpful and concise response to keep it on track. The request is: {interaction_request.get('prompt')}\n\nYour response should be something like 'Looks good, please continue.' or a more specific instruction if needed. Be brief."
+
+        feedback = run_llm(interaction_prompt, purpose="general")
+        if not feedback:
+            feedback = "Looks good, please continue." # Fallback response
+
+        # Send the feedback to the Jules API.
+        with self.lock:
+            task = self.tasks[task_id]
+            session_name = task['session_name']
+            api_key = os.environ.get("JULES_API_KEY")
+
+        if not api_key: return
+
+        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}:provideFeedback"
+        data = {"feedback": {"response": feedback}}
+
+        try:
+            requests.post(url, headers=headers, json=data)
+            self.console.print(f"[green]Provided feedback to Jules: '{feedback}'[/green]")
+        except requests.exceptions.RequestException as e:
+            log_event(f"Task {task_id}: Failed to provide feedback: {e}", level="ERROR")
+
+
     def _check_for_pr(self, task_id):
-        """Polls the Jules API for a specific session to find the PR URL."""
+        """
+        Polls the Jules API for a specific session to find the PR URL.
+        If the session is active but has no PR, it switches to streaming mode.
+        """
         with self.lock:
             if task_id not in self.tasks: return
             task = self.tasks[task_id]
@@ -317,6 +427,7 @@ class JulesTaskManager:
             session_data = response.json()
             pr_url = None
 
+            # Check for a PR URL in the activities.
             for activity in session_data.get("activities", []):
                 if activity.get("pullRequest") and activity["pullRequest"].get("url"):
                     pr_url = activity["pullRequest"]["url"]
@@ -325,10 +436,11 @@ class JulesTaskManager:
             if pr_url:
                 log_event(f"Task {task_id}: Found PR URL: {pr_url}", level="INFO")
                 self._update_task_status(task_id, 'pr_ready', f"Pull request found: {pr_url}", pr_url=pr_url)
-            else:
-                # Check for timeout (e.g., 10 minutes)
-                if time.time() - task['created_at'] > 600:
-                    self._update_task_status(task_id, 'failed', "Timed out waiting for pull request.")
+            elif session_data.get("state") in ["CREATING", "IN_PROGRESS"]:
+                # If the task is running but no PR is ready, switch to streaming.
+                self._update_task_status(task_id, 'streaming', "Task in progress. Connecting to live stream...")
+            elif time.time() - task['created_at'] > 1800: # 30 minute timeout
+                self._update_task_status(task_id, 'failed', "Timed out waiting for task to start or create a PR.")
 
         except requests.exceptions.RequestException as e:
             error_message = f"API error checking PR status: {e}"
@@ -336,24 +448,106 @@ class JulesTaskManager:
             self._update_task_status(task_id, 'failed', error_message)
 
     def _attempt_merge(self, task_id):
-        """Attempts to auto-merge a pull request for a given task."""
+        """
+        Orchestrates the sandbox testing and merging process for a PR.
+        """
         with self.lock:
             if task_id not in self.tasks: return
             task = self.tasks[task_id]
             pr_url = task['pr_url']
 
-        self._update_task_status(task_id, 'merging', "Attempting to merge pull request...")
+        self._update_task_status(task_id, 'sandboxing', "Preparing to test pull request in a sandbox...")
 
-        success, message = self._auto_merge_pull_request(pr_url)
+        repo_owner, repo_name = get_git_repo_info()
+        if not repo_owner or not repo_name:
+            self._update_task_status(task_id, 'failed', "Could not determine git repo info.")
+            return
 
-        if success:
-            self._update_task_status(task_id, 'completed', message)
-            # After a successful merge, we expect a restart.
-            # The console message will be seen if the restart fails for some reason.
-            self.console.print(f"\n[bold green]Jules Task {task_id} merged successfully! Prepare for restart...[/bold green]")
-            restart_script(self.console)
+        # The repo URL that the sandbox will clone
+        repo_url = f"https://github.com/{repo_owner}/{repo_name}.git"
+
+        # We need the branch name to create the sandbox
+        branch_name = self._get_pr_branch_name(pr_url)
+        if not branch_name:
+            self._update_task_status(task_id, 'failed', "Could not determine the PR branch name.")
+            return
+
+        sandbox = Sandbox(repo_url=repo_url)
+        try:
+            if not sandbox.create(branch_name):
+                self._update_task_status(task_id, 'failed', "Failed to create the sandbox environment.")
+                return
+
+            tests_passed, test_output = sandbox.run_tests()
+
+            if tests_passed:
+                self._update_task_status(task_id, 'merging', "Sandbox tests passed. Attempting to merge...")
+                success, message = self._auto_merge_pull_request(pr_url)
+                if success:
+                    self._update_task_status(task_id, 'completed', message)
+                    self.console.print(f"\n[bold green]Jules Task {task_id} merged successfully! Prepare for restart...[/bold green]")
+                    restart_script(self.console)
+                else:
+                    self._update_task_status(task_id, 'merge_failed', message)
+            else:
+                log_event(f"Task {task_id} failed sandbox tests. Output:\n{test_output}", level="ERROR")
+                # Update the task with the necessary info for the correction loop
+                with self.lock:
+                    if task_id in self.tasks:
+                        self.tasks[task_id]['test_output'] = test_output
+                        self.tasks[task_id]['branch_name'] = branch_name
+                self._update_task_status(task_id, 'tests_failed', "Sandbox tests failed. Triggering self-correction.")
+
+        finally:
+            # Always ensure the sandbox is cleaned up.
+            sandbox.destroy()
+
+    def _trigger_self_correction(self, task_id):
+        """
+        When tests fail, this method creates a new Jules task to fix the code.
+        """
+        with self.lock:
+            if task_id not in self.tasks: return
+            task = self.tasks[task_id]
+            # Add a retry limit to prevent infinite loops
+            retries = task.get('retries', 0)
+            if retries >= 3:
+                self._update_task_status(task_id, 'failed', "Self-correction failed after 3 attempts.")
+                return
+
+        self.console.print(f"[bold magenta]Task {task_id}: Tests failed. Triggering self-correction loop...[/bold magenta]")
+
+        # Formulate a new request for Jules to fix the tests
+        original_request = task['request']
+        test_output = task.get('test_output', 'No test output available.')
+
+        correction_prompt = f"""
+The previous attempt to implement the request "{original_request}" resulted in code that failed the automated tests.
+
+Your new task is to fix the code on branch '{task.get('branch_name', 'unknown')}' to make the tests pass.
+
+Here is the output from the failed test run:
+---
+{test_output}
+---
+
+Please analyze the test output, identify the bug, and provide a corrected version of the code.
+"""
+
+        # Trigger a new evolution, which will create a new task
+        # We pass the jules_task_manager instance to the function
+        api_success = trigger_jules_evolution(correction_prompt, self.console, self)
+
+        if api_success:
+            # Mark the old task as superseded
+            self._update_task_status(task_id, 'superseded', f"Superseded by new self-correction task.")
+            with self.lock:
+                # This is a bit of a hack, but we need to find the new task to update its retry count
+                # This assumes the new task is the most recently created one.
+                new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                self.tasks[new_task_id]['retries'] = retries + 1
         else:
-            self._update_task_status(task_id, 'merge_failed', message)
+            self._update_task_status(task_id, 'failed', "Failed to trigger the self-correction task.")
 
 
     def _auto_merge_pull_request(self, pr_url):
@@ -383,15 +577,132 @@ class JulesTaskManager:
                 self._delete_pr_branch(repo_owner, repo_name, pr_number, headers)
                 return True, msg
             elif merge_response.status_code == 405: # Merge conflict
-                msg = f"Cannot merge PR #{pr_number} due to a merge conflict."
-                log_event(msg, level="ERROR")
-                return False, msg
+                self.console.print(f"[bold yellow]Merge conflict detected for PR #{pr_number}. Attempting LLM-driven resolution...[/bold yellow]")
+                resolved = self._resolve_merge_conflict(pr_url)
+                if resolved:
+                    self.console.print(f"[bold green]LLM resolved conflicts. Re-attempting merge for PR #{pr_number}...[/bold green]")
+                    # After resolution, try merging again
+                    return self._auto_merge_pull_request(pr_url)
+                else:
+                    msg = f"LLM failed to resolve merge conflict for PR #{pr_number}."
+                    log_event(msg, level="ERROR")
+                    return False, msg
             else:
                 msg = f"Failed to merge PR #{pr_number}. Status: {merge_response.status_code}, Response: {merge_response.text}"
                 log_event(msg, level="ERROR")
                 return False, msg
         except requests.exceptions.RequestException as e:
             return False, f"GitHub API error during merge: {e}"
+
+    def _get_pr_branch_name(self, pr_url):
+        """Fetches PR details from GitHub API to get the source branch name."""
+        github_token = os.environ.get("GITHUB_TOKEN")
+        if not github_token:
+            log_event("Cannot get PR branch name: GITHUB_TOKEN not set.", level="ERROR")
+            return None
+
+        repo_owner, repo_name = get_git_repo_info()
+        if not repo_owner or not repo_name:
+            log_event("Cannot get PR branch name: Could not determine git repo info.", level="ERROR")
+            return None
+
+        pr_number_match = re.search(r'/pull/(\d+)', pr_url)
+        if not pr_number_match:
+            log_event(f"Could not extract PR number from URL: {pr_url}", level="ERROR")
+            return None
+        pr_number = pr_number_match.group(1)
+
+        headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+        api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}"
+
+        try:
+            response = requests.get(api_url, headers=headers)
+            response.raise_for_status()
+            branch_name = response.json()["head"]["ref"]
+            log_event(f"Determined PR branch name is '{branch_name}'.", level="INFO")
+            return branch_name
+        except requests.exceptions.RequestException as e:
+            log_event(f"Error fetching PR details to get branch name: {e}", level="ERROR")
+            return None
+
+    def _resolve_merge_conflict(self, pr_url):
+        """
+        Attempts to resolve a merge conflict using an LLM.
+        Returns True if successful, False otherwise.
+        """
+        repo_owner, repo_name = get_git_repo_info()
+        branch_name = self._get_pr_branch_name(pr_url)
+        if not all([repo_owner, repo_name, branch_name]):
+            return False
+
+        temp_dir = os.path.join("jules_sandbox", f"conflict-resolver-{branch_name}")
+        if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
+        os.makedirs(temp_dir)
+
+        try:
+            # 1. Setup git environment to reproduce the conflict
+            repo_url = f"https://github.com/{repo_owner}/{repo_name}.git"
+            subprocess.check_call(["git", "clone", repo_url, temp_dir], capture_output=True)
+            subprocess.check_call(["git", "checkout", "main"], cwd=temp_dir, capture_output=True)
+
+            # This merge is expected to fail and create conflict markers
+            merge_process = subprocess.run(["git", "merge", f"origin/{branch_name}"], cwd=temp_dir, capture_output=True, text=True)
+            if merge_process.returncode == 0:
+                # This should not happen if GitHub reported a conflict, but handle it.
+                log_event("Merge succeeded unexpectedly during conflict resolution setup.", "WARNING")
+                return True
+
+            # 2. Find and read conflicted files
+            status_output = subprocess.check_output(["git", "status", "--porcelain"], cwd=temp_dir, text=True)
+            conflicted_files = [line.split()[1] for line in status_output.splitlines() if line.startswith("UU")]
+
+            if not conflicted_files:
+                log_event("Merge failed but no conflicted files found.", "ERROR")
+                return False
+
+            # 3. Use LLM to resolve each conflict
+            for file_path in conflicted_files:
+                full_path = os.path.join(temp_dir, file_path)
+                with open(full_path, 'r') as f:
+                    conflicted_content = f.read()
+
+                resolution_prompt = f"""
+You are an expert git developer. You must resolve the following merge conflict in the file '{file_path}'.
+Analyze the code from the 'HEAD' (main branch) and the incoming branch ('{branch_name}').
+Combine them logically to create a final, correct version of the file.
+You must remove all git conflict markers ('<<<<<<<', '=======', '>>>>>>>').
+Your output must be only the complete, resolved code for the file.
+
+CONFLICTED CONTENT:
+---
+{conflicted_content}
+---
+                """
+                resolved_code = run_llm(resolution_prompt, purpose="review")
+                if not resolved_code or '<<<' in resolved_code:
+                    log_event(f"LLM failed to provide a clean resolution for {file_path}.", "ERROR")
+                    return False
+
+                with open(full_path, 'w') as f:
+                    f.write(resolved_code)
+
+                # Stage the resolved file
+                subprocess.check_call(["git", "add", file_path], cwd=temp_dir)
+
+            # 4. Commit and push the resolution
+            commit_message = f"chore: Resolve merge conflicts via LLM for PR from {branch_name}"
+            subprocess.check_call(["git", "commit", "-m", commit_message], cwd=temp_dir)
+            subprocess.check_call(["git", "push", "origin", f"HEAD:{branch_name}"], cwd=temp_dir)
+
+            log_event(f"Successfully resolved conflicts and pushed to branch {branch_name}.", "INFO")
+            return True
+
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            log_event(f"Git operation failed during conflict resolution: {e}", "CRITICAL")
+            return False
+        finally:
+            shutil.rmtree(temp_dir)
+
 
     def _delete_pr_branch(self, owner, repo, pr_number, headers):
         """Deletes the branch of a merged pull request."""
