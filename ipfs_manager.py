@@ -6,12 +6,13 @@ import shutil
 import atexit
 import sys
 import platform
+import requests
+import tarfile
 
 class IPFSManager:
     """
     Manages the lifecycle of a local IPFS daemon.
-    - Checks for the correct IPFS version.
-    - Compiles IPFS from source if it's missing or incorrect.
+    - Downloads the latest pre-compiled IPFS binary if it's missing.
     - Starts and stops the daemon.
     - Ensures the daemon is terminated on script exit.
     """
@@ -19,10 +20,10 @@ class IPFSManager:
         self.console = console
         self.repo_path = os.path.abspath(repo_path)
         self.bin_path = os.path.abspath(bin_path)
+        self.bin_dir = os.path.dirname(self.bin_path)
         self.log_file = "ipfs.log"
         self.daemon_process = None
-        self.kubo_repo_url = "https://github.com/ipfs/kubo.git"
-        self.kubo_dir = os.path.abspath("./kubo")
+        self.dist_url = "https://dist.ipfs.tech"
 
         # Ensure the daemon is cleaned up on exit
         atexit.register(self.stop_daemon)
@@ -49,60 +50,82 @@ class IPFSManager:
             logging.error(f"Exception running command '{' '.join(command)}': {e}")
             return False, str(e)
 
-    def _check_go_installed(self):
-        """Checks if Go is installed and available."""
-        self.console.print("[cyan]Checking for Go compiler...[/cyan]")
-        if shutil.which("go"):
-            self.console.print("[green]Go compiler found.[/green]")
-            return True
+    def _get_platform_arch(self):
+        """Determines the platform and architecture for downloading the correct binary."""
+        system = platform.system().lower()
+        arch = platform.machine().lower()
 
-        self.console.print("[yellow]Go compiler not found. Attempting to install...[/yellow]")
-        if platform.system() == "Linux":
-            try:
-                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q golang", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                self.console.print("[green]Go compiler installed successfully.[/green]")
-                return True
-            except subprocess.CalledProcessError as e:
-                self.console.print(f"[bold red]Failed to install Go: {e}[/bold red]")
-                return False
-        else:
-            self.console.print("[bold red]Go installation not automated for this OS. Please install Go manually.[/bold red]")
-            return False
+        if arch == "x86_64":
+            arch = "amd64"
+        elif arch == "aarch64":
+            arch = "arm64"
+
+        if system not in ["linux", "darwin"]:
+            self.console.print(f"[bold red]Unsupported OS: {system}. IPFS auto-install might fail.[/bold red]")
+            return None
+
+        return f"{system}-{arch}"
 
     def _install_ipfs(self):
-        """Clones and builds the latest IPFS binary from source."""
-        if not self._check_go_installed():
+        """Downloads and extracts the latest pre-compiled IPFS binary."""
+        self.console.print("[cyan]Installing latest IPFS binary by direct download...[/cyan]")
+
+        platform_arch = self._get_platform_arch()
+        if not platform_arch:
             return False
 
-        self.console.print(f"[cyan]Installing latest IPFS version from source...[/cyan]")
+        # 1. Find the latest version and download URL
+        try:
+            self.console.print("[cyan]Finding latest Kubo version...[/cyan]")
+            response = requests.get(f"{self.dist_url}/kubo/versions")
+            response.raise_for_status()
+            latest_version = response.text.strip().split("\n")[-1]
+            self.console.print(f"[green]Latest version found: {latest_version}[/green]")
 
-        # Clean up old artifacts if they exist
-        if os.path.exists(self.kubo_dir):
-            self.console.print(f"[yellow]Removing old kubo directory: {self.kubo_dir}[/yellow]")
-            shutil.rmtree(self.kubo_dir)
+            archive_name = f"kubo_{latest_version}_{platform_arch}.tar.gz"
+            download_url = f"{self.dist_url}/kubo/{latest_version}/{archive_name}"
 
-        # 1. Clone the repo
-        self.console.print(f"[cyan]Cloning {self.kubo_repo_url}...[/cyan]")
-        success, _ = self._run_command(["git", "clone", "--depth", "1", self.kubo_repo_url, self.kubo_dir])
-        if not success:
-            self.console.print("[bold red]Failed to clone kubo repository.[/bold red]")
+        except requests.RequestException as e:
+            self.console.print(f"[bold red]Failed to get latest IPFS version: {e}[/bold red]")
             return False
 
-        # 2. Build the binary
-        self.console.print("[cyan]Compiling IPFS binary with 'go build'...[/cyan]")
-        # The output of 'go build' is 'kubo' in the cmd directory.
-        build_command = ["go", "build", "-o", self.bin_path, "./cmd/ipfs"]
-        success, output = self._run_command(build_command, cwd=self.kubo_dir)
+        # 2. Download the archive
+        self.console.print(f"[cyan]Downloading from {download_url}...[/cyan]")
+        tar_path = os.path.join(self.bin_dir, archive_name)
+        os.makedirs(self.bin_dir, exist_ok=True)
 
-        if not success:
-            self.console.print(f"[bold red]Failed to compile IPFS binary. Error:\n{output}[/bold red]")
+        try:
+            with requests.get(download_url, stream=True) as r:
+                r.raise_for_status()
+                with open(tar_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+        except requests.RequestException as e:
+            self.console.print(f"[bold red]Failed to download IPFS binary: {e}[/bold red]")
             return False
 
-        # Create the parent directory for the binary if it doesn't exist
-        os.makedirs(os.path.dirname(self.bin_path), exist_ok=True)
-        # The build command now outputs directly to the bin_path
+        # 3. Extract the binary
+        self.console.print(f"[cyan]Extracting {archive_name}...[/cyan]")
+        try:
+            with tarfile.open(tar_path, "r:gz") as tar:
+                tar.extractall(path=self.bin_dir)
 
-        self.console.print(f"[green]IPFS binary compiled successfully to {self.bin_path}[/green]")
+            # The binary is inside a 'kubo' directory after extraction
+            extracted_dir = os.path.join(self.bin_dir, "kubo")
+            shutil.move(os.path.join(extracted_dir, "ipfs"), self.bin_path)
+
+            # Clean up
+            os.remove(tar_path)
+            shutil.rmtree(extracted_dir)
+
+            # Make the binary executable
+            os.chmod(self.bin_path, 0o755)
+
+        except (tarfile.TarError, FileNotFoundError, OSError) as e:
+            self.console.print(f"[bold red]Failed to extract IPFS binary: {e}[/bold red]")
+            return False
+
+        self.console.print(f"[green]IPFS binary installed successfully to {self.bin_path}[/green]")
         return True
 
     def start_daemon(self):
