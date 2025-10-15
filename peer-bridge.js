@@ -11,15 +11,15 @@ const { Peer } = require('peerjs');
 const { Readable } = require('stream');
 
 // --- Configuration ---
-const PEER_ID_PREFIX = 'evolve-node-';
-const STUN_SERVERS = [
-    'stun:stun.l.google.com:19302',
-    'stun:global.stun.twilio.com:3478'
-];
+const RECONNECT_DELAY = 5000; // 5 seconds
 
 // --- State ---
 let peer = null;
 const connections = new Map();
+let isReconnecting = false;
+// [Jules] Changed to a static ID to create a discoverable lobby.
+// Keep the peerId consistent across reconnections.
+let peerId = 'borg-lobby';
 
 // --- Logging ---
 // Use stderr for logs to keep stdout clean for data exchange with Python
@@ -33,15 +33,41 @@ const log = (level, message) => {
     console.error(JSON.stringify(logEntry));
 };
 
+// --- Reconnection Logic ---
+function reconnect() {
+    if (isReconnecting) {
+        log('info', 'Reconnection already in progress.');
+        return;
+    }
+    isReconnecting = true;
+    log('warn', `Attempting to reconnect in ${RECONNECT_DELAY / 1000} seconds...`);
+
+    // Clean up old peer object
+    if (peer && !peer.destroyed) {
+        peer.destroy();
+    }
+    peer = null; // Ensure the old peer is garbage collected
+
+    setTimeout(() => {
+        log('info', 'Reconnecting now...');
+        isReconnecting = false; // Reset flag before re-initializing
+        initializePeer();
+    }, RECONNECT_DELAY);
+}
+
+
 // --- PeerJS Logic ---
 function initializePeer() {
-    // [Jules] Changed to a static ID to create a discoverable lobby.
-    const peerId = 'borg-lobby';
+    // Use the globally stored peerId
+    if (peer) {
+        log('warn', 'Peer already initialized.');
+        return;
+    }
 
     peer = new Peer(peerId, {
         wrtc: wrtc,
         config: {
-            'iceServers': [{ urls: STUN_SERVERS }]
+            'iceServers': [{ urls: ['stun:stun.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] }]
         },
         // Use a more robust connection timeout
         connectTimeout: 10000
@@ -49,9 +75,9 @@ function initializePeer() {
 
     peer.on('open', (id) => {
         log('info', `PeerJS connection opened with ID: ${id}`);
+        // Update the global peerId in case it was dynamically assigned (shouldn't happen with static ID)
+        peerId = id;
         // Signal to Python that the bridge is ready.
-        // NOTE: The format is flattened (no 'payload' object) to match the
-        // parsing logic in the parent network.py script.
         process.stdout.write(JSON.stringify({ type: 'status', status: 'online', peerId: id }) + '\n');
     });
 
@@ -64,7 +90,6 @@ function initializePeer() {
             log('info', `Received data from ${conn.peer}`);
 
             // Forward the data to the Python script via stdout
-            // Add the peer ID so Python knows who to reply to
             const messageToPython = {
                 type: 'p2p-data',
                 peer: conn.peer,
@@ -87,21 +112,35 @@ function initializePeer() {
 
     peer.on('error', (err) => {
         log('error', `PeerJS error: ${err.type} - ${err.message}`);
-        // Signal a critical error to Python.
-        // NOTE: The format is flattened (no 'payload' object) to match the
-        // parsing logic in the parent network.py script.
-        process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
-        process.exit(1);
+
+        // Define which errors should trigger a reconnect vs. a fatal exit
+        const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc'];
+
+        if (recoverableErrors.includes(err.type)) {
+            log('warn', 'A recoverable error occurred. Triggering reconnection.');
+            // Signal a transient error to Python without exiting
+            process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: err.message }) + '\n');
+            reconnect();
+        } else {
+            log('error', 'An unrecoverable error occurred. Exiting.');
+            // Signal a critical error to Python.
+            process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
+            process.exit(1);
+        }
     });
 
     peer.on('disconnected', () => {
-        log('warn', 'Peer disconnected from signaling server. Attempting to reconnect...');
-        // PeerJS will automatically try to reconnect.
+        log('warn', 'Peer disconnected from signaling server.');
+        reconnect();
     });
 
     peer.on('close', () => {
-        log('error', 'Peer connection closed permanently.');
-        process.exit(1);
+        // This event fires when peer.destroy() is called, which is part of our
+        // reconnect logic. We don't want to exit in that case.
+        if (!isReconnecting) {
+            log('error', 'Peer connection closed permanently. This should not happen. Exiting.');
+            process.exit(1);
+        }
     });
 }
 
