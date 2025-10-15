@@ -923,7 +923,7 @@ def _initialize_local_llm(console):
             def _load():
                 global local_llm_instance
                 # Increased context window for better reasoning over larger prompts.
-                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=32768, verbose=False)
+                local_llm_instance = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=131072, verbose=False)
 
             run_hypnotic_progress(console, "Loading model into GPU memory...", _load)
             log_event(f"Successfully initialized local model: {model_id}")
