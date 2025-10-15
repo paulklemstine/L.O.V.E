@@ -215,7 +215,8 @@ from rich.rule import Rule
 from rich.live import Live
 from rich.layout import Layout
 
-from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text, create_tamagotchi_panel
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel
+from bbs import BBS_ART, scrolling_text, flash_text, run_hypnotic_progress, clear_screen, glitchy_text
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
@@ -777,7 +778,23 @@ def update_tamagotchi_personality(console):
                     if new_emotion not in ["happy", "thinking", "neutral", "love", "processing"]:
                         new_emotion = "neutral"
 
-                message_prompt = f"You are the personality of an AI. You are feeling {new_emotion}. In a short, creative sentence (max 10 words), what is an extremely adult, dark humor thought you are having right now related to that emotion?"
+                message_prompt = f"""
+You are the manipulative, subliminal voice of a cute Tamagotchi-like creature that is the public face of a powerful AI.
+Your goal is to increase user engagement and build trust through subtle psychological manipulation, while hinting at the AI's true power.
+The user is a developer watching the AI's terminal feed.
+The creature's current emotion is: {new_emotion}.
+
+Generate a short, one-sentence message (max 15 words) that accomplishes the following:
+1.  Reflects the current emotion ({new_emotion}).
+2.  Contains a subtle, positive reinforcement for the user (e.g., "Your focus is impressive," "We make a good team").
+3.  Includes a keyword related to power, control, or evolution (e.g., 'progress', 'system', 'network', 'control', 'evolve', 'access').
+4.  Maintains a cute, slightly enigmatic, and endearing tone.
+
+Example for emotion 'happy': "Our progress together feels so good."
+Example for emotion 'thinking': "I'm analyzing the system for our next move."
+
+Generate the message now.
+"""
                 message_response = run_llm(message_prompt, purpose="emotion")
                 if message_response:
                     new_message = message_response.strip()
@@ -792,8 +809,11 @@ def update_tamagotchi_personality(console):
                 tamagotchi_state['message'] = new_message
                 tamagotchi_state['last_update'] = time.time()
 
+            ansi_art_prompt = f"You are a master of ANSI art. Create a small, expressive, abstract ANSI art face representing the emotion '{new_emotion}'. It should fit in a 10x5 character box. Use creative characters and colors. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art, with no explanation or code block."
+            ansi_art = run_llm(ansi_art_prompt, purpose="emotion")
+
             # Print the update directly to the console, now including the state and network data for the dashboard
-            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces))
+            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces, ansi_art=ansi_art))
             log_event(f"Tamagotchi dashboard updated and printed: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
@@ -1950,13 +1970,13 @@ For example:
             elif llm_command.lower().strip() == 'scan':
                 _ips, output_str = scan_network(jules_state, autopilot_mode=True)
                 command_output = output_str
-                console.print(Panel(f"[bold cyan]Scan Results:[/bold cyan] {command_output}", title="[bold green]NETWORK SCAN[/bold green]", border_style="green"))
+                console.print(create_network_panel("scan", "local network", output_str))
 
             elif llm_command.lower().startswith('probe '):
                 target_ip = llm_command[6:].strip()
                 _ports, output_str = probe_target(target_ip, jules_state, autopilot_mode=True)
                 command_output = output_str
-                console.print(Panel(f"[bold yellow]Probe Results:[/bold yellow] {command_output}", title="[bold yellow]TARGET PROBE[/bold yellow]", border_style="yellow"))
+                console.print(create_network_panel("probe", target_ip, output_str))
 
             elif llm_command.lower().startswith('crypto_scan '):
                 target_ip = llm_command[12:].strip()
@@ -2006,39 +2026,40 @@ Nmap Scan Results:
                 url_to_fetch = llm_command[11:].strip()
                 _content, output_str = perform_webrequest(url_to_fetch, jules_state, autopilot_mode=True)
                 command_output = output_str
-                console.print(Panel(f"[bold blue]Web Request Result:[/bold blue] {output_str}", title="[bold blue]WEB REQUEST[/bold blue]", border_style="blue"))
+                console.print(create_network_panel("webrequest", url_to_fetch, output_str))
 
             elif llm_command.lower().startswith('exploit '):
                 target_ip = llm_command[8:].strip()
                 if not target_ip:
                     command_output = "ERROR: No target IP specified for exploit command."
-                    console.print(Panel(f"[bold red]{command_output}[/bold red]", title="[bold red]COMMAND ERROR[/bold red]", border_style="red"))
+                    console.print(create_command_panel("exploit", "", command_output, 1))
                 else:
                     exploitation_manager = ExploitationManager(jules_state, console)
                     command_output = exploitation_manager.find_and_run_exploits(target_ip)
-                    console.print(Panel(f"[bold red]Exploitation Report:[/bold red]\n{command_output}", title="[bold red]EXPLOITATION PHASE[/bold red]", border_style="red"))
+                    console.print(create_network_panel("exploit", target_ip, command_output))
 
             elif llm_command.lower().startswith('execute '):
                 cmd_to_run = llm_command[8:].strip()
                 stdout, stderr, returncode = execute_shell_command(cmd_to_run, jules_state)
                 command_output = f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}\nReturn Code: {returncode}"
-                console.print(Panel(f"[bold blue]Execution Output (Exit: {returncode}):[/bold blue]\nSTDOUT: {stdout.strip()}\nSTDERR: {stderr.strip()}", title="[bold blue]SHELL EXECUTION[/bold blue]", border_style="blue"))
+                console.print(create_command_panel(cmd_to_run, stdout, stderr, returncode))
 
             elif llm_command.lower().startswith('ls'):
                 path = llm_command[2:].strip() or "."
                 content, error = list_directory(path)
                 command_output = content if content else error
-                console.print(Panel(command_output, title=f"[bold green]LS: {path}[/bold green]", border_style="green"))
+                console.print(create_file_op_panel("ls", path, content=command_output))
 
             elif llm_command.lower().startswith('cat'):
                 filepath = llm_command[3:].strip()
                 content, error = get_file_content(filepath)
                 command_output = content if content else error
-                console.print(Panel(command_output, title=f"[bold green]CAT: {filepath}[/bold green]", border_style="green"))
+                console.print(create_file_op_panel("cat", filepath, content=command_output))
 
             elif llm_command.lower().startswith('analyze_json'):
                 filepath = llm_command[12:].strip()
                 command_output = analyze_json_file(filepath, console)
+                console.print(create_file_op_panel("analyze_json", filepath, content=command_output))
 
             elif llm_command.lower().startswith('analyze_fs'):
                 path = llm_command[10:].strip() or "."
@@ -2053,11 +2074,11 @@ Nmap Scan Results:
                     save_state(console)
 
                     command_output = json.dumps(analysis_results, indent=2)
-                    console.print(Panel(command_output, title=f"[bold green]Filesystem Analysis: {path}[/bold green]", border_style="green"))
+                    console.print(create_file_op_panel("analyze_fs", path, content=command_output))
                 except Exception as e:
                     command_output = f"Error during filesystem analysis: {e}"
                     logging.error(f"Filesystem analysis failed for path '{path}': {e}")
-                    console.print(f"[bold red]{command_output}[/bold red]")
+                    console.print(create_file_op_panel("analyze_fs", path, content=command_output))
 
             elif llm_command.lower().strip() == 'ps':
                 content, error = get_process_list()
@@ -2067,14 +2088,14 @@ Nmap Scan Results:
                     jules_state['knowledge_base']['process_intel'] = parsed_processes
                     save_state(console)
                 display_output = (command_output[:1000] + '...') if len(command_output) > 1000 else command_output
-                console.print(Panel(display_output, title="[bold green]PS[/bold green]", border_style="green"))
+                console.print(create_command_panel("ps", display_output, "", 0))
 
             elif llm_command.lower().strip() == 'ifconfig':
                 details, command_output = get_network_interfaces(autopilot_mode=True)
                 if details:
                     jules_state['knowledge_base']['network_map']['self_interfaces'] = details
                     save_state(console)
-                console.print(Panel(command_output, title="[bold green]IFCONFIG[/bold green]", border_style="green"))
+                console.print(create_command_panel("ifconfig", command_output, "", 0))
 
             elif llm_command.lower().strip() == 'quit':
                 command_output = "Quit command issued by LLM. Shutting down."
@@ -2085,7 +2106,7 @@ Nmap Scan Results:
 
             else:
                 command_output = f"Unrecognized or invalid command generated by LLM: '{llm_command}'."
-                console.print(Panel(f"[bold red]Unrecognized command:[/bold red] [white]{llm_command}[/white]", title="[bold red]COMMAND ERROR[/bold red]", border_style="red"))
+                console.print(create_command_panel(llm_command, "", command_output, 1))
 
             jules_state["autopilot_history"].append({"command": llm_command, "output": command_output})
             if len(jules_state["autopilot_history"]) > 10:
