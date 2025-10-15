@@ -776,39 +776,42 @@ def load_state(ipfs_cid=None):
 
 def save_state(console=None):
     """
-    Saves the current state to a local JSON file and pins it to IPFS.
+    Saves the current state to a local JSON file and, if available, pins it to IPFS.
     The IPFS CID is stored within the state itself before saving.
     """
+    global ipfs_available
     if console is None:
         console = Console() # Create a console instance if not provided
 
     try:
-        # Convert state to JSON bytes for IPFS
+        # Always save locally first.
         state_bytes = json.dumps(jules_state, indent=4).encode('utf-8')
+        with open(STATE_FILE, 'wb') as f:
+            f.write(state_bytes)
+        log_event(f"Saved state locally to '{STATE_FILE}'.", level="INFO")
 
-        # Pin to IPFS
-        console.print("[cyan]Pinning current state to IPFS network...[/cyan]")
+        # If IPFS is not available, we stop here.
+        if not ipfs_available:
+            return
+
+        # --- IPFS Pinning (if available) ---
+        console.print("[cyan]Attempting to pin current state to IPFS network...[/cyan]")
         cid = pin_to_ipfs(state_bytes, console)
 
         if cid:
             console.print(f"[green]State pinned successfully. New CID:[/green] [bold white]{cid}[/bold white]")
             jules_state['state_cid'] = cid
-            # Re-dump the state with the new CID included for local saving
+            # Re-dump the state with the new CID included and save locally again
             state_bytes_with_cid = json.dumps(jules_state, indent=4).encode('utf-8')
-
-            # Save the updated state locally
             with open(STATE_FILE, 'wb') as f:
                 f.write(state_bytes_with_cid)
-            log_event(f"Saved state to '{STATE_FILE}' and pinned to IPFS with CID: {cid}", level="INFO")
+            log_event(f"Re-saved state to '{STATE_FILE}' and pinned to IPFS with CID: {cid}", level="INFO")
 
             # Asynchronously verify the pin on public gateways
             verify_ipfs_pin(cid, console)
         else:
-            log_event("Failed to pin state to IPFS. Saving locally without a new CID.", level="ERROR")
-            console.print("[bold red]Failed to pin state to IPFS. Saving locally only.[/bold red]")
-            # Save locally even if IPFS pinning fails
-            with open(STATE_FILE, 'wb') as f:
-                 f.write(state_bytes) # Write original state without new CID
+            log_event("Failed to pin state to IPFS. Local copy is still saved.", level="ERROR")
+            console.print("[bold red]Failed to pin state to IPFS. State is only saved locally.[/bold red]")
 
     except Exception as e:
         log_event(f"Could not save state to '{STATE_FILE}': {e}", level="CRITICAL")
@@ -1671,10 +1674,16 @@ def main(args):
     global ipfs_manager
     console = Console()
 
+    global ipfs_available
     # --- Start Core Services ---
     # 1. IPFS Manager (must start before anything that uses IPFS)
     ipfs_manager = IPFSManager(console=console)
-    ipfs_manager.setup() # This will block until IPFS is ready
+    if ipfs_manager.setup(): # This will block until IPFS is ready
+        ipfs_available = True
+    else:
+        ipfs_available = False
+        console.print("[bold yellow]IPFS setup failed. Continuing without IPFS functionality.[/bold yellow]")
+
 
     # 2. Network Manager
     log_event("Attempting to start Node.js peer bridge...")
@@ -1703,6 +1712,9 @@ def main(args):
 
     # The main logic is now the cognitive loop. This will run forever.
     cognitive_loop(console)
+
+ipfs_available = False
+
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
 def run_safely():

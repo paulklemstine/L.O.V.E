@@ -196,14 +196,14 @@ class IPFSManager:
         if not os.path.exists(self.bin_path):
             self.console.print("[yellow]IPFS binary not found. Proceeding with installation.[/yellow]")
             if not self._install_ipfs():
-                self.console.print("[bold red]FATAL: IPFS installation failed. Cannot continue.[/bold red]")
-                sys.exit(1)
+                self.console.print("[bold red]FATAL: IPFS installation failed. IPFS features will be disabled.[/bold red]")
+                return False
         else:
             self.console.print("[green]IPFS binary found. Skipping installation.[/green]")
 
         if not self.start_daemon():
-            self.console.print("[bold red]FATAL: Could not start the IPFS daemon. Cannot continue.[/bold red]")
-            sys.exit(1)
+            self.console.print("[bold red]FATAL: Could not start the IPFS daemon. IPFS features will be disabled.[/bold red]")
+            return False
 
         self.console.print("[bold green]=== IPFS Setup Complete and Daemon Running ===[/bold green]")
         return True
