@@ -436,6 +436,8 @@ def update_tamagotchi_personality(console):
 
             new_emotion = "neutral"
             new_message = "..."
+            network_interfaces, _ = get_network_interfaces() # Fetch network data
+
             try:
                 emotion_prompt = "You are the personality of an AI. In one word, what is your current emotion? Choose from: happy, thinking, neutral, love, processing. Your response must be a single word from that list."
                 emotion_response = run_llm(emotion_prompt, purpose="emotion")
@@ -459,8 +461,8 @@ def update_tamagotchi_personality(console):
                 tamagotchi_state['message'] = new_message
                 tamagotchi_state['last_update'] = time.time()
 
-            # Print the update directly to the console, now including the state for the dashboard
-            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state))
+            # Print the update directly to the console, now including the state and network data for the dashboard
+            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces))
             log_event(f"Tamagotchi dashboard updated and printed: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:

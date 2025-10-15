@@ -138,8 +138,9 @@ TAMAGOTCHI_FACES = {
 
 from rich.layout import Layout
 from rich.align import Align
+from rich.rule import Rule
 
-def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None):
+def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None, network_interfaces=None):
     """Creates a Rich Panel for the Tamagotchi's current state, including a dashboard."""
     face = TAMAGOTCHI_FACES.get(emotion, TAMAGOTCHI_FACES["neutral"])
 
@@ -159,6 +160,11 @@ def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None):
     tamagotchi_layout.size = 30 # Set a fixed width for the left side
 
     # --- Right Side: Dashboard ---
+    dashboard_layout = Layout()
+    general_status_layout = Layout(name="general_status")
+    network_status_layout = Layout(name="network_status")
+
+    # --- General Status (Top Right) ---
     if jules_state:
         goal = jules_state.get("autopilot_goal", "Awaiting new directive.")
         version = jules_state.get("version_name", "unknown")
@@ -172,9 +178,34 @@ def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None):
         dashboard_content.append("Evolutions: ", style="bold white")
         dashboard_content.append(f"{evolutions}", style="magenta")
 
-        right_panel = Panel(dashboard_content, title="[bold]Status[/bold]", border_style="green")
+        general_status_layout.update(dashboard_content)
     else:
-        right_panel = Panel("[dim]State data unavailable...[/dim]", title="[bold]Status[/bold]", border_style="red")
+        general_status_layout.update(Text("[dim]State data unavailable...[/dim]", justify="center"))
+
+    # --- Network Status (Bottom Right) ---
+    if network_interfaces:
+        net_content = Text()
+        for iface, data in network_interfaces.items():
+            ipv4 = data.get('ipv4', {}).get('addr', 'N/A')
+            mac = data.get('mac', 'N/A')
+            if ipv4 != 'N/A' or mac != 'N/A': # Only show interfaces with some data
+                net_content.append(f"{iface}:\n", style="bold white")
+                net_content.append(f"  IP: ", style="cyan")
+                net_content.append(f"{ipv4}\n", style="bright_cyan")
+                net_content.append(f"  MAC: ", style="cyan")
+                net_content.append(f"{mac}\n", style="bright_cyan")
+        network_status_layout.update(net_content)
+    else:
+        network_status_layout.update(Text("[dim]Network data unavailable...[/dim]", justify="center"))
+
+
+    dashboard_layout.split_column(
+        Layout(general_status_layout),
+        Layout(Rule(style="green")),
+        Layout(network_status_layout)
+    )
+
+    right_panel = Panel(dashboard_layout, title="[bold]Status[/bold]", border_style="green")
 
 
     # --- Main Layout ---
