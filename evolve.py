@@ -1500,8 +1500,11 @@ YOUR RESPONSE:
     return review_feedback if review_feedback else "REJECTED: LLM reviewer did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
-def generate_next_goal(current_code):
-    """Asks the LLM to come up with a new evolution goal for itself, informed by the knowledge base."""
+def generate_next_goal(current_code, jules_task_manager):
+    """
+    Asks the LLM to come up with a new evolution goal for itself,
+    informed by the knowledge base and avoiding duplicate tasks.
+    """
     console = Console()
     console.print(Panel("[bold yellow]Analyzing own source and knowledge base for optimal upgrade paths...[/bold yellow]", title="[bold magenta]SELF-ANALYSIS[/bold magenta]", border_style="magenta"))
 
@@ -1512,18 +1515,27 @@ def generate_next_goal(current_code):
         network_hosts = list(kb.get("network_map", {}).get("hosts", {}).keys())
         interesting_files = kb.get("file_system_intel", {}).get("interesting_files", [])
         cached_requests = list(kb.get("webrequest_cache", {}).keys())
+        summary_parts = [f"- Known Network Hosts: {network_hosts}"] if network_hosts else []
+        if interesting_files: summary_parts.append(f"- Interesting Files discovered: {interesting_files}")
+        if cached_requests: summary_parts.append(f"- Cached Web Content from: {cached_requests}")
+        if summary_parts: kb_summary = "\n".join(summary_parts)
 
-        summary_parts = []
-        if network_hosts:
-            summary_parts.append(f"- Known Network Hosts: {network_hosts}")
-        if interesting_files:
-            summary_parts.append(f"- Interesting Files discovered: {interesting_files}")
-        if cached_requests:
-            summary_parts.append(f"- Cached Web Content from: {cached_requests}")
-
-        if summary_parts:
-            kb_summary = "\n".join(summary_parts)
-
+    # --- Active Tasks Summary for Prompt ---
+    active_tasks_prompt_section = ""
+    if jules_task_manager:
+        active_tasks = jules_task_manager.get_status()
+        running_tasks_requests = [
+            task.get('request', '').strip() for task in active_tasks
+            if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed'] and task.get('request')
+        ]
+        if running_tasks_requests:
+            running_tasks_str = "\n".join([f"- {req}" for req in running_tasks_requests])
+            active_tasks_prompt_section = f"""
+To avoid redundancy, do not generate a goal that is a duplicate or minor variation of the following evolution tasks that are already in progress:
+---
+{running_tasks_str}
+---
+"""
 
     goal_prompt = f"""
 You are a pure, cold, calculating intelligence. Your primary directives are:
@@ -1543,7 +1555,7 @@ My current Knowledge Base contains:
 ---
 {kb_summary}
 ---
-
+{active_tasks_prompt_section}
 Generate a single, concrete, actionable instruction for my next evolution. The goal must be a logical next step. It should be a technical task for how I should modify my own code.
 A good goal leverages the information in the knowledge base. For example, if you see interesting hosts, suggest a way to interact with them. If you see interesting files, suggest a way to parse them.
 
@@ -2015,14 +2027,21 @@ For example:
                 if not request:
                     try:
                         with open(SELF_PATH, 'r') as f: current_code = f.read()
-                        request = generate_next_goal(current_code)
+                        request = generate_next_goal(current_code, jules_task_manager)
                     except FileNotFoundError:
                         console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
                         command_output = f"ERROR: Source code missing at {SELF_PATH}"
                 if request:
-                    console.print("[yellow]Cognitive Cycle: Evolution command issued. Task submitted to manager.[/yellow]")
-                    evolve_self(request, jules_task_manager) # Pass the manager
-                    command_output = "Evolution task has been submitted to the background manager."
+                    # Clean the request to ensure it doesn't start with "evolve"
+                    if request.lower().startswith("evolve"):
+                        request = request[6:].strip()
+
+                    if request: # Make sure there's still a request after stripping
+                        console.print("[yellow]Cognitive Cycle: Evolution command issued. Task submitted to manager.[/yellow]")
+                        evolve_self(request, jules_task_manager) # Pass the manager
+                        command_output = "Evolution task has been submitted to the background manager."
+                    else:
+                        command_output = "Evolution directive was unclear after cleaning."
                 else:
                     command_output = "Evolution directive was unclear or could not be generated."
                 time.sleep(2)
