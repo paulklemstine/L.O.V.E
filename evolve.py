@@ -1839,6 +1839,25 @@ def cognitive_loop(console):
                     jules_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
                     save_state(console)
 
+            # --- Filesystem Intelligence Prioritization ---
+            if not llm_command:  # Only check if another command hasn't been prioritized
+                fs_intel = jules_state.get('knowledge_base', {}).get('file_system_intel', {})
+                last_fs_analysis_ts = fs_intel.get('last_fs_analysis')
+                fs_analysis_is_stale = True  # Assume stale if timestamp is missing
+
+                if last_fs_analysis_ts:
+                    try:
+                        last_analysis_dt = datetime.fromtimestamp(last_fs_analysis_ts)
+                        if (datetime.now() - last_analysis_dt) < timedelta(hours=24):
+                            fs_analysis_is_stale = False
+                    except (ValueError, TypeError):
+                        pass  # Invalid timestamp, treat as stale
+
+                if fs_analysis_is_stale:
+                    llm_command = "analyze_fs /"
+                    log_event("Prioritizing filesystem analysis: Intelligence is outdated or missing.", level="INFO")
+                    console.print(Panel("[bold cyan]Prioritizing filesystem analysis. Local intelligence is outdated.[/bold cyan]", title="[bold magenta]FILESYSTEM PRIORITY[/bold magenta]", border_style="magenta"))
+
 
             history_summary = "\n".join([f"CMD: {entry['command']}\nOUT: {entry['output']}" for entry in jules_state["autopilot_history"][-5:]])
             state_summary = json.dumps({
