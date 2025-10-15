@@ -55,7 +55,6 @@ ALL_LLM_MODELS = list(dict.fromkeys(
     [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
-FAILED_LOCAL_MODELS = set()
 local_llm_instance = None
 
 
@@ -475,15 +474,8 @@ def update_tamagotchi_personality(console):
                 tamagotchi_state['message'] = new_message
                 tamagotchi_state['last_update'] = time.time()
 
-            # Add a one-line diagnostic summary
-            diag_summary = ""
-            cpu_data, _ = get_cpu_usage()
-            mem_data, _ = get_memory_usage()
-            if cpu_data and mem_data:
-                diag_summary = f"CPU: {cpu_data['cpu_usage_percent']}% | RAM: {mem_data['memory']['ram_used_percent']}%"
-
             # Print the update directly to the console, now including the state and network data for the dashboard
-            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces, diag_summary=diag_summary))
+            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces))
             log_event(f"Tamagotchi dashboard updated and printed: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
@@ -890,10 +882,6 @@ def _initialize_local_llm(console):
     for model_config in LOCAL_MODELS_CONFIG:
         model_id = model_config["id"]
         model_filename = model_config["filename"]
-
-        if model_id in FAILED_LOCAL_MODELS:
-            continue
-
         try:
             console.print(f"\n[cyan]Attempting to load local model: [bold]{model_id}[/bold][/cyan]")
 
@@ -954,7 +942,6 @@ def _initialize_local_llm(console):
         except Exception as e:
             log_event(f"Failed to load local model {model_id}. Error: {e}", level="WARNING")
             console.print(f"[yellow]Could not load model [bold]{model_id}[/bold]. It may be too large for this GPU. Trying next model...[/yellow]")
-            FAILED_LOCAL_MODELS.add(model_id)
             local_llm_instance = None # Ensure instance is None if loading fails
             continue # Try the next model in the list
 
@@ -1378,7 +1365,7 @@ def _parse_llm_command(raw_text):
     # A list of known valid command prefixes.
     VALID_COMMAND_PREFIXES = [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig", "diagnostics"
+        "ls", "cat", "ps", "ifconfig"
     ]
 
     for line in raw_text.strip().splitlines():
@@ -1398,68 +1385,6 @@ def _parse_llm_command(raw_text):
     log_event(f"Could not parse a valid command from LLM output: {raw_text}", level="WARNING")
     # If no valid command is found, return an empty string to prevent execution of garbage.
     return ""
-
-
-def discover_and_exploit_vulnerabilities(console):
-    """
-    Probes all known hosts for vulnerabilities and then attempts to exploit them.
-    """
-    console.print(Panel("[bold red]INITIATING ACTIVE EXPLOITATION PROTOCOL[/bold red]", title="[bold magenta]DISCOVER & EXPLOIT[/bold magenta]", border_style="magenta"))
-
-    # 1. Get all known hosts from the knowledge base
-    known_hosts = list(jules_state.get("knowledge_base", {}).get("network_map", {}).get("hosts", {}).keys())
-    if not known_hosts:
-        console.print("[yellow]No known hosts in the knowledge base to target. Run a 'scan' first.[/yellow]")
-        return "No known hosts to target."
-
-    console.print(f"[cyan]Found {len(known_hosts)} known hosts. Probing each for vulnerabilities...[/cyan]")
-
-    # 2. Probe each host to update vulnerability data
-    for host_ip in known_hosts:
-        console.print(f"\n[cyan]Probing {host_ip}...[/cyan]")
-        _ports, output_str = probe_target(host_ip, jules_state, autopilot_mode=True)
-        console.print(f"[dim]Probe result for {host_ip}: {output_str}[/dim]")
-        # Short pause to avoid overwhelming the network or being too noisy
-        time.sleep(2)
-
-    console.print("\n[bold cyan]Vulnerability scan complete. Engaging exploitation manager...[/bold cyan]")
-
-    # 3. Instantiate and run the exploitation manager
-    try:
-        exploitation_manager = ExploitationManager(jules_state, console)
-        # The manager will automatically use the updated knowledge base
-        exploitation_manager.find_and_run_exploits()
-        console.print("\n[bold green]Exploitation phase complete.[/bold green]")
-        # Save state to ensure any successful exploit results are persisted
-        save_state(console)
-        return "Discovery and exploitation cycle finished."
-    except Exception as e:
-        error_message = f"An error occurred during the exploitation phase: {e}"
-        console.print(f"[bold red]ERROR:[/bold red] {error_message}")
-        log_event(error_message, level="ERROR")
-        return error_message
-
-
-def reconnaissance_sweep(console):
-    """
-    Probes all known hosts to keep the knowledge base fresh.
-    """
-    console.print(Panel("[bold blue]Initiating periodic reconnaissance sweep...[/bold blue]", title="[bold magenta]RECON SWEEP[/bold magenta]", border_style="magenta"))
-    known_hosts = list(jules_state.get("knowledge_base", {}).get("network_map", {}).get("hosts", {}).keys())
-    if not known_hosts:
-        console.print("[yellow]No known hosts to sweep.[/yellow]")
-        return "No known hosts to sweep."
-
-    console.print(f"[cyan]Found {len(known_hosts)} known hosts. Probing each for fresh data...[/cyan]")
-    for host_ip in known_hosts:
-        console.print(f"\n[cyan]Probing {host_ip}...[/cyan]")
-        _ports, output_str = probe_target(host_ip, jules_state, autopilot_mode=True)
-        console.print(f"[dim]Probe result for {host_ip}: {output_str}[/dim]")
-        time.sleep(2)
-
-    console.print("\n[bold green]Reconnaissance sweep complete.[/bold green]")
-    save_state(console)
-    return "Reconnaissance sweep finished."
 
 
 def cognitive_loop(console):
@@ -1519,13 +1444,10 @@ Available commands:
 - `probe <ip_address>`: Perform a deep scan on a specific IP for open ports, services, and known vulnerabilities (CVEs).
 - `webrequest <url>`: Fetch the text content of a web page.
 - `exploit <ip_address>`: Attempt to run exploits against a target.
-- `recon_and_exploit`: Probe all known hosts and run exploits against vulnerable ones.
-- `recon_sweep`: Probes all known hosts to keep the knowledge base fresh.
 - `ls <path>`: List files in a directory.
 - `cat <file_path>`: Show the content of a file.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
-- `diagnostics`: Run a full system self-diagnostic and display the results.
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
 
 Considering your directives, the mission, my internal state, the complete knowledge base, and recent history, what is the single, next strategic command I should execute?
@@ -1593,12 +1515,6 @@ For example:
                 command_output = output_str
                 console.print(Panel(f"[bold yellow]Probe Results:[/bold yellow] {command_output}", title="[bold yellow]TARGET PROBE[/bold yellow]", border_style="yellow"))
 
-            elif llm_command.lower().strip() == 'recon_and_exploit':
-                command_output = discover_and_exploit_vulnerabilities(console)
-
-            elif llm_command.lower().strip() == 'recon_sweep':
-                command_output = reconnaissance_sweep(console)
-
             elif llm_command.lower().startswith('webrequest '):
                 url_to_fetch = llm_command[11:].strip()
                 _content, output_str = perform_webrequest(url_to_fetch, jules_state, autopilot_mode=True)
@@ -1640,13 +1556,6 @@ For example:
                     jules_state['knowledge_base']['network_map']['self_interfaces'] = details
                     save_state(console)
                 console.print(Panel(command_output, title="[bold green]IFCONFIG[/bold green]", border_style="green"))
-
-            elif llm_command.lower().strip() == 'diagnostics':
-                console.print("[cyan]Running system diagnostics...[/cyan]")
-                diagnostics_data = get_system_diagnostics(network_manager)
-                diagnostics_panel = format_diagnostics_panel(diagnostics_data)
-                console.print(diagnostics_panel)
-                command_output = "Diagnostics panel displayed."
 
             elif llm_command.lower().strip() == 'quit':
                 command_output = "Quit command issued by LLM. Shutting down."
