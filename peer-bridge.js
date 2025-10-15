@@ -5,6 +5,8 @@ global.RTCSessionDescription = wrtc.RTCSessionDescription;
 global.RTCIceCandidate = wrtc.RTCIceCandidate;
 global.navigator = { userAgent: 'Node.js' };
 
+const WebSocket = require('ws');
+global.WebSocket = WebSocket;
 const { Peer } = require('peerjs');
 const { Readable } = require('stream');
 
