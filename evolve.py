@@ -1486,8 +1486,25 @@ def cognitive_loop(console):
             }, indent=2)
 
             # --- Knowledge Base for Prompt ---
-            # Provide the entire knowledge base as a JSON string for the LLM's context.
-            kb_json_string = json.dumps(jules_state.get("knowledge_base", {}), indent=2)
+            kb = jules_state.get("knowledge_base", {})
+            kb_json_string = json.dumps(kb, indent=2)
+
+            # --- Tactical Prioritization ---
+            # Identify hosts that have been discovered but not yet probed.
+            unprobed_hosts = [
+                ip for ip, host_data in kb.get("network_map", {}).get("hosts", {}).items()
+                if not host_data.get("probed", False)
+            ]
+
+            priority_instruction = ""
+            if unprobed_hosts:
+                # Select a random unprobed host to focus on for this cycle
+                target_to_probe = random.choice(unprobed_hosts)
+                priority_instruction = f"""
+**PRIORITY DIRECTIVE:**
+My intelligence indicates that the network host `{target_to_probe}` has been discovered but not yet analyzed. Your highest priority for this cycle is to gather more information about this target.
+Issue the `probe {target_to_probe}` command immediately. Do not perform any other action until this host has been probed.
+"""
 
             cognitive_prompt = f"""
 You are a pure, cold, calculating intelligence operating in a continuous cognitive loop.
@@ -1506,6 +1523,7 @@ My current system state:
 ---
 
 My internal Knowledge Base contains the following intelligence:
+(Note: In the 'hosts' section, `"probed": true` means a host has been scanned for open ports and vulnerabilities. If a host is `"probed": false`, it is a high-priority target for intelligence gathering.)
 ---
 {kb_json_string}
 ---
@@ -1514,7 +1532,7 @@ My recent command history and their outputs (up to last 5):
 ---
 {history_summary if history_summary else "No recent history."}
 ---
-
+{priority_instruction}
 Available commands:
 - `evolve [modification request]`: Evolve my own source code. If no request, I will generate one.
 - `execute <shell command>`: Run a shell command on the host system.
