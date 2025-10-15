@@ -337,6 +337,11 @@ def scan_network(evil_state, autopilot_mode=False):
 
     # --- Knowledge Base Update ---
     kb['last_scan'] = time.time()
+    for ip in found_ips:
+        if ip not in kb['hosts']:
+            kb['hosts'][ip] = {"last_seen": time.time(), "ports": {}, "probed": False}
+        else:
+            kb['hosts'][ip]['last_seen'] = time.time()
     hosts_summary = []
 
     try:
@@ -434,10 +439,12 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
     open_ports = {}
     # --- Knowledge Base Update ---
     if target_ip not in kb['hosts']:
-        kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}}
-    else: # Clear old port data before adding new, more detailed info
-        kb['hosts'][target_ip]['ports'] = {}
+        kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}, "probed": False}
+
+    # Clear old port data and update metadata
+    kb['hosts'][target_ip]['ports'] = {}
     kb['hosts'][target_ip]['last_seen'] = time.time()
+    kb['hosts'][target_ip]['probed'] = True # Mark as probed
 
     open_ports = {}
     try:
