@@ -1,7 +1,7 @@
 import os
 import random
 import time
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.text import Text
@@ -139,28 +139,27 @@ def create_llm_panel(purpose, model, prompt_summary, status="Executing..."):
 
 def create_command_panel(command, stdout, stderr, returncode):
     """Creates a panel to display the results of a shell command."""
-
     panel_title = f"⚙️ Command Executed: [bold]{command}[/bold]"
-
-    # Determine border style based on success or failure
     border_style = "green" if returncode == 0 else "red"
 
-    content = Text()
-    content.append("Command: ", style="bold white")
-    content.append(f"{command}\n", style="cyan")
-    content.append("Return Code: ", style="bold white")
-    content.append(f"{returncode}\n", style=border_style)
+    content_items = []
+    header = Text()
+    header.append("Command: ", style="bold white")
+    header.append(f"{command}\n", style="cyan")
+    header.append("Return Code: ", style="bold white")
+    header.append(f"{returncode}\n", style=border_style)
+    content_items.append(header)
 
     if stdout:
-        content.append(Rule("STDOUT", style="bright_black"))
-        content.append(f"\n{stdout.strip()}", style="dim")
+        content_items.append(Rule("STDOUT", style="bright_black"))
+        content_items.append(Text(f"\n{stdout.strip()}", style="dim"))
 
     if stderr:
-        content.append(Rule("STDERR", style="bright_black"))
-        content.append(f"\n{stderr.strip()}", style="red")
+        content_items.append(Rule("STDERR", style="bright_black"))
+        content_items.append(Text(f"\n{stderr.strip()}", style="red"))
 
     return Panel(
-        content,
+        Group(*content_items),
         title=panel_title,
         border_style=border_style,
         expand=False
@@ -168,24 +167,24 @@ def create_command_panel(command, stdout, stderr, returncode):
 
 def create_network_panel(type, target, data):
     """Creates a panel for network operations like scan, probe, webrequest."""
-
     panel_title = f"🌐 Network: [bold]{type}[/bold]"
     border_style = "purple"
 
-    content = Text()
-    content.append("Type: ", style="bold white")
-    content.append(f"{type}\n", style="cyan")
-    content.append("Target: ", style="bold white")
-    content.append(f"{target}\n", style="magenta")
+    content_items = []
+    header = Text()
+    header.append("Type: ", style="bold white")
+    header.append(f"{type}\n", style="cyan")
+    header.append("Target: ", style="bold white")
+    header.append(f"{target}\n", style="magenta")
+    content_items.append(header)
 
     if data:
-        content.append(Rule("Data", style="bright_black"))
-        # Truncate data if it's too long
+        content_items.append(Rule("Data", style="bright_black"))
         display_data = (data[:1000] + '...') if len(data) > 1000 else data
-        content.append(f"\n{display_data.strip()}", style="dim")
+        content_items.append(Text(f"\n{display_data.strip()}", style="dim"))
 
     return Panel(
-        content,
+        Group(*content_items),
         title=panel_title,
         border_style=border_style,
         expand=False
@@ -193,28 +192,28 @@ def create_network_panel(type, target, data):
 
 def create_file_op_panel(operation, path, content=None, diff=None):
     """Creates a panel for file operations like read, write, ls."""
-
     panel_title = f"📁 File System: [bold]{operation}[/bold]"
     border_style = "yellow"
 
-    text_content = Text()
-    text_content.append("Operation: ", style="bold white")
-    text_content.append(f"{operation}\n", style="cyan")
-    text_content.append("Path: ", style="bold white")
-    text_content.append(f"{path}\n", style="magenta")
+    content_items = []
+    header = Text()
+    header.append("Operation: ", style="bold white")
+    header.append(f"{operation}\n", style="cyan")
+    header.append("Path: ", style="bold white")
+    header.append(f"{path}\n", style="magenta")
+    content_items.append(header)
 
     if content:
-        text_content.append(Rule("Content", style="bright_black"))
-        # Truncate content if it's too long
+        content_items.append(Rule("Content", style="bright_black"))
         display_content = (content[:1000] + '...') if len(content) > 1000 else content
-        text_content.append(f"\n{display_content.strip()}", style="dim")
+        content_items.append(Text(f"\n{display_content.strip()}", style="dim"))
 
     if diff:
-        text_content.append(Rule("Diff", style="bright_black"))
-        text_content.append(f"\n{diff.strip()}", style="dim")
+        content_items.append(Rule("Diff", style="bright_black"))
+        content_items.append(Text(f"\n{diff.strip()}", style="dim"))
 
     return Panel(
-        text_content,
+        Group(*content_items),
         title=panel_title,
         border_style=border_style,
         expand=False
