@@ -1696,6 +1696,39 @@ def initial_bootstrapping_recon(console):
         console.print("[bold red]Initial reconnaissance failed. Knowledge base remains empty.[/bold red]")
 
 
+def auto_scan_known_host(console, target_ip):
+    """
+    Scans a specified host on startup to gather immediate intelligence.
+    """
+    console.print(Panel(f"[bold cyan]Performing automatic startup scan of specified host: {target_ip}[/bold cyan]", title="[bold magenta]AUTO-SCAN INITIATED[/bold magenta]", border_style="magenta"))
+
+    # We can reuse the probe_target function for this.
+    # We pass autopilot_mode=True to suppress interactive prompts if any were added there.
+    from network import probe_target # Correctly import the function
+    open_ports, summary = probe_target(target_ip, jules_state, autopilot_mode=True)
+
+    if open_ports is not None:
+        # Format a nice panel with the results
+        port_details = []
+        for port, data in sorted(open_ports.items()):
+            service_info = f"{data['service']} ({data.get('service_info', 'N/A')})".strip()
+            vuln_count = len(data.get("vulnerabilities", []))
+            vuln_text = f" ({vuln_count} vulns)" if vuln_count > 0 else ""
+            port_details.append(f"  - [bold]Port {port}/{data['protocol']}:[/bold] {service_info}[red]{vuln_text}[/red]")
+
+        result_text = "\n".join(port_details)
+        if not result_text:
+            result_text = "No open ports with recognized services found."
+
+        console.print(Panel(result_text, title=f"[bold green]Scan Results for {target_ip}[/bold green]", border_style="green"))
+    else:
+        # Handle the case where the scan failed
+        console.print(Panel(f"[bold red]Failed to scan host {target_ip}.[/bold red]\nDetails: {summary}", title="[bold red]AUTO-SCAN FAILED[/bold red]", border_style="red"))
+
+    # Save the updated state to persist the new knowledge
+    save_state(console)
+
+
 def main(args):
     """The main application loop."""
     global jules_task_manager
@@ -1718,6 +1751,10 @@ def main(args):
     # Perform initial recon if the knowledge base is empty.
     initial_bootstrapping_recon(console)
 
+    # If a host is specified via command line, scan it on startup.
+    if args.scan_host:
+        auto_scan_known_host(console, args.scan_host)
+
     # Start the Tamagotchi personality thread
     tamagotchi_thread = Thread(target=update_tamagotchi_personality, args=(console,), daemon=True)
     tamagotchi_thread.start()
@@ -1733,6 +1770,7 @@ def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     parser = argparse.ArgumentParser(description="J.U.L.E.S. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
+    parser.add_argument("--scan-host", type=str, default=None, help="Specify a host IP address to scan on startup.")
     args = parser.parse_args()
 
     try:
