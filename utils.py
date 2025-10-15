@@ -153,3 +153,106 @@ def parse_ps_output(ps_output):
             process_info = dict(zip(header, parts))
             processes.append(process_info)
     return processes
+
+
+def get_cpu_usage():
+    """
+    Retrieves system-wide CPU usage percentage.
+    Returns a dictionary with cpu usage details or an error string.
+    """
+    try:
+        # Use 'top' to get a snapshot of CPU usage. -b is for batch mode, -n1 for one iteration.
+        result = subprocess.run(
+            ["top", "-bn1"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        cpu_line = [line for line in result.stdout.split('\n') if line.startswith('%Cpu(s)')][0]
+        # Example: %Cpu(s):  0.3 us,  0.1 sy,  0.0 ni, 99.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+        idle_search = __import__('re').search(r'(\d+\.\d+)\s+id', cpu_line)
+        if idle_search:
+            idle_percent = float(idle_search.group(1))
+            usage_percent = 100.0 - idle_percent
+            return {"cpu_usage_percent": round(usage_percent, 2)}, None
+        return None, "Could not parse CPU idle percentage from 'top' command."
+    except (subprocess.CalledProcessError, FileNotFoundError, IndexError) as e:
+        return None, f"Error getting CPU usage: {e}"
+
+
+def get_memory_usage():
+    """
+    Retrieves system memory (RAM) and swap usage.
+    Returns a dictionary with memory details in MB or an error string.
+    """
+    try:
+        # Use 'free -m' to get memory usage in megabytes.
+        result = subprocess.run(
+            ["free", "-m"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        lines = result.stdout.strip().split('\n')
+        mem_line = [line for line in lines if line.startswith('Mem:')][0]
+        swap_line = [line for line in lines if line.startswith('Swap:')][0]
+
+        mem_parts = mem_line.split()
+        swap_parts = swap_line.split()
+
+        memory_data = {
+            "ram_total_mb": int(mem_parts[1]),
+            "ram_used_mb": int(mem_parts[2]),
+            "ram_free_mb": int(mem_parts[3]),
+            "ram_used_percent": round((int(mem_parts[2]) / int(mem_parts[1])) * 100, 2)
+        }
+        # Swap may not exist, so total can be 0.
+        if int(swap_parts[1]) > 0:
+            swap_used_percent = round((int(swap_parts[2]) / int(swap_parts[1])) * 100, 2)
+        else:
+            swap_used_percent = 0
+
+        swap_data = {
+            "swap_total_mb": int(swap_parts[1]),
+            "swap_used_mb": int(swap_parts[2]),
+            "swap_free_mb": int(swap_parts[3]),
+            "swap_used_percent": swap_used_percent
+        }
+
+        return {"memory": memory_data, "swap": swap_data}, None
+    except (subprocess.CalledProcessError, FileNotFoundError, IndexError) as e:
+        return None, f"Error getting memory usage: {e}"
+
+
+def get_disk_usage(path="/"):
+    """
+    Retrieves disk usage for a given path.
+    Returns a dictionary with disk usage details or an error string.
+    """
+    try:
+        # Use 'df -h' for human-readable disk usage statistics.
+        result = subprocess.run(
+            ["df", "-h", path],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        lines = result.stdout.strip().split('\n')
+        if len(lines) < 2:
+            return None, "Invalid output from 'df' command."
+
+        # e.g., /dev/vda1        74G   20G   55G  27% /
+        parts = lines[1].split()
+        if len(parts) < 5:
+             return None, f"Could not parse 'df' output: {lines[1]}"
+
+        disk_data = {
+            "filesystem": parts[0],
+            "total_space": parts[1],
+            "used_space": parts[2],
+            "available_space": parts[3],
+            "used_percent": parts[4].replace('%', '')
+        }
+        return disk_data, None
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        return None, f"Error getting disk usage: {e}"

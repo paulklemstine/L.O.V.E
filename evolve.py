@@ -210,6 +210,7 @@ from network import NetworkManager, scan_network, probe_target, perform_webreque
 from exploitation import ExploitationManager
 from ipfs import pin_to_ipfs, verify_ipfs_pin, get_from_ipfs
 from persistent_comm import PersistentCommunicator
+from diagnostics import get_system_diagnostics, format_diagnostics_panel
 from threading import Thread, Lock, RLock
 import uuid
 
@@ -470,8 +471,15 @@ def update_tamagotchi_personality(console):
                 tamagotchi_state['message'] = new_message
                 tamagotchi_state['last_update'] = time.time()
 
+            # Add a one-line diagnostic summary
+            diag_summary = ""
+            cpu_data, _ = get_cpu_usage()
+            mem_data, _ = get_memory_usage()
+            if cpu_data and mem_data:
+                diag_summary = f"CPU: {cpu_data['cpu_usage_percent']}% | RAM: {mem_data['memory']['ram_used_percent']}%"
+
             # Print the update directly to the console, now including the state and network data for the dashboard
-            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces))
+            console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces, diag_summary=diag_summary))
             log_event(f"Tamagotchi dashboard updated and printed: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
@@ -1341,7 +1349,7 @@ def _parse_llm_command(raw_text):
     # A list of known valid command prefixes.
     VALID_COMMAND_PREFIXES = [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig"
+        "ls", "cat", "ps", "ifconfig", "diagnostics"
     ]
 
     for line in raw_text.strip().splitlines():
@@ -1465,6 +1473,7 @@ Available commands:
 - `cat <file_path>`: Show the content of a file.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
+- `diagnostics`: Run a full system self-diagnostic and display the results.
 - `quit`: Shut down the script (use only if the mission is complete or impossible).
 
 Considering your directives, the mission, my internal state, the complete knowledge base, and recent history, what is the single, next strategic command I should execute?
@@ -1571,6 +1580,13 @@ For example:
                     jules_state['knowledge_base']['network_map']['self_interfaces'] = details
                     save_state(console)
                 console.print(Panel(command_output, title="[bold green]IFCONFIG[/bold green]", border_style="green"))
+
+            elif llm_command.lower().strip() == 'diagnostics':
+                console.print("[cyan]Running system diagnostics...[/cyan]")
+                diagnostics_data = get_system_diagnostics(network_manager)
+                diagnostics_panel = format_diagnostics_panel(diagnostics_data)
+                console.print(diagnostics_panel)
+                command_output = "Diagnostics panel displayed."
 
             elif llm_command.lower().strip() == 'quit':
                 command_output = "Quit command issued by LLM. Shutting down."
