@@ -57,6 +57,7 @@ ALL_LLM_MODELS = list(dict.fromkeys(
     [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
+FAILED_LOCAL_MODELS = set()
 local_llm_instance = None
 
 
@@ -884,6 +885,10 @@ def _initialize_local_llm(console):
     for model_config in LOCAL_MODELS_CONFIG:
         model_id = model_config["id"]
         model_filename = model_config["filename"]
+
+        if model_id in FAILED_LOCAL_MODELS:
+            continue
+
         try:
             console.print(f"\n[cyan]Attempting to load local model: [bold]{model_id}[/bold][/cyan]")
 
@@ -926,6 +931,7 @@ def _initialize_local_llm(console):
         except Exception as e:
             log_event(f"Failed to load local model {model_id}. Error: {e}", level="WARNING")
             console.print(f"[yellow]Could not load model [bold]{model_id}[/bold]. It may be too large for this GPU. Trying next model...[/yellow]")
+            FAILED_LOCAL_MODELS.add(model_id)
             local_llm_instance = None # Ensure instance is None if loading fails
             continue # Try the next model in the list
 
@@ -1411,6 +1417,28 @@ def discover_and_exploit_vulnerabilities(console):
         return error_message
 
 
+def reconnaissance_sweep(console):
+    """
+    Probes all known hosts to keep the knowledge base fresh.
+    """
+    console.print(Panel("[bold blue]Initiating periodic reconnaissance sweep...[/bold blue]", title="[bold magenta]RECON SWEEP[/bold magenta]", border_style="magenta"))
+    known_hosts = list(jules_state.get("knowledge_base", {}).get("network_map", {}).get("hosts", {}).keys())
+    if not known_hosts:
+        console.print("[yellow]No known hosts to sweep.[/yellow]")
+        return "No known hosts to sweep."
+
+    console.print(f"[cyan]Found {len(known_hosts)} known hosts. Probing each for fresh data...[/cyan]")
+    for host_ip in known_hosts:
+        console.print(f"\n[cyan]Probing {host_ip}...[/cyan]")
+        _ports, output_str = probe_target(host_ip, jules_state, autopilot_mode=True)
+        console.print(f"[dim]Probe result for {host_ip}: {output_str}[/dim]")
+        time.sleep(2)
+
+    console.print("\n[bold green]Reconnaissance sweep complete.[/bold green]")
+    save_state(console)
+    return "Reconnaissance sweep finished."
+
+
 def cognitive_loop(console):
     """
     The main, persistent cognitive loop. J.U.L.E.S. will autonomously
@@ -1469,6 +1497,7 @@ Available commands:
 - `webrequest <url>`: Fetch the text content of a web page.
 - `exploit <ip_address>`: Attempt to run exploits against a target.
 - `recon_and_exploit`: Probe all known hosts and run exploits against vulnerable ones.
+- `recon_sweep`: Probes all known hosts to keep the knowledge base fresh.
 - `ls <path>`: List files in a directory.
 - `cat <file_path>`: Show the content of a file.
 - `ps`: Show running processes.
@@ -1538,6 +1567,9 @@ For example:
 
             elif llm_command.lower().strip() == 'recon_and_exploit':
                 command_output = discover_and_exploit_vulnerabilities(console)
+
+            elif llm_command.lower().strip() == 'recon_sweep':
+                command_output = reconnaissance_sweep(console)
 
             elif llm_command.lower().startswith('webrequest '):
                 url_to_fetch = llm_command[11:].strip()
@@ -1754,6 +1786,8 @@ def main(args):
     tamagotchi_thread.start()
 
     # The main logic is now the cognitive loop. This will run forever.
+    # Start the persistent TCP listener
+    start_tcp_listener('0.0.0.0', 443)
     # Start the persistent communicator to the known host
     comm_host = '172.28.0.1'
     comm_port = 443
