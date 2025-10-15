@@ -1,8 +1,0 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Theme.BorgLauncher" parent="Theme.Material3.Dark.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <item name="android:statusBarColor">@color/launcher_background</item>
-        <item name="android:windowBackground">@color/launcher_background</item>
-    </style>
-</resources>
