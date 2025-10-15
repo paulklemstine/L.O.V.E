@@ -2,6 +2,7 @@ import re
 from typing import List, Dict, Any
 from core.planning import Planner
 from core.tools import ToolRegistry, SecureExecutor
+from core.structured_logger import StructuredEventLogger
 
 class ExecutionEngine:
     """
@@ -14,6 +15,7 @@ class ExecutionEngine:
         self.tool_registry = tool_registry
         self.executor = executor
         self.plan_state: List[Dict[str, Any]] = []
+        self.logger = StructuredEventLogger()
 
     def _determine_tool_and_args(self, task: str) -> (str, Dict[str, Any]):
         """
@@ -86,12 +88,14 @@ class ExecutionEngine:
                 continue
 
             # Execute the tool
+            self.logger.log_event("tool_start", {"tool_name": tool_name, "kwargs": kwargs})
             result = self.executor.execute(tool_name, self.tool_registry, **kwargs)
 
             if isinstance(result, str) and result.startswith("Error:"):
                 print(f"Error executing step {step['step']}. Halting execution.")
                 step['status'] = 'failed'
                 step['result'] = result
+                self.logger.log_event("tool_failure", {"tool_name": tool_name, "error": result})
                 # Self-Correction Logic (Simplified)
                 # In a real system, this would trigger a new planning cycle to fix the issue.
                 print("--- Self-Correction Triggered ---")
@@ -101,6 +105,7 @@ class ExecutionEngine:
             else:
                 step['status'] = 'success'
                 step['result'] = result
+                self.logger.log_event("tool_success", {"tool_name": tool_name, "result": result})
                 print(f"Step {step['step']} completed successfully.")
 
         print("\n===== Plan Execution Finished =====")
