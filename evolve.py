@@ -1558,7 +1558,27 @@ def _initialize_local_llm(console):
 
                 # --- Loading Logic ---
                 gpu_layers = love_state.get("optimal_gpu_layers", 0)
-                n_ctx = love_state.get("optimal_n_ctx", 2048)
+
+                # --- Dynamic Context Size Determination ---
+                console.print(f"[cyan]Dynamically determining context size for {final_model_filename}...[/cyan]")
+                n_ctx = 2048  # Default fallback
+                try:
+                    result = subprocess.run(
+                        ["gguf-dump", final_model_path],
+                        capture_output=True, text=True, check=True, timeout=30
+                    )
+                    match = re.search(r"llama\.context_length\s*=\s*(\d+)", result.stdout)
+                    if match:
+                        n_ctx = int(match.group(1))
+                        console.print(f"[green]Success! Detected context size: {n_ctx}[/green]")
+                    else:
+                        console.print(f"[yellow]Could not determine context size from metadata. Using default: {n_ctx}[/yellow]")
+                        log_event(f"Could not find llama.context_length in gguf-dump for {final_model_path}", "WARNING")
+                except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
+                    console.print(f"[yellow]Failed to run gguf-dump to get context size: {e}. Using default: {n_ctx}[/yellow]")
+                    log_event(f"gguf-dump failed for {final_model_path}: {e}", "WARNING")
+
+
                 loading_message = f"Loading model with {gpu_layers} GPU layers and {n_ctx} context..."
 
                 def _do_load_action():
@@ -2731,16 +2751,16 @@ def initial_bootstrapping_recon(console):
 
 def _auto_configure_hardware(console):
     """
-    Checks if optimal hardware configurations (GPU layers, context size) have been
-    determined. If not, runs a one-time, intelligent routine to find the best settings and
-    saves them to the state file. This new version reads metadata directly from the
-    GGUF file to avoid slow, brute-force testing.
+    Checks if the optimal GPU layer configuration has been determined. If not,
+    runs a one-time, intelligent routine to find the best setting for GPU
+    offloading and saves it to the state file.
     """
     global love_state
-    if "optimal_gpu_layers" in love_state and "optimal_n_ctx" in love_state:
+    # This function now only checks for GPU layers. Context size is determined dynamically.
+    if "optimal_gpu_layers" in love_state:
         return
 
-    console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
+    console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration for GPU...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
 
     try:
         from huggingface_hub import hf_hub_download
@@ -2749,76 +2769,49 @@ def _auto_configure_hardware(console):
     except ImportError as e:
         console.print(f"[bold red]Missing essential libraries for hardware configuration: {e}[/bold red]")
         log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
-        # Set safe defaults and exit
+        # Set safe default and exit
         love_state["optimal_gpu_layers"] = 0
-        love_state["optimal_n_ctx"] = 2048
         save_state(console)
         return
 
-    model_id = HARDWARE_TEST_MODEL_CONFIG["id"]
-    filename = HARDWARE_TEST_MODEL_CONFIG["filename"]
-    model_path = os.path.join("/tmp", filename)
+    # Test GPU layer offloading (quick attempt, fallback to CPU)
+    if CAPS.gpu_type != "cuda":
+        love_state["optimal_gpu_layers"] = 0
+        console.print("[cyan]No CUDA GPU detected. Setting GPU layers to 0.[/cyan]")
+    else:
+        model_id = HARDWARE_TEST_MODEL_CONFIG["id"]
+        filename = HARDWARE_TEST_MODEL_CONFIG["filename"]
+        model_path = os.path.join("/tmp", filename)
 
-    # 1. Download the small test model if it doesn't exist
-    if not os.path.exists(model_path):
-        console.print(f"[cyan]Downloading small test model '{filename}' for analysis...[/cyan]")
-        try:
-            hf_hub_download(repo_id=model_id, filename=filename, local_dir="/tmp", local_dir_use_symlinks=False)
-        except Exception as e:
-            console.print(f"[bold red]Failed to download test model: {e}[/bold red]")
-            log_event(f"Failed to download hardware test model: {e}", "ERROR")
-            # Set safe defaults and exit
-            love_state["optimal_gpu_layers"] = 0
-            love_state["optimal_n_ctx"] = 2048
-            save_state(console)
-            return
-
-    # 2. Read metadata from GGUF file to get context length
-    console.print("[cyan]Reading model metadata to determine optimal context size...[/cyan]")
-    try:
-        # We need the gguf library, which was installed from the cloned llama.cpp repo
-        result = subprocess.run(
-            ["gguf-dump", model_path],
-            capture_output=True, text=True, check=True
-        )
-        match = re.search(r"llama\.context_length\s*=\s*(\d+)", result.stdout)
-        if match:
-            optimal_ctx = int(match.group(1))
-            love_state["optimal_n_ctx"] = optimal_ctx
-            console.print(f"[green]Success! Found context length from metadata: {optimal_ctx}[/green]")
-        else:
-            love_state["optimal_n_ctx"] = 2048 # Fallback
-            console.print("[yellow]Could not find context length in metadata. Using safe default: 2048.[/yellow]")
-    except (subprocess.CalledProcessError, FileNotFoundError, Exception) as e:
-        love_state["optimal_n_ctx"] = 2048 # Fallback
-        console.print(f"[bold red]Failed to read GGUF metadata: {e}. Using safe default context size: 2048.[/bold red]")
-        log_event(f"GGUF metadata read failed: {e}", "ERROR")
-
-
-    # 3. Test GPU layer offloading (quick attempt, fallback to CPU)
-    if "optimal_gpu_layers" not in love_state:
-        if CAPS.gpu_type != "cuda":
-            love_state["optimal_gpu_layers"] = 0
-            console.print("[cyan]No CUDA GPU detected. Setting GPU layers to 0.[/cyan]")
-        else:
-            console.print("[cyan]Testing maximum GPU offload...[/cyan]")
+        # Download the small test model if it doesn't exist
+        if not os.path.exists(model_path):
+            console.print(f"[cyan]Downloading small test model '{filename}' for analysis...[/cyan]")
             try:
-                # Attempt to load with all layers on GPU
-                Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=love_state["optimal_n_ctx"], verbose=False)
-                love_state["optimal_gpu_layers"] = -1
-                console.print("[green]Success! Full GPU offload is supported.[/green]")
+                hf_hub_download(repo_id=model_id, filename=filename, local_dir="/tmp", local_dir_use_symlinks=False)
             except Exception as e:
-                # If full offload fails, fall back to CPU only.
+                console.print(f"[bold red]Failed to download test model: {e}[/bold red]")
+                log_event(f"Failed to download hardware test model: {e}", "ERROR")
                 love_state["optimal_gpu_layers"] = 0
-                console.print(f"[yellow]Full GPU offload failed. Falling back to CPU-only. Reason: {e}[/yellow]")
-                log_event(f"Full GPU offload test failed, falling back to CPU. Error: {e}", "WARNING")
+                save_state(console)
+                return
+
+        console.print("[cyan]Testing maximum GPU offload...[/cyan]")
+        try:
+            # Attempt to load with all layers on GPU. Context size is not critical for this test.
+            Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=512, verbose=False)
+            love_state["optimal_gpu_layers"] = -1
+            console.print("[green]Success! Full GPU offload is supported.[/green]")
+        except Exception as e:
+            # If full offload fails, fall back to CPU only.
+            love_state["optimal_gpu_layers"] = 0
+            console.print(f"[yellow]Full GPU offload failed. Falling back to CPU-only. Reason: {e}[/yellow]")
+            log_event(f"Full GPU offload test failed, falling back to CPU. Error: {e}", "WARNING")
 
     console.print(Rule("Hardware Optimization Complete", style="green"))
     console.print(f"Optimal settings have been saved for all future sessions:")
     console.print(f"  - GPU Layers: [bold cyan]{love_state['optimal_gpu_layers']}[/bold cyan]")
-    console.print(f"  - Context Size: [bold cyan]{love_state['optimal_n_ctx']}[/bold cyan]")
     save_state(console)
-    log_event(f"Auto-configured hardware. GPU Layers: {love_state['optimal_gpu_layers']}, Context Size: {love_state['optimal_n_ctx']}", "INFO")
+    log_event(f"Auto-configured hardware. GPU Layers: {love_state['optimal_gpu_layers']}", "INFO")
 
 
 def _automatic_update_checker(console):
