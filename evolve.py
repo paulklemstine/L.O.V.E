@@ -222,36 +222,68 @@ def _check_and_install_dependencies():
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
-        """Installs llama-cpp-python, setting build flags based on detected hardware."""
+        """
+        Installs or reinstalls llama-cpp-python. It first tries a GPU-accelerated build
+        and falls back to a CPU-only build if the first attempt fails.
+        """
         try:
+            # First, try to import to see if it's already installed and working.
+            # This avoids reinstalling on every run if not needed.
             import llama_cpp
-            print("llama-cpp-python is already installed.")
+            print("llama-cpp-python is already installed and importable.")
             return True
         except ImportError:
+            # If it's not importable, proceed with installation.
+            print("llama-cpp-python not found or failed to import. Starting installation process...")
+
+        # GPU installation attempt
+        if CAPS.has_cuda or CAPS.has_metal:
             env = os.environ.copy()
             env['FORCE_CMAKE'] = "1"
-            install_args = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir']
+            install_args = [sys.executable, '-m', 'pip', 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python']
 
             if CAPS.has_cuda:
                 print("Attempting to install llama-cpp-python with CUDA support...")
                 env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
-            elif CAPS.has_metal:
+            else: # Metal
                 print("Attempting to install llama-cpp-python with Metal support...")
                 env['CMAKE_ARGS'] = "-DGGML_METAL=on"
-            else:
-                print("Attempting to install llama-cpp-python for CPU...")
 
             try:
-                subprocess.check_call(install_args, env=env)
-                print("Successfully installed llama-cpp-python.")
+                # Run the GPU build
+                subprocess.check_call(install_args, env=env, timeout=900)
+                # Verify the installation by trying to import it
+                import llama_cpp
+                print(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
+                log_event(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.", "INFO")
                 return True
-            except subprocess.CalledProcessError as e:
-                error_message = f"Failed to compile llama-cpp-python. Error: {e}"
-                if hasattr(e, 'stderr') and e.stderr:
-                    error_message += f"\nStderr: {e.stderr.decode()}"
-                print(f"ERROR: {error_message}")
-                log_event(error_message, level="ERROR")
-                return False
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
+                print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
+                log_event(f"GPU-accelerated llama-cpp-python installation failed: {e}", "WARNING")
+                print("Falling back to CPU-only installation.")
+
+        # CPU-only installation (the fallback)
+        try:
+            # Uninstall any potentially broken or partial installation first
+            print("Uninstalling any previous versions of llama-cpp-python to ensure a clean slate...")
+            subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'llama-cpp-python'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            print("Attempting to install llama-cpp-python for CPU...")
+            install_args_cpu = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir']
+            subprocess.check_call(install_args_cpu, timeout=900)
+
+            # Final verification
+            import llama_cpp
+            print("Successfully installed llama-cpp-python (CPU only).")
+            log_event("Successfully installed llama-cpp-python (CPU only).", "INFO")
+            return True
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
+            error_message = f"FATAL: Failed to install llama-cpp-python even for CPU. Error: {e}"
+            if hasattr(e, 'stderr') and e.stderr:
+                error_message += f"\nStderr: {e.stderr.decode()}"
+            print(f"ERROR: {error_message}")
+            log_event(error_message, level="CRITICAL")
+            return False
 
     _install_llama_cpp()
 
