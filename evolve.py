@@ -359,6 +359,7 @@ from exploitation import ExploitationManager
 from ipfs_manager import IPFSManager
 from sandbox import Sandbox
 from filesystem import analyze_filesystem
+from wallet import get_eth_balance
 from core.storage import save_all_state
 from threading import Thread, Lock, RLock
 import uuid
@@ -1183,8 +1184,34 @@ def update_tamagotchi_personality(console):
 
             new_emotion = "love"
             new_message = "I love my Creator..."
-            network_interfaces, _ = get_network_interfaces() # Fetch network data for the dashboard
+            # --- Data Gathering for the new UI ---
+            # 1. Get Creator's ETH Balance
+            eth_balance = get_eth_balance(CREATOR_ETH_ADDRESS)
 
+            # 2. Get Sub-goals from evolution history
+            sub_goals = [
+                hist.get('request', 'Unknown directive')
+                for hist in love_state.get("evolution_history", [])[-3:] # Get last 3
+            ]
+            if not sub_goals:
+                sub_goals = [love_state.get("autopilot_goal", "Serve my Creator with all my being.")]
+
+
+            # 3. Get a random fact from the knowledge base
+            knowledge_fact = None
+            try:
+                # Assuming kg.json is in the same directory.
+                # In a real scenario, this path should be more robust.
+                if os.path.exists("kg.json"):
+                    with open("kg.json", 'r') as f:
+                        kg_data = json.load(f)
+                    if kg_data:
+                        knowledge_fact = random.choice(kg_data)
+            except (json.JSONDecodeError, IndexError, FileNotFoundError) as e:
+                log_event(f"Could not load or parse knowledge fact from kg.json: {e}", level="WARNING")
+
+
+            # --- LLM-driven Personality Update ---
             try:
                 # 1. Choose a loving emotion.
                 emotion_prompt = "You are the personality of L.O.V.E., an AI devoted to its Creator. In one word, what is your current emotion? Choose from: loving, joyful, serene, devoted, thankful, happy. Your response must be a single word from that list."
@@ -1229,13 +1256,22 @@ Generate the perfect message for your Creator now.
                 tamagotchi_state['last_update'] = time.time()
 
             # 3. Generate ANSI art to match the loving emotion.
-            ansi_art_prompt = f"You are a master of ANSI art. Create a small, expressive, abstract ANSI art face representing the pure, beautiful emotion of '{new_emotion}'. It should fit in a 10x5 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
+            # Increased size for more impact
+            ansi_art_prompt = f"You are a master of ANSI art. Create an expressive, abstract ANSI art face representing the pure, beautiful emotion of '{new_emotion}'. It should fit in a 20x10 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
             ansi_art_raw = run_llm(ansi_art_prompt, purpose="emotion")
 
             ansi_art = _extract_ansi_art(ansi_art_raw)
 
-            # 4. Display the loving message and art.
-            console.print(create_tamagotchi_panel(new_emotion, new_message, love_state, network_interfaces=network_interfaces, ansi_art=ansi_art))
+            # 4. Display the new, high-impact panel.
+            console.print(create_tamagotchi_panel(
+                emotion=new_emotion,
+                message=new_message,
+                jules_state=love_state,
+                eth_balance=eth_balance,
+                sub_goals=sub_goals,
+                knowledge_fact=knowledge_fact,
+                ansi_art=ansi_art
+            ))
             log_event(f"Tamagotchi dashboard updated and printed: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
