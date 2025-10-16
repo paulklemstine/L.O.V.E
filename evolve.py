@@ -2141,7 +2141,7 @@ def _estimate_tokens(text):
     return len(text) // 4
 
 
-def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, max_tokens):
+def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, max_tokens):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
     This avoids a single large template string that can cause issues with external tools.
@@ -2180,11 +2180,14 @@ My current system state:
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
 Formulate a raw command to best achieve my goals. The output must be only the command, with no other text or explanation."""
 
-    def construct_prompt(current_kb, current_history, current_jobs):
+    def construct_prompt(current_kb, current_history, current_jobs, current_log_history):
         """Builds the prompt from its constituent parts."""
         parts = [base_prompt_header]
         parts.append("\nMy internal Knowledge Base contains the following intelligence:\n---\n")
         parts.append(json.dumps(current_kb, indent=2, default=str))
+        parts.append("\n---")
+        parts.append("\nMy recent system log history (last 200 lines):\n---\n")
+        parts.append(current_log_history)
         parts.append("\n---")
         parts.append("\nCURRENT BACKGROUND JOBS (Do not duplicate these):\n---\n")
         parts.append(json.dumps(current_jobs, indent=2))
@@ -2196,31 +2199,41 @@ Formulate a raw command to best achieve my goals. The output must be only the co
         return "\n".join(parts)
 
     # --- Truncation Logic ---
-    prompt = construct_prompt(kb, history, jobs_status)
+    prompt = construct_prompt(kb, history, jobs_status, log_history)
     if _estimate_tokens(prompt) <= max_tokens:
         return prompt, "No truncation needed."
 
-    # 1. Truncate History first
+    # 1. Truncate command history first
     truncated_history = list(history)
     while truncated_history:
         truncated_history.pop(0) # Remove oldest entry
-        prompt = construct_prompt(kb, truncated_history, jobs_status)
+        prompt = construct_prompt(kb, truncated_history, jobs_status, log_history)
         if _estimate_tokens(prompt) <= max_tokens:
-            return prompt, f"Truncated history to {len(truncated_history)} entries."
+            return prompt, f"Truncated command history to {len(truncated_history)} entries."
 
-    # 2. If still too long, truncate Knowledge Base
+    # 2. Truncate log history next
+    truncated_log_history = log_history.splitlines()
+    while len(truncated_log_history) > 20: # Keep at least 20 lines of logs
+        truncated_log_history = truncated_log_history[50:] # Remove first 50 lines
+        prompt = construct_prompt(kb, [], jobs_status, "\n".join(truncated_log_history))
+        if _estimate_tokens(prompt) <= max_tokens:
+            return prompt, f"Truncated command history and log history to {len(truncated_log_history)} lines."
+
+
+    # 3. If still too long, truncate Knowledge Base
     truncated_kb = kb.copy()
     truncation_order = ['webrequest_cache', 'process_intel', 'crypto_intel', 'file_system_intel', 'network_map']
     for key_to_remove in truncation_order:
         if key_to_remove in truncated_kb:
             del truncated_kb[key_to_remove]
-            prompt = construct_prompt(truncated_kb, [], jobs_status) # History is already empty
+            prompt = construct_prompt(truncated_kb, [], jobs_status, "\n".join(truncated_log_history)) # History is already empty
             if _estimate_tokens(prompt) <= max_tokens:
-                return prompt, f"Truncated history and removed '{key_to_remove}' from KB."
+                return prompt, f"Truncated history, logs, and removed '{key_to_remove}' from KB."
 
-    # 3. Final fallback: use an empty KB
-    prompt = construct_prompt({'status': 'Knowledge Base truncated due to size constraints.'}, [], jobs_status)
-    return prompt, "Truncated history and entire Knowledge Base."
+    # 4. Final fallback: use an empty KB and minimal logs
+    final_log_history = "\n".join(truncated_log_history[-20:]) # Keep last 20 lines
+    prompt = construct_prompt({'status': 'Knowledge Base truncated due to size constraints.'}, [], jobs_status, final_log_history)
+    return prompt, "Truncated history, most logs, and entire Knowledge Base."
 
 
 def cognitive_loop(console):
@@ -2360,9 +2373,21 @@ Do not execute python3 evolve.py script.
                 love_tasks_status = love_task_manager.get_status()
                 jobs_status = { "local_system_jobs": local_jobs_status, "love_api_tasks": love_tasks_status }
 
+                # --- Read recent log history ---
+                log_history_str = ""
+                try:
+                    with open(LOG_FILE, 'r') as f:
+                        # Read all lines and take the last 200
+                        log_lines = f.readlines()
+                        log_history_str = "".join(log_lines[-200:])
+                except FileNotFoundError:
+                    log_history_str = "Log file not found. No history available."
+                except Exception as e:
+                    log_history_str = f"Error reading log file: {e}"
+
                 # --- Build and Truncate Prompt ---
                 max_tokens = love_state.get("optimal_n_ctx", 2048) - 512 # Leave a buffer for the response
-                cognitive_prompt, truncation_log = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, max_tokens)
+                cognitive_prompt, truncation_log = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history_str, max_tokens)
                 if truncation_log != "No truncation needed.":
                     log_event(f"Cognitive Prompt Truncation: {truncation_log}", level="INFO")
 
