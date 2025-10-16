@@ -932,6 +932,25 @@ CONFLICTED CONTENT:
                 log_event(f"Cleaned up old Jules task {task_id}.", level="INFO")
 
 
+def _extract_ansi_art(raw_text):
+    """
+    Extracts ANSI art from raw LLM output, removing markdown code blocks.
+    If no code block is found, it assumes the entire text is the art.
+    """
+    if not raw_text:
+        return ""
+
+    # Pattern to match content inside ```ansi ... ``` or ``` ... ```
+    code_block_match = re.search(r"```(?:ansi)?\n(.*?)\n```", raw_text, re.DOTALL)
+
+    if code_block_match:
+        # If a markdown code block is found, return its content
+        return code_block_match.group(1).strip()
+    else:
+        # If no code block is found, assume the whole response is the art
+        # and strip any leading/trailing whitespace.
+        return raw_text.strip()
+
 # --- TAMAGOTCHI STATE ---
 tamagotchi_state = {"emotion": "neutral", "message": "...", "last_update": time.time()}
 tamagotchi_lock = Lock()
@@ -990,8 +1009,10 @@ Generate the message now.
                 tamagotchi_state['message'] = new_message
                 tamagotchi_state['last_update'] = time.time()
 
-            ansi_art_prompt = f"You are a master of ANSI art. Create a small, expressive, abstract ANSI art face representing the emotion '{new_emotion}'. It should fit in a 10x5 character box. Use creative characters and colors. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art, with no explanation or code block."
-            ansi_art = run_llm(ansi_art_prompt, purpose="emotion")
+            ansi_art_prompt = f"You are a master of ANSI art. Create a small, expressive, abstract ANSI art face representing the emotion '{new_emotion}'. It should fit in a 10x5 character box. Use creative characters and colors. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
+            ansi_art_raw = run_llm(ansi_art_prompt, purpose="emotion")
+
+            ansi_art = _extract_ansi_art(ansi_art_raw)
 
             # Print the update directly to the console, now including the state and network data for the dashboard
             console.print(create_tamagotchi_panel(new_emotion, new_message, jules_state, network_interfaces=network_interfaces, ansi_art=ansi_art))

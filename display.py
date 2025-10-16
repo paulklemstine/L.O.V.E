@@ -49,7 +49,8 @@ def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None, 
         Layout(Align.center(Text(face, style="bold cyan"), vertical="middle"), name="face"),
         Layout(left_panel, name="message")
     )
-    tamagotchi_layout.size = 30 # Set a fixed width for the left side
+    # The `size` attribute is removed to allow for flexible, ratio-based sizing.
+    # tamagotchi_layout.size = 30
 
     # --- Right Side: Dashboard ---
     dashboard_layout = Layout()
@@ -103,7 +104,7 @@ def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None, 
     # --- Main Layout ---
     layout = Layout()
     layout.split_row(
-        tamagotchi_layout,
+        Layout(tamagotchi_layout, name="tamagotchi", ratio=1),
         Layout(right_panel, name="dashboard", ratio=2),
     )
 
