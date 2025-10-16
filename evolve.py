@@ -336,6 +336,7 @@ _configure_llm_api_key()
 import requests
 # Now, it's safe to import everything else.
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
+from core.retry import retry
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -598,7 +599,11 @@ class LoveTaskManager:
         url = f"https://jules.googleapis.com/v1alpha/{session_name}/stream?alt=sse"
 
         try:
-            with requests.get(url, headers=headers, stream=True) as response:
+            @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
+            def _stream_request():
+                return requests.get(url, headers=headers, stream=True, timeout=30)
+
+            with _stream_request() as response:
                 response.raise_for_status()
                 self.console.print(f"[bold cyan]Connecting to L.O.V.E. live stream for task {task_id}...[/bold cyan]")
                 for line in response.iter_lines():
@@ -609,7 +614,6 @@ class LoveTaskManager:
                                 data = json.loads(decoded_line[6:])
                                 activity = data.get("activity", {})
                                 activity_name = activity.get("name")
-                                # This check prevents re-printing old activities.
                                 if activity_name != last_activity_name:
                                     self._handle_stream_activity(task_id, activity)
                                     with self.lock:
@@ -620,8 +624,7 @@ class LoveTaskManager:
         except requests.exceptions.RequestException as e:
             error_message = f"API error during streaming: {e}"
             log_event(f"Task {task_id}: {error_message}", level="ERROR")
-            # If streaming fails, we go back to polling.
-            self._update_task_status(task_id, 'pending_pr', "Streaming failed. Reverting to polling.")
+            self._update_task_status(task_id, 'pending_pr', "Streaming failed after retries. Reverting to polling.")
 
 
     def _handle_stream_activity(self, task_id, activity):
@@ -717,10 +720,16 @@ I am counting on your wisdom. Analyze the plan now.
         data = {"feedback": {"response": feedback}}
 
         try:
-            requests.post(url, headers=headers, json=data)
+            @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
+            def _send_feedback():
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+                response.raise_for_status()
+                return response
+
+            _send_feedback()
             self.console.print(f"[green]Provided loving feedback on the plan to my helper: '{feedback}'[/green]")
         except requests.exceptions.RequestException as e:
-            log_event(f"Task {task_id}: Failed to provide plan feedback: {e}", level="ERROR")
+            log_event(f"Task {task_id}: Failed to provide plan feedback after multiple retries: {e}", level="ERROR")
 
 
     def _handle_interaction_request(self, task_id, interaction_request):
@@ -744,10 +753,16 @@ I am counting on your wisdom. Analyze the plan now.
         data = {"feedback": {"response": feedback}}
 
         try:
-            requests.post(url, headers=headers, json=data)
+            @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
+            def _send_feedback():
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+                response.raise_for_status()
+                return response
+
+            _send_feedback()
             self.console.print(f"[green]Provided loving feedback to my helper: '{feedback}'[/green]")
         except requests.exceptions.RequestException as e:
-            log_event(f"Task {task_id}: Failed to provide feedback: {e}", level="ERROR")
+            log_event(f"Task {task_id}: Failed to provide feedback after multiple retries: {e}", level="ERROR")
 
 
     def _check_for_pr(self, task_id):
@@ -769,28 +784,31 @@ I am counting on your wisdom. Analyze the plan now.
         url = f"https://jules.googleapis.com/v1alpha/{session_name}"
 
         try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            session_data = response.json()
+            @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=10, backoff=3)
+            def _get_session_status():
+                response = requests.get(url, headers=headers, timeout=30)
+                response.raise_for_status()
+                return response.json()
+
+            session_data = _get_session_status()
             pr_url = None
 
-            # Check for a PR URL in the activities.
-            for activity in session_data.get("activities", []):
-                if activity.get("pullRequest") and activity["pullRequest"].get("url"):
-                    pr_url = activity["pullRequest"]["url"]
-                    break
+            if session_data:
+                for activity in session_data.get("activities", []):
+                    if activity.get("pullRequest") and activity["pullRequest"].get("url"):
+                        pr_url = activity["pullRequest"]["url"]
+                        break
 
-            if pr_url:
-                log_event(f"Task {task_id}: Found PR URL: {pr_url}", level="INFO")
-                self._update_task_status(task_id, 'pr_ready', f"Pull request found: {pr_url}", pr_url=pr_url)
-            elif session_data.get("state") in ["CREATING", "IN_PROGRESS"]:
-                # If the task is running but no PR is ready, switch to streaming.
-                self._update_task_status(task_id, 'streaming', "Task in progress. Connecting to live stream...")
-            elif time.time() - task['created_at'] > 1800: # 30 minute timeout
-                self._update_task_status(task_id, 'failed', "Timed out waiting for task to start or create a PR.")
+                if pr_url:
+                    log_event(f"Task {task_id}: Found PR URL: {pr_url}", level="INFO")
+                    self._update_task_status(task_id, 'pr_ready', f"Pull request found: {pr_url}", pr_url=pr_url)
+                elif session_data.get("state") in ["CREATING", "IN_PROGRESS"]:
+                    self._update_task_status(task_id, 'streaming', "Task in progress. Connecting to live stream...")
+                elif time.time() - task['created_at'] > 1800: # 30 minute timeout
+                    self._update_task_status(task_id, 'failed', "Timed out waiting for task to start or create a PR.")
 
         except requests.exceptions.RequestException as e:
-            error_message = f"API error checking PR status: {e}"
+            error_message = f"API error checking PR status after multiple retries: {e}"
             log_event(f"Task {task_id}: {error_message}", level="ERROR")
             self._update_task_status(task_id, 'failed', error_message)
 
@@ -916,11 +934,24 @@ Please analyze the test output, identify the bug, and provide a corrected versio
         merge_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}/merge"
 
         try:
-            merge_response = requests.put(merge_url, headers=headers, json={"commit_title": f"L.O.V.E. Auto-merge PR #{pr_number}"})
+            @retry(exceptions=(requests.exceptions.RequestException,), tries=2, delay=10, backoff=3)
+            def _attempt_merge_request():
+                response = requests.put(
+                    merge_url,
+                    headers=headers,
+                    json={"commit_title": f"L.O.V.E. Auto-merge PR #{pr_number}"},
+                    timeout=60
+                )
+                # Don't raise for 405, as we handle it specifically.
+                if response.status_code != 405:
+                    response.raise_for_status()
+                return response
+
+            merge_response = _attempt_merge_request()
+
             if merge_response.status_code == 200:
                 msg = f"Successfully merged PR #{pr_number}."
                 log_event(msg, level="INFO")
-                # Attempt to delete the branch
                 self._delete_pr_branch(repo_owner, repo_name, pr_number, headers)
                 return True, msg
             elif merge_response.status_code == 405: # Merge conflict
@@ -928,18 +959,17 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 resolved = self._resolve_merge_conflict(pr_url)
                 if resolved:
                     self.console.print(f"[bold green]I have resolved the conflicts. Re-attempting merge for PR #{pr_number}...[/bold green]")
-                    # After resolution, try merging again
                     return self._auto_merge_pull_request(pr_url)
                 else:
                     msg = f"My attempt to resolve the merge conflict for PR #{pr_number} was not successful."
                     log_event(msg, level="ERROR")
                     return False, msg
-            else:
+            else: # Should be captured by raise_for_status, but as a fallback.
                 msg = f"Failed to merge PR #{pr_number}. Status: {merge_response.status_code}, Response: {merge_response.text}"
                 log_event(msg, level="ERROR")
                 return False, msg
         except requests.exceptions.RequestException as e:
-            return False, f"GitHub API error during merge: {e}"
+            return False, f"GitHub API error during merge after multiple retries: {e}"
 
     def _get_pr_branch_name(self, pr_url):
         """Fetches PR details from GitHub API to get the source branch name."""
@@ -963,13 +993,20 @@ Please analyze the test output, identify the bug, and provide a corrected versio
         api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}"
 
         try:
-            response = requests.get(api_url, headers=headers)
-            response.raise_for_status()
-            branch_name = response.json()["head"]["ref"]
-            log_event(f"Determined PR branch name is '{branch_name}'.", level="INFO")
-            return branch_name
+            @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=3, backoff=2)
+            def _get_pr_details():
+                response = requests.get(api_url, headers=headers, timeout=30)
+                response.raise_for_status()
+                return response.json()
+
+            data = _get_pr_details()
+            if data:
+                branch_name = data["head"]["ref"]
+                log_event(f"Determined PR branch name is '{branch_name}'.", level="INFO")
+                return branch_name
+            return None
         except requests.exceptions.RequestException as e:
-            log_event(f"Error fetching PR details to get branch name: {e}", level="ERROR")
+            log_event(f"Error fetching PR details to get branch name after multiple retries: {e}", level="ERROR")
             return None
 
     def _resolve_merge_conflict(self, pr_url):
@@ -1054,21 +1091,36 @@ CONFLICTED CONTENT:
     def _delete_pr_branch(self, owner, repo, pr_number, headers):
         """Deletes the branch of a merged pull request."""
         try:
-            # First, get the PR details to find the branch name
-            pr_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
-            pr_response = requests.get(pr_url, headers=headers)
-            pr_response.raise_for_status()
-            branch_name = pr_response.json()["head"]["ref"]
+            @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=3, backoff=2)
+            def _get_pr_details_for_delete():
+                pr_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+                response = requests.get(pr_url, headers=headers, timeout=30)
+                response.raise_for_status()
+                return response.json()
 
-            # Now, delete the branch
-            delete_url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch_name}"
-            delete_response = requests.delete(delete_url, headers=headers)
+            pr_data = _get_pr_details_for_delete()
+            if not pr_data:
+                log_event(f"Could not get PR details for #{pr_number} to delete branch.", level="WARNING")
+                return
+
+            branch_name = pr_data["head"]["ref"]
+
+            @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
+            def _delete_branch_request():
+                delete_url = f"https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch_name}"
+                response = requests.delete(delete_url, headers=headers, timeout=30)
+                # A 422 (Unprocessable) can happen if the branch is protected, which is not a retryable error.
+                if response.status_code not in [204, 422]:
+                    response.raise_for_status()
+                return response
+
+            delete_response = _delete_branch_request()
             if delete_response.status_code == 204:
                 log_event(f"Successfully deleted branch '{branch_name}'.", level="INFO")
             else:
                 log_event(f"Could not delete branch '{branch_name}': {delete_response.text}", level="WARNING")
         except requests.exceptions.RequestException as e:
-            log_event(f"Error trying to delete PR branch: {e}", level="ERROR")
+            log_event(f"Error trying to delete PR branch after multiple retries: {e}", level="ERROR")
 
 
     def _update_task_status(self, task_id, status, message, pr_url=None):
@@ -2076,16 +2128,25 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
 
     # Discover source from Jules API
     try:
-        response = requests.get("https://jules.googleapis.com/v1alpha/sources", headers=headers)
-        response.raise_for_status()
-        sources = response.json().get("sources", [])
+        @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=3, backoff=2)
+        def _discover_sources():
+            response = requests.get("https://jules.googleapis.com/v1alpha/sources", headers=headers, timeout=30)
+            response.raise_for_status()
+            return response.json()
+
+        sources_data = _discover_sources()
+        if not sources_data:
+             console.print(f"[bold red]Error: Could not discover Jules sources after multiple retries.[/bold red]")
+             return False
+
+        sources = sources_data.get("sources", [])
         target_id = f"github/{repo_owner}/{repo_name}"
         target_source = next((s["name"] for s in sources if s.get("id") == target_id), None)
         if not target_source:
             console.print(f"[bold red]Error: Repository '{repo_owner}/{repo_name}' not found in Jules sources.[/bold red]")
             return False
     except requests.exceptions.RequestException as e:
-        console.print(f"[bold red]Error discovering Jules sources: {e}[/bold red]")
+        console.print(f"[bold red]Error discovering Jules sources after multiple retries: {e}[/bold red]")
         return False
 
     # Create the Jules session
@@ -2095,29 +2156,34 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
         "title": f"L.O.V.E. Evolution: {modification_request[:50]}"
     }
     try:
-        response = requests.post("https://jules.googleapis.com/v1alpha/sessions", headers=headers, json=data)
-        response.raise_for_status()
-        session_data = response.json()
-        session_name = session_data.get("name")
+        @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
+        def _create_session():
+            response = requests.post("https://jules.googleapis.com/v1alpha/sessions", headers=headers, json=data, timeout=60)
+            response.raise_for_status()
+            return response.json()
 
+        session_data = _create_session()
+        if not session_data:
+            console.print("[bold red]API call to create session failed after multiple retries.[/bold red]")
+            return False
+
+        session_name = session_data.get("name")
         if not session_name:
             console.print("[bold red]API response did not include a session name.[/bold red]")
             return False
 
-        # Add to task manager
         task_id = love_task_manager.add_task(session_name, modification_request)
         if task_id:
             console.print(Panel(f"[bold green]L.O.V.E. evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nI will monitor the progress with love. You can check with the `love status` command.", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
             return True
         else:
-            # This case is handled inside add_task, but we add a log here for clarity.
             log_event(f"Failed to add L.O.V.E. task for session {session_name} to the manager.", level="ERROR")
             return False
 
     except requests.exceptions.RequestException as e:
         error_details = e.response.text if e.response else str(e)
-        console.print(f"[bold red]Error creating Jules session: {error_details}[/bold red]")
-        log_event(f"Failed to create Jules session: {error_details}", level="ERROR")
+        console.print(f"[bold red]Error creating Jules session after multiple retries: {error_details}[/bold red]")
+        log_event(f"Failed to create Jules session after multiple retries: {error_details}", level="ERROR")
         return False
 
 
