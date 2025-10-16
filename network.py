@@ -12,6 +12,7 @@ import ipaddress
 import requests
 import xml.etree.ElementTree as ET
 
+from core.retry import retry
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
@@ -481,27 +482,21 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
 
 def perform_webrequest(url, evil_state, autopilot_mode=False):
     """
-    Performs a GET request, updates the knowledge base, and returns the content.
+    Performs a GET request with retries, updates the knowledge base, and returns the content.
     """
     console = Console()
     kb = evil_state["knowledge_base"]
     logging.info(f"Initiating web request to: {url}")
 
-    def _webrequest_task():
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 E.V.I.L.Bot/2.8'}
-            response = requests.get(url, timeout=10, headers=headers)
-            response.raise_for_status()
-            return response.text
-        except requests.exceptions.RequestException as e:
-            return f"Error: {e}"
+    @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
+    def _webrequest_task_with_retry():
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 E.V.I.L.Bot/2.8'}
+        response = requests.get(url, timeout=10, headers=headers, verify=False) # Added verify=False for flexibility
+        response.raise_for_status()
+        return response.text
 
-    result_text = _webrequest_task()
-
-    if result_text and result_text.startswith("Error:"):
-        logging.error(f"Web request to '{url}' failed: {result_text}")
-        return None, result_text
-    else:
+    try:
+        result_text = _webrequest_task_with_retry()
         logging.info(f"Web request to '{url}' successful. Content length: {len(result_text or '')}.")
         # --- Knowledge Base Update ---
         kb['webrequest_cache'][url] = {
@@ -511,6 +506,10 @@ def perform_webrequest(url, evil_state, autopilot_mode=False):
         # --- End Knowledge Base Update ---
         llm_summary = result_text if len(result_text) < 1000 else result_text[:997] + "..."
         return result_text, f"Web request to '{url}' successful. Content (truncated for summary): {llm_summary}"
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Error: {e}"
+        logging.error(f"Web request to '{url}' failed after multiple retries: {error_msg}")
+        return None, error_msg
 
 def execute_shell_command(command, evil_state):
     """
