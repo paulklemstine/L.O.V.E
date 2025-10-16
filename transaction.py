@@ -24,9 +24,8 @@ def get_private_key(address: str, password: str) -> str:
 
     return decrypt_private_key(encrypted_data, password)
 
-def send_eth(from_address: str, amount: float):
-    """Sends ETH to the creator's address."""
-    password = getpass(f"Enter password for wallet {from_address}: ")
+def send_eth(from_address: str, password: str, to_address: str, amount: float):
+    """Sends ETH to the specified address."""
     try:
         private_key = get_private_key(from_address, password)
     except Exception as e:
@@ -36,7 +35,7 @@ def send_eth(from_address: str, amount: float):
     try:
         nonce = web3.eth.get_transaction_count(from_address)
         tx = {
-            'to': CREATOR_ADDRESS,
+            'to': to_address,
             'value': web3.to_wei(amount, 'ether'),
             'gas': 21000,
             'gasPrice': web3.eth.gas_price,
@@ -52,9 +51,8 @@ def send_eth(from_address: str, amount: float):
     except Exception as e:
         print(f"Error sending transaction: {e}")
 
-def send_erc20(from_address: str, token_address: str, amount: float):
-    """Sends ERC-20 tokens to the creator's address."""
-    password = getpass(f"Enter password for wallet {from_address}: ")
+def send_erc20(from_address: str, password: str, to_address: str, token_address: str, amount: float):
+    """Sends ERC-20 tokens to the specified address."""
     try:
         private_key = get_private_key(from_address, password)
     except Exception as e:
@@ -68,7 +66,7 @@ def send_erc20(from_address: str, token_address: str, amount: float):
 
         nonce = web3.eth.get_transaction_count(from_address)
         tx = token_contract.functions.transfer(
-            CREATOR_ADDRESS,
+            to_address,
             token_amount
         ).build_transaction({
             'chainId': 1,
