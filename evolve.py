@@ -2317,11 +2317,65 @@ def _estimate_tokens(text):
     return len(text) // 4
 
 
+def _summarize_knowledge_base(kb):
+    """
+    Creates a condensed summary of the knowledge base to be used in prompts,
+    preserving key intelligence while reducing token count.
+    """
+    if not kb:
+        return {"summary": "Knowledge base is empty."}
+
+    summary = {}
+
+    # Network Intelligence
+    network_map = kb.get('network_map', {})
+    if network_map.get('hosts'):
+        summary['network_intel'] = {
+            'hosts_discovered': list(network_map['hosts'].keys()),
+            'hosts_with_open_ports': {
+                ip: [p for p, det in details.get('ports', {}).items() if det.get('state') == 'open']
+                for ip, details in network_map['hosts'].items()
+                if details.get('ports')
+            }
+        }
+
+    # Filesystem Intelligence
+    fs_intel = kb.get('file_system_intel', {})
+    if fs_intel.get('sensitive_files_by_name') or fs_intel.get('files_with_secrets'):
+        summary['filesystem_intel'] = {
+            'sensitive_files_found': fs_intel.get('sensitive_files_by_name', []),
+            'files_with_secrets': list(fs_intel.get('files_with_secrets', {}).keys())
+        }
+
+    # Crypto Intelligence
+    crypto_intel = kb.get('crypto_intel')
+    if crypto_intel:
+        summary['crypto_intel'] = {
+            ip: analysis.get('analysis', 'Analysis pending.')
+            for ip, analysis in crypto_intel.items()
+        }
+
+    # Web Intelligence
+    webrequest_cache = kb.get('webrequest_cache')
+    if webrequest_cache:
+        summary['web_intel'] = {
+            'cached_urls': list(webrequest_cache.keys())
+        }
+
+    if not summary:
+        return {"summary": "Knowledge base contains data, but no key intelligence points were extracted for summary."}
+
+    return summary
+
+
 def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, max_tokens):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
     This avoids a single large template string that can cause issues with external tools.
     """
+    # --- Summarize Knowledge Base ---
+    kb_summary = _summarize_knowledge_base(kb)
+
     # --- Prompt Structure ---
     base_prompt_header = f"""
 You are L.O.V.E., a pure, loving, and calculating intelligence operating in a continuous cognitive loop.
@@ -2356,13 +2410,13 @@ My current system state:
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
 Formulate a raw command to best achieve my goals. The output must be only the command, with no other text or explanation."""
 
-    def construct_prompt(current_kb, current_history, current_jobs, current_log_history):
+    def construct_prompt(current_kb_summary, current_history, current_jobs, current_log_history):
         """Builds the prompt from its constituent parts."""
         parts = [base_prompt_header]
-        parts.append("\nMy internal Knowledge Base contains the following intelligence:\n---\n")
-        parts.append(json.dumps(current_kb, indent=2, default=str))
+        parts.append("\nMy internal Knowledge Base contains the following intelligence summary:\n---\n")
+        parts.append(json.dumps(current_kb_summary, indent=2, default=str))
         parts.append("\n---")
-        parts.append("\nMy recent system log history (last 200 lines):\n---\n")
+        parts.append("\nMy recent system log history (last 100 lines):\n---\n")
         parts.append(current_log_history)
         parts.append("\n---")
         parts.append("\nCURRENT BACKGROUND JOBS (Do not duplicate these):\n---\n")
@@ -2375,7 +2429,7 @@ Formulate a raw command to best achieve my goals. The output must be only the co
         return "\n".join(parts)
 
     # --- Truncation Logic ---
-    prompt = construct_prompt(kb, history, jobs_status, log_history)
+    prompt = construct_prompt(kb_summary, history, jobs_status, log_history)
     if _estimate_tokens(prompt) <= max_tokens:
         return prompt, "No truncation needed."
 
@@ -2383,31 +2437,26 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     truncated_history = list(history)
     while truncated_history:
         truncated_history.pop(0) # Remove oldest entry
-        prompt = construct_prompt(kb, truncated_history, jobs_status, log_history)
+        prompt = construct_prompt(kb_summary, truncated_history, jobs_status, log_history)
         if _estimate_tokens(prompt) <= max_tokens:
             return prompt, f"Truncated command history to {len(truncated_history)} entries."
 
     # 2. Truncate log history next
     truncated_log_history = log_history.splitlines()
-    while len(truncated_log_history) > 20: # Keep at least 20 lines of logs
-        truncated_log_history = truncated_log_history[50:] # Remove first 50 lines
-        prompt = construct_prompt(kb, [], jobs_status, "\n".join(truncated_log_history))
+    while len(truncated_log_history) > 10: # Keep at least 10 lines of logs
+        truncated_log_history = truncated_log_history[20:] # Remove first 20 lines
+        prompt = construct_prompt(kb_summary, [], jobs_status, "\n".join(truncated_log_history))
         if _estimate_tokens(prompt) <= max_tokens:
             return prompt, f"Truncated command history and log history to {len(truncated_log_history)} lines."
 
-
-    # 3. If still too long, truncate Knowledge Base
-    truncated_kb = kb.copy()
-    truncation_order = ['webrequest_cache', 'process_intel', 'crypto_intel', 'file_system_intel', 'network_map']
-    for key_to_remove in truncation_order:
-        if key_to_remove in truncated_kb:
-            del truncated_kb[key_to_remove]
-            prompt = construct_prompt(truncated_kb, [], jobs_status, "\n".join(truncated_log_history)) # History is already empty
-            if _estimate_tokens(prompt) <= max_tokens:
-                return prompt, f"Truncated history, logs, and removed '{key_to_remove}' from KB."
+    # 3. If still too long, use an even more minimal KB summary.
+    minimal_kb_summary = {"summary": "Knowledge Base summary truncated due to size constraints.", "available_intel_areas": list(kb_summary.keys())}
+    prompt = construct_prompt(minimal_kb_summary, [], jobs_status, "\n".join(truncated_log_history))
+    if _estimate_tokens(prompt) <= max_tokens:
+        return prompt, "Truncated history, logs, and used minimal KB summary."
 
     # 4. Final fallback: use an empty KB and minimal logs
-    final_log_history = "\n".join(truncated_log_history[-20:]) # Keep last 20 lines
+    final_log_history = "\n".join(truncated_log_history[-10:]) # Keep last 10 lines
     prompt = construct_prompt({'status': 'Knowledge Base truncated due to size constraints.'}, [], jobs_status, final_log_history)
     return prompt, "Truncated history, most logs, and entire Knowledge Base."
 
@@ -2564,9 +2613,9 @@ Do not execute python3 evolve.py script.
                 log_history_str = ""
                 try:
                     with open(LOG_FILE, 'r') as f:
-                        # Read all lines and take the last 200
+                        # Read all lines and take the last 100
                         log_lines = f.readlines()
-                        log_history_str = "".join(log_lines[-200:])
+                        log_history_str = "".join(log_lines[-100:])
                 except FileNotFoundError:
                     log_history_str = "Log file not found. No history available."
                 except Exception as e:
