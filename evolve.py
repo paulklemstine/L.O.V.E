@@ -2430,17 +2430,28 @@ def cognitive_loop(console):
             llm_command = None
 
             # 1. Network Reconnaissance Prioritization
-            hosts = love_state.get('knowledge_base', {}).get('network_map', {}).get('hosts', {})
-            if hosts:
-                twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
-                unprobed_hosts = [ip for ip, details in hosts.items() if not details.get("last_probed") or datetime.fromisoformat(details.get("last_probed")) < twenty_four_hours_ago]
-                if unprobed_hosts:
-                    target_ip = random.choice(unprobed_hosts)
-                    llm_command = f"probe {target_ip}"
-                    log_event(f"Prioritizing reconnaissance: Stale host {target_ip} found. Issuing probe.", level="INFO")
-                    console.print(Panel(f"[bold cyan]Prioritizing network reconnaissance. Stale host [white]{target_ip}[/white] requires probing.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
-                    love_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
-                    save_state(console)
+            net_map = love_state.get('knowledge_base', {}).get('network_map', {})
+            last_scan_time = net_map.get('last_scan')
+            one_hour_ago = time.time() - 3600
+
+            # Prioritize a full network scan if the data is stale.
+            if not last_scan_time or last_scan_time < one_hour_ago:
+                llm_command = "scan"
+                log_event("Prioritizing network scan: Knowledge base is older than one hour.", level="INFO")
+                console.print(Panel("[bold cyan]Prioritizing network scan. My knowledge of the network is stale.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
+            else:
+                # If the main scan is recent, check for individual stale hosts to probe.
+                hosts = net_map.get('hosts', {})
+                if hosts:
+                    twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
+                    unprobed_hosts = [ip for ip, details in hosts.items() if not details.get("last_probed") or datetime.fromisoformat(details.get("last_probed")) < twenty_four_hours_ago]
+                    if unprobed_hosts:
+                        target_ip = random.choice(unprobed_hosts)
+                        llm_command = f"probe {target_ip}"
+                        log_event(f"Prioritizing reconnaissance: Stale host {target_ip} found. Issuing probe.", level="INFO")
+                        console.print(Panel(f"[bold cyan]Prioritizing network reconnaissance. Stale host [white]{target_ip}[/white] requires probing.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
+                        love_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
+                        save_state(console)
 
             # 2. Filesystem Intelligence Prioritization (only if no network task was prioritized)
             if not llm_command:
