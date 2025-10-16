@@ -47,8 +47,27 @@ class FinancialStrategyEngine:
 
         strategies.extend(self._analyze_creator_portfolio(creator_address))
         strategies.extend(self._identify_growth_tokens())
+        strategies.extend(self._identify_crypto_opportunities())
 
         return strategies
+
+    def _identify_crypto_opportunities(self) -> List[Dict[str, Any]]:
+        """
+        Identifies opportunities from network crypto scans.
+        """
+        crypto_strategies = []
+        for subject, relation, obj in self.kg.get_triples():
+            if relation == "crypto_analysis":
+                crypto_strategies.append({
+                    "strategy_id": f"EXPLORE_CRYPTO_OPPORTUNITY_{subject.replace(':', '_')}",
+                    "description": f"Potential crypto opportunity detected on host {subject}.",
+                    "actions": [
+                        "Investigate the host for mining or staking opportunities.",
+                        "Assess the security and viability of the opportunity."
+                    ],
+                    "details": obj
+                })
+        return crypto_strategies
 
     def _identify_growth_tokens(self) -> List[Dict[str, Any]]:
         """
