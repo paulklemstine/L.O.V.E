@@ -227,14 +227,20 @@ def _check_and_install_dependencies():
         and falls back to a CPU-only build if the first attempt fails.
         """
         try:
-            # First, try to import to see if it's already installed and working.
-            # This avoids reinstalling on every run if not needed.
+            # A more robust check. We try to initialize the backend, which will
+            # fail if the underlying shared library has missing dependencies (like libcuda.so).
+            # This prevents a false positive from a simple 'import' succeeding.
             import llama_cpp
-            print("llama-cpp-python is already installed and importable.")
+            from llama_cpp.llama_cpp import llama_backend_init
+            llama_backend_init(False) # Don't log NUMA warnings
+            print("llama-cpp-python is already installed and functional.")
             return True
-        except ImportError:
-            # If it's not importable, proceed with installation.
-            print("llama-cpp-python not found or failed to import. Starting installation process...")
+        except (ImportError, AttributeError, RuntimeError, OSError):
+            # Catches:
+            # - ImportError: package not installed.
+            # - AttributeError: for older versions of llama-cpp-python.
+            # - RuntimeError/OSError: for shared library loading failures (the original bug).
+            print("llama-cpp-python not found or failed to load. Starting installation process...")
 
         # GPU installation attempt
         if CAPS.has_cuda or CAPS.has_metal:
