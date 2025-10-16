@@ -578,7 +578,7 @@ class LoveTaskManager:
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
         # The `alt=sse` parameter is what enables Server-Sent Events (SSE) for streaming.
-        url = f"https://jules.googleapis.com/v1alpha/{session_name}?alt=sse"
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}:stream?alt=sse"
 
         try:
             with requests.get(url, headers=headers, stream=True) as response:
