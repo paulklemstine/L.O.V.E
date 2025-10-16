@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 import os
 import json
 from core.agents.metacognition_agent import MetacognitionAgent
@@ -47,13 +48,22 @@ class TestPhase3EvolutionLoop(unittest.TestCase):
 
         # 2. Initialize and run the MetacognitionAgent
         meta_agent = MetacognitionAgent()
-        meta_agent.run_evolution_cycle()
+
+        # Mock the analyze_logs method to return a specific insight
+        meta_agent.analyst.analyze_logs = mock.MagicMock(return_value="Insight: The web_search tool is inefficient.")
+
+        # Mock the benchmarker to avoid running a real experiment
+        meta_agent.benchmarker.run_experiment = mock.MagicMock(return_value=True)
+
+        # Provide a mock log entry for the agent to analyze
+        mock_logs = [{"event_type": "tool_failure", "data": {"tool_name": "web_search"}}]
+        meta_agent.run_evolution_cycle(logs=mock_logs)
 
         # 3. Assertions to verify the process
-        # For this test, we are checking that the simulated process runs to completion.
-        # A more robust test would mock each component and check the calls and outputs.
+        # Check that analyze_logs was called with the mock logs
+        meta_agent.analyst.analyze_logs.assert_called_once_with(mock_logs)
 
-        # Check that the placeholder file for the new code was created
+        # Check that the placeholder file for the new code was created as a side effect
         self.assertTrue(os.path.exists("core/tools_updated.py"), "The new tool code file was not created.")
 
 if __name__ == '__main__':

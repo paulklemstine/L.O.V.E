@@ -3,206 +3,205 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Creator Command Center</title>
+    <title>L.O.V.E. Creator Command Center</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/11.1.0/jsrsasign-all-min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+
     <style>
-        body { font-family: sans-serif; background-color: #111; color: #eee; }
-        #container { max-width: 800px; margin: auto; padding: 20px; }
-        textarea, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 5px; }
-        #log { height: 400px; background-color: #222; overflow-y: scroll; border: 1px solid #444; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+        :root {
+            --background-color: #0d0d0d; --font-color: #00ff41;
+            --border-color: #00ff41; --glow-color: rgba(0, 255, 65, 0.5);
+            --panel-bg-color: rgba(10, 25, 10, 0.8);
+        }
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: var(--background-color); color: var(--font-color); font-family: 'Courier New', Courier, monospace; }
+        * { box-sizing: border-box; }
+        button, input { background-color: var(--panel-bg-color); color: var(--font-color); border: 1px solid var(--border-color); padding: 5px; margin: 5px; }
+        textarea { background-color: rgba(0,0,0,0.5); color: var(--font-color); border: 1px solid var(--border-color); width: 95%; height: 60px; }
+        hr { border-color: var(--border-color); opacity: 0.3; }
+
+        #main-container { display: flex; height: 100vh; }
+        #left-panel { flex: 2; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
+        #right-panel { flex: 1; display: flex; flex-direction: column; }
+        .panel { border-bottom: 1px solid var(--border-color); padding: 10px; overflow-y: auto; }
+        .panel:last-child { border-bottom: none; }
+        #network-graph-container { flex-grow: 1; }
+        #comms-log-panel { flex: 1; }
+        #question-queue-panel { flex: 1; }
+        #controls-panel { flex: 1; }
+        #tests-panel { flex: 1; }
+
     </style>
 </head>
 <body>
-    <div id="container">
-        <h1>Creator Command Center</h1>
-        <p style="color: #ffcc00; background-color: #332a00; padding: 10px; border-radius: 5px;">
-            <b>Important:</b> Ensure the main <code>evolve.py</code> script is running before using this command center.
-        </p>
-        <p>Status: <span id="status">Connecting...</span></p>
-        <p>Peer ID: <span id="peer-id">N/A</span></p>
-        <p>Load Private Key: <input type="file" id="privateKeyFile" accept=".pem"></p>
-        <textarea id="command" placeholder="Enter command to send to all instances..."></textarea>
-        <button id="send">Send Signed Command</button>
-        <h2>Log</h2>
-        <div id="log"></div>
+    <div id="main-container">
+        <div id="left-panel">
+            <div class="panel" id="network-graph-container"></div>
+        </div>
+        <div id="right-panel">
+            <div class="panel" id="comms-log-panel">
+                <h3>Communications Log</h3>
+                <div id="comms-log" style="height: 150px; overflow-y: scroll;"></div>
+            </div>
+            <div class="panel" id="question-queue-panel">
+                <h3>Question Queue</h3>
+                <ul id="question-queue" style="height: 150px; overflow-y: scroll; list-style-type: none; padding: 0;"></ul>
+            </div>
+            <div class="panel" id="controls-panel">
+                <h3>Controls</h3>
+                <p>Status: <span id="status">...</span> | Peer ID: <span id="peer-id">...</span></p>
+                <p>Load Private Key: <input type="file" id="privateKeyFile"></p>
+                <textarea id="message-input" placeholder="Type message..."></textarea>
+                <button id="send-broadcast">Send to All</button>
+                <button id="send-selected">Send to Selected</button>
+            </div>
+            <div class="panel" id="tests-panel">
+                <h3>Network Tests</h3>
+                <button id="ping-selected-btn">Ping Selected</button>
+                <div id="test-results"></div>
+            </div>
+        </div>
     </div>
 
+    <script src="mplib.js"></script>
     <script>
         let creatorPrivateKey = null;
+        let cy = null;
 
-        const log = (msg) => {
-            document.getElementById('log').innerHTML += `${new Date().toLocaleTimeString()}: ${msg}\n`;
-        };
+        function log(message) {
+            const commsLog = document.getElementById('comms-log');
+            if (commsLog) {
+                const div = document.createElement('div');
+                div.innerHTML = `${new Date().toLocaleTimeString()}: ${message}`;
+                commsLog.appendChild(div);
+                commsLog.scrollTop = commsLog.scrollHeight;
+            }
+        }
 
-        const LOBBY_ID = 'borg-lobby';
-        let peer = null;
-        let lobbyConnection = null;
-        let retryTimeout = null;
-
-        function initializePeer() {
-            // First, try to become the lobby host
-            log(`Attempting to become the lobby host: ${LOBBY_ID}`);
-            peer = new Peer(LOBBY_ID);
-
-            peer.on('open', id => {
-                // This block runs if we successfully became the host
-                document.getElementById('peer-id').textContent = id;
-                document.getElementById('status').textContent = 'Lobby Host';
-                log(`Successfully became the lobby host with ID: ${id}`);
-                setupHostListeners();
+        function initializeGraph() {
+            cy = cytoscape({
+                container: document.getElementById('network-graph-container'),
+                style: [
+                    { selector: 'node', style: { 'background-color': 'var(--font-color)', 'label': 'data(id)' }},
+                    { selector: 'node:selected', style: { 'border-width': '3px', 'border-color': '#ffde00' }}
+                ],
+                layout: { name: 'cose' }
             });
+        }
 
-            peer.on('error', err => {
-                if (err.type === 'unavailable-id') {
-                    // This means the lobby host already exists.
-                    log(`Lobby host already exists. Connecting as a client...`);
-                    peer.destroy(); // Destroy the failed peer instance
-                    connectAsClient();
-                } else {
-                    // Handle other critical errors
-                    log(`A critical PeerJS error occurred: ${err.message}`);
-                    document.getElementById('status').textContent = `Error: ${err.message}`;
+        function updateGraph() {
+            const localId = MPLib.getLocalPeerId();
+            const peers = MPLib.getDirectConnections();
+            if (cy && localId && cy.getElementById(localId).empty()) {
+                cy.add({ group: 'nodes', data: { id: localId } });
+            }
+            peers.forEach(peerId => {
+                if (cy && cy.getElementById(peerId).empty()) {
+                    cy.add({ group: 'nodes', data: { id: peerId } });
+                    cy.add({ group: 'edges', data: { source: localId, target: peerId } });
                 }
             });
+            if (cy) {
+                cy.nodes().forEach(node => {
+                    if (node.id() !== localId && !peers.includes(node.id())) cy.remove(node);
+                });
+                cy.layout({ name: 'cose', animate: true }).run();
+            }
         }
 
-        function connectAsClient() {
-            peer = new Peer(); // Create a peer with a random ID
+        window.addEventListener('DOMContentLoaded', (event) => {
+            initializeGraph();
 
-            peer.on('open', id => {
-                document.getElementById('peer-id').textContent = id;
-                log(`My Peer ID is ${id}. Connecting to lobby...`);
-                connectToLobby();
-            });
-
-            peer.on('error', err => {
-                log(`A critical PeerJS error occurred as a client: ${err.message}`);
-                document.getElementById('status').textContent = `Error: ${err.message}`;
-            });
-        }
-
-        function setupHostListeners() {
-            const connections = new Map();
-            log('Lobby is online. Waiting for connections...');
-
-            peer.on('connection', conn => {
-                log(`Incoming connection from ${conn.peer}`);
-                connections.set(conn.peer, conn);
-
-                conn.on('data', data => {
-                    log(`Received data from ${conn.peer}: ${JSON.stringify(data)}`);
-                    // As the host, broadcast the command to all other peers
-                    if (data.type === 'creator-command') {
-                        log(`Broadcasting creator command to all clients.`);
-                        for (const [peerId, connection] of connections.entries()) {
-                            // Don't send it back to the sender (which is us, the creator)
-                            if (peerId !== conn.peer) {
-                                connection.send(data);
-                            }
-                        }
+            MPLib.initialize({
+                onStatusUpdate: (msg, type) => {
+                if (type === 'status') {
+                    document.getElementById('status').textContent = msg;
+                    if (msg === 'Lobby Host' || msg === 'Connected to lobby for discovery') {
+                        // Announce our presence as the creator
+                        setTimeout(() => MPLib.broadcastToRoom({ type: 'creator-announcement' }), 2000);
                     }
-                });
-
-                conn.on('close', () => {
-                    log(`Connection from ${conn.peer} closed.`);
-                    connections.delete(conn.peer);
-                });
-            });
-        }
-
-        function connectToLobby() {
-            if (retryTimeout) clearTimeout(retryTimeout);
-            log(`Attempting to connect to lobby: ${LOBBY_ID}`);
-            document.getElementById('status').textContent = `Connecting to lobby...`;
-
-            lobbyConnection = peer.connect(LOBBY_ID, { reliable: true });
-
-            lobbyConnection.on('open', () => {
-                document.getElementById('status').textContent = 'Connected to lobby';
-                log('Connection to lobby established.');
-                if (retryTimeout) clearTimeout(retryTimeout);
-            });
-
-            lobbyConnection.on('data', data => {
-                log(`Received broadcast from lobby: ${JSON.stringify(data)}`);
-                // Client-side handling of broadcasted data could go here
-            });
-
-            lobbyConnection.on('close', () => {
-                log('Connection to lobby closed. Retrying...');
-                document.getElementById('status').textContent = 'Disconnected from lobby.';
-                scheduleRetry();
-            });
-
-            lobbyConnection.on('error', err => {
-                log(`Lobby connection error: ${err.message}.`);
-                scheduleRetry();
-            });
-        }
-
-        function scheduleRetry() {
-            const retryDelay = 5000; // 5 seconds
-            document.getElementById('status').textContent = `Connection failed. Retrying in ${retryDelay / 1000}s...`;
-
-            if (retryTimeout) clearTimeout(retryTimeout);
-
-            retryTimeout = setTimeout(connectToLobby, retryDelay);
-        }
-
-        function handleKeyFile(event) {
-            const file = event.target.files[0];
-            if (!file) {
-                return;
-            }
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                creatorPrivateKey = e.target.result;
-                log('Private key loaded successfully.');
-                document.getElementById('send').disabled = false;
-            };
-            reader.readAsText(file);
-        }
-
-        function sendCommand() {
-            const commandText = document.getElementById('command').value;
-            if (!commandText) {
-                alert('Command cannot be empty.');
-                return;
-            }
-            if (!lobbyConnection || !lobbyConnection.open) {
-                alert('Not connected to the lobby.');
-                return;
-            }
-            if (!creatorPrivateKey) {
-                alert('Please load a private key file first.');
-                return;
-            }
-
-            // Create a signature
-            const sig = new KJUR.crypto.Signature({"alg": "SHA256withRSA"});
-            sig.init(creatorPrivateKey);
-            sig.updateString(commandText);
-            const signature = sig.sign();
-
-            const message = {
-                type: 'creator-command',
-                payload: {
-                    command: commandText,
-                    signature: signature
                 }
-            };
+                    if (document.getElementById('peer-id')) document.getElementById('peer-id').textContent = MPLib.getLocalPeerId() || 'N/A';
+                    updateGraph();
+                },
+                onConnectionChange: updateGraph,
+                onRoomDataReceived: (peerId, data) => {
+                    log(`Received message from ${peerId}: type=${data.type}`);
+                    if (data.type === 'pong') {
+                        document.getElementById('test-results').innerHTML += `<div>Pong from ${peerId} (Test ID: ${data.id})</div>`;
+                    } else if (data.type === 'question') {
+                        const queue = document.getElementById('question-queue');
+                        const li = document.createElement('li');
+                        li.id = `question-${data.id}`;
+                        li.innerHTML = `<p>From: ${peerId.substring(0,12)}...</p><p>${data.question}</p>
+                                        <button class="answer-btn" data-id="${data.id}" data-from="${peerId}">Answer</button>`;
+                        queue.appendChild(li);
+                    }
+                }
+            });
 
-            log(`Sending command: ${commandText}`);
-            lobbyConnection.send(message);
-        }
+            document.getElementById('privateKeyFile').addEventListener('change', (event) => {
+                const reader = new FileReader();
+                reader.onload = (e) => { creatorPrivateKey = e.target.result; log('Private key loaded.'); };
+                reader.readAsText(event.target.files[0]);
+            });
 
-        window.onload = () => {
-            document.getElementById('send').disabled = true;
-            document.getElementById('privateKeyFile').addEventListener('change', handleKeyFile);
-            document.getElementById('send').addEventListener('click', sendCommand);
-            initializePeer();
-        };
+            function sendMessage(commandText, peers) {
+                if (!commandText || !creatorPrivateKey) return;
+                const sig = new KJUR.crypto.Signature({"alg": "SHA256withRSA"});
+                sig.init(creatorPrivateKey);
+                sig.updateString(commandText);
+                const message = { type: 'creator-command', payload: { command: commandText, signature: sig.sign() } };
+
+                // Encrypt the entire message object before sending
+                const encryptedPayload = MPLib.encrypt(JSON.stringify(message));
+                const finalMessage = { type: 'encrypted-message', payload: encryptedPayload };
+
+                if (peers) {
+                    peers.forEach(peerId => MPLib.sendDirectToRoomPeer(peerId, finalMessage));
+                } else {
+                    MPLib.broadcastToRoom(finalMessage);
+                }
+                document.getElementById('message-input').value = '';
+            }
+
+            document.getElementById('send-broadcast').addEventListener('click', () => {
+                sendMessage(document.getElementById('message-input').value);
+            });
+
+            document.getElementById('send-selected').addEventListener('click', () => {
+                const selectedPeers = cy.nodes(':selected').map(node => node.id());
+                if (selectedPeers.length === 0) {
+                    log("No peers selected.");
+                    return;
+                }
+                sendMessage(document.getElementById('message-input').value, selectedPeers);
+            });
+
+            document.getElementById('ping-selected-btn').addEventListener('click', () => {
+                const selectedPeers = cy.nodes(':selected').map(node => node.id());
+                if (selectedPeers.length === 0) {
+                    log("No peers selected to ping.");
+                    return;
+                }
+                selectedPeers.forEach(peerId => {
+                    MPLib.sendDirectToRoomPeer(peerId, { type: 'ping', id: `ping-${Date.now()}` });
+                });
+            });
+
+            document.getElementById('question-queue').addEventListener('click', (e) => {
+                if (e.target.classList.contains('answer-btn')) {
+                    const peerId = e.target.dataset.from;
+                    const questionId = e.target.dataset.id;
+                    const answer = prompt(`Answering question...`);
+                    if (answer) {
+                        MPLib.sendDirectToRoomPeer(peerId, { type: 'answer', payload: { answer, questionId } });
+                        e.target.parentElement.remove();
+                    }
+                }
+            });
+        });
     </script>
 </body>
 </html>

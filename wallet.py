@@ -109,6 +109,8 @@ def list_wallets():
 def main():
     """Main function to run the CLI."""
     import argparse
+    from transaction import send_eth, send_erc20
+
     parser = argparse.ArgumentParser(description="A simple, non-custodial Ethereum wallet management tool.")
 
     subparsers = parser.add_subparsers(dest='command', required=True, help='Available commands')
@@ -126,6 +128,17 @@ def main():
     # Command: list-wallets
     parser_list = subparsers.add_parser('list-wallets', help='List all created wallets and their balances.')
 
+    # Command: send-eth
+    parser_send_eth = subparsers.add_parser('send-eth', help="Send ETH to the creator's address.")
+    parser_send_eth.add_argument('from_address', type=str, help='The address to send from.')
+    parser_send_eth.add_argument('amount', type=float, help='The amount of ETH to send.')
+
+    # Command: send-erc20
+    parser_send_erc20 = subparsers.add_parser('send-erc20', help="Send ERC-20 tokens to the creator's address.")
+    parser_send_erc20.add_argument('from_address', type=str, help='The address to send from.')
+    parser_send_erc20.add_argument('token_address', type=str, help='The address of the ERC-20 token contract.')
+    parser_send_erc20.add_argument('amount', type=float, help='The amount of tokens to send.')
+
     args = parser.parse_args()
 
     if args.command == 'create':
@@ -138,6 +151,10 @@ def main():
         get_eth_balance(creator_address)
     elif args.command == 'list-wallets':
         list_wallets()
+    elif args.command == 'send-eth':
+        send_eth(args.from_address, args.amount)
+    elif args.command == 'send-erc20':
+        send_erc20(args.from_address, args.token_address, args.amount)
 
 if __name__ == '__main__':
     main()

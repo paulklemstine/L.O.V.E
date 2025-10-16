@@ -1,67 +1,73 @@
 import unittest
-import os
-import sys
-
-# Add the root directory to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import asyncio
+from unittest.mock import patch, MagicMock
 
 from core.agents.orchestrator import Orchestrator
-from core.agents.execution import ResearchAgent
-from core.perception.information_extractor import extract_entities_and_relations
-from core.knowledge_graph.graph import KnowledgeGraph
-from core.memory.memory_manager import MemoryManager
 
 class TestPhase1Integration(unittest.TestCase):
 
     def setUp(self):
         """Set up the test environment before each test."""
         self.orchestrator = Orchestrator()
-        self.research_agent = ResearchAgent()
-        self.orchestrator.register_agent("researcher", self.research_agent)
-        self.kg = KnowledgeGraph(db_path="test_kg.json")
-        self.memory = MemoryManager(ltm_path="test_ltm.json")
 
-    def tearDown(self):
-        """Clean up the test environment after each test."""
-        if os.path.exists("test_kg.json"):
-            os.remove("test_kg.json")
-        if os.path.exists("test_ltm.json"):
-            os.remove("test_ltm.json")
-
-    def test_full_workflow(self):
+    def test_orchestrator_initialization(self):
         """
-        Tests the full workflow:
-        1. Orchestrator delegates a task.
-        2. Information is extracted from a sample text.
-        3. The Knowledge Graph is populated.
-        4. The outcome is stored in Long-Term Memory.
-        5. A relevant memory is retrieved.
+        Tests if the Orchestrator and its key components are initialized correctly.
         """
-        # 1. Orchestrator delegates a task
-        task = "Analyze the provided text about major tech companies."
-        result = self.orchestrator.delegate_task("researcher", task)
-        self.assertIn("Research complete", result)
+        print("\n--- Running test_orchestrator_initialization ---")
+        self.assertIsNotNone(self.orchestrator.planner)
+        self.assertIsNotNone(self.orchestrator.tool_registry)
+        self.assertIsNotNone(self.orchestrator.executor)
+        self.assertIsNotNone(self.orchestrator.execution_engine)
+        # Check if default tools are registered
+        self.assertIn("web_search", self.orchestrator.tool_registry.list_tools())
+        self.assertIn("read_file", self.orchestrator.tool_registry.list_tools())
 
-        # 2. Information is extracted from a sample text (simulating the agent's research)
-        sample_text = "Apple Inc. is based in Cupertino. Google, a subsidiary of Alphabet Inc., is a major player in search technology."
-        relations = extract_entities_and_relations(sample_text)
-        self.assertTrue(len(relations) > 0)
-        self.assertIn(('Apple Inc.', 'related_to', 'Cupertino'), relations)
+    @patch('core.planning.mock_llm_call')
+    def test_simple_goal_execution(self, mock_llm_call_func):
+        """
+        Tests a simple, successful workflow where the orchestrator takes a goal,
+        generates a plan, and executes it. This replaces the old agent registration test.
+        """
+        # --- Arrange ---
+        goal = "Summarize the latest advancements in AI"
+        print(f"\n--- Running test_simple_goal_execution with goal: '{goal}' ---")
 
-        # 3. The Knowledge Graph is populated
-        for sub, rel, obj in relations:
-            self.kg.add_relation(sub, rel, obj)
-        self.kg.save_graph()
-        self.assertIn(('Google', 'related_to', 'Alphabet Inc.'), self.kg.get_triples())
+        # Mock the LLM call within the planner to return a predictable plan
+        mock_plan_json = """
+        [
+            {"step": 1, "task": "Execute web search for 'latest AI advancements'", "tool": "web_search", "args": {"query": "latest AI advancements"}},
+            {"step": 2, "task": "Read the content of the first article", "tool": "read_file", "args": {"path": "/mnt/data/article1.txt"}},
+            {"step": 3, "task": "Synthesize a final summary."}
+        ]
+        """
+        mock_llm_call_func.return_value = mock_plan_json
 
-        # 4. The outcome is stored in Long-Term Memory
-        self.memory.add_episode(task, "Extracted relations from text and updated KG.", success=True)
-        self.assertEqual(len(self.memory.episodes), 1)
+        # Mock the executor to avoid actual tool execution
+        # We need an async mock for the executor's async `execute` method
+        async def mock_executor_execute(tool_name, tool_registry, **kwargs):
+            if tool_name == "web_search":
+                return '[{"title": "AI Advancements", "url": "/mnt/data/article1.txt"}]'
+            if tool_name == "read_file":
+                return "Article content about AI."
+            return "Default mock result"
 
-        # 5. A relevant memory is retrieved
-        similar_task = "Find information on technology corporations."
-        relevant_memories = self.memory.retrieve_relevant_memories(similar_task)
-        self.assertIn("Task: Analyze the provided text about major tech companies. | Outcome: Extracted relations from text and updated KG. | Success: True", relevant_memories[0])
+        self.orchestrator.executor.execute = MagicMock(side_effect=mock_executor_execute)
+
+        # --- Act ---
+        # The execute_goal method is async, so we need to run it in the event loop.
+        result = asyncio.run(self.orchestrator.execute_goal(goal))
+
+        # --- Assert ---
+        self.assertIsNotNone(result)
+        self.assertEqual(result.get('status'), 'Success')
+        self.assertIn("summary", result.get('final_result', '').lower()) # More flexible check
+
+        # Verify that the planner was called
+        mock_llm_call_func.assert_called_once()
+        # Verify that the executor was called for the tools in the plan
+        self.assertEqual(self.orchestrator.executor.execute.call_count, 2)
+
 
 if __name__ == '__main__':
     unittest.main()

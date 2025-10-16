@@ -3,6 +3,7 @@ from rich.rule import Rule
 import os
 
 from core.orchestrator import Orchestrator
+from core.tools import crypto_scan_tool
 
 def main():
     """
@@ -15,6 +16,7 @@ def main():
 
     # The Orchestrator now encapsulates the entire cognitive architecture.
     agent_orchestrator = Orchestrator()
+    agent_orchestrator.tool_registry.register_tool("crypto_scan", crypto_scan_tool)
 
     # --- Phase 2 Demonstration ---
     console.print("\n")

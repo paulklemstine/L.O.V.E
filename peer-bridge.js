@@ -57,6 +57,48 @@ function reconnect() {
 
 
 // --- PeerJS Logic ---
+function connectToPeer(targetPeerId) {
+    if (!peer || peer.destroyed) {
+        log('error', 'Cannot connect to peer, main peer object is not initialized.');
+        return;
+    }
+    if (connections.has(targetPeerId) || targetPeerId === peerId) {
+        log('info', `Already connected to ${targetPeerId} or it is self, skipping.`);
+        return;
+    }
+
+    log('info', `Attempting to establish direct connection to peer: ${targetPeerId}`);
+    const conn = peer.connect(targetPeerId, { reliable: true });
+
+    // The event handlers for this new connection are the same as for incoming ones.
+    // We can reuse the logic from the main 'connection' event handler.
+    handleNewConnection(conn);
+}
+
+function handleNewConnection(conn) {
+    log('info', `Handling new connection with ${conn.peer}`);
+    connections.set(conn.peer, conn);
+    process.stdout.write(JSON.stringify({ type: 'connection', peer: conn.peer }) + '\n');
+
+    conn.on('data', (data) => {
+        log('info', `Received data from ${conn.peer}`);
+        const messageToPython = { type: 'p2p-data', peer: conn.peer, payload: data };
+        process.stdout.write(JSON.stringify(messageToPython) + '\n');
+    });
+
+    conn.on('close', () => {
+        log('info', `Connection closed with ${conn.peer}`);
+        connections.delete(conn.peer);
+        process.stdout.write(JSON.stringify({ type: 'disconnection', peer: conn.peer }) + '\n');
+    });
+
+    conn.on('error', (err) => {
+        log('error', `Connection error with ${conn.peer}: ${err.message}`);
+        connections.delete(conn.peer);
+    });
+}
+
+
 function initializePeer() {
     // Use the globally stored peerId
     if (peer) {
@@ -82,32 +124,7 @@ function initializePeer() {
     });
 
     peer.on('connection', (conn) => {
-        log('info', `Received connection from ${conn.peer}`);
-        connections.set(conn.peer, conn);
-        process.stdout.write(JSON.stringify({ type: 'connection', peer: conn.peer }) + '\n');
-
-        conn.on('data', (data) => {
-            log('info', `Received data from ${conn.peer}`);
-
-            // Forward the data to the Python script via stdout
-            const messageToPython = {
-                type: 'p2p-data',
-                peer: conn.peer,
-                payload: data
-            };
-            process.stdout.write(JSON.stringify(messageToPython) + '\n');
-        });
-
-        conn.on('close', () => {
-            log('info', `Connection closed with ${conn.peer}`);
-            connections.delete(conn.peer);
-            process.stdout.write(JSON.stringify({ type: 'disconnection', peer: conn.peer }) + '\n');
-        });
-
-        conn.on('error', (err) => {
-            log('error', `Connection error with ${conn.peer}: ${err.message}`);
-            connections.delete(conn.peer);
-        });
+        handleNewConnection(conn);
     });
 
     peer.on('error', (err) => {
@@ -179,6 +196,8 @@ function handlePythonMessage(jsonString) {
             } else {
                 log('warn', `Could not send to peer ${message.peer}: connection not found or not open.`);
             }
+        } else if (message.type === 'connect-to-peer' && message.peerId) {
+            connectToPeer(message.peerId);
         }
     } catch (e) {
         log('error', `Error parsing JSON from Python: ${e.message}`);

@@ -59,6 +59,9 @@ class ExecutionEngine:
             return "no_op", {"task": task, "is_final_step": True}
 
         # If no tool is identified, it's a no-op task.
+        if "crypto_scan" in task_lower:
+            ip_address = task.split(" ")[-1]
+            return "crypto_scan", {"target_ip": ip_address}
         return "no_op", {"task": task}
 
     async def execute_plan(self, goal: str) -> Dict[str, Any]:

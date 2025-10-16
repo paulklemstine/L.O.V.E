@@ -313,6 +313,16 @@
             </div>
         </div>
 
+        <div class="panel">
+            <div class="panel-header">
+                <h2>Ask Creator</h2>
+            </div>
+            <div class="panel-content">
+                <textarea id="question-input" placeholder="Ask a question to the creator..."></textarea>
+                <button id="send-question-btn">Send Question</button>
+            </div>
+        </div>
+
         <div class="panel panel-full-width">
             <div class="panel-header">
                 <h2>Saved Pages</h2>
@@ -455,6 +465,7 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
         readyPeers: new Set(),
         isMerging: false,
         pendingPin: null, // To track the page ID of the code being pinned
+        creatorId: null,
     };
 
     // --- DOM Elements ---
@@ -682,9 +693,23 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
                     console.log(`Received new page version from peer: ${data.payload.pageId}`);
                     savePage(data.payload.pageId, data.payload.pageCode);
                     renderSavedPagesList(); // Refresh the list
-                } else if (data.type === 'creator-command') {
-                    console.log('Received a command from the Creator.');
-                    handleCreatorCommand(data.payload);
+                } else if (data.type === 'encrypted-message') {
+                    try {
+                        const decryptedPayload = MPLib.decrypt(data.payload);
+                        const message = JSON.parse(decryptedPayload);
+                        if (message.type === 'creator-command') {
+                            console.log('Received an encrypted command from the Creator.');
+                            handleCreatorCommand(message.payload);
+                        } else if (message.type === 'answer') {
+                            console.log(`Received answer from creator for question ${message.payload.questionId}: ${message.payload.answer}`);
+                            alert(`Creator answered your question: ${message.payload.answer}`);
+                        } else if (message.type === 'creator-announcement') {
+                            state.creatorId = peerId;
+                            console.log(`Discovered Creator at Peer ID: ${peerId}`);
+                        }
+                    } catch (e) {
+                        console.error("Failed to decrypt or parse message:", e);
+                    }
                 }
             }
         });
@@ -695,6 +720,23 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
         // Set the autopilot to enabled and start the cycle.
         localStorage.setItem('autopilotEnabled', 'true');
         runDrGeminiCycle();
+
+        document.getElementById('send-question-btn').addEventListener('click', () => {
+            const questionText = document.getElementById('question-input').value;
+            if (!questionText) return;
+            if (!state.creatorId) {
+                alert("Creator not found on the network.");
+                return;
+            }
+            const message = {
+                type: 'question',
+                id: `q-${Date.now()}`,
+                question: questionText
+            };
+            MPLib.sendDirectToRoomPeer(state.creatorId, message);
+            console.log(`Sent question to creator: ${questionText}`);
+            document.getElementById('question-input').value = '';
+        });
     }
 
     function loadPage(pageId) {

@@ -8,7 +8,7 @@ def test_smoke():
     try:
         # We run with --help, which should trigger the dependency checks and then exit cleanly.
         result = subprocess.run([sys.executable, 'evolve.py', '--help'], capture_output=True, text=True, check=True)
-        assert "J.U.L.E.S." in result.stdout
+        assert "L.O.V.E." in result.stdout
         assert result.returncode == 0
     except subprocess.CalledProcessError as e:
         print(f"Smoke test failed: {e}")

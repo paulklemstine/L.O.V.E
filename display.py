@@ -34,19 +34,21 @@ TAMAGOTCHI_FACES = {
 
 def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None, network_interfaces=None, ansi_art=None):
     """Creates a Rich Panel for the Tamagotchi's current state, including a dashboard."""
-    face = ansi_art if ansi_art else TAMAGOTCHI_FACES.get(emotion, TAMAGOTCHI_FACES["neutral"])
-
     # --- Left Side: Tamagotchi ---
-    left_content = Text(justify="center")
-    left_content.append(face, style="bold cyan")
-    left_content.append("\n\n")
+    # Use from_ansi to correctly render pre-formatted ANSI art, preventing character splitting.
+    if ansi_art:
+        face_renderable = Text.from_ansi(ansi_art)
+    else:
+        face_text = TAMAGOTCHI_FACES.get(emotion, TAMAGOTCHI_FACES["neutral"])
+        face_renderable = Text(face_text, style="bold cyan")
+
     # Wrap the message for better formatting
     wrapped_message = Text(message, style="italic yellow", justify="center")
     left_panel = Panel(Align.center(wrapped_message, vertical="middle"), title=f"Feeling: {emotion}", border_style="cyan", height=7)
 
     tamagotchi_layout = Layout()
     tamagotchi_layout.split_column(
-        Layout(Align.center(Text(face, style="bold cyan"), vertical="middle"), name="face"),
+        Layout(Align.center(face_renderable, vertical="middle"), name="face"),
         Layout(left_panel, name="message")
     )
     # The `size` attribute is removed to allow for flexible, ratio-based sizing.

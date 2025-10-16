@@ -17,14 +17,17 @@ class MetacognitionAgent:
         self.benchmarker = AutomatedBenchmarker()
         self.git_manager = GitManager()
 
-    def run_evolution_cycle(self):
+    def run_evolution_cycle(self, logs: list):
         """
         Executes one full cycle of self-improvement.
+
+        Args:
+            logs: A list of log entries to be analyzed.
         """
         print("\n===== Starting Metacognitive Evolution Cycle =====")
 
         # 1. Performance Logging & Causal Reflection
-        insight = self.analyst.analyze_logs()
+        insight = self.analyst.analyze_logs(logs)
         if not insight or "No significant patterns" in insight:
             print("MetacognitionAgent: No actionable insights found. Ending cycle.")
             return
