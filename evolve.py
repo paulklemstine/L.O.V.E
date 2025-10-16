@@ -218,6 +218,7 @@ def _check_and_install_dependencies():
     _install_pip_package("llm")
     _install_pip_package("llm-gemini")
     _install_pip_package("huggingface-hub")
+    _install_pip_package("web3")
     _install_pip_package("cmake")
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
