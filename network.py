@@ -7,6 +7,10 @@ import base64
 import hashlib
 import shutil
 import re
+import netifaces
+import ipaddress
+import requests
+import xml.etree.ElementTree as ET
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
