@@ -49,6 +49,15 @@ class AnsiStrippingTee(object):
         self.stream2 = stream2 # e.g., log file handle
         self.ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
         self.lock = threading.Lock()
+        # Check if the primary stream is a TTY to report back to libraries like rich
+        self._isatty = hasattr(stream1, 'isatty') and stream1.isatty()
+
+    def isatty(self):
+        """
+        Report whether the main stream is a TTY. This is crucial for libraries
+        like 'rich' to determine if they should output ANSI color codes.
+        """
+        return self._isatty
 
     def write(self, data):
         with self.lock:
