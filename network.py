@@ -244,11 +244,11 @@ def scan_network(evil_state, autopilot_mode=False):
         if not autopilot_mode: console.print(f"[bold red]{msg}[/bold red]")
         return [], msg
 
-    # -sn: Ping Scan (host discovery)
+    # -sT: TCP Connect Scan (more reliable than -sn for port scanning)
     # -T4: Aggressive timing template for faster scans
-    # --top-ports 20: Scan the 20 most common TCP ports
+    # --top-ports 1000: Scan the 1000 most common TCP ports
     # -oX -: Output in XML format to stdout
-    scan_cmd = f"nmap -sn -T4 --top-ports 20 -oX - {network_range}"
+    scan_cmd = f"nmap -sT -T4 --top-ports 1000 -oX - {network_range}"
     if not autopilot_mode:
         console.print(f"[cyan]Deploying enhanced 'nmap' discovery and port scan on subnet ({network_range})...[/cyan]")
 

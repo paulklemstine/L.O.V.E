@@ -1,0 +1,14 @@
+rich
+web3
+netifaces
+requests
+beautifulsoup4
+ipfshttpclient
+cryptography
+llm
+llm-gemini
+huggingface-hub
+cmake
+llama-cpp-python
+pytest
+pytest-asyncio
