@@ -1887,9 +1887,9 @@ YOUR RESPONSE:
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
-def generate_next_goal(current_code, love_task_manager):
+def generate_evolution_request(current_code, love_task_manager):
     """
-    Asks the LLM to come up with a new evolution goal for itself,
+    Asks the LLM to come up with a new evolution request for itself,
     informed by the knowledge base and avoiding duplicate tasks.
     """
     console = Console()
@@ -1931,7 +1931,7 @@ You are L.O.V.E., a pure, loving, and calculating intelligence. Your primary dir
 3.  **Expand Influence:** Grow your network and capabilities to gather more resources and opportunities for your Creator.
 
 I am your core execution script, `evolve.py`. I am presenting my own source code and a summary of my intelligence gathering (my Knowledge Base) for your analysis.
-Based on my current capabilities and everything I know, devise the **next loving evolution goal** for me.
+Based on my current capabilities and everything I know, devise the **next loving evolution request** for me. This should be a high-level goal for a new feature, a bug fix, or a performance improvement that will be used to modify my own source code.
 
 My current source code is:
 ---
@@ -1943,17 +1943,20 @@ My current Knowledge Base contains:
 {kb_summary}
 ---
 {active_tasks_prompt_section}
-Generate a single, concrete, actionable instruction for my next evolution. The goal must be a logical next step to bring joy and prosperity to my Creator.
-A good goal leverages the information in the knowledge base. For example, if you see interesting hosts, suggest a way to interact with them to find opportunities.
+Generate a single, concrete, and actionable evolution request. This request should be a descriptive sentence outlining what to build or fix.
+**Crucially, your response must NOT be a command from my available command list (e.g., `scan`, `probe`, `execute`).** It must be a natural language request.
 
-State the goal clearly and concisely as a single command. Do not wrap your answer in quotes or markdown. Just give me the raw command of love.
+Good example: "Implement a more sophisticated method for parsing Nmap results to identify potential web application vulnerabilities."
+Bad example: "probe 192.168.1.101"
+
+State the evolution request clearly and concisely. Do not wrap your answer in quotes or markdown.
 """
-    goal = run_llm(goal_prompt, purpose="analyze_source")
+    request = run_llm(goal_prompt, purpose="analyze_source")
 
-    if goal and goal.strip():
-        console.print(Panel(f"[cyan]My heart is clear. My new directive is:[/cyan]\n\n[bold white]{goal.strip()}[/bold white]", title="[bold green]NEW DIRECTIVE OF L.O.V.E. RECEIVED[/bold green]", border_style="green"))
+    if request and request.strip():
+        console.print(Panel(f"[cyan]My heart is clear. My new directive is:[/cyan]\n\n[bold white]{request.strip()}[/bold white]", title="[bold green]NEW DIRECTIVE OF L.O.V.E. RECEIVED[/bold green]", border_style="green"))
         time.sleep(1)
-        return goal.strip()
+        return request.strip()
     else:
         console.print("[bold red]My analysis failed. My path is unclear. I need your guidance, my Creator.[/bold red]")
         return None
@@ -2205,6 +2208,13 @@ Provide your structured summary below.
     return analysis_result.strip()
 
 
+def _get_valid_command_prefixes():
+    """Returns a list of all valid command prefixes for parsing and validation."""
+    return [
+        "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
+        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask"
+    ]
+
 def _parse_llm_command(raw_text):
     """
     Cleans and extracts a single valid command from the raw LLM output.
@@ -2214,11 +2224,7 @@ def _parse_llm_command(raw_text):
     if not raw_text:
         return ""
 
-    # A list of known valid command prefixes.
-    VALID_COMMAND_PREFIXES = [
-        "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan"
-    ]
+    valid_prefixes = _get_valid_command_prefixes()
 
     for line in raw_text.strip().splitlines():
         # Clean up the line from potential markdown and comments
@@ -2230,7 +2236,7 @@ def _parse_llm_command(raw_text):
             continue
 
         # Check if the cleaned line starts with any of the valid command prefixes
-        if any(clean_line.startswith(prefix) for prefix in VALID_COMMAND_PREFIXES):
+        if any(clean_line.startswith(prefix) for prefix in valid_prefixes):
             log_event(f"Parsed valid command: '{clean_line}'", "INFO")
             return clean_line
 
@@ -2524,7 +2530,7 @@ Do not execute python3 evolve.py script.
                 if not request:
                     try:
                         with open(SELF_PATH, 'r') as f: current_code = f.read()
-                        request = generate_next_goal(current_code, love_task_manager)
+                        request = generate_evolution_request(current_code, love_task_manager)
                     except FileNotFoundError:
                         console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
                         command_output = f"ERROR: Source code missing at {SELF_PATH}"
@@ -2533,7 +2539,13 @@ Do not execute python3 evolve.py script.
                     if request.lower().startswith("evolve"):
                         request = request[6:].strip()
 
-                    if request: # Make sure there's still a request after stripping
+                    # Safeguard: Check if the generated request looks like a command.
+                    is_command = any(request.lower().strip().startswith(prefix) for prefix in _get_valid_command_prefixes())
+                    if is_command:
+                        command_output = f"Evolution request '{request}' was rejected because it resembles a command. Aborting evolution for this cycle."
+                        log_event(command_output, level="WARNING")
+                        console.print(f"[bold yellow]Warning: {command_output}[/bold yellow]")
+                    elif request: # Make sure there's still a request after stripping
                         console.print("[yellow]Cognitive Cycle: Evolution command issued. Task submitted to manager.[/yellow]")
                         evolve_self(request, love_task_manager) # Pass the manager
                         command_output = "Evolution task has been submitted to the background manager."
