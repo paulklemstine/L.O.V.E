@@ -1,6 +1,10 @@
 import json
 from typing import List, Dict, Any
 
+from core.financial_strategy_engine import FinancialStrategyEngine
+from core.knowledge_graph.graph import KnowledgeGraph
+
+
 # A mock LLM call function for demonstration purposes.
 # In a real implementation, this would be a call to a powerful language model.
 def mock_llm_call(prompt: str) -> str:
@@ -32,6 +36,10 @@ class Planner:
     verifiable sub-tasks (a Plan).
     """
 
+    def __init__(self, knowledge_graph: KnowledgeGraph):
+        self.kg = knowledge_graph
+        self.financial_engine = FinancialStrategyEngine(self.kg)
+
     def decompose_goal(self, goal: str) -> List[Dict[str, Any]]:
         """
         Uses an LLM to recursively break a goal into smaller, actionable steps.
@@ -42,6 +50,11 @@ class Planner:
         Returns:
             A list of dictionaries, where each dictionary represents a step in the plan.
         """
+        # Check if the goal is financial in nature
+        financial_keywords = ["financial", "wealth", "abundance", "money", "invest"]
+        if any(keyword in goal.lower() for keyword in financial_keywords):
+            return self._decompose_financial_goal(goal)
+
         prompt = (
             f"Given the high-level goal: '{goal}', decompose it into a series of "
             "small, actionable, and verifiable steps. The output should be a JSON array "
@@ -65,6 +78,34 @@ class Planner:
             return []
         except Exception as e:
             print(f"An unexpected error occurred during goal decomposition: {e}")
+            return []
+
+    def _decompose_financial_goal(self, goal: str) -> List[Dict[str, Any]]:
+        """
+        Decomposes a financial goal using the FinancialStrategyEngine.
+        """
+        print(f"Decomposing financial goal: {goal}")
+        strategies = self.financial_engine.generate_strategies()
+
+        if not strategies:
+            print("No financial strategies were generated.")
+            return []
+
+        # Convert strategies into a plan
+        plan = []
+        step_counter = 1
+        for strategy in strategies:
+            plan.append({"step": step_counter, "task": f"Strategy: {strategy['description']}"})
+            step_counter += 1
+            for action in strategy['actions']:
+                plan.append({"step": step_counter, "task": action})
+                step_counter += 1
+
+        if self.validate_plan(plan):
+            print("Successfully generated and validated financial plan.")
+            return plan
+        else:
+            print("Error: Generated financial plan failed validation.")
             return []
 
     def validate_plan(self, plan: List[Dict[str, Any]]) -> bool:

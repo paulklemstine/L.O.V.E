@@ -15,10 +15,19 @@ class TestPhase2Integration(unittest.IsolatedAsyncioTestCase):
     and Execution) work together as a system.
     """
 
+from core.knowledge_graph.graph import KnowledgeGraph
+
+class TestPhase2Integration(unittest.IsolatedAsyncioTestCase):
+    """
+    An integration test to ensure all components of Phase 2 (Planning, Tools,
+    and Execution) work together as a system.
+    """
+
     def setUp(self):
         """Set up the test environment."""
         print("\n--- Setting up TestPhase2Integration ---")
-        self.orchestrator = Orchestrator()
+        self.mock_kg = KnowledgeGraph()
+        self.orchestrator = Orchestrator(knowledge_graph=self.mock_kg)
 
     async def test_full_execution_flow(self):
         """

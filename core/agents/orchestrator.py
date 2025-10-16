@@ -8,12 +8,23 @@ class Orchestrator:
     orchestrating the planning and execution process, and returning the
     final result.
     """
-    def __init__(self):
+from core.knowledge_graph.graph import KnowledgeGraph
+
+class Orchestrator:
+    """
+    The central controller responsible for receiving high-level goals,
+    orchestrating the planning and execution process, and returning the
+    final result.
+    """
+    def __init__(self, knowledge_graph: KnowledgeGraph = None):
         """Initializes all core components of the agent's architecture."""
         print("Initializing Orchestrator and its components...")
 
-        # 1. Initialize the Planner
-        self.planner = Planner()
+        # 1. Initialize the Knowledge Graph
+        self.kg = knowledge_graph if knowledge_graph else KnowledgeGraph()
+
+        # 2. Initialize the Planner
+        self.planner = Planner(self.kg)
 
         # 2. Initialize the Tool Registry and register tools
         self.tool_registry = ToolRegistry()
