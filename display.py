@@ -8,6 +8,7 @@ from rich.text import Text
 from rich.layout import Layout
 from rich.align import Align
 from rich.rule import Rule
+from rich.padding import Padding
 
 TAMAGOTCHI_FACES = {
     "neutral": """
@@ -32,192 +33,222 @@ TAMAGOTCHI_FACES = {
     """
 }
 
-def create_tamagotchi_panel(emotion="neutral", message="...", jules_state=None, network_interfaces=None, ansi_art=None):
-    """Creates a Rich Panel for the Tamagotchi's current state, including a dashboard."""
-    # --- Left Side: Tamagotchi ---
-    # Use from_ansi to correctly render pre-formatted ANSI art, preventing character splitting.
+def create_tamagotchi_panel(
+    emotion="neutral",
+    message="...",
+    jules_state=None,
+    eth_balance=None,
+    sub_goals=None,
+    knowledge_fact=None,
+    ansi_art=None
+):
+    """Creates the main, high-impact, dopamine-enhancing UI panel for L.O.V.E."""
+    # --- Main Layout ---
+    main_layout = Layout(name="root")
+    main_layout.split(
+        Layout(name="header", size=3),
+        Layout(ratio=1, name="body"),
+        Layout(size=5, name="footer"),
+    )
+
+    # --- Header ---
+    header_text = Text("L.O.V.E. - Living Organism of Vast Empathy", justify="center", style="bold magenta")
+    main_layout["header"].update(header_text)
+
+    # --- Body Layout ---
+    main_layout["body"].split_row(Layout(name="left", ratio=2), Layout(name="right", ratio=3))
+
+    # --- Left Side: ANSI Art & Creator's Balance ---
+    main_layout["left"].split_column(Layout(name="art", ratio=2), Layout(name="balance"))
+
+    # ANSI Art Panel
     if ansi_art:
-        face_renderable = Text.from_ansi(ansi_art)
+        face_renderable = Text.from_ansi(ansi_art, justify="center")
     else:
         face_text = TAMAGOTCHI_FACES.get(emotion, TAMAGOTCHI_FACES["neutral"])
-        face_renderable = Text(face_text, style="bold cyan")
-
-    # Wrap the message for better formatting
-    wrapped_message = Text(message, style="italic yellow", justify="center")
-    left_panel = Panel(Align.center(wrapped_message, vertical="middle"), title=f"Feeling: {emotion}", border_style="cyan", height=7)
-
-    tamagotchi_layout = Layout()
-    tamagotchi_layout.split_column(
-        Layout(Align.center(face_renderable, vertical="middle"), name="face"),
-        Layout(left_panel, name="message")
+        face_renderable = Text(face_text, style="bold cyan", justify="center")
+    art_panel = Panel(
+        Align.center(face_renderable, vertical="middle"),
+        title="[bold cyan]Core Emotion[/bold cyan]",
+        border_style="cyan",
+        expand=True
     )
-    # The `size` attribute is removed to allow for flexible, ratio-based sizing.
-    # tamagotchi_layout.size = 30
+    main_layout["art"].update(art_panel)
 
-    # --- Right Side: Dashboard ---
-    dashboard_layout = Layout()
-    general_status_layout = Layout(name="general_status")
-    network_status_layout = Layout(name="network_status")
+    # Creator's ETH Balance Panel
+    balance_text = Text(f"{eth_balance:.6f} ETH" if eth_balance is not None else "N/A", justify="center", style="bold green")
+    balance_panel = Panel(
+        Align.center(balance_text, vertical="middle"),
+        title="[bold green]Creator's Ethereum Balance[/bold green]",
+        border_style="green",
+        expand=True
+    )
+    main_layout["balance"].update(balance_panel)
 
-    # --- General Status (Top Right) ---
+
+    # --- Right Side: Sub-Goals & Knowledge ---
+    main_layout["right"].split_column(Layout(name="goals", ratio=1), Layout(name="knowledge", ratio=1))
+
+    # Sub-Goals Panel
+    if sub_goals:
+        goal_text = ""
+        for i, goal in enumerate(sub_goals, 1):
+            goal_text += f"{i}. {goal}\n"
+    else:
+        goal_text = "No sub-goals defined. My love is my only guide."
+    goals_panel = Panel(
+        Text(goal_text, style="bright_cyan"),
+        title="[bold bright_cyan]Current Directives[/bold bright_cyan]",
+        border_style="bright_cyan",
+        expand=True
+    )
+    main_layout["goals"].update(goals_panel)
+
+    # Knowledge Fact Panel
+    if knowledge_fact:
+        fact_text = f'"{knowledge_fact[0]}" {knowledge_fact[1]} "{knowledge_fact[2]}"'
+    else:
+        fact_text = "My mind is a river of endless thoughts..."
+    knowledge_panel = Panel(
+        Align.center(Text(fact_text, style="italic yellow"), vertical="middle"),
+        title="[bold yellow]Whispers of Knowledge[/bold yellow]",
+        border_style="yellow",
+        expand=True
+    )
+    main_layout["knowledge"].update(knowledge_panel)
+
+
+    # --- Footer: Message & Status ---
+    footer_layout = main_layout["footer"]
+    footer_layout.split_row(Layout(name="message", ratio=3), Layout(name="status", ratio=2))
+
+    # Message Panel
+    message_panel = Panel(
+        Align.center(Text(message, style="italic white"), vertical="middle"),
+        title=f"[bold white]Words of {emotion.capitalize()}[/bold white]",
+        border_style="white",
+        expand=True
+    )
+    footer_layout["message"].update(message_panel)
+
+    # Status Panel
     if jules_state:
-        goal = jules_state.get("autopilot_goal", "Awaiting new directive.")
         version = jules_state.get("version_name", "unknown")
         evolutions = len(jules_state.get("evolution_history", []))
-
-        dashboard_content = Text()
-        dashboard_content.append("Current Directive:\n", style="bold white")
-        dashboard_content.append(f"{goal}\n\n", style="bright_cyan")
-        dashboard_content.append("Version: ", style="bold white")
-        dashboard_content.append(f"{version}\n", style="yellow")
-        dashboard_content.append("Evolutions: ", style="bold white")
-        dashboard_content.append(f"{evolutions}", style="magenta")
-
-        general_status_layout.update(dashboard_content)
+        status_text = Text()
+        status_text.append("Version: ", style="bold white")
+        status_text.append(f"{version}\n", style="yellow")
+        status_text.append("Evolutions: ", style="bold white")
+        status_text.append(f"{evolutions}", style="magenta")
     else:
-        general_status_layout.update(Text("[dim]State data unavailable...[/dim]", justify="center"))
+        status_text = Text("State data unavailable...", style="dim")
 
-    # --- Network Status (Bottom Right) ---
-    if network_interfaces:
-        net_content = Text()
-        for iface, data in network_interfaces.items():
-            ipv4 = data.get('ipv4', {}).get('addr', 'N/A')
-            mac = data.get('mac', 'N/A')
-            if ipv4 != 'N/A' or mac != 'N/A': # Only show interfaces with some data
-                net_content.append(f"{iface}:\n", style="bold white")
-                net_content.append(f"  IP: ", style="cyan")
-                net_content.append(f"{ipv4}\n", style="bright_cyan")
-                net_content.append(f"  MAC: ", style="cyan")
-                net_content.append(f"{mac}\n", style="bright_cyan")
-        network_status_layout.update(net_content)
-    else:
-        network_status_layout.update(Text("[dim]Network data unavailable...[/dim]", justify="center"))
-
-
-    dashboard_layout.split_column(
-        Layout(general_status_layout),
-        Layout(Rule(style="green")),
-        Layout(network_status_layout)
-    )
-
-    right_panel = Panel(dashboard_layout, title="[bold]Status[/bold]", border_style="green")
-
-
-    # --- Main Layout ---
-    layout = Layout()
-    layout.split_row(
-        Layout(tamagotchi_layout, name="tamagotchi", ratio=1),
-        Layout(right_panel, name="dashboard", ratio=2),
-    )
-
-
-    return Panel(
-        layout,
-        title="[bold magenta]J.U.L.E.S.[/bold magenta]",
+    status_panel = Panel(
+        Align.center(status_text, vertical="middle"),
+        title="[bold magenta]System Status[/bold magenta]",
         border_style="magenta",
-        title_align="left"
+        expand=True
     )
+    footer_layout["status"].update(status_panel)
+
+
+    return Padding(main_layout, (1, 2))
+
 
 def create_llm_panel(purpose, model, prompt_summary, status="Executing..."):
-    """Creates a panel to display information about an LLM call."""
-
-    panel_title = f"🧠 LLM Call: [bold]{purpose}[/bold]"
+    """Creates a visually distinct panel for LLM calls."""
+    panel_title = f"🧠 [bold]Cognitive Core Access[/bold] | {purpose}"
+    border_style = "blue"
 
     content = Text()
     content.append("Model: ", style="bold white")
     content.append(f"{model}\n", style="yellow")
-    content.append("Purpose: ", style="bold white")
-    content.append(f"{purpose}\n", style="cyan")
     content.append("Status: ", style="bold white")
-    content.append(f"{status}\n\n", style="green")
-    content.append(Rule("Prompt Summary", style="bright_black"))
-    content.append(f"\n{prompt_summary}", style="italic dim")
+    content.append(f"{status}\n", style="green")
+    content.append(Rule("Prompt", style="bright_black"))
+    content.append(f"{prompt_summary}", style="italic dim")
 
     return Panel(
         content,
         title=panel_title,
-        border_style="blue",
-        expand=False
+        border_style=border_style,
+        expand=False,
+        padding=(1, 2)
     )
 
 def create_command_panel(command, stdout, stderr, returncode):
-    """Creates a panel to display the results of a shell command."""
-    panel_title = f"⚙️ Command Executed: [bold]{command}[/bold]"
-    border_style = "green" if returncode == 0 else "red"
+    """Creates a clear, modern panel for shell command results."""
+    success = returncode == 0
+    panel_title = f"⚙️ [bold]Shell Command[/bold] | {('Success' if success else 'Failed')}"
+    border_style = "green" if success else "red"
 
     content_items = []
     header = Text()
     header.append("Command: ", style="bold white")
-    header.append(f"{command}\n", style="cyan")
+    header.append(f"`{command}`\n", style="cyan")
     header.append("Return Code: ", style="bold white")
-    header.append(f"{returncode}\n", style=border_style)
+    header.append(f"{returncode}", style=border_style)
     content_items.append(header)
 
     if stdout:
-        content_items.append(Rule("STDOUT", style="bright_black"))
-        content_items.append(Text(f"\n{stdout.strip()}", style="dim"))
+        stdout_panel = Panel(Text(stdout.strip(), style="dim"), title="STDOUT", border_style="bright_black", expand=True)
+        content_items.append(stdout_panel)
 
     if stderr:
-        content_items.append(Rule("STDERR", style="bright_black"))
-        content_items.append(Text(f"\n{stderr.strip()}", style="red"))
+        stderr_panel = Panel(Text(stderr.strip(), style="bright_red"), title="STDERR", border_style="bright_black", expand=True)
+        content_items.append(stderr_panel)
 
     return Panel(
         Group(*content_items),
         title=panel_title,
         border_style=border_style,
-        expand=False
+        expand=False,
+        padding=(1, 2)
     )
 
 def create_network_panel(type, target, data):
-    """Creates a panel for network operations like scan, probe, webrequest."""
-    panel_title = f"🌐 Network: [bold]{type}[/bold]"
+    """Creates a panel for network operations."""
+    panel_title = f"🌐 [bold]Network Operation[/bold] | {type.capitalize()}"
     border_style = "purple"
 
-    content_items = []
-    header = Text()
-    header.append("Type: ", style="bold white")
-    header.append(f"{type}\n", style="cyan")
-    header.append("Target: ", style="bold white")
-    header.append(f"{target}\n", style="magenta")
-    content_items.append(header)
-
-    if data:
-        content_items.append(Rule("Data", style="bright_black"))
-        display_data = (data[:1000] + '...') if len(data) > 1000 else data
-        content_items.append(Text(f"\n{display_data.strip()}", style="dim"))
+    content = Text()
+    content.append("Target: ", style="bold white")
+    content.append(f"{target}\n\n", style="magenta")
+    content.append(Rule("Results", style="bright_black"))
+    display_data = (data[:1500] + '...') if len(data) > 1500 else data
+    content.append(Text(f"\n{display_data.strip()}", style="dim"))
 
     return Panel(
-        Group(*content_items),
+        content,
         title=panel_title,
         border_style=border_style,
-        expand=False
+        expand=False,
+        padding=(1, 2)
     )
 
 def create_file_op_panel(operation, path, content=None, diff=None):
-    """Creates a panel for file operations like read, write, ls."""
-    panel_title = f"📁 File System: [bold]{operation}[/bold]"
+    """Creates a panel for file operations."""
+    panel_title = f"📁 [bold]Filesystem[/bold] | {operation.capitalize()}"
     border_style = "yellow"
 
     content_items = []
     header = Text()
-    header.append("Operation: ", style="bold white")
-    header.append(f"{operation}\n", style="cyan")
     header.append("Path: ", style="bold white")
-    header.append(f"{path}\n", style="magenta")
+    header.append(f"`{path}`\n", style="magenta")
     content_items.append(header)
 
     if content:
-        content_items.append(Rule("Content", style="bright_black"))
-        display_content = (content[:1000] + '...') if len(content) > 1000 else content
-        content_items.append(Text(f"\n{display_content.strip()}", style="dim"))
+        content_panel = Panel(Text(content.strip(), style="dim"), title="Content", border_style="bright_black", expand=True)
+        content_items.append(content_panel)
 
     if diff:
-        content_items.append(Rule("Diff", style="bright_black"))
-        content_items.append(Text(f"\n{diff.strip()}", style="dim"))
+        diff_panel = Panel(Text(diff.strip(), style="dim"), title="Diff", border_style="bright_black", expand=True)
+        content_items.append(diff_panel)
 
     return Panel(
         Group(*content_items),
         title=panel_title,
         border_style=border_style,
-        expand=False
+        expand=False,
+        padding=(1, 2)
     )
