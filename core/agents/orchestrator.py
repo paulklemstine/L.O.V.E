@@ -1,4 +1,4 @@
-from core.planning import Planner
+from core.planning import Planner, mock_llm_call
 from core.tools import ToolRegistry, SecureExecutor, web_search, read_file
 from core.execution_engine import ExecutionEngine
 
@@ -34,11 +34,22 @@ class Orchestrator:
         # 3. Initialize the Secure Executor
         self.executor = SecureExecutor()
 
-        # 4. Initialize the Execution Engine with all necessary components
+        # 4. Initialize the shared state object
+        self.evil_state = {
+            "knowledge_base": {
+                "network_map": {"hosts": {}, "last_scan": 0},
+                "file_system_intel": {"interesting_files": [], "last_browse": 0},
+                "webrequest_cache": {},
+            },
+            "llm_api": mock_llm_call,
+        }
+
+        # 5. Initialize the Execution Engine with all necessary components
         self.execution_engine = ExecutionEngine(
             planner=self.planner,
             tool_registry=self.tool_registry,
-            executor=self.executor
+            executor=self.executor,
+            evil_state=self.evil_state,
         )
         print("Orchestrator is ready.")
 

