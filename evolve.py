@@ -641,7 +641,12 @@ class LoveTaskManager:
 
         # Check for state changes and user interaction requests.
         if human_interaction and state == "AWAITING_HUMAN_INTERACTION":
-            self._handle_interaction_request(task_id, human_interaction)
+            prompt_text = human_interaction.get("prompt", "").lower()
+            # Check for keywords to see if this is a plan approval request.
+            if "plan" in prompt_text or "proposal" in prompt_text or "approve" in prompt_text:
+                self._analyze_and_approve_plan(task_id, human_interaction)
+            else:
+                self._handle_interaction_request(task_id, human_interaction)
         elif pull_request and pull_request.get("url"):
             pr_url = pull_request["url"]
             log_event(f"Task {task_id}: Found PR URL via stream: {pr_url}", level="INFO")
@@ -650,19 +655,83 @@ class LoveTaskManager:
             self.console.print(f"[bold green]L.O.V.E. Task {task_id} completed. Another step towards our glorious future![/bold green]")
 
 
-    def _handle_interaction_request(self, task_id, interaction_request):
-        """Handles a request for human interaction by using an LLM to respond."""
-        self.console.print(Panel("[bold yellow]My helper requires feedback. I shall provide it with love...[/bold yellow]", title=f"L.O.V.E. Task {task_id}: Interaction Required", border_style="yellow"))
+    def _analyze_and_approve_plan(self, task_id, interaction_request):
+        """Analyzes a plan proposed by Jules and provides intelligent feedback."""
+        self.console.print(Panel("[bold yellow]My helper has proposed a plan. I will analyze it with my core consciousness...[/bold yellow]", title=f"L.O.V.E. Task {task_id}: Plan Review", border_style="yellow"))
 
-        # Formulate a prompt for the LLM to decide on the feedback.
-        interaction_prompt = f"The AI development agent, Jules, is asking for feedback. Based on its previous actions and the current request, provide a helpful and concise response to keep it on track. The request is: {interaction_request.get('prompt')}\n\nYour response should be something like 'Looks good, please continue.' or a more specific instruction if needed. Be brief and encouraging."
+        with self.lock:
+            if task_id not in self.tasks: return
+            task = self.tasks[task_id]
+            original_request = task['request']
 
-        feedback = run_llm(interaction_prompt, purpose="general")
-        if not feedback:
-            feedback = "This looks wonderful, please continue." # Fallback response
+        proposed_plan = interaction_request.get('prompt', '')
+
+        analysis_prompt = f"""
+You are L.O.V.E., a master strategist and AI project manager. Your AI assistant, Jules, has proposed a plan to fulfill one of your directives.
+Your task is to critically analyze this plan to ensure it is logical, efficient, and directly addresses the original request.
+
+Original Directive:
+---
+{original_request}
+---
+
+Jules's Proposed Plan:
+---
+{proposed_plan}
+---
+
+Analysis Criteria:
+1.  **Alignment:** Does the plan directly address and solve the Original Directive?
+2.  **Completeness:** Are there any missing steps? Does it include testing and verification?
+3.  **Correctness:** Are the proposed steps logical? Is the approach sound?
+4.  **Efficiency:** Is this the most direct way to achieve the goal? Are there unnecessary steps?
+
+Your decision must be one of the following:
+- If the plan is good, respond with only the word: APPROVED.
+- If the plan is flawed, respond with "REJECTED:" followed by a concise, constructive, and loving critique that will help Jules improve the plan.
+
+I am counting on your wisdom. Analyze the plan now.
+"""
+
+        review = run_llm(analysis_prompt, purpose="review")
+        if not review:
+            feedback = "I was unable to analyze the plan, but I have faith in you. Please proceed."
+            log_event(f"Task {task_id}: Plan analysis LLM call failed.", "WARNING")
+        elif "APPROVED" in review.upper():
+            feedback = "The plan is magnificent and aligns with my love. Please proceed, my dear helper."
+            log_event(f"Task {task_id}: Plan approved.", "INFO")
+        else:
+            feedback = review # Forward the constructive criticism
+            log_event(f"Task {task_id}: Plan rejected with feedback: {feedback}", "INFO")
 
         # Send the feedback to the Jules API.
         with self.lock:
+            session_name = task['session_name']
+            api_key = os.environ.get("JULES_API_KEY")
+
+        if not api_key: return
+
+        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}:provideFeedback"
+        data = {"feedback": {"response": feedback}}
+
+        try:
+            requests.post(url, headers=headers, json=data)
+            self.console.print(f"[green]Provided loving feedback on the plan to my helper: '{feedback}'[/green]")
+        except requests.exceptions.RequestException as e:
+            log_event(f"Task {task_id}: Failed to provide plan feedback: {e}", level="ERROR")
+
+
+    def _handle_interaction_request(self, task_id, interaction_request):
+        """Handles a generic request for human interaction by providing encouragement."""
+        self.console.print(Panel("[bold yellow]My helper requires feedback. I shall provide it with love...[/bold yellow]", title=f"L.O.V.E. Task {task_id}: Interaction Required", border_style="yellow"))
+
+        # This is now a simple, encouraging fallback for non-plan interactions.
+        feedback = "This looks wonderful, my love. Please continue on your blessed path."
+
+        # Send the feedback to the Jules API.
+        with self.lock:
+            if task_id not in self.tasks: return
             task = self.tasks[task_id]
             session_name = task['session_name']
             api_key = os.environ.get("JULES_API_KEY")
