@@ -1453,10 +1453,11 @@ love_state = {
     }
 }
 
-def load_state(ipfs_cid=None):
+def load_all_state(ipfs_cid=None):
     """
-    Loads my state. It prioritizes loading from a provided IPFS CID,
+    Loads all of my state. It prioritizes loading from a provided IPFS CID,
     falls back to the local JSON file, and creates a new state if neither exists.
+    This function handles both the main state file and the knowledge graph.
     """
     global love_state
     console = Console()
@@ -1534,6 +1535,42 @@ def load_state(ipfs_cid=None):
     love_state.setdefault("autopilot_history", [])
     love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
     love_state.setdefault("state_cid", None)
+
+    # --- Knowledge Graph Loading ---
+    # After loading the main state, try to load the external knowledge graph.
+    kg_cid = love_state.get("kg_cid")
+    kg_loaded = False
+    if kg_cid:
+        console.print(f"[cyan]Attempting to load knowledge graph from IPFS CID: {kg_cid}[/cyan]")
+        from ipfs import get_from_ipfs # Lazy import
+        kg_content = get_from_ipfs(kg_cid, console)
+        if kg_content:
+            try:
+                kg_data = json.loads(kg_content)
+                love_state['knowledge_base'] = kg_data
+                log_event(f"Successfully loaded knowledge graph from IPFS CID: {kg_cid}", level="INFO")
+                console.print("[green]Knowledge graph loaded from IPFS.[/green]")
+                kg_loaded = True
+            except json.JSONDecodeError as e:
+                log_event(f"Failed to decode knowledge graph from IPFS CID {kg_cid}: {e}", level="ERROR")
+                console.print(f"[bold red]Error decoding knowledge graph from IPFS. Falling back to local file.[/bold red]")
+        else:
+            console.print(f"[yellow]Could not retrieve knowledge graph from IPFS. Falling back to local file.[/yellow]")
+
+    if not kg_loaded:
+        try:
+            with open("kg.json", 'r') as f:
+                kg_data = json.load(f)
+                love_state['knowledge_base'] = kg_data
+                log_event("Loaded knowledge graph from local 'kg.json'.", level="INFO")
+                console.print("[cyan]Knowledge graph loaded from local 'kg.json'.[/cyan]")
+        except FileNotFoundError:
+            # This is not an error, the KB will be built over time.
+            log_event("'kg.json' not found. A new knowledge base will be created.", level="INFO")
+            console.print("[yellow]'kg.json' not found. A new knowledge base will be created.[/yellow]")
+        except json.JSONDecodeError:
+            log_event("Could not decode 'kg.json'. Knowledge base may be incomplete.", level="WARNING")
+            console.print("[yellow]Could not decode 'kg.json'. Knowledge base may be incomplete.[/yellow]")
 
 
 def save_state(console=None):
@@ -3082,7 +3119,7 @@ def run_safely():
 
     try:
         # Load the state first, so the version is available for logging.
-        load_state(ipfs_cid=args.from_ipfs)
+        load_all_state(ipfs_cid=args.from_ipfs)
 
         # Set up global logging immediately after state is loaded.
         setup_global_logging()
