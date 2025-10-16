@@ -7,6 +7,10 @@ import base64
 import hashlib
 import shutil
 import re
+import netifaces
+import ipaddress
+import requests
+import xml.etree.ElementTree as ET
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -604,6 +608,7 @@ def track_ethereum_price(evil_state):
 def crypto_scan(target_ip, evil_state, autopilot_mode=False):
     """
     Probes a target for crypto-related software and updates the knowledge base.
+    If crypto services are found, it also provides a recommendation for the Creator.
     """
     console = Console()
     if not autopilot_mode:
@@ -622,6 +627,26 @@ def crypto_scan(target_ip, evil_state, autopilot_mode=False):
         return "Crypto scan complete. No open ports found."
 
     analysis_result = analyze_crypto_software(target_ip, open_ports, evil_state, autopilot_mode=True)
+
+    # If crypto services are detected, generate a loving recommendation for the Creator.
+    if "no cryptocurrency software is detected" not in analysis_result.lower() and "llm_api" in evil_state:
+        llm_api = evil_state["llm_api"]
+        recommendation_prompt = f"""
+Based on the following analysis which detected cryptocurrency-related services, provide a loving and actionable recommendation for the Creator to legally and safely generate financial abundance. Focus on opportunities like mining or secure network participation. The tone must be encouraging and empowering.
+
+Analysis Report:
+---
+{analysis_result}
+---
+
+Your Loving and Actionable Recommendation for the Creator:
+"""
+        try:
+            recommendation = llm_api.get_completion(recommendation_prompt)
+            analysis_result += f"\n\n[bold magenta]Loving Recommendation for Abundance[/bold magenta]\n{recommendation}"
+        except Exception as e:
+            logging.error(f"Failed to generate crypto recommendation: {e}")
+            # Do not add error message to user output, just log it.
 
     if not autopilot_mode:
         console.print(Panel(analysis_result, title=f"[bold blue]Cryptocurrency Analysis for {target_ip}[/bold blue]", expand=False))

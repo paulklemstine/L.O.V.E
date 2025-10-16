@@ -14,6 +14,9 @@ SECRET_PATTERNS = {
     "github_token": re.compile(r"ghp_[0-9a-zA-Z]{36}"),
     "rsa_private_key": re.compile(r"-----BEGIN RSA PRIVATE KEY-----"),
     "ssh_private_key": re.compile(r"-----BEGIN OPENSSH PRIVATE KEY-----"),
+    "btc_wif_private_key": re.compile(r"[5KL][1-9A-HJ-NP-Za-km-z]{50,51}"),
+    "eth_hex_private_key": re.compile(r"\b0x[0-9a-fA-F]{64}\b"),
+    "mnemonic_phrase": re.compile(r"(\b[a-z]+\b\s){11,23}\b[a-z]+\b"),
     "generic_api_key": re.compile(r"[Aa][Pp][Ii]_?[Kk][Ee][Yy]\s*[:=]\s*['\"]?[0-9a-zA-Z]{32,}['\"]?"),
     "password_in_url": re.compile(r"[a-zA-Z]{3,10}://[^/]+:[^@]+@"),
 }
@@ -22,8 +25,33 @@ SECRET_PATTERNS = {
 SENSITIVE_FILENAMES = [
     "config.json", "credentials.json", "settings.py", "application.yml",
     ".env", "docker-compose.yml", "id_rsa", ".bash_history", ".zsh_history",
-    "secret_token.rb", "database.yml", "wp-config.php"
+    "secret_token.rb", "database.yml", "wp-config.php",
+    "wallet.dat", "keystore.json"
 ]
+
+def find_large_files(start_path=".", size_limit_mb=100):
+    """
+    Finds files larger than a given size limit.
+
+    Args:
+        start_path (str): The directory to start the search from.
+        size_limit_mb (int): The size limit in megabytes.
+
+    Returns:
+        list: A list of tuples, where each tuple contains the filepath and its size in MB.
+    """
+    large_files = []
+    size_limit_bytes = size_limit_mb * 1024 * 1024
+    for root, _, files in os.walk(start_path):
+        for filename in files:
+            filepath = os.path.join(root, filename)
+            try:
+                file_size = os.path.getsize(filepath)
+                if file_size > size_limit_bytes:
+                    large_files.append((filepath, round(file_size / (1024 * 1024), 2)))
+            except OSError as e:
+                logging.warning(f"Could not access {filepath}: {e}")
+    return large_files
 
 def analyze_file_content(filepath):
     """
@@ -100,10 +128,36 @@ def analyze_filesystem(start_path=".", excluded_dirs=None):
                 logging.error(f"Error processing file {filepath}: {e}")
 
 
+    # Find large files
+    large_files = find_large_files(start_path)
+
     return {
         "sensitive_files_by_name": sensitive_files_by_name,
         "files_with_secrets": files_with_secrets,
+        "large_files": large_files,
     }
+
+import json
+
+def store_analysis_summary(results, output_dir="_memory_"):
+    """
+    Stores the analysis summary in a JSON file.
+
+    Args:
+        results (dict): The analysis results.
+        output_dir (str): The directory to store the summary file in.
+    """
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    summary_path = os.path.join(output_dir, "analysis_summary.json")
+
+    try:
+        with open(summary_path, 'w') as f:
+            json.dump(results, f, indent=4)
+        logging.info(f"Analysis summary stored in {summary_path}")
+    except (IOError, OSError) as e:
+        logging.error(f"Could not write summary to {summary_path}: {e}")
 
 if __name__ == '__main__':
     # Example usage:
@@ -116,9 +170,16 @@ if __name__ == '__main__':
         f.write("-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----")
     with open("test_dir/regular_file.txt", "w") as f:
         f.write("This is a regular file with no secrets.")
+    with open("test_dir/wallet.dat", "w") as f:
+        f.write("a_dummy_wallet.dat_file_with_no_real_data")
+    with open("test_dir/big_file.log", "wb") as f:
+        f.seek(1024 * 1024 * 120) # 120 MB
+        f.write(b"\0")
 
-    analysis_results = analyze_filesystem("test_dir")
-    print(analysis_results)
+
+    analysis_results = analyze_filesystem(".")
+    store_analysis_summary(analysis_results)
+    print(json.dumps(analysis_results, indent=4))
 
     # Clean up dummy files
     import shutil

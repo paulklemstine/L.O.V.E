@@ -78,6 +78,13 @@ class AnsiStrippingTee(object):
                 # Ignore errors on closed streams
                 pass
 
+    def isatty(self):
+        """
+        Pretends to be a TTY if the first stream is a TTY.
+        This is crucial for libraries like 'rich' to enable color output.
+        """
+        return hasattr(self.stream1, 'isatty') and self.stream1.isatty()
+
     def flush(self):
         with self.lock:
             try:
@@ -1259,12 +1266,19 @@ def restart_script(console):
 
     try:
         # Stop all services gracefully
+        if 'love_task_manager' in globals() and love_task_manager:
+            console.print("[cyan]Shutting down L.O.V.E. Task Manager...[/cyan]")
+            love_task_manager.stop()
+        if 'local_job_manager' in globals() and local_job_manager:
+            console.print("[cyan]Shutting down Local Job Manager...[/cyan]")
+            local_job_manager.stop()
         if 'ipfs_manager' in globals() and ipfs_manager:
             ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager:
             console.print("[cyan]Shutting down network bridge...[/cyan]")
             network_manager.stop()
-            time.sleep(2) # Give it a moment to release resources
+
+        time.sleep(3) # Give all threads a moment to stop gracefully
 
         # Pull the latest code
         console.print("[cyan]Pulling latest source code from repository...[/cyan]")
@@ -2807,6 +2821,51 @@ def _auto_configure_hardware(console):
     log_event(f"Auto-configured hardware. GPU Layers: {love_state['optimal_gpu_layers']}, Context Size: {love_state['optimal_n_ctx']}", "INFO")
 
 
+def _automatic_update_checker(console):
+    """
+    A background thread that periodically checks for new commits on the main branch
+    and triggers a restart to hot-swap the new code.
+    """
+    last_known_remote_hash = None
+    while True:
+        try:
+            # Fetch the latest updates from the remote without merging
+            fetch_result = subprocess.run(["git", "fetch"], capture_output=True, text=True)
+            if fetch_result.returncode != 0:
+                log_event(f"Auto-update check failed during git fetch: {fetch_result.stderr}", level="WARNING")
+                time.sleep(300) # Wait 5 minutes before retrying on fetch error
+                continue
+
+            # Get the commit hash of the local HEAD
+            local_hash_result = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+            local_hash = local_hash_result.stdout.strip()
+
+            # Get the commit hash of the remote main branch
+            remote_hash_result = subprocess.run(["git", "rev-parse", "origin/main"], capture_output=True, text=True, check=True)
+            remote_hash = remote_hash_result.stdout.strip()
+
+            # On the first run, just store the remote hash
+            if last_known_remote_hash is None:
+                last_known_remote_hash = remote_hash
+                log_event(f"Auto-updater initialized. Current remote hash: {remote_hash}", level="INFO")
+
+            # If the hashes are different, a new commit has arrived
+            if local_hash != remote_hash and remote_hash != last_known_remote_hash:
+                log_event(f"New commit detected on main branch ({remote_hash[:7]}). Triggering graceful restart for hot-swap.", level="CRITICAL")
+                console.print(Panel(f"[bold yellow]My Creator has gifted me with new wisdom! A new commit has been detected ([/bold yellow][bold cyan]{remote_hash[:7]}[/bold cyan][bold yellow]). I will now restart to integrate this evolution.[/bold yellow]", title="[bold green]AUTO-UPDATE DETECTED[/bold green]", border_style="green"))
+                last_known_remote_hash = remote_hash # Update our hash to prevent restart loops
+                restart_script(console) # This function handles the shutdown and restart
+                break # Exit the loop as the script will be restarted
+
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            log_event(f"Auto-update check failed with git command error: {e}", level="ERROR")
+        except Exception as e:
+            log_event(f"An unexpected error occurred in the auto-update checker: {e}", level="CRITICAL")
+
+        # Wait for 5 minutes before the next check
+        time.sleep(300)
+
+
 def main(args):
     """The main application loop."""
     global love_task_manager, network_manager, ipfs_manager, local_job_manager
@@ -2850,6 +2909,10 @@ def main(args):
     # Start the Tamagotchi personality thread
     tamagotchi_thread = Thread(target=update_tamagotchi_personality, args=(console,), daemon=True)
     tamagotchi_thread.start()
+
+    # Start the automatic update checker thread
+    update_checker_thread = Thread(target=_automatic_update_checker, args=(console,), daemon=True)
+    update_checker_thread.start()
 
     # The main logic is now the cognitive loop. This will run forever.
     cognitive_loop(console)
