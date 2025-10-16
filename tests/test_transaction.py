@@ -4,10 +4,9 @@ from transaction import send_eth, send_erc20
 
 class TestTransaction(unittest.TestCase):
 
-    @patch('transaction.getpass')
     @patch('transaction.get_private_key')
     @patch('transaction.web3')
-    def test_send_eth_success(self, mock_web3, mock_get_private_key, mock_getpass):
+    def test_send_eth_success(self, mock_web3, mock_get_private_key):
         # Arrange
         mock_get_private_key.return_value = '0x' + 'a' * 64
         mock_web3.eth.get_transaction_count.return_value = 0
@@ -19,16 +18,15 @@ class TestTransaction(unittest.TestCase):
 
         # Act
         with patch('builtins.print') as mock_print:
-            result = send_eth('0x' + 'c' * 40, 1)
+            result = send_eth('0x' + 'c' * 40, "password", '0x' + 'd' * 40, 1)
 
         # Assert
         self.assertEqual(result, '0x' + 'b' * 64)
         mock_print.assert_any_call("Transaction sent! Tx Hash: 0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 
-    @patch('transaction.getpass')
     @patch('transaction.get_private_key')
     @patch('transaction.web3')
-    def test_send_erc20_success(self, mock_web3, mock_get_private_key, mock_getpass):
+    def test_send_erc20_success(self, mock_web3, mock_get_private_key):
         # Arrange
         mock_get_private_key.return_value = '0x' + 'a' * 64
 
@@ -44,7 +42,7 @@ class TestTransaction(unittest.TestCase):
 
         # Act
         with patch('builtins.print') as mock_print:
-            result = send_erc20('0x' + 'c' * 40, '0x' + 'd' * 40, 1)
+            result = send_erc20('0x' + 'c' * 40, "password", '0x' + 'd' * 40, '0x' + 'e' * 40, 1)
 
         # Assert
         self.assertEqual(result, '0x' + 'b' * 64)

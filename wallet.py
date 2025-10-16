@@ -78,33 +78,22 @@ def get_eth_balance(address: str):
     """Fetches the ETH balance for a given address."""
     if not web3.is_address(address):
         print(f"Error: '{address}' is not a valid Ethereum address.")
-        return
+        return None
 
     try:
         balance_wei = web3.eth.get_balance(address)
         balance_eth = web3.from_wei(balance_wei, 'ether')
-        print(f"Balance for {address}: {balance_eth} ETH")
         return balance_eth
     except Exception as e:
         print(f"Error fetching balance: {e}")
         return None
 
 def list_wallets():
-    """Lists all wallets and their balances."""
+    """Lists all wallet addresses."""
     if not os.path.exists(KEY_FILE_DIR):
-        print("No wallets found. Use 'create' to generate a new wallet.")
-        return
+        return []
 
-    wallets = [f for f in os.listdir(KEY_FILE_DIR) if f.endswith('.json')]
-    if not wallets:
-        print("No wallets found in the directory.")
-        return
-
-    print("--- Found Wallets ---")
-    for wallet_file in wallets:
-        address = os.path.splitext(wallet_file)[0]
-        get_eth_balance(address)
-    print("---------------------")
+    return [f.replace('.json', '') for f in os.listdir(KEY_FILE_DIR) if f.endswith('.json')]
 
 def main():
     """Main function to run the CLI."""
