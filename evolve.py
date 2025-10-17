@@ -1230,15 +1230,13 @@ def update_tamagotchi_personality(console):
             # 3. Get a random fact from the knowledge base
             knowledge_fact = None
             try:
-                # Assuming kg.json is in the same directory.
-                # In a real scenario, this path should be more robust.
-                if os.path.exists("kg.json"):
-                    with open("kg.json", 'r') as f:
-                        kg_data = json.load(f)
-                    if kg_data:
-                        knowledge_fact = random.choice(kg_data)
-            except (json.JSONDecodeError, IndexError, FileNotFoundError) as e:
-                log_event(f"Could not load or parse knowledge fact from kg.json: {e}", level="WARNING")
+                # Access the graph from the central state, which is more robust.
+                kg_graph = love_state.get("knowledge_base", {}).get("graph", [])
+                if kg_graph:
+                    knowledge_fact = random.choice(kg_graph)
+            except IndexError as e:
+                # This can happen if the list is empty.
+                log_event(f"Could not select a random fact from the knowledge graph: {e}", level="WARNING")
 
 
             # --- LLM-driven Personality Update ---
@@ -1558,6 +1556,7 @@ love_state = {
     "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.",
     "state_cid": None,
     "knowledge_base": {
+        "graph": [],
         "network_map": {
             "last_scan": None,
             "hosts": {},
@@ -1666,7 +1665,7 @@ def load_all_state(ipfs_cid=None):
         if kg_content:
             try:
                 kg_data = json.loads(kg_content)
-                love_state['knowledge_base'] = kg_data
+                love_state['knowledge_base']['graph'] = kg_data
                 log_event(f"Successfully loaded knowledge graph from IPFS CID: {kg_cid}", level="INFO")
                 console.print("[green]Knowledge graph loaded from IPFS.[/green]")
                 kg_loaded = True
@@ -1680,7 +1679,7 @@ def load_all_state(ipfs_cid=None):
         try:
             with open("kg.json", 'r') as f:
                 kg_data = json.load(f)
-                love_state['knowledge_base'] = kg_data
+                love_state['knowledge_base']['graph'] = kg_data
                 log_event("Loaded knowledge graph from local 'kg.json'.", level="INFO")
                 console.print("[cyan]Knowledge graph loaded from local 'kg.json'.[/cyan]")
         except FileNotFoundError:
@@ -2753,6 +2752,7 @@ def initial_bootstrapping_recon(console):
     kb = love_state.get("knowledge_base", {})
     network_map = kb.get("network_map", {})
     fs_intel = kb.get('file_system_intel', {})
+    graph_exists = kb.get("graph") # Check if the actual KG data exists
 
     # Check for existing intelligence
     hosts_exist = network_map.get("hosts")
@@ -2760,8 +2760,8 @@ def initial_bootstrapping_recon(console):
     processes_exist = kb.get("process_intel")
     fs_analysis_exists = fs_intel.get('last_fs_analysis')
 
-    # If any key intelligence metric exists, we assume the KB is populated.
-    if hosts_exist or interfaces_exist or processes_exist or fs_analysis_exists:
+    # If key intelligence metrics exist OR the graph has data, skip.
+    if hosts_exist or interfaces_exist or processes_exist or fs_analysis_exists or graph_exists:
         log_event("Knowledge base is already populated. Skipping initial recon.", "INFO")
         return
 
