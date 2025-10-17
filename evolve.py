@@ -417,7 +417,7 @@ from rich.console import Group
 from rich.rule import Rule
 from rich.layout import Layout
 
-from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event
+from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event, ensure_primary_model_downloaded
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
@@ -3342,7 +3342,10 @@ def main(args):
     # 2. Auto-configure hardware settings on first run
     _auto_configure_hardware(console)
 
-    # 3. Local LLM API Server
+    # 3. Ensure the primary local model is downloaded before starting the server
+    ensure_primary_model_downloaded(console)
+
+    # 4. Local LLM API Server
     llm_server = LocalLLMServer(console)
     llm_server.start()
 
