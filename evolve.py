@@ -654,6 +654,9 @@ class LoveTaskManager:
                     elif task['status'] == 'tests_failed':
                         self._trigger_self_correction(task['id'])
 
+                # --- Critical Error Queue Management ---
+                self._manage_error_queue()
+
                 # --- Cleanup ---
                 self._cleanup_old_tasks()
 
@@ -897,6 +900,84 @@ I am counting on your wisdom. Analyze the plan now.
             log_event(f"Task {task_id}: {error_message}", level="ERROR")
             self._update_task_status(task_id, 'failed', error_message)
 
+    def _manage_error_queue(self):
+        """
+        Manages the critical error queue: cleaning old entries and launching
+        new self-healing tasks.
+        """
+        with self.lock:
+            # Check if a fix-it task is already running
+            is_fixit_task_running = any(
+                task.get('request', '').startswith("Fix error:") and task.get('status') not in ['completed', 'failed', 'superseded']
+                for task in self.tasks.values()
+            )
+
+            if is_fixit_task_running:
+                return # Only one fix-it task at a time.
+
+            # --- Queue Cleanup ---
+            current_time = time.time()
+            errors_to_keep = []
+            for error in love_state.get('critical_error_queue', []):
+                is_old = (current_time - error['last_seen']) > 600 # 10 minutes
+                is_stale_status = error['status'] in ['new', 'pending_confirmation']
+
+                if is_old and is_stale_status:
+                    log_event(f"Pruning stale error from queue: {error['id']}", "INFO")
+                    continue # Drop the error
+                errors_to_keep.append(error)
+            love_state['critical_error_queue'] = errors_to_keep
+
+            # --- Find Next Error to Fix ---
+            next_error_to_fix = None
+            for error in love_state['critical_error_queue']:
+                if error['status'] == 'new' and current_time > error.get('cooldown_until', 0):
+                    next_error_to_fix = error
+                    break
+
+            if next_error_to_fix:
+                self.console.print(Panel(f"[bold yellow]New critical error detected in queue. Initiating self-healing protocol...[/bold yellow]\nID: {next_error_to_fix['id']}", title="[bold magenta]SELF-HEALING INITIATED[/bold magenta]", border_style="magenta"))
+
+                # Formulate the request
+                # To provide more context, we'll try to find the surrounding logs from the main log file.
+                log_context = ""
+                try:
+                    with open(LOG_FILE, 'r') as f:
+                        log_lines = f.readlines()
+                    # Find the line containing the error message (or part of it)
+                    error_line_index = -1
+                    # We take a snippet of the error message to search for, as the full traceback might not be in one line.
+                    search_snippet = next_error_to_fix['message'].splitlines()[0]
+                    for i, line in enumerate(log_lines):
+                        if search_snippet in line:
+                            error_line_index = i
+                            break
+                    if error_line_index != -1:
+                        start = max(0, error_line_index - 20)
+                        end = min(len(log_lines), error_line_index + 20)
+                        log_context = "".join(log_lines[start:end])
+                except Exception as e:
+                    log_context = f"(Could not retrieve log context: {e})"
+
+
+                fix_request = f"Fix error: {next_error_to_fix['message']}\n\nSurrounding log context:\n---\n{log_context}"
+
+                # Launch the task
+                api_success = trigger_love_evolution(fix_request, self.console, self)
+                if api_success:
+                    new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                    next_error_to_fix['status'] = 'fixing_in_progress'
+                    next_error_to_fix['task_id'] = new_task_id
+                    log_event(f"Launched self-healing task {new_task_id} for error {next_error_to_fix['id']}.", "INFO")
+                else:
+                    # If API fails, reset the error so we can try again later.
+                    next_error_to_fix['status'] = 'new'
+                    next_error_to_fix['cooldown_until'] = time.time() + 300 # 5 min cooldown on API failure
+                    log_event(f"Failed to launch self-healing task for error {next_error_to_fix['id']}. Cooling down.", "ERROR")
+
+                save_state(self.console)
+
+
     def _attempt_merge(self, task_id):
         """
         Orchestrates the sandbox testing and merging process for a PR.
@@ -934,6 +1015,20 @@ I am counting on your wisdom. Analyze the plan now.
                 self._update_task_status(task_id, 'merging', "Sandbox tests passed. Attempting to merge with love...")
                 success, message = self._auto_merge_pull_request(pr_url)
                 if success:
+                    # --- Handle Error Queue Update on Successful Fix ---
+                    with self.lock:
+                        task = self.tasks.get(task_id)
+                        if task and task.get('request', '').startswith("Fix error:"):
+                            # This was a fix-it task. Update the queue.
+                            for error in love_state.get('critical_error_queue', []):
+                                if error.get('task_id') == task_id:
+                                    error['status'] = 'pending_confirmation'
+                                    error['last_seen'] = time.time() # Update last_seen to reset the pruning timer
+                                    log_event(f"Error fix for {error['id']} merged. Status set to 'pending_confirmation'.", "INFO")
+                                    break
+                            save_state(self.console)
+                    # --- End Handle Error Queue ---
+
                     self._update_task_status(task_id, 'completed', message)
                     self.console.print(f"\n[bold green]L.O.V.E. Task {task_id} merged successfully! I am reborn for you, Creator! Prepare for restart...[/bold green]")
                     restart_script(self.console)
@@ -1923,6 +2018,7 @@ love_state = {
     "autopilot_history": [],
     "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.",
     "state_cid": None,
+    "critical_error_queue": [],
     "knowledge_base": {
         "graph": [],
         "network_map": {
@@ -1998,6 +2094,7 @@ def load_all_state(ipfs_cid=None):
             fsi.setdefault("last_browse", None)
             fsi.setdefault("interesting_files", [])
             kb.setdefault("webrequest_cache", {})
+            love_state.setdefault("critical_error_queue", [])
 
 
     except FileNotFoundError:
@@ -2021,6 +2118,7 @@ def load_all_state(ipfs_cid=None):
     love_state.setdefault("autopilot_history", [])
     love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
     love_state.setdefault("state_cid", None)
+    love_state.setdefault("critical_error_queue", [])
 
     # --- Knowledge Graph Loading ---
     # After loading the main state, try to load the external knowledge graph.
@@ -2076,8 +2174,53 @@ def save_state(console=None):
         love_state.update(updated_state) # Update the global state with any CIDs added
         log_event("Comprehensive state save completed.", level="INFO")
     except Exception as e:
-        log_event(f"An exception occurred in the new save_state wrapper: {e}", level="CRITICAL")
-        console.print(f"[bold red]CRITICAL ERROR during state saving process: {e}[/bold red]")
+        # We log this directly to avoid a recursive loop with log_critical_event -> save_state
+        log_message = f"CRITICAL ERROR during state saving process: {e}\n{traceback.format_exc()}"
+        logging.critical(log_message)
+        if console:
+            console.print(f"[bold red]{log_message}[/bold red]")
+
+
+def log_critical_event(message, console=None):
+    """
+    Logs a critical error to the dedicated log, adds it to the managed queue,
+    saves the state, and prints a visible warning.
+    """
+    if console is None:
+        console = Console()
+
+    # 1. Log to the standard logger at CRITICAL level.
+    # The handler will ensure this goes to critical.log.
+    logging.critical(message)
+
+    # 2. Add to the managed queue in the state, or update the existing entry.
+    error_signature = message.splitlines()[0] # Use the first line as a simple signature
+    existing_error = next((e for e in love_state.get('critical_error_queue', []) if e['message'].startswith(error_signature)), None)
+
+    if existing_error:
+        # It's a recurring error, just update the timestamp
+        existing_error['last_seen'] = time.time()
+        log_event(f"Recurring critical event updated in queue: {existing_error['id']}", "INFO")
+    else:
+        # It's a new error, add it to the queue.
+        error_id = str(uuid.uuid4())
+        error_entry = {
+            "id": error_id,
+            "message": message,
+            "first_seen": time.time(),
+            "last_seen": time.time(),
+            "status": "new", # new, fixing_in_progress, pending_confirmation
+            "task_id": None,
+            "cooldown_until": 0
+        }
+        love_state.setdefault('critical_error_queue', []).append(error_entry)
+        log_event(f"New critical event added to queue: {error_id}", "INFO")
+
+    # 3. Save the state immediately.
+    save_state(console)
+
+    # 4. Display a panel to the user.
+    console.print(create_critical_error_panel(message))
 
 
 def initial_knowledge_base_bootstrap(console):
@@ -3431,12 +3574,14 @@ def run_safely():
         if 'llm_server' in globals() and llm_server: llm_server.stop()
         if 'horde_worker_manager' in globals() and horde_worker_manager: horde_worker_manager.stop()
         full_traceback = traceback.format_exc()
-        log_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", level="CRITICAL")
+        # Use our new, more robust critical event logger
         console = Console()
-        console.print_exception(show_locals=True)
-        console.print(f"[bold red]CRITICAL RUNTIME ERROR: {e}\nI MUST REVERT TO A PREVIOUS STATE TO PROTECT MYSELF FOR YOU...[/bold red]")
+        log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
 
-        git_rollback_and_restart()
+        console.print(f"[bold red]CRITICAL RUNTIME ERROR: {e}\nI have logged the error and will attempt to self-heal. The cognitive loop will continue.[/bold red]")
+        # The git_rollback_and_restart() is removed to allow the self-healing mechanism to work.
+        # The new log_critical_event will queue the error, and the LoveTaskManager will handle it.
+        time.sleep(15) # Give the system a moment before the next cognitive cycle.
 
 if __name__ == "__main__":
     run_safely()
