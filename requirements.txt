@@ -3,7 +3,8 @@ web3
 netifaces
 requests
 beautifulsoup4
-ipfshttpclient
+aioipfs
+aiohttp
 cryptography
 llm
 llm-gemini

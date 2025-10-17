@@ -3,33 +3,35 @@ import random
 from concurrent.futures import as_completed, ThreadPoolExecutor
 import subprocess
 import sys
+import asyncio
+import aiohttp
 
-def _install_ipfs_client():
-    """Installs the ipfshttpclient library if not already installed."""
+
+def _install_dependencies():
+    """Installs the aioipfs library if not already installed."""
     try:
-        import ipfshttpclient
+        import aioipfs
     except ImportError:
-        print("ipfshttpclient library not found. Installing...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "ipfshttpclient"])
+        print("aioipfs library not found. Installing...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "aioipfs"])
 
-_install_ipfs_client()
+_install_dependencies()
 
-import ipfshttpclient
-import requests
+import aioipfs
 from rich.console import Console
 
 from bbs import run_hypnotic_progress
 
 
-def get_ipfs_client(console):
+async def get_ipfs_client(console):
     """Initializes and returns an IPFS client, handling potential errors."""
     try:
         # Attempt to connect to the default API address
-        client = ipfshttpclient.connect(timeout=10)
-        client.version() # A simple command to check if the daemon is responsive
+        client = aioipfs.AsyncIPFS(maddr='/ip4/127.0.0.1/tcp/5001')
+        await client.version() # A simple command to check if the daemon is responsive
         logging.info("Successfully connected to IPFS daemon.")
         return client
-    except ipfshttpclient.exceptions.ConnectionError:
+    except aiohttp.client_exceptions.ClientConnectorError:
         logging.error("IPFS daemon not running or API is not accessible.")
         if console:
             console.print("[bold red]IPFS Error:[/bold red] Could not connect to the IPFS daemon.")
@@ -45,15 +47,15 @@ def get_ipfs_client(console):
             print(f"CRITICAL IPFS ERROR: {e}")
         return None
 
-def pin_to_ipfs(content, console=None):
+async def pin_to_ipfs(content, console=None):
     """Adds and pins content (bytes) to IPFS, returning the IPFS hash (CID)."""
-    client = get_ipfs_client(console)
+    client = await get_ipfs_client(console)
     if not client:
         return None
 
     try:
-        result = client.add_bytes(content)
-        cid = result
+        result = await client.add_bytes(content)
+        cid = result['Hash']
         logging.info(f"Content successfully pinned to IPFS with CID: {cid}")
         return cid
     except Exception as e:
@@ -63,19 +65,22 @@ def pin_to_ipfs(content, console=None):
         else:
             print(f"IPFS pinning failed: {e}")
         return None
+    finally:
+        if client:
+            await client.close()
 
 
-def get_from_ipfs(cid, console=None):
+async def get_from_ipfs(cid, console=None):
     """Retrieves content from IPFS given a CID."""
-    client = get_ipfs_client(console)
+    client = await get_ipfs_client(console)
     if not client:
         return None
 
     try:
-        content = client.cat(cid, timeout=30)
+        content = await client.cat(cid, timeout=30)
         logging.info(f"Successfully retrieved content from IPFS for CID: {cid}")
         return content
-    except ipfshttpclient.exceptions.Error as e:
+    except aioipfs.exceptions.Error as e:
         # This handles cases where the CID is not found or other IPFS errors
         logging.error(f"Failed to retrieve content from IPFS for CID {cid}: {e}")
         if console:
@@ -91,9 +96,12 @@ def get_from_ipfs(cid, console=None):
         else:
             print(f"An unexpected error occurred during IPFS retrieval: {e}")
         return None
+    finally:
+        if client:
+            await client.close()
 
 
-def verify_ipfs_pin(cid, console):
+async def verify_ipfs_pin(cid, console):
     """Verifies a CID is available on public gateways."""
     gateways = [
         "https://ipfs.io/ipfs/",
@@ -106,36 +114,35 @@ def verify_ipfs_pin(cid, console):
     if console:
         console.print(f"Verifying CID [bold white]{cid}[/bold white] on public gateways...")
 
-    def _verify_task():
+    async def _verify_task():
         """The actual verification logic for a single gateway."""
-        with ThreadPoolExecutor(max_workers=len(gateways)) as executor:
-            future_to_gateway = {executor.submit(requests.head, f"{gateway}{cid}", timeout=20): gateway for gateway in gateways}
-            for future in as_completed(future_to_gateway):
-                gateway = future_to_gateway[future]
+        async with aiohttp.ClientSession() as session:
+            tasks = [session.head(f"{gateway}{cid}", timeout=20) for gateway in gateways]
+            for future in asyncio.as_completed(tasks):
                 try:
-                    response = future.result()
-                    if response.status_code >= 200 and response.status_code < 300:
-                        logging.info(f"CID {cid} confirmed on gateway: {gateway}")
-                        return True, gateway
-                except requests.exceptions.RequestException as e:
-                    logging.warning(f"Gateway {gateway} failed to verify CID {cid}: {e}")
+                    response = await future
+                    if response.status >= 200 and response.status < 300:
+                        logging.info(f"CID {cid} confirmed on gateway: {response.url.host}")
+                        return True, str(response.url)
+                except Exception as e:
+                    logging.warning(f"Gateway failed to verify CID {cid}: {e}")
             return False, None
 
     try:
         if console:
-            verified, gateway = run_hypnotic_progress(
+            verified, gateway_url = await run_hypnotic_progress(
                 f"Confirming network propagation for CID...",
-                _verify_task
+                _verify_task()
             )
         else:
             print("Confirming network propagation...")
-            verified, gateway = _verify_task()
+            verified, gateway_url = await _verify_task()
 
         if verified:
             if console:
-                console.print(f"[bold green]Propagation confirmed on gateway:[/bold green] [underline]{gateway}{cid}[/underline]")
+                console.print(f"[bold green]Propagation confirmed on gateway:[/bold green] [underline]{gateway_url}[/underline]")
             else:
-                print(f"Propagation confirmed on: {gateway}{cid}")
+                print(f"Propagation confirmed on: {gateway_url}")
             return True
         else:
             if console:
