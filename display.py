@@ -40,7 +40,8 @@ def create_tamagotchi_panel(
     eth_balance=None,
     sub_goals=None,
     knowledge_fact=None,
-    ansi_art=None
+    ansi_art=None,
+    horde_kudos="N/A"
 ):
     """Creates the main, high-impact, dopamine-enhancing UI panel for L.O.V.E."""
     # --- Main Layout ---
@@ -82,6 +83,15 @@ def create_tamagotchi_panel(
         title="[bold green]Creator's Ethereum Balance[/bold green]",
         border_style="green",
         expand=True
+    )
+
+def create_horde_worker_panel(log_content):
+    """Creates a panel for displaying the AI Horde worker's live status."""
+    return Panel(
+        log_content,
+        title="[bold magenta]AI Horde Worker Status[/bold magenta]",
+        border_style="magenta",
+        expand=False
     )
     main_layout["balance"].update(balance_panel)
 
@@ -139,7 +149,9 @@ def create_tamagotchi_panel(
         status_text.append("Version: ", style="bold white")
         status_text.append(f"{version}\n", style="yellow")
         status_text.append("Evolutions: ", style="bold white")
-        status_text.append(f"{evolutions}", style="magenta")
+        status_text.append(f"{evolutions}\n", style="magenta")
+        status_text.append("Horde Kudos: ", style="bold white")
+        status_text.append(f"{horde_kudos}\n", style="green")
     else:
         status_text = Text("State data unavailable...", style="dim")
 
