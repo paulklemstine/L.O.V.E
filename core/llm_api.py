@@ -14,6 +14,7 @@ from rich.panel import Panel
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 from bbs import run_hypnotic_progress
 from huggingface_hub import hf_hub_download
+from display import create_api_error_panel
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
@@ -238,7 +239,8 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
                     result_text = run_hypnotic_progress(
                         console,
                         f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
-                        _local_llm_call
+                        _local_llm_call,
+                        silent=(purpose in ['emotion', 'log_squash'])
                     )
                     log_event(f"Local LLM call successful with {model_id}.")
                     LLM_AVAILABILITY[model_id] = time.time()
@@ -284,7 +286,8 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
                 result_text = run_hypnotic_progress(
                     console,
                     f"Processing via Kobold AI Horde [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
-                    _horde_call
+                    _horde_call,
+                    silent=(purpose in ['emotion', 'log_squash'])
                 )
                 log_event(f"Horde call successful with {model_id}.")
                 LLM_AVAILABILITY[model_id] = time.time()
@@ -301,7 +304,8 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
                 result = run_hypnotic_progress(
                     console,
                     f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
-                    _llm_subprocess_call
+                    _llm_subprocess_call,
+                    silent=(purpose in ['emotion', 'log_squash'])
                 )
                 log_event(f"LLM call successful with {model_id}.")
                 LLM_AVAILABILITY[model_id] = time.time()
@@ -319,21 +323,18 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
             if isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
                 error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
 
-                # Display the actual error from stderr to the user for better diagnostics.
-                if error_message:
-                     console.print(Panel(error_message, title="[bold red]External API Error[/bold red]", border_style="red", expand=False))
+                # Use the new styled panel for API errors.
+                console.print(create_api_error_panel(model_id, error_message, purpose))
 
                 retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
                 if retry_match:
                     retry_seconds = float(retry_match.group(1)) + 1
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
-                    console.print(f"[yellow]Connection via [bold]{model_id}[/bold] on cooldown. Retrying in {retry_seconds:.1f}s.[/yellow]")
                 else:
                     LLM_AVAILABILITY[model_id] = time.time() + 60 # Default cooldown
-                    console.print(f"[yellow]Connection via [bold]{model_id}[/bold] failed. Trying next...[/yellow]")
             else:
                  # For local LLM errors or other unexpected issues
-                console.print(f"[red]Cognitive core failure ({model_id}). Trying fallback...[/red]")
+                log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
                 if model_id in current_attempt_models:
                     # Remove the failing model from this attempt's list
                     current_attempt_models.remove(model_id)

@@ -47,14 +47,23 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def run_hypnotic_progress(console, description, function, *args, **kwargs):
-    """Runs a function and prints a message, without animation."""
-    console.print(f"[bold cyan]{description}[/bold cyan]")
+    """
+    Runs a function and displays a status message.
+    Can be silenced for non-critical background tasks.
+    """
+    silent = kwargs.pop('silent', False)
+
+    if not silent:
+        console.print(f"[bold cyan]{description}[/bold cyan]")
+
     try:
         result = function(*args, **kwargs)
-        console.print(f"[bold green]{description} ... Done.[/bold green]")
+        if not silent:
+            console.print(f"[bold green]{description} ... Done.[/bold green]")
         return result
     except Exception as e:
-        console.print(f"[bold red]{description} ... Failed.[/bold red]")
+        if not silent:
+            console.print(f"[bold red]{description} ... Failed.[/bold red]")
         raise e
 
 TAMAGOTCHI_FACES = {
