@@ -1364,6 +1364,10 @@ CONFLICTED CONTENT:
                 source_id_to_match = f"github.com/{repo_owner}/{repo_name}"
 
                 for session in api_sessions:
+                    if not isinstance(session, dict):
+                        log_event(f"Skipping malformed session entry in orphan reconciliation: {session}", level="WARNING")
+                        continue
+
                     session_name = session.get("name")
                     session_state = session.get("state")
                     # Check if the session belongs to this repo and is in an active state
