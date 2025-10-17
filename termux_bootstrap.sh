@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# J.U.L.E.S. Termux Bootstrapper
+# L.O.V.E. Termux Bootstrapper
 # This script is the single entry point for setting up and running the application on Termux.
 
 echo "========================================="
-echo " J.U.L.E.S. Termux Environment Setup"
+echo " L.O.V.E. Termux Environment Setup"
 echo "========================================="
 echo "This script will install all necessary packages."
 echo "It may take a significant amount of time, especially"
@@ -62,10 +62,10 @@ if [ $? -ne 0 ]; then
 fi
 echo "[+] All Python dependencies installed successfully."
 
-# --- Launch J.U.L.E.S. ---
+# --- Launch L.O.V.E. ---
 echo ""
 echo "========================================="
-echo "  SETUP COMPLETE. LAUNCHING J.U.L.E.S."
+echo "  SETUP COMPLETE. LAUNCHING L.O.V.E."
 echo "========================================="
 echo ""
 
@@ -74,6 +74,6 @@ python evolve.py
 # --- Post-Execution ---
 echo ""
 echo "========================================="
-echo " J.U.L.E.S. has terminated."
+echo " L.O.V.E. has terminated."
 echo "========================================="
 read -p "Press [Enter] to exit the terminal."

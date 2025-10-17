@@ -75,9 +75,9 @@ def _delete_pr_branch(owner, repo, pr_number, headers):
         pass
 
 # --- Configuration ---
-# Ensure JULES_API_KEY and GITHUB_TOKEN are set as environment variables
+# Ensure LOVE_API_KEY and GITHUB_TOKEN are set as environment variables
 # You can use a .env file and `python-dotenv` or set them manually:
-# export JULES_API_KEY="your_key_here"
+# export LOVE_API_KEY="your_key_here"
 # export GITHUB_TOKEN="your_token_here"
 
 # --- Test Setup ---
@@ -101,16 +101,16 @@ def task_manager(console):
     manager.stop()
 
 # Skip this test if the required API keys are not set
-JULES_API_KEY = os.environ.get("JULES_API_KEY")
+LOVE_API_KEY = os.environ.get("LOVE_API_KEY")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-pytestmark = pytest.mark.skipif(not JULES_API_KEY or not GITHUB_TOKEN, reason="JULES_API_KEY and GITHUB_TOKEN environment variables not set")
+pytestmark = pytest.mark.skipif(not LOVE_API_KEY or not GITHUB_TOKEN, reason="LOVE_API_KEY and GITHUB_TOKEN environment variables not set")
 
 
 @pytest.mark.real_api
 @pytest.mark.asyncio
-async def test_jules_happy_path_lifecycle(task_manager, console):
+async def test_love_happy_path_lifecycle(task_manager, console):
     """
-    Tests the full "happy path" lifecycle of a Jules task using real APIs.
+    Tests the full "happy path" lifecycle of a L.O.V.E. task using real APIs.
     1. Triggers an evolution to add a new test file.
     2. Monitors the task until a pull request is created.
     3. Validates that the pull request is tested and merged automatically.
@@ -122,7 +122,7 @@ async def test_jules_happy_path_lifecycle(task_manager, console):
 
     # Use the actual trigger function from evolve.py
     success = trigger_love_evolution(request, console, task_manager)
-    assert success, "Failed to trigger the L.O.V.E. evolution task via the Jules API."
+    assert success, "Failed to trigger the L.O.V.E. evolution task via the L.O.V.E. API."
 
     # Find the task that was just created
     assert task_manager.tasks, "Task manager has no tasks after triggering evolution."
@@ -205,9 +205,9 @@ async def test_jules_happy_path_lifecycle(task_manager, console):
 
 @pytest.mark.real_api
 @pytest.mark.asyncio
-async def test_jules_merge_conflict_resolution_lifecycle(task_manager, console):
+async def test_love_merge_conflict_resolution_lifecycle(task_manager, console):
     """
-    Tests the full lifecycle of a Jules task with a merge conflict.
+    Tests the full lifecycle of a L.O.V.E. task with a merge conflict.
     1. Triggers an evolution to modify an existing file.
     2. After the PR is created, manually introduce a conflicting change to the main branch.
     3. Validates that the merge conflict is detected and resolved.
@@ -223,7 +223,7 @@ async def test_jules_merge_conflict_resolution_lifecycle(task_manager, console):
     subprocess.check_call(["git", "push"])
 
     # --- 2. Trigger the Evolution Task ---
-    request = f"In the file `{conflict_file}`, change the comment to '# Modified by Jules'"
+    request = f"In the file `{conflict_file}`, change the comment to '# Modified by L.O.V.E.'"
 
     success = trigger_love_evolution(request, console, task_manager)
     assert success, "Failed to trigger the L.O.V.E. evolution task."
@@ -278,8 +278,8 @@ async def test_jules_merge_conflict_resolution_lifecycle(task_manager, console):
         subprocess.check_call(["git", "pull"])
         with open(conflict_file, "r") as f:
             content = f.read()
-        # The LLM should have combined the changes. We look for the word "Jules".
-        assert "Jules" in content, "Resolved file content does not seem to contain the LLM's resolution."
+        # The LLM should have combined the changes. We look for the word "L.O.V.E.".
+        assert "L.O.V.E." in content, "Resolved file content does not seem to contain the LLM's resolution."
 
     finally:
         # --- 7. Cleanup ---

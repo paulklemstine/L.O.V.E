@@ -36,7 +36,7 @@ TAMAGOTCHI_FACES = {
 def create_tamagotchi_panel(
     emotion="neutral",
     message="...",
-    jules_state=None,
+    love_state=None,
     eth_balance=None,
     sub_goals=None,
     knowledge_fact=None,
@@ -132,9 +132,9 @@ def create_tamagotchi_panel(
     footer_layout["message"].update(message_panel)
 
     # Status Panel
-    if jules_state:
-        version = jules_state.get("version_name", "unknown")
-        evolutions = len(jules_state.get("evolution_history", []))
+    if love_state:
+        version = love_state.get("version_name", "unknown")
+        evolutions = len(love_state.get("evolution_history", []))
         status_text = Text()
         status_text.append("Version: ", style="bold white")
         status_text.append(f"{version}\n", style="yellow")

@@ -9,7 +9,7 @@ from threading import Thread
 from rich.console import Console
 
 # --- Constants ---
-STATE_FILE = "jules_state.json"
+STATE_FILE = "love_state.json"
 # Public gateways to verify IPFS pins
 IPFS_GATEWAYS = [
     "https://ipfs.io/ipfs/{}",
@@ -61,11 +61,11 @@ def _verify_pin_on_gateways(cid: str, console: Console):
 
 
 # --- Main State Management Function ---
-def save_all_state(jules_state: dict, console: Console):
+def save_all_state(love_state: dict, console: Console):
     """
     Orchestrates the saving of all critical application data.
     1. Backs up 'interesting files' from the knowledge base to IPFS.
-    2. Saves the final, updated state to the local jules_state.json file.
+    2. Saves the final, updated state to the local love_state.json file.
     3. Pins the state file itself to IPFS.
     4. Creates a manifest of all CIDs from this operation.
     """
@@ -80,7 +80,7 @@ def save_all_state(jules_state: dict, console: Console):
         }
 
         # 1. Pin all "interesting files" from the knowledge base
-        fs_intel = jules_state.get("knowledge_base", {}).get("file_system_intel", {})
+        fs_intel = love_state.get("knowledge_base", {}).get("file_system_intel", {})
         interesting_files = fs_intel.get("interesting_files", [])
 
         if interesting_files:
@@ -98,22 +98,22 @@ def save_all_state(jules_state: dict, console: Console):
                     console.print(f"[yellow]Could not read interesting file '{fpath}': {e}[/yellow]")
 
         # 2. Update the main state with the new manifest
-        jules_state.setdefault("backup_manifests", []).append(ipfs_manifest)
-        if len(jules_state["backup_manifests"]) > 10: # Keep only the last 10 manifests
-            jules_state["backup_manifests"] = jules_state["backup_manifests"][-10:]
+        love_state.setdefault("backup_manifests", []).append(ipfs_manifest)
+        if len(love_state["backup_manifests"]) > 10: # Keep only the last 10 manifests
+            love_state["backup_manifests"] = love_state["backup_manifests"][-10:]
 
         # 3. Save the final state file (locally and to IPFS)
         try:
-            state_bytes_with_manifest = json.dumps(jules_state, indent=4).encode('utf-8')
+            state_bytes_with_manifest = json.dumps(love_state, indent=4).encode('utf-8')
 
             # Pin the state itself to IPFS
             state_cid = _pin_to_ipfs(ipfs_client, state_bytes_with_manifest, console)
             if state_cid:
                 ipfs_manifest["state_cid"] = state_cid
-                jules_state["state_cid"] = state_cid # Update the top-level CID
+                love_state["state_cid"] = state_cid # Update the top-level CID
                 _verify_pin_on_gateways(state_cid, console) # Asynchronously verify
                 # Re-encode with the final state CID for local saving
-                state_bytes_with_manifest = json.dumps(jules_state, indent=4).encode('utf-8')
+                state_bytes_with_manifest = json.dumps(love_state, indent=4).encode('utf-8')
 
             # Write the final version to the local file
             with open(STATE_FILE, 'wb') as f:
@@ -133,4 +133,4 @@ def save_all_state(jules_state: dict, console: Console):
             except Exception:
                 pass # Ignore errors on close
 
-    return jules_state
+    return love_state
