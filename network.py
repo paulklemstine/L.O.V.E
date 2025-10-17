@@ -599,10 +599,12 @@ def execute_shell_command(command, evil_state):
 
     def _shell_task():
         try:
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60)
+            # Increased timeout to 5 minutes for potentially slow network scans
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=300)
             return result.stdout, result.stderr, result.returncode
         except subprocess.TimeoutExpired:
-            return "", "Command timed out after 60 seconds.", -1
+            # Keep the error message specific to the new timeout
+            return "", "Command timed out after 300 seconds.", -1
         except Exception as e:
             return "", f"An unexpected error occurred: {e}", -1
 

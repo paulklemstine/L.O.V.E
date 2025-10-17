@@ -29,7 +29,7 @@ async def get_ipfs_client(console):
     """Initializes and returns an IPFS client, handling potential errors."""
     try:
         # Attempt to connect to the default API address
-        client = aioipfs.AsyncIPFS(maddr='/ip4/127.0.0.1/tcp/5001')
+        client = aioipfs.AsyncIPFS(maddr='/ip4/127.0.0.1/tcp/5002')
         await client.version() # A simple command to check if the daemon is responsive
         logging.info("Successfully connected to IPFS daemon.")
         return client
