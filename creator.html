@@ -64,7 +64,7 @@
         </div>
     </div>
 
-    <script src="mplib.js"></script>
+    <script type="module" src="mplib.js"></script>
     <script>
         let creatorPrivateKey = null;
         let cy = null;
@@ -80,10 +80,11 @@
         }
 
         function initializeGraph() {
+            const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--font-color').trim();
             cy = cytoscape({
                 container: document.getElementById('network-graph-container'),
                 style: [
-                    { selector: 'node', style: { 'background-color': 'var(--font-color)', 'label': 'data(id)' }},
+                    { selector: 'node', style: { 'background-color': fontColor, 'label': 'data(id)' }},
                     { selector: 'node:selected', style: { 'border-width': '3px', 'border-color': '#ffde00' }}
                 ],
                 layout: { name: 'cose' }
