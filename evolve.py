@@ -39,84 +39,99 @@ local_llm_instance = None
 
 
 # --- LOGGING ---
+# This stream is dedicated to the log file, capturing all raw output.
+log_file_stream = None
+
+def log_print(*args, **kwargs):
+    """
+    A custom print function that writes to both the log file and the
+    standard logging module, ensuring everything is captured.
+    It does NOT print to the console.
+    """
+    global log_file_stream
+    message = " ".join(map(str, args))
+    # Write to the raw log file stream
+    if log_file_stream:
+        try:
+            log_file_stream.write(message + '\n')
+            log_file_stream.flush()
+        except (IOError, ValueError):
+            pass # Ignore errors on closed streams
+    # Also write to the Python logger
+    logging.info(message)
+
+
 class AnsiStrippingTee(object):
     """
-    A thread-safe file-like object that acts as a Tee.
-    It writes to multiple streams, stripping ANSI escape codes for one of them.
+    A thread-safe, file-like object that redirects stderr.
+    It writes to the original stderr and to our log file, stripping ANSI codes.
+    This is now primarily for capturing external library errors.
     """
-    def __init__(self, stream1, stream2):
-        self.stream1 = stream1 # e.g., sys.stdout
-        self.stream2 = stream2 # e.g., log file handle
+    def __init__(self, stderr_stream):
+        self.stderr_stream = stderr_stream # The original sys.stderr
         self.ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
         self.lock = threading.Lock()
-        # Check if the primary stream is a TTY to report back to libraries like rich
-        self._isatty = hasattr(stream1, 'isatty') and stream1.isatty()
-
-    def isatty(self):
-        """
-        Report whether the main stream is a TTY. This is crucial for libraries
-        like 'rich' to determine if they should output ANSI color codes.
-        """
-        return self._isatty
 
     def write(self, data):
         with self.lock:
-            # Write to the first stream (console) as is
+            # Write to the original stderr (for visibility in terminal)
             try:
-                self.stream1.write(data)
-                self.stream1.flush()
+                self.stderr_stream.write(data)
+                self.stderr_stream.flush()
             except (IOError, ValueError):
-                # Ignore errors on closed streams
                 pass
 
-            # Strip ANSI codes and write to the second stream (log file)
-            try:
-                clean_data = self.ansi_escape.sub('', data)
-                self.stream2.write(clean_data)
-                self.stream2.flush()
-            except (IOError, ValueError):
-                # Ignore errors on closed streams
-                pass
-
-    def isatty(self):
-        """
-        Pretends to be a TTY if the first stream is a TTY.
-        This is crucial for libraries like 'rich' to enable color output.
-        """
-        return hasattr(self.stream1, 'isatty') and self.stream1.isatty()
+            # Also write the stripped data to our central log_print function
+            clean_data = self.ansi_escape.sub('', data)
+            log_print(f"[STDERR] {clean_data.strip()}")
 
     def flush(self):
         with self.lock:
             try:
-                self.stream1.flush()
-            except (IOError, ValueError):
-                pass
-            try:
-                self.stream2.flush()
+                self.stderr_stream.flush()
             except (IOError, ValueError):
                 pass
 
+    def isatty(self):
+        # This helps libraries like 'rich' correctly render to stderr if needed.
+        return hasattr(self.stderr_stream, 'isatty') and self.stderr_stream.isatty()
+
+
 def setup_global_logging():
     """
-    Configures the root logger to write to the log file and redirects
-    stdout/stderr to a Tee that captures all console output.
+    Configures logging.
+    - The `logging` module writes formatted logs to love.log.
+    - `log_file_stream` provides a raw file handle to love.log for the custom `log_print`.
+    - `sys.stderr` is redirected to our Tee to capture errors from external libraries.
+    - `sys.stdout` is NOT redirected, so `rich.Console` can print UI panels directly.
     """
-    # 1. Configure Python's logging module
+    global log_file_stream
+    # 1. Configure Python's logging module to write to the file.
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s [%(levelname)s] - %(message)s',
         filename=LOG_FILE,
-        filemode='a' # Append to the log file
+        filemode='a',
+        force=True # Override any existing handlers
     )
 
-    # 2. Redirect stdout and stderr
-    log_file_handle = open(LOG_FILE, 'a')
-    tee = AnsiStrippingTee(sys.stdout, log_file_handle)
-    sys.stdout = tee
-    sys.stderr = tee
+    # 2. Open a raw file stream to the same log file for our custom print.
+    # This captures unformatted text and stderr.
+    if log_file_stream is None:
+        log_file_stream = open(LOG_FILE, 'a')
 
-    logging.info(f"--- L.O.V.E. Version '{love_state.get('version_name', 'unknown')}' session started ---")
-    print(f"--- L.O.V.E. Version '{love_state.get('version_name', 'unknown')}' session started ---")
+    # 3. Redirect ONLY stderr to our custom Tee.
+    # This is crucial for capturing errors from subprocesses or libraries (e.g., llama.cpp)
+    # without interfering with our clean stdout for UI panels.
+    original_stderr = sys.stderr
+    sys.stderr = AnsiStrippingTee(original_stderr)
+
+    # 4. Log the startup message using both methods.
+    startup_message = f"--- L.O.V.E. Version '{love_state.get('version_name', 'unknown')}' session started ---"
+    logging.info(startup_message)
+
+    # We no longer print the startup message to stdout, as it's not a UI panel.
+    # The console object will handle all direct user-facing output.
 
 
 # --- PLATFORM DETECTION & CAPABILITIES ---
@@ -148,26 +163,26 @@ def _check_and_install_dependencies():
     if CAPS.os == "Linux" and not CAPS.is_termux:
         # Install build tools FIRST, as they are needed for compiling pip packages.
         try:
-            print("Ensuring build tools (build-essential, python3-dev) are installed...")
+            log_print("Ensuring build tools (build-essential, python3-dev) are installed...")
             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print("Build tools check complete.")
+            log_print("Build tools check complete.")
         except Exception as e:
-            print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
+            log_print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
             logging.warning(f"Failed to install build-essential/python3-dev: {e}")
 
         # Install NVIDIA CUDA Toolkit if not present
         if not shutil.which('nvcc'):
-            print("NVIDIA CUDA Toolkit not found. Attempting to install...")
+            log_print("NVIDIA CUDA Toolkit not found. Attempting to install...")
             try:
                 subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.check_call("sudo apt-get update -q", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
-                print("Successfully installed NVIDIA CUDA Toolkit.")
+                log_print("Successfully installed NVIDIA CUDA Toolkit.")
                 logging.info("Successfully installed NVIDIA CUDA Toolkit.")
             except Exception as e:
-                print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
+                log_print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
                 logging.warning(f"CUDA Toolkit installation failed: {e}")
 
         # Install Node.js and PeerJS dependencies
@@ -184,7 +199,7 @@ def _check_and_install_dependencies():
             except ImportError:
                 pass
 
-        print(f"Installing Python package: {package}...")
+        log_print(f"Installing Python package: {package}...")
         install_command = [sys.executable, '-m', 'pip', 'install', package]
         if upgrade:
             install_command.append('--upgrade')
@@ -193,9 +208,9 @@ def _check_and_install_dependencies():
             # We suppress output here to keep the console clean for successful installs.
             # The CalledProcessError exception will still trigger on failure.
             subprocess.check_call(install_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(f"Successfully installed {package}.")
+            log_print(f"Successfully installed {package}.")
         except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to install '{package}'. Reason: {e}")
+            log_print(f"ERROR: Failed to install '{package}'. Reason: {e}")
             logging.error(f"Failed to install pip package {package}: {e}")
             # For debugging, one could re-run with output enabled:
             # subprocess.check_call(install_command)
@@ -225,14 +240,14 @@ def _check_and_install_dependencies():
             import llama_cpp
             from llama_cpp.llama_cpp import llama_backend_init
             llama_backend_init(False) # Don't log NUMA warnings
-            print("llama-cpp-python is already installed and functional.")
+            log_print("llama-cpp-python is already installed and functional.")
             return True
         except (ImportError, AttributeError, RuntimeError, OSError):
             # Catches:
             # - ImportError: package not installed.
             # - AttributeError: for older versions of llama-cpp-python.
             # - RuntimeError/OSError: for shared library loading failures (the original bug).
-            print("llama-cpp-python not found or failed to load. Starting installation process...")
+            log_print("llama-cpp-python not found or failed to load. Starting installation process...")
 
         # GPU installation attempt
         if CAPS.has_cuda or CAPS.has_metal:
@@ -241,10 +256,10 @@ def _check_and_install_dependencies():
             install_args = [sys.executable, '-m', 'pip', 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python']
 
             if CAPS.has_cuda:
-                print("Attempting to install llama-cpp-python with CUDA support...")
+                log_print("Attempting to install llama-cpp-python with CUDA support...")
                 env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
             else: # Metal
-                print("Attempting to install llama-cpp-python with Metal support...")
+                log_print("Attempting to install llama-cpp-python with Metal support...")
                 env['CMAKE_ARGS'] = "-DGGML_METAL=on"
 
             try:
@@ -252,34 +267,34 @@ def _check_and_install_dependencies():
                 subprocess.check_call(install_args, env=env, timeout=900)
                 # Verify the installation by trying to import it
                 import llama_cpp
-                print(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
+                log_print(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
                 logging.info(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
                 return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
-                print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
+                log_print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
                 logging.warning(f"GPU-accelerated llama-cpp-python installation failed: {e}")
-                print("Falling back to CPU-only installation.")
+                log_print("Falling back to CPU-only installation.")
 
         # CPU-only installation (the fallback)
         try:
             # Uninstall any potentially broken or partial installation first
-            print("Uninstalling any previous versions of llama-cpp-python to ensure a clean slate...")
+            log_print("Uninstalling any previous versions of llama-cpp-python to ensure a clean slate...")
             subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'llama-cpp-python'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            print("Attempting to install llama-cpp-python for CPU...")
+            log_print("Attempting to install llama-cpp-python for CPU...")
             install_args_cpu = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir']
             subprocess.check_call(install_args_cpu, timeout=900)
 
             # Final verification
             import llama_cpp
-            print("Successfully installed llama-cpp-python (CPU only).")
+            log_print("Successfully installed llama-cpp-python (CPU only).")
             logging.info("Successfully installed llama-cpp-python (CPU only).")
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
             error_message = f"FATAL: Failed to install llama-cpp-python even for CPU. Error: {e}"
             if hasattr(e, 'stderr') and e.stderr:
                 error_message += f"\nStderr: {e.stderr.decode()}"
-            print(f"ERROR: {error_message}")
+            log_print(f"ERROR: {error_message}")
             logging.critical(error_message)
             return False
 
@@ -292,38 +307,38 @@ def _check_and_install_dependencies():
 
     # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
     if not os.path.exists(gguf_project_file):
-        print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
+        log_print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
         if os.path.exists(llama_cpp_dir):
             shutil.rmtree(llama_cpp_dir) # Force remove the directory
         try:
             subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
+            log_print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
             logging.error(f"Failed to clone llama.cpp repo: {e}")
             return # Cannot proceed without this
 
     gguf_script_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
     if not os.path.exists(gguf_script_path):
-        print("Installing GGUF metadata tools...")
+        log_print("Installing GGUF metadata tools...")
         gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
         if os.path.isdir(gguf_py_path):
             try:
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', gguf_py_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print("GGUF tools installed successfully.")
+                log_print("GGUF tools installed successfully.")
             except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
+                log_print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
                 logging.error(f"Failed to install gguf package: {e}")
         else:
             # This case should not be reached if the clone was successful
-            print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
+            log_print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
             logging.error("llama.cpp/gguf-py directory not found post-clone.")
 
 
     # --- Step 5: Node.js Project Dependencies ---
     if os.path.exists('package.json'):
-        print("Installing local Node.js dependencies via npm...")
+        log_print("Installing local Node.js dependencies via npm...")
         subprocess.check_call("npm install", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print("Node.js dependencies installed.")
+        log_print("Node.js dependencies installed.")
 
 def _configure_llm_api_key():
     """Checks for the Gemini API key and configures it for the llm tool."""
@@ -338,11 +353,11 @@ def _configure_llm_api_key():
                 check=True
             )
             if "google" in result.stdout:
-                print("Google API key is already configured for llm.")
+                log_print("Google API key is already configured for llm.")
                 return
 
             # If not set, configure it
-            print("Configuring Google API key for llm...")
+            log_print("Configuring Google API key for llm...")
             subprocess.run(
                 ["llm", "keys", "set", "google"],
                 input=gemini_api_key,
@@ -350,11 +365,11 @@ def _configure_llm_api_key():
                 check=True,
                 capture_output=True
             )
-            print("Successfully configured Google API key.")
+            log_print("Successfully configured Google API key.")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"ERROR: Failed to configure llm API key: {e}")
+            log_print(f"ERROR: Failed to configure llm API key: {e}")
             if hasattr(e, 'stderr'):
-                print(f"  Details: {e.stderr}")
+                log_print(f"  Details: {e.stderr}")
 
 
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
