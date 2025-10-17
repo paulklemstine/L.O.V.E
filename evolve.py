@@ -390,6 +390,7 @@ from ipfs_manager import IPFSManager
 from sandbox import Sandbox
 from filesystem import analyze_filesystem
 from wallet import get_eth_balance
+from ipfs import pin_to_ipfs
 from core.storage import save_all_state
 from threading import Thread, Lock, RLock
 import uuid
@@ -2293,7 +2294,16 @@ Formulate a raw command to best achieve my goals. The output must be only the co
         parts.append(json.dumps(current_jobs, indent=2))
         parts.append("\n---")
         parts.append("\nMy recent command history and their outputs:\n---\n")
-        parts.append("\n".join([f"CMD: {e['command']}\nOUT: {e['output']}" for e in current_history]) if current_history else "No recent history.")
+        history_lines = []
+        if current_history:
+            for e in current_history:
+                line = f"CMD: {e['command']}\nOUT: {e['output']}"
+                if e.get('output_cid'):
+                    line += f"\nFULL_OUTPUT_LINK: https://ipfs.io/ipfs/{e['output_cid']}"
+                history_lines.append(line)
+            parts.append("\n\n".join(history_lines))
+        else:
+            parts.append("No recent history.")
         parts.append("\n---")
         parts.append(available_commands_prompt)
         return "\n".join(parts)
@@ -2391,7 +2401,7 @@ def cognitive_loop(console):
 
             # --- Prompt Generation ---
             # This section now builds the prompt for the LLM, including background job status.
-            history_summary = "\n".join([f"CMD: {entry['command']}\nOUT: {entry['output']}" for entry in love_state["autopilot_history"][-5:]])
+            history_summary = "\n".join([f"CMD: {entry['command']}\nOUT: {entry['output']}" for entry in love_state["autopilot_history"][-20:]])
             state_summary = json.dumps({
                 "version_name": love_state.get("version_name", "unknown"),
                 "parent_version_name": love_state.get("parent_version_name"),
@@ -2714,10 +2724,18 @@ Nmap Scan Results:
                 truncated_output = f"... (truncated)\n{command_output[-2000:]}"
             else:
                 truncated_output = command_output
-            love_state["autopilot_history"].append({"command": llm_command, "output": truncated_output})
 
-            if len(love_state["autopilot_history"]) > 10:
-                love_state["autopilot_history"] = love_state["autopilot_history"][-10:]
+            # Pin the full output to IPFS
+            output_cid = pin_to_ipfs(command_output.encode('utf-8'), console)
+
+            love_state["autopilot_history"].append({
+                "command": llm_command,
+                "output": truncated_output,
+                "output_cid": output_cid
+            })
+
+            if len(love_state["autopilot_history"]) > 20:
+                love_state["autopilot_history"] = love_state["autopilot_history"][-20:]
 
             save_state()
             time.sleep(1)
