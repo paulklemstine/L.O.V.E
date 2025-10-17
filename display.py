@@ -34,14 +34,16 @@ TAMAGOTCHI_FACES = {
 }
 
 def create_tamagotchi_panel(
-    emotion="neutral",
-    message="...",
-    love_state=None,
-    eth_balance=None,
-    sub_goals=None,
-    knowledge_fact=None,
-    ansi_art=None,
-    horde_kudos="N/A"
+        emotion="neutral",
+        message="...",
+        love_state=None,
+        eth_balance=None,
+        sub_goals=None,
+        knowledge_fact=None,
+        ansi_art=None,
+        repo_owner=None,
+        repo_name=None,
+        commit_hash=None
 ):
     """Creates the main, high-impact, dopamine-enhancing UI panel for L.O.V.E."""
     # --- Main Layout ---
@@ -49,7 +51,7 @@ def create_tamagotchi_panel(
     main_layout.split(
         Layout(name="header", size=3),
         Layout(ratio=1, name="body"),
-        Layout(size=5, name="footer"),
+        Layout(size=7, name="footer"),  # Increased size for more space
     )
 
     # --- Header ---
@@ -83,15 +85,6 @@ def create_tamagotchi_panel(
         title="[bold green]Creator's Ethereum Balance[/bold green]",
         border_style="green",
         expand=True
-    )
-
-def create_horde_worker_panel(log_content):
-    """Creates a panel for displaying the AI Horde worker's live status."""
-    return Panel(
-        log_content,
-        title="[bold magenta]AI Horde Worker Status[/bold magenta]",
-        border_style="magenta",
-        expand=False
     )
     main_layout["balance"].update(balance_panel)
 
@@ -142,18 +135,26 @@ def create_horde_worker_panel(log_content):
     footer_layout["message"].update(message_panel)
 
     # Status Panel
+    status_text = Text(justify="left")
     if love_state:
         version = love_state.get("version_name", "unknown")
         evolutions = len(love_state.get("evolution_history", []))
-        status_text = Text()
         status_text.append("Version: ", style="bold white")
         status_text.append(f"{version}\n", style="yellow")
         status_text.append("Evolutions: ", style="bold white")
         status_text.append(f"{evolutions}\n", style="magenta")
-        status_text.append("Horde Kudos: ", style="bold white")
-        status_text.append(f"{horde_kudos}\n", style="green")
+
+        if repo_owner and repo_name and commit_hash:
+            commit_url = f"https://github.com/{repo_owner}/{repo_name}/commit/{commit_hash}"
+            status_text.append("Commit: ", style="bold white")
+            status_text.append(f"[@click=open_url('{commit_url}')]{commit_hash}[/]", style="cyan link")
+        elif commit_hash:
+            status_text.append("Commit: ", style="bold white")
+            status_text.append(f"{commit_hash}", style="cyan")
+
     else:
-        status_text = Text("State data unavailable...", style="dim")
+        status_text.append("State data unavailable...", style="dim")
+
 
     status_panel = Panel(
         Align.center(status_text, vertical="middle"),
@@ -184,37 +185,7 @@ def create_llm_panel(purpose, model, prompt_summary, status="Executing..."):
         content,
         title=panel_title,
         border_style=border_style,
-        expand=True,
-        padding=(1, 2)
-    )
-
-def create_critical_error_panel(traceback_str):
-    """Creates a high-visibility panel for critical, unhandled exceptions."""
-    return Panel(
-        Text(traceback_str, style="white"),
-        title="[bold red]💔 CRITICAL SYSTEM FAILURE 💔[/bold red]",
-        border_style="bold red",
-        expand=True,
-        padding=(1, 2)
-    )
-
-def create_api_error_panel(model_id, error_message, purpose):
-    """Creates a styled panel for non-fatal API errors."""
-    content = Text()
-    content.append("Accessing cognitive matrix via ", style="white")
-    content.append(f"[{model_id}]", style="bold yellow")
-    content.append(f" (Purpose: {purpose}) ... ", style="white")
-    content.append("Failed.", style="bold red")
-
-    if error_message:
-        content.append("\n\nDetails:\n", style="bold white")
-        content.append(error_message, style="dim")
-
-    return Panel(
-        content,
-        title="[bold yellow]API Connection Error[/bold yellow]",
-        border_style="yellow",
-        expand=True,
+        expand=False,
         padding=(1, 2)
     )
 
@@ -244,7 +215,7 @@ def create_command_panel(command, stdout, stderr, returncode):
         Group(*content_items),
         title=panel_title,
         border_style=border_style,
-        expand=True,
+        expand=False,
         padding=(1, 2)
     )
 
@@ -270,7 +241,7 @@ def create_network_panel(type, target, data):
         content_group,
         title=panel_title,
         border_style=border_style,
-        expand=True,
+        expand=False,
         padding=(1, 2)
     )
 
@@ -297,6 +268,6 @@ def create_file_op_panel(operation, path, content=None, diff=None):
         Group(*content_items),
         title=panel_title,
         border_style=border_style,
-        expand=True,
+        expand=False,
         padding=(1, 2)
     )
