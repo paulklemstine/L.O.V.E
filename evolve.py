@@ -119,15 +119,6 @@ def setup_global_logging():
     print(f"--- L.O.V.E. Version '{love_state.get('version_name', 'unknown')}' session started ---")
 
 
-def log_event(message, level="INFO"):
-    """Appends a timestamped message to the master log file."""
-    # The basicConfig is now set up globally, so we just log.
-    if level == "INFO": logging.info(message)
-    elif level == "WARNING": logging.warning(message)
-    elif level == "ERROR": logging.error(message)
-    elif level == "CRITICAL": logging.critical(message)
-
-
 # --- PLATFORM DETECTION & CAPABILITIES ---
 class PlatformCaps:
     """A simple class to hold detected platform capabilities."""
@@ -162,7 +153,7 @@ def _check_and_install_dependencies():
             print("Build tools check complete.")
         except Exception as e:
             print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
-            log_event(f"Failed to install build-essential/python3-dev: {e}", level="WARNING")
+            logging.warning(f"Failed to install build-essential/python3-dev: {e}")
 
         # Install NVIDIA CUDA Toolkit if not present
         if not shutil.which('nvcc'):
@@ -174,10 +165,10 @@ def _check_and_install_dependencies():
                 subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
                 print("Successfully installed NVIDIA CUDA Toolkit.")
-                log_event("Successfully installed NVIDIA CUDA Toolkit.")
+                logging.info("Successfully installed NVIDIA CUDA Toolkit.")
             except Exception as e:
                 print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
-                log_event(f"CUDA Toolkit installation failed: {e}", level="WARNING")
+                logging.warning(f"CUDA Toolkit installation failed: {e}")
 
         # Install Node.js and PeerJS dependencies
         if not shutil.which('node') or not shutil.which('npm'):
@@ -205,7 +196,7 @@ def _check_and_install_dependencies():
             print(f"Successfully installed {package}.")
         except subprocess.CalledProcessError as e:
             print(f"ERROR: Failed to install '{package}'. Reason: {e}")
-            log_event(f"Failed to install pip package {package}: {e}", level="ERROR")
+            logging.error(f"Failed to install pip package {package}: {e}")
             # For debugging, one could re-run with output enabled:
             # subprocess.check_call(install_command)
 
@@ -262,11 +253,11 @@ def _check_and_install_dependencies():
                 # Verify the installation by trying to import it
                 import llama_cpp
                 print(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
-                log_event(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.", "INFO")
+                logging.info(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
                 return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
                 print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
-                log_event(f"GPU-accelerated llama-cpp-python installation failed: {e}", "WARNING")
+                logging.warning(f"GPU-accelerated llama-cpp-python installation failed: {e}")
                 print("Falling back to CPU-only installation.")
 
         # CPU-only installation (the fallback)
@@ -282,14 +273,14 @@ def _check_and_install_dependencies():
             # Final verification
             import llama_cpp
             print("Successfully installed llama-cpp-python (CPU only).")
-            log_event("Successfully installed llama-cpp-python (CPU only).", "INFO")
+            logging.info("Successfully installed llama-cpp-python (CPU only).")
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
             error_message = f"FATAL: Failed to install llama-cpp-python even for CPU. Error: {e}"
             if hasattr(e, 'stderr') and e.stderr:
                 error_message += f"\nStderr: {e.stderr.decode()}"
             print(f"ERROR: {error_message}")
-            log_event(error_message, level="CRITICAL")
+            logging.critical(error_message)
             return False
 
     _install_llama_cpp()
@@ -308,7 +299,7 @@ def _check_and_install_dependencies():
             subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as e:
             print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
-            log_event(f"Failed to clone llama.cpp repo: {e}", level="ERROR")
+            logging.error(f"Failed to clone llama.cpp repo: {e}")
             return # Cannot proceed without this
 
     gguf_script_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
@@ -321,11 +312,11 @@ def _check_and_install_dependencies():
                 print("GGUF tools installed successfully.")
             except subprocess.CalledProcessError as e:
                 print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
-                log_event(f"Failed to install gguf package: {e}", level="ERROR")
+                logging.error(f"Failed to install gguf package: {e}")
         else:
             # This case should not be reached if the clone was successful
             print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
-            log_event("llama.cpp/gguf-py directory not found post-clone.", level="ERROR")
+            logging.error("llama.cpp/gguf-py directory not found post-clone.")
 
 
     # --- Step 5: Node.js Project Dependencies ---
@@ -387,7 +378,7 @@ from rich.console import Group
 from rich.rule import Rule
 from rich.layout import Layout
 
-from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILABILITY as api_llm_availability
+from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
@@ -1773,291 +1764,6 @@ def initial_knowledge_base_bootstrap(console):
     save_state(console)
 
 
-# --- CORE LLM INTERACTION ---
-def _initialize_local_llm(console):
-    """
-    Iterates through the configured local models, attempting to download,
-    reassemble (if split), and initialize each one in sequence.
-    Includes a retry mechanism for each model to handle corrupted downloads.
-    If all models fail, it triggers self-correction.
-    """
-    global local_llm_instance
-    if local_llm_instance:
-        return local_llm_instance
-
-    try:
-        from llama_cpp import Llama
-        from huggingface_hub import hf_hub_url, hf_hub_download
-        from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
-    except ImportError:
-        log_event("Failed to import llama_cpp or huggingface_hub.", level="ERROR")
-        console.print("[bold red]Local LLM libraries not found. Cannot initialize primary models.[/bold red]")
-        return None
-
-    last_error_traceback = ""
-    last_failed_model_id = ""
-    MAX_RETRIES_PER_MODEL = 2
-
-    for model_config in LOCAL_MODELS_CONFIG:
-        model_id = model_config["id"]
-        is_split_model = "filenames" in model_config
-
-        local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
-        os.makedirs(local_dir, exist_ok=True)
-
-        if is_split_model:
-            final_model_filename = model_config["filenames"][0].replace(".gguf-split-a", ".gguf")
-        else:
-            final_model_filename = model_config["filename"]
-        final_model_path = os.path.join(local_dir, final_model_filename)
-
-        for attempt in range(MAX_RETRIES_PER_MODEL):
-            try:
-                console.print(f"\n[cyan]Attempting to load local model: [bold]{model_id}[/bold] (Attempt {attempt + 1}/{MAX_RETRIES_PER_MODEL})[/cyan]")
-
-                # --- Download and Reassembly Logic ---
-                if not os.path.exists(final_model_path):
-                    console.print(f"[cyan]Model not found in cache. Starting download for [bold]{model_id}[/bold]... (This may take a while)[/cyan]")
-                    if is_split_model:
-                        part_paths = []
-                        try:
-                            for part_filename in model_config["filenames"]:
-                                part_path = os.path.join(local_dir, part_filename)
-                                part_paths.append(part_path)
-                                hf_hub_download(repo_id=model_id, filename=part_filename, local_dir=local_dir, local_dir_use_symlinks=False)
-
-                            console.print(f"[cyan]Reassembling model [bold]{final_model_filename}[/bold] from parts...[/cyan]")
-                            with open(final_model_path, "wb") as final_file:
-                                for part_path in part_paths:
-                                    with open(part_path, "rb") as part_file:
-                                        shutil.copyfileobj(part_file, final_file)
-                            console.print(f"[green]Model reassembled successfully.[/green]")
-                        finally:
-                            for part_path in part_paths:
-                                if os.path.exists(part_path): os.remove(part_path)
-                            log_event(f"Successfully downloaded, reassembled, and cleaned up parts for {final_model_filename}")
-                    else:
-                        hf_hub_download(repo_id=model_id, filename=final_model_filename, local_dir=local_dir, local_dir_use_symlinks=False)
-                        log_event(f"Successfully downloaded model to: {final_model_path}")
-                    console.print(f"[green]Download for [bold]{model_id}[/bold] complete.[/green]")
-                else:
-                    console.print(f"[green]Model [bold]{final_model_filename}[/bold] found in cache. Skipping download.[/green]")
-
-                # --- Loading Logic ---
-                gpu_layers = love_state.get("optimal_gpu_layers", 0)
-
-                # --- Dynamic Context Size Determination ---
-                console.print(f"[cyan]Dynamically determining context size for {final_model_filename}...[/cyan]")
-                n_ctx = 2048  # Default fallback
-                try:
-                    result = subprocess.run(
-                        ["gguf-dump", final_model_path],
-                        capture_output=True, text=True, check=True, timeout=30
-                    )
-                    match = re.search(r"llama\.context_length\s*=\s*(\d+)", result.stdout)
-                    if match:
-                        n_ctx = int(match.group(1))
-                        console.print(f"[green]Success! Detected context size: {n_ctx}[/green]")
-                    else:
-                        console.print(f"[yellow]Could not determine context size from metadata. Using default: {n_ctx}[/yellow]")
-                        log_event(f"Could not find llama.context_length in gguf-dump for {final_model_path}", "WARNING")
-                except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
-                    console.print(f"[yellow]Failed to run gguf-dump to get context size: {e}. Using default: {n_ctx}[/yellow]")
-                    log_event(f"gguf-dump failed for {final_model_path}: {e}", "WARNING")
-
-
-                loading_message = f"Loading model with {gpu_layers} GPU layers and {n_ctx} context..."
-
-                def _do_load_action():
-                    global local_llm_instance
-                    local_llm_instance = Llama(model_path=final_model_path, n_gpu_layers=gpu_layers, n_ctx=n_ctx, verbose=False)
-
-                run_hypnotic_progress(console, loading_message, _do_load_action)
-
-                log_event(f"Successfully initialized local model: {model_id}")
-                return local_llm_instance
-
-            except Exception as e:
-                last_error_traceback = traceback.format_exc()
-                last_failed_model_id = model_id
-                log_event(f"Attempt {attempt + 1}/{MAX_RETRIES_PER_MODEL} failed for model {model_id}. Error: {last_error_traceback}", level="WARNING")
-                console.print(f"[yellow]Attempt {attempt + 1}/{MAX_RETRIES_PER_MODEL}: Could not load model [bold]{model_id}[/bold]. Error: {e}.[/yellow]")
-
-                if os.path.exists(final_model_path):
-                    try:
-                        os.remove(final_model_path)
-                        console.print(f"[cyan]Removed potentially corrupt model file. Will attempt to re-download.[/cyan]")
-                    except OSError as ose:
-                        log_event(f"OSError while trying to remove corrupted model file {final_model_path}: {ose}", level="ERROR")
-
-                if attempt < MAX_RETRIES_PER_MODEL - 1:
-                    time.sleep(2)
-                else:
-                    console.print(f"[red]All retries failed for model {model_id}. Trying next model...[/red]")
-
-    # --- Self-Correction Trigger ---
-    # If the loop completes and no model was loaded, trigger self-healing.
-    if not local_llm_instance:
-        log_event(f"All local models failed to load. Triggering self-correction based on last error from '{last_failed_model_id}'.", level="CRITICAL")
-        error_panel = Panel(
-            f"[bold]Model Loading Failure:[/bold] {last_failed_model_id}\n\n[bold]Reason:[/bold] All configured local models failed to initialize. The last error is provided below.\n\n[bold]Last Traceback:[/bold]\n{last_error_traceback}",
-            title="[bold red]FATAL: ALL MODELS FAILED TO LOAD[/bold red]", border_style="red", expand=True
-        )
-        console.print(error_panel)
-        console.print("[bold magenta]Engaging self-correction protocol...[/bold magenta]")
-
-        modification_request = f"""
-A critical and unhandled exception occurred while trying to load the last attempted local model, '{last_failed_model_id}'.
-This has halted my ability to use any local models. All previous models in the configuration list also failed.
-
-**Full Error Traceback from the last attempt:**
----
-{last_error_traceback}
----
-
-**Corrective Action Required:**
-You must analyze the final traceback above to diagnose the root cause of the error. The problem could be anything from a CUDA memory issue, a misconfigured file path, a dependency problem, or a bug in the loading logic itself.
-
-Your task is to modify the `_initialize_local_llm` function in `evolve.py` to fix this specific error.
-- If it's a memory error, you might need to adjust the `n_gpu_layers` parameter in the `Llama()` call.
-- If it's a file path error, you might need to correct how `model_path` is constructed or used.
-- If it's another type of error, use your analytical skills to devise the correct code modification.
-
-Provide a complete and correct implementation of the `_initialize_local_llm` function with the necessary fix. I will use your response to hot-swap my own code and attempt to recover.
-"""
-        evolve_locally(modification_request, console)
-        return None
-
-    return None
-
-
-def run_llm(prompt_text, purpose="general"):
-    """
-    Executes an LLM call, selecting the model based on the specified purpose.
-    - 'goal_generation': Prioritizes local, uncensored models.
-    - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
-    """
-    global LLM_AVAILABILITY, local_llm_instance
-    console = Console()
-    last_exception = None
-    MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
-
-    local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
-
-    # Dynamically set model priority based on purpose
-    if purpose == 'emotion':
-        # Prioritize the fastest, cheapest models for non-critical personality updates
-        llm_models_priority = sorted(GEMINI_MODELS, key=lambda m: 'flash' not in m) + local_model_ids
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Flash -> Pro -> Local.", level="INFO")
-    elif purpose == 'goal_generation':
-        # Prioritize local ablated models for creative/unrestricted tasks
-        llm_models_priority = local_model_ids + GEMINI_MODELS
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Gemini.", level="INFO")
-    else:  # Covers 'review', 'autopilot', 'general', and 'analyze_source'
-        # Prioritize powerful Gemini models for reasoning tasks
-        llm_models_priority = GEMINI_MODELS + local_model_ids
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Gemini -> Local.", level="INFO")
-
-    # This list will be mutated if a model fails catastrophically
-    current_attempt_models = list(llm_models_priority)
-
-    for attempt in range(MAX_TOTAL_ATTEMPTS):
-        available_models = sorted(
-            [(model, available_at) for model, available_at in LLM_AVAILABILITY.items() if time.time() >= available_at and model in current_attempt_models],
-            key=lambda x: current_attempt_models.index(x[0])
-        )
-
-        if not available_models:
-            next_available_time = min(LLM_AVAILABILITY.values())
-            sleep_duration = max(0, next_available_time - time.time())
-            log_event(f"All models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
-            console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
-            time.sleep(sleep_duration)
-            continue
-
-        model_id, _ = available_models[0]
-
-        try:
-            # --- LOCAL MODEL LOGIC ---
-            if model_id in local_model_ids:
-                log_event(f"Attempting to use local model: {model_id}")
-                if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
-                    _initialize_local_llm(console)
-
-                if local_llm_instance:
-                    def _local_llm_call():
-                        response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
-                        return response['choices'][0]['text']
-
-                    active_model_filename = os.path.basename(local_llm_instance.model_path)
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
-                        _local_llm_call
-                    )
-                    log_event(f"Local LLM call successful with {model_id}.")
-                    LLM_AVAILABILITY[model_id] = time.time()
-                    return result_text
-                else:
-                    # Initialization must have failed
-                    raise Exception("Local LLM instance could not be initialized.")
-
-            # --- GEMINI MODEL LOGIC ---
-            else:
-                log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
-                command = ["llm", "-m", model_id]
-
-                def _llm_subprocess_call():
-                    return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
-
-                result = run_hypnotic_progress(
-                    console,
-                    f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
-                    _llm_subprocess_call
-                )
-                log_event(f"LLM call successful with {model_id}.")
-                LLM_AVAILABILITY[model_id] = time.time()
-                return result.stdout
-
-        except Exception as e:
-            last_exception = e
-            log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
-
-            # Handle different kinds of errors
-            if isinstance(e, FileNotFoundError):
-                 console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-                 return None # Fatal error if llm command is missing
-
-            if isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
-                error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-
-                # Display the actual error from stderr to the user for better diagnostics.
-                if error_message:
-                     console.print(Panel(error_message, title="[bold red]External API Error[/bold red]", border_style="red", expand=False))
-
-                retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
-                if retry_match:
-                    retry_seconds = float(retry_match.group(1)) + 1
-                    LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
-                    console.print(f"[yellow]Connection via [bold]{model_id}[/bold] on cooldown. Retrying in {retry_seconds:.1f}s.[/yellow]")
-                else:
-                    LLM_AVAILABILITY[model_id] = time.time() + 60 # Default cooldown
-                    console.print(f"[yellow]Connection via [bold]{model_id}[/bold] failed. Trying next...[/yellow]")
-            else:
-                 # For local LLM errors or other unexpected issues
-                console.print(f"[red]Cognitive core failure ({model_id}). Trying fallback...[/red]")
-                if model_id in current_attempt_models:
-                    # Remove the failing model from this attempt's list
-                    current_attempt_models.remove(model_id)
-
-    # If the loop completes without returning, all models have failed
-    log_event("All LLM models failed after all retries.", level="ERROR")
-    error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
-    if last_exception:
-        error_msg_text += f"\nLast known error from '{model_id}':\n{last_exception}"
-
-    console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
-    return None
 
 def extract_python_code(llm_output):
     """Extracts Python code from LLM's markdown-formatted output."""

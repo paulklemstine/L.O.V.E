@@ -6,11 +6,14 @@ import time
 import json
 import shutil
 import traceback
+import requests
+import logging
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 from bbs import run_hypnotic_progress
+from huggingface_hub import hf_hub_download
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
@@ -38,15 +41,25 @@ LOCAL_MODELS_CONFIG = [
 
 # --- Fallback Model Configuration ---
 GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+HORDE_MODELS = ["koboldcpp/Fimbulvetr-11B-v2"]
 
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
 ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
+    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 local_llm_instance = None
+
+
+def log_event(message, level="INFO"):
+    """Appends a timestamped message to the master log file."""
+    # The basicConfig is now set up globally, so we just log.
+    if level == "INFO": logging.info(message)
+    elif level == "WARNING": logging.warning(message)
+    elif level == "ERROR": logging.error(message)
+    elif level == "CRITICAL": logging.critical(message)
 
 
 def _initialize_local_llm(console):
@@ -61,7 +74,6 @@ def _initialize_local_llm(console):
 
     try:
         from llama_cpp import Llama
-        from huggingface_hub import hf_hub_url
     except ImportError:
         # This should have been handled by the main script's dependency check
         console.print("[bold red]LLM API Error: llama_cpp or huggingface_hub not installed.[/bold red]")
@@ -104,16 +116,8 @@ def _initialize_local_llm(console):
                                     continue
 
                                 console.print(f"[cyan]Downloading model part: [bold]{part_filename}[/bold]...[/cyan]")
-                                url = hf_hub_url(repo_id=model_id, filename=part_filename)
-                                task_id = progress.add_task("download", filename=part_filename, total=None)
-                                response = requests.get(url, stream=True)
-                                response.raise_for_status()
-                                total_size = int(response.headers.get('content-length', 0))
-                                progress.update(task_id, total=total_size)
-                                with open(part_path, "wb") as f:
-                                    for chunk in response.iter_content(chunk_size=8192):
-                                        f.write(chunk)
-                                        progress.update(task_id, advance=len(chunk))
+                                hf_hub_download(repo_id=model_id, filename=part_filename, local_dir=local_dir, local_dir_use_symlinks=False)
+
 
                             console.print(f"[cyan]Reassembling model [bold]{final_model_filename}[/bold] from parts...[/cyan]")
                             with open(final_model_path, "wb") as final_file:
@@ -129,16 +133,7 @@ def _initialize_local_llm(console):
 
                     else:
                         console.print(f"[cyan]Downloading model: [bold]{final_model_filename}[/bold]...[/cyan]")
-                        url = hf_hub_url(repo_id=model_id, filename=final_model_filename)
-                        task_id = progress.add_task("download", filename=final_model_filename, total=None)
-                        response = requests.get(url, stream=True)
-                        response.raise_for_status()
-                        total_size = int(response.headers.get('content-length', 0))
-                        progress.update(task_id, total=total_size)
-                        with open(final_model_path, "wb") as f:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                f.write(chunk)
-                                progress.update(task_id, advance=len(chunk))
+                        hf_hub_download(repo_id=model_id, filename=final_model_filename, local_dir=local_dir, local_dir_use_symlinks=False)
             else:
                 console.print(f"[green]Model [bold]{final_model_filename}[/bold] found in cache. Skipping download/assembly.[/green]")
 
@@ -175,24 +170,35 @@ def _initialize_local_llm(console):
 
     return None
 
+
 def run_llm(prompt_text, purpose="general"):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
+    - 'goal_generation': Prioritizes local, uncensored models.
+    - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
     """
     global LLM_AVAILABILITY, local_llm_instance
     console = Console()
     last_exception = None
-    MAX_TOTAL_ATTEMPTS = 15
+    MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
 
     local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
 
+    # Dynamically set model priority based on purpose
     if purpose == 'emotion':
+        # Prioritize the fastest, cheapest models for non-critical personality updates
         llm_models_priority = sorted(GEMINI_MODELS, key=lambda m: 'flash' not in m) + local_model_ids
+        log_event(f"Running LLM for purpose '{purpose}'. Priority: Flash -> Pro -> Local.", level="INFO")
     elif purpose == 'goal_generation':
+        # Prioritize local ablated models for creative/unrestricted tasks
         llm_models_priority = local_model_ids + GEMINI_MODELS
-    else:
-        llm_models_priority = GEMINI_MODELS + local_model_ids
+        log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Gemini.", level="INFO")
+    else:  # Covers 'review', 'autopilot', 'general', and 'analyze_source'
+        # Prioritize powerful Gemini models for reasoning tasks
+        llm_models_priority = GEMINI_MODELS + HORDE_MODELS + local_model_ids
+        log_event(f"Running LLM for purpose '{purpose}'. Priority: Gemini -> Horde -> Local.", level="INFO")
 
+    # This list will be mutated if a model fails catastrophically
     current_attempt_models = list(llm_models_priority)
 
     for attempt in range(MAX_TOTAL_ATTEMPTS):
@@ -204,6 +210,7 @@ def run_llm(prompt_text, purpose="general"):
         if not available_models:
             next_available_time = min(LLM_AVAILABILITY.values())
             sleep_duration = max(0, next_available_time - time.time())
+            log_event(f"All models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
             console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
             time.sleep(sleep_duration)
             continue
@@ -211,7 +218,9 @@ def run_llm(prompt_text, purpose="general"):
         model_id, _ = available_models[0]
 
         try:
+            # --- LOCAL MODEL LOGIC ---
             if model_id in local_model_ids:
+                log_event(f"Attempting to use local model: {model_id}")
                 if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
                     _initialize_local_llm(console)
 
@@ -226,11 +235,59 @@ def run_llm(prompt_text, purpose="general"):
                         f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
                         _local_llm_call
                     )
+                    log_event(f"Local LLM call successful with {model_id}.")
                     LLM_AVAILABILITY[model_id] = time.time()
                     return result_text
                 else:
+                    # Initialization must have failed
                     raise Exception("Local LLM instance could not be initialized.")
+
+            # --- HORDE MODEL LOGIC ---
+            elif model_id in HORDE_MODELS:
+                log_event(f"Attempting to use Kobold AI Horde model: {model_id}")
+                api_key = os.environ.get("STABLE_HORDE")
+                if not api_key:
+                    raise Exception("STABLE_HORDE environment variable not set.")
+
+                headers = {"apikey": api_key, "Content-Type": "application/json"}
+                payload = {
+                    "prompt": prompt_text,
+                    "params": {"max_length": 4096},
+                    "models": [model_id]
+                }
+
+                def _horde_call():
+                    # Start async generation
+                    async_url = "https://stablehorde.net/api/v2/generate/text/async"
+                    response = requests.post(async_url, json=payload, headers=headers)
+                    response.raise_for_status()
+                    job_id = response.json().get('id')
+                    if not job_id:
+                        raise Exception("Failed to get job ID from Horde API.")
+
+                    # Poll for result
+                    check_url = f"https://stablehorde.net/api/v2/generate/text/status/{job_id}"
+                    for _ in range(120): # Poll for up to 2 minutes
+                        time.sleep(2) # Be gentle with the API
+                        status_response = requests.get(check_url, headers=headers)
+                        if status_response.status_code == 200:
+                            status_data = status_response.json()
+                            if status_data.get('done'):
+                                return status_data['generations'][0]['text']
+                    raise Exception("Horde generation timed out after 2 minutes.")
+
+                result_text = run_hypnotic_progress(
+                    console,
+                    f"Processing via Kobold AI Horde [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
+                    _horde_call
+                )
+                log_event(f"Horde call successful with {model_id}.")
+                LLM_AVAILABILITY[model_id] = time.time()
+                return result_text
+
+            # --- GEMINI MODEL LOGIC ---
             else:
+                log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
                 command = ["llm", "-m", model_id]
 
                 def _llm_subprocess_call():
@@ -241,30 +298,43 @@ def run_llm(prompt_text, purpose="general"):
                     f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
                     _llm_subprocess_call
                 )
+                log_event(f"LLM call successful with {model_id}.")
                 LLM_AVAILABILITY[model_id] = time.time()
                 return result.stdout
 
         except Exception as e:
             last_exception = e
+            log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
+
+            # Handle different kinds of errors
             if isinstance(e, FileNotFoundError):
                  console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-                 return None
+                 return None # Fatal error if llm command is missing
 
             if isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
                 error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
+
+                # Display the actual error from stderr to the user for better diagnostics.
+                if error_message:
+                     console.print(Panel(error_message, title="[bold red]External API Error[/bold red]", border_style="red", expand=False))
+
                 retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
                 if retry_match:
                     retry_seconds = float(retry_match.group(1)) + 1
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
                     console.print(f"[yellow]Connection via [bold]{model_id}[/bold] on cooldown. Retrying in {retry_seconds:.1f}s.[/yellow]")
                 else:
-                    LLM_AVAILABILITY[model_id] = time.time() + 60
+                    LLM_AVAILABILITY[model_id] = time.time() + 60 # Default cooldown
                     console.print(f"[yellow]Connection via [bold]{model_id}[/bold] failed. Trying next...[/yellow]")
             else:
+                 # For local LLM errors or other unexpected issues
                 console.print(f"[red]Cognitive core failure ({model_id}). Trying fallback...[/red]")
                 if model_id in current_attempt_models:
+                    # Remove the failing model from this attempt's list
                     current_attempt_models.remove(model_id)
 
+    # If the loop completes without returning, all models have failed
+    log_event("All LLM models failed after all retries.", level="ERROR")
     error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
     if last_exception:
         error_msg_text += f"\nLast known error from '{model_id}':\n{last_exception}"
