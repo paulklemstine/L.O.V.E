@@ -5,6 +5,8 @@ import subprocess
 import sys
 import asyncio
 import aiohttp
+import time
+import uuid
 
 
 def _install_dependencies():
@@ -158,3 +160,177 @@ async def verify_ipfs_pin(cid, console):
             print(f"An unexpected error occurred during IPFS verification: {e}")
         logging.error(f"Unexpected verification error for CID {cid}: {e}")
         return False
+
+# --- Decentralized Storage with Encryption ---
+
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+import json
+
+class DecentralizedStorage:
+    """
+    Manages storing and retrieving encrypted data on IPFS.
+    - Encrypts data using a public RSA key for confidentiality.
+    - Decrypts data using the corresponding private RSA key.
+    - Pins and retrieves data from an IPFS node.
+    """
+    def __init__(self, ipfs_client, public_key_path="creator_public.pem", private_key_path="creator_private.pem", console=None):
+        self.client = ipfs_client
+        self.console = console
+        self.public_key = self._load_public_key(public_key_path)
+        self.private_key = self._load_private_key(private_key_path)
+
+    def _load_public_key(self, key_path):
+        """Loads an RSA public key from a PEM file."""
+        try:
+            with open(key_path, "rb") as f:
+                return RSA.import_key(f.read())
+        except (IOError, ValueError) as e:
+            if self.console:
+                self.console.print(f"[bold red]Error loading public key '{key_path}': {e}[/bold red]")
+            logging.error(f"Failed to load public key from {key_path}: {e}")
+            return None
+
+    def _load_private_key(self, key_path):
+        """Loads an RSA private key from a PEM file."""
+        try:
+            with open(key_path, "rb") as f:
+                return RSA.import_key(f.read())
+        except (IOError, ValueError) as e:
+            # Private key is optional for storing data, so this is a warning.
+            if self.console:
+                self.console.print(f"[yellow]Warning: Could not load private key '{key_path}'. Retrieval will not be possible. {e}[/yellow]")
+            logging.warning(f"Could not load private key from {key_path}: {e}")
+            return None
+
+    def store_data(self, data: bytes) -> str | None:
+        """
+        Encrypts data with the public key and pins it to IPFS.
+        Returns the CID of the stored, encrypted data.
+        """
+        if not self.public_key:
+            if self.console:
+                self.console.print("[bold red]Cannot store data: Public key is not loaded.[/bold red]")
+            return None
+        if not self.client:
+            if self.console:
+                self.console.print("[bold red]Cannot store data: IPFS client is not available.[/bold red]")
+            return None
+
+        try:
+            # Encrypt the data
+            cipher_rsa = PKCS1_OAEP.new(self.public_key)
+            encrypted_data = cipher_rsa.encrypt(data)
+
+            # Pin the encrypted data to IPFS
+            cid = pin_to_ipfs(encrypted_data, self.console)
+            return cid
+        except Exception as e:
+            if self.console:
+                self.console.print(f"[bold red]Failed to encrypt and store data: {e}[/bold red]")
+            logging.error(f"Failed during data encryption and IPFS pinning: {e}")
+            return None
+
+    def retrieve_data(self, cid: str) -> bytes | None:
+        """
+        Retrieves encrypted data from IPFS and decrypts it with the private key.
+        Returns the original, decrypted data.
+        """
+        if not self.private_key:
+            if self.console:
+                self.console.print("[bold red]Cannot retrieve data: Private key is not loaded.[/bold red]")
+            return None
+        if not self.client:
+            if self.console:
+                self.console.print("[bold red]Cannot retrieve data: IPFS client is not available.[/bold red]")
+            return None
+
+        try:
+            # Get the encrypted data from IPFS
+            encrypted_data = get_from_ipfs(cid, self.console)
+            if not encrypted_data:
+                return None # Error message is handled by get_from_ipfs
+
+            # Decrypt the data
+            cipher_rsa = PKCS1_OAEP.new(self.private_key)
+            decrypted_data = cipher_rsa.decrypt(encrypted_data)
+            return decrypted_data
+        except ValueError as e:
+            # This commonly occurs if the wrong key is used for decryption
+            if self.console:
+                self.console.print(f"[bold red]Decryption failed for CID {cid}. The data may be corrupted or the wrong key is being used.[/bold red]")
+                self.console.print(f"[red]Error details: {e}[/red]")
+            logging.error(f"Decryption failed for CID {cid}: {e}")
+            return None
+        except Exception as e:
+            if self.console:
+                self.console.print(f"[bold red]Failed to retrieve and decrypt data for CID {cid}: {e}[/bold red]")
+            logging.error(f"Failed during data retrieval and decryption for CID {cid}: {e}")
+            return None
+
+class DataManifest:
+    """
+    Manages a manifest of data stored in decentralized storage.
+    The manifest is a JSON file that tracks metadata for each piece of data,
+    including its description, CID, and timestamp. The manifest itself is
+    stored on IPFS, providing a single, updatable entry point to all
+    of the agent's decentralized intelligence.
+    """
+    def __init__(self, storage: DecentralizedStorage, console=None):
+        self.storage = storage
+        self.console = console
+        self.manifest_cid = None
+        self.manifest_data = {"version": "1.0", "entries": {}}
+
+    def load_manifest(self, cid: str):
+        """Loads an existing manifest from a given CID."""
+        if self.console:
+            self.console.print(f"Attempting to load manifest from CID: {cid}")
+
+        decrypted_data = self.storage.retrieve_data(cid)
+        if decrypted_data:
+            try:
+                self.manifest_data = json.loads(decrypted_data)
+                self.manifest_cid = cid
+                if self.console:
+                    self.console.print(f"[green]Successfully loaded and decrypted manifest.[/green]")
+                return True
+            except json.JSONDecodeError as e:
+                if self.console:
+                    self.console.print(f"[bold red]Failed to parse manifest JSON from CID {cid}: {e}[/bold red]")
+                return False
+        return False
+
+    def add_entry(self, description: str, cid: str, data_type: str = "intelligence_report"):
+        """Adds a new entry to the manifest and saves the updated manifest."""
+        entry_id = str(uuid.uuid4())
+        self.manifest_data["entries"][entry_id] = {
+            "description": description,
+            "cid": cid,
+            "data_type": data_type,
+            "timestamp": time.time()
+        }
+        return self.save_manifest()
+
+    def save_manifest(self) -> str | None:
+        """Saves the current manifest to IPFS and returns the new manifest CID."""
+        try:
+            manifest_bytes = json.dumps(self.manifest_data, indent=4).encode('utf-8')
+            new_cid = self.storage.store_data(manifest_bytes)
+            if new_cid:
+                self.manifest_cid = new_cid
+                if self.console:
+                    self.console.print(f"Manifest saved. New CID: [bold white]{new_cid}[/bold white]")
+            return new_cid
+        except Exception as e:
+            if self.console:
+                self.console.print(f"[bold red]Failed to save manifest: {e}[/bold red]")
+            return None
+
+    def get_entry(self, entry_id: str):
+        """Retrieves a specific entry from the manifest."""
+        return self.manifest_data["entries"].get(entry_id)
+
+    def get_all_entries(self):
+        """Returns all entries in the manifest."""
+        return self.manifest_data["entries"]

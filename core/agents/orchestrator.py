@@ -1,6 +1,7 @@
 from core.planning import Planner, mock_llm_call
 from core.tools import ToolRegistry, SecureExecutor, web_search, read_file
 from core.execution_engine import ExecutionEngine
+from ipfs import get_ipfs_client, DecentralizedStorage, DataManifest
 
 class Orchestrator:
     """
@@ -30,6 +31,17 @@ class Orchestrator:
         self.tool_registry = ToolRegistry()
         self.tool_registry.register_tool("web_search", web_search)
         self.tool_registry.register_tool("read_file", read_file)
+
+        # Initialize IPFS and decentralized storage
+        self.ipfs_client = get_ipfs_client(None)
+        self.decentralized_storage = DecentralizedStorage(self.ipfs_client)
+        self.data_manifest = DataManifest(self.decentralized_storage)
+
+        # Register new tools for decentralized storage
+        self.tool_registry.register_tool("store_decentralized_data", self.decentralized_storage.store_data)
+        self.tool_registry.register_tool("retrieve_decentralized_data", self.decentralized_storage.retrieve_data)
+        self.tool_registry.register_tool("add_manifest_entry", self.data_manifest.add_entry)
+        self.tool_registry.register_tool("load_manifest", self.data_manifest.load_manifest)
 
         # 3. Initialize the Secure Executor
         self.executor = SecureExecutor()
