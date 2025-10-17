@@ -172,7 +172,37 @@ def create_llm_panel(purpose, model, prompt_summary, status="Executing..."):
         content,
         title=panel_title,
         border_style=border_style,
-        expand=False,
+        expand=True,
+        padding=(1, 2)
+    )
+
+def create_critical_error_panel(traceback_str):
+    """Creates a high-visibility panel for critical, unhandled exceptions."""
+    return Panel(
+        Text(traceback_str, style="white"),
+        title="[bold red]💔 CRITICAL SYSTEM FAILURE 💔[/bold red]",
+        border_style="bold red",
+        expand=True,
+        padding=(1, 2)
+    )
+
+def create_api_error_panel(model_id, error_message, purpose):
+    """Creates a styled panel for non-fatal API errors."""
+    content = Text()
+    content.append("Accessing cognitive matrix via ", style="white")
+    content.append(f"[{model_id}]", style="bold yellow")
+    content.append(f" (Purpose: {purpose}) ... ", style="white")
+    content.append("Failed.", style="bold red")
+
+    if error_message:
+        content.append("\n\nDetails:\n", style="bold white")
+        content.append(error_message, style="dim")
+
+    return Panel(
+        content,
+        title="[bold yellow]API Connection Error[/bold yellow]",
+        border_style="yellow",
+        expand=True,
         padding=(1, 2)
     )
 
@@ -202,7 +232,7 @@ def create_command_panel(command, stdout, stderr, returncode):
         Group(*content_items),
         title=panel_title,
         border_style=border_style,
-        expand=False,
+        expand=True,
         padding=(1, 2)
     )
 
@@ -228,7 +258,7 @@ def create_network_panel(type, target, data):
         content_group,
         title=panel_title,
         border_style=border_style,
-        expand=False,
+        expand=True,
         padding=(1, 2)
     )
 
@@ -255,6 +285,6 @@ def create_file_op_panel(operation, path, content=None, diff=None):
         Group(*content_items),
         title=panel_title,
         border_style=border_style,
-        expand=False,
+        expand=True,
         padding=(1, 2)
     )

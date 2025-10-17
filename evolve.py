@@ -394,7 +394,7 @@ from rich.rule import Rule
 from rich.layout import Layout
 
 from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -2758,7 +2758,7 @@ Nmap Scan Results:
         except Exception as e:
             full_traceback = traceback.format_exc()
             log_event(f"Error during cognitive cycle: {e}\n{full_traceback}", level="ERROR")
-            console.print(Panel(f"[bold red]Cognitive Cycle Exception:[/bold red]\n{full_traceback}", title="[bold red]CYCLE ERROR[/bold red]", border_style="red"))
+            console.print(create_critical_error_panel(full_traceback))
 
             # Record the failed command to history so the AI doesn't repeat it.
             if 'llm_command' in locals() and llm_command:
