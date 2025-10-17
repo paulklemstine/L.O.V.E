@@ -19,3 +19,4 @@ bin/
 kubo/
 .ipfs_repo/
 ipfs.log
+:memory:
