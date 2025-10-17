@@ -8,7 +8,7 @@ class Sandbox:
     """
     Manages a temporary, isolated environment for testing code changes.
     """
-    def __init__(self, repo_url, base_dir="jules_sandbox"):
+    def __init__(self, repo_url, base_dir="love_sandbox"):
         self.repo_url = repo_url
         self.base_dir = os.path.abspath(base_dir)
         self.sandbox_path = None

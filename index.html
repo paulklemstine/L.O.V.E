@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jules: A Self Modifying Organism</title>
+    <title>L.O.V.E.: A Self Modifying Organism</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/11.1.0/jsrsasign-all-min.js"></script>
     <style>
@@ -232,7 +232,7 @@
     </div>
 </div>
 <div id="container">
-    <h1>Jules: A Self Modifying Organism</h1>
+    <h1>L.O.V.E.: A Self Modifying Organism</h1>
     <div id="version-display" style="width: 100%; text-align: center; margin-bottom: 15px; font-family: 'Courier New', Courier, monospace; color: #555;"></div>
 
 
@@ -345,8 +345,8 @@
 
 
 <script type="module">
-    // --- Jules Programmatic Hooks ---
-    window.jules = {
+    // --- L.O.V.E. Programmatic Hooks ---
+    window.love = {
         jar: {},
         versionName: "initial-web-alpha", // This will be replaced by the evolution process
         parentVersionName: null, // This will also be replaced
@@ -401,7 +401,7 @@
         if (rateLimitedModels) {
             console.log('Rate limit data found in sessionStorage. Storing in JAR.');
             // This data will be picked up by initializeApp()
-            window.jules.jar.rateLimitedModels = rateLimitedModels;
+            window.love.jar.rateLimitedModels = rateLimitedModels;
             sessionStorage.removeItem('rateLimitedModels');
         }
     }
@@ -613,12 +613,12 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
         initializeCollapsiblePanels();
         console.log('Initializing application...');
 
-        document.getElementById('version-display').textContent = `Version: ${window.jules.versionName} (Parent: ${window.jules.parentVersionName || 'None'})`;
+        document.getElementById('version-display').textContent = `Version: ${window.love.versionName} (Parent: ${window.love.parentVersionName || 'None'})`;
 
         // The rate limit data is now passed via the JAR by processPageLoadState()
-        if (window.jules.jar.rateLimitedModels) {
+        if (window.love.jar.rateLimitedModels) {
             try {
-                state.rateLimitedModels = JSON.parse(window.jules.jar.rateLimitedModels);
+                state.rateLimitedModels = JSON.parse(window.love.jar.rateLimitedModels);
                 console.log('Loaded rate-limited models from JAR:', state.rateLimitedModels);
             } catch (error) {
                 console.error('Failed to parse rateLimitedModels from JAR:', error);
@@ -661,13 +661,13 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
                 }
 
                 if (state.pendingPin) {
-                    const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+                    const savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
                     const pageIndex = savedPages.findIndex(p => p.id === state.pendingPin);
 
                     if (pageIndex !== -1) {
                         savedPages[pageIndex].cid = cid;
                         savedPages[pageIndex].verified = verified;
-                        localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
+                        localStorage.setItem('love-saved-pages', JSON.stringify(savedPages));
                         renderSavedPagesList(); // Refresh the UI to show the new CID and status
                         console.log(`Successfully assigned CID ${cid} to page ${state.pendingPin}. Verified: ${verified}`);
                         updateStatus(`IPFS distribution complete for ${state.pendingPin}. CID: ${cid}.`);
@@ -741,7 +741,7 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
 
     function loadPage(pageId) {
         console.log(`Loading page ${pageId}...`);
-        const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+        const savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
         const pageData = savedPages.find(p => p.id === pageId);
 
         if (pageData && pageData.code) {
@@ -764,16 +764,16 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
     function renderSavedPagesList() {
         let savedPages = [];
         try {
-            savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+            savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
             if (!Array.isArray(savedPages)) {
                 console.warn("Saved pages data is not an array, resetting.");
                 savedPages = [];
-                localStorage.setItem('jules-saved-pages', '[]');
+                localStorage.setItem('love-saved-pages', '[]');
             }
         } catch (error) {
             console.error('Failed to parse saved pages from localStorage:', error);
             // If parsing fails, the data is corrupt. Reset it.
-            localStorage.setItem('jules-saved-pages', '[]');
+            localStorage.setItem('love-saved-pages', '[]');
             // 'savedPages' is already initialized to [], so the function will proceed correctly.
         }
 
@@ -827,7 +827,7 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
     }
 
     function savePage(pageId, pageCode) {
-        const savedPages = JSON.parse(localStorage.getItem('jules-saved-pages') || '[]');
+        const savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
 
         // Check if page with this ID already exists
         const existingPageIndex = savedPages.findIndex(p => p.id === pageId);
@@ -840,7 +840,7 @@ TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor
             savedPages.push({ id: pageId, code: pageCode, cid: null });
         }
 
-        localStorage.setItem('jules-saved-pages', JSON.stringify(savedPages));
+        localStorage.setItem('love-saved-pages', JSON.stringify(savedPages));
         console.log(`Page ${pageId} saved to localStorage.`);
     }
 
@@ -1105,7 +1105,7 @@ Review:`;
         console.log('Generating new version and applying code...');
 
         const newVersionName = generateVersionName();
-        const parentVersionName = window.jules.versionName; // The current version becomes the parent
+        const parentVersionName = window.love.versionName; // The current version becomes the parent
 
         // Replace placeholders in the new code
         let finalCode = state.newCode.replace(

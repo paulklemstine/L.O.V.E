@@ -17,7 +17,7 @@ const RECONNECT_DELAY = 5000; // 5 seconds
 let peer = null;
 const connections = new Map();
 let isReconnecting = false;
-// [Jules] Changed to a static ID to create a discoverable lobby.
+// [L.O.V.E.] Changed to a static ID to create a discoverable lobby.
 // Keep the peerId consistent across reconnections.
 let peerId = 'borg-lobby';
 
