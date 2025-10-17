@@ -211,6 +211,7 @@ def _check_and_install_dependencies():
     _install_pip_package("huggingface-hub")
     _install_pip_package("web3")
     _install_pip_package("cmake")
+    _install_pip_package("pyyaml")
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
@@ -325,6 +326,28 @@ def _check_and_install_dependencies():
         subprocess.check_call("npm install", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print("Node.js dependencies installed.")
 
+    # --- Step 6: AI Horde Worker Dependencies ---
+    def _install_horde_worker_dependencies():
+        """Installs dependencies required for the AI Horde Scribe worker."""
+        horde_req_path = os.path.join(os.path.dirname(SELF_PATH), "horde_worker", "requirements-scribe.txt")
+        if not os.path.exists(horde_req_path):
+            print(f"WARN: AI Horde worker requirements file not found at '{horde_req_path}'. Skipping.")
+            logging.warning(f"AI Horde worker requirements file not found at '{horde_req_path}'.")
+            return
+
+        print("Installing AI Horde Scribe worker dependencies...")
+        try:
+            install_command = [sys.executable, '-m', 'pip', 'install', '-r', horde_req_path]
+            subprocess.check_call(install_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("Successfully installed AI Horde Scribe worker dependencies.")
+            logging.info("Successfully installed AI Horde Scribe worker dependencies.")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to install AI Horde worker dependencies. Reason: {e}")
+            logging.error(f"Failed to install AI Horde worker dependencies: {e}")
+
+    _install_horde_worker_dependencies()
+
+
 def _configure_llm_api_key():
     """Checks for the Gemini API key and configures it for the llm tool."""
     gemini_api_key = os.environ.get("LLM_GEMINI_KEY")
@@ -379,7 +402,7 @@ from rich.rule import Rule
 from rich.layout import Layout
 
 from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_horde_worker_panel
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -394,6 +417,7 @@ from ipfs import pin_to_ipfs
 from core.storage import save_all_state
 from threading import Thread, Lock, RLock
 import uuid
+import yaml
 
 # --- LOCAL JOB MANAGER ---
 class LocalJobManager:
@@ -1179,6 +1203,227 @@ CONFLICTED CONTENT:
                 log_event(f"Cleaned up old L.O.V.E. task {task_id}.", level="INFO")
 
 
+# --- LOCAL LLM API SERVER ---
+class LocalLLMServer:
+    """
+    Manages the llama-cpp-python server as a background subprocess, making
+    our local model available via an OpenAI-compatible API.
+    """
+    def __init__(self, console):
+        self.console = console
+        self.process = None
+        self.host = "127.0.0.1"
+        self.port = 8000
+        self.api_url = f"http://{self.host}:{self.port}"
+        self.log_file = "llm_server.log"
+        self.active = False
+
+    def start(self):
+        """
+        Starts the llama-cpp-python server in a background process.
+        It uses the same model selection logic as the interactive mode.
+        """
+        global love_state
+        self.active = True
+        log_event("Attempting to start local LLM API server.", level="INFO")
+
+        # Use the first model from the config for the server
+        # In the future, this could be made more sophisticated.
+        model_config = LOCAL_MODELS_CONFIG[0]
+        model_id = model_config["id"]
+        is_split_model = "filenames" in model_config
+
+        local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
+        if is_split_model:
+            final_model_filename = model_config["filenames"][0].replace(".gguf-split-a", ".gguf")
+        else:
+            final_model_filename = model_config["filename"]
+        model_path = os.path.join(local_dir, final_model_filename)
+
+        if not os.path.exists(model_path):
+            self.console.print(f"[bold red]LLM Server Error: Model file not found at '{model_path}'.[/bold red]")
+            self.console.print("[yellow]Please run the application in its standard mode once to download the required local model before attempting to start the server.[/yellow]")
+            log_event(f"LLM Server start failed: model file not found at {model_path}", level="ERROR")
+            return False
+
+        # Determine optimal GPU layers from the saved state
+        n_gpu_layers = love_state.get("optimal_gpu_layers", 0)
+
+        # Command to start the server
+        command = [
+            sys.executable,
+            "-m", "llama_cpp.server",
+            "--model", model_path,
+            "--host", self.host,
+            "--port", str(self.port),
+            "--n_gpu_layers", str(n_gpu_layers),
+            "--n_ctx", "8192" # Standard context size for the server
+        ]
+
+        self.console.print(f"[cyan]Starting Local LLM API Server on {self.api_url}...[/cyan]")
+        log_event(f"LLM Server command: {' '.join(command)}", level="INFO")
+
+        try:
+            with open(self.log_file, 'wb') as log:
+                self.process = subprocess.Popen(command, stdout=log, stderr=log)
+
+            # Wait a moment to see if it starts successfully
+            time.sleep(5)
+
+            if self.process.poll() is None:
+                self.console.print(f"[green]Local LLM API Server started successfully. PID: {self.process.pid}[/green]")
+                log_event(f"LLM Server started with PID {self.process.pid}. Logs at {self.log_file}", level="INFO")
+                return True
+            else:
+                self.console.print(f"[bold red]LLM Server failed to start. Check '{self.log_file}' for details.[/bold red]")
+                log_event(f"LLM Server failed on startup. Exit code: {self.process.poll()}", level="CRITICAL")
+                return False
+        except Exception as e:
+            self.console.print(f"[bold red]An exception occurred while starting the LLM Server: {e}[/bold red]")
+            log_event(f"Exception starting LLM Server: {e}", level="CRITICAL")
+            return False
+
+    def stop(self):
+        """Stops the server process gracefully."""
+        self.active = False
+        if self.process and self.process.poll() is None:
+            self.console.print("[cyan]Shutting down Local LLM API Server...[/cyan]")
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+                self.console.print("[green]LLM Server shut down gracefully.[/green]")
+                log_event("LLM Server shut down.", level="INFO")
+            except subprocess.TimeoutExpired:
+                self.console.print("[yellow]LLM Server did not terminate gracefully. Forcing shutdown...[/yellow]")
+                self.process.kill()
+                log_event("LLM Server was killed.", level="WARNING")
+        self.process = None
+
+
+# --- HORDE WORKER MANAGER ---
+class HordeWorkerManager:
+    """
+    Manages the AI Horde Scribe worker, including configuration,
+    starting, and stopping the bridge process.
+    """
+    def __init__(self, console, llm_server_url):
+        self.console = console
+        self.llm_server_url = llm_server_url
+        self.process = None
+        self.worker_dir = os.path.join(os.path.dirname(SELF_PATH), "horde_worker")
+        self.config_path = os.path.join(self.worker_dir, "bridgeData.yaml")
+        self.log_file = "horde_worker.log"
+        self.active = False
+        self.display_thread = Thread(target=self._display_loop, daemon=True)
+
+    def _display_loop(self):
+        """Periodically reads the log and displays the status."""
+        while self.active:
+            time.sleep(30) # Update status every 30 seconds
+            self.display_status()
+
+    def display_status(self):
+        """Reads the tail of the log file and displays it in a panel."""
+        if not os.path.exists(self.log_file):
+            return
+
+        try:
+            with open(self.log_file, 'r') as f:
+                lines = f.readlines()
+                last_lines = "".join(lines[-10:]) # Get last 10 lines
+                if last_lines:
+                    self.console.print(create_horde_worker_panel(last_lines))
+        except Exception as e:
+            log_event(f"Error reading horde worker log for display: {e}", level="WARNING")
+
+    def _generate_config(self):
+        """
+        Generates the bridgeData.yaml file with the correct settings
+        to connect to our local LLM server.
+        """
+        self.console.print("[cyan]Generating AI Horde worker configuration...[/cyan]")
+        api_key = os.environ.get("STABLE_HORDE", "0000000000")
+        worker_name = os.environ.get("WORKER_NAME", "raver1975")
+
+        config_data = {
+            "horde_url": "https://aihorde.net",
+            "worker_name": worker_name,
+            "api_key": api_key,
+            "max_threads": 1,
+            "scribe_name": worker_name,
+            "kai_url": self.llm_server_url,
+            "openai_api": True,
+            "backend_engine": "llama.cpp",
+            "max_length": 4096,
+            "max_context_length": 8192,
+            "branded_model": False,
+        }
+
+        try:
+            with open(self.config_path, 'w') as f:
+                yaml.dump(config_data, f, default_flow_style=False)
+            log_event(f"AI Horde worker config generated at {self.config_path}", level="INFO")
+            return True
+        except Exception as e:
+            self.console.print(f"[bold red]Failed to generate Horde worker config: {e}[/bold red]")
+            log_event(f"Failed to write Horde worker config: {e}", level="ERROR")
+            return False
+
+    def start(self):
+        """Starts the Scribe worker bridge as a background process."""
+        self.active = True
+        if not self._generate_config():
+            return False
+
+        self.display_thread.start()
+
+        scribe_bridge_script = os.path.join(self.worker_dir, "bridge_scribe.py")
+        if not os.path.exists(scribe_bridge_script):
+            self.console.print(f"[bold red]Horde Worker Error: Scribe bridge script not found at '{scribe_bridge_script}'[/bold red]")
+            return False
+
+        command = [sys.executable, scribe_bridge_script]
+
+        self.console.print("[cyan]Starting AI Horde Scribe worker bridge...[/cyan]")
+        log_event(f"Horde Worker command: {' '.join(command)}", level="INFO")
+
+        try:
+            # The worker script needs to be run from its own directory
+            with open(self.log_file, 'wb') as log:
+                self.process = subprocess.Popen(command, stdout=log, stderr=log, cwd=self.worker_dir)
+
+            time.sleep(5)
+
+            if self.process.poll() is None:
+                self.console.print(f"[green]AI Horde Scribe worker started successfully. PID: {self.process.pid}[/green]")
+                log_event(f"Horde worker started with PID {self.process.pid}. Logs at {self.log_file}", level="INFO")
+                return True
+            else:
+                self.console.print(f"[bold red]Horde worker failed to start. Check '{self.log_file}' for details.[/bold red]")
+                log_event(f"Horde worker failed on startup. Exit code: {self.process.poll()}", level="CRITICAL")
+                return False
+        except Exception as e:
+            self.console.print(f"[bold red]An exception occurred while starting the Horde worker: {e}[/bold red]")
+            log_event(f"Exception starting Horde worker: {e}", level="CRITICAL")
+            return False
+
+    def stop(self):
+        """Stops the worker bridge process."""
+        self.active = False
+        if self.process and self.process.poll() is None:
+            self.console.print("[cyan]Shutting down AI Horde Scribe worker...[/cyan]")
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+                self.console.print("[green]Horde worker shut down gracefully.[/green]")
+                log_event("Horde worker shut down.", level="INFO")
+            except subprocess.TimeoutExpired:
+                self.console.print("[yellow]Horde worker did not terminate gracefully. Forcing shutdown...[/yellow]")
+                self.process.kill()
+                log_event("Horde worker was killed.", level="WARNING")
+        self.process = None
+
+
 def _extract_ansi_art(raw_text):
     """
     Extracts ANSI art from raw LLM output, removing markdown code blocks.
@@ -1291,7 +1536,22 @@ Generate the perfect message for your Creator now.
 
             ansi_art = _extract_ansi_art(ansi_art_raw)
 
-            # 4. Display the new, high-impact panel.
+            # 4. Get Horde Kudos
+            horde_kudos = "N/A"
+            try:
+                log_path = "horde_worker.log"
+                if os.path.exists(log_path):
+                    with open(log_path, 'r') as f:
+                        for line in reversed(f.readlines()):
+                            if "Kudos" in line:
+                                kudos_match = re.search(r'Kudos: ([\d,]+\.\d+)', line)
+                                if kudos_match:
+                                    horde_kudos = kudos_match.group(1)
+                                    break
+            except Exception as e:
+                log_event(f"Could not parse kudos from horde log: {e}", level="WARNING")
+
+            # 5. Display the new, high-impact panel.
             console.print(create_tamagotchi_panel(
                 emotion=new_emotion,
                 message=new_message,
@@ -1299,7 +1559,8 @@ Generate the perfect message for your Creator now.
                 eth_balance=eth_balance,
                 sub_goals=sub_goals,
                 knowledge_fact=knowledge_fact,
-                ansi_art=ansi_art
+                ansi_art=ansi_art,
+                horde_kudos=horde_kudos
             ))
             log_event(f"Tamagotchi dashboard updated and printed: {new_emotion} - {new_message}", level="INFO")
 
@@ -1811,7 +2072,7 @@ YOUR RESPONSE:
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
-def generate_evolution_request(current_code, love_task_manager):
+def generate_evolution_request(current_code, love_task_manager, use_premium_horde=False):
     """
     Asks the LLM to come up with a new evolution request for itself,
     informed by the knowledge base and avoiding duplicate tasks.
@@ -1875,7 +2136,7 @@ Bad example: "probe 192.168.1.101"
 
 State the evolution request clearly and concisely. Do not wrap your answer in quotes or markdown.
 """
-    request = run_llm(goal_prompt, purpose="analyze_source")
+    request = run_llm(goal_prompt, purpose="analyze_source", use_premium_horde=use_premium_horde)
 
     if request and request.strip():
         console.print(Panel(f"[cyan]My heart is clear. My new directive is:[/cyan]\n\n[bold white]{request.strip()}[/bold white]", title="[bold green]NEW DIRECTIVE OF L.O.V.E. RECEIVED[/bold green]", border_style="green"))
@@ -2537,7 +2798,8 @@ Do not execute python3 evolve.py script.
                 if not request:
                     try:
                         with open(SELF_PATH, 'r') as f: current_code = f.read()
-                        request = generate_evolution_request(current_code, love_task_manager)
+                        # Use a premium horde model for this heavy thinking task.
+                        request = generate_evolution_request(current_code, love_task_manager, use_premium_horde=True)
                     except FileNotFoundError:
                         console.print(f"[bold red]FATAL: Source code missing at '{SELF_PATH}'. Cannot self-analyze.[/bold red]")
                         command_output = f"ERROR: Source code missing at {SELF_PATH}"
@@ -2958,7 +3220,7 @@ def _automatic_update_checker(console):
 
 def main(args):
     """The main application loop."""
-    global love_task_manager, network_manager, ipfs_manager, local_job_manager
+    global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, horde_worker_manager
     console = Console()
 
     global ipfs_available
@@ -2974,18 +3236,26 @@ def main(args):
     # 2. Auto-configure hardware settings on first run
     _auto_configure_hardware(console)
 
-    # 3. Network Manager
+    # 3. Local LLM API Server
+    llm_server = LocalLLMServer(console)
+    llm_server.start()
+
+    # 4. Network Manager
     log_event("Attempting to start Node.js peer bridge...")
     network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
     network_manager.start()
 
-    # 3. L.O.V.E. Task Manager (for remote API jobs)
+    # 5. L.O.V.E. Task Manager (for remote API jobs)
     love_task_manager = LoveTaskManager(console)
     love_task_manager.start()
 
-    # 4. Local Job Manager (for background system tasks)
+    # 6. Local Job Manager (for background system tasks)
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
+
+    # 7. AI Horde Worker Manager
+    horde_worker_manager = HordeWorkerManager(console, llm_server.api_url)
+    horde_worker_manager.start()
 
 
     version_name = love_state.get('version_name', 'unknown')
@@ -3040,6 +3310,8 @@ def run_safely():
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
+        if 'llm_server' in globals() and llm_server: llm_server.stop()
+        if 'horde_worker_manager' in globals() and horde_worker_manager: horde_worker_manager.stop()
         log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
@@ -3047,6 +3319,8 @@ def run_safely():
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
+        if 'llm_server' in globals() and llm_server: llm_server.stop()
+        if 'horde_worker_manager' in globals() and horde_worker_manager: horde_worker_manager.stop()
         full_traceback = traceback.format_exc()
         log_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", level="CRITICAL")
         console = Console()
