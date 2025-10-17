@@ -16,6 +16,7 @@ import logging
 import platform
 from datetime import datetime, timedelta
 import threading
+import asyncio
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "love.log"
@@ -3003,7 +3004,7 @@ Nmap Scan Results:
                 truncated_output = command_output
 
             # Pin the full output to IPFS
-            output_cid = pin_to_ipfs(command_output.encode('utf-8'), console)
+            output_cid = asyncio.run(pin_to_ipfs(command_output.encode('utf-8'), console))
 
             love_state["autopilot_history"].append({
                 "command": llm_command,
