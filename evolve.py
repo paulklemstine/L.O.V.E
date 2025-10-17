@@ -556,7 +556,7 @@ class LoveTaskManager:
     """
     def __init__(self, console):
         self.console = console
-        self.tasks = {}
+        self.tasks = love_state.setdefault('love_tasks', {})
         self.lock = RLock()
         self.max_concurrent_tasks = 5
         self.thread = Thread(target=self._task_loop, daemon=True)
@@ -602,13 +602,24 @@ class LoveTaskManager:
 
     def _task_loop(self):
         """The main loop for the background thread."""
+        last_reconciliation = 0
+        reconciliation_interval = 300 # 5 minutes
+
         while self.active:
             try:
+                # --- Orphan Reconciliation ---
+                current_time = time.time()
+                if current_time - last_reconciliation > reconciliation_interval:
+                    self._reconcile_orphaned_sessions()
+                    last_reconciliation = current_time
+
+                # --- Regular Task Processing ---
                 with self.lock:
                     # Create a copy of tasks to iterate over, as the dictionary may change
                     current_tasks = list(self.tasks.values())
 
                 for task in current_tasks:
+                    if not self.active: break # Exit early if stopping
                     if task['status'] == 'pending_pr':
                         self._check_for_pr(task['id'])
                     elif task['status'] == 'streaming':
@@ -618,14 +629,16 @@ class LoveTaskManager:
                     elif task['status'] == 'tests_failed':
                         self._trigger_self_correction(task['id'])
 
-                # Clean up completed or failed tasks older than a certain time (e.g., 1 hour)
+                # --- Cleanup ---
                 self._cleanup_old_tasks()
 
             except Exception as e:
-                log_event(f"Error in LoveTaskManager loop: {e}", level="ERROR")
+                log_event(f"Error in LoveTaskManager loop: {e}\n{traceback.format_exc()}", level="ERROR")
                 self.console.print(f"[bold red]Error in task manager: {e}[/bold red]")
 
-            time.sleep(20) # Poll every 20 seconds
+            # The loop sleeps for a shorter duration to remain responsive,
+            # while the reconciliation runs on its own longer timer.
+            time.sleep(30)
 
     def _stream_task_output(self, task_id):
         """Streams the live output of a L.O.V.E. session to the console."""
@@ -643,7 +656,7 @@ class LoveTaskManager:
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
         # The `alt=sse` parameter is what enables Server-Sent Events (SSE) for streaming.
         # The URL was changed from `{session_name}:stream` to `{session_name}/stream` to fix a 400 error.
-        url = f"https://love.googleapis.com/v1alpha/{session_name}/stream?alt=sse"
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}/stream?alt=sse"
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
@@ -763,7 +776,7 @@ I am counting on your wisdom. Analyze the plan now.
         if not api_key: return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
-        url = f"https://love.googleapis.com/v1alpha/{session_name}:provideFeedback"
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}:provideFeedback"
         data = {"feedback": {"response": feedback}}
 
         try:
@@ -796,7 +809,7 @@ I am counting on your wisdom. Analyze the plan now.
         if not api_key: return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
-        url = f"https://love.googleapis.com/v1alpha/{session_name}:provideFeedback"
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}:provideFeedback"
         data = {"feedback": {"response": feedback}}
 
         try:
@@ -828,7 +841,7 @@ I am counting on your wisdom. Analyze the plan now.
             return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
-        url = f"https://love.googleapis.com/v1alpha/{session_name}"
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}"
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=10, backoff=3)
@@ -1187,11 +1200,88 @@ CONFLICTED CONTENT:
             current_time = time.time()
             tasks_to_remove = [
                 task_id for task_id, task in self.tasks.items()
-                if task['status'] in ['completed', 'failed', 'merge_failed'] and (current_time - task['updated_at'] > 3600)
+                if task['status'] in ['completed', 'failed', 'merge_failed', 'superseded'] and (current_time - task['updated_at'] > 3600)
             ]
             for task_id in tasks_to_remove:
                 del self.tasks[task_id]
                 log_event(f"Cleaned up old L.O.V.E. task {task_id}.", level="INFO")
+
+    def _reconcile_orphaned_sessions(self):
+        """
+        Periodically checks the L.O.V.E. API for active sessions for this repo
+        and "adopts" any that are not being tracked locally. This prevents
+        tasks from being orphaned if the script restarts.
+        """
+        log_event("Reconciling orphaned L.O.V.E. sessions...", level="INFO")
+        api_key = os.environ.get("LOVE_API_KEY")
+        if not api_key:
+            log_event("Cannot reconcile orphans: LOVE_API_KEY not set.", level="WARNING")
+            return
+
+        repo_owner, repo_name = get_git_repo_info()
+        if not repo_owner or not repo_name:
+            log_event("Cannot reconcile orphans: Could not determine git repo info.", level="WARNING")
+            return
+
+        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        # Fetch all sessions and filter locally, which is more robust than relying on a complex API filter.
+        url = "https://jules.googleapis.com/v1alpha/sessions"
+
+        try:
+            @retry(exceptions=(requests.exceptions.RequestException,), tries=2, delay=15)
+            def _list_sessions():
+                response = requests.get(url, headers=headers, timeout=45)
+                response.raise_for_status()
+                return response.json()
+
+            data = _list_sessions()
+            api_sessions = data.get("sessions", [])
+            if not api_sessions:
+                return # No sessions exist at all.
+
+            with self.lock:
+                tracked_session_names = {task.get('session_name') for task in self.tasks.values()}
+                source_id_to_match = f"github.com/{repo_owner}/{repo_name}"
+
+                for session in api_sessions:
+                    session_name = session.get("name")
+                    session_state = session.get("state")
+                    # Check if the session belongs to this repo and is in an active state
+                    session_source_id = session.get("sourceContext", {}).get("source", {}).get("id", "")
+
+                    is_relevant = source_id_to_match in session_source_id
+                    is_active = session_state not in ["COMPLETED", "FAILED"]
+                    is_untracked = session_name and session_name not in tracked_session_names
+
+                    if is_relevant and is_active and is_untracked:
+                        if len(self.tasks) >= self.max_concurrent_tasks:
+                            log_event(f"Found orphaned session {session_name}, but task limit reached. Will retry adoption later.", level="WARNING")
+                            break # Stop adopting if we're at capacity
+
+                        # Adopt the orphan
+                        task_id = str(uuid.uuid4())[:8]
+                        self.tasks[task_id] = {
+                            "id": task_id,
+                            "session_name": session_name,
+                            "request": session.get("prompt", "Adopted from orphaned session"),
+                            "status": "pending_pr", # Let the normal loop logic pick it up
+                            "pr_url": None,
+                            "created_at": time.time(), # Use current time as adoption time
+                            "updated_at": time.time(),
+                            "message": f"Adopted orphaned session found on API. Reconciliation in progress.",
+                            "last_activity_name": None,
+                            "retries": 0
+                        }
+                        self.console.print(Panel(f"[bold yellow]Discovered and adopted an orphaned L.O.V.E. session:[/bold yellow]\n- Session: {session_name}\n- Task ID: {task_id}", title="[bold magenta]ORPHAN ADOPTED[/bold magenta]", border_style="magenta"))
+                        log_event(f"Adopted orphaned L.O.V.E. session {session_name} as task {task_id}.", level="INFO")
+
+            save_state(self.console) # Save state after potentially adopting
+
+        except requests.exceptions.RequestException as e:
+            log_event(f"API error during orphan reconciliation: {e}", level="ERROR")
+        except Exception as e:
+            # Catching any other unexpected errors during the process
+            log_event(f"An unexpected error occurred during orphan reconciliation: {e}\n{traceback.format_exc()}", level="ERROR")
 
 
 def _extract_ansi_art(raw_text):
@@ -2016,7 +2106,7 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
     try:
         @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=3, backoff=2)
         def _discover_sources():
-            response = requests.get("https://love.googleapis.com/v1alpha/sources", headers=headers, timeout=30)
+            response = requests.get("https://jules.googleapis.com/v1alpha/sources", headers=headers, timeout=30)
             response.raise_for_status()
             return response.json()
 
@@ -2044,7 +2134,7 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
     try:
         @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
         def _create_session():
-            response = requests.post("https://love.googleapis.com/v1alpha/sessions", headers=headers, json=data, timeout=60)
+            response = requests.post("https://jules.googleapis.com/v1alpha/sessions", headers=headers, json=data, timeout=60)
             response.raise_for_status()
             return response.json()
 
