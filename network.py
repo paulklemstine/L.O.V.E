@@ -314,6 +314,80 @@ def scan_network(evil_state, autopilot_mode=False):
 
     return sorted(result_ips), formatted_output_for_llm
 
+def probe_additional_info(target_ip, evil_state, autopilot_mode=False):
+    """
+    Performs an nmap scan with additional scripts for deeper reconnaissance.
+    """
+    console = Console()
+    kb = evil_state["knowledge_base"]["network_map"]
+    nmap_path = shutil.which('nmap')
+
+    if not nmap_path:
+        msg = "'nmap' is not installed or not in PATH. Additional probing is disabled."
+        if not autopilot_mode:
+            console.print(f"[bold red]Error: {msg}[/bold red]")
+        return None, f"Error: {msg}"
+
+    # --- Nmap Execution ---
+    # Using a variety of scripts for deeper reconnaissance.
+    scan_cmd = f"nmap -sV --script=smb-enum-shares,http-title,ssl-cert,dns-brute -oX - {target_ip}"
+    if not autopilot_mode:
+        console.print(f"[cyan]Deploying additional 'nmap' scripts against {target_ip}...[/cyan]")
+
+    # We need a longer timeout for these scans.
+    def _nmap_scan_task():
+        try:
+            # Use a much longer timeout for potentially slow vulnerability scans
+            result = subprocess.run(scan_cmd, shell=True, capture_output=True, text=True, timeout=900)  # 15 minutes
+            return result.stdout, result.stderr, result.returncode
+        except subprocess.TimeoutExpired:
+            return "", "Nmap command timed out after 15 minutes.", -1
+        except Exception as e:
+            return "", f"An unexpected error occurred during nmap execution: {e}", -1
+
+    if autopilot_mode:
+        stdout, stderr, returncode = _nmap_scan_task()
+    else:
+        # Wrap the synchronous, long-running scan in a visual progress indicator
+        # to show the user that the application has not hung.
+        stdout, stderr, returncode = run_hypnotic_progress(
+            console,
+            f"Probing {target_ip} with additional scripts...",
+            _nmap_scan_task
+        )
+
+    if returncode != 0:
+        log_msg = f"Nmap additional info scan failed for {target_ip}. Stderr: {stderr.strip()}"
+        logging.warning(log_msg)
+        if not autopilot_mode:
+            console.print(f"[bold red]Nmap additional info scan failed.[/bold red]\n[dim]{stderr.strip()}[/dim]")
+        return None, f"Error: {log_msg}"
+
+    additional_info = {}
+    try:
+        root = ET.fromstring(stdout)
+        for script_elem in root.findall(".//script"):
+            script_id = script_elem.get('id')
+            script_output = script_elem.get('output')
+            if script_id and script_output:
+                additional_info[script_id] = script_output
+
+    except ET.ParseError as e:
+        log_msg = f"Failed to parse nmap XML output for {target_ip}. Error: {e}"
+        logging.error(log_msg)
+        return None, f"Error: {log_msg}"
+
+    # --- Knowledge Base Update ---
+    if target_ip not in kb['hosts']:
+        kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}, "probed": False}
+
+    kb['hosts'][target_ip]['additional_info'] = additional_info
+    # --- End Knowledge Base Update ---
+
+    formatted_output_for_llm = f"Additional info for {target_ip}: {json.dumps(additional_info)}"
+    return additional_info, formatted_output_for_llm
+
+
 def probe_target(target_ip, evil_state, autopilot_mode=False):
     """
     Performs an advanced nmap scan for services and vulnerabilities,
@@ -477,6 +551,10 @@ def probe_target(target_ip, evil_state, autopilot_mode=False):
             formatted_output_for_llm += f" Web Probe: {', '.join(web_probe_summary)}."
     else:
         formatted_output_for_llm = f"No open ports with recognized services found on {target_ip}."
+
+    additional_info, additional_info_summary = probe_additional_info(target_ip, evil_state, autopilot_mode)
+    if additional_info:
+        formatted_output_for_llm += f" Additional Info: {additional_info_summary}"
 
     return open_ports, formatted_output_for_llm
 
