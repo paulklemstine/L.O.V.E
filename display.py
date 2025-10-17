@@ -211,15 +211,21 @@ def create_network_panel(type, target, data):
     panel_title = f"🌐 [bold]Network Operation[/bold] | {type.capitalize()}"
     border_style = "purple"
 
-    content = Text()
-    content.append("Target: ", style="bold white")
-    content.append(f"{target}\n\n", style="magenta")
-    content.append(Rule("Results", style="bright_black"))
+    header_text = Text()
+    header_text.append("Target: ", style="bold white")
+    header_text.append(f"{target}", style="magenta")
+
     display_data = (data[:1500] + '...') if len(data) > 1500 else data
-    content.append(Text(f"\n{display_data.strip()}", style="dim"))
+    results_text = Text(f"\n{display_data.strip()}", style="dim")
+
+    content_group = Group(
+        header_text,
+        Rule("Results", style="bright_black"),
+        results_text
+    )
 
     return Panel(
-        content,
+        content_group,
         title=panel_title,
         border_style=border_style,
         expand=False,
