@@ -3564,9 +3564,9 @@ def _auto_configure_hardware(console):
         return
 
     # Test GPU layer offloading (quick attempt, fallback to CPU)
-    if CAPS.gpu_type != "cuda":
+    if CAPS.gpu_type == "none":
         love_state["optimal_gpu_layers"] = 0
-        console.print("[cyan]No CUDA GPU detected. Setting GPU layers to 0.[/cyan]")
+        console.print("[cyan]No supported GPU detected. Setting GPU layers to 0.[/cyan]")
     else:
         model_id = HARDWARE_TEST_MODEL_CONFIG["id"]
         filename = HARDWARE_TEST_MODEL_CONFIG["filename"]
@@ -3584,16 +3584,36 @@ def _auto_configure_hardware(console):
                 save_state(console)
                 return
 
-        console.print("[cyan]Testing maximum GPU offload...[/cyan]")
+        console.print("[cyan]Testing maximum GPU offload with inference...[/cyan]")
         try:
-            # Attempt to load with all layers on GPU. Context size is not critical for this test.
-            Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=512, verbose=False)
+            # Dynamically determine the context size from the model file
+            n_ctx = 512 # Default fallback
+            try:
+                gguf_dump_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
+                if not os.path.exists(gguf_dump_path):
+                    # Fallback for systems where the script might not be in the path
+                    gguf_dump_path = shutil.which("gguf-dump")
+
+                if gguf_dump_path:
+                    result = subprocess.run([gguf_dump_path, "--json", model_path], capture_output=True, text=True, check=True)
+                    model_metadata = json.loads(result.stdout)
+                    n_ctx = int(model_metadata.get('llama.context_length', 512))
+                    console.print(f"[cyan]Dynamically determined context size: {n_ctx}[/cyan]")
+                else:
+                    console.print("[yellow]WARN: `gguf-dump` tool not found. Using default context size for test.[/yellow]")
+            except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+                console.print(f"[yellow]WARN: Could not determine context size dynamically. Using default. Error: {e}[/yellow]")
+
+            # Attempt to load with all layers on GPU and run a test inference.
+            llm = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=n_ctx, verbose=False)
+            # Perform a small inference to ensure the GPU is actually working.
+            llm("This is a test query to confirm GPU functionality.")
             love_state["optimal_gpu_layers"] = -1
-            console.print("[green]Success! Full GPU offload is supported.[/green]")
+            console.print("[green]Success! Full GPU offload and inference confirmed.[/green]")
         except Exception as e:
-            # If full offload fails, fall back to CPU only.
+            # If full offload or inference fails, fall back to CPU only.
             love_state["optimal_gpu_layers"] = 0
-            console.print(f"[yellow]Full GPU offload failed. Falling back to CPU-only. Reason: {e}[/yellow]")
+            console.print(f"[yellow]Full GPU offload/inference failed. Falling back to CPU-only. Reason: {e}[/yellow]")
             log_event(f"Full GPU offload test failed, falling back to CPU. Error: {e}", "WARNING")
 
     console.print(Rule("Hardware Optimization Complete", style="green"))
