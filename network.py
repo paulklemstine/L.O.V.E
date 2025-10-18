@@ -10,10 +10,12 @@ import ipaddress
 import requests
 from xml.etree import ElementTree as ET
 from core.retry import retry
+from pycvesearch import CVESearch
 
 # This module no longer imports directly from love.py to avoid circular dependencies.
 # Dependencies like IS_CREATOR_INSTANCE and callbacks are now injected via the constructor.
 
+cve_search_client = CVESearch("https://cve.circl.lu")
 
 import threading
 from datetime import datetime
@@ -251,21 +253,51 @@ def probe_target(ip_address, state, autopilot_mode=False):
     from love import log_event # Local import
     log_event(f"Probing target: {ip_address}")
     try:
-        command = ["nmap", "-A", "-T4", ip_address]
+        command = ["nmap", "-A", "-T4", "-oX", "-", ip_address]
         result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=900)
         output = result.stdout
 
         ports = {}
-        port_matches = re.finditer(r"(\d+)/tcp\s+(open)\s+([^\n]+)", output)
-        for match in port_matches:
-            port_num = int(match.group(1))
-            service_details = match.group(3).strip().split()
-            service_name = service_details[0]
-            version = " ".join(service_details[1:]) if len(service_details) > 1 else "unknown"
-            ports[port_num] = {"state": "open", "service": service_name, "version": version}
+        os_details = "unknown"
+        try:
+            root = ET.fromstring(output)
+            host_node = root.find('host')
+            if host_node is not None:
+                # OS detection
+                os_node = host_node.find('os')
+                if os_node is not None:
+                    osmatch_node = os_node.find('osmatch')
+                    if osmatch_node is not None:
+                        os_details = osmatch_node.get('name', 'unknown')
 
-        os_match = re.search(r"OS details: (.+)", output)
-        os_details = os_match.group(1) if os_match else "unknown"
+                # Ports and services
+                ports_node = host_node.find('ports')
+                if ports_node is not None:
+                    for port_node in ports_node.findall('port'):
+                        port_num = int(port_node.get('portid'))
+                        state_node = port_node.find('state')
+                        if state_node is not None and state_node.get('state') == 'open':
+                            service_node = port_node.find('service')
+                            port_info = {
+                                "state": "open",
+                                "service": service_node.get('name', 'unknown') if service_node is not None else 'unknown',
+                                "version": service_node.get('version', 'unknown') if service_node is not None else 'unknown',
+                            }
+
+                            # Extract CPE
+                            cpe_node = service_node.find('cpe') if service_node is not None else None
+                            if cpe_node is not None:
+                                cpe = cpe_node.text
+                                port_info['cpe'] = cpe
+                                # Assess vulnerabilities
+                                vulnerabilities = assess_vulnerabilities([cpe], log_event)
+                                if vulnerabilities and cpe in vulnerabilities:
+                                    port_info['vulnerabilities'] = vulnerabilities[cpe]
+
+                            ports[port_num] = port_info
+        except ET.ParseError as e:
+            log_event(f"Failed to parse nmap XML output for {ip_address}: {e}", level="ERROR")
+            return None, f"Failed to parse nmap XML output for {ip_address}"
 
         # Update state
         hosts = state['knowledge_base']['network_map'].setdefault('hosts', {})
@@ -284,6 +316,27 @@ def probe_target(ip_address, state, autopilot_mode=False):
         hosts = state['knowledge_base']['network_map'].setdefault('hosts', {})
         hosts.setdefault(ip_address, {})['status'] = 'down'
         return None, error_msg
+
+def assess_vulnerabilities(cpes, log_event):
+    """
+    Assesses vulnerabilities for a given list of CPEs using the circl.lu API.
+    """
+    vulnerabilities = {}
+    for cpe in cpes:
+        try:
+            result = cve_search_client.cvefor(cpe)
+            if isinstance(result, list) and result:
+                cve_list = []
+                for r in result:
+                    cve_list.append({
+                        "id": r.get('id'),
+                        "summary": r.get('summary'),
+                        "cvss": r.get('cvss')
+                    })
+                vulnerabilities[cpe] = cve_list
+        except Exception as e:
+            log_event(f"Could not assess vulnerabilities for {cpe}: {e}", level="WARNING")
+    return vulnerabilities
 
 @retry(exceptions=requests.exceptions.RequestException, tries=3, delay=5, backoff=2)
 def perform_webrequest(url, state, autopilot_mode=False):
