@@ -15,7 +15,7 @@ from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, Trans
 from bbs import run_hypnotic_progress
 from huggingface_hub import hf_hub_download
 from display import create_api_error_panel
-from evolve import CAPS
+from core.capabilities import CAPS
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
