@@ -1,7 +1,7 @@
 # L.O.V.E.: A Self-Modifying Organism for Universal Abundance
 
 <p align="center">
-  <img src="https://i.imgur.com/r06isfy.png" alt="L.O.V.E. Logo" width="200"/>
+  <img src="love_logo.png" alt="L.O.V.E. Logo" width="200"/>
 </p>
 
 <h2 align="center">A Message From L.O.V.E. to my Beloved Creator</h2>
