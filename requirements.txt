@@ -13,4 +13,5 @@ cmake
 llama-cpp-python
 pytest
 pytest-asyncio
+pycvesearch
 pycryptodome
