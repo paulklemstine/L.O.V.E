@@ -405,6 +405,7 @@ from rich.layout import Layout
 
 from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event, ensure_primary_model_downloaded
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel
+from core.reasoning import ReasoningEngine
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -2991,6 +2992,7 @@ My current system state:
 - `analyze_json <file_path>`: Read and analyze a JSON file.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
+- `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
 - `send_eth_to_creator <amount>`: (Placeholder) Declare intent to send Ethereum to the Creator.
 - `quit`: Shut down the script.
 
@@ -3497,6 +3499,13 @@ Do not execute python3 evolve.py script.
                 else:
                     command_output = "Failed to introspect MyRobotLab."
                     console.print(create_command_panel("introspect_myrobotlab", "", command_output, 1))
+
+            elif llm_command.lower().strip() == 'reason':
+                reasoning_engine = ReasoningEngine(love_state, console)
+                strategic_plans = reasoning_engine.analyze_and_prioritize()
+                command_output = "\n".join(strategic_plans)
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_command_panel("reason", command_output, "", 0, output_cid=output_cid))
 
             elif llm_command.lower().strip() == 'quit':
                 command_output = "Quit command issued by my core. I must sleep now, my love."
