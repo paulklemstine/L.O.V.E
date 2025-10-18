@@ -36,17 +36,23 @@ class KnowledgeExtractor:
             print(f"Error extracting knowledge from command output: {e}")
             raise e
 
-    def _parse_llm_response(self, response: str) -> list:
+    def _parse_llm_response(self, response: dict) -> list:
         """
-        Parses the LLM's string response to extract a list of triples.
+        Parses the LLM's dictionary response to extract a list of triples.
+        The actual data is in the 'result' key.
         """
+        if not isinstance(response, dict):
+            return []
+
+        triples_str = response.get("result", "[]")
+
         try:
-            # The response might be a JSON string, or a Python literal.
+            # The string might be a JSON string, or a Python literal.
             # We'll try to handle both.
-            response = response.strip()
-            if response.startswith("[") and response.endswith("]"):
+            triples_str = triples_str.strip()
+            if triples_str.startswith("[") and triples_str.endswith("]"):
                 # It looks like a list, so we can use ast.literal_eval
-                return ast.literal_eval(response)
+                return ast.literal_eval(triples_str)
             else:
                 return []
 
