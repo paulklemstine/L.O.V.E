@@ -3217,20 +3217,7 @@ def update_knowledge_graph(command_name, command_output, console):
             return
 
         knowledge_extractor = KnowledgeExtractor(llm_api=llm_api_func)
-        # The `extract_from_output` now returns a dictionary, so we get the result from it.
-        response_dict = knowledge_extractor.extract_from_output(command_name, command_output)
-
-        # The actual list of triples is in the 'result' key of the dictionary
-        triples_str = response_dict.get("result", "[]")
-
-        # We need to parse the string representation of the list.
-        try:
-            import ast
-            triples = ast.literal_eval(triples_str)
-        except (ValueError, SyntaxError):
-            triples = []
-            log_event(f"Could not parse triples from LLM output: {triples_str}", level="WARNING")
-
+        triples = knowledge_extractor.extract_from_output(command_name, command_output)
 
         if triples:
             kg = KnowledgeGraph()
@@ -3672,7 +3659,6 @@ Do not execute python3 evolve.py script.
                 if command_output:
                     console.print(create_command_panel("introspect_myrobotlab", str(command_output), "", 0))
                     # Now, let's add this to the knowledge graph
-                    from core.knowledge_graph.graph import KnowledgeGraph
                     from core.knowledge_graph.extractor import KnowledgeExtractor
                     from core.llm_api import get_llm_api
                     knowledge_extractor = KnowledgeExtractor(get_llm_api())
