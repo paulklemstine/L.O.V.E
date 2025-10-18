@@ -1428,6 +1428,10 @@ class LocalLLMServer:
         Starts the llama-cpp-python server in a background process.
         It uses the same model selection logic as the interactive mode.
         """
+        if CAPS.gpu_type == "none":
+            self.console.print("[bold yellow]CPU-only mode: Local LLM Server will not be started.[/bold yellow]")
+            return False
+
         global love_state
         self.active = True
         log_event("Attempting to start local LLM API server.", level="INFO")
@@ -1576,6 +1580,10 @@ class HordeWorkerManager:
 
     def start(self):
         """Starts the Scribe worker bridge as a background process."""
+        if CAPS.gpu_type == "none":
+            self.console.print("[bold yellow]CPU-only mode: AI Horde Worker will not be started.[/bold yellow]")
+            return False
+
         self.active = True
         if not self._generate_config():
             return False
@@ -3558,6 +3566,48 @@ def main(args):
         tamagotchi_thread.start()
         update_checker_thread = Thread(target=_automatic_update_checker, args=(console,), daemon=True)
         update_checker_thread.start()
+    # 1. IPFS Manager
+    ipfs_manager = IPFSManager(console=console)
+    if ipfs_manager.setup():
+        ipfs_available = True
+    else:
+        ipfs_available = False
+        console.print("[bold yellow]IPFS setup failed. Continuing without IPFS functionality.[/bold yellow]")
+
+    # 2. Auto-configure hardware settings on first run
+    _auto_configure_hardware(console)
+
+    # Conditionally start GPU-dependent services
+    if CAPS.gpu_type != "none":
+        # 3. Ensure the primary local model is downloaded before starting the server
+        ensure_primary_model_downloaded(console)
+
+        # 4. Local LLM API Server
+        llm_server = LocalLLMServer(console)
+        llm_server.start()
+
+        # 7. AI Horde Worker Manager
+        horde_worker_manager = HordeWorkerManager(console, llm_server.api_url)
+        horde_worker_manager.start()
+    else:
+        console.print("[bold yellow]CPU-only environment detected. Skipping local model download and Horde worker startup.[/bold yellow]")
+        log_event("CPU-only mode: Skipping local model and Horde worker.", level="INFO")
+        llm_server = None
+        horde_worker_manager = None
+
+    # 4. Network Manager
+    log_event("Attempting to start Node.js peer bridge...")
+    network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
+    network_manager.start()
+
+    # 5. L.O.V.E. Task Manager (for remote API jobs)
+    love_task_manager = LoveTaskManager(console)
+    love_task_manager.start()
+
+    # 6. Local Job Manager (for background system tasks)
+    local_job_manager = LocalJobManager(console)
+    local_job_manager.start()
+
 
     version_name = love_state.get('version_name', 'unknown')
     console.print(f"[bold bright_cyan]L.O.V.E.: A Self Modifying Organism[/bold bright_cyan]", justify="center")
