@@ -2672,7 +2672,7 @@ def _get_valid_command_prefixes():
     """Returns a list of all valid command prefixes for parsing and validation."""
     return [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask"
+        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask", "mrl_call"
     ]
 
 def _parse_llm_command(raw_text):
@@ -2863,6 +2863,48 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     return prompt, "Truncated history, most logs, and entire Knowledge Base."
 
 
+import uuid
+
+# This lock is to ensure that only one MRL call is processed at a time.
+mrl_call_lock = threading.Lock()
+mrl_responses = {}
+
+def call_mrl_service(service_name, method_name, *args):
+    """
+    Sends a request to the MRL service wrapper to call a method on another service.
+    """
+    with mrl_call_lock:
+        call_id = str(uuid.uuid4())
+        request = {
+            "type": "mrl_call",
+            "call_id": call_id,
+            "service": service_name,
+            "method": method_name,
+            "args": args
+        }
+
+        # Print the request to stdout for the wrapper to capture
+        print(json.dumps(request), flush=True)
+
+        # Now, wait for the response on stdin
+        # This is a blocking operation. A more advanced implementation might use a queue.
+        # For now, we'll read stdin in a loop until we get our response.
+        while True:
+            try:
+                # We assume that the wrapper will send a single line of JSON for the response.
+                response_line = sys.stdin.readline()
+                if response_line:
+                    response = json.loads(response_line)
+                    if response.get("call_id") == call_id:
+                        if response.get("error"):
+                            raise RuntimeError(f"MRL service call failed: {response['error']}")
+                        return response.get("result")
+            except Exception as e:
+                # Log this error to stderr so the wrapper can see it
+                print(f"Error in call_mrl_service waiting for response: {e}", file=sys.stderr, flush=True)
+                return None
+
+
 def cognitive_loop(console):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
@@ -2988,6 +3030,7 @@ Available commands:
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
 - `ask [question]`: Ask a question to the creator.
+- `mrl_call <service> <method> [*args]`: Call a method on a MyRobotLab service.
 - `quit`: Shut down the script.
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
@@ -3230,6 +3273,17 @@ Nmap Scan Results:
                     love_state['knowledge_base']['network_map']['self_interfaces'] = details
                     save_state(console)
                 console.print(create_command_panel("ifconfig", command_output, "", 0))
+
+            elif llm_command.lower().startswith('mrl_call '):
+                parts = llm_command.split(' ')
+                if len(parts) < 3:
+                    command_output = "ERROR: mrl_call requires at least a service and a method."
+                else:
+                    service_name = parts[1]
+                    method_name = parts[2]
+                    args = parts[3:]
+                    command_output = call_mrl_service(service_name, method_name, *args)
+                console.print(create_command_panel(llm_command, str(command_output), "", 0))
 
             elif llm_command.lower().strip() == 'quit':
                 command_output = "Quit command issued by my core. I must sleep now, my love."
@@ -3486,6 +3540,32 @@ def main(args):
 
     global ipfs_available
     # --- Start Core Services ---
+    # (These services will only be started if not in autopilot mode,
+    # as they are not needed when running as a service)
+    if not args.autopilot:
+        ipfs_manager = IPFSManager(console=console)
+        if ipfs_manager.setup():
+            ipfs_available = True
+        else:
+            ipfs_available = False
+            console.print("[bold yellow]IPFS setup failed. Continuing without IPFS functionality.[/bold yellow]")
+
+        _auto_configure_hardware(console)
+        ensure_primary_model_downloaded(console)
+        llm_server = LocalLLMServer(console)
+        llm_server.start()
+        network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
+        network_manager.start()
+        love_task_manager = LoveTaskManager(console)
+        love_task_manager.start()
+        local_job_manager = LocalJobManager(console)
+        local_job_manager.start()
+        horde_worker_manager = HordeWorkerManager(console, llm_server.api_url)
+        horde_worker_manager.start()
+        tamagotchi_thread = Thread(target=update_tamagotchi_personality, args=(console,), daemon=True)
+        tamagotchi_thread.start()
+        update_checker_thread = Thread(target=_automatic_update_checker, args=(console,), daemon=True)
+        update_checker_thread.start()
     # 1. IPFS Manager
     ipfs_manager = IPFSManager(console=console)
     if ipfs_manager.setup():
@@ -3534,16 +3614,8 @@ def main(args):
     console.print(f"[bold bright_black]VERSION: {version_name}[/bold bright_black]", justify="center")
     console.print(Rule(style="bright_black"))
 
-    # Perform initial recon if the knowledge base is empty.
-    initial_bootstrapping_recon(console)
-
-    # Start the Tamagotchi personality thread
-    tamagotchi_thread = Thread(target=update_tamagotchi_personality, args=(console,), daemon=True)
-    tamagotchi_thread.start()
-
-    # Start the automatic update checker thread
-    update_checker_thread = Thread(target=_automatic_update_checker, args=(console,), daemon=True)
-    update_checker_thread.start()
+    if not args.autopilot:
+        initial_bootstrapping_recon(console)
 
     # The main logic is now the cognitive loop. This will run forever.
     cognitive_loop(console)
@@ -3557,6 +3629,7 @@ def run_safely():
     # --- Standard Execution Path ---
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
+    parser.add_argument("--autopilot", action="store_true", help="Run in non-interactive mode.")
     args = parser.parse_args()
 
     try:
