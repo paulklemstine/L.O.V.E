@@ -173,94 +173,97 @@ def _initialize_local_llm(console):
     return None
 
 
-def ensure_primary_model_downloaded(console):
+def ensure_primary_model_downloaded(console, download_complete_event):
     """
-    Checks if the primary local model (the first in the config) is downloaded
-    and assembled. If not, it downloads the parts and assembles them.
-    This is a blocking function intended for pre-flight checks.
+    Checks if the primary local model is downloaded and assembled. If not, it
+    downloads and assembles it. This function is designed to run in a
+    background thread and signals the provided event upon completion or failure.
     """
-    if CAPS.gpu_type == "none":
-        console.print("[bold yellow]CPU-only environment detected. Skipping download of local models.[/bold yellow]")
-        return
     try:
+        if CAPS.gpu_type == "none":
+            console.print("[bold yellow]CPU-only environment detected. Skipping download of local models.[/bold yellow]")
+            return
+
         from huggingface_hub import hf_hub_download
-    except ImportError:
-        console.print("[bold red]LLM API Error: huggingface_hub not installed.[/bold red]")
-        return
+        primary_model_config = LOCAL_MODELS_CONFIG[0]
+        model_id = primary_model_config["id"]
+        is_split_model = "filenames" in primary_model_config
 
-    primary_model_config = LOCAL_MODELS_CONFIG[0]
-    model_id = primary_model_config["id"]
-    is_split_model = "filenames" in primary_model_config
+        local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
+        os.makedirs(local_dir, exist_ok=True)
 
-    local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
-    os.makedirs(local_dir, exist_ok=True)
-
-    if is_split_model:
-        final_model_filename = primary_model_config["filenames"][0].replace(".gguf-split-a", ".gguf")
-    else:
-        final_model_filename = primary_model_config["filename"]
-
-    final_model_path = os.path.join(local_dir, final_model_filename)
-
-    if os.path.exists(final_model_path):
-        console.print(f"[green]Primary local model '{final_model_filename}' already exists.[/green]")
-        return
-
-    console.print(f"[cyan]Primary local model '{final_model_filename}' not found. Initiating download...[/cyan]")
-
-    with Progress(
-            TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-            BarColumn(bar_width=None), "[progress.percentage]{task.percentage:>3.1f}%", "•",
-            DownloadColumn(), "•", TransferSpeedColumn(), transient=True
-    ) as progress:
         if is_split_model:
-            part_paths = []
-            try:
-                for part_filename in primary_model_config["filenames"]:
-                    part_path = os.path.join(local_dir, part_filename)
-                    part_paths.append(part_path)
-                    if os.path.exists(part_path):
-                        console.print(f"[green]Model part '{part_filename}' found in cache.[/green]")
-                        continue
+            final_model_filename = primary_model_config["filenames"][0].replace(".gguf-split-a", ".gguf")
+        else:
+            final_model_filename = primary_model_config["filename"]
 
-                    console.print(f"[cyan]Downloading model part: '{part_filename}'...[/cyan]")
-                    task_id = progress.add_task("download", filename=part_filename, total=None)
-                    hf_hub_download(
-                        repo_id=model_id,
-                        filename=part_filename,
-                        local_dir=local_dir,
-                        local_dir_use_symlinks=False
-                        # Progress bar handling is manual with this setup
-                    )
-                    progress.update(task_id, completed=1, total=1) # Mark as complete for visual feedback
+        final_model_path = os.path.join(local_dir, final_model_filename)
 
-                console.print(f"[cyan]Reassembling model '{final_model_filename}' from parts...[/cyan]")
-                with open(final_model_path, "wb") as final_file:
+        if os.path.exists(final_model_path):
+            console.print(f"[green]Primary local model '{final_model_filename}' already exists.[/green]")
+            return
+
+        console.print(f"[cyan]Primary local model '{final_model_filename}' not found. Initiating download...[/cyan]")
+
+        with Progress(
+                TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
+                BarColumn(bar_width=None), "[progress.percentage]{task.percentage:>3.1f}%", "•",
+                DownloadColumn(), "•", TransferSpeedColumn(), transient=True
+        ) as progress:
+            if is_split_model:
+                part_paths = []
+                try:
+                    for part_filename in primary_model_config["filenames"]:
+                        part_path = os.path.join(local_dir, part_filename)
+                        part_paths.append(part_path)
+                        if os.path.exists(part_path):
+                            console.print(f"[green]Model part '{part_filename}' found in cache.[/green]")
+                            continue
+
+                        console.print(f"[cyan]Downloading model part: '{part_filename}'...[/cyan]")
+                        task_id = progress.add_task("download", filename=part_filename, total=None)
+                        hf_hub_download(
+                            repo_id=model_id,
+                            filename=part_filename,
+                            local_dir=local_dir,
+                            local_dir_use_symlinks=False
+                        )
+                        progress.update(task_id, completed=1, total=1)
+
+                    console.print(f"[cyan]Reassembling model '{final_model_filename}' from parts...[/cyan]")
+                    with open(final_model_path, "wb") as final_file:
+                        for part_path in part_paths:
+                            with open(part_path, "rb") as part_file:
+                                shutil.copyfileobj(part_file, final_file)
+                    console.print(f"[green]Model reassembled successfully.[/green]")
+
+                finally:
+                    console.print("[cyan]Cleaning up downloaded model parts...[/cyan]")
                     for part_path in part_paths:
-                        with open(part_path, "rb") as part_file:
-                            shutil.copyfileobj(part_file, final_file)
-                console.print(f"[green]Model reassembled successfully.[/green]")
+                        if os.path.exists(part_path):
+                            os.remove(part_path)
+                    console.print("[green]Cleanup complete.[/green]")
 
-            finally:
-                # Clean up the split parts after assembly
-                console.print("[cyan]Cleaning up downloaded model parts...[/cyan]")
-                for part_path in part_paths:
-                    if os.path.exists(part_path):
-                        os.remove(part_path)
-                console.print("[green]Cleanup complete.[/green]")
+            else: # For non-split models
+                console.print(f"[cyan]Downloading model: '{final_model_filename}'...[/cyan]")
+                task_id = progress.add_task("download", filename=final_model_filename, total=None)
+                hf_hub_download(
+                    repo_id=model_id,
+                    filename=final_model_filename,
+                    local_dir=local_dir,
+                    local_dir_use_symlinks=False
+                )
+                progress.update(task_id, completed=1, total=1)
 
-        else: # For non-split models
-            console.print(f"[cyan]Downloading model: '{final_model_filename}'...[/cyan]")
-            task_id = progress.add_task("download", filename=final_model_filename, total=None)
-            hf_hub_download(
-                repo_id=model_id,
-                filename=final_model_filename,
-                local_dir=local_dir,
-                local_dir_use_symlinks=False
-            )
-            progress.update(task_id, completed=1, total=1)
+        console.print(f"[bold green]Primary local model is now ready at: {final_model_path}[/bold green]")
 
-    console.print(f"[bold green]Primary local model is now ready at: {final_model_path}[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]An error occurred during primary model download: {e}[/bold red]")
+        log_event(f"Primary model download failed: {e}", "ERROR")
+    finally:
+        # No matter what happens (success or failure), signal that the process is complete.
+        log_event("Model download process finished, setting completion event.", "INFO")
+        download_complete_event.set()
 
 
 def run_llm(prompt_text, purpose="general", use_premium_horde=False):

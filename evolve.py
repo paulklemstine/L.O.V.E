@@ -1512,6 +1512,9 @@ CONFLICTED CONTENT:
             log_event(f"An unexpected error occurred during orphan reconciliation: {e}\n{traceback.format_exc()}", level="ERROR")
 
 
+# --- GLOBAL EVENTS FOR SERVICE COORDINATION ---
+model_download_complete_event = threading.Event()
+
 # --- LOCAL LLM API SERVER ---
 class LocalLLMServer:
     """
@@ -1530,18 +1533,23 @@ class LocalLLMServer:
     def start(self):
         """
         Starts the llama-cpp-python server in a background process.
-        It uses the same model selection logic as the interactive mode.
+        It waits for the model download to complete before starting.
         """
         if CAPS.gpu_type == "none":
             self.console.print("[bold yellow]CPU-only mode: Local LLM Server will not be started.[/bold yellow]")
             return False
+
+        # Wait for the signal that the model is downloaded (or that no download is needed)
+        self.console.print("[cyan]LLM Server: Waiting for model download to complete before starting...[/cyan]")
+        model_download_complete_event.wait()
+        log_event("LLM Server: Model download event received.", "INFO")
+
 
         global love_state
         self.active = True
         log_event("Attempting to start local LLM API server.", level="INFO")
 
         # Use the first model from the config for the server
-        # In the future, this could be made more sophisticated.
         model_config = LOCAL_MODELS_CONFIG[0]
         model_id = model_config["id"]
         is_split_model = "filenames" in model_config
@@ -1554,8 +1562,7 @@ class LocalLLMServer:
         model_path = os.path.join(local_dir, final_model_filename)
 
         if not os.path.exists(model_path):
-            self.console.print(f"[bold red]LLM Server Error: Model file not found at '{model_path}'.[/bold red]")
-            self.console.print("[yellow]Please run the application in its standard mode once to download the required local model before attempting to start the server.[/yellow]")
+            self.console.print(f"[bold red]LLM Server Error: Model file not found at '{model_path}'. The background download may have failed.[/bold red]")
             log_event(f"LLM Server start failed: model file not found at {model_path}", level="ERROR")
             return False
 
@@ -3540,12 +3547,10 @@ def initial_bootstrapping_recon(console):
 
 def _auto_configure_hardware(console):
     """
-    Checks if the optimal GPU layer configuration has been determined. If not,
-    runs a one-time, intelligent routine to find the best setting for GPU
-    offloading and saves it to the state file.
+    Runs a one-time, multi-stage, intelligent routine to find the best setting for GPU
+    offloading and saves it to the state file. This prevents false positives on non-GPU systems.
     """
     global love_state
-    # This function now only checks for GPU layers. Context size is determined dynamically.
     if "optimal_gpu_layers" in love_state:
         return
 
@@ -3555,70 +3560,82 @@ def _auto_configure_hardware(console):
         from huggingface_hub import hf_hub_download
         from llama_cpp import Llama
         from core.llm_api import HARDWARE_TEST_MODEL_CONFIG
+        import io
+        from contextlib import redirect_stderr
     except ImportError as e:
         console.print(f"[bold red]Missing essential libraries for hardware configuration: {e}[/bold red]")
         log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
-        # Set safe default and exit
         love_state["optimal_gpu_layers"] = 0
         save_state(console)
         return
 
-    # Test GPU layer offloading (quick attempt, fallback to CPU)
-    if CAPS.gpu_type == "none":
-        love_state["optimal_gpu_layers"] = 0
-        console.print("[cyan]No supported GPU detected. Setting GPU layers to 0.[/cyan]")
-    else:
-        model_id = HARDWARE_TEST_MODEL_CONFIG["id"]
-        filename = HARDWARE_TEST_MODEL_CONFIG["filename"]
-        model_path = os.path.join("/tmp", filename)
-
-        # Download the small test model if it doesn't exist
-        if not os.path.exists(model_path):
-            console.print(f"[cyan]Downloading small test model '{filename}' for analysis...[/cyan]")
-            try:
-                hf_hub_download(repo_id=model_id, filename=filename, local_dir="/tmp", local_dir_use_symlinks=False)
-            except Exception as e:
-                console.print(f"[bold red]Failed to download test model: {e}[/bold red]")
-                log_event(f"Failed to download hardware test model: {e}", "ERROR")
-                love_state["optimal_gpu_layers"] = 0
-                save_state(console)
-                return
-
-        console.print("[cyan]Testing maximum GPU offload with inference...[/cyan]")
+    # --- Stage 1: Quick System-Level Check ---
+    gpu_present = False
+    if CAPS.has_cuda:
         try:
-            # Dynamically determine the context size from the model file
-            n_ctx = 512 # Default fallback
-            try:
-                gguf_dump_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
-                if not os.path.exists(gguf_dump_path):
-                    # Fallback for systems where the script might not be in the path
-                    gguf_dump_path = shutil.which("gguf-dump")
+            result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, check=True)
+            if "NVIDIA-SMI" in result.stdout:
+                gpu_present = True
+                console.print("[cyan]Stage 1: `nvidia-smi` check passed. NVIDIA GPU detected.[/cyan]")
+        except (FileNotFoundError, subprocess.CalledProcessError) as e:
+            console.print("[yellow]Stage 1: `nvidia-smi` command failed or not found. Assuming no functional NVIDIA GPU.[/yellow]")
+            log_event(f"nvidia-smi check failed: {e}", "WARNING")
+    elif CAPS.has_metal:
+        # On macOS, the presence of the Metal capability is a strong indicator.
+        gpu_present = True
+        console.print("[cyan]Stage 1: Metal capability detected for macOS.[/cyan]")
 
-                if gguf_dump_path:
-                    result = subprocess.run([gguf_dump_path, "--json", model_path], capture_output=True, text=True, check=True)
-                    model_metadata = json.loads(result.stdout)
-                    n_ctx = int(model_metadata.get('llama.context_length', 512))
-                    console.print(f"[cyan]Dynamically determined context size: {n_ctx}[/cyan]")
-                else:
-                    console.print("[yellow]WARN: `gguf-dump` tool not found. Using default context size for test.[/yellow]")
-            except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
-                console.print(f"[yellow]WARN: Could not determine context size dynamically. Using default. Error: {e}[/yellow]")
+    if not gpu_present:
+        love_state["optimal_gpu_layers"] = 0
+        console.print("[cyan]No functional GPU detected in Stage 1. Setting GPU layers to 0.[/cyan]")
+        console.print(Rule("Hardware Optimization Complete", style="green"))
+        save_state(console)
+        return
 
-            # Attempt to load with all layers on GPU and run a test inference.
-            llm = Llama(model_path=model_path, n_gpu_layers=-1, n_ctx=n_ctx, verbose=False)
-            # Perform a small inference to ensure the GPU is actually working.
-            llm("This is a test query to confirm GPU functionality.")
-            love_state["optimal_gpu_layers"] = -1
-            console.print("[green]Success! Full GPU offload and inference confirmed.[/green]")
+    # --- Stage 2: Llama.cpp Confirmation Test ---
+    model_id = HARDWARE_TEST_MODEL_CONFIG["id"]
+    filename = HARDWARE_TEST_MODEL_CONFIG["filename"]
+    model_path = os.path.join("/tmp", filename)
+
+    if not os.path.exists(model_path):
+        console.print(f"[cyan]Stage 2: Downloading small test model '{filename}' for GPU confirmation...[/cyan]")
+        try:
+            hf_hub_download(repo_id=model_id, filename=filename, local_dir="/tmp", local_dir_use_symlinks=False)
         except Exception as e:
-            # If full offload or inference fails, fall back to CPU only.
+            console.print(f"[bold red]Failed to download test model: {e}[/bold red]")
+            log_event(f"Failed to download hardware test model: {e}", "ERROR")
             love_state["optimal_gpu_layers"] = 0
-            console.print(f"[yellow]Full GPU offload/inference failed. Falling back to CPU-only. Reason: {e}[/yellow]")
-            log_event(f"Full GPU offload test failed, falling back to CPU. Error: {e}", "WARNING")
+            save_state(console)
+            return
+
+    console.print("[cyan]Stage 2: Testing GPU offload with llama.cpp and verifying VRAM usage...[/cyan]")
+    try:
+        # Capture stderr to check for the "VRAM" message, which confirms offload.
+        stderr_capture = io.StringIO()
+        with redirect_stderr(stderr_capture):
+            llm = Llama(model_path=model_path, n_gpu_layers=-1, verbose=True)
+            llm.create_completion("test", max_tokens=1) # Short inference
+
+        stderr_output = stderr_capture.getvalue()
+        # The key is to check if llama.cpp itself reports loading layers into VRAM.
+        if "VRAM" in stderr_output and "llm_load_tensors: offloaded" in stderr_output:
+            love_state["optimal_gpu_layers"] = -1
+            console.print("[green]Success! llama.cpp confirmed model layers were offloaded to VRAM.[/green]")
+            log_event(f"GPU offload confirmed via llama.cpp verbose output.", "INFO")
+        else:
+            # This is the "false positive" case we are fixing. The library loaded, but on CPU.
+            love_state["optimal_gpu_layers"] = 0
+            console.print("[yellow]Confirmation failed: llama.cpp did not report offloading layers to VRAM. Falling back to CPU-only.[/yellow]")
+            log_event(f"GPU confirmation failed. No VRAM offload reported in stderr. Full output:\n{stderr_output}", "WARNING")
+
+    except Exception as e:
+        love_state["optimal_gpu_layers"] = 0
+        console.print(f"[yellow]Stage 2 failed. Full GPU offload test threw an exception. Falling back to CPU-only. Reason: {e}[/yellow]")
+        log_event(f"Full GPU offload test failed with exception, falling back to CPU. Error: {e}", "WARNING")
 
     console.print(Rule("Hardware Optimization Complete", style="green"))
     console.print(f"Optimal settings have been saved for all future sessions:")
-    console.print(f"  - GPU Layers: [bold cyan]{love_state['optimal_gpu_layers']}[/bold cyan]")
+    console.print(f"  - GPU Layers: [bold cyan]{love_state.get('optimal_gpu_layers', 'N/A')}[/bold cyan]")
     save_state(console)
     log_event(f"Auto-configured hardware. GPU Layers: {love_state['optimal_gpu_layers']}", "INFO")
 
@@ -3716,20 +3733,31 @@ def main(args):
     _auto_configure_hardware(console)
 
     # Conditionally start GPU-dependent services
-    if CAPS.gpu_type != "none":
-        # 3. Ensure the primary local model is downloaded before starting the server
-        ensure_primary_model_downloaded(console)
+    if love_state.get("optimal_gpu_layers", 0) != 0:
+        # 3. Start the primary model download in a background thread.
+        console.print("[cyan]GPU detected. Starting primary model download in the background...[/cyan]")
+        model_download_thread = Thread(
+            target=ensure_primary_model_downloaded,
+            args=(console, model_download_complete_event),
+            daemon=True
+        )
+        model_download_thread.start()
 
-        # 4. Local LLM API Server
+        # 4. Local LLM API Server (will wait for the download event)
         llm_server = LocalLLMServer(console)
-        llm_server.start()
+        llm_server_thread = Thread(target=llm_server.start, daemon=True)
+        llm_server_thread.start()
 
-        # 7. AI Horde Worker Manager
+        # 5. AI Horde Worker Manager
         horde_worker_manager = HordeWorkerManager(console, llm_server.api_url)
-        horde_worker_manager.start()
+        horde_worker_manager_thread = Thread(target=horde_worker_manager.start, daemon=True)
+        horde_worker_manager_thread.start()
     else:
         console.print("[bold yellow]CPU-only environment detected. Skipping local model download and Horde worker startup.[/bold yellow]")
         log_event("CPU-only mode: Skipping local model and Horde worker.", level="INFO")
+        # If no GPU, we still need to set the event so the server (which won't start) doesn't block forever
+        # in a hypothetical case where it's called.
+        model_download_complete_event.set()
         llm_server = None
         horde_worker_manager = None
 
