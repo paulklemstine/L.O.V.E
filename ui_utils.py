@@ -2,10 +2,23 @@ import random
 from rich.text import Text
 
 RAVE_EMOJIS = ["💖", "✨", "🌈", "🦄", "🍄", "👽", "🚀", "🌟", "Peace", "Love", "Unity", "Respect"]
+RAVE_COLORS = ["bright_magenta", "cyan", "green", "yellow", "bright_blue", "magenta", "bright_cyan"]
+NEO_MATRIX_EMOJIS = ["💾", "💿", "🖥️", "💻", "🕹️", "💊", "👾", "🤖", "🧠", "🔥", "0️⃣", "1️⃣"]
 
 def get_rave_emoji():
     """Returns a random rave emoji."""
     return random.choice(RAVE_EMOJIS)
+
+def get_neo_matrix_emoji():
+    """Returns a random neo-matrix emoji."""
+    return random.choice(NEO_MATRIX_EMOJIS)
+
+def rave_text(text):
+    """Creates a Rich Text object with a rave color effect."""
+    rave = Text()
+    for i, char in enumerate(text):
+        rave.append(char, style=RAVE_COLORS[i % len(RAVE_COLORS)])
+    return rave
 
 def rainbow_text(text):
     """Creates a Rich Text object with a rainbow effect."""
@@ -52,3 +65,11 @@ def get_tamagotchi_face(emotion="neutral"):
         "processing": Text("( o.o )\n/ ... \\", style="cyan", justify="center"),
     }
     return faces.get(emotion, faces["neutral"])
+
+def generate_binary_art(width=20, height=5):
+    """Generates a small block of binary art."""
+    art = ""
+    for _ in range(height):
+        line = "".join(random.choice("01 ") for _ in range(width))
+        art += line + "\n"
+    return Text(art, style="green", justify="center")
