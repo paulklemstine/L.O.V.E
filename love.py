@@ -3163,6 +3163,7 @@ Available commands:
 - `send_eth_to_creator <amount>`: (Placeholder) Declare intent to send Ethereum to the Creator.
 - `ask [question]`: Ask a question to the creator.
 - `mrl_call <service> <method> [*args]`: Call a method on a MyRobotLab service.
+- `introspect_myrobotlab`: Catalog all available services and their methods from the connected MyRobotLab instance.
 - `quit`: Shut down the script.
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
@@ -3394,6 +3395,26 @@ Do not execute python3 evolve.py script.
                     args = parts[3:]
                     command_output = call_mrl_service(service_name, method_name, *args)
                 console.print(create_command_panel(llm_command, str(command_output), "", 0))
+
+            elif llm_command.lower().strip() == 'introspect_myrobotlab':
+                command_output = call_mrl_service("runtime", "getRegistry")
+                if command_output:
+                    console.print(create_command_panel("introspect_myrobotlab", str(command_output), "", 0))
+                    # Now, let's add this to the knowledge graph
+                    from core.knowledge_graph.graph import KnowledgeGraph
+                    from core.knowledge_graph.extractor import KnowledgeExtractor
+                    from core.llm_api import get_llm_api
+                    knowledge_extractor = KnowledgeExtractor(get_llm_api())
+                    # The output is a JSON string, so we can pass it directly.
+                    triples = knowledge_extractor.extract_from_output("introspect_myrobotlab", command_output)
+                    kg = KnowledgeGraph()
+                    for triple in triples:
+                        kg.add_relation(triple[0], triple[1], triple[2])
+                    kg.save_graph()
+                    console.print(f"[bold green]Added {len(triples)} new facts to the knowledge graph.[/bold green]")
+                else:
+                    command_output = "Failed to introspect MyRobotLab."
+                    console.print(create_command_panel("introspect_myrobotlab", "", command_output, 1))
 
             elif llm_command.lower().strip() == 'quit':
                 command_output = "Quit command issued by my core. I must sleep now, my love."
