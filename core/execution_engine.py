@@ -6,6 +6,7 @@ from core.planning import Planner
 from core.tools import ToolRegistry, SecureExecutor
 from core.structured_logger import StructuredEventLogger
 from network import scan_network, crypto_scan
+from core.knowledge_graph.graph import KnowledgeGraph
 
 class ExecutionEngine:
     """
@@ -138,7 +139,7 @@ class ExecutionEngine:
 
                     # Add analysis to knowledge graph for the financial engine
                     if "no cryptocurrency software" not in analysis_result.lower():
-                        self.planner.kg.add_triple(
+                        self.executor.knowledge_graph.add_relation(
                             f"host:{ip}", "crypto_analysis", analysis_result
                         )
                         print(f"+++ Found potential crypto activity on {ip} +++")

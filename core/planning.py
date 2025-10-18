@@ -7,11 +7,13 @@ from core.knowledge_graph.graph import KnowledgeGraph
 
 # A mock LLM call function for demonstration purposes.
 # In a real implementation, this would be a call to a powerful language model.
-def mock_llm_call(prompt: str) -> str:
+def mock_llm_call(prompt: str, purpose: str = "general") -> str:
     """Mocks a call to a Large Language Model for plan generation."""
     print(f"--- Mock LLM Call ---\nPrompt: {prompt.strip()}\n--------------------")
     # Pre-defined responses for specific goals to simulate LLM behavior.
-    if "Summarize the latest advancements in AI" in prompt:
+    if purpose == "knowledge_extraction":
+        return '[("entity", "relationship", "value")]'
+    elif "Summarize the latest advancements in AI" in prompt:
         plan = [
             {"step": 1, "task": "Identify key research sources like arXiv, major conference proceedings, and tech news sites."},
             {"step": 2, "task": "Formulate search queries for the identified sources."},

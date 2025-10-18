@@ -54,7 +54,7 @@ class TestPhase1Integration(unittest.TestCase):
                 return "Article content about AI."
             return "Default mock result"
 
-        self.orchestrator.executor.execute = MagicMock(side_effect=mock_executor_execute)
+        self.orchestrator.execution_engine.executor.execute = MagicMock(side_effect=mock_executor_execute)
 
         # --- Act ---
         # The execute_goal method is async, so we need to run it in the event loop.
@@ -68,7 +68,7 @@ class TestPhase1Integration(unittest.TestCase):
         # Verify that the planner was called
         mock_llm_call_func.assert_called_once()
         # Verify that the executor was called for the tools in the plan
-        self.assertEqual(self.orchestrator.executor.execute.call_count, 2)
+        self.assertEqual(self.orchestrator.execution_engine.executor.execute.call_count, 2)
 
 
 if __name__ == '__main__':

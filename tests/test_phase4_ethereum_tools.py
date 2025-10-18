@@ -25,7 +25,10 @@ def mock_web3():
 def tool_registry_and_executor():
     """Fixture for a ToolRegistry and SecureExecutor."""
     registry = ToolRegistry()
-    executor = SecureExecutor()
+    # Mock the KnowledgeGraph and llm_api for the SecureExecutor
+    mock_kg = MagicMock()
+    mock_llm_api = MagicMock()
+    executor = SecureExecutor(knowledge_graph=mock_kg, llm_api=mock_llm_api)
 
     # Register a mock notification tool
     mock_notify = AsyncMock(return_value="Notification sent.")

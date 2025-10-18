@@ -43,10 +43,7 @@ class Orchestrator:
         self.tool_registry.register_tool("add_manifest_entry", self.data_manifest.add_entry)
         self.tool_registry.register_tool("load_manifest", self.data_manifest.load_manifest)
 
-        # 3. Initialize the Secure Executor
-        self.executor = SecureExecutor()
-
-        # 4. Initialize the shared state object
+        # 3. Initialize the shared state object
         self.evil_state = {
             "knowledge_base": {
                 "network_map": {"hosts": {}, "last_scan": 0},
@@ -55,6 +52,9 @@ class Orchestrator:
             },
             "llm_api": mock_llm_call,
         }
+
+        # 4. Initialize the Secure Executor
+        self.executor = SecureExecutor(self.kg, self.evil_state["llm_api"])
 
         # 5. Initialize the Execution Engine with all necessary components
         self.execution_engine = ExecutionEngine(
