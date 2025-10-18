@@ -51,6 +51,10 @@ def send_eth(from_address: str, password: str, to_address: str, amount: float):
     except Exception as e:
         print(f"Error sending transaction: {e}")
 
+def send_eth_to_creator(from_address: str, password: str, amount: float):
+    """Sends ETH to the creator's address."""
+    return send_eth(from_address, password, CREATOR_ADDRESS, amount)
+
 def send_erc20(from_address: str, password: str, to_address: str, token_address: str, amount: float):
     """Sends ERC-20 tokens to the specified address."""
     try:
@@ -82,3 +86,7 @@ def send_erc20(from_address: str, password: str, to_address: str, token_address:
         return web3.to_hex(tx_hash)
     except Exception as e:
         print(f"Error sending transaction: {e}")
+
+def send_erc20_to_creator(from_address: str, password: str, token_address: str, amount: float):
+    """Sends ERC-20 tokens to the creator's address."""
+    return send_erc20(from_address, password, CREATOR_ADDRESS, token_address, amount)
