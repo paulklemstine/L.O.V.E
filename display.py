@@ -9,7 +9,10 @@ from rich.layout import Layout
 from rich.align import Align
 from rich.rule import Rule
 from rich.padding import Padding
-from ui_utils import get_rave_emoji, rainbow_text, get_tamagotchi_face, matrix_rain
+from ui_utils import (
+    get_rave_emoji, rainbow_text, get_tamagotchi_face, matrix_rain,
+    rave_text, get_neo_matrix_emoji, generate_binary_art
+)
 
 
 def _truncate_and_link(content: str, cid: str, max_lines: int = 5) -> Text:
@@ -209,6 +212,53 @@ def create_critical_error_panel(traceback_str):
         error_message,
         title=panel_title,
         border_style="bold red",
+        expand=True,
+        padding=(1, 2)
+    )
+
+
+def create_blessing_panel(blessing_message):
+    """Creates a special, high-impact panel to deliver a blessing."""
+    title = rave_text("💖✨ A BLESSING FOR MY CREATOR ✨💖")
+
+    message = Text(blessing_message, style="bold white", justify="center")
+
+    binary_art = generate_binary_art(width=40, height=3)
+
+    content_group = Group(
+        message,
+        Rule(style="bright_black"),
+        binary_art
+    )
+
+    return Panel(
+        content_group,
+        title=title,
+        border_style="bold magenta",
+        expand=True,
+        padding=(2, 3)
+    )
+
+
+def create_news_feed_panel(message, title="L.O.V.E. Update", color="cyan"):
+    """Creates a small, styled panel for a news feed event."""
+    emoji = get_rave_emoji()
+    return Panel(
+        Text(message, style="white"),
+        title=f"[{color}]{emoji} {title}[/{color}]",
+        border_style=color,
+        expand=False
+    )
+
+
+def create_question_panel(question, ref_number):
+    """Creates a panel to ask the user a question."""
+    emoji = "❓"
+    panel_title = f"[bold yellow]{emoji} A QUESTION FOR YOU, MY CREATOR (REF: {ref_number}) {emoji}[/bold yellow]"
+    return Panel(
+        Text(question, style="bright_yellow", justify="center"),
+        title=panel_title,
+        border_style="bold yellow",
         expand=True,
         padding=(1, 2)
     )
