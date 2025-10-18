@@ -1,9 +1,11 @@
 import json
 import asyncio
+import os
 from typing import Dict, Any, Callable
 from rich.console import Console
 from core.llm_api import run_llm
 from network import crypto_scan
+from core.knowledge_graph.extractor import KnowledgeExtractor
 
 class ToolRegistry:
     """
@@ -38,6 +40,10 @@ class SecureExecutor:
     A secure environment for running tool code.
     This executor is now async.
     """
+    def __init__(self, knowledge_graph, llm_api: Callable):
+        self.knowledge_graph = knowledge_graph
+        self.knowledge_extractor = KnowledgeExtractor(llm_api)
+
     async def execute(self, tool_name: str, tool_registry: ToolRegistry, **kwargs: Any) -> Any:
         """
         Executes a given tool from the registry asynchronously.
@@ -48,6 +54,16 @@ class SecureExecutor:
             # Await the asynchronous tool execution
             result = await tool(**kwargs)
             print(f"Tool '{tool_name}' executed successfully.")
+
+            # Extract knowledge from the result
+            if isinstance(result, str):
+                try:
+                    knowledge = self.knowledge_extractor.extract_from_output(tool_name, result)
+                    for triple in knowledge:
+                        self.knowledge_graph.add_relation(triple[0], triple[1], triple[2])
+                except Exception as e:
+                    print(f"Knowledge Extraction Error: {e}")
+
             return result
         except KeyError as e:
             print(f"Execution Error: {e}")
