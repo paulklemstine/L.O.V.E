@@ -112,6 +112,23 @@ def create_horde_worker_panel(log_content):
         border_style="magenta",
         expand=False
     )
+
+def create_skyvern_panel(prompt, result, output_cid=None):
+    """Creates a panel to display the results of a Skyvern web automation task."""
+    title = f"[bold blue]SKYVERN AUTOMATION[/bold blue] - [cyan]{prompt}[/cyan]"
+
+    content = Text(str(result), justify="left")
+
+    if output_cid:
+        link = f"https://ipfs.io/ipfs/{output_cid}"
+        content.append(f"\n\n[dim]Full output available at: [link={link}]{link}[/link][/dim]")
+
+    return Panel(
+        content,
+        title=title,
+        border_style="blue",
+        expand=False
+    )
     main_layout["balance"].update(balance_panel)
 
 

@@ -213,6 +213,7 @@ def _check_and_install_dependencies():
     _install_pip_package("web3")
     _install_pip_package("cmake")
     _install_pip_package("pyyaml")
+    _install_pip_package("skyvern")
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
@@ -2863,7 +2864,7 @@ def _get_valid_command_prefixes():
     """Returns a list of all valid command prefixes for parsing and validation."""
     return [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask", "mrl_call"
+        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask", "mrl_call", "browse"
     ]
 
 def _parse_llm_command(raw_text):
@@ -3497,6 +3498,15 @@ Do not execute python3 evolve.py script.
                 else:
                     command_output = "Failed to introspect MyRobotLab."
                     console.print(create_command_panel("introspect_myrobotlab", "", command_output, 1))
+
+            elif llm_command.lower().startswith('browse '):
+                prompt = llm_command[len('browse '):].strip()
+                if not prompt:
+                    command_output = "ERROR: No prompt provided for browse command."
+                else:
+                    command_output = call_mrl_service("skyvern", "run_task", prompt)
+                    console.print(create_skyvern_panel(prompt, command_output))
+
 
             elif llm_command.lower().strip() == 'quit':
                 command_output = "Quit command issued by my core. I must sleep now, my love."
