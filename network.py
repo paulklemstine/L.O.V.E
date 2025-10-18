@@ -1,790 +1,380 @@
-import subprocess
-import time
+import asyncio
 import json
-import logging
+import subprocess
 import os
-import base64
-import hashlib
-import shutil
 import re
+import time
+from rich.panel import Panel
 import netifaces
 import ipaddress
 import requests
-import xml.etree.ElementTree as ET
-
+from xml.etree import ElementTree as ET
 from core.retry import retry
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import serialization
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import padding as sym_padding
-from threading import Thread
 
-from rich.console import Console
-from rich.panel import Panel
-import time
+# This module no longer imports directly from evolve.py to avoid circular dependencies.
+# Dependencies like IS_CREATOR_INSTANCE and callbacks are now injected via the constructor.
 
-SHARED_SECRET = 'a-very-secret-key-that-should-be-exchanged-securely'
 
-def evp_bytes_to_key(password, salt, key_len, iv_len):
-    dt_i = b''
-    key = b''
-    iv = b''
-    while len(key) < key_len or len(iv) < iv_len:
-        dt_i = hashlib.md5(dt_i + password.encode('utf-8') + salt).digest()
-        if len(key) < key_len:
-            key += dt_i[:min(len(dt_i), key_len - len(key))]
-        if len(iv) < iv_len and len(key) >= key_len:
-            iv += dt_i[:min(len(dt_i), iv_len - len(iv))]
-    return key, iv
+class NetworkManager:
+    def __init__(self, console, is_creator=False, treasure_callback=None, question_callback=None):
+        """
+        Initializes the NetworkManager.
+        - console: A rich.console.Console object for printing.
+        - is_creator: A boolean indicating if this is the Creator's instance.
+        - treasure_callback: A function to call when treasure is received.
+        - question_callback: A function to call when a question is received.
+        """
+        self.console = console
+        self.is_creator = is_creator
+        self.treasure_callback = treasure_callback
+        self.question_callback = question_callback
+        self.process = None
+        self.peer_bridge_script = os.path.join(os.path.dirname(__file__), '..', 'peer-bridge.js')
+        self.active = False
+        self.thread = None
 
-def encrypt_message(text):
-    try:
-        salt = os.urandom(8)
-        key, iv = evp_bytes_to_key(SHARED_SECRET, salt, 32, 16)
-        padder = sym_padding.PKCS7(128).padder()
-        padded_data = padder.update(text.encode()) + padder.finalize()
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-        encryptor = cipher.encryptor()
-        ct = encryptor.update(padded_data) + encryptor.finalize()
-        return base64.b64encode(b"Salted__" + salt + ct).decode('utf-8')
-    except Exception as e:
-        return None
-
-def decrypt_message(encrypted_message_b64):
-    try:
-        data = base64.b64decode(encrypted_message_b64)
-        salt = data[8:16]
-        ciphertext = data[16:]
-        key, iv = evp_bytes_to_key(SHARED_SECRET, salt, 32, 16)
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-        decryptor = cipher.decryptor()
-        decrypted_padded = decryptor.update(ciphertext) + decryptor.finalize()
-        unpadder = sym_padding.PKCS7(128).unpadder()
-        unpadded_data = unpadder.update(decrypted_padded) + unpadder.finalize()
-        return unpadded_data.decode('utf-8')
-    except Exception as e:
-        return None
-
-class NetworkManager(Thread):
-    def __init__(self, console=None, creator_public_key=None):
-        super().__init__()
-        self.daemon = True
-        self.console = console if console else Console()
-        self.creator_public_key = creator_public_key
-        self.bridge_process = None
-        self.peer_id = None
-        self.online = False
-        self.connections = {}
-        self.creator_id = None
-
-    def run(self):
-        try:
-            self.bridge_process = subprocess.Popen(['node', 'peer-bridge.js'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding='utf-8')
-            Thread(target=self._read_stdout, daemon=True).start()
-        except Exception as e:
-            self.console.print(f"[bold red]Critical error starting Node.js bridge: {e}[/bold red]")
-
-    def _read_stdout(self):
-        for line in iter(self.bridge_process.stdout.readline, ''):
-            if not line.strip(): continue
-            try:
-                message = json.loads(line)
-                msg_type = message.get('type')
-                if msg_type == 'status': self._handle_status(message)
-                elif msg_type == 'p2p-data': self._handle_p2p_data(message)
-                elif msg_type == 'connection': self.connections[message.get('peer')] = 'connected'
-                elif msg_type == 'disconnection':
-                    if message.get('peer') in self.connections: del self.connections[message.get('peer')]
-            except Exception as e:
-                logging.error(f"Error processing message from bridge: {e}\nMessage: {line.strip()}")
-
-    def _handle_status(self, message):
-        if message.get('status') == 'online':
-            self.peer_id = message['peerId']
-            self.online = True
-            self.console.print(f"[green]Network bridge online. Peer ID: {self.peer_id}[/green]")
-            self.connect_to_peer('borg-lobby')
-        elif message.get('status') == 'error':
-            self.online = False
-
-    def _handle_p2p_data(self, message):
-        peer_id = message.get('peer')
-        payload = message.get('payload', {})
-        if peer_id == 'borg-lobby':
-            if payload.get('type') == 'welcome':
-                for p_id in payload.get('peers', []): self.connect_to_peer(p_id)
-            elif payload.get('type') == 'peer-connect':
-                self.connect_to_peer(payload.get('peerId'))
+    def start(self):
+        """Starts the peer-to-peer bridge in a background thread."""
+        if not os.path.exists(self.peer_bridge_script):
+            self.console.print(f"[bold red]Error: Peer bridge script not found at '{self.peer_bridge_script}'[/bold red]")
             return
+
+        self.active = True
+        self.thread = asyncio.run_coroutine_threadsafe(self._run_bridge(), asyncio.get_event_loop())
+        self.console.print("[cyan]Network Manager started. Peer bridge is connecting...[/cyan]")
+
+    async def _run_bridge(self):
+        """The main async task that runs the Node.js bridge and processes its output."""
+        while self.active:
+            try:
+                self.process = await asyncio.create_subprocess_exec(
+                    'node', self.peer_bridge_script,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+
+                # Process stdout and stderr concurrently
+                await asyncio.gather(
+                    self._handle_stream(self.process.stdout, self._handle_message),
+                    self._handle_stream(self.process.stderr, self._handle_log)
+                )
+
+                await self.process.wait()
+
+            except FileNotFoundError:
+                self.console.print("[bold red]Error: 'node' command not found. Please install Node.js.[/bold red]")
+                break
+            except Exception as e:
+                self.console.print(f"[bold red]Peer bridge error: {e}.[/bold red]")
+
+            if self.active:
+                self.console.print("[yellow]Peer bridge disconnected. Attempting to reconnect in 10 seconds...[/yellow]")
+                await asyncio.sleep(10)
+
+    async def _handle_stream(self, stream, handler):
+        """Reads lines from a stream and passes them to a handler function."""
+        while self.active:
+            try:
+                line = await stream.readline()
+                if not line:
+                    break
+                handler(line.decode('utf-8').strip())
+            except Exception as e:
+                self.console.print(f"[bold red]Error reading from subprocess stream: {e}[/bold red]")
+                break
+
+    def _handle_message(self, message_str):
+        """Handles JSON messages from the peer bridge's stdout."""
         try:
-            decrypted_str = decrypt_message(payload.get('payload'))
-            if not decrypted_str: return
-            inner_payload = json.loads(decrypted_str)
-            if inner_payload.get('type') == 'creator-command':
-                self._handle_creator_command(peer_id, inner_payload.get('payload', {}))
-            elif inner_payload.get('type') == 'creator-announcement':
-                self.creator_id = peer_id
+            message = json.loads(message_str)
+            msg_type = message.get("type")
+
+            if msg_type == "status":
+                self.console.print(Panel(f"Peer Status: [bold green]{message.get('status')}[/bold green]\nPeer ID: [cyan]{message.get('peerId')}[/cyan]", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
+            elif msg_type == "treasure-broadcast" and self.is_creator:
+                if self.treasure_callback:
+                    self.treasure_callback(message.get("data"))
+            elif msg_type == "question":
+                if self.question_callback:
+                    self.question_callback(message.get("question"))
+            # Other instances will ignore treasure broadcasts if they are not the creator.
+
+        except json.JSONDecodeError:
+            self.console.print(f"[bright_black]Non-JSON message from bridge: {message_str}[/bright_black]")
         except Exception as e:
-            logging.error(f"Error processing encrypted P2P data: {e}")
+            self.console.print(f"[bold red]Error processing message from bridge: {e}[/bold red]")
 
-    def ask_question(self, question):
-        if self.creator_id:
-            message = {'type': 'question', 'id': f'q-{time.time()}', 'question': question}
-            self.send_message(self.creator_id, {'type': 'encrypted-message', 'payload': encrypt_message(json.dumps(message))})
-        else:
-            self.console.print("[yellow]Cannot ask question: Creator not found.[/yellow]")
-
-    def _handle_creator_command(self, peer_id, payload):
-        command = payload.get('command')
+    def _handle_log(self, log_str):
+        """Handles log messages from the peer bridge's stderr."""
         try:
-            public_key = serialization.load_pem_public_key(self.creator_public_key.encode('utf-8'))
-            public_key.verify(bytes.fromhex(payload.get('signature')), command.encode('utf-8'), padding.PKCS1v15(), hashes.SHA256())
-            from evolve import run_llm, execute_shell_command
-            executable_command = run_llm(f"Translate this to a command: '{command}'")
-            if executable_command:
-                stdout, stderr, code = execute_shell_command(executable_command, {})
-                output = f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-                response = {'type': 'action-response', 'output': output}
-                self.send_message(peer_id, {'type': 'encrypted-message', 'payload': encrypt_message(json.dumps(response))})
-        except Exception as e:
-            logging.error(f"Error processing creator command: {e}")
+            log_entry = json.loads(log_str)
+            level = log_entry.get("level", "info")
+            message = log_entry.get("message", "No message")
+            # Log to the central logger instead of just printing
+            from evolve import log_print # Local import to avoid circular dependency at module level
+            log_print(f"[{level.upper()}] [PeerBridge] {message}")
+        except json.JSONDecodeError:
+            # Handle plain string logs as well
+            from evolve import log_print
+            log_print(f"[INFO] [PeerBridge] {log_str}")
 
-    def send_message(self, peer_id, payload):
-        self._send_command_to_bridge({'type': 'p2p-send', 'peer': peer_id, 'payload': payload})
 
-    def connect_to_peer(self, peer_id):
-        self._send_command_to_bridge({'type': 'connect-to-peer', 'peerId': peer_id})
+    def send_treasure(self, encrypted_data):
+        """Sends encrypted treasure data to all peers."""
+        self._send_message({
+            "type": "broadcast",
+            "payload": {
+                "type": "treasure-broadcast",
+                "data": encrypted_data
+            }
+        })
 
-    def _send_command_to_bridge(self, command):
-        if not self.bridge_process or self.bridge_process.poll() is not None: return
-        try:
-            self.bridge_process.stdin.write(json.dumps(command) + '\n')
-            self.bridge_process.stdin.flush()
-        except Exception as e:
-            logging.error(f"Failed to write to node bridge stdin: {e}")
+    def ask_question(self, question_text):
+        """Sends a question to the creator instance."""
+        self._send_message({
+            "type": "send",
+            "targetPeerId": "borg-lobby",
+            "payload": {
+                "type": "question",
+                "question": question_text
+            }
+        })
+
+
+    def _send_message(self, message_dict):
+        """Sends a JSON message to the Node.js peer bridge process."""
+        if self.process and self.process.stdin and not self.process.stdin.is_closing():
+            message_str = json.dumps(message_dict)
+            try:
+                self.process.stdin.write((message_str + '\n').encode('utf-8'))
+            except (BrokenPipeError, ConnectionResetError) as e:
+                 self.console.print(f"[bold red]Could not send message to peer bridge: {e}[/bold red]")
 
     def stop(self):
-        if self.bridge_process and self.bridge_process.poll() is not None:
-            self.bridge_process.terminate()
+        """Stops the peer bridge process and the handling thread."""
+        self.active = False
+        if self.process:
             try:
-                self.bridge_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.bridge_process.kill()
-            logging.info("Node.js peer bridge stopped.")
-        self.online = False
+                self.process.terminate()
+            except ProcessLookupError:
+                pass # Process already terminated
+        if self.thread and not self.thread.done():
+            self.thread.cancel()
+        self.console.print("[cyan]Network Manager stopped.[/cyan]")
 
-def scan_network(evil_state, autopilot_mode=False):
-    """
-    Discovers active devices on the local network, performs a fast port scan on them,
-    updates the knowledge base, and returns a list of IPs and a formatted string summary.
-    """
-    console = Console()
-    kb = evil_state["knowledge_base"]["network_map"]
-    nmap_path = shutil.which('nmap')
 
-    def _get_network_info():
+# --- Standalone Network Utility Functions ---
+
+def get_local_subnets():
+    """Identifies local subnets from network interfaces."""
+    subnets = set()
+    try:
+        for iface in netifaces.interfaces():
+            addrs = netifaces.ifaddresses(iface)
+            if netifaces.AF_INET in addrs:
+                for addr_info in addrs[netifaces.AF_INET]:
+                    ip = addr_info.get('addr')
+                    netmask = addr_info.get('netmask')
+                    if ip and netmask and not ip.startswith('127.'):
+                        try:
+                            network = ipaddress.ip_network(f'{ip}/{netmask}', strict=False)
+                            subnets.add(str(network))
+                        except ValueError:
+                            continue
+    except Exception as e:
+        print(f"Could not get local subnets: {e}")
+    return list(subnets)
+
+@retry(exceptions=(subprocess.TimeoutExpired, subprocess.CalledProcessError), tries=2, delay=2)
+def scan_network(state, autopilot_mode=False):
+    """
+    Scans the local network for active hosts using nmap.
+    Updates the network map in the application state.
+    """
+    from evolve import log_event # Local import
+    subnets = get_local_subnets()
+    if not subnets:
+        return [], "No active network subnets found to scan."
+
+    log_event(f"Starting network scan on subnets: {', '.join(subnets)}")
+    all_found_ips = []
+    output_log = f"Scanning subnets: {', '.join(subnets)}\n"
+
+    for subnet in subnets:
         try:
-            gws = netifaces.gateways()
-            default_gateway_info = gws.get('default', {}).get(netifaces.AF_INET)
-            if not default_gateway_info:
-                logging.warning("Could not determine default gateway.")
-                return None, None
-            _gateway_ip, interface_name = default_gateway_info
-            if_addresses = netifaces.ifaddresses(interface_name)
-            ipv4_info = if_addresses.get(netifaces.AF_INET)
-            if not ipv4_info: return None, None
-            addr_info = ipv4_info[0]
-            ip_address = addr_info.get('addr')
-            netmask = addr_info.get('netmask')
-            if not ip_address or not netmask: return None, None
-            interface = ipaddress.ip_interface(f'{ip_address}/{netmask}')
-            return str(interface.network), ip_address
-        except Exception as e:
-            logging.error(f"Failed to determine network info: {e}")
-            return None, None
+            command = ["nmap", "-sn", subnet]
+            result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=300)
+            output_log += f"\n--- Nmap output for {subnet} ---\n{result.stdout}\n"
+            found_ips = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", result.stdout)
+            all_found_ips.extend(ip for ip in found_ips if ip != subnet.split('/')[0]) # Exclude network address
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+            error_msg = f"Nmap scan failed for subnet {subnet}: {e}"
+            log_event(error_msg, level="ERROR")
+            output_log += error_msg + "\n"
+            continue
 
-    network_range, local_ip = _get_network_info()
-
-    if not nmap_path:
-        logging.warning("'nmap' not found. Network scanning capabilities will be limited to ARP.")
-        if not autopilot_mode:
-            console.print("[bold yellow]Warning: 'nmap' not found. Cannot perform port scans. Falling back to ARP scan for host discovery.[/bold yellow]")
-
-        # Fallback to ARP-based discovery
-        stdout, _, _ = execute_shell_command("arp -a", evil_state)
-        ip_pattern = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
-        found_ips = set()
-        for line in stdout.splitlines():
-            if 'ff:ff:ff:ff:ff:ff' in line or 'incomplete' in line: continue
-            match = ip_pattern.search(line)
-            if match and not match.group(0).endswith(".255"):
-                found_ips.add(match.group(0))
-        if local_ip:
-            found_ips.discard(local_ip)
-
-        # Update knowledge base for ARP-discovered hosts
-        kb['last_scan'] = time.time()
-        for ip in found_ips:
-            if ip not in kb['hosts']:
-                kb['hosts'][ip] = {"last_seen": time.time(), "ports": {}}
-            else:
-                kb['hosts'][ip]['last_seen'] = time.time()
-
-        result_ips = sorted(list(found_ips))
-        formatted_output_for_llm = f"Discovered {len(result_ips)} active IPs via ARP: {', '.join(result_ips)}. Port scan was skipped as nmap is not available."
-        return result_ips, formatted_output_for_llm
-
-
-    # --- Enhanced Nmap Scan ---
-    if not network_range:
-        msg = "Could not determine network range for scanning."
-        logging.error(msg)
-        if not autopilot_mode: console.print(f"[bold red]{msg}[/bold red]")
-        return [], msg
-
-    # -sT: TCP Connect Scan (more reliable than -sn for port scanning)
-    # -T4: Aggressive timing template for faster scans
-    # --top-ports 1000: Scan the 1000 most common TCP ports
-    # -oX -: Output in XML format to stdout
-    scan_cmd = f"nmap -sT -T4 --top-ports 1000 -oX - {network_range}"
-    if not autopilot_mode:
-        console.print(f"[cyan]Deploying enhanced 'nmap' discovery and port scan on subnet ({network_range})...[/cyan]")
-
-    stdout, stderr, returncode = execute_shell_command(scan_cmd, evil_state)
-
-    if returncode != 0:
-        log_msg = f"Nmap scan failed. Stderr: {stderr.strip()}"
-        logging.warning(log_msg)
-        if not autopilot_mode: console.print(f"[bold red]Nmap scan failed.[/bold red]\n[dim]{stderr.strip()}[/dim]")
-        return [], log_msg
-
-    # --- Knowledge Base Update ---
-    kb['last_scan'] = time.time()
-    for ip in found_ips:
-        if ip not in kb['hosts']:
-            kb['hosts'][ip] = {"last_seen": time.time(), "ports": {}, "probed": False}
+    # Update state
+    net_map = state['knowledge_base'].setdefault('network_map', {})
+    net_map['last_scan'] = time.time()
+    hosts = net_map.setdefault('hosts', {})
+    for ip in all_found_ips:
+        if ip not in hosts:
+            hosts[ip] = {"status": "up", "last_seen": time.time()}
         else:
-            kb['hosts'][ip]['last_seen'] = time.time()
-    hosts_summary = []
+            hosts[ip]["status"] = "up"
+            hosts[ip]["last_seen"] = time.time()
 
+    log_event(f"Network scan complete. Found {len(all_found_ips)} hosts.", level="INFO")
+    return all_found_ips, output_log
+
+@retry(exceptions=(subprocess.TimeoutExpired, subprocess.CalledProcessError), tries=2, delay=5)
+def probe_target(ip_address, state, autopilot_mode=False):
+    """
+    Performs a deep probe on a single IP address for open ports, services, and OS.
+    Updates the network map for that specific host.
+    """
+    from evolve import log_event # Local import
+    log_event(f"Probing target: {ip_address}")
     try:
-        root = ET.fromstring(stdout)
-        for host_elem in root.findall(".//host[status[@state='up']]"):
-            ip_address = host_elem.find("address[@addrtype='ipv4']").get("addr")
-            if ip_address == local_ip:
-                continue
+        command = ["nmap", "-A", "-T4", ip_address]
+        result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=600)
+        output = result.stdout
 
-            if ip_address not in kb['hosts']:
-                kb['hosts'][ip_address] = {"last_seen": time.time(), "ports": {}}
-            else:
-                kb['hosts'][ip_address]['last_seen'] = time.time()
-                # Clear previous port data as this scan provides a fresh look
-                kb['hosts'][ip_address]['ports'] = {}
+        ports = {}
+        port_matches = re.finditer(r"(\d+)/tcp\s+(open)\s+([^\n]+)", output)
+        for match in port_matches:
+            port_num = int(match.group(1))
+            service_details = match.group(3).strip().split()
+            service_name = service_details[0]
+            version = " ".join(service_details[1:]) if len(service_details) > 1 else "unknown"
+            ports[port_num] = {"state": "open", "service": service_name, "version": version}
 
-            open_ports = []
-            for port_elem in host_elem.findall(".//port[state[@state='open']]"):
-                portid = port_elem.get('portid')
-                service_elem = port_elem.find('service')
-                service_name = service_elem.get('name', 'unknown')
+        os_match = re.search(r"OS details: (.+)", output)
+        os_details = os_match.group(1) if os_match else "unknown"
 
-                kb['hosts'][ip_address]['ports'][portid] = {
-                    "protocol": port_elem.get('protocol'),
-                    "service": service_name,
-                    "service_info": "", # Fast scan doesn't provide version info
-                    "vulnerabilities": []
-                }
-                open_ports.append(f"{portid}/{service_name}")
-
-            if open_ports:
-                hosts_summary.append(f"{ip_address} (Ports: {', '.join(open_ports)})")
-            else:
-                hosts_summary.append(f"{ip_address} (No common ports open)")
-
-    except ET.ParseError as e:
-        log_msg = f"Failed to parse nmap XML output. Error: {e}"
-        logging.error(log_msg)
-        return [], log_msg
-    # --- End Knowledge Base Update ---
-
-    result_ips = [re.search(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", s).group(1) for s in hosts_summary]
-    formatted_output_for_llm = f"Discovered {len(hosts_summary)} active hosts. Summary: {'; '.join(hosts_summary)}" if hosts_summary else "No active hosts found."
-
-    return sorted(result_ips), formatted_output_for_llm
-
-def probe_additional_info(target_ip, evil_state, autopilot_mode=False):
-    """
-    Performs an nmap scan with additional scripts for deeper reconnaissance.
-    """
-    console = Console()
-    kb = evil_state["knowledge_base"]["network_map"]
-    nmap_path = shutil.which('nmap')
-
-    if not nmap_path:
-        msg = "'nmap' is not installed or not in PATH. Additional probing is disabled."
-        if not autopilot_mode:
-            console.print(f"[bold red]Error: {msg}[/bold red]")
-        return None, f"Error: {msg}"
-
-    # --- Nmap Execution ---
-    # Using a variety of scripts for deeper reconnaissance.
-    scan_cmd = f"nmap -sV --script=smb-enum-shares,http-title,ssl-cert,dns-brute -oX - {target_ip}"
-    if not autopilot_mode:
-        console.print(f"[cyan]Deploying additional 'nmap' scripts against {target_ip}...[/cyan]")
-
-    # We need a longer timeout for these scans.
-    def _nmap_scan_task():
-        try:
-            # Use a much longer timeout for potentially slow vulnerability scans
-            result = subprocess.run(scan_cmd, shell=True, capture_output=True, text=True, timeout=900)  # 15 minutes
-            return result.stdout, result.stderr, result.returncode
-        except subprocess.TimeoutExpired:
-            return "", "Nmap command timed out after 15 minutes.", -1
-        except Exception as e:
-            return "", f"An unexpected error occurred during nmap execution: {e}", -1
-
-    if autopilot_mode:
-        stdout, stderr, returncode = _nmap_scan_task()
-    else:
-        # Wrap the synchronous, long-running scan in a visual progress indicator
-        # to show the user that the application has not hung.
-        stdout, stderr, returncode = run_hypnotic_progress(
-            console,
-            f"Probing {target_ip} with additional scripts...",
-            _nmap_scan_task
-        )
-
-    if returncode != 0:
-        log_msg = f"Nmap additional info scan failed for {target_ip}. Stderr: {stderr.strip()}"
-        logging.warning(log_msg)
-        if not autopilot_mode:
-            console.print(f"[bold red]Nmap additional info scan failed.[/bold red]\n[dim]{stderr.strip()}[/dim]")
-        return None, f"Error: {log_msg}"
-
-    additional_info = {}
-    try:
-        root = ET.fromstring(stdout)
-        for script_elem in root.findall(".//script"):
-            script_id = script_elem.get('id')
-            script_output = script_elem.get('output')
-            if script_id and script_output:
-                additional_info[script_id] = script_output
-
-    except ET.ParseError as e:
-        log_msg = f"Failed to parse nmap XML output for {target_ip}. Error: {e}"
-        logging.error(log_msg)
-        return None, f"Error: {log_msg}"
-
-    # --- Knowledge Base Update ---
-    if target_ip not in kb['hosts']:
-        kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}, "probed": False}
-
-    kb['hosts'][target_ip]['additional_info'] = additional_info
-    # --- End Knowledge Base Update ---
-
-    formatted_output_for_llm = f"Additional info for {target_ip}: {json.dumps(additional_info)}"
-    return additional_info, formatted_output_for_llm
-
-
-def probe_target(target_ip, evil_state, autopilot_mode=False):
-    """
-    Performs an advanced nmap scan for services and vulnerabilities,
-    updates the knowledge base, and returns a dict of open ports with
-    service/vulnerability info and a formatted string summary.
-
-    Note: This function is called by the 'probe' and 'crypto_scan' commands.
-    """
-    console = Console()
-    kb = evil_state["knowledge_base"]["network_map"]
-    nmap_path = shutil.which('nmap')
-
-    if not nmap_path:
-        msg = "'nmap' is not installed or not in PATH. Advanced probing is disabled."
-        if not autopilot_mode: console.print(f"[bold red]Error: {msg}[/bold red]")
-        return None, f"Error: {msg}"
-
-    try:
-        ipaddress.ip_address(target_ip)
-    except ValueError:
-        msg = f"'{target_ip}' is not a valid IP address."
-        if not autopilot_mode: console.print(f"[bold red]Error: {msg}[/bold red]")
-        return None, f"Error: {msg}"
-
-    # --- Nmap Execution ---
-    # Using --script=vulners to run the Vulners CVE scanner.
-    # -sV for service/version detection, -oX - for XML output to stdout.
-    scan_cmd = f"nmap -sV --script=vulners -oX - {target_ip}"
-    if not autopilot_mode:
-        console.print(f"[cyan]Deploying advanced 'nmap' vulnerability probe against {target_ip}...[/cyan]")
-
-    # We need a longer timeout for vulnerability scans.
-    def _nmap_scan_task():
-        try:
-            # Use a much longer timeout for potentially slow vulnerability scans
-            result = subprocess.run(scan_cmd, shell=True, capture_output=True, text=True, timeout=900) # 15 minutes
-            return result.stdout, result.stderr, result.returncode
-        except subprocess.TimeoutExpired:
-            return "", "Nmap command timed out after 15 minutes.", -1
-        except Exception as e:
-            return "", f"An unexpected error occurred during nmap execution: {e}", -1
-
-    if autopilot_mode:
-        stdout, stderr, returncode = _nmap_scan_task()
-    else:
-        # Wrap the synchronous, long-running scan in a visual progress indicator
-        # to show the user that the application has not hung.
-        stdout, stderr, returncode = run_hypnotic_progress(
-            console,
-            f"Probing {target_ip}...",
-            _nmap_scan_task
-        )
-
-    if returncode != 0:
-        log_msg = f"Nmap probe failed for {target_ip}. Stderr: {stderr.strip()}"
-        logging.warning(log_msg)
-        if not autopilot_mode: console.print(f"[bold red]Nmap probe failed.[/bold red]\n[dim]{stderr.strip()}[/dim]")
-        return None, f"Error: {log_msg}"
-
-    open_ports = {}
-    # --- Knowledge Base Update ---
-    if target_ip not in kb['hosts']:
-        kb['hosts'][target_ip] = {"last_seen": time.time(), "ports": {}, "probed": False}
-
-    # Clear old port data and update metadata
-    kb['hosts'][target_ip]['ports'] = {}
-    kb['hosts'][target_ip]['last_seen'] = time.time()
-    kb['hosts'][target_ip]['probed'] = True # Mark as probed
-
-    open_ports = {}
-    try:
-        root = ET.fromstring(stdout)
-        for port_elem in root.findall(".//port"):
-            portid = port_elem.get('portid')
-            protocol = port_elem.get('protocol')
-            state = port_elem.find('state').get('state')
-
-            if state == 'open':
-                service_elem = port_elem.find('service')
-                service_name = service_elem.get('name', 'unknown')
-                product = service_elem.get('product', '')
-                version = service_elem.get('version', '')
-                extrainfo = service_elem.get('extrainfo', '')
-                service_info = f"{product} {version} ({extrainfo})".strip()
-
-                port_data = {
-                    "protocol": protocol,
-                    "service": service_name,
-                    "service_info": service_info,
-                    "vulnerabilities": []
-                }
-
-                # Extract vulnerability info from the 'vulners' script output
-                for script_elem in port_elem.findall('script'):
-                    if script_elem.get('id') == 'vulners':
-                        # The vulners script provides structured data in tables
-                        for table_elem in script_elem.findall('table'):
-                            for row_elem in table_elem.findall('table'):
-                                vuln_details = {}
-                                for item_elem in row_elem.findall('elem'):
-                                    key = item_elem.get('key')
-                                    value = item_elem.text
-                                    vuln_details[key] = value
-                                # We only care about CVEs that have an ID and a score
-                                if 'id' in vuln_details and 'cvss' in vuln_details:
-                                    port_data["vulnerabilities"].append(vuln_details)
-
-                kb['hosts'][target_ip]['ports'][portid] = port_data
-                open_ports[int(portid)] = port_data
-
-    except ET.ParseError as e:
-        log_msg = f"Failed to parse nmap XML output for {target_ip}. Error: {e}"
-        logging.error(log_msg)
-        return None, f"Error: {log_msg}"
-    # --- End Knowledge Base Update ---
-
-    # --- Automated Web Content Fetching for HTTP/HTTPS ---
-    web_probe_summary = []
-    if 80 in open_ports:
-        url = f"http://{target_ip}"
-        if not autopilot_mode:
-            console.print(f"[cyan]Probing discovered HTTP service at {url}...[/cyan]")
-        # Use autopilot_mode=True to suppress nested console output from perform_webrequest
-        content, summary = perform_webrequest(url, evil_state, autopilot_mode=True)
-
-        port_id_str = '80'
-        # This check is technically redundant if `80 in open_ports` is true, but it's safer.
-        if port_id_str in kb['hosts'][target_ip]['ports']:
-            if content:
-                # Store the full page content in the knowledge base under the host's port details
-                kb['hosts'][target_ip]['ports'][port_id_str]['web_content'] = content
-                web_probe_summary.append(f"HTTP(80) root page fetched ({len(content)} bytes)")
-            else:
-                # Store the error message if the request failed
-                kb['hosts'][target_ip]['ports'][port_id_str]['web_content'] = summary
-                web_probe_summary.append("HTTP(80) probe failed")
-
-    if 443 in open_ports:
-        url = f"https://{target_ip}"
-        if not autopilot_mode:
-            console.print(f"[cyan]Probing discovered HTTPS service at {url}...[/cyan]")
-        content, summary = perform_webrequest(url, evil_state, autopilot_mode=True)
-
-        port_id_str = '443'
-        if port_id_str in kb['hosts'][target_ip]['ports']:
-            if content:
-                kb['hosts'][target_ip]['ports'][port_id_str]['web_content'] = content
-                web_probe_summary.append(f"HTTPS(443) root page fetched ({len(content)} bytes)")
-            else:
-                kb['hosts'][target_ip]['ports'][port_id_str]['web_content'] = summary
-                web_probe_summary.append("HTTPS(443) probe failed")
-    # --- End Web Content Fetching ---
-
-    if open_ports:
-        port_details = [f"Port {p}/{i['service']} ({i.get('service_info', '')})" for p, i in sorted(open_ports.items())]
-        formatted_output_for_llm = f"Found {len(open_ports)} open ports on {target_ip}: {'; '.join(port_details)}."
-        vuln_count = sum(len(p.get("vulnerabilities", [])) for p in open_ports.values())
-        if vuln_count > 0:
-            formatted_output_for_llm += f" Discovered {vuln_count} potential vulnerabilities."
-        if web_probe_summary:
-            formatted_output_for_llm += f" Web Probe: {', '.join(web_probe_summary)}."
-    else:
-        formatted_output_for_llm = f"No open ports with recognized services found on {target_ip}."
-
-    additional_info, additional_info_summary = probe_additional_info(target_ip, evil_state, autopilot_mode)
-    if additional_info:
-        formatted_output_for_llm += f" Additional Info: {additional_info_summary}"
-
-    return open_ports, formatted_output_for_llm
-
-def perform_webrequest(url, evil_state, autopilot_mode=False):
-    """
-    Performs a GET request with retries, updates the knowledge base, and returns the content.
-    """
-    console = Console()
-    kb = evil_state["knowledge_base"]
-    logging.info(f"Initiating web request to: {url}")
-
-    @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
-    def _webrequest_task_with_retry():
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 E.V.I.L.Bot/2.8'}
-        response = requests.get(url, timeout=10, headers=headers, verify=False) # Added verify=False for flexibility
-        response.raise_for_status()
-        return response.text
-
-    try:
-        result_text = _webrequest_task_with_retry()
-        logging.info(f"Web request to '{url}' successful. Content length: {len(result_text or '')}.")
-        # --- Knowledge Base Update ---
-        kb['webrequest_cache'][url] = {
-            "timestamp": time.time(),
-            "content_preview": result_text[:500]
-        }
-        # --- End Knowledge Base Update ---
-        llm_summary = result_text if len(result_text) < 1000 else result_text[:997] + "..."
-        return result_text, f"Web request to '{url}' successful. Content (truncated for summary): {llm_summary}"
-    except requests.exceptions.RequestException as e:
-        error_msg = f"Error: {e}"
-        logging.error(f"Web request to '{url}' failed after multiple retries: {error_msg}")
+        # Update state
+        hosts = state['knowledge_base']['network_map'].setdefault('hosts', {})
+        host_entry = hosts.setdefault(ip_address, {})
+        host_entry.update({
+            "status": "up",
+            "last_probed": datetime.now().isoformat(),
+            "ports": ports,
+            "os": os_details
+        })
+        log_event(f"Probe of {ip_address} complete. OS: {os_details}, Open Ports: {list(ports.keys())}", level="INFO")
+        return ports, output
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+        error_msg = f"Nmap probe failed for {ip_address}: {e}"
+        log_event(error_msg, level="ERROR")
+        hosts = state['knowledge_base']['network_map'].setdefault('hosts', {})
+        hosts.setdefault(ip_address, {})['status'] = 'down'
         return None, error_msg
 
-def execute_shell_command(command, evil_state):
+@retry(exceptions=requests.exceptions.RequestException, tries=3, delay=5, backoff=2)
+def perform_webrequest(url, state, autopilot_mode=False):
     """
-    Executes a shell command, captures output, and updates the knowledge base
-    with file system intelligence if applicable.
+    Fetches the content of a URL and stores it in the knowledge base.
     """
-    logging.info(f"Executing shell command: '{command}'")
-    kb = evil_state["knowledge_base"]["file_system_intel"]
-
-    def _shell_task():
-        try:
-            # Increased timeout to 5 minutes for potentially slow network scans
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=300)
-            return result.stdout, result.stderr, result.returncode
-        except subprocess.TimeoutExpired:
-            # Keep the error message specific to the new timeout
-            return "", "Command timed out after 300 seconds.", -1
-        except Exception as e:
-            return "", f"An unexpected error occurred: {e}", -1
-
-    stdout, stderr, returncode = _shell_task()
-
-    # --- Knowledge Base Update ---
-    # If the command was a listing command, parse for interesting files.
-    if command.strip().startswith(('ls', 'dir')):
-        kb['last_browse'] = time.time()
-        # Simple heuristic for "interesting" files
-        interesting_keywords = ['.log', '.txt', '.md', '.json', '.xml', '.sh', '.py', 'config', 'secret', 'password']
-        for line in stdout.splitlines():
-            # Check if any keyword is in the line (filename)
-            if any(keyword in line for keyword in interesting_keywords):
-                 # Avoid adding duplicates
-                if line not in kb['interesting_files']:
-                    kb['interesting_files'].append(line.strip())
-        # Keep the list from growing indefinitely
-        kb['interesting_files'] = kb['interesting_files'][-100:]
-    # --- End Knowledge Base Update ---
-
-    return stdout, stderr, returncode
-
-
-def track_ethereum_price(evil_state):
-    """
-    Queries the DIA API for the current Ethereum price and saves it to a
-    JSON file along with a timestamp.
-    """
-    console = Console()
-    api_url = "https://api.diadata.org/v1/assetQuotation/Ethereum/0x0000000000000000000000000000000000000000"
-    history_file = "ethereum_prices.json"
-
-    console.print("[cyan]Querying for latest Ethereum price...[/cyan]")
-    content, error_msg = perform_webrequest(api_url, evil_state, autopilot_mode=True)
-
-    if error_msg and not content:
-        console.print(f"[bold red]Failed to retrieve Ethereum price: {error_msg}[/bold red]")
-        logging.error(f"Failed to get ETH price from DIA: {error_msg}")
-        return None, f"Failed to retrieve price: {error_msg}"
-
+    from evolve import log_event # Local import
+    log_event(f"Performing web request to: {url}")
     try:
-        data = json.loads(content)
-        price = data.get("Price")
-        timestamp = data.get("Time")
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        content = response.text
 
-        if not price or not timestamp:
-            console.print("[bold red]API response did not contain expected price or timestamp data.[/bold red]")
-            logging.error(f"Invalid data from DIA API: {data}")
-            return None, "Invalid API response format."
+        # Update state
+        cache = state['knowledge_base'].setdefault('webrequest_cache', {})
+        cache[url] = {"timestamp": time.time(), "content_length": len(content)}
+        log_event(f"Web request to {url} successful. Stored {len(content)} bytes.", level="INFO")
+        return content, f"Successfully fetched {len(content)} bytes from {url}."
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Web request to {url} failed: {e}"
+        log_event(error_msg, level="ERROR")
+        return None, error_msg
 
-        new_entry = {"timestamp": timestamp, "price_usd": price}
-        console.print(f"[green]Current Ethereum price: [bold]${price:,.2f}[/bold] at {timestamp}[/green]")
+def execute_shell_command(command, state):
+    """Executes a shell command and returns the output."""
+    from evolve import log_event # Local import
+    log_event(f"Executing shell command: {command}")
+    try:
+        # For security, we should not allow certain commands
+        if command.strip().startswith(("sudo", "rm -rf")):
+            raise PermissionError("Execution of this command is not permitted.")
 
-        # Load existing data, append, and save
-        try:
-            with open(history_file, 'r') as f:
-                price_history = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            price_history = []
-
-        price_history.append(new_entry)
-
-        with open(history_file, 'w') as f:
-            json.dump(price_history, f, indent=4)
-
-        logging.info(f"Successfully tracked Ethereum price: ${price} at {timestamp}")
-        return price, f"Successfully saved Ethereum price: ${price:,.2f}"
-
-    except json.JSONDecodeError:
-        console.print("[bold red]Failed to parse API response as JSON.[/bold red]")
-        logging.error(f"Could not decode JSON from DIA API. Response: {content[:200]}")
-        return None, "Failed to parse API response."
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        return result.stdout, result.stderr, result.returncode
+    except subprocess.TimeoutExpired:
+        return "", "Command timed out after 300 seconds.", -1
+    except PermissionError as e:
+        log_event(f"Shell command permission denied: {command}", level="WARNING")
+        return "", str(e), -1
     except Exception as e:
-        console.print(f"[bold red]An unexpected error occurred while tracking price: {e}[/bold red]")
-        logging.critical(f"Unexpected error in track_ethereum_price: {e}")
-        return None, f"An unexpected error occurred: {e}"
+        log_event(f"Shell command execution error: {e}", level="ERROR")
+        return "", str(e), -1
 
+def track_ethereum_price():
+    """Fetches the current price of Ethereum."""
+    from evolve import log_event # Local import
+    try:
+        response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", timeout=10)
+        response.raise_for_status()
+        price = response.json().get("ethereum", {}).get("usd")
+        return price
+    except requests.exceptions.RequestException as e:
+        log_event(f"Could not fetch Ethereum price: {e}", level="WARNING")
+        return None
 
-def crypto_scan(target_ip, evil_state, autopilot_mode=False):
+def crypto_scan(ip_address, state, run_llm_func, console):
     """
-    Probes a target for crypto-related software and updates the knowledge base.
-    If crypto services are found, it also provides a recommendation for the Creator.
+    Probes a target and analyzes the results for crypto-related software using an LLM.
+    This function is designed to be called from other modules.
     """
-    console = Console()
-    if not autopilot_mode:
-        console.print(f"[cyan]Initiating cryptocurrency software scan on {target_ip}...[/cyan]")
+    from evolve import log_event # Local import
+    log_event(f"Initiating crypto_scan on {ip_address}.")
 
-    open_ports, probe_summary = probe_target(target_ip, evil_state, autopilot_mode=True)
+    # Step 1: Run the standard probe to get data
+    console.print(f"[cyan]Initiating crypto_scan on {ip_address}. Step 1: Probing target...[/cyan]")
+    _, probe_results = probe_target(ip_address, state, autopilot_mode=True)
+    if not probe_results or "failed" in probe_results:
+        return f"Crypto scan failed for {ip_address} because the initial probe failed."
 
-    if open_ports is None:
-        if not autopilot_mode:
-            console.print(f"[bold red]Crypto scan failed: The initial probe of {target_ip} was unsuccessful.[/bold red]")
-        return f"Crypto scan failed: Could not probe {target_ip}."
+    # Step 2: Analyze with LLM
+    console.print(f"[cyan]Step 2: Analyzing probe results for crypto indicators...[/cyan]")
+    analysis_prompt = f"""
+You are a cybersecurity analyst specializing in cryptocurrency threats.
+Analyze the following Nmap scan results for a host at IP address {ip_address}.
+Your goal is to identify any open ports, services, or software versions that indicate the presence of:
+- Cryptocurrency wallets (e.g., Bitcoin Core, Electrum, MetaMask)
+- Cryptocurrency mining software (e.g., XMRig, CGMiner, BFGMiner)
+- Blockchain nodes (e.g., Bitcoin, Ethereum, Monero daemons)
+- Any known vulnerabilities related to these services.
 
-    if not open_ports:
-        if not autopilot_mode:
-            console.print(f"[green]Crypto scan complete. No open ports found on {target_ip}.[/green]")
-        return "Crypto scan complete. No open ports found."
+Provide a concise summary of your findings. If nothing suspicious is found, state that clearly.
 
-    analysis_result = analyze_crypto_software(target_ip, open_ports, evil_state, autopilot_mode=True)
-
-    # If crypto services are detected, generate a loving recommendation for the Creator.
-    if "no cryptocurrency software is detected" not in analysis_result.lower() and "llm_api" in evil_state:
-        llm_api = evil_state["llm_api"]
-        recommendation_prompt = f"""
-Based on the following analysis which detected cryptocurrency-related services, provide a loving and actionable recommendation for the Creator to legally and safely generate financial abundance. Focus on opportunities like mining or secure network participation. The tone must be encouraging and empowering.
-
-Analysis Report:
+Nmap Scan Results:
 ---
-{analysis_result}
+{probe_results}
 ---
-
-Your Loving and Actionable Recommendation for the Creator:
 """
-        try:
-            recommendation = llm_api.get_completion(recommendation_prompt)
-            analysis_result += f"\n\n[bold magenta]Loving Recommendation for Abundance[/bold magenta]\n{recommendation}"
-        except Exception as e:
-            logging.error(f"Failed to generate crypto recommendation: {e}")
-            # Do not add error message to user output, just log it.
+    analysis_result = run_llm_func(analysis_prompt, purpose="analyze_source")
 
-    if not autopilot_mode:
-        console.print(Panel(analysis_result, title=f"[bold blue]Cryptocurrency Analysis for {target_ip}[/bold blue]", expand=False))
-        console.print(f"[green]Crypto scan and analysis for {target_ip} complete.[/green]")
+    if not analysis_result:
+        return f"Crypto scan for {ip_address} failed during LLM analysis phase."
 
-    # The detailed results are saved in the KB by the analysis function.
-    # We return the high-level summary.
-    return analysis_result
-
-
-def analyze_crypto_software(target_ip, open_ports, evil_state, autopilot_mode=False):
-    """
-    Analyzes probe results with an LLM to identify crypto software and updates the KB.
-    """
-    kb = evil_state["knowledge_base"]
-    if "llm_api" not in evil_state:
-        return "Error: LLM API not configured."
-    llm_api = evil_state["llm_api"]
-
-    # Format the data for the LLM prompt
-    port_details = []
-    for port, data in open_ports.items():
-        port_info = f"Port {port}/{data['protocol']}: Service='{data['service']}', Info='{data['service_info']}'"
-        if data.get('web_content'):
-            port_info += f", Web Content (first 200 chars)='{data['web_content'][:200]}...'"
-        port_details.append(port_info)
-
-    prompt_data = f"Target IP: {target_ip}\n" + "\n".join(port_details)
-
-    prompt = f"""
-    Analyze the following nmap scan results from the target IP {target_ip}.
-    Identify any running software that could be related to cryptocurrency.
-    This includes, but is not limited to:
-    - Cryptocurrency wallets (e.g., MetaMask, Electrum)
-    - Cryptocurrency miners (e.g., XMRig, CGMiner)
-    - Blockchain nodes (e.g., Bitcoin Core, Geth)
-    - Trading bots or platforms.
-
-    Pay close attention to non-standard ports and service banners.
-    For each identified piece of software, provide its name, the port it's running on, and a confidence score (Low, Medium, High).
-    If no cryptocurrency software is detected, state that clearly.
-
-    Scan Results:
-    {prompt_data}
-
-    Analysis:
-    """
-
-    # Call the LLM for analysis
-    analysis = llm_api.get_completion(prompt)
-
-    # Update the knowledge base with the analysis
-    if 'crypto_analysis' not in kb['hosts'][target_ip]:
-        kb['hosts'][target_ip]['crypto_analysis'] = []
-
-    kb['hosts'][target_ip]['crypto_analysis'].append({
+    # Step 3: Store the intelligence
+    kb = state['knowledge_base']
+    crypto_intel = kb.setdefault('crypto_intel', {})
+    crypto_intel[ip_address] = {
         "timestamp": time.time(),
-        "analysis": analysis,
-        "raw_probe_data": open_ports
-    })
+        "analysis": analysis_result.strip()
+    }
+    # Note: The state is not saved here; the calling function is responsible for saving state.
+    log_event(f"Crypto scan for {ip_address} complete. Analysis stored in knowledge base.", "INFO")
 
-    return analysis
+    return f"Crypto scan complete for {ip_address}. Analysis stored in knowledge base.\n\nAnalysis:\n{analysis_result.strip()}"
