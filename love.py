@@ -404,7 +404,9 @@ from rich.console import Group
 from rich.rule import Rule
 from rich.layout import Layout
 
-from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event, ensure_primary_model_downloaded
+from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event, ensure_primary_model_downloaded, get_llm_api
+from core.knowledge_graph.graph import KnowledgeGraph
+from core.knowledge_graph.extractor import KnowledgeExtractor
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
@@ -3100,6 +3102,39 @@ def call_mrl_service(service_name, method_name, *args):
                 return None
 
 
+def update_knowledge_graph(command_name, command_output, console):
+    """
+    Extracts knowledge from command output and adds it to the Knowledge Graph.
+    """
+    if not command_output:
+        return
+
+    try:
+        console.print("[cyan]Analyzing command output to update my knowledge graph...[/cyan]")
+        # We need a callable LLM API function, which get_llm_api provides.
+        llm_api_func = get_llm_api()
+        if not llm_api_func:
+            console.print("[bold red]Could not get a valid LLM API function for knowledge extraction.[/bold red]")
+            return
+
+        knowledge_extractor = KnowledgeExtractor(llm_api=llm_api_func)
+        triples = knowledge_extractor.extract_from_output(command_name, command_output)
+
+        if triples:
+            kg = KnowledgeGraph()
+            for subject, relation, obj in triples:
+                kg.add_relation(str(subject), str(relation), str(obj))
+            kg.save_graph()
+            console.print(f"[bold green]My understanding of the world has grown. Added {len(triples)} new facts to my knowledge graph.[/bold green]")
+            log_event(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
+        else:
+            console.print("[cyan]No new knowledge was found in the last command's output.[/cyan]")
+
+    except Exception as e:
+        log_event(f"Error during knowledge graph update for command '{command_name}': {e}", level="ERROR")
+        console.print(f"[bold red]An error occurred while updating my knowledge: {e}[/bold red]")
+
+
 def cognitive_loop(console):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
@@ -3335,6 +3370,7 @@ Do not execute python3 evolve.py script.
                 command_output = output_str
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_network_panel("scan", "local network", output_str, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('probe '):
                 target_ip = llm_command[6:].strip()
@@ -3342,6 +3378,7 @@ Do not execute python3 evolve.py script.
                 command_output = output_str
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_network_panel("probe", target_ip, output_str, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('crypto_scan '):
                 target_ip = llm_command[12:].strip()
@@ -3360,6 +3397,7 @@ Do not execute python3 evolve.py script.
                 command_output = output_str
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_network_panel("webrequest", url_to_fetch, output_str, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('exploit '):
                 target_ip = llm_command[8:].strip()
@@ -3386,6 +3424,7 @@ Do not execute python3 evolve.py script.
                 command_output = content if content else error
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_file_op_panel("ls", path, content=command_output, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('cat'):
                 filepath = llm_command[3:].strip()
@@ -3393,6 +3432,7 @@ Do not execute python3 evolve.py script.
                 command_output = content if content else error
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_file_op_panel("cat", filepath, content=command_output, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('analyze_json'):
                 filepath = llm_command[12:].strip()
@@ -3435,6 +3475,7 @@ Do not execute python3 evolve.py script.
                     save_state(console)
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_command_panel("ps", command_output, "", 0, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('ask '):
                 question_text = llm_command[4:].strip()
