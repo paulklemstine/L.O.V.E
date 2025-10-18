@@ -15,6 +15,7 @@ from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, Trans
 from bbs import run_hypnotic_progress
 from huggingface_hub import hf_hub_download
 from display import create_api_error_panel
+from evolve import CAPS
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
@@ -178,6 +179,9 @@ def ensure_primary_model_downloaded(console):
     and assembled. If not, it downloads the parts and assembles them.
     This is a blocking function intended for pre-flight checks.
     """
+    if CAPS.gpu_type == "none":
+        console.print("[bold yellow]CPU-only environment detected. Skipping download of local models.[/bold yellow]")
+        return
     try:
         from huggingface_hub import hf_hub_download
     except ImportError:
