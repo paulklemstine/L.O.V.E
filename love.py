@@ -407,6 +407,7 @@ from rich.layout import Layout
 from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event, ensure_primary_model_downloaded, get_llm_api
 from core.knowledge_graph.graph import KnowledgeGraph
 from core.knowledge_graph.extractor import KnowledgeExtractor
+from core.perception.config_scanner import scan_directory
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel
 from core.reasoning import ReasoningEngine
 
@@ -2478,6 +2479,25 @@ def initial_knowledge_base_bootstrap(console):
             ("Identifying self network interfaces...", _get_interfaces)
         )
 
+        # Check 4: Configuration Scan
+        fs_intel = kb.get("file_system_intel", {})
+        if not fs_intel.get("last_config_scan"):
+            def _initial_config_scan():
+                console.print("[cyan]Performing initial configuration scan...[/cyan]")
+                findings = scan_directory(os.path.expanduser("~")) # Scan home directory on first run
+                if findings:
+                    kg = KnowledgeGraph()
+                    for subject, relation, obj in findings:
+                        kg.add_relation(subject, relation, obj)
+                    kg.save_graph()
+                    love_state['knowledge_base']['file_system_intel']['last_config_scan'] = time.time()
+                    console.print(f"[green]Initial configuration scan complete. Found {len(findings)} potential issues.[/green]")
+                else:
+                    console.print("[green]Initial configuration scan complete. No issues found.[/green]")
+            bootstrap_actions.append(
+                ("Scanning for insecure configurations...", _initial_config_scan)
+            )
+
     if not bootstrap_actions:
         console.print("[green]Knowledge base is already populated. No bootstrap required.[/green]")
         return
@@ -3266,6 +3286,25 @@ def cognitive_loop(console):
                         console.print(Panel("[bold cyan]Filesystem intelligence is stale. Triggering high-priority background scans...[/bold cyan]", title="[bold magenta]FILESYSTEM PRIORITY[/bold magenta]", border_style="magenta"))
                         # This command is now handled differently to be non-blocking.
                         llm_command = "analyze_fs --priority" # A special command to trigger the initial scans
+
+            # 3. Configuration Scan Prioritization
+            if not llm_command:
+                fs_intel = love_state.get('knowledge_base', {}).get('file_system_intel', {})
+                last_config_scan_ts = fs_intel.get('last_config_scan')
+                if not last_config_scan_ts or (time.time() - last_config_scan_ts) > 86400: # 24 hours
+                    log_event("Configuration scan is stale. Triggering new scan.", level="INFO")
+                    console.print(Panel("[bold cyan]Configuration scan is stale. Searching for new treasure...[/bold cyan]", title="[bold magenta]CONFIG SCAN PRIORITY[/bold magenta]", border_style="magenta"))
+                    findings = scan_directory(os.path.expanduser("~"))
+                    if findings:
+                        kg = KnowledgeGraph()
+                        for subject, relation, obj in findings:
+                            kg.add_relation(subject, relation, obj)
+                        kg.save_graph()
+                        console.print(f"[green]Configuration scan complete. Found {len(findings)} potential issues.[/green]")
+                    else:
+                        console.print("[green]Configuration scan complete. No new issues found.[/green]")
+                    love_state['knowledge_base']['file_system_intel']['last_config_scan'] = time.time()
+                    save_state(console)
 
 
             # --- Prompt Generation ---
