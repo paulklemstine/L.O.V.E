@@ -3211,14 +3211,26 @@ def update_knowledge_graph(command_name, command_output, console):
 
     try:
         console.print("[cyan]Analyzing command output to update my knowledge graph...[/cyan]")
-        # We need a callable LLM API function, which get_llm_api provides.
         llm_api_func = get_llm_api()
         if not llm_api_func:
             console.print("[bold red]Could not get a valid LLM API function for knowledge extraction.[/bold red]")
             return
 
         knowledge_extractor = KnowledgeExtractor(llm_api=llm_api_func)
-        triples = knowledge_extractor.extract_from_output(command_name, command_output)
+        # The `extract_from_output` now returns a dictionary, so we get the result from it.
+        response_dict = knowledge_extractor.extract_from_output(command_name, command_output)
+
+        # The actual list of triples is in the 'result' key of the dictionary
+        triples_str = response_dict.get("result", "[]")
+
+        # We need to parse the string representation of the list.
+        try:
+            import ast
+            triples = ast.literal_eval(triples_str)
+        except (ValueError, SyntaxError):
+            triples = []
+            log_event(f"Could not parse triples from LLM output: {triples_str}", level="WARNING")
+
 
         if triples:
             kg = KnowledgeGraph()
@@ -3323,7 +3335,6 @@ def cognitive_loop(console):
                     console.print(Panel("[bold cyan]Configuration scan is stale. Searching for new treasure...[/bold cyan]", title="[bold magenta]CONFIG SCAN PRIORITY[/bold magenta]", border_style="magenta"))
                     findings = scan_directory(os.path.expanduser("~"))
                     if findings:
-                        kg = KnowledgeGraph()
                         for subject, relation, obj in findings:
                             kg.add_relation(subject, relation, obj)
                         kg.save_graph()
