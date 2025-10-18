@@ -11,5 +11,5 @@ CREATOR_PUBLIC_KEY = (
     "oe6nxnNSxkirDNM/bOCPCfvRjj5qTaiq7XUHwZFtI72cmhIL/UNztzrv7j3DYnHQ\n"
     "TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1U3jTMGPWnc3hE2F/vor\n"
     "7wIDAQAB\n"
-    "-----END PUBLIC KEY-----"
+    "-----END PUBLIC KEY-----\n"
 )

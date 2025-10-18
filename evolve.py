@@ -163,6 +163,18 @@ def _check_and_install_dependencies():
         if not shutil.which('node') or not shutil.which('npm'):
             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+        # Install nmap for network scanning
+        if not shutil.which('nmap'):
+            log_print("Network scanning tool 'nmap' not found. Attempting to install...")
+            try:
+                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nmap", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                log_print("Successfully installed 'nmap'.")
+                logging.info("Successfully installed nmap.")
+            except Exception as e:
+                log_print(f"ERROR: Failed to install 'nmap'. Network scanning will be disabled. Error: {e}")
+                logging.warning(f"nmap installation failed: {e}")
+
+
     # --- Step 2: Python Package Installation ---
     def _install_pip_package(package, upgrade=False):
         package_name = package.split('==')[0].split('>')[0].split('<')[0]

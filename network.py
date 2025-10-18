@@ -29,7 +29,7 @@ class NetworkManager:
         self.treasure_callback = treasure_callback
         self.question_callback = question_callback
         self.process = None
-        self.peer_bridge_script = os.path.join(os.path.dirname(__file__), '..', 'peer-bridge.js')
+        self.peer_bridge_script = 'peer-bridge.js'
         self.active = False
         self.thread = None
 
