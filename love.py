@@ -216,6 +216,7 @@ def _check_and_install_dependencies():
     _install_pip_package("cmake")
     _install_pip_package("pyyaml")
     _install_pip_package("skyvern")
+    _install_pip_package("pycvesearch")
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
