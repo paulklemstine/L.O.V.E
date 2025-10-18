@@ -389,7 +389,7 @@ _configure_llm_api_key()
 
 import requests
 # Now, it's safe to import everything else.
-from core.constants import CREATOR_ETH_ADDRESS, CREATOR_PUBLIC_KEY
+from core.constants import CREATOR_ETH_ADDRESS
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
 from core.retry import retry
 from rich.console import Console
@@ -448,10 +448,11 @@ def _verify_creator_instance(console):
                 password=None,
             )
 
-        # Load the public key from the embedded string
-        public_key_embedded = serialization.load_pem_public_key(
-            CREATOR_PUBLIC_KEY.encode()
-        )
+        # Load the public key from the file
+        with open("creator_public.pem", "rb") as key_file:
+            public_key_embedded = serialization.load_pem_public_key(
+                key_file.read()
+            )
 
         # Verify that the public components of the keys match
         if private_key.public_key().public_numbers() == public_key_embedded.public_numbers():
@@ -479,9 +480,10 @@ def encrypt_for_creator(plaintext_message):
         from cryptography.hazmat.primitives import hashes
         import base64
 
-        public_key = serialization.load_pem_public_key(
-            CREATOR_PUBLIC_KEY.encode()
-        )
+        with open("creator_public.pem", "rb") as key_file:
+            public_key = serialization.load_pem_public_key(
+                key_file.read()
+            )
 
         ciphertext = public_key.encrypt(
             plaintext_message.encode('utf-8'),
