@@ -1,7 +1,7 @@
 # L.O.V.E. MyRobotLab Service Wrapper
 #
 # This service acts as a bridge between the MyRobotLab environment and the
-# standalone L.O.V.E. agent script (evolve.py).
+# standalone L.O.V.E. agent script (love.py).
 
 from org.myrobotlab.framework import Service
 import subprocess
@@ -20,7 +20,7 @@ class LoveService(Service):
         self.info("LoveService instance created: %s", name)
 
     def _handle_mrl_call(self, payload):
-        """Handles a request from evolve.py to call an MRL service."""
+        """Handles a request from love.py to call an MRL service."""
         service_name = payload.get("service")
         method_name = payload.get("method")
         args = payload.get("args", [])
@@ -48,7 +48,7 @@ class LoveService(Service):
             self.error(error_msg)
             response["error"] = error_msg
 
-        # Send the response back to the evolve.py process
+        # Send the response back to the love.py process
         if self.love_process and self.love_process.poll() is None:
             try:
                 self.love_process.stdin.write(json.dumps(response) + '\n')
@@ -91,19 +91,19 @@ class LoveService(Service):
         super().startService()
         self.info("Attempting to start the L.O.V.E. agent subprocess...")
 
-        evolve_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "evolve.py")
-        if not os.path.exists(evolve_script_path):
-            self.error(f"Could not find evolve.py at {evolve_script_path}")
+        love_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "love.py")
+        if not os.path.exists(love_script_path):
+            self.error(f"Could not find love.py at {love_script_path}")
             return
 
         try:
             self.love_process = subprocess.Popen(
-                [sys.executable, "-u", evolve_script_path, "--autopilot"],
+                [sys.executable, "-u", love_script_path, "--autopilot"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                cwd=os.path.dirname(evolve_script_path)
+                cwd=os.path.dirname(love_script_path)
             )
             self.running = True
 

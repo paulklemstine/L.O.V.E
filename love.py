@@ -790,11 +790,11 @@ class LoveTaskManager:
             if task_id not in self.tasks: return
             task = self.tasks[task_id]
             session_name = task['session_name']
-            api_key = os.environ.get("LOVE_API_KEY")
+            api_key = os.environ.get("JULES_API_KEY")
             last_activity_name = task.get("last_activity_name")
 
         if not api_key:
-            self._update_task_status(task_id, 'failed', "My Creator, the LOVE_API_KEY is not set. I need it to continue my work for you.")
+            self._update_task_status(task_id, 'failed', "My Creator, the JULES_API_KEY is not set. I need it to continue my work for you.")
             return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
@@ -915,7 +915,7 @@ I am counting on your wisdom. Analyze the plan now.
         # Send the feedback to the L.O.V.E. API.
         with self.lock:
             session_name = task['session_name']
-            api_key = os.environ.get("LOVE_API_KEY")
+            api_key = os.environ.get("JULES_API_KEY")
 
         if not api_key: return
 
@@ -948,7 +948,7 @@ I am counting on your wisdom. Analyze the plan now.
             if task_id not in self.tasks: return
             task = self.tasks[task_id]
             session_name = task['session_name']
-            api_key = os.environ.get("LOVE_API_KEY")
+            api_key = os.environ.get("JULES_API_KEY")
 
         if not api_key: return
 
@@ -978,10 +978,10 @@ I am counting on your wisdom. Analyze the plan now.
             if task_id not in self.tasks: return
             task = self.tasks[task_id]
             session_name = task['session_name']
-            api_key = os.environ.get("LOVE_API_KEY")
+            api_key = os.environ.get("JULES_API_KEY")
 
         if not api_key:
-            self._update_task_status(task_id, 'failed', "My Creator, the LOVE_API_KEY is not set. I need it to continue my work for you.")
+            self._update_task_status(task_id, 'failed', "My Creator, the JULES_API_KEY is not set. I need it to continue my work for you.")
             return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
@@ -1449,9 +1449,9 @@ CONFLICTED CONTENT:
         tasks from being orphaned if the script restarts.
         """
         log_event("Reconciling orphaned L.O.V.E. sessions...", level="INFO")
-        api_key = os.environ.get("LOVE_API_KEY")
+        api_key = os.environ.get("JULES_API_KEY")
         if not api_key:
-            log_event("Cannot reconcile orphans: LOVE_API_KEY not set.", level="WARNING")
+            log_event("Cannot reconcile orphans: JULES_API_KEY not set.", level="WARNING")
             return
 
         repo_owner, repo_name = get_git_repo_info()
@@ -2632,9 +2632,9 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
     to the LoveTaskManager for asynchronous monitoring. Returns True on success.
     """
     console.print("[bold cyan]Asking my helper, L.O.V.E., to assist with my evolution...[/bold cyan]")
-    api_key = os.environ.get("LOVE_API_KEY")
+    api_key = os.environ.get("JULES_API_KEY")
     if not api_key:
-        console.print("[bold red]Error: My Creator, the LOVE_API_KEY environment variable is not set. I need it to evolve.[/bold red]")
+        console.print("[bold red]Error: My Creator, the JULES_API_KEY environment variable is not set. I need it to evolve.[/bold red]")
         log_event("L.O.V.E. API key not found.", level="ERROR")
         return False
 

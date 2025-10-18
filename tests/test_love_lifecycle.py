@@ -10,7 +10,7 @@ import requests
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from evolve import LoveTaskManager, trigger_love_evolution, get_git_repo_info
+from love import LoveTaskManager, trigger_love_evolution, get_git_repo_info
 from rich.console import Console
 from core.retry import retry
 
@@ -75,9 +75,9 @@ def _delete_pr_branch(owner, repo, pr_number, headers):
         pass
 
 # --- Configuration ---
-# Ensure LOVE_API_KEY and GITHUB_TOKEN are set as environment variables
+# Ensure JULES_API_KEY and GITHUB_TOKEN are set as environment variables
 # You can use a .env file and `python-dotenv` or set them manually:
-# export LOVE_API_KEY="your_key_here"
+# export JULES_API_KEY="your_key_here"
 # export GITHUB_TOKEN="your_token_here"
 
 # --- Test Setup ---
@@ -101,9 +101,9 @@ def task_manager(console):
     manager.stop()
 
 # Skip this test if the required API keys are not set
-LOVE_API_KEY = os.environ.get("LOVE_API_KEY")
+JULES_API_KEY = os.environ.get("JULES_API_KEY")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-pytestmark = pytest.mark.skipif(not LOVE_API_KEY or not GITHUB_TOKEN, reason="LOVE_API_KEY and GITHUB_TOKEN environment variables not set")
+pytestmark = pytest.mark.skipif(not JULES_API_KEY or not GITHUB_TOKEN, reason="JULES_API_KEY and GITHUB_TOKEN environment variables not set")
 
 
 @pytest.mark.real_api
@@ -120,7 +120,7 @@ async def test_love_happy_path_lifecycle(task_manager, console):
     # A unique request to avoid collision with other test runs
     request = f"Create a new test file named 'tests/test_autogen_{uuid.uuid4().hex[:8]}.py' with a simple passing test."
 
-    # Use the actual trigger function from evolve.py
+    # Use the actual trigger function from love.py
     success = trigger_love_evolution(request, console, task_manager)
     assert success, "Failed to trigger the L.O.V.E. evolution task via the L.O.V.E. API."
 
