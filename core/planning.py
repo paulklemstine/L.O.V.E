@@ -22,6 +22,13 @@ def mock_llm_call(prompt: str, purpose: str = "general") -> str:
             {"step": 5, "task": "Produce a final summary report."}
         ]
         return json.dumps(plan)
+    elif purpose == "mrl_planning":
+        plan = [
+            {"step": 1, "task": "mrl_call --service eye_control --method move_to --params 90 90"},
+            {"step": 2, "task": "mrl_call --service head_control --method move_to --params 90 90"},
+            {"step": 3, "task": "mrl_call --service arm_control --method move_to --params 90 90 90 90 90 90"}
+        ]
+        return json.dumps(plan)
     else:
         # Generic response for other goals.
         plan = [

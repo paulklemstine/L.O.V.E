@@ -1,5 +1,6 @@
 import json
 import os
+from typing import List
 from ipfs import pin_to_ipfs
 
 class KnowledgeGraph:
@@ -35,6 +36,16 @@ class KnowledgeGraph:
     def get_triples(self):
         """Returns all triples in the graph."""
         return list(self.graph)
+
+    def find_services(self, service_type: str = "MyRobotLab") -> List[str]:
+        """
+        Finds all services of a specific type in the knowledge graph.
+        """
+        services = []
+        for subject, relation, obj in self.graph:
+            if relation == "has_service" and service_type in obj:
+                services.append(subject)
+        return services
 
     def backup_to_ipfs(self) -> str:
         """
