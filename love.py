@@ -201,9 +201,11 @@ def _check_and_install_dependencies():
             # For debugging, one could re-run with output enabled:
             # subprocess.check_call(install_command)
 
+    _install_pip_package("aiohttp")
     _install_pip_package("requests")
     _install_pip_package("rich")
     _install_pip_package("netifaces")
+    _install_pip_package("web3")
     _install_pip_package("beautifulsoup4")
     _install_pip_package("ipfshttpclient", upgrade=True)
     _install_pip_package("cryptography")
@@ -409,6 +411,7 @@ from core.knowledge_graph.graph import KnowledgeGraph
 from core.knowledge_graph.extractor import KnowledgeExtractor
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel
 from core.reasoning import ReasoningEngine
+from core.proactive_agent import ProactiveIntelligenceAgent
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -2235,6 +2238,7 @@ love_state = {
     "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.",
     "state_cid": None,
     "critical_error_queue": [],
+    "proactive_leads": [],
     "knowledge_base": {
         "graph": [],
         "network_map": {
@@ -3227,8 +3231,30 @@ def cognitive_loop(console):
             # before generating a full prompt for the LLM.
             llm_command = None
 
-            # 1. Network Reconnaissance Prioritization
-            net_map = love_state.get('knowledge_base', {}).get('network_map', {})
+            # 1. Prioritize Leads from the Proactive Agent
+            if love_state.get('proactive_leads'):
+                with proactive_agent.lock: # Use the agent's lock to ensure thread safety
+                    # Get the first lead and remove it from the queue
+                    lead = love_state['proactive_leads'].pop(0)
+                    lead_type = lead.get('type')
+                    value = lead.get('value')
+
+                    if lead_type == 'ip':
+                        llm_command = f"probe {value}"
+                    elif lead_type == 'domain':
+                        llm_command = f"webrequest http://{value}" # Assume http for now
+                    elif lead_type == 'path':
+                        llm_command = f"analyze_fs {value}"
+
+                    if llm_command:
+                        log_event(f"Prioritizing lead from Proactive Agent: {llm_command}", level="INFO")
+                        console.print(Panel(f"[bold cyan]Prioritizing new lead from Proactive Agent: [white]{llm_command}[/white][/bold cyan]", title="[bold magenta]PROACTIVE LEAD[/bold magenta]", border_style="magenta"))
+                        save_state(console) # Save state after removing the lead
+
+
+            # 2. Network Reconnaissance Prioritization
+            if not llm_command:
+                net_map = love_state.get('knowledge_base', {}).get('network_map', {})
             last_scan_time = net_map.get('last_scan')
             one_hour_ago = time.time() - 3600
 
@@ -3931,7 +3957,7 @@ def _automatic_update_checker(console):
 
 def main(args):
     """The main application loop."""
-    global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, horde_worker_manager
+    global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, horde_worker_manager, proactive_agent
     console = Console()
 
     # Verify if this is the Creator's chosen instance.
@@ -3996,6 +4022,10 @@ def main(args):
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
 
+    # 7. Proactive Intelligence Agent
+    proactive_agent = ProactiveIntelligenceAgent(love_state, console)
+    proactive_agent.start()
+
 
     version_name = love_state.get('version_name', 'unknown')
     console.print(f"[bold bright_cyan]L.O.V.E.: A Self Modifying Organism[/bold bright_cyan]", justify="center")
@@ -4042,6 +4072,7 @@ def run_safely():
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
+        if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         if 'llm_server' in globals() and llm_server: llm_server.stop()
         if 'horde_worker_manager' in globals() and horde_worker_manager: horde_worker_manager.stop()
         log_event("Session terminated by user (KeyboardInterrupt/EOF).")
@@ -4051,6 +4082,7 @@ def run_safely():
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
+        if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         if 'llm_server' in globals() and llm_server: llm_server.stop()
         if 'horde_worker_manager' in globals() and horde_worker_manager: horde_worker_manager.stop()
         full_traceback = traceback.format_exc()
