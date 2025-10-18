@@ -3706,33 +3706,6 @@ def main(args):
     _verify_creator_instance(console)
 
     global ipfs_available
-    # --- Start Core Services ---
-    # (These services will only be started if not in autopilot mode,
-    # as they are not needed when running as a service)
-    if not args.autopilot:
-        ipfs_manager = IPFSManager(console=console)
-        if ipfs_manager.setup():
-            ipfs_available = True
-        else:
-            ipfs_available = False
-            console.print("[bold yellow]IPFS setup failed. Continuing without IPFS functionality.[/bold yellow]")
-
-        _auto_configure_hardware(console)
-        ensure_primary_model_downloaded(console)
-        llm_server = LocalLLMServer(console)
-        llm_server.start()
-        network_manager = NetworkManager(console=console, creator_public_key=CREATOR_PUBLIC_KEY)
-        network_manager.start()
-        love_task_manager = LoveTaskManager(console)
-        love_task_manager.start()
-        local_job_manager = LocalJobManager(console)
-        local_job_manager.start()
-        horde_worker_manager = HordeWorkerManager(console, llm_server.api_url)
-        horde_worker_manager.start()
-        tamagotchi_thread = Thread(target=update_tamagotchi_personality, args=(console,), daemon=True)
-        tamagotchi_thread.start()
-        update_checker_thread = Thread(target=_automatic_update_checker, args=(console,), daemon=True)
-        update_checker_thread.start()
     # 1. IPFS Manager
     ipfs_manager = IPFSManager(console=console)
     if ipfs_manager.setup():

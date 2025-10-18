@@ -15,6 +15,10 @@ from core.retry import retry
 # Dependencies like IS_CREATOR_INSTANCE and callbacks are now injected via the constructor.
 
 
+import threading
+from datetime import datetime
+
+
 class NetworkManager:
     def __init__(self, console, is_creator=False, treasure_callback=None, question_callback=None):
         """
@@ -32,6 +36,7 @@ class NetworkManager:
         self.peer_bridge_script = 'peer-bridge.js'
         self.active = False
         self.thread = None
+        self.loop = None
 
     def start(self):
         """Starts the peer-to-peer bridge in a background thread."""
@@ -39,8 +44,15 @@ class NetworkManager:
             self.console.print(f"[bold red]Error: Peer bridge script not found at '{self.peer_bridge_script}'[/bold red]")
             return
 
+        def run_loop():
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            self.loop.run_until_complete(self._run_bridge())
+            self.loop.close()
+
         self.active = True
-        self.thread = asyncio.run_coroutine_threadsafe(self._run_bridge(), asyncio.get_event_loop())
+        self.thread = threading.Thread(target=run_loop, daemon=True)
+        self.thread.start()
         self.console.print("[cyan]Network Manager started. Peer bridge is connecting...[/cyan]")
 
     async def _run_bridge(self):
@@ -50,7 +62,8 @@ class NetworkManager:
                 self.process = await asyncio.create_subprocess_exec(
                     'node', self.peer_bridge_script,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    stdin=asyncio.subprocess.PIPE # Ensure stdin is a pipe
                 )
 
                 # Process stdout and stderr concurrently
@@ -140,26 +153,28 @@ class NetworkManager:
             }
         })
 
+    async def _write_to_stdin(self, data_str):
+        """Coroutine to write data to the subprocess's stdin."""
+        if self.process and self.process.stdin and not self.process.stdin.is_closing():
+            self.process.stdin.write((data_str + '\n').encode('utf-8'))
+            await self.process.stdin.drain()
 
     def _send_message(self, message_dict):
-        """Sends a JSON message to the Node.js peer bridge process."""
-        if self.process and self.process.stdin and not self.process.stdin.is_closing():
+        """Sends a JSON message to the Node.js peer bridge process by scheduling it on the event loop."""
+        if self.process and self.loop and self.loop.is_running():
             message_str = json.dumps(message_dict)
-            try:
-                self.process.stdin.write((message_str + '\n').encode('utf-8'))
-            except (BrokenPipeError, ConnectionResetError) as e:
-                 self.console.print(f"[bold red]Could not send message to peer bridge: {e}[/bold red]")
+            asyncio.run_coroutine_threadsafe(self._write_to_stdin(message_str), self.loop)
 
     def stop(self):
         """Stops the peer bridge process and the handling thread."""
         self.active = False
-        if self.process:
+        if self.process and self.process.returncode is None:
             try:
                 self.process.terminate()
             except ProcessLookupError:
                 pass # Process already terminated
-        if self.thread and not self.thread.done():
-            self.thread.cancel()
+        # No need to directly interact with the thread. Setting self.active = False
+        # will cause the loop in _run_bridge to exit, and the daemon thread will terminate.
         self.console.print("[cyan]Network Manager stopped.[/cyan]")
 
 
@@ -203,7 +218,7 @@ def scan_network(state, autopilot_mode=False):
     for subnet in subnets:
         try:
             command = ["nmap", "-sn", subnet]
-            result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=300)
+            result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=600)
             output_log += f"\n--- Nmap output for {subnet} ---\n{result.stdout}\n"
             found_ips = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", result.stdout)
             all_found_ips.extend(ip for ip in found_ips if ip != subnet.split('/')[0]) # Exclude network address
@@ -237,7 +252,7 @@ def probe_target(ip_address, state, autopilot_mode=False):
     log_event(f"Probing target: {ip_address}")
     try:
         command = ["nmap", "-A", "-T4", ip_address]
-        result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=600)
+        result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=900)
         output = result.stdout
 
         ports = {}
