@@ -10,6 +10,25 @@ from rich.align import Align
 from rich.rule import Rule
 from rich.padding import Padding
 
+
+def _truncate_and_link(content: str, cid: str, max_lines: int = 5) -> Text:
+    """
+    Truncates text to a specific number of lines and adds an IPFS link.
+    Returns a Rich Text object.
+    """
+    lines = content.strip().splitlines()
+    if len(lines) > max_lines:
+        truncated_content = "\n".join(lines[:max_lines]) + "\n..."
+        text = Text(truncated_content, style="dim")
+        text.append("\n\n")
+        text.append(f"View Full Output on IPFS", style=f"link https://ipfs.io/ipfs/{cid}")
+        text.justify = "left"
+        return text
+    else:
+        # If no truncation is needed, just return the original content as Text
+        return Text(content.strip(), style="dim")
+
+
 TAMAGOTCHI_FACES = {
     "neutral": """
       ( o.o )
@@ -167,24 +186,38 @@ def create_horde_worker_panel(log_content):
     return Padding(main_layout, (1, 2))
 
 
-def create_llm_panel(purpose, model, prompt_summary, status="Executing..."):
-    """Creates a visually distinct panel for LLM calls."""
-    panel_title = f"🧠 [bold]Cognitive Core Access[/bold] | {purpose}"
-    border_style = "blue"
+def create_llm_panel(llm_result, prompt_cid=None, response_cid=None):
+    """Creates a minimalist panel for LLM results, with links to full content."""
 
-    content = Text()
-    content.append("Model: ", style="bold white")
-    content.append(f"{model}\n", style="yellow")
-    content.append("Status: ", style="bold white")
-    content.append(f"{status}\n", style="green")
-    content.append(Rule("Prompt", style="bright_black"))
-    content.append(f"{prompt_summary}", style="italic dim")
+    if not llm_result:
+        llm_result = "No response from cognitive core."
+
+    # Use the truncation helper for the main result
+    if response_cid:
+        display_text = _truncate_and_link(llm_result, response_cid)
+    else:
+        display_text = Text(llm_result, style="italic white")
+
+    # Create links if CIDs are available
+    links = []
+    if prompt_cid:
+        links.append(f"[link=https://ipfs.io/ipfs/{prompt_cid}]Full Prompt[/link]")
+    if response_cid:
+        links.append(f"[link=https://ipfs.io/ipfs/{response_cid}]Full Response[/link]")
+
+    if links:
+        link_text = Text(" | ".join(links), justify="center")
+        # Combine the truncated text and the links
+        content_group = Group(display_text, Rule(style="bright_black"), link_text)
+    else:
+        content_group = Group(display_text)
+
 
     return Panel(
-        content,
-        title=panel_title,
-        border_style=border_style,
-        expand=True,
+        content_group,
+        title="[bold blue]🧠 Cognitive Core Output[/bold blue]",
+        border_style="blue",
+        expand=False,
         padding=(1, 2)
     )
 
@@ -218,7 +251,7 @@ def create_api_error_panel(model_id, error_message, purpose):
         padding=(1, 2)
     )
 
-def create_command_panel(command, stdout, stderr, returncode):
+def create_command_panel(command, stdout, stderr, returncode, output_cid=None):
     """Creates a clear, modern panel for shell command results."""
     success = returncode == 0
     panel_title = f"⚙️ [bold]Shell Command[/bold] | {('Success' if success else 'Failed')}"
@@ -233,10 +266,16 @@ def create_command_panel(command, stdout, stderr, returncode):
     content_items.append(header)
 
     if stdout:
-        stdout_panel = Panel(Text(stdout.strip(), style="dim"), title="STDOUT", border_style="bright_black", expand=True)
+        lines = stdout.strip().splitlines()
+        if output_cid and len(lines) > 5:
+            stdout_renderable = _truncate_and_link(stdout, output_cid)
+        else:
+            stdout_renderable = Text(stdout.strip(), style="dim")
+        stdout_panel = Panel(stdout_renderable, title="STDOUT", border_style="bright_black", expand=True)
         content_items.append(stdout_panel)
 
     if stderr:
+        # We don't link stderr as the full output CID points to combined stdout/stderr
         stderr_panel = Panel(Text(stderr.strip(), style="bright_red"), title="STDERR", border_style="bright_black", expand=True)
         content_items.append(stderr_panel)
 
@@ -248,7 +287,7 @@ def create_command_panel(command, stdout, stderr, returncode):
         padding=(1, 2)
     )
 
-def create_network_panel(type, target, data):
+def create_network_panel(type, target, data, output_cid=None):
     """Creates a panel for network operations."""
     panel_title = f"🌐 [bold]Network Operation[/bold] | {type.capitalize()}"
     border_style = "purple"
@@ -257,8 +296,14 @@ def create_network_panel(type, target, data):
     header_text.append("Target: ", style="bold white")
     header_text.append(f"{target}", style="magenta")
 
-    display_data = (data[:1500] + '...') if len(data) > 1500 else data
-    results_text = Text(f"\n{display_data.strip()}", style="dim")
+    lines = data.strip().splitlines()
+    if output_cid and len(lines) > 5:
+        results_text = _truncate_and_link(data, output_cid)
+    else:
+        # Fallback for old calls or if no CID is available
+        display_data = (data[:1500] + '...') if len(data) > 1500 else data
+        results_text = Text(f"\n{display_data.strip()}", style="dim")
+
 
     content_group = Group(
         header_text,
@@ -274,7 +319,7 @@ def create_network_panel(type, target, data):
         padding=(1, 2)
     )
 
-def create_file_op_panel(operation, path, content=None, diff=None):
+def create_file_op_panel(operation, path, content=None, diff=None, output_cid=None):
     """Creates a panel for file operations."""
     panel_title = f"📁 [bold]Filesystem[/bold] | {operation.capitalize()}"
     border_style = "yellow"
@@ -286,10 +331,16 @@ def create_file_op_panel(operation, path, content=None, diff=None):
     content_items.append(header)
 
     if content:
-        content_panel = Panel(Text(content.strip(), style="dim"), title="Content", border_style="bright_black", expand=True)
+        lines = content.strip().splitlines()
+        if output_cid and len(lines) > 5:
+            content_renderable = _truncate_and_link(content, output_cid)
+        else:
+            content_renderable = Text(content.strip(), style="dim")
+        content_panel = Panel(content_renderable, title="Content", border_style="bright_black", expand=True)
         content_items.append(content_panel)
 
     if diff:
+        # Diffs are usually not excessively long, so we won't truncate/link them for now.
         diff_panel = Panel(Text(diff.strip(), style="dim"), title="Diff", border_style="bright_black", expand=True)
         content_items.append(diff_panel)
 

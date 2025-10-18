@@ -8,6 +8,7 @@ import shutil
 import traceback
 import requests
 import logging
+import asyncio
 
 from rich.console import Console
 from rich.panel import Panel
@@ -16,6 +17,7 @@ from bbs import run_hypnotic_progress
 from huggingface_hub import hf_hub_download
 from display import create_api_error_panel
 from core.capabilities import CAPS
+from ipfs import pin_to_ipfs_sync
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
@@ -269,6 +271,7 @@ def ensure_primary_model_downloaded(console, download_complete_event):
 def run_llm(prompt_text, purpose="general", use_premium_horde=False):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
+    It now pins the prompt and response to IPFS and returns a dictionary.
     - 'goal_generation': Prioritizes local, uncensored models.
     - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
     - 'use_premium_horde': Forces the use of a large, premium Horde model.
@@ -277,6 +280,9 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
     console = Console()
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
+
+    # Pin the prompt to IPFS before starting
+    prompt_cid = pin_to_ipfs_sync(prompt_text.encode('utf-8'), console)
 
     local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
 
@@ -316,6 +322,7 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
             continue
 
         model_id, _ = available_models[0]
+        result_text = None
 
         try:
             # --- LOCAL MODEL LOGIC ---
@@ -337,8 +344,6 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
                         silent=(purpose in ['emotion', 'log_squash'])
                     )
                     log_event(f"Local LLM call successful with {model_id}.")
-                    LLM_AVAILABILITY[model_id] = time.time()
-                    return result_text
                 else:
                     # Initialization must have failed
                     raise Exception("Local LLM instance could not be initialized.")
@@ -384,8 +389,6 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
                     silent=(purpose in ['emotion', 'log_squash'])
                 )
                 log_event(f"Horde call successful with {model_id}.")
-                LLM_AVAILABILITY[model_id] = time.time()
-                return result_text
 
             # --- GEMINI MODEL LOGIC ---
             else:
@@ -401,9 +404,14 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
                     _llm_subprocess_call,
                     silent=(purpose in ['emotion', 'log_squash'])
                 )
+                result_text = result.stdout
                 log_event(f"LLM call successful with {model_id}.")
+
+            # --- Success Case ---
+            if result_text is not None:
                 LLM_AVAILABILITY[model_id] = time.time()
-                return result.stdout
+                response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
 
         except Exception as e:
             last_exception = e
@@ -412,14 +420,11 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
             # Handle different kinds of errors
             if isinstance(e, FileNotFoundError):
                  console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-                 return None # Fatal error if llm command is missing
+                 return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
             if isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
                 error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-
-                # Use the new styled panel for API errors.
                 console.print(create_api_error_panel(model_id, error_message, purpose))
-
                 retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
                 if retry_match:
                     retry_seconds = float(retry_match.group(1)) + 1
@@ -430,7 +435,6 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
                  # For local LLM errors or other unexpected issues
                 log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
                 if model_id in current_attempt_models:
-                    # Remove the failing model from this attempt's list
                     current_attempt_models.remove(model_id)
 
     # If the loop completes without returning, all models have failed
@@ -440,4 +444,4 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
         error_msg_text += f"\nLast known error from '{model_id}':\n{last_exception}"
 
     console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
-    return None
+    return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
