@@ -7,6 +7,7 @@ import asyncio
 import aiohttp
 import time
 import uuid
+import requests
 
 
 def _install_dependencies():
