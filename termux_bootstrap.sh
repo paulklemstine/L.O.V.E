@@ -48,15 +48,15 @@ else
     echo "[!] package.json not found. Skipping npm install."
 fi
 
-# --- Delegate to evolve.py for Python Dependencies ---
+# --- Delegate to love.py for Python Dependencies ---
 echo ""
-echo "[*] Handing off to evolve.py for platform-aware Python dependency installation..."
+echo "[*] Handing off to love.py for platform-aware Python dependency installation..."
 echo "[*] This is the longest step and will involve compiling code. Please be patient."
 # We run the script with --help. The dependency check runs before arg parsing.
 # This avoids starting the full application while still triggering the setup.
-python evolve.py --help > /dev/null
+python love.py --help > /dev/null
 if [ $? -ne 0 ]; then
-    echo "[!] The dependency installer in evolve.py failed."
+    echo "[!] The dependency installer in love.py failed."
     echo "[!] Please check the output above for errors."
     exit 1
 fi
@@ -69,7 +69,7 @@ echo "  SETUP COMPLETE. LAUNCHING L.O.V.E."
 echo "========================================="
 echo ""
 
-python evolve.py
+python love.py
 
 # --- Post-Execution ---
 echo ""
