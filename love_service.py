@@ -29,12 +29,21 @@ class LoveService(Service):
         response = {"type": "mrl_response", "call_id": call_id, "result": None, "error": None}
 
         try:
-            target_service = self.getRuntime().getService(service_name)
-            if not target_service:
-                raise ValueError(f"MRL service '{service_name}' not found.")
+            if service_name == "runtime" and method_name == "getRegistry":
+                service_map = {}
+                registry = self.getRuntime().getRegistry()
+                for name, service in registry.items():
+                    methods = [m.getName() for m in service.getClass().getMethods()]
+                    service_map[name] = {"methods": methods}
+                result = service_map
+                self.info("Successfully introspected MRL services.")
+            else:
+                target_service = self.getRuntime().getService(service_name)
+                if not target_service:
+                    raise ValueError(f"MRL service '{service_name}' not found.")
 
-            method_to_call = getattr(target_service, method_name)
-            result = method_to_call(*args)
+                method_to_call = getattr(target_service, method_name)
+                result = method_to_call(*args)
             try:
                 # Attempt to serialize the result to JSON directly
                 response["result"] = json.dumps(result)
@@ -55,7 +64,6 @@ class LoveService(Service):
                 self.love_process.stdin.flush()
             except Exception as e:
                 self.error(f"Failed to send MRL response to subprocess: {e}")
-
 
     def _stream_reader(self, stream, log_method, is_stdout=False):
         """Reads and logs a stream line by line, checking for MRL calls on stdout."""
