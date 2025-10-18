@@ -18,6 +18,7 @@ from huggingface_hub import hf_hub_download
 from display import create_api_error_panel
 from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
+from core.token_utils import count_tokens_for_api_models
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
@@ -55,6 +56,10 @@ ALL_LLM_MODELS = list(dict.fromkeys(
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 local_llm_instance = None
+local_llm_tokenizer = None
+
+# Constants
+MAX_PROMPT_TOKENS_LOCAL = 7000  # Leaving ~1k for response
 
 
 def log_event(message, level="INFO"):
@@ -66,13 +71,27 @@ def log_event(message, level="INFO"):
     elif level == "CRITICAL": logging.critical(message)
 
 
+def get_token_count(text):
+    """
+    Counts the number of tokens in a given text. It uses the local model's
+    tokenizer if available, otherwise falls back to the API model tokenizer.
+    """
+    global local_llm_instance, local_llm_tokenizer
+    if local_llm_instance and local_llm_tokenizer:
+        # The tokenizer function of a Llama instance can be used directly.
+        return len(local_llm_tokenizer.tokenize(text.encode('utf-8')))
+    else:
+        # Fallback for API-based models or when local LLM is not loaded
+        return count_tokens_for_api_models(text)
+
+
 def _initialize_local_llm(console):
     """
     Iterates through the configured local models, attempting to download,
     reassemble (if split), and initialize each one in sequence.
     If all fail, it triggers self-correction.
     """
-    global local_llm_instance
+    global local_llm_instance, local_llm_tokenizer
     if local_llm_instance:
         return local_llm_instance
 
@@ -142,14 +161,16 @@ def _initialize_local_llm(console):
                 console.print(f"[green]Model [bold]{final_model_filename}[/bold] found in cache. Skipping download/assembly.[/green]")
 
             def _load():
-                global local_llm_instance
+                global local_llm_instance, local_llm_tokenizer
                 # This needs the CAPS global, which we don't have here.
                 # For now, we assume no GPU for simplicity in this refactor.
                 gpu_layers = 0
                 loading_message = "Loading model into CPU memory..."
                 def _do_load_action():
-                    global local_llm_instance
+                    global local_llm_instance, local_llm_tokenizer
                     local_llm_instance = Llama(model_path=final_model_path, n_gpu_layers=gpu_layers, n_ctx=8192, verbose=False)
+                    # We can reuse the same instance for tokenization.
+                    local_llm_tokenizer = local_llm_instance
                 run_hypnotic_progress(console, loading_message, _do_load_action)
             _load()
             return local_llm_instance
@@ -281,7 +302,36 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
 
-    # Pin the prompt to IPFS before starting
+    # --- Token Count & Prompt Management ---
+    try:
+        token_count = get_token_count(prompt_text)
+        log_event(f"Initial prompt token count: {token_count}", "INFO")
+
+        # Truncate if necessary, primarily for local models
+        if token_count > MAX_PROMPT_TOKENS_LOCAL:
+            log_event(f"Prompt token count ({token_count}) exceeds limit ({MAX_PROMPT_TOKENS_LOCAL}). Truncating...", "WARNING")
+            # This is a simple truncation, more sophisticated methods could be used.
+            # We tokenize, truncate the token list, and then decode back to text.
+            if local_llm_tokenizer:
+                tokens = local_llm_tokenizer.tokenize(prompt_text.encode('utf-8'))
+                truncated_tokens = tokens[:MAX_PROMPT_TOKENS_LOCAL]
+                prompt_text = local_llm_tokenizer.detokenize(truncated_tokens).decode('utf-8', errors='ignore')
+                token_count = len(truncated_tokens)
+                log_event(f"Truncated prompt token count: {token_count}", "INFO")
+            else:
+                # A less precise method for API models if truncation is ever needed for them
+                # This path is less likely given their larger context windows.
+                avg_chars_per_token = len(prompt_text) / token_count
+                estimated_cutoff = int(MAX_PROMPT_TOKENS_LOCAL * avg_chars_per_token)
+                prompt_text = prompt_text[:estimated_cutoff]
+                log_event(f"Truncated prompt for API model (approximate).", "WARNING")
+
+
+    except Exception as e:
+        log_event(f"Error during token counting/truncation: {e}", "ERROR")
+        # Decide if we should proceed or return, for now we proceed cautiously.
+
+    # Pin the potentially truncated prompt to IPFS
     prompt_cid = pin_to_ipfs_sync(prompt_text.encode('utf-8'), console)
 
     local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
