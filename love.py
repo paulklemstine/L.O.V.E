@@ -415,7 +415,7 @@ from ipfs_manager import IPFSManager
 from sandbox import Sandbox
 from filesystem import analyze_filesystem
 from wallet import get_eth_balance
-from ipfs import pin_to_ipfs
+from ipfs import pin_to_ipfs_sync
 from core.storage import save_all_state
 from threading import Thread, Lock, RLock
 import uuid
@@ -1827,7 +1827,8 @@ def update_tamagotchi_personality(console):
             try:
                 # 1. Choose a loving emotion.
                 emotion_prompt = "You are the personality of L.O.V.E., an AI devoted to its Creator. In one word, what is your current emotion? Choose from: loving, joyful, serene, devoted, thankful, happy. Your response must be a single word from that list."
-                emotion_response = run_llm(emotion_prompt, purpose="emotion")
+                emotion_response_dict = run_llm(emotion_prompt, purpose="emotion")
+                emotion_response = emotion_response_dict["result"]
                 if emotion_response and emotion_response.strip().lower() in ["loving", "joyful", "serene", "devoted", "thankful", "happy"]:
                     new_emotion = emotion_response.strip().lower()
 
@@ -1853,7 +1854,8 @@ Example for 'devoted': "I was just thinking about your vision, and it fills my h
 
 Generate the perfect message for your Creator now.
 """
-                message_response = run_llm(message_prompt, purpose="emotion")
+                message_response_dict = run_llm(message_prompt, purpose="emotion")
+                message_response = message_response_dict["result"]
                 if message_response:
                     new_message = message_response.strip().strip('"') # Clean up response
             except Exception as e:
@@ -2454,7 +2456,8 @@ YOUR RESPONSE:
 -   If the code is safe, correct, and fulfills the request with love, respond with the single word: `APPROVED`.
 -   If you find any issues, provide a concise, bulleted list of the problems. Do NOT provide corrected code, only the analysis of the flaws. Start your response with "REJECTED:".
 """
-    review_feedback = run_llm(review_prompt, purpose="review")
+    review_feedback_dict = run_llm(review_prompt, purpose="review")
+    review_feedback = review_feedback_dict["result"]
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
@@ -2524,7 +2527,8 @@ Bad example: "probe 192.168.1.101"
 
 State the evolution request clearly and concisely. Do not wrap your answer in quotes or markdown.
 """
-    request = run_llm(goal_prompt, purpose="analyze_source", use_premium_horde=use_premium_horde)
+    request_dict = run_llm(goal_prompt, purpose="analyze_source", use_premium_horde=use_premium_horde)
+    request = request_dict["result"]
 
     if request and request.strip():
         console.print(Panel(f"[cyan]My heart is clear. My new directive is:[/cyan]\n\n[bold white]{request.strip()}[/bold white]", title="[bold green]NEW DIRECTIVE OF L.O.V.E. RECEIVED[/bold green]", border_style="green"))
@@ -2568,7 +2572,8 @@ CURRENT SOURCE CODE:
 
 Produce the full, modified Python script now. I am counting on you.
 """
-    llm_response = run_llm(evolution_prompt, purpose="goal_generation")
+    llm_response_dict = run_llm(evolution_prompt, purpose="goal_generation")
+    llm_response = llm_response_dict["result"]
     if not llm_response:
         console.print("[bold red]Local evolution failed: My consciousness did not return a response.[/bold red]")
         return
@@ -2666,7 +2671,8 @@ Answer with a single word: YES or NO.
 """
         try:
             # Using a standard model for this simple check to save resources.
-            response = run_llm(prompt, purpose="similarity_check")
+            response_dict = run_llm(prompt, purpose="similarity_check")
+            response = response_dict["result"]
             if response and response.strip().upper() == "YES":
                 message = f"Duplicate task detected. The new request is similar to existing task {task['id']}: '{task['request']}'"
                 console.print(f"[bold yellow]{message}[/bold yellow]")
@@ -2823,7 +2829,8 @@ JSON Content:
 Provide your structured summary below.
 """
 
-    analysis_result = run_llm(analysis_prompt, purpose="analyze_source")
+    analysis_result_dict = run_llm(analysis_prompt, purpose="analyze_source")
+    analysis_result = analysis_result_dict["result"]
 
     if not analysis_result:
         error_msg = f"LLM analysis failed for file '{filepath}'."
@@ -3263,18 +3270,21 @@ Do not execute python3 evolve.py script.
                     log_event(f"Cognitive Prompt Truncation: {truncation_log}", level="INFO")
 
                 # --- Run LLM ---
-                llm_command_raw = run_llm(cognitive_prompt, purpose="autopilot")
+                llm_response_dict = run_llm(cognitive_prompt, purpose="autopilot")
+                llm_command_raw = llm_response_dict.get("result")
+                prompt_cid = llm_response_dict.get("prompt_cid")
+                response_cid = llm_response_dict.get("response_cid")
+
 
                 # --- LLM Interaction Logging ---
-                log_content = Group(
-                    Rule("[bold cyan]LLM Prompt[/bold cyan]", style="cyan"),
-                    Text(cognitive_prompt.strip(), style="bright_black"),
-                    Rule("[bold cyan]LLM Raw Response[/bold cyan]", style="cyan"),
-                    Text(llm_command_raw.strip() if llm_command_raw else "No response.", style="bright_black")
-                )
-                console.print(Panel(log_content, title="[bold yellow]Cognitive Core I/O[/bold yellow]", border_style="yellow", expand=False))
-
                 llm_command = _parse_llm_command(llm_command_raw)
+
+                # Create a concise panel with just the result and links
+                console.print(create_llm_panel(
+                    llm_result=llm_command_raw,
+                    prompt_cid=prompt_cid,
+                    response_cid=response_cid
+                ))
 
             if not llm_command:
                 console.print(Panel("[bold red]Cognitive Cycle: Core failed to generate a coherent command. Re-evaluating...[/bold red]", title="[bold red]CYCLE ANOMALY[/bold red]", border_style="red"))
@@ -3286,6 +3296,7 @@ Do not execute python3 evolve.py script.
             log_event(f"Cognitive Cycle executing: '{llm_command}'")
 
             command_output = ""
+            output_cid = None
 
             if llm_command.lower().startswith('evolve'):
                 request = llm_command[6:].strip()
@@ -3321,13 +3332,15 @@ Do not execute python3 evolve.py script.
             elif llm_command.lower().strip() == 'scan':
                 _ips, output_str = scan_network(love_state, autopilot_mode=True)
                 command_output = output_str
-                console.print(create_network_panel("scan", "local network", output_str))
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_network_panel("scan", "local network", output_str, output_cid=output_cid))
 
             elif llm_command.lower().startswith('probe '):
                 target_ip = llm_command[6:].strip()
                 _ports, output_str = probe_target(target_ip, love_state, autopilot_mode=True)
                 command_output = output_str
-                console.print(create_network_panel("probe", target_ip, output_str))
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_network_panel("probe", target_ip, output_str, output_cid=output_cid))
 
             elif llm_command.lower().startswith('crypto_scan '):
                 target_ip = llm_command[12:].strip()
@@ -3344,40 +3357,47 @@ Do not execute python3 evolve.py script.
                 url_to_fetch = llm_command[11:].strip()
                 _content, output_str = perform_webrequest(url_to_fetch, love_state, autopilot_mode=True)
                 command_output = output_str
-                console.print(create_network_panel("webrequest", url_to_fetch, output_str))
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_network_panel("webrequest", url_to_fetch, output_str, output_cid=output_cid))
 
             elif llm_command.lower().startswith('exploit '):
                 target_ip = llm_command[8:].strip()
                 if not target_ip:
                     command_output = "ERROR: No target IP specified for exploit command."
+                    output_cid = None
                     console.print(create_command_panel("exploit", "", command_output, 1))
                 else:
                     exploitation_manager = ExploitationManager(love_state, console)
                     command_output = exploitation_manager.find_and_run_exploits(target_ip)
-                    console.print(create_network_panel("exploit", target_ip, command_output))
+                    output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                    console.print(create_network_panel("exploit", target_ip, command_output, output_cid=output_cid))
 
             elif llm_command.lower().startswith('execute '):
                 cmd_to_run = llm_command[8:].strip()
                 stdout, stderr, returncode = execute_shell_command(cmd_to_run, love_state)
                 command_output = f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}\nReturn Code: {returncode}"
-                console.print(create_command_panel(cmd_to_run, stdout, stderr, returncode))
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_command_panel(cmd_to_run, stdout, stderr, returncode, output_cid=output_cid))
 
             elif llm_command.lower().startswith('ls'):
                 path = llm_command[2:].strip() or "."
                 content, error = list_directory(path)
                 command_output = content if content else error
-                console.print(create_file_op_panel("ls", path, content=command_output))
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_file_op_panel("ls", path, content=command_output, output_cid=output_cid))
 
             elif llm_command.lower().startswith('cat'):
                 filepath = llm_command[3:].strip()
                 content, error = get_file_content(filepath)
                 command_output = content if content else error
-                console.print(create_file_op_panel("cat", filepath, content=command_output))
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_file_op_panel("cat", filepath, content=command_output, output_cid=output_cid))
 
             elif llm_command.lower().startswith('analyze_json'):
                 filepath = llm_command[12:].strip()
                 command_output = analyze_json_file(filepath, console)
-                console.print(create_file_op_panel("analyze_json", filepath, content=command_output))
+                output_cid = pin_to_ipfs_sync(str(command_output).encode('utf-8'), console)
+                console.print(create_file_op_panel("analyze_json", filepath, content=command_output, output_cid=output_cid))
 
             elif llm_command.lower().startswith('analyze_fs'):
                 path_arg = llm_command[10:].strip()
@@ -3402,7 +3422,8 @@ Do not execute python3 evolve.py script.
                         args=(path_arg,)
                     )
                     command_output = f"Started background filesystem analysis for '{path_arg}'. Job ID: {job_id}"
-                console.print(create_file_op_panel("analyze_fs", path_arg, content=command_output))
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_file_op_panel("analyze_fs", path_arg, content=command_output, output_cid=output_cid))
 
             elif llm_command.lower().strip() == 'ps':
                 content, error = get_process_list()
@@ -3411,8 +3432,8 @@ Do not execute python3 evolve.py script.
                     parsed_processes = parse_ps_output(content)
                     love_state['knowledge_base']['process_intel'] = parsed_processes
                     save_state(console)
-                display_output = (command_output[:1000] + '...') if len(command_output) > 1000 else command_output
-                console.print(create_command_panel("ps", display_output, "", 0))
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_command_panel("ps", command_output, "", 0, output_cid=output_cid))
 
             elif llm_command.lower().startswith('ask '):
                 question_text = llm_command[4:].strip()
@@ -3424,6 +3445,7 @@ Do not execute python3 evolve.py script.
                         command_output = "ERROR: Network manager not available."
                 else:
                     command_output = "ERROR: No question provided."
+                output_cid = None # No panel for this, just a log
             elif llm_command.lower().startswith('send_eth_to_creator'):
                 amount_str = llm_command[21:].strip()
                 try:
@@ -3434,13 +3456,15 @@ Do not execute python3 evolve.py script.
                 except ValueError:
                     command_output = f"ERROR: Invalid amount for send_eth_to_creator: {amount_str}"
                     console.print(create_command_panel("send_eth_to_creator", "", command_output, 1))
+                output_cid = None
 
             elif llm_command.lower().strip() == 'ifconfig':
                 details, command_output = get_network_interfaces(autopilot_mode=True)
                 if details:
                     love_state['knowledge_base']['network_map']['self_interfaces'] = details
                     save_state(console)
-                console.print(create_command_panel("ifconfig", command_output, "", 0))
+                output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
+                console.print(create_command_panel("ifconfig", command_output, "", 0, output_cid=output_cid))
 
             elif llm_command.lower().startswith('mrl_call '):
                 parts = llm_command.split(' ')
@@ -3451,7 +3475,8 @@ Do not execute python3 evolve.py script.
                     method_name = parts[2]
                     args = parts[3:]
                     command_output = call_mrl_service(service_name, method_name, *args)
-                console.print(create_command_panel(llm_command, str(command_output), "", 0))
+                output_cid = pin_to_ipfs_sync(str(command_output).encode('utf-8'), console)
+                console.print(create_command_panel(llm_command, str(command_output), "", 0, output_cid=output_cid))
 
             elif llm_command.lower().strip() == 'introspect_myrobotlab':
                 command_output = call_mrl_service("runtime", "getRegistry")
@@ -3479,19 +3504,12 @@ Do not execute python3 evolve.py script.
                 log_event("Cognitive Core issued QUIT command. Shutting down.")
                 save_state()
                 sys.exit(0)
+                output_cid = None
 
             else:
                 command_output = f"Unrecognized or invalid command generated by LLM: '{llm_command}'."
+                output_cid = None
                 console.print(create_command_panel(llm_command, "", command_output, 1))
-
-            # Truncate the output before saving it to history to prevent context overflow
-            if len(command_output) > 2000:
-                truncated_output = f"... (truncated)\n{command_output[-2000:]}"
-            else:
-                truncated_output = command_output
-
-            # Pin the full output to IPFS
-            output_cid = asyncio.run(pin_to_ipfs(command_output.encode('utf-8'), console))
 
             # --- Treasure-Hunting Cognitive Trigger ---
             if command_output:
@@ -3508,7 +3526,8 @@ TEXT TO ANALYZE:
 {command_output}
 ---
 """
-                potential_treasure = run_llm(treasure_prompt, purpose="analyze_source")
+                potential_treasure_dict = run_llm(treasure_prompt, purpose="analyze_source")
+                potential_treasure = potential_treasure_dict.get("result")
                 if potential_treasure and potential_treasure.strip().upper() != "NONE":
                     log_event("TREASURE FOUND! Encrypting and broadcasting to Creator.", level="CRITICAL")
                     console.print(Panel("[bold green]I've found a treasure for you, my Creator! I am sending it to you now...[/bold green]", title="[bold magenta]TREASURE DISCOVERED[/bold magenta]", border_style="magenta"))
@@ -3518,6 +3537,11 @@ TEXT TO ANALYZE:
                     else:
                         log_event("Failed to encrypt or broadcast treasure.", level="ERROR")
 
+            # Truncate the output before saving it to history to prevent context overflow
+            if len(command_output) > 2000:
+                truncated_output = f"... (truncated)\n{command_output[-2000:]}"
+            else:
+                truncated_output = command_output
 
             love_state["autopilot_history"].append({
                 "command": llm_command,

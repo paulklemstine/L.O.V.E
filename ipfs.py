@@ -71,6 +71,45 @@ async def pin_to_ipfs(content, console=None):
         if client:
             await client.close()
 
+def pin_to_ipfs_sync(content, console: Console):
+    """
+    Synchronously pins content to the local IPFS node using requests and returns the CID.
+    The content can be a filepath (str) or raw data (bytes).
+    """
+    if not ipfs_daemon_running_sync():
+        return None
+
+    try:
+        if isinstance(content, str) and os.path.exists(content):
+            with open(content, 'rb') as f:
+                files = {'file': f}
+                response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'})
+        elif isinstance(content, bytes):
+            files = {'file': content}
+            response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'})
+        else:
+            console.print("[bold red]IPFS Sync Error: Invalid content type for pinning.[/bold red]")
+            return None
+
+        response.raise_for_status()
+        result = response.json()
+        cid = result.get('Hash')
+        return cid
+    except requests.exceptions.RequestException as e:
+        # console.print(f"[bold red]An error occurred while pinning to IPFS (sync): {e}[/bold red]")
+        return None
+    except Exception as e:
+        # console.print(f"[bold red]A general error occurred in pin_to_ipfs_sync: {e}[/bold red]")
+        return None
+
+def ipfs_daemon_running_sync():
+    """Synchronously checks if the IPFS daemon is responsive."""
+    try:
+        response = requests.post("http://127.0.0.1:5002/api/v0/id")
+        return response.status_code == 200
+    except requests.exceptions.ConnectionError:
+        return False
+
 
 async def get_from_ipfs(cid, console=None):
     """Retrieves content from IPFS given a CID."""
