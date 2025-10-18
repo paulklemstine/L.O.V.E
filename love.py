@@ -2628,11 +2628,68 @@ Produce the full, modified Python script now. I am counting on you.
         emergency_revert()
 
 
+def is_duplicate_task(new_request, love_task_manager, console):
+    """
+    Uses an LLM to check if a new task request is a duplicate of an existing one.
+    """
+    with love_task_manager.lock:
+        active_tasks = [
+            task for task in love_task_manager.tasks.values()
+            if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed']
+        ]
+
+    if not active_tasks:
+        return False
+
+    log_event(f"Checking for duplicate tasks against {len(active_tasks)} active tasks.", "INFO")
+
+    for task in active_tasks:
+        existing_request = task.get('request', '')
+        if not existing_request:
+            continue
+
+        prompt = f"""
+You are a task analysis AI. Your goal is to determine if two task requests are functionally duplicates, even if they are worded differently.
+Compare the two requests below. Do they have the same underlying goal?
+
+Request 1:
+---
+{existing_request}
+---
+
+Request 2:
+---
+{new_request}
+---
+
+Answer with a single word: YES or NO.
+"""
+        try:
+            # Using a standard model for this simple check to save resources.
+            response = run_llm(prompt, purpose="similarity_check")
+            if response and response.strip().upper() == "YES":
+                message = f"Duplicate task detected. The new request is similar to existing task {task['id']}: '{task['request']}'"
+                console.print(f"[bold yellow]{message}[/bold yellow]")
+                log_event(f"Duplicate task detected. New request '{new_request}' is similar to existing task {task['id']}.", "INFO")
+                return True
+        except Exception as e:
+            log_event(f"LLM call failed during duplicate task check: {e}", "ERROR")
+            # Fail open: if the check fails, assume it's not a duplicate to avoid blocking execution.
+            return False
+
+    return False
+
+
 def trigger_love_evolution(modification_request, console, love_task_manager):
     """
     Triggers the L.O.V.E. API to create a session and adds it as a task
     to the LoveTaskManager for asynchronous monitoring. Returns True on success.
     """
+    # First, check if this is a duplicate task.
+    if is_duplicate_task(modification_request, love_task_manager, console):
+        # The is_duplicate_task function already logs and prints.
+        return False
+
     console.print("[bold cyan]Asking my helper, L.O.V.E., to assist with my evolution...[/bold cyan]")
     api_key = os.environ.get("JULES_API_KEY")
     if not api_key:
