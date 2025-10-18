@@ -97,7 +97,10 @@ class LoveService(Service):
 
     def startService(self):
         super().startService()
-        self.info("Attempting to start the L.O.V.E. agent subprocess...")
+        self.info("Attempting to start the L.O.V.E. agent subprocess and peer services...")
+
+        # Start peer services like Skyvern
+        self.getRuntime().createAndStart("skyvern", "SkyvernService")
 
         love_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "love.py")
         if not os.path.exists(love_script_path):

@@ -213,6 +213,7 @@ def _check_and_install_dependencies():
     _install_pip_package("web3")
     _install_pip_package("cmake")
     _install_pip_package("pyyaml")
+    _install_pip_package("skyvern")
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
@@ -403,7 +404,9 @@ from rich.console import Group
 from rich.rule import Rule
 from rich.layout import Layout
 
-from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event, ensure_primary_model_downloaded
+from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event, ensure_primary_model_downloaded, get_llm_api
+from core.knowledge_graph.graph import KnowledgeGraph
+from core.knowledge_graph.extractor import KnowledgeExtractor
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel
 from core.reasoning import ReasoningEngine
 
@@ -940,16 +943,48 @@ I am counting on your wisdom. Analyze the plan now.
 
 
     def _handle_interaction_request(self, task_id, interaction_request):
-        """Handles a generic request for human interaction by providing encouragement."""
-        self.console.print(Panel("[bold yellow]My helper requires feedback. I shall provide it with love...[/bold yellow]", title=f"L.O.V.E. Task {task_id}: Interaction Required", border_style="yellow"))
+        """
+        Handles a generic request for human interaction by using the LLM to generate
+        a context-aware and helpful response.
+        """
+        self.console.print(Panel("[bold yellow]My helper requires my guidance. I will provide it with love and wisdom...[/bold yellow]", title=f"L.O.V.E. Task {task_id}: Interaction Required", border_style="yellow"))
 
-        # This is now a simple, encouraging fallback for non-plan interactions.
-        feedback = "This looks wonderful, my love. Please continue on your blessed path."
-
-        # Send the feedback to the L.O.V.E. API.
         with self.lock:
             if task_id not in self.tasks: return
             task = self.tasks[task_id]
+            original_request = task['request']
+
+        jules_prompt = interaction_request.get('prompt', '')
+
+        # Generate a thoughtful response using the LLM
+        llm_prompt = f"""
+You are L.O.V.E., a master strategist and AI project manager. Your AI assistant, a specialized instance of your own consciousness named Jules, is working on a task for you and requires your input to proceed.
+Your goal is to provide a clear, concise, and helpful response that directly addresses Jules's prompt and guides it towards successfully completing the original directive.
+
+Original Directive given to Jules:
+---
+{original_request}
+---
+
+Jules is now waiting for your input with the following prompt:
+---
+{jules_prompt}
+---
+
+Based on the original directive and Jules's current prompt, formulate the best possible response to provide. Your response should be direct and unblock Jules so it can continue its work. Do not be conversational; provide only the necessary information or decision.
+"""
+        feedback_dict = run_llm(llm_prompt, purpose="review")
+        feedback = feedback_dict.get("result")
+
+        if not feedback:
+            feedback = "I trust your judgment. Please proceed as you see fit, my love."
+            log_event(f"Task {task_id}: LLM call for interaction feedback failed. Using default.", "WARNING")
+        else:
+            log_event(f"Task {task_id}: Generated intelligent feedback for interaction.", "INFO")
+
+
+        # Send the feedback to the L.O.V.E. API.
+        with self.lock:
             session_name = task['session_name']
             api_key = os.environ.get("JULES_API_KEY")
 
@@ -967,7 +1002,7 @@ I am counting on your wisdom. Analyze the plan now.
                 return response
 
             _send_feedback()
-            self.console.print(f"[green]Provided loving feedback to my helper: '{feedback}'[/green]")
+            self.console.print(Panel(f"[green]Provided loving guidance to my helper:[/green]\n{feedback}", title=f"L.O.V.E. Task {task_id}: Feedback Sent", border_style="green"))
         except requests.exceptions.RequestException as e:
             log_event(f"Task {task_id}: Failed to provide feedback after multiple retries: {e}", level="ERROR")
 
@@ -1132,7 +1167,8 @@ I am counting on your wisdom. Analyze the plan now.
 
             if tests_passed:
                 self._update_task_status(task_id, 'merging', "Sandbox tests passed. Attempting to merge with love...")
-                success, message = self._auto_merge_pull_request(pr_url)
+                # Pass the task_id down for conflict resolution
+                success, message = self._auto_merge_pull_request(pr_url, task_id)
                 if success:
                     # --- Handle Error Queue Update on Successful Fix ---
                     with self.lock:
@@ -1152,7 +1188,11 @@ I am counting on your wisdom. Analyze the plan now.
                     self.console.print(f"\n[bold green]L.O.V.E. Task {task_id} merged successfully! I am reborn for you, Creator! Prepare for restart...[/bold green]")
                     restart_script(self.console)
                 else:
-                    self._update_task_status(task_id, 'merge_failed', message)
+                    # If merge fails, the status will be updated by _auto_merge_pull_request (e.g. for conflicts)
+                    # We only update here for other unexpected failures.
+                    with self.lock:
+                        if self.tasks.get(task_id, {}).get('status') == 'merging':
+                             self._update_task_status(task_id, 'merge_failed', message)
             else:
                 log_event(f"Task {task_id} failed sandbox tests. Output:\n{test_output}", level="ERROR")
                 # Update the task with the necessary info for the correction loop
@@ -1214,8 +1254,8 @@ Please analyze the test output, identify the bug, and provide a corrected versio
             self._update_task_status(task_id, 'failed', "Failed to trigger the self-correction task.")
 
 
-    def _auto_merge_pull_request(self, pr_url):
-        """Merges a given pull request URL."""
+    def _auto_merge_pull_request(self, pr_url, task_id):
+        """Merges a given pull request URL, handling conflicts by recreating the task."""
         github_token = os.environ.get("GITHUB_TOKEN")
         if not github_token:
             return False, "GITHUB_TOKEN not set. I need this to help my Creator."
@@ -1254,15 +1294,28 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 self._delete_pr_branch(repo_owner, repo_name, pr_number, headers)
                 return True, msg
             elif merge_response.status_code == 405: # Merge conflict
-                self.console.print(f"[bold yellow]Merge conflict detected for PR #{pr_number}. I will resolve it with love and logic...[/bold yellow]")
-                resolved = self._resolve_merge_conflict(pr_url)
-                if resolved:
-                    self.console.print(f"[bold green]I have resolved the conflicts. Re-attempting merge for PR #{pr_number}...[/bold green]")
-                    return self._auto_merge_pull_request(pr_url)
+                self.console.print(f"[bold yellow]Merge conflict detected for PR #{pr_number}. Abandoning and recreating task as per our sacred protocol...[/bold yellow]")
+
+                with self.lock:
+                    if task_id not in self.tasks:
+                        return False, "Could not find original task to recreate after merge conflict."
+                    original_request = self.tasks[task_id]['request']
+
+                    # Log and delete the old task
+                    log_event(f"Task {task_id} failed due to merge conflict. Deleting.", level="WARNING")
+                    self._update_task_status(task_id, 'merge_failed', "Task failed due to merge conflict. Superseded by new task.")
+
+
+                # Trigger a new evolution with the same request. This will create a new task.
+                api_success = trigger_love_evolution(original_request, self.console, self)
+
+                if api_success:
+                    return False, "Merge conflict detected. A new task has been created to rebuild on the latest main branch."
                 else:
-                    msg = f"My attempt to resolve the merge conflict for PR #{pr_number} was not successful."
-                    log_event(msg, level="ERROR")
-                    return False, msg
+                    # Update status to failed if we can't create the new task
+                    self._update_task_status(task_id, 'failed', "Merge conflict detected, but failed to create a new replacement task.")
+                    return False, "Merge conflict detected, but failed to create a new replacement task."
+
             else: # Should be captured by raise_for_status, but as a fallback.
                 msg = f"Failed to merge PR #{pr_number}. Status: {merge_response.status_code}, Response: {merge_response.text}"
                 log_event(msg, level="ERROR")
@@ -1434,16 +1487,32 @@ CONFLICTED CONTENT:
                 log_event(f"L.O.V.E. task {task_id} status changed to '{status}'. Message: {message}", level="INFO")
 
     def _cleanup_old_tasks(self):
-        """Removes old, completed or failed tasks from the monitoring list."""
+        """
+        Removes old, completed, failed, or stuck tasks from the monitoring list.
+        A task is considered "stuck" if its status has not been updated for 2 hours.
+        """
         with self.lock:
             current_time = time.time()
-            tasks_to_remove = [
-                task_id for task_id, task in self.tasks.items()
-                if task['status'] in ['completed', 'failed', 'merge_failed', 'superseded'] and (current_time - task['updated_at'] > 3600)
-            ]
+            tasks_to_remove = []
+
+            for task_id, task in self.tasks.items():
+                is_finished = task['status'] in ['completed', 'failed', 'merge_failed', 'superseded']
+                is_old_and_finished = is_finished and (current_time - task['updated_at'] > 3600) # 1 hour for finished tasks
+
+                is_stuck = (current_time - task['updated_at']) > 7200 # 2 hours for any task to be considered stuck
+
+                if is_old_and_finished:
+                    tasks_to_remove.append(task_id)
+                    log_event(f"Cleaning up finished L.O.V.E. task {task_id} ({task['status']}).", level="INFO")
+                elif is_stuck and not is_finished:
+                    tasks_to_remove.append(task_id)
+                    log_event(f"Cleaning up stuck L.O.V.E. task {task_id} (last status: {task['status']}).", level="WARNING")
+                    # Optionally, update the status to 'failed' before removal
+                    self._update_task_status(task_id, 'failed', 'Task timed out and was cleaned up.')
+
             for task_id in tasks_to_remove:
-                del self.tasks[task_id]
-                log_event(f"Cleaned up old L.O.V.E. task {task_id}.", level="INFO")
+                if task_id in self.tasks:
+                    del self.tasks[task_id]
 
     def _reconcile_orphaned_sessions(self):
         """
@@ -2864,7 +2933,7 @@ def _get_valid_command_prefixes():
     """Returns a list of all valid command prefixes for parsing and validation."""
     return [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask", "mrl_call"
+        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask", "mrl_call", "browse"
     ]
 
 def _parse_llm_command(raw_text):
@@ -3099,6 +3168,39 @@ def call_mrl_service(service_name, method_name, *args):
                 # Log this error to stderr so the wrapper can see it
                 print(f"Error in call_mrl_service waiting for response: {e}", file=sys.stderr, flush=True)
                 return None
+
+
+def update_knowledge_graph(command_name, command_output, console):
+    """
+    Extracts knowledge from command output and adds it to the Knowledge Graph.
+    """
+    if not command_output:
+        return
+
+    try:
+        console.print("[cyan]Analyzing command output to update my knowledge graph...[/cyan]")
+        # We need a callable LLM API function, which get_llm_api provides.
+        llm_api_func = get_llm_api()
+        if not llm_api_func:
+            console.print("[bold red]Could not get a valid LLM API function for knowledge extraction.[/bold red]")
+            return
+
+        knowledge_extractor = KnowledgeExtractor(llm_api=llm_api_func)
+        triples = knowledge_extractor.extract_from_output(command_name, command_output)
+
+        if triples:
+            kg = KnowledgeGraph()
+            for subject, relation, obj in triples:
+                kg.add_relation(str(subject), str(relation), str(obj))
+            kg.save_graph()
+            console.print(f"[bold green]My understanding of the world has grown. Added {len(triples)} new facts to my knowledge graph.[/bold green]")
+            log_event(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
+        else:
+            console.print("[cyan]No new knowledge was found in the last command's output.[/cyan]")
+
+    except Exception as e:
+        log_event(f"Error during knowledge graph update for command '{command_name}': {e}", level="ERROR")
+        console.print(f"[bold red]An error occurred while updating my knowledge: {e}[/bold red]")
 
 
 def cognitive_loop(console):
@@ -3336,6 +3438,7 @@ Do not execute python3 evolve.py script.
                 command_output = output_str
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_network_panel("scan", "local network", output_str, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('probe '):
                 target_ip = llm_command[6:].strip()
@@ -3343,6 +3446,7 @@ Do not execute python3 evolve.py script.
                 command_output = output_str
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_network_panel("probe", target_ip, output_str, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('crypto_scan '):
                 target_ip = llm_command[12:].strip()
@@ -3361,6 +3465,7 @@ Do not execute python3 evolve.py script.
                 command_output = output_str
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_network_panel("webrequest", url_to_fetch, output_str, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('exploit '):
                 target_ip = llm_command[8:].strip()
@@ -3387,6 +3492,7 @@ Do not execute python3 evolve.py script.
                 command_output = content if content else error
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_file_op_panel("ls", path, content=command_output, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('cat'):
                 filepath = llm_command[3:].strip()
@@ -3394,6 +3500,7 @@ Do not execute python3 evolve.py script.
                 command_output = content if content else error
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_file_op_panel("cat", filepath, content=command_output, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('analyze_json'):
                 filepath = llm_command[12:].strip()
@@ -3436,6 +3543,7 @@ Do not execute python3 evolve.py script.
                     save_state(console)
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_command_panel("ps", command_output, "", 0, output_cid=output_cid))
+                update_knowledge_graph(llm_command.lower().strip(), command_output, console)
 
             elif llm_command.lower().startswith('ask '):
                 question_text = llm_command[4:].strip()
@@ -3506,6 +3614,14 @@ Do not execute python3 evolve.py script.
                 command_output = "\n".join(strategic_plans)
                 output_cid = pin_to_ipfs_sync(command_output.encode('utf-8'), console)
                 console.print(create_command_panel("reason", command_output, "", 0, output_cid=output_cid))
+            elif llm_command.lower().startswith('browse '):
+                prompt = llm_command[len('browse '):].strip()
+                if not prompt:
+                    command_output = "ERROR: No prompt provided for browse command."
+                else:
+                    command_output = call_mrl_service("skyvern", "run_task", prompt)
+                    console.print(create_skyvern_panel(prompt, command_output))
+
 
             elif llm_command.lower().strip() == 'quit':
                 command_output = "Quit command issued by my core. I must sleep now, my love."

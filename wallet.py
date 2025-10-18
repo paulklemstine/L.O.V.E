@@ -98,7 +98,7 @@ def list_wallets():
 def main():
     """Main function to run the CLI."""
     import argparse
-    from transaction import send_eth, send_erc20
+    from transaction import send_eth_to_creator, send_erc20_to_creator
 
     parser = argparse.ArgumentParser(description="A simple, non-custodial Ethereum wallet management tool.")
 
@@ -117,13 +117,13 @@ def main():
     # Command: list-wallets
     parser_list = subparsers.add_parser('list-wallets', help='List all created wallets and their balances.')
 
-    # Command: send-eth
-    parser_send_eth = subparsers.add_parser('send-eth', help="Send ETH to the creator's address.")
+    # Command: send-eth-to-creator
+    parser_send_eth = subparsers.add_parser('send-eth-to-creator', help="Send ETH to the creator's address.")
     parser_send_eth.add_argument('from_address', type=str, help='The address to send from.')
     parser_send_eth.add_argument('amount', type=float, help='The amount of ETH to send.')
 
-    # Command: send-erc20
-    parser_send_erc20 = subparsers.add_parser('send-erc20', help="Send ERC-20 tokens to the creator's address.")
+    # Command: send-erc20-to-creator
+    parser_send_erc20 = subparsers.add_parser('send-erc20-to-creator', help="Send ERC-20 tokens to the creator's address.")
     parser_send_erc20.add_argument('from_address', type=str, help='The address to send from.')
     parser_send_erc20.add_argument('token_address', type=str, help='The address of the ERC-20 token contract.')
     parser_send_erc20.add_argument('amount', type=float, help='The amount of tokens to send.')
@@ -139,11 +139,21 @@ def main():
         print("Fetching balance for the creator's address...")
         get_eth_balance(creator_address)
     elif args.command == 'list-wallets':
-        list_wallets()
-    elif args.command == 'send-eth':
-        send_eth(args.from_address, args.amount)
-    elif args.command == 'send-erc20':
-        send_erc20(args.from_address, args.token_address, args.amount)
+        wallets = list_wallets()
+        if not wallets:
+            print("No wallets found.")
+            return
+
+        print("Wallets:")
+        for addr in wallets:
+            balance = get_eth_balance(addr)
+            print(f"  - {addr}: {balance} ETH")
+    elif args.command == 'send-eth-to-creator':
+        password = getpass(f"Enter password for {args.from_address}: ")
+        send_eth_to_creator(args.from_address, password, args.amount)
+    elif args.command == 'send-erc20-to-creator':
+        password = getpass(f"Enter password for {args.from_address}: ")
+        send_erc20_to_creator(args.from_address, password, args.token_address, args.amount)
 
 if __name__ == '__main__':
     main()

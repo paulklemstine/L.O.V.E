@@ -445,3 +445,9 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
 
     console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
     return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
+
+def get_llm_api():
+    """
+    Returns a callable LLM API function.
+    """
+    return run_llm
