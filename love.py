@@ -358,9 +358,9 @@ def _check_and_install_dependencies():
 
 def _configure_llm_api_key():
     """Checks for the Gemini API key and configures it for the llm tool."""
-    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    gemini_api_key = os.environ.get("LLM_GEMINI_KEY")
     if not gemini_api_key:
-        log_print("INFO: GEMINI_API_KEY environment variable not found. Skipping llm configuration.")
+        log_print("INFO: LLM_GEMINI_KEY environment variable not found. Skipping llm configuration.")
         return
 
     try:
