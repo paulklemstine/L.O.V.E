@@ -217,6 +217,9 @@ def _check_and_install_dependencies():
     _install_pip_package("pyyaml")
     _install_pip_package("skyvern")
     _install_pip_package("pycvesearch")
+    _install_pip_package("langgraph")
+    _install_pip_package("langchain")
+    _install_pip_package("langchain-community")
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
