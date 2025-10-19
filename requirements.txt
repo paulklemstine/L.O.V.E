@@ -15,3 +15,6 @@ pytest
 pytest-asyncio
 pycvesearch
 pycryptodome
+langgraph
+langchain
+langchain-community

@@ -32,7 +32,7 @@ class TestPhase3EvolutionLoop(unittest.TestCase):
             "timestamp": "2023-10-27T10:00:00Z",
             "event_type": "tool_failure",
             "data": {
-                "tool_name": "web_search",
+                "tool_name": "perform_webrequest",
                 "error": "API limit exceeded"
             }
         }
@@ -50,13 +50,13 @@ class TestPhase3EvolutionLoop(unittest.TestCase):
         meta_agent = MetacognitionAgent()
 
         # Mock the analyze_logs method to return a specific insight
-        meta_agent.analyst.analyze_logs = mock.MagicMock(return_value="Insight: The web_search tool is inefficient.")
+        meta_agent.analyst.analyze_logs = mock.MagicMock(return_value="Insight: The perform_webrequest tool is inefficient.")
 
         # Mock the benchmarker to avoid running a real experiment
         meta_agent.benchmarker.run_experiment = mock.MagicMock(return_value=True)
 
         # Provide a mock log entry for the agent to analyze
-        mock_logs = [{"event_type": "tool_failure", "data": {"tool_name": "web_search"}}]
+        mock_logs = [{"event_type": "tool_failure", "data": {"tool_name": "perform_webrequest"}}]
         meta_agent.run_evolution_cycle(logs=mock_logs)
 
         # 3. Assertions to verify the process
