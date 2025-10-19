@@ -19,7 +19,7 @@ const connections = new Map();
 let isReconnecting = false;
 // [L.O.V.E.] Changed to a static ID to create a discoverable lobby.
 // Keep the peerId consistent across reconnections.
-let peerId = 'borg-lobby';
+let peerId = 'love-lobby';
 
 // --- Logging ---
 // Use stderr for logs to keep stdout clean for data exchange with Python

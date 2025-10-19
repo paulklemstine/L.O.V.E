@@ -149,7 +149,7 @@ class NetworkManager:
         """Sends a question to the creator instance."""
         self._send_message({
             "type": "send",
-            "targetPeerId": "borg-lobby",
+            "targetPeerId": "love-lobby",
             "payload": {
                 "type": "question",
                 "question": question_text
