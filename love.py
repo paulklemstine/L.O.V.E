@@ -3353,6 +3353,7 @@ def cognitive_loop(console, user_input_queue):
                     console.print(Panel("[bold cyan]Configuration scan is stale. Searching for new treasure...[/bold cyan]", title="[bold magenta]CONFIG SCAN PRIORITY[/bold magenta]", border_style="magenta"))
                     findings = scan_directory(os.path.expanduser("~"))
                     if findings:
+                        kg = KnowledgeGraph()
                         for subject, relation, obj in findings:
                             kg.add_relation(subject, relation, obj)
                         kg.save_graph()
