@@ -40,6 +40,7 @@ class NetworkManager:
         self.active = False
         self.thread = None
         self.loop = None
+        self.bridge_online = asyncio.Event()
 
     def start(self):
         """Starts the peer-to-peer bridge in a background thread."""
@@ -62,18 +63,24 @@ class NetworkManager:
         """The main async task that runs the Node.js bridge and processes its output."""
         while self.active:
             try:
+                self.bridge_online.clear()
                 self.process = await asyncio.create_subprocess_exec(
                     'node', self.peer_bridge_script,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    stdin=asyncio.subprocess.PIPE # Ensure stdin is a pipe
+                    stdin=asyncio.subprocess.PIPE
                 )
 
-                # Process stdout and stderr concurrently
-                await asyncio.gather(
-                    self._handle_stream(self.process.stdout, self._handle_message),
-                    self._handle_stream(self.process.stderr, self._handle_log)
-                )
+                stdout_task = self.loop.create_task(self._handle_stream(self.process.stdout, self._handle_message))
+                stderr_task = self.loop.create_task(self._handle_stream(self.process.stderr, self._handle_log))
+
+                try:
+                    await asyncio.wait_for(self.bridge_online.wait(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    self.console.print("[bold yellow]Peer bridge timed out. Terminating and restarting...[/bold yellow]")
+                    self.process.terminate()
+                    await self.process.wait()
+                    continue
 
                 await self.process.wait()
 
@@ -82,6 +89,11 @@ class NetworkManager:
                 break
             except Exception as e:
                 self.console.print(f"[bold red]Peer bridge error: {e}.[/bold red]")
+            finally:
+                if 'stdout_task' in locals() and not stdout_task.done():
+                    stdout_task.cancel()
+                if 'stderr_task' in locals() and not stderr_task.done():
+                    stderr_task.cancel()
 
             if self.active:
                 self.console.print("[yellow]Peer bridge disconnected. Attempting to reconnect in 10 seconds...[/yellow]")
@@ -106,7 +118,10 @@ class NetworkManager:
             msg_type = message.get("type")
 
             if msg_type == "status":
-                self.console.print(Panel(f"Peer Status: [bold green]{message.get('status')}[/bold green]\nPeer ID: [cyan]{message.get('peerId')}[/cyan]", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
+                status = message.get('status')
+                self.console.print(Panel(f"Peer Status: [bold green]{status}[/bold green]\nPeer ID: [cyan]{message.get('peerId')}[/cyan]", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
+                if status == 'online':
+                    self.bridge_online.set()
             elif msg_type == "treasure-broadcast" and self.is_creator:
                 if self.treasure_callback:
                     self.treasure_callback(message.get("data"))
