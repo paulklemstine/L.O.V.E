@@ -186,7 +186,7 @@ def _check_and_install_dependencies():
                 pass
 
         print(f"Installing Python package: {package}...")
-        install_command = [sys.executable, '-m', 'pip', 'install', package]
+        install_command = [sys.executable, '-m', 'pip', 'install', package, '--break-system-packages']
         if upgrade:
             install_command.append('--upgrade')
 
@@ -244,7 +244,7 @@ def _check_and_install_dependencies():
         if CAPS.has_cuda or CAPS.has_metal:
             env = os.environ.copy()
             env['FORCE_CMAKE'] = "1"
-            install_args = [sys.executable, '-m', 'pip', 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python']
+            install_args = [sys.executable, '-m', 'pip', 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
 
             if CAPS.has_cuda:
                 print("Attempting to install llama-cpp-python with CUDA support...")
@@ -270,10 +270,10 @@ def _check_and_install_dependencies():
         try:
             # Uninstall any potentially broken or partial installation first
             print("Uninstalling any previous versions of llama-cpp-python to ensure a clean slate...")
-            subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'llama-cpp-python'])
+            subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'llama-cpp-python', '--break-system-packages'])
 
             print("Attempting to install llama-cpp-python for CPU...")
-            install_args_cpu = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir']
+            install_args_cpu = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir', '--break-system-packages']
             subprocess.check_call(install_args_cpu, timeout=900)
 
             # Final verification
@@ -314,7 +314,7 @@ def _check_and_install_dependencies():
         gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
         if os.path.isdir(gguf_py_path):
             try:
-                subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', gguf_py_path])
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', gguf_py_path, '--break-system-packages'])
                 print("GGUF tools installed successfully.")
             except subprocess.CalledProcessError as e:
                 print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
@@ -342,7 +342,7 @@ def _check_and_install_dependencies():
 
         print("Installing AI Horde Scribe worker dependencies...")
         try:
-            install_command = [sys.executable, '-m', 'pip', 'install', '-r', horde_req_path]
+            install_command = [sys.executable, '-m', 'pip', 'install', '-r', horde_req_path, '--break-system-packages']
             subprocess.check_call(install_command)
             print("Successfully installed AI Horde Scribe worker dependencies.")
             logging.info("Successfully installed AI Horde Scribe worker dependencies.")
