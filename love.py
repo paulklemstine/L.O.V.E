@@ -3306,8 +3306,6 @@ def cognitive_loop(console, user_input_queue):
 
             # 2. Network Reconnaissance Prioritization
             net_map = love_state.get('knowledge_base', {}).get('network_map', {})
-            if not llm_command:
-                pass
             last_scan_time = net_map.get('last_scan')
             one_hour_ago = time.time() - 3600
 
