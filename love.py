@@ -3670,7 +3670,6 @@ ipfs_available = False
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
 def run_safely():
-    """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     # --- Standard Execution Path ---
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
