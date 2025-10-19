@@ -378,13 +378,13 @@ def _configure_llm_api_key():
         # If not set, configure it
         log_print("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
         configure_result = subprocess.run(
-            ["llm", "keys", "set", "google"],
+            ["llm", "keys", "set", "gemini"],
             input=gemini_api_key,
             text=True,
             check=True,
             capture_output=True
         )
-        log_print(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
+        log_print(f"SUCCESS: 'llm keys set gemini' command completed. Output: {configure_result.stdout.strip()}")
     except FileNotFoundError:
         log_print("ERROR: The 'llm' command-line tool was not found. Please ensure it is installed and in your PATH.")
     except subprocess.CalledProcessError as e:
