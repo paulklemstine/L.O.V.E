@@ -6,9 +6,9 @@ class HypothesisFormatter:
         Example: IF we [make change], THEN [expected outcome] WILL OCCUR, as measured by [metric].
         """
         # This is a simplified implementation based on the insight from AnalystAgent
-        if "inefficient" in insight and "web_search" in insight:
+        if "inefficient" in insight and "perform_webrequest" in insight:
             return (
-                "IF we modify the web_search tool to use targeted CSS selectors, "
+                "IF we modify the perform_webrequest tool to use targeted CSS selectors, "
                 "THEN its token usage will decrease by over 50% "
                 "WILL OCCUR, as measured by token_usage_metric."
             )

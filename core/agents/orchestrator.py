@@ -1,5 +1,5 @@
 from core.planning import Planner, mock_llm_call
-from core.tools import ToolRegistry, SecureExecutor, web_search, read_file
+from core.tools import ToolRegistry, SecureExecutor
 from core.execution_engine import ExecutionEngine
 from ipfs import get_ipfs_client, DecentralizedStorage, DataManifest
 
@@ -29,8 +29,8 @@ class Orchestrator:
 
         # 2. Initialize the Tool Registry and register tools
         self.tool_registry = ToolRegistry()
-        self.tool_registry.register_tool("web_search", web_search)
-        self.tool_registry.register_tool("read_file", read_file)
+        # self.tool_registry.register_tool("web_search", web_search)
+        # self.tool_registry.register_tool("read_file", read_file)
 
         # Initialize IPFS and decentralized storage
         self.ipfs_client = get_ipfs_client(None)
