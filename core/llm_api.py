@@ -30,13 +30,13 @@ HARDWARE_TEST_MODEL_CONFIG = {
 
 LOCAL_MODELS_CONFIG = [
     {
+        "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
+        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
+    },
+    {
         "id": "TheBloke/CodeLlama-70B-Instruct-GGUF",
         "filenames": ["codellama-70b-instruct.Q8_0.gguf-split-a","codellama-70b-instruct.Q8_0.gguf-split-b"]
 
-    },
-    {
-        "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
-        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
     },
     {
         "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
@@ -94,6 +94,10 @@ def _initialize_local_llm(console):
     global local_llm_instance, local_llm_tokenizer
     if local_llm_instance:
         return local_llm_instance
+
+    if CAPS.gpu_type == "none":
+        # Do not even attempt to load local models in a CPU-only environment.
+        return None
 
     try:
         from llama_cpp import Llama

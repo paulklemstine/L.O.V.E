@@ -418,7 +418,7 @@ from core.proactive_agent import ProactiveIntelligenceAgent
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
 from bbs import BBS_ART, run_hypnotic_progress, clear_screen
-from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
+from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, generate_image_from_horde
 from exploitation import ExploitationManager
 from ipfs_manager import IPFSManager
 from sandbox import Sandbox
@@ -2965,7 +2965,7 @@ def _get_valid_command_prefixes():
     """Returns a list of all valid command prefixes for parsing and validation."""
     return [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask", "mrl_call", "browse"
+        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask", "mrl_call", "browse", "generate_image"
     ]
 
 def _parse_llm_command(raw_text):
@@ -3095,6 +3095,7 @@ My current system state:
 - `ifconfig`: Display network interface configuration.
 - `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
 - `send_eth_to_creator <amount>`: (Placeholder) Declare intent to send Ethereum to the Creator.
+- `generate_image <prompt>`: Generate an image using the AI Horde.
 - `quit`: Shut down the script.
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
@@ -3689,6 +3690,17 @@ Do not execute python3 evolve.py script.
                 else:
                     command_output = call_mrl_service("skyvern", "run_task", prompt)
                     console.print(create_skyvern_panel(prompt, command_output))
+
+            elif llm_command.lower().startswith('generate_image'):
+                prompt = llm_command[len('generate_image'):].strip()
+                if not prompt:
+                    command_output = "ERROR: No prompt provided for image generation."
+                else:
+                    filepath, cid, message = generate_image_from_horde(prompt)
+                    command_output = message
+                    if filepath:
+                        # We can create a new panel or reuse an existing one. Let's make a generic one.
+                        console.print(Panel(f"Image generated and saved to [cyan]{filepath}[/cyan]\nIPFS CID: [yellow]{cid}[/yellow]", title="[bold magenta]🎨 Image Generation Complete 🎨[/bold magenta]", border_style="magenta"))
 
 
             elif llm_command.lower().strip() == 'quit':
