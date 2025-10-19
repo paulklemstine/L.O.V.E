@@ -4,6 +4,7 @@ import subprocess
 import os
 import re
 import time
+import uuid
 from rich.panel import Panel
 import netifaces
 import ipaddress
@@ -446,3 +447,93 @@ Nmap Scan Results:
     log_event(f"Crypto scan for {ip_address} complete. Analysis stored in knowledge base.", "INFO")
 
     return f"Crypto scan complete for {ip_address}. Analysis stored in knowledge base.\n\nAnalysis:\n{analysis_result.strip()}"
+
+def generate_image_from_horde(prompt, dimensions="1024x1024", style=""):
+    """
+    Generates an image using the AI Horde, downloads it, saves it,
+    pins it to IPFS, and returns the local path and CID.
+    """
+    from love import log_event, console
+    from ipfs import pin_to_ipfs_sync
+
+    log_event(f"Initiating Horde image generation for prompt: {prompt}")
+
+    api_key = os.environ.get("STABLE_HORDE")
+    if not api_key:
+        return None, None, "STABLE_HORDE environment variable not set."
+
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    width, height = map(int, dimensions.split('x'))
+
+    payload = {
+        "prompt": prompt,
+        "params": {
+            "width": width,
+            "height": height,
+            "steps": 30,
+            "n": 1
+        },
+        "models": ["stable_diffusion"]
+    }
+
+    try:
+        # Step 1: Initiate async generation
+        async_url = "https://stablehorde.net/api/v2/generate/async"
+        response = requests.post(async_url, json=payload, headers=headers, timeout=30)
+        response.raise_for_status()
+        job_id = response.json().get('id')
+        if not job_id:
+            raise Exception("Failed to get job ID from Horde API.")
+
+        console.print(f"[cyan]Horde image generation started. Job ID: {job_id}[/cyan]")
+
+        # Step 2: Poll for result
+        check_url = f"https://stablehorde.net/api/v2/generate/status/{job_id}"
+        image_url = None
+        for i in range(120):  # Poll for up to 2 minutes
+            time.sleep(2)
+            status_response = requests.get(check_url, headers=headers, timeout=30)
+            if status_response.status_code == 200:
+                status_data = status_response.json()
+                if status_data.get('done'):
+                    image_url = status_data['generations'][0]['img']
+                    break
+                else:
+                    wait_est = status_data.get('wait_time', 0)
+                    console.print(f"[cyan]Image generation in progress... Estimated wait: {wait_est}s ({i+1}/120)[/cyan]")
+
+        if not image_url:
+            raise Exception("Horde image generation timed out after 2 minutes.")
+
+        # Step 3: Download the image
+        console.print(f"[cyan]Downloading generated image from: {image_url}[/cyan]")
+        image_response = requests.get(image_url, timeout=60)
+        image_response.raise_for_status()
+        image_data = image_response.content
+
+        # Step 4: Save the image
+        image_dir = "generated_images"
+        os.makedirs(image_dir, exist_ok=True)
+        filename = f"{uuid.uuid4()}.png"
+        filepath = os.path.join(image_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(image_data)
+        console.print(f"[green]Image saved locally to: {filepath}[/green]")
+
+        # Step 5: Pin to IPFS
+        cid = pin_to_ipfs_sync(image_data, console)
+        if cid:
+            console.print(f"[green]Image pinned to IPFS. CID: {cid}[/green]")
+        else:
+            console.print("[yellow]Failed to pin image to IPFS.[/yellow]")
+
+        return filepath, cid, f"Image generated successfully. Saved to {filepath}, CID: {cid}"
+
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Horde image generation API error: {e}"
+        log_event(error_msg, level="ERROR")
+        return None, None, error_msg
+    except Exception as e:
+        error_msg = f"An unexpected error occurred during image generation: {e}"
+        log_event(error_msg, level="ERROR")
+        return None, None, error_msg
