@@ -75,7 +75,7 @@ class NetworkManager:
                 stderr_task = self.loop.create_task(self._handle_stream(self.process.stderr, self._handle_log))
 
                 try:
-                    await asyncio.wait_for(self.bridge_online.wait(), timeout=30.0)
+                    await asyncio.wait_for(self.bridge_online.wait(), timeout=90.0)
                 except asyncio.TimeoutError:
                     self.console.print("[bold yellow]Peer bridge timed out. Terminating and restarting...[/bold yellow]")
                     self.process.terminate()

@@ -106,14 +106,19 @@ function initializePeer() {
         return;
     }
 
-    peer = new Peer(peerId, {
+    const peerConfig = {
         wrtc: wrtc,
         config: {
             'iceServers': [{ urls: ['stun:stun.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] }]
         },
         // Use a more robust connection timeout
         connectTimeout: 10000
-    });
+    };
+
+    log('info', `Initializing PeerJS with ID '${peerId}'...`);
+    log('info', `Using STUN servers: ${JSON.stringify(peerConfig.config.iceServers)}`);
+
+    peer = new Peer(peerId, peerConfig);
 
     peer.on('open', (id) => {
         log('info', `PeerJS connection opened with ID: ${id}`);
