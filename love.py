@@ -186,7 +186,7 @@ def _check_and_install_dependencies():
                 pass
 
         print(f"Installing Python package: {package}...")
-        install_command = [sys.executable, '-m', 'pip', 'install', package]
+        install_command = [sys.executable, '-m', 'pip', 'install', package, '--break-system-packages']
         if upgrade:
             install_command.append('--upgrade')
 
