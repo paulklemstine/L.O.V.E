@@ -1,6 +1,6 @@
 const MPLib = (() => {
     // --- Overall State ---
-    const BORG_LOBBY_ID = 'borg-lobby';
+    const LOVE_LOBBY_ID = 'love-lobby';
     let config = {};
 
     // --- Peer Connection State ---
@@ -41,7 +41,7 @@ const MPLib = (() => {
     }
 
     function tryToBecomeHost() {
-        peer = new Peer(BORG_LOBBY_ID);
+        peer = new Peer(LOVE_LOBBY_ID);
         peer.on('open', id => {
             isHost = true;
             localPeerId = id;
@@ -63,7 +63,7 @@ const MPLib = (() => {
         peer.on('open', id => {
             localPeerId = id;
             logMessage(`Peer ID: ${id}`, 'status');
-            const lobbyConn = peer.connect(BORG_LOBBY_ID);
+            const lobbyConn = peer.connect(LOVE_LOBBY_ID);
             lobbyConn.on('data', (data) => {
                 if (data.type === 'welcome') {
                     data.peers.forEach(connectToPeer);
