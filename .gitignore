@@ -13,6 +13,8 @@ checkpoints/
 # State and logs
 love_state.json
 *.log
+.deps_installed
+.hw_config_complete
 
 # IPFS self-management
 bin/
