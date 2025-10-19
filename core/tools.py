@@ -5,9 +5,10 @@ import re
 import subprocess
 from typing import Dict, Any, Callable
 from rich.console import Console
-from core.llm_api import run_llm
+from core.llm_api import run_llm, get_llm_api, log_event
 from network import crypto_scan
 from core.knowledge_graph.extractor import KnowledgeExtractor
+from core.knowledge_graph.graph import KnowledgeGraph
 from datetime import datetime
 import time
 import ipaddress
