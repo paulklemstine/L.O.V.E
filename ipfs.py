@@ -16,7 +16,7 @@ def _install_dependencies():
         import aioipfs
     except ImportError:
         print("aioipfs library not found. Installing...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "aioipfs"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "aioipfs", "--break-system-packages"])
 
 _install_dependencies()
 
