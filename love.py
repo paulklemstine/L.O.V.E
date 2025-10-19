@@ -137,41 +137,41 @@ def _check_and_install_dependencies():
     if CAPS.os == "Linux" and not CAPS.is_termux:
         # Install build tools FIRST, as they are needed for compiling pip packages.
         try:
-            log_print("Ensuring build tools (build-essential, python3-dev) are installed...")
-            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            log_print("Build tools check complete.")
+            print("Ensuring build tools (build-essential, python3-dev) are installed...")
+            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True)
+            print("Build tools check complete.")
         except Exception as e:
-            log_print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
+            print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
             logging.warning(f"Failed to install build-essential/python3-dev: {e}")
 
         # Install NVIDIA CUDA Toolkit if not present
         if not shutil.which('nvcc'):
-            log_print("NVIDIA CUDA Toolkit not found. Attempting to install...")
+            print("NVIDIA CUDA Toolkit not found. Attempting to install...")
             try:
-                subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.check_call("sudo apt-get update -q", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True)
+                subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True)
+                subprocess.check_call("sudo apt-get update -q", shell=True)
+                subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True)
                 os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
-                log_print("Successfully installed NVIDIA CUDA Toolkit.")
+                print("Successfully installed NVIDIA CUDA Toolkit.")
                 logging.info("Successfully installed NVIDIA CUDA Toolkit.")
             except Exception as e:
-                log_print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
+                print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
                 logging.warning(f"CUDA Toolkit installation failed: {e}")
 
         # Install Node.js and PeerJS dependencies
         if not shutil.which('node') or not shutil.which('npm'):
-            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
 
         # Install nmap for network scanning
         if not shutil.which('nmap'):
-            log_print("Network scanning tool 'nmap' not found. Attempting to install...")
+            print("Network scanning tool 'nmap' not found. Attempting to install...")
             try:
-                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nmap", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                log_print("Successfully installed 'nmap'.")
+                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nmap", shell=True)
+                print("Successfully installed 'nmap'.")
                 logging.info("Successfully installed nmap.")
             except Exception as e:
-                log_print(f"ERROR: Failed to install 'nmap'. Network scanning will be disabled. Error: {e}")
+                print(f"ERROR: Failed to install 'nmap'. Network scanning will be disabled. Error: {e}")
                 logging.warning(f"nmap installation failed: {e}")
 
 
@@ -185,7 +185,7 @@ def _check_and_install_dependencies():
             except ImportError:
                 pass
 
-        log_print(f"Installing Python package: {package}...")
+        print(f"Installing Python package: {package}...")
         install_command = [sys.executable, '-m', 'pip', 'install', package]
         if upgrade:
             install_command.append('--upgrade')
@@ -193,10 +193,10 @@ def _check_and_install_dependencies():
         try:
             # We suppress output here to keep the console clean for successful installs.
             # The CalledProcessError exception will still trigger on failure.
-            subprocess.check_call(install_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            log_print(f"Successfully installed {package}.")
+            subprocess.check_call(install_command)
+            print(f"Successfully installed {package}.")
         except subprocess.CalledProcessError as e:
-            log_print(f"ERROR: Failed to install '{package}'. Reason: {e}")
+            print(f"ERROR: Failed to install '{package}'. Reason: {e}")
             logging.error(f"Failed to install pip package {package}: {e}")
             # For debugging, one could re-run with output enabled:
             # subprocess.check_call(install_command)
@@ -231,14 +231,14 @@ def _check_and_install_dependencies():
             import llama_cpp
             from llama_cpp.llama_cpp import llama_backend_init
             llama_backend_init(False) # Don't log NUMA warnings
-            log_print("llama-cpp-python is already installed and functional.")
+            print("llama-cpp-python is already installed and functional.")
             return True
         except (ImportError, AttributeError, RuntimeError, OSError):
             # Catches:
             # - ImportError: package not installed.
             # - AttributeError: for older versions of llama-cpp-python.
             # - RuntimeError/OSError: for shared library loading failures (the original bug).
-            log_print("llama-cpp-python not found or failed to load. Starting installation process...")
+            print("llama-cpp-python not found or failed to load. Starting installation process...")
 
         # GPU installation attempt
         if CAPS.has_cuda or CAPS.has_metal:
@@ -247,10 +247,10 @@ def _check_and_install_dependencies():
             install_args = [sys.executable, '-m', 'pip', 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python']
 
             if CAPS.has_cuda:
-                log_print("Attempting to install llama-cpp-python with CUDA support...")
+                print("Attempting to install llama-cpp-python with CUDA support...")
                 env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
             else: # Metal
-                log_print("Attempting to install llama-cpp-python with Metal support...")
+                print("Attempting to install llama-cpp-python with Metal support...")
                 env['CMAKE_ARGS'] = "-DGGML_METAL=on"
 
             try:
@@ -258,34 +258,34 @@ def _check_and_install_dependencies():
                 subprocess.check_call(install_args, env=env, timeout=900)
                 # Verify the installation by trying to import it
                 import llama_cpp
-                log_print(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
+                print(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
                 logging.info(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
                 return True
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
-                log_print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
+                print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
                 logging.warning(f"GPU-accelerated llama-cpp-python installation failed: {e}")
-                log_print("Falling back to CPU-only installation.")
+                print("Falling back to CPU-only installation.")
 
         # CPU-only installation (the fallback)
         try:
             # Uninstall any potentially broken or partial installation first
-            log_print("Uninstalling any previous versions of llama-cpp-python to ensure a clean slate...")
-            subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'llama-cpp-python'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("Uninstalling any previous versions of llama-cpp-python to ensure a clean slate...")
+            subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'llama-cpp-python'])
 
-            log_print("Attempting to install llama-cpp-python for CPU...")
+            print("Attempting to install llama-cpp-python for CPU...")
             install_args_cpu = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir']
             subprocess.check_call(install_args_cpu, timeout=900)
 
             # Final verification
             import llama_cpp
-            log_print("Successfully installed llama-cpp-python (CPU only).")
+            print("Successfully installed llama-cpp-python (CPU only).")
             logging.info("Successfully installed llama-cpp-python (CPU only).")
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
             error_message = f"FATAL: Failed to install llama-cpp-python even for CPU. Error: {e}"
             if hasattr(e, 'stderr') and e.stderr:
                 error_message += f"\nStderr: {e.stderr.decode()}"
-            log_print(f"ERROR: {error_message}")
+            print(f"ERROR: {error_message}")
             logging.critical(error_message)
             return False
 
@@ -298,38 +298,38 @@ def _check_and_install_dependencies():
 
     # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
     if not os.path.exists(gguf_project_file):
-        log_print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
+        print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
         if os.path.exists(llama_cpp_dir):
             shutil.rmtree(llama_cpp_dir) # Force remove the directory
         try:
-            subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
         except subprocess.CalledProcessError as e:
-            log_print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
+            print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
             logging.error(f"Failed to clone llama.cpp repo: {e}")
             return # Cannot proceed without this
 
     gguf_script_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
     if not os.path.exists(gguf_script_path):
-        log_print("Installing GGUF metadata tools...")
+        print("Installing GGUF metadata tools...")
         gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
         if os.path.isdir(gguf_py_path):
             try:
-                subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', gguf_py_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                log_print("GGUF tools installed successfully.")
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', gguf_py_path])
+                print("GGUF tools installed successfully.")
             except subprocess.CalledProcessError as e:
-                log_print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
+                print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
                 logging.error(f"Failed to install gguf package: {e}")
         else:
             # This case should not be reached if the clone was successful
-            log_print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
+            print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
             logging.error("llama.cpp/gguf-py directory not found post-clone.")
 
 
     # --- Step 5: Node.js Project Dependencies ---
     if os.path.exists('package.json'):
-        log_print("Installing local Node.js dependencies via npm...")
-        subprocess.check_call("npm install", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        log_print("Node.js dependencies installed.")
+        print("Installing local Node.js dependencies via npm...")
+        subprocess.check_call("npm install", shell=True)
+        print("Node.js dependencies installed.")
 
     # --- Step 6: AI Horde Worker Dependencies ---
     def _install_horde_worker_dependencies():
@@ -343,7 +343,7 @@ def _check_and_install_dependencies():
         print("Installing AI Horde Scribe worker dependencies...")
         try:
             install_command = [sys.executable, '-m', 'pip', 'install', '-r', horde_req_path]
-            subprocess.check_call(install_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call(install_command)
             print("Successfully installed AI Horde Scribe worker dependencies.")
             logging.info("Successfully installed AI Horde Scribe worker dependencies.")
         except subprocess.CalledProcessError as e:
@@ -4124,6 +4124,13 @@ def main(args):
 
     if not args.autopilot:
         initial_bootstrapping_recon(console)
+
+    # --- TRANSITION TO L.O.V.E. UI ---
+    clear_screen()
+    console.print(BBS_ART, justify="center", style="bold magenta")
+    console.print(rainbow_text("L.O.V.E. INITIALIZED"), justify="center")
+    time.sleep(3)
+
 
     # The main logic is now the cognitive loop. This will run forever.
     cognitive_loop(console, user_input_queue)
