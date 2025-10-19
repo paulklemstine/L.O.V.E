@@ -3195,7 +3195,7 @@ def cognitive_loop(console, user_input_queue):
                     console.print(create_news_feed_panel(f"Executing command: `{command}`", title="Action", color="yellow"))
                 # Display any errors that occurred
                 if output.get('last_tool_error'):
-                    console.print(create_api_error_panel(output.get('last_tool_error'), "Tool Execution Failed"))
+                    console.print(create_api_error_panel("N/A", output.get('last_tool_error'), "Tool Execution Failed"))
 
             # Save the complete love_state after each cycle.
             # A good place to do this is after the knowledge update or after an error.
