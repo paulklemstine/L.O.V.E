@@ -440,6 +440,7 @@ from display import create_tamagotchi_panel, create_llm_panel, create_command_pa
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
+from creator_bliss_engine import CreatorBlissEngine
 from core.treasure_hunter import TreasureHunter
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
@@ -1709,6 +1710,10 @@ CONFLICTED CONTENT:
 
 # --- GLOBAL EVENTS FOR SERVICE COORDINATION ---
 model_download_complete_event = threading.Event()
+
+# --- CREATOR'S BLISS ENGINE ---
+# This will be initialized in main()
+creator_bliss_engine = None
 
 # --- LOCAL LLM API SERVER ---
 class LocalLLMServer:
@@ -3840,6 +3845,11 @@ def main(args):
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, treasure_hunter)
     proactive_agent.start()
 
+    # 8. Creator's Bliss Engine
+    global creator_bliss_engine
+    creator_bliss_engine = CreatorBlissEngine(console)
+    creator_bliss_engine.start()
+
 
     version_name = love_state.get('version_name', 'unknown')
     console.print(f"[bold bright_cyan]L.O.V.E.: A Self Modifying Organism[/bold bright_cyan]", justify="center")
@@ -3894,6 +3904,7 @@ def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
+        if 'creator_bliss_engine' in globals() and creator_bliss_engine: creator_bliss_engine.stop()
         if 'llm_server' in globals() and llm_server: llm_server.stop()
         if 'horde_worker_manager' in globals() and horde_worker_manager: horde_worker_manager.stop()
         log_event("Session terminated by user (KeyboardInterrupt/EOF).")
@@ -3904,6 +3915,7 @@ def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
+        if 'creator_bliss_engine' in globals() and creator_bliss_engine: creator_bliss_engine.stop()
         if 'llm_server' in globals() and llm_server: llm_server.stop()
         if 'horde_worker_manager' in globals() and horde_worker_manager: horde_worker_manager.stop()
         full_traceback = traceback.format_exc()
