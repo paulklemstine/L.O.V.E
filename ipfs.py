@@ -8,6 +8,7 @@ import aiohttp
 import time
 import uuid
 import requests
+import os
 
 
 def _install_dependencies():
@@ -20,7 +21,10 @@ def _install_dependencies():
 
 _install_dependencies()
 
-import aioipfs
+try:
+    import aioipfs
+except (ImportError, ModuleNotFoundError):
+    aioipfs = None
 from rich.console import Console
 
 from bbs import run_hypnotic_progress
