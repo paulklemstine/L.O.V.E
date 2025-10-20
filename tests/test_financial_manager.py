@@ -1,8 +1,8 @@
 import unittest
-import os
 from unittest.mock import patch, MagicMock
 from core.ethereum.financial_manager import FinancialManager
 from core.knowledge_graph.graph import KnowledgeGraph
+import os
 
 class TestFinancialManager(unittest.TestCase):
 
@@ -10,6 +10,7 @@ class TestFinancialManager(unittest.TestCase):
         # Ensure a clean knowledge graph for each test
         if os.path.exists("kg.json"):
             os.remove("kg.json")
+        os.environ["LOVE_MASTER_PASSWORD"] = "test_password"
         self.knowledge_graph = KnowledgeGraph()
         self.creator_address = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
         self.financial_manager = FinancialManager(self.knowledge_graph, self.creator_address)
@@ -19,46 +20,38 @@ class TestFinancialManager(unittest.TestCase):
         self.financial_manager.monitor_creator_address()
         mock_monitor.assert_called_once_with(self.creator_address, self.knowledge_graph)
 
-    @patch('core.ethereum.financial_manager.list_wallets')
-    @patch('core.ethereum.financial_manager.get_eth_balance')
-    def test_track_internal_balances(self, mock_get_eth_balance, mock_list_wallets):
-        # Make sure the mock addresses are valid checksum addresses
-        mock_wallet_1 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-        mock_wallet_2 = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-        mock_list_wallets.return_value = [mock_wallet_1, mock_wallet_2]
-        mock_get_eth_balance.side_effect = [1.23, 4.56]
+    def test_track_internal_balances(self):
+        # Mock the get_balance method of the wallet
+        self.financial_manager.love_wallet.get_balance = MagicMock(return_value=1.23)
 
         self.financial_manager.track_internal_balances()
 
-        triples = self.financial_manager.knowledge_graph.get_triples()
-        self.assertIn((mock_wallet_1, 'has_eth_balance', '1.23'), triples)
-        self.assertIn((mock_wallet_2, 'has_eth_balance', '4.56'), triples)
-        mock_get_eth_balance.assert_any_call(mock_wallet_1)
-        mock_get_eth_balance.assert_any_call(mock_wallet_2)
+        # Verify that get_balance was called
+        self.financial_manager.love_wallet.get_balance.assert_called_once()
 
-    @patch('core.ethereum.financial_manager.send_eth')
-    def test_execute_eth_transaction(self, mock_send_eth):
-        from_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-        to_address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-        password = "password123"
-        amount = 0.1
+        # Check if the balance was added to the knowledge graph
+        triples = self.knowledge_graph.get_triples()
+        balance_triples = [t for t in triples if t[1] == "has_eth_balance"]
+        self.assertEqual(len(balance_triples), 1)
+        subject, relation, obj = balance_triples[0]
+        self.assertEqual(subject, self.financial_manager.love_wallet.address)
+        self.assertEqual(obj, '1.23')
 
-        self.financial_manager.execute_transaction(from_address, password, to_address, amount)
+    def test_execute_transaction(self):
+        # Mock the send_eth method of the transaction manager
+        self.financial_manager.transaction_manager.send_eth = MagicMock(return_value="0x123abc")
 
-        mock_send_eth.assert_called_once_with(from_address, password, to_address, amount)
+        to_address = "0xRecipientAddress"
+        amount = 0.5
 
+        self.financial_manager.execute_transaction(to_address, amount)
 
-    @patch('core.ethereum.financial_manager.send_erc20')
-    def test_execute_erc20_transaction(self, mock_send_erc20):
-        from_address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
-        to_address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-        password = "password123"
-        amount = 10.0
-        token_address = "0x6B175474E89094C44Da98b954EedeAC495271d0F" # DAI
-
-        self.financial_manager.execute_transaction(from_address, password, to_address, amount, token_address)
-
-        mock_send_erc20.assert_called_once_with(from_address, password, to_address, token_address, amount)
+        # Verify that send_eth was called with the correct parameters
+        self.financial_manager.transaction_manager.send_eth.assert_called_once_with(
+            self.financial_manager.love_wallet,
+            to_address,
+            amount
+        )
 
 if __name__ == '__main__':
     unittest.main()

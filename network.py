@@ -370,7 +370,9 @@ def perform_webrequest(url, state, autopilot_mode=False):
         cache = state['knowledge_base'].setdefault('webrequest_cache', {})
         cache[url] = {"timestamp": time.time(), "content_length": len(content)}
         log_event(f"Web request to {url} successful. Stored {len(content)} bytes.", level="INFO")
-        return content, f"Successfully fetched {len(content)} bytes from {url}."
+        # Return a summary to the loop, not the full content, and None for the error.
+        summary = f"Successfully fetched {len(content)} bytes from {url}."
+        return summary, None
     except requests.exceptions.RequestException as e:
         error_msg = f"Web request to {url} failed: {e}"
         log_event(error_msg, level="ERROR")

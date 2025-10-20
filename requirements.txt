@@ -18,3 +18,4 @@ pycryptodome
 numpy==1.26.4
 tiktoken
 horde-client
+scapy

@@ -1,7 +1,6 @@
 node_modules/
 __pycache__/
 *.pyc
-evil_state.json
 checkpoints/
 
 # Log files
@@ -22,3 +21,4 @@ kubo/
 .ipfs_repo/
 ipfs.log
 :memory:
+kg.json
