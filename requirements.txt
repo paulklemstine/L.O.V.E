@@ -1,8 +1,8 @@
 rich
 web3
 netifaces
-requests==2.27.1
-urllib3==1.26.12
+requests
+urllib3
 beautifulsoup4
 aioipfs
 aiohttp
@@ -16,8 +16,8 @@ pytest
 pytest-asyncio
 pycvesearch
 pycryptodome
-numpy==1.26.4
+numpy
 tiktoken
 scapy
 aioboto3
-pydantic>2
+pydantic
