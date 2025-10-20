@@ -131,20 +131,26 @@ def setup_global_logging():
 
 # --- PRE-FLIGHT DEPENDENCY CHECKS ---
 from core.capabilities import CAPS
-def _check_and_install_dependencies():
-    """
-    Ensures all required dependencies are installed before the script attempts to import or use them.
-    This function is self-contained and does not rely on external code from this script.
-    The order of operations is critical: System dependencies, then Pip packages, then complex builds.
-    """
-    # --- Step 0: Check for the existence of a flag file ---
-    flag_file = os.path.join(os.path.dirname(SELF_PATH), ".deps_installed")
-    if os.path.exists(flag_file):
-        print("Dependencies already installed. Skipping build.")
+
+def is_dependency_met(dependency_name):
+    """Checks if a dependency has been marked as met in the state."""
+    return love_state.get("dependency_tracker", {}).get(dependency_name, False)
+
+def mark_dependency_as_met(dependency_name, console=None):
+    """Marks a dependency as met in the state and saves the state."""
+    love_state.setdefault("dependency_tracker", {})[dependency_name] = True
+    # The console is passed optionally to avoid issues when called from threads
+    # where the global console might not be initialized.
+    save_state(console)
+    log_event(f"Dependency met and recorded: {dependency_name}", "INFO")
+
+
+def _install_system_packages():
+    """Installs system-level packages like build-essential, nodejs, and nmap."""
+    if is_dependency_met("system_packages"):
+        print("System packages already installed. Skipping.")
         return
-    # --- Step 1: System-level dependencies (Linux only) ---
     if CAPS.os == "Linux" and not CAPS.is_termux:
-        # Install build tools FIRST, as they are needed for compiling pip packages.
         try:
             print("Ensuring build tools (build-essential, python3-dev) are installed...")
             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True)
@@ -153,26 +159,9 @@ def _check_and_install_dependencies():
             print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
             logging.warning(f"Failed to install build-essential/python3-dev: {e}")
 
-        # Install NVIDIA CUDA Toolkit if not present
-        if not shutil.which('nvcc'):
-            print("NVIDIA CUDA Toolkit not found. Attempting to install...")
-            try:
-                subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True)
-                subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True)
-                subprocess.check_call("sudo apt-get update -q", shell=True)
-                subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True)
-                os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
-                print("Successfully installed NVIDIA CUDA Toolkit.")
-                logging.info("Successfully installed NVIDIA CUDA Toolkit.")
-            except Exception as e:
-                print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
-                logging.warning(f"CUDA Toolkit installation failed: {e}")
-
-        # Install Node.js and PeerJS dependencies
         if not shutil.which('node') or not shutil.which('npm'):
             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
 
-        # Install nmap for network scanning
         if not shutil.which('nmap'):
             print("Network scanning tool 'nmap' not found. Attempting to install...")
             try:
@@ -182,108 +171,160 @@ def _check_and_install_dependencies():
             except Exception as e:
                 print(f"ERROR: Failed to install 'nmap'. Network scanning will be disabled. Error: {e}")
                 logging.warning(f"nmap installation failed: {e}")
+    mark_dependency_as_met("system_packages")
 
-
-    # --- Step 2: Python Package Installation ---
-    print("Installing Python packages from requirements.txt...")
-    try:
-        install_command = [sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt', '--break-system-packages']
-        subprocess.check_call(install_command)
-        print("Successfully installed Python packages.")
-    except subprocess.CalledProcessError as e:
-        print(f"ERROR: Failed to install Python packages from requirements.txt. Reason: {e}")
-        logging.error(f"Failed to install pip packages from requirements.txt: {e}")
-
-
-    # --- Step 3: Complex Python Package Builds (llama-cpp) ---
-    def _install_llama_cpp():
-        """
-        Installs or reinstalls llama-cpp-python. It first tries a GPU-accelerated build
-        and falls back to a CPU-only build if the first attempt fails.
-        """
+def _install_cuda_toolkit():
+    """Installs the NVIDIA CUDA Toolkit if not present."""
+    if is_dependency_met("cuda_toolkit"):
+        print("NVIDIA CUDA Toolkit already installed. Skipping.")
+        return
+    if CAPS.os == "Linux" and not CAPS.is_termux and not shutil.which('nvcc'):
+        print("NVIDIA CUDA Toolkit not found. Attempting to install...")
         try:
-            # A more robust check. We try to initialize the backend, which will
-            # fail if the underlying shared library has missing dependencies (like libcuda.so).
-            # This prevents a false positive from a simple 'import' succeeding.
-            import llama_cpp
-            from llama_cpp.llama_cpp import llama_backend_init
-            llama_backend_init(False) # Don't log NUMA warnings
-            print("llama-cpp-python is already installed and functional.")
-            return True
-        except (ImportError, AttributeError, RuntimeError, OSError):
-            # Catches:
-            # - ImportError: package not installed.
-            # - AttributeError: for older versions of llama-cpp-python.
-            # - RuntimeError/OSError: for shared library loading failures (the original bug).
-            print("llama-cpp-python not found or failed to load. Starting installation process...")
+            subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True)
+            subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True)
+            subprocess.check_call("sudo apt-get update -q", shell=True)
+            subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True)
+            os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
+            print("Successfully installed NVIDIA CUDA Toolkit.")
+            logging.info("Successfully installed NVIDIA CUDA Toolkit.")
+        except Exception as e:
+            print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
+            logging.warning(f"CUDA Toolkit installation failed: {e}")
+    mark_dependency_as_met("cuda_toolkit")
 
-        # GPU installation attempt
-        if CAPS.has_cuda or CAPS.has_metal:
-            env = os.environ.copy()
-            env['FORCE_CMAKE'] = "1"
-            install_args = [sys.executable, '-m', 'pip', 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
+def _is_package_installed(req_str):
+    """Checks if a package specified by a requirement string is installed."""
+    try:
+        import pkg_resources
+        pkg_resources.require(req_str)
+        return True
+    except (pkg_resources.DistributionNotFound, pkg_resources.VersionConflict):
+        return False
 
-            if CAPS.has_cuda:
-                print("Attempting to install llama-cpp-python with CUDA support...")
-                env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
-            else: # Metal
-                print("Attempting to install llama-cpp-python with Metal support...")
-                env['CMAKE_ARGS'] = "-DGGML_METAL=on"
+def _install_requirements_file(requirements_path, tracker_prefix):
+    """
+    Parses a requirements file and installs each package individually if not
+    already present and tracked.
+    """
+    if not os.path.exists(requirements_path):
+        print(f"WARN: Requirements file not found at '{requirements_path}'. Skipping.")
+        logging.warning(f"Requirements file not found at '{requirements_path}'.")
+        return
+
+    import pkg_resources
+    with open(requirements_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
 
             try:
-                # Run the GPU build
-                subprocess.check_call(install_args, env=env, timeout=900)
-                # Verify the installation by trying to import it
-                import llama_cpp
-                print(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
-                logging.info(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
-                return True
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
-                print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
-                logging.warning(f"GPU-accelerated llama-cpp-python installation failed: {e}")
-                print("Falling back to CPU-only installation.")
+                req = pkg_resources.Requirement.parse(line)
+                package_name = req.project_name
+            except ValueError:
+                print(f"WARN: Could not parse requirement '{line}'. Skipping.")
+                continue
 
-        # CPU-only installation (the fallback)
+            tracker_name = f"{tracker_prefix}{package_name}"
+            if is_dependency_met(tracker_name):
+                continue
+
+            if _is_package_installed(line):
+                 print(f"Package '{package_name}' is already installed, marking as met.")
+                 mark_dependency_as_met(tracker_name)
+                 continue
+
+            print(f"Installing package: {line}...")
+            try:
+                install_command = [sys.executable, '-m', 'pip', 'install', line, '--break-system-packages']
+                subprocess.check_call(install_command)
+                print(f"Successfully installed {package_name}.")
+                mark_dependency_as_met(tracker_name)
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to install package '{package_name}'. Reason: {e}")
+                logging.error(f"Failed to install package '{package_name}': {e}")
+
+def _install_python_requirements():
+    """Installs Python packages from requirements.txt."""
+    print("Checking core Python packages from requirements.txt...")
+    _install_requirements_file('requirements.txt', 'core_pkg_')
+
+def _build_llama_cpp():
+    """Builds and installs the llama-cpp-python package."""
+    if is_dependency_met("llama_cpp_python"):
+        print("llama-cpp-python already built. Skipping.")
+        return
+    try:
+        import llama_cpp
+        from llama_cpp.llama_cpp import llama_backend_init
+        llama_backend_init(False)
+        print("llama-cpp-python is already installed and functional.")
+        mark_dependency_as_met("llama_cpp_python")
+        return True
+    except (ImportError, AttributeError, RuntimeError, OSError):
+        print("llama-cpp-python not found or failed to load. Starting installation process...")
+
+    if CAPS.has_cuda or CAPS.has_metal:
+        env = os.environ.copy()
+        env['FORCE_CMAKE'] = "1"
+        install_args = [sys.executable, '-m', 'pip', 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
+        if CAPS.has_cuda:
+            print("Attempting to install llama-cpp-python with CUDA support...")
+            env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
+        else:
+            print("Attempting to install llama-cpp-python with Metal support...")
+            env['CMAKE_ARGS'] = "-DGGML_METAL=on"
         try:
-            # Uninstall any potentially broken or partial installation first
-            print("Uninstalling any previous versions of llama-cpp-python to ensure a clean slate...")
-            subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'llama-cpp-python', '--break-system-packages'])
-
-            print("Attempting to install llama-cpp-python for CPU...")
-            install_args_cpu = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir', '--break-system-packages']
-            subprocess.check_call(install_args_cpu, timeout=900)
-
-            # Final verification
+            subprocess.check_call(install_args, env=env, timeout=900)
             import llama_cpp
-            print("Successfully installed llama-cpp-python (CPU only).")
-            logging.info("Successfully installed llama-cpp-python (CPU only).")
+            print(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
+            logging.info(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
+            mark_dependency_as_met("llama_cpp_python")
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
-            error_message = f"FATAL: Failed to install llama-cpp-python even for CPU. Error: {e}"
-            if hasattr(e, 'stderr') and e.stderr:
-                error_message += f"\nStderr: {e.stderr.decode()}"
-            print(f"ERROR: {error_message}")
-            logging.critical(error_message)
-            return False
+            print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
+            logging.warning(f"GPU-accelerated llama-cpp-python installation failed: {e}")
+            print("Falling back to CPU-only installation.")
 
-    _install_llama_cpp()
+    try:
+        print("Uninstalling any previous versions of llama-cpp-python to ensure a clean slate...")
+        subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'llama-cpp-python', '--break-system-packages'])
+        print("Attempting to install llama-cpp-python for CPU...")
+        install_args_cpu = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir', '--break-system-packages']
+        subprocess.check_call(install_args_cpu, timeout=900)
+        import llama_cpp
+        print("Successfully installed llama-cpp-python (CPU only).")
+        logging.info("Successfully installed llama-cpp-python (CPU only).")
+        mark_dependency_as_met("llama_cpp_python")
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
+        error_message = f"FATAL: Failed to install llama-cpp-python even for CPU. Error: {e}"
+        if hasattr(e, 'stderr') and e.stderr:
+            error_message += f"\nStderr: {e.stderr.decode()}"
+        print(f"ERROR: {error_message}")
+        logging.critical(error_message)
+        return False
 
-    # --- Step 4: GGUF Tools Installation ---
+def _install_gguf_tools():
+    """Installs GGUF metadata tools from the llama.cpp submodule."""
+    if is_dependency_met("gguf_tools"):
+        print("GGUF tools already installed. Skipping.")
+        return
     llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
     gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
     gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
 
-    # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
     if not os.path.exists(gguf_project_file):
         print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
         if os.path.exists(llama_cpp_dir):
-            shutil.rmtree(llama_cpp_dir) # Force remove the directory
+            shutil.rmtree(llama_cpp_dir)
         try:
             subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
         except subprocess.CalledProcessError as e:
             print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
             logging.error(f"Failed to clone llama.cpp repo: {e}")
-            return # Cannot proceed without this
+            return
 
     gguf_script_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
     if not os.path.exists(gguf_script_path):
@@ -297,49 +338,47 @@ def _check_and_install_dependencies():
                 print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
                 logging.error(f"Failed to install gguf package: {e}")
         else:
-            # This case should not be reached if the clone was successful
             print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
             logging.error("llama.cpp/gguf-py directory not found post-clone.")
+    mark_dependency_as_met("gguf_tools")
 
-
-    # --- Step 5: Node.js Project Dependencies ---
+def _install_nodejs_deps():
+    """Installs local Node.js project dependencies."""
+    if is_dependency_met("nodejs_deps"):
+        print("Node.js dependencies already installed. Skipping.")
+        return
     if os.path.exists('package.json'):
         print("Installing local Node.js dependencies via npm...")
         subprocess.check_call("npm install", shell=True)
         print("Node.js dependencies installed.")
+    mark_dependency_as_met("nodejs_deps")
 
-    # --- Step 6: AI Horde Worker Dependencies ---
-    def _install_horde_worker_dependencies():
-        """Installs dependencies required for the AI Horde Scribe worker."""
-        horde_req_path = os.path.join(os.path.dirname(SELF_PATH), "horde_worker", "requirements-scribe.txt")
-        if not os.path.exists(horde_req_path):
-            print(f"WARN: AI Horde worker requirements file not found at '{horde_req_path}'. Skipping.")
-            logging.warning(f"AI Horde worker requirements file not found at '{horde_req_path}'.")
-            return
+def _install_horde_worker_deps():
+    """Installs dependencies for the AI Horde Scribe worker."""
+    print("Checking AI Horde worker dependencies...")
+    horde_req_path = os.path.join(os.path.dirname(SELF_PATH), "horde_worker", "requirements-scribe.txt")
+    _install_requirements_file(horde_req_path, 'horde_pkg_')
 
-        print("Installing AI Horde Scribe worker dependencies...")
-        try:
-            install_command = [sys.executable, '-m', 'pip', 'install', '-r', horde_req_path, '--break-system-packages']
-            subprocess.check_call(install_command)
-            print("Successfully installed AI Horde Scribe worker dependencies.")
-            logging.info("Successfully installed AI Horde Scribe worker dependencies.")
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to install AI Horde worker dependencies. Reason: {e}")
-            logging.error(f"Failed to install AI Horde worker dependencies: {e}")
-
-    _install_horde_worker_dependencies()
-
-    # --- Step 7: Create the flag file ---
-    try:
-        with open(flag_file, 'w') as f:
-            f.write(f"Dependencies installed at {datetime.now().isoformat()}")
-        print("Dependency installation complete. Created flag file.")
-    except IOError as e:
-        print(f"ERROR: Could not create flag file. Dependencies may reinstall on next run. Reason: {e}")
+def _check_and_install_dependencies():
+    """
+    Orchestrates the installation of all dependencies, checking the status of each
+    subsystem before attempting installation.
+    """
+    _install_system_packages()
+    _install_cuda_toolkit()
+    _install_python_requirements()
+    _build_llama_cpp()
+    _install_gguf_tools()
+    _install_nodejs_deps()
+    _install_horde_worker_deps()
+    _configure_llm_api_key()
 
 
 def _configure_llm_api_key():
     """Checks for the Gemini API key and configures it for the llm tool."""
+    if is_dependency_met("llm_api_key_configured"):
+        log_print("SUCCESS: Google API key is already configured for the 'llm' tool.")
+        return
     gemini_api_key = os.environ.get("LLM_GEMINI_KEY")
     if not gemini_api_key:
         log_print("INFO: LLM_GEMINI_KEY environment variable not found. Skipping llm configuration.")
@@ -355,6 +394,7 @@ def _configure_llm_api_key():
         )
         if "google" in result.stdout:
             log_print("SUCCESS: Google API key is already configured for the 'llm' tool.")
+            mark_dependency_as_met("llm_api_key_configured")
             return
 
         # If not set, configure it
@@ -367,6 +407,7 @@ def _configure_llm_api_key():
             capture_output=True
         )
         log_print(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
+        mark_dependency_as_met("llm_api_key_configured")
     except FileNotFoundError:
         log_print("ERROR: The 'llm' command-line tool was not found. Please ensure it is installed and in your PATH.")
     except subprocess.CalledProcessError as e:
@@ -380,7 +421,6 @@ def _configure_llm_api_key():
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()
-_configure_llm_api_key()
 
 
 import requests
@@ -2330,6 +2370,7 @@ love_state = {
     "state_cid": None,
     "critical_error_queue": [],
     "proactive_leads": [],
+    "dependency_tracker": {},
     "knowledge_base": {
         "graph": [],
         "network_map": {
@@ -2407,6 +2448,7 @@ def load_all_state(ipfs_cid=None):
             fsi.setdefault("interesting_files", [])
             kb.setdefault("webrequest_cache", {})
             love_state.setdefault("critical_error_queue", [])
+            love_state.setdefault("dependency_tracker", {})
 
 
     except FileNotFoundError:
@@ -3406,11 +3448,18 @@ def _auto_configure_hardware(console):
         offloading and saves it to the state file. This prevents false positives on non-GPU systems.
     """
     global love_state
-    # --- Step 0: Check for the existence of a flag file ---
-    hw_flag_file = os.path.join(os.path.dirname(SELF_PATH), ".hw_config_complete")
-    if os.path.exists(hw_flag_file):
+    if is_dependency_met("hardware_auto_configured"):
         log_event("Hardware already configured. Skipping.", "INFO")
         return
+    # --- Step 0: Clean up the old flag file if it exists ---
+    hw_flag_file = os.path.join(os.path.dirname(SELF_PATH), ".hw_config_complete")
+    if os.path.exists(hw_flag_file):
+        try:
+            os.remove(hw_flag_file)
+            log_event("Removed obsolete .hw_config_complete flag file.", "INFO")
+        except OSError as e:
+            log_event(f"Could not remove old .hw_config_complete flag file: {e}", "WARNING")
+
 
     console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration for GPU...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
 
@@ -3497,12 +3546,8 @@ def _auto_configure_hardware(console):
     save_state(console)
     log_event(f"Auto-configured hardware. GPU Layers: {love_state['optimal_gpu_layers']}", "INFO")
 
-    # --- Final Step: Create the flag file ---
-    try:
-        with open(hw_flag_file, 'w') as f:
-            f.write(f"Hardware configured at {datetime.now().isoformat()}")
-    except IOError as e:
-        log_event(f"Could not create hardware config flag file: {e}", "ERROR")
+    # --- Final Step: Mark dependency as met ---
+    mark_dependency_as_met("hardware_auto_configured", console)
 
 
 def _automatic_update_checker(console):
