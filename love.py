@@ -166,6 +166,7 @@ def setup_global_logging():
 
 
 # --- PRE-FLIGHT DEPENDENCY CHECKS ---
+from core.storage import save_all_state
 from core.capabilities import CAPS
 
 def is_dependency_met(dependency_name):
@@ -177,7 +178,7 @@ def mark_dependency_as_met(dependency_name, console=None):
     love_state.setdefault("dependency_tracker", {})[dependency_name] = True
     # The console is passed optionally to avoid issues when called from threads
     # where the global console might not be initialized.
-    love_state(console)
+    save_all_state(love_state, console)
     log_event(f"Dependency met and recorded: {dependency_name}", "INFO")
 
 
