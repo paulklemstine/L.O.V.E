@@ -3745,7 +3745,7 @@ def live_ui_renderer(console, user_input_queue):
     The main rendering loop, now powered by prompt_toolkit for true asynchronous input.
     """
     from prompt_toolkit import Application
-    from prompt_toolkit.layout.containers import VSplit, Window
+    from prompt_toolkit.layout.containers import HSplit, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.layout.layout import Layout
     from prompt_toolkit.widgets import TextArea
@@ -3756,58 +3756,67 @@ def live_ui_renderer(console, user_input_queue):
     # --- Output Area ---
     # This control will display the rendered Rich panels.
     output_control = FormattedTextControl(text="")
-    output_window = Window(content=output_control, wrap_lines=True)
+    output_window = Window(content=output_control, wrap_lines=True, scroll_offsets=(0, 0))
 
     # --- Input Area ---
     def accept_input(buf):
         """Callback for when the user presses Enter."""
         user_input_queue.put(buf.text)
-        # We don't clear the buffer here; the cognitive loop will send a confirmation.
-        # This provides a more responsive feel.
-        return True # Keep the input in the buffer for now.
+        buf.text = "" # Clear the input field after sending
+        return True
 
     input_field = TextArea(
         height=1,
-        prompt="> ",
+        prompt="💖> ",
         multiline=False,
         wrap_lines=False,
         accept_handler=accept_input,
     )
 
     # --- Main Layout ---
-    root_container = VSplit([
-        # The main feed window takes up all available space
+    # HSplit arranges the windows vertically (one on top of the other).
+    root_container = HSplit([
+        # The main feed window takes up all available space except for the input field.
         output_window,
-        # Use the TextArea widget directly in the layout.
+        # The input field is a single line at the bottom.
         input_field,
     ])
 
     layout = Layout(container=root_container)
 
     app = Application(layout=layout, full_screen=True)
+    # Set the initial focus on the input field.
     app.layout.focus(input_field)
 
     # --- Refresh Loop ---
     async def refresh_ui():
         """The coroutine that periodically redraws the UI."""
+        is_first_render = True
         while True:
             # --- Update Feed ---
+            new_content = False
             while not ui_panel_queue.empty():
                 panel = ui_panel_queue.get()
                 feed_panels.append(panel)
+                new_content = True
 
-            # Render the Rich group to the console and capture the output
-            with console.capture() as capture:
-                console.print(Group(*feed_panels))
-            output_control.text = capture.get()
+            # Only re-render if there's new content or it's the first run
+            if new_content or is_first_render:
+                # Render the Rich group to the console and capture the output
+                with console.capture() as capture:
+                    console.print(Group(*feed_panels))
+                output_control.text = capture.get()
+                is_first_render = False
+
+                # --- Auto-scroll to the bottom ---
+                # By setting the vertical scroll to a large number, we ensure it's at the end.
+                output_window.vertical_scroll = 100000
 
             # --- Invalidate and Redraw ---
             app.invalidate()
             await asyncio.sleep(0.1)
 
     # Run the application with the refresh coroutine.
-    # This is a simplified way to run an async refresh loop with a sync app.
-    # For more complex scenarios, prompt_toolkit's async support would be used more deeply.
     @retry(tries=3, delay=2)
     def run_app_with_refresh():
         # This setup allows the UI to refresh in the "background" of the app's own event loop.
