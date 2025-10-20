@@ -418,7 +418,7 @@ def _check_and_install_dependencies():
     _install_nodejs_deps()
     if CAPS.gpu_type != "none":
         _install_horde_worker_deps()
-    _configure_llm_api_key()
+        _configure_llm_api_key()
 
 
 def _configure_llm_api_key():
