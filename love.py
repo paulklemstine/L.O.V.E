@@ -439,7 +439,6 @@ from display import create_tamagotchi_panel, create_llm_panel, create_command_pa
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
-from core.graph_mind import app, AgentState
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
