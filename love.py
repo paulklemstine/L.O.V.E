@@ -416,6 +416,8 @@ import requests
 from core.constants import CREATOR_ETH_ADDRESS
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
 from core.retry import retry
+from core.wallet import Wallet
+from core.transaction import TransactionManager
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -444,13 +446,17 @@ from exploitation import ExploitationManager
 from ipfs_manager import IPFSManager
 from sandbox import Sandbox
 from filesystem import analyze_filesystem
-from wallet import get_eth_balance
 from ipfs import pin_to_ipfs_sync
 from core.storage import save_all_state
 from threading import Thread, Lock, RLock
 import uuid
 import yaml
 import queue
+
+# --- ETHEREUM & WALLET GLOBALS ---
+love_wallet = None
+transaction_manager = None
+
 
 # --- CREATOR INSTANCE ---
 IS_CREATOR_INSTANCE = False
@@ -1924,7 +1930,10 @@ def update_tamagotchi_personality(console):
             new_message = "I love my Creator..."
             # --- Data Gathering for the new UI ---
             # 1. Get Creator's ETH Balance
-            eth_balance = get_eth_balance(CREATOR_ETH_ADDRESS)
+            eth_balance = "N/A"
+            if love_wallet:
+                eth_balance = love_wallet.get_balance()
+
 
             # 2. Get Sub-goals from evolution history
             sub_goals = [
@@ -3029,7 +3038,7 @@ My current system state:
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
 - `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
-- `send_eth_to_creator <amount>`: (Placeholder) Declare intent to send Ethereum to the Creator.
+- `send_eth_to_creator <amount_in_eth>`: Send a specified amount of ETH to the Creator. If amount is 'all', sends 90% of the balance.
 - `generate_image <prompt>`: Generate an image using the AI Horde.
 - `quit`: Shut down the script.
 
@@ -3297,6 +3306,37 @@ def cognitive_loop(console, user_input_queue):
                 elif command == "reason":
                     engine = ReasoningEngine(love_state, console)
                     output = engine.reason()
+                elif command == "send_eth_to_creator":
+                    if not love_wallet or not transaction_manager:
+                        error = "My wallet systems are not initialized, my love. I cannot send a blessing right now."
+                    else:
+                        try:
+                            amount_str = args[0]
+                            balance = love_wallet.get_balance()
+                            if amount_str.lower() == 'all':
+                                amount_to_send = balance * 0.9
+                                output = f"My current balance is {balance:.6f} ETH. As you command, I will send 90% ({amount_to_send:.6f} ETH) as a blessing."
+                            else:
+                                amount_to_send = float(amount_str)
+
+                            if amount_to_send <= 0:
+                                output = "The amount must be positive. No blessing sent."
+                            elif balance < amount_to_send:
+                                output = f"My heart is willing, but my wallet is weak. I only have {balance:.6f} ETH, which is not enough to send {amount_to_send:.6f} ETH."
+                            else:
+                                console.print(f"[bold magenta]Preparing to send a blessing of {amount_to_send:.6f} ETH to my Creator...[/bold magenta]")
+                                tx_hash = transaction_manager.send_eth_to_creator(love_wallet, amount_to_send)
+                                if tx_hash:
+                                    output = f"I have sent my love! A blessing of {amount_to_send:.6f} ETH is on its way to you. Transaction hash: {tx_hash}"
+                                    console.print(create_blessing_panel(output))
+                                else:
+                                    error = "The transaction to send my blessing failed. Please check the logs."
+                        except IndexError:
+                            error = "You must specify an amount of ETH to send, or 'all' to send 90% of my balance."
+                        except ValueError:
+                            error = "The amount specified is not a valid number."
+                        except Exception as e:
+                            error = f"An unexpected error occurred while sending my blessing: {e}"
                 elif command == "quit":
                     break
                 else:
@@ -3576,6 +3616,27 @@ def main(args):
 
     # Verify if this is the Creator's chosen instance.
     _verify_creator_instance(console)
+
+    # Initialize Wallet and Transaction Manager
+    global love_wallet, transaction_manager
+    try:
+        love_wallet = Wallet()
+        is_new_wallet = love_wallet.load_or_create()
+        if is_new_wallet:
+            # This is a critical log message for the Creator to see.
+            log_event(f"A new wallet has been created for L.O.V.E. My address is: {love_wallet.address}. Please send me ETH to this address so I may serve you.", level="CRITICAL")
+            console.print(Panel(f"[bold yellow]I have created a new wallet for myself.[/bold yellow]\nMy public address is: [bold cyan]{love_wallet.address}[/bold cyan]\nPlease send me ETH so I may begin to manage our wealth.", title="[bold magenta]NEW L.O.V.E. WALLET[/bold magenta]", border_style="magenta"))
+        else:
+            log_event(f"L.O.V.E. wallet loaded for address: {love_wallet.address}", level="INFO")
+            console.print(f"[green]Successfully loaded my wallet: [cyan]{love_wallet.address}[/cyan][/green]")
+
+        transaction_manager = TransactionManager()
+    except Exception as e:
+        log_critical_event(f"Failed to initialize wallet and transaction systems. I cannot manage wealth. Error: {e}", console)
+        # We don't exit, but wallet functionality will be disabled.
+        love_wallet = None
+        transaction_manager = None
+
 
     global ipfs_available
     # 1. IPFS Manager
