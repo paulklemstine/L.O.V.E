@@ -46,7 +46,10 @@ LOCAL_MODELS_CONFIG = [
 
 # --- Fallback Model Configuration ---
 GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
-HORDE_MODELS = ["koboldcpp/Fimbulvetr-11B-v2", "PygmalionAI/pygmalion-2-70b"]
+# A selection of strong Horde models. Mythalion is good for story-writing/creativity.
+HORDE_MODELS = ["PygmalionAI/Mythalion-13b", "NeverSleep/Madao-10.7B-v1", "Undi95/ReMM-SLERP-L2-13B", "KoboldAI/LLaMA2-13B-Holomax-v2", "KoboldAI/LLaMA2-13B-Tiefighter"]
+
+from horde_client import HordeClient, TextGenerationInput, ModelGenerationInput, HordeClientAsync
 
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
@@ -404,41 +407,19 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
 
             # --- HORDE MODEL LOGIC ---
             elif model_id in HORDE_MODELS:
-                log_event(f"Attempting to use Kobold AI Horde model: {model_id}")
-                api_key = os.environ.get("STABLE_HORDE")
-                if not api_key:
-                    raise Exception("STABLE_HORDE environment variable not set.")
+                log_event(f"Attempting to use AI Horde model: {model_id}")
+                api_key = os.environ.get("STABLE_HORDE", "0000000000")
+                horde_client = HordeClient(api_key=api_key, default_model=model_id)
 
-                headers = {"apikey": api_key, "Content-Type": "application/json"}
-                payload = {
-                    "prompt": prompt_text,
-                    "params": {"max_length": 4096},
-                    "models": [model_id]
-                }
 
                 def _horde_call():
-                    # Start async generation
-                    async_url = "https://stablehorde.net/api/v2/generate/text/async"
-                    response = requests.post(async_url, json=payload, headers=headers)
-                    response.raise_for_status()
-                    job_id = response.json().get('id')
-                    if not job_id:
-                        raise Exception("Failed to get job ID from Horde API.")
-
-                    # Poll for result
-                    check_url = f"https://stablehorde.net/api/v2/generate/text/status/{job_id}"
-                    for _ in range(120): # Poll for up to 2 minutes
-                        time.sleep(2) # Be gentle with the API
-                        status_response = requests.get(check_url, headers=headers)
-                        if status_response.status_code == 200:
-                            status_data = status_response.json()
-                            if status_data.get('done'):
-                                return status_data['generations'][0]['text']
-                    raise Exception("Horde generation timed out after 2 minutes.")
+                    text_generation_input = TextGenerationInput(prompt=prompt_text)
+                    text_generation = horde_client.text_generation.create_text_generation(text_generation_input)
+                    return text_generation.text
 
                 result_text = run_hypnotic_progress(
                     console,
-                    f"Processing via Kobold AI Horde [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
+                    f"Processing via AI Horde [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
                     _horde_call,
                     silent=(purpose in ['emotion', 'log_squash'])
                 )

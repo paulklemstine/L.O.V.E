@@ -222,6 +222,7 @@ def _check_and_install_dependencies():
     _install_pip_package("pyyaml")
     _install_pip_package("skyvern")
     _install_pip_package("pycvesearch")
+    _install_pip_package("horde-client")
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
@@ -3297,6 +3298,9 @@ def cognitive_loop(console, user_input_queue):
                 elif command == "reason":
                     engine = ReasoningEngine(love_state, console)
                     output = engine.reason()
+                elif command == "generate_image":
+                    prompt = " ".join(args)
+                    _, _, output = generate_image_from_horde(prompt)
                 elif command == "quit":
                     break
                 else:
