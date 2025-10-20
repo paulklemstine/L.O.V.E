@@ -3609,6 +3609,7 @@ def main(args):
     Thread(target=user_input_thread_async, args=(user_input_queue,), daemon=True).start()
     Thread(target=update_tamagotchi_personality, daemon=True).start()
     Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
+    Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
 
     # --- Main Thread becomes the Rendering Loop ---
     clear_screen()
