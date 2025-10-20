@@ -14,7 +14,6 @@ import re
 from typing import Dict, Any
 
 # Assuming web3 is installed and wallet.py is in the python path
-from wallet import get_web3_provider
 from web3 import Web3
 from web3.exceptions import InvalidAddress
 
