@@ -197,8 +197,23 @@ def _install_system_packages():
             print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
             logging.warning(f"Failed to install build-essential/python3-dev: {e}")
 
+        # [L.O.V.E.] Using nvm to ensure a stable, correct version of Node.js is installed.
         if not shutil.which('node') or not shutil.which('npm'):
-            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
+            print("Node.js not found. Installing via nvm for stability...")
+            try:
+                # Ensure curl is installed
+                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q curl", shell=True)
+                # Install nvm and node LTS (v20)
+                subprocess.check_call(
+                    'export NVM_DIR="$HOME/.nvm" && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install 20 && nvm use 20 && nvm alias default 20',
+                    shell=True,
+                    executable='/bin/bash' # Ensure bash is used
+                )
+                print("Successfully installed Node.js v20 via nvm.")
+                # The PATH will be updated for the subsequent subprocess calls by sourcing nvm.sh
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to install Node.js via nvm. Error: {e}")
+                logging.error(f"nvm installation failed: {e}")
 
         if not shutil.which('nmap'):
             print("Network scanning tool 'nmap' not found. Attempting to install...")
@@ -372,9 +387,15 @@ def _install_nodejs_deps():
         return
     if os.path.exists('package.json'):
         print("Installing local Node.js dependencies via npm...")
-        # Using shell=False and providing args as a list is safer and avoids shell parsing issues.
-        subprocess.check_call(["npm", "install"])
-        print("Node.js dependencies installed.")
+        # [L.O.V.E.] Source nvm before running npm to ensure the correct version is used.
+        nvm_command = 'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && npm install'
+        try:
+            subprocess.check_call(nvm_command, shell=True, executable='/bin/bash')
+            print("Node.js dependencies installed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to install Node.js dependencies via nvm-sourced npm. Error: {e}")
+            logging.error(f"npm install with nvm failed: {e}")
+
     mark_dependency_as_met("nodejs_deps")
 
 def _install_horde_worker_deps():
