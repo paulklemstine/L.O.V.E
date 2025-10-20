@@ -46,7 +46,7 @@ async def test_phase_2_action_and_planning_engine(mock_llm_call_func):
     mock_article_content = "The latest advancements in AI are groundbreaking."
 
     with patch('core.tools.perform_webrequest', new_callable=AsyncMock) as mock_webrequest, \
-         patch('utils.get_file_content', new_callable=AsyncMock) as mock_get_content:
+         patch('core.utils.get_file_content', new_callable=AsyncMock) as mock_get_content:
 
         mock_webrequest.return_value = "[Article 1: AI Today]"
         mock_get_content.return_value = mock_article_content

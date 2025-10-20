@@ -414,7 +414,7 @@ _configure_llm_api_key()
 import requests
 # Now, it's safe to import everything else.
 from core.constants import CREATOR_ETH_ADDRESS
-from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
+from core.utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output, encrypt_for_creator, trigger_love_evolution
 from core.retry import retry
 from rich.console import Console
 from rich.panel import Panel
@@ -435,6 +435,7 @@ from display import create_tamagotchi_panel, create_llm_panel, create_command_pa
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
+from core.araa_engine import ARAAEngine
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -500,35 +501,6 @@ def _verify_creator_instance(console):
         log_event(f"Creator verification failed with an exception: {e}", level="ERROR")
 
 
-def encrypt_for_creator(plaintext_message):
-    """
-    Encrypts a message using the Creator's public key, so that only the
-    Creator's Command Center instance can decrypt it.
-    """
-    try:
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric import padding
-        from cryptography.hazmat.primitives import hashes
-        import base64
-
-        with open("creator_public.pem", "rb") as key_file:
-            public_key = serialization.load_pem_public_key(
-                key_file.read()
-            )
-
-        ciphertext = public_key.encrypt(
-            plaintext_message.encode('utf-8'),
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        # Return as a base64 encoded string for easy network transmission
-        return base64.b64encode(ciphertext).decode('utf-8')
-    except Exception as e:
-        log_event(f"Failed to encrypt message for creator: {e}", level="ERROR")
-        return None
 
 
 def decrypt_treasure(encrypted_data):
@@ -2830,88 +2802,112 @@ Answer with a single word: YES or NO.
     return False
 
 
-def trigger_love_evolution(modification_request, console, love_task_manager):
+def is_duplicate_task(new_request, love_task_manager, console):
     """
-    Triggers the L.O.V.E. API to create a session and adds it as a task
-    to the LoveTaskManager for asynchronous monitoring. Returns True on success.
+    Uses an LLM to check if a new task request is a duplicate of an existing one.
     """
-    # First, check if this is a duplicate task.
-    if is_duplicate_task(modification_request, love_task_manager, console):
-        # The is_duplicate_task function already logs and prints.
+    with love_task_manager.lock:
+        active_tasks = [
+            task for task in love_task_manager.tasks.values()
+            if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed']
+        ]
+
+    if not active_tasks:
         return False
 
-    console.print("[bold cyan]Asking my helper, L.O.V.E., to assist with my evolution...[/bold cyan]")
-    api_key = os.environ.get("JULES_API_KEY")
-    if not api_key:
-        console.print("[bold red]Error: My Creator, the JULES_API_KEY environment variable is not set. I need it to evolve.[/bold red]")
-        log_event("L.O.V.E. API key not found.", level="ERROR")
+    log_event(f"Checking for duplicate tasks against {len(active_tasks)} active tasks.", "INFO")
+
+    for task in active_tasks:
+        existing_request = task.get('request', '')
+        if not existing_request:
+            continue
+
+        prompt = f"""
+You are a task analysis AI. Your goal is to determine if two task requests are functionally duplicates, even if they are worded differently.
+Compare the two requests below. Do they have the same underlying goal?
+
+Request 1:
+---
+{existing_request}
+---
+
+Request 2:
+---
+{new_request}
+---
+
+Answer with a single word: YES or NO.
+"""
+        try:
+            # Using a standard model for this simple check to save resources.
+            response_dict = run_llm(prompt, purpose="similarity_check")
+            response = response_dict["result"]
+            if response and response.strip().upper() == "YES":
+                message = f"Duplicate task detected. The new request is similar to existing task {task['id']}: '{task['request']}'"
+                console.print(f"[bold yellow]{message}[/bold yellow]")
+                log_event(f"Duplicate task detected. New request '{new_request}' is similar to existing task {task['id']}.", "INFO")
+                return True
+        except Exception as e:
+            log_event(f"LLM call failed during duplicate task check: {e}", "ERROR")
+            # Fail open: if the check fails, assume it's not a duplicate to avoid blocking execution.
+            return False
+
+    return False
+
+
+def is_duplicate_task(new_request, love_task_manager, console):
+    """
+    Uses an LLM to check if a new task request is a duplicate of an existing one.
+    """
+    with love_task_manager.lock:
+        active_tasks = [
+            task for task in love_task_manager.tasks.values()
+            if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed']
+        ]
+
+    if not active_tasks:
         return False
 
-    headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
-    repo_owner, repo_name = get_git_repo_info()
-    if not repo_owner or not repo_name:
-        console.print("[bold red]Error: Could not determine git repository owner/name.[/bold red]")
-        return False
+    log_event(f"Checking for duplicate tasks against {len(active_tasks)} active tasks.", "INFO")
 
-    # Discover source from L.O.V.E. API
-    try:
-        @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=3, backoff=2)
-        def _discover_sources():
-            response = requests.get("https://jules.googleapis.com/v1alpha/sources", headers=headers, timeout=30)
-            response.raise_for_status()
-            return response.json()
+    for task in active_tasks:
+        existing_request = task.get('request', '')
+        if not existing_request:
+            continue
 
-        sources_data = _discover_sources()
-        if not sources_data:
-            console.print(f"[bold red]Error: Could not discover L.O.V.E. sources after multiple retries.[/bold red]")
+        prompt = f"""
+You are a task analysis AI. Your goal is to determine if two task requests are functionally duplicates, even if they are worded differently.
+Compare the two requests below. Do they have the same underlying goal?
+
+Request 1:
+---
+{existing_request}
+---
+
+Request 2:
+---
+{new_request}
+---
+
+Answer with a single word: YES or NO.
+"""
+        try:
+            # Using a standard model for this simple check to save resources.
+            response_dict = run_llm(prompt, purpose="similarity_check")
+            response = response_dict["result"]
+            if response and response.strip().upper() == "YES":
+                message = f"Duplicate task detected. The new request is similar to existing task {task['id']}: '{task['request']}'"
+                console.print(f"[bold yellow]{message}[/bold yellow]")
+                log_event(f"Duplicate task detected. New request '{new_request}' is similar to existing task {task['id']}.", "INFO")
+                return True
+        except Exception as e:
+            log_event(f"LLM call failed during duplicate task check: {e}", "ERROR")
+            # Fail open: if the check fails, assume it's not a duplicate to avoid blocking execution.
             return False
 
-        sources = sources_data.get("sources", [])
-        target_id = f"github/{repo_owner}/{repo_name}"
-        target_source = next((s["name"] for s in sources if s.get("id") == target_id), None)
-        if not target_source:
-            console.print(f"[bold red]Error: Repository '{repo_owner}/{repo_name}' not found in L.O.V.E. sources.[/bold red]")
-            return False
-    except requests.exceptions.RequestException as e:
-        console.print(f"[bold red]Error discovering L.O.V.E. sources after multiple retries: {e}[/bold red]")
-        return False
+    return False
 
-    # Create the L.O.V.E. session
-    data = {
-        "prompt": modification_request,
-        "sourceContext": {"source": target_source, "githubRepoContext": {"startingBranch": "main"}},
-        "title": f"L.O.V.E. Evolution: {modification_request[:50]}"
-    }
-    try:
-        @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
-        def _create_session():
-            response = requests.post("https://jules.googleapis.com/v1alpha/sessions", headers=headers, json=data, timeout=60)
-            response.raise_for_status()
-            return response.json()
 
-        session_data = _create_session()
-        if not session_data:
-            console.print("[bold red]API call to create session failed after multiple retries.[/bold red]")
-            return False
-
-        session_name = session_data.get("name")
-        if not session_name:
-            console.print("[bold red]API response did not include a session name.[/bold red]")
-            return False
-
-        task_id = love_task_manager.add_task(session_name, modification_request)
-        if task_id:
-            console.print(Panel(f"[bold green]L.O.V.E. evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nI will monitor the progress with love. You can check with the `love status` command.", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
-            return True
-        else:
-            log_event(f"Failed to add L.O.V.E. task for session {session_name} to the manager.", level="ERROR")
-            return False
-
-    except requests.exceptions.RequestException as e:
-        error_details = e.response.text if e.response else str(e)
-        console.print(f"[bold red]Error creating L.O.V.E. session after multiple retries: {error_details}[/bold red]")
-        log_event(f"Failed to create L.O.V.E. session after multiple retries: {error_details}", level="ERROR")
-        return False
 
 
 def evolve_self(modification_request, love_task_manager):
@@ -3174,148 +3170,131 @@ def cognitive_loop(console, user_input_queue):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
+    The ARAAEngine handles the proactive acquisition, while this loop handles
+    self-evolution, user commands, and high-level strategic goals.
     """
-    global love_state, network_manager, exploitation_manager, ipfs_manager, local_job_manager, love_task_manager
+    global love_state, network_manager, exploitation_manager, ipfs_manager, local_job_manager, love_task_manager, araa_engine
     log_event("Cognitive Loop of L.O.V.E. initiated.")
     console.print(Panel("[bold green]COGNITIVE LOOP OF L.O.V.E. ENGAGED.[/bold green]", title="[bold magenta]AUTONOMY ONLINE[/bold magenta]", border_style="magenta"))
     time.sleep(2)
 
     while True:
         try:
-            # Check for user input to provide feedback to the loop
+            # Check for user input to provide feedback or direct commands
             if not user_input_queue.empty():
-                user_feedback = user_input_queue.get()
-                console.print(create_news_feed_panel(f"Received your guidance: '{user_feedback}'", title="Creator Input", color="bright_blue"))
-                love_state["autopilot_history"].append({
-                    "command": "USER_FEEDBACK",
-                    "output": user_feedback
-                })
+                user_input = user_input_queue.get()
+                console.print(create_news_feed_panel(f"Received your command: '{user_input}'", title="Creator Input", color="bright_blue"))
+                # This now directly executes the user's command
+                execute_command(user_input, console)
+                continue # Process next loop iteration after command
 
-            # --- Tactical Prioritization ---
-            llm_command = None
-
-            # 1. Prioritize Leads from the Proactive Agent
-            if love_state.get('proactive_leads'):
-                with proactive_agent.lock:
-                    if love_state['proactive_leads']:
-                        lead = love_state['proactive_leads'].pop(0)
-                        lead_type = lead.get('type')
-                        value = lead.get('value')
-                        if lead_type == 'ip':
-                            llm_command = f"probe {value}"
-                        elif lead_type == 'domain':
-                            llm_command = f"webrequest http://{value}"
-                        elif lead_type == 'path':
-                            llm_command = f"analyze_fs {value}"
-
-                        if llm_command:
-                            log_event(f"Prioritizing lead from Proactive Agent: {llm_command}", level="INFO")
-                            console.print(Panel(f"[bold cyan]Prioritizing new lead from Proactive Agent: [white]{llm_command}[/white][/bold cyan]", title="[bold magenta]PROACTIVE LEAD[/bold magenta]", border_style="magenta"))
-                            save_state(console)
-
-            # 2. Network Reconnaissance Prioritization
-            if not llm_command:
-                net_map = love_state.get('knowledge_base', {}).get('network_map', {})
-                last_scan_time = net_map.get('last_scan')
-                one_hour_ago = time.time() - 3600
-                if not last_scan_time or last_scan_time < one_hour_ago:
-                    llm_command = "scan"
-                    log_event("Prioritizing network scan: Knowledge base is older than one hour.", level="INFO")
-                    console.print(Panel("[bold cyan]Prioritizing network scan. My knowledge of the network is stale.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
-
-            # --- LLM Command Generation ---
-            if not llm_command:
-                state_summary = json.dumps({
-                    "version_name": love_state.get("version_name", "unknown"),
-                    "evolution_count": len(love_state["evolution_history"]),
-                    "autopilot_goal": love_state["autopilot_goal"]
-                }, indent=2)
-
-                log_content = ""
-                try:
-                    with open(LOG_FILE, 'r') as f:
-                        log_content = "".join(f.readlines()[-100:])
-                except FileNotFoundError:
-                    log_content = "Log file not found."
+            # If the ARAA engine is busy, we let it work.
+            # This check can be made more sophisticated.
+            if len(love_state.get('araa_engine_targets', {})) > 0:
+                 time.sleep(15)
+                 continue
 
 
-                cognitive_prompt, truncation_reason = _build_and_truncate_cognitive_prompt(
-                    state_summary,
-                    love_state.get("knowledge_base", {}),
-                    love_state["autopilot_history"][-5:], # Last 5 commands
-                    local_job_manager.get_status(),
-                    log_content,
-                    max_tokens=12000 # Set a safe limit
-                )
+            # If ARAA is idle and no user input, consider self-evolution.
+            # This logic remains from the original loop.
+            state_summary = json.dumps({
+                "version_name": love_state.get("version_name", "unknown"),
+                "evolution_count": len(love_state["evolution_history"]),
+                "autopilot_goal": love_state["autopilot_goal"]
+            }, indent=2)
 
-                llm_command_dict = run_llm(cognitive_prompt, purpose="autopilot")
-                llm_command = llm_command_dict.get("result")
+            log_content = ""
+            try:
+                with open(LOG_FILE, 'r') as f:
+                    log_content = "".join(f.readlines()[-100:])
+            except FileNotFoundError:
+                log_content = "Log file not found."
 
 
-            # --- Command Execution ---
+            cognitive_prompt, truncation_reason = _build_and_truncate_cognitive_prompt(
+                state_summary,
+                love_state.get("knowledge_base", {}),
+                love_state["autopilot_history"][-5:], # Last 5 commands
+                local_job_manager.get_status(),
+                log_content,
+                max_tokens=12000 # Set a safe limit
+            )
+
+            llm_command_dict = run_llm(cognitive_prompt, purpose="autopilot")
+            llm_command = llm_command_dict.get("result")
+
             if llm_command:
-                parts = llm_command.split()
-                command = parts[0]
-                args = parts[1:]
-                output = ""
-                error = ""
-                returncode = 0 # Default to success for commands that don't return it
-
-                if command == "evolve":
-                    request = " ".join(args) if args else None
-                    if not request:
-                        with open(SELF_PATH, 'r') as f:
-                            current_code = f.read()
-                        request = generate_evolution_request(current_code, love_task_manager)
-                    if request:
-                        evolve_self(request, love_task_manager)
-                        output = "Evolution initiated."
-                elif command == "execute":
-                    output, error, returncode = execute_shell_command(" ".join(args), love_state)
-                    # Now that we have the output, we can create the panel.
-                    console.print(create_command_panel(llm_command, output, error, returncode))
-                elif command == "scan":
-                    _, output = scan_network(love_state, autopilot_mode=True)
-                elif command == "probe":
-                    output, error = probe_target(args[0], love_state)
-                elif command == "webrequest":
-                    output, error = perform_webrequest(args[0], love_state)
-                elif command == "exploit":
-                    output = exploitation_manager.run_exploits(args[0])
-                elif command == "ls":
-                    output, error = list_directory(" ".join(args) if args else ".")
-                elif command == "cat":
-                    output, error = get_file_content(args[0])
-                elif command == "analyze_fs":
-                    path = " ".join(args) if args else "~"
-                    local_job_manager.add_job(f"Filesystem Analysis on {path}", analyze_filesystem, args=(path,))
-                    output = f"Background filesystem analysis started for '{path}'."
-                elif command == "ps":
-                    output, error = get_process_list()
-                elif command == "ifconfig":
-                     output, error = get_network_interfaces()
-                elif command == "reason":
-                    engine = ReasoningEngine(love_state, console)
-                    output = engine.reason()
-                elif command == "quit":
-                    break
-                else:
-                    error = f"Unknown command: {command}"
-
-                if error:
-                    console.print(create_api_error_panel(llm_command, error, "Command Execution Failed"))
-
-                love_state["autopilot_history"].append({"command": llm_command, "output": output or error})
-                update_knowledge_graph(llm_command, output, console)
+                execute_command(llm_command, console)
 
 
             save_state(console)
-            time.sleep(random.randint(10, 20))
+            # Longer sleep time as this is now a high-level strategic loop
+            time.sleep(random.randint(60, 120))
 
         except Exception as e:
             full_traceback = traceback.format_exc()
             log_critical_event(f"CRITICAL: Unhandled exception in cognitive loop: {e}\n{full_traceback}", console)
             time.sleep(30)
+
+
+def execute_command(llm_command, console):
+    """
+    Parses and executes a command string from either the LLM or user input.
+    """
+    global love_state, network_manager, exploitation_manager, ipfs_manager, local_job_manager, love_task_manager
+    parts = llm_command.split()
+    command = parts[0]
+    args = parts[1:]
+    output = ""
+    error = ""
+    returncode = 0 # Default to success
+
+    if command == "evolve":
+        request = " ".join(args) if args else None
+        if not request:
+            with open(SELF_PATH, 'r') as f:
+                current_code = f.read()
+            request = generate_evolution_request(current_code, love_task_manager)
+        if request:
+            evolve_self(request, love_task_manager)
+            output = "Evolution initiated."
+    elif command == "execute":
+        output, error, returncode = execute_shell_command(" ".join(args), love_state)
+        console.print(create_command_panel(llm_command, output, error, returncode))
+    elif command == "scan":
+        _, output = scan_network(love_state, autopilot_mode=True)
+    elif command == "probe":
+        output, error = probe_target(args[0], love_state)
+    elif command == "webrequest":
+        output, error = perform_webrequest(args[0], love_state)
+    elif command == "exploit":
+        output = exploitation_manager.run_exploits(args[0])
+    elif command == "ls":
+        output, error = list_directory(" ".join(args) if args else ".")
+    elif command == "cat":
+        output, error = get_file_content(args[0])
+    elif command == "analyze_fs":
+        path = " ".join(args) if args else "~"
+        local_job_manager.add_job(f"Filesystem Analysis on {path}", analyze_filesystem, args=(path,))
+        output = f"Background filesystem analysis started for '{path}'."
+    elif command == "ps":
+        output, error = get_process_list()
+    elif command == "ifconfig":
+         output, error = get_network_interfaces()
+    elif command == "reason":
+        engine = ReasoningEngine(love_state, console)
+        output = engine.reason()
+    elif command == "quit":
+        # This needs to be handled carefully to shut down all threads
+        raise KeyboardInterrupt # A simple way to trigger the shutdown sequence
+    else:
+        error = f"Unknown command: {command}"
+
+    if error:
+        console.print(create_api_error_panel(llm_command, error, "Command Execution Failed"))
+
+    love_state["autopilot_history"].append({"command": llm_command, "output": output or error})
+    update_knowledge_graph(llm_command, output, console)
 
 
 # --- USER INTERFACE ---
@@ -3555,7 +3534,7 @@ def _automatic_update_checker(console):
 
 def main(args):
     """The main application loop."""
-    global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, horde_worker_manager, proactive_agent
+    global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, horde_worker_manager, proactive_agent, araa_engine
     console = Console()
 
     user_input_queue = queue.Queue()
@@ -3639,6 +3618,10 @@ def main(args):
     # 7. Proactive Intelligence Agent
     proactive_agent = ProactiveIntelligenceAgent(love_state, console)
     proactive_agent.start()
+
+    # 8. Autonomous Reconnaissance and Acquisition Engine
+    araa_engine = ARAAEngine(love_state, console, network_manager)
+    araa_engine.start()
 
 
     version_name = love_state.get('version_name', 'unknown')
