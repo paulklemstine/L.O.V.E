@@ -20,4 +20,4 @@ numpy==1.26.4
 tiktoken
 scapy
 aioboto3
-pydantic<2
+pydantic>2
