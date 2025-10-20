@@ -181,49 +181,14 @@ def _check_and_install_dependencies():
 
 
     # --- Step 2: Python Package Installation ---
-    def _install_pip_package(package, upgrade=False):
-        package_name = package.split('==')[0].split('>')[0].split('<')[0]
-        if not upgrade:
-            try:
-                __import__(package_name)
-                return
-            except ImportError:
-                pass
-
-        print(f"Installing Python package: {package}...")
-        install_command = [sys.executable, '-m', 'pip', 'install', package, '--break-system-packages']
-        if upgrade:
-            install_command.append('--upgrade')
-
-        try:
-            # We suppress output here to keep the console clean for successful installs.
-            # The CalledProcessError exception will still trigger on failure.
-            subprocess.check_call(install_command)
-            print(f"Successfully installed {package}.")
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to install '{package}'. Reason: {e}")
-            logging.error(f"Failed to install pip package {package}: {e}")
-            # For debugging, one could re-run with output enabled:
-            # subprocess.check_call(install_command)
-
-    _install_pip_package("aiohttp")
-    _install_pip_package("requests")
-    _install_pip_package("rich")
-    _install_pip_package("netifaces")
-    _install_pip_package("web3")
-    _install_pip_package("beautifulsoup4")
-    _install_pip_package("ipfshttpclient", upgrade=True)
-    _install_pip_package("cryptography")
-    _install_pip_package("llm")
-    _install_pip_package("llm-gemini")
-    _install_pip_package("huggingface-hub")
-    _install_pip_package("web3")
-    _install_pip_package("cmake")
-    _install_pip_package("pyyaml")
-    _install_pip_package("skyvern")
-    _install_pip_package("pycvesearch")
-    _install_pip_package("horde-client")
-    _install_pip_package("scapy")
+    print("Installing Python packages from requirements.txt...")
+    try:
+        install_command = [sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt', '--break-system-packages']
+        subprocess.check_call(install_command)
+        print("Successfully installed Python packages.")
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: Failed to install Python packages from requirements.txt. Reason: {e}")
+        logging.error(f"Failed to install pip packages from requirements.txt: {e}")
 
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
