@@ -465,10 +465,11 @@ Nmap Scan Results:
 
     return f"Crypto scan complete for {ip_address}. Analysis stored in knowledge base.\n\nAnalysis:\n{analysis_result.strip()}"
 
-def generate_image_from_horde(prompt, console, dimensions="1024x1024", style=""):
+def generate_image_from_horde(prompt, console=None, dimensions="1024x1024", style=""):
     """
     Generates an image using the AI Horde, downloads it, saves it,
     pins it to IPFS, and returns the local path and CID.
+    The console object is optional. If provided, progress will be printed.
     """
     from core.llm_api import log_event
     from ipfs import pin_to_ipfs_sync
@@ -479,9 +480,7 @@ def generate_image_from_horde(prompt, console, dimensions="1024x1024", style="")
     api_key = os.environ.get("STABLE_HORDE", "0000000000")
     horde_client = HordeClient(api_key=api_key)
 
-
     width, height = map(int, dimensions.split('x'))
-
 
     image_generate_input = ImageGenerateInput(
         prompt=prompt,
@@ -493,12 +492,14 @@ def generate_image_from_horde(prompt, console, dimensions="1024x1024", style="")
 
     try:
         # The client library handles the async polling internally.
-        console.print(f"[cyan]Submitting image generation request to the AI Horde...[/cyan]")
+        if console:
+            console.print(f"[cyan]Submitting image generation request to the AI Horde...[/cyan]")
         image_generation = horde_client.image_generation.create_image_generation(image_generate_input)
         image_url = image_generation.img
 
         # Download the image
-        console.print(f"[cyan]Downloading generated image from: {image_url}[/cyan]")
+        if console:
+            console.print(f"[cyan]Downloading generated image from: {image_url}[/cyan]")
         image_response = requests.get(image_url, timeout=60)
         image_response.raise_for_status()
         image_data = image_response.content
@@ -510,14 +511,18 @@ def generate_image_from_horde(prompt, console, dimensions="1024x1024", style="")
         filepath = os.path.join(image_dir, filename)
         with open(filepath, "wb") as f:
             f.write(image_data)
-        console.print(f"[green]Image saved locally to: {filepath}[/green]")
+        if console:
+            console.print(f"[green]Image saved locally to: {filepath}[/green]")
 
         # Pin to IPFS
+        # Pass the console object to the pinning function as well.
         cid = pin_to_ipfs_sync(image_data, console)
         if cid:
-            console.print(f"[green]Image pinned to IPFS. CID: {cid}[/green]")
+            if console:
+                console.print(f"[green]Image pinned to IPFS. CID: {cid}[/green]")
         else:
-            console.print("[yellow]Failed to pin image to IPFS.[/yellow]")
+            if console:
+                console.print("[yellow]Failed to pin image to IPFS.[/yellow]")
 
         return filepath, cid, f"Image generated successfully. Saved to {filepath}, CID: {cid}"
 

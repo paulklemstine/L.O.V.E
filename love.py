@@ -3429,7 +3429,8 @@ def cognitive_loop(user_input_queue):
                     output = ReasoningEngine(love_state, console=None).reason()
                 elif command == "generate_image":
                     prompt = " ".join(args)
-                    _, _, output = generate_image_from_horde(prompt)
+                    # Pass console=None because this is a background thread with no direct UI.
+                    _, _, output = generate_image_from_horde(prompt, console=None)
                 elif command == "send_eth_to_creator":
                     if not love_wallet or not transaction_manager:
                         error = "My wallet systems are not initialized, my love."
