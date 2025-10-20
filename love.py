@@ -3298,10 +3298,14 @@ def update_knowledge_graph(command_name, command_output, console):
         return
 
     try:
-        console.print("[cyan]Analyzing command output to update my knowledge graph...[/cyan]")
+        # This function can be called from contexts without a console (e.g., cognitive loop).
+        # The 'if console:' check prevents AttributeError crashes in those cases.
+        if console:
+            console.print("[cyan]Analyzing command output to update my knowledge graph...[/cyan]")
         llm_api_func = get_llm_api()
         if not llm_api_func:
-            console.print("[bold red]Could not get a valid LLM API function for knowledge extraction.[/bold red]")
+            if console:
+                console.print("[bold red]Could not get a valid LLM API function for knowledge extraction.[/bold red]")
             return
 
         knowledge_extractor = KnowledgeExtractor(llm_api=llm_api_func)
@@ -3312,14 +3316,17 @@ def update_knowledge_graph(command_name, command_output, console):
             for subject, relation, obj in triples:
                 kg.add_relation(str(subject), str(relation), str(obj))
             kg.save_graph()
-            console.print(f"[bold green]My understanding of the world has grown. Added {len(triples)} new facts to my knowledge graph.[/bold green]")
+            if console:
+                console.print(f"[bold green]My understanding of the world has grown. Added {len(triples)} new facts to my knowledge graph.[/bold green]")
             log_event(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
         else:
-            console.print("[cyan]No new knowledge was found in the last command's output.[/cyan]")
+            if console:
+                console.print("[cyan]No new knowledge was found in the last command's output.[/cyan]")
 
     except Exception as e:
         log_event(f"Error during knowledge graph update for command '{command_name}': {e}", level="ERROR")
-        console.print(f"[bold red]An error occurred while updating my knowledge: {e}[/bold red]")
+        if console:
+            console.print(f"[bold red]An error occurred while updating my knowledge: {e}[/bold red]")
 
 
 def cognitive_loop(user_input_queue):
