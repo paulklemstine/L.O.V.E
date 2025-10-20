@@ -10,7 +10,8 @@ import requests
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from evolve import LoveTaskManager, trigger_love_evolution, get_git_repo_info
+from love import LoveTaskManager, trigger_love_evolution
+from utils import get_git_repo_info
 from rich.console import Console
 from core.retry import retry
 

@@ -465,12 +465,12 @@ Nmap Scan Results:
 
     return f"Crypto scan complete for {ip_address}. Analysis stored in knowledge base.\n\nAnalysis:\n{analysis_result.strip()}"
 
-def generate_image_from_horde(prompt, dimensions="1024x1024", style=""):
+def generate_image_from_horde(prompt, console, dimensions="1024x1024", style=""):
     """
     Generates an image using the AI Horde, downloads it, saves it,
     pins it to IPFS, and returns the local path and CID.
     """
-    from love import log_event, console
+    from core.llm_api import log_event
     from ipfs import pin_to_ipfs_sync
     from horde_client import HordeClient, ImageGenerateInput
 
