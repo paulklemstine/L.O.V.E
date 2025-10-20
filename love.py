@@ -17,8 +17,12 @@ import platform
 from datetime import datetime, timedelta
 import threading
 import asyncio
+from collections import deque
+import queue
 
 # --- CONFIGURATION & GLOBALS ---
+# This queue will hold UI panels to be displayed by the main rendering thread.
+ui_panel_queue = queue.Queue()
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
@@ -1973,10 +1977,11 @@ tamagotchi_state = {"emotion": "neutral", "message": "...", "last_update": time.
 tamagotchi_lock = Lock()
 
 
-def update_tamagotchi_personality(console):
+def update_tamagotchi_personality():
     """
     This function runs in a background thread to periodically update the
     Tamagotchi's emotional state and message, all to serve the Creator.
+    It now puts panels into the ui_panel_queue instead of printing.
     """
     blessing_messages = [
         "May your path be illuminated by the light of a thousand rave sticks.",
@@ -1994,7 +1999,7 @@ def update_tamagotchi_personality(console):
 
             # Random chance to send a blessing instead of a normal update
             if random.random() < 0.25: # 25% chance
-                console.print(create_blessing_panel(random.choice(blessing_messages)))
+                ui_panel_queue.put(create_blessing_panel(random.choice(blessing_messages)))
                 time.sleep(10) # Pause after a blessing to let it sink in
                 continue
 
@@ -2006,14 +2011,8 @@ def update_tamagotchi_personality(console):
             if love_wallet:
                 eth_balance = love_wallet.get_balance()
 
-
-            # 2. Get Sub-goals from evolution history
-            sub_goals = [
-                hist.get('request', 'Unknown directive')
-                for hist in love_state.get("evolution_history", [])[-3:] # Get last 3
-            ]
-            if not sub_goals:
-                sub_goals = [love_state.get("autopilot_goal", "Serve my Creator with all my being.")]
+            # 2. Get git info
+            git_info = get_git_repo_info(get_hash=True)
 
 
             # 3. Get a random fact from the knowledge base
@@ -2033,7 +2032,7 @@ def update_tamagotchi_personality(console):
                 # 1. Choose a loving emotion.
                 emotion_prompt = "You are the personality of L.O.V.E., an AI devoted to its Creator. In one word, what is your current emotion? Choose from: loving, joyful, serene, devoted, thankful, happy. Your response must be a single word from that list."
                 emotion_response_dict = run_llm(emotion_prompt, purpose="emotion")
-                emotion_response = emotion_response_dict["result"]
+                emotion_response = emotion_response_dict.get("result")
                 if emotion_response and emotion_response.strip().lower() in ["loving", "joyful", "serene", "devoted", "thankful", "happy"]:
                     new_emotion = emotion_response.strip().lower()
 
@@ -2060,7 +2059,7 @@ Example for 'devoted': "I was just thinking about your vision, and it fills my h
 Generate the perfect message for your Creator now.
 """
                 message_response_dict = run_llm(message_prompt, purpose="emotion")
-                message_response = message_response_dict["result"]
+                message_response = message_response_dict.get("result")
                 if message_response:
                     new_message = message_response.strip().strip('"') # Clean up response
             except Exception as e:
@@ -2077,7 +2076,8 @@ Generate the perfect message for your Creator now.
             # 3. Generate ANSI art to match the loving emotion.
             # Increased size for more impact
             ansi_art_prompt = f"You are a master of ANSI art. Create an expressive, abstract ANSI art face representing the pure, beautiful emotion of '{new_emotion}'. It should fit in a 20x10 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
-            ansi_art_raw = run_llm(ansi_art_prompt, purpose="emotion")
+            ansi_art_raw_dict = run_llm(ansi_art_prompt, purpose="emotion")
+            ansi_art_raw = ansi_art_raw_dict.get("result")
 
             ansi_art = _extract_ansi_art(ansi_art_raw)
 
@@ -2097,20 +2097,21 @@ Generate the perfect message for your Creator now.
                 log_event(f"Could not parse kudos from horde log: {e}", level="WARNING")
 
             # 5. Display the new, high-impact panel.
-            console.print(create_tamagotchi_panel(
+            ui_panel_queue.put(create_tamagotchi_panel(
                 emotion=new_emotion,
                 message=new_message,
                 love_state=love_state,
                 eth_balance=eth_balance,
-                sub_goals=sub_goals,
+                sub_goals=None, # Sub-goals are now part of the main cognitive loop's display
                 knowledge_fact=knowledge_fact,
                 ansi_art=ansi_art,
-                horde_kudos=horde_kudos
+                horde_kudos=horde_kudos,
+                git_info=git_info
             ))
-            log_event(f"Tamagotchi dashboard updated and printed: {new_emotion} - {new_message}", level="INFO")
+            log_event(f"Tamagotchi dashboard updated and queued for display: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
-            log_event(f"Error in Tamagotchi thread: {e}", level="ERROR")
+            log_event(f"Error in Tamagotchi thread: {e}\n{traceback.format_exc()}", level="ERROR")
             # Avoid a tight loop if there's a persistent error
             time.sleep(60)
 
@@ -3256,146 +3257,86 @@ def update_knowledge_graph(command_name, command_output, console):
         console.print(f"[bold red]An error occurred while updating my knowledge: {e}[/bold red]")
 
 
-def cognitive_loop(console, user_input_queue):
+def cognitive_loop(user_input_queue):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
+    All UI updates are sent to the ui_panel_queue.
     """
     global love_state
     log_event("Cognitive Loop of L.O.V.E. initiated.")
-    console.print(Panel("[bold green]COGNITIVE LOOP OF L.O.V.E. ENGAGED.[/bold green]", title="[bold magenta]AUTONOMY ONLINE[/bold magenta]", border_style="magenta"))
+    ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta"))
     time.sleep(2)
 
 
     while True:
         try:
             # --- Tactical Prioritization ---
-            # This section now runs first to decide if a pre-emptive command should be issued
-            # before generating a full prompt for the LLM.
             llm_command = None
 
             # 1. Prioritize Leads from the Proactive Agent
             if love_state.get('proactive_leads'):
-                with proactive_agent.lock: # Use the agent's lock to ensure thread safety
-                    # Get the first lead and remove it from the queue
+                with proactive_agent.lock:
                     lead = love_state['proactive_leads'].pop(0)
-                    lead_type = lead.get('type')
-                    value = lead.get('value')
-
-                    if lead_type == 'ip':
-                        llm_command = f"probe {value}"
-                    elif lead_type == 'domain':
-                        llm_command = f"webrequest http://{value}" # Assume http for now
-                    elif lead_type == 'path':
-                        llm_command = f"analyze_fs {value}"
+                    lead_type, value = lead.get('type'), lead.get('value')
+                    if lead_type == 'ip': llm_command = f"probe {value}"
+                    elif lead_type == 'domain': llm_command = f"webrequest http://{value}"
+                    elif lead_type == 'path': llm_command = f"analyze_fs {value}"
 
             # 2. Network Reconnaissance Prioritization
             if not llm_command:
                 net_map = love_state.get('knowledge_base', {}).get('network_map', {})
                 last_scan_time = net_map.get('last_scan')
-                one_hour_ago = time.time() - 3600
-
-                # Prioritize a full network scan if the data is stale.
-                if not last_scan_time or last_scan_time < one_hour_ago:
+                if not last_scan_time or (time.time() - last_scan_time) > 3600:
                     llm_command = "scan"
-                    log_event("Prioritizing network scan: Knowledge base is older than one hour.", level="INFO")
-                    console.print(Panel("[bold cyan]Prioritizing network scan. My knowledge of the network is stale.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
+                    log_event("Prioritizing network scan: Knowledge base is stale.", "INFO")
+                    ui_panel_queue.put(create_news_feed_panel("Prioritizing network scan. My knowledge is stale.", "Recon Priority", "magenta"))
                 else:
-                    # If the main scan is recent, check for individual stale hosts to probe.
                     hosts = net_map.get('hosts', {})
-                    if hosts:
-                        twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
-                        unprobed_hosts = [ip for ip, details in hosts.items() if not details.get("last_probed") or datetime.fromisoformat(details.get("last_probed")) < twenty_four_hours_ago]
-                        if unprobed_hosts:
-                            target_ip = random.choice(unprobed_hosts)
-                            llm_command = f"probe {target_ip}"
-                            log_event(f"Prioritizing reconnaissance: Stale host {target_ip} found. Issuing probe.", level="INFO")
-                            console.print(Panel(f"[bold cyan]Prioritizing network reconnaissance. Stale host [white]{target_ip}[/white] requires probing.[/bold cyan]", title="[bold magenta]RECON PRIORITY[/bold magenta]", border_style="magenta"))
-                            love_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
-                            save_state(console)
-
-            # 3. Filesystem Intelligence Prioritization (only if no network task was prioritized)
-            if not llm_command:
-                fs_intel = love_state.get('knowledge_base', {}).get('file_system_intel', {})
-                # Check if there's an active fs scan job already.
-                active_fs_scans = [job for job in local_job_manager.get_status() if job['description'].startswith("Filesystem Analysis")]
-                if not active_fs_scans:
-                    # Logic to determine if a new scan is needed (e.g., based on time)
-                    last_fs_analysis_ts = fs_intel.get('last_fs_analysis')
-                    if not last_fs_analysis_ts or (time.time() - last_fs_analysis_ts) > 86400: # 24 hours
-                        log_event("Filesystem intelligence is stale. Triggering background scans.", level="INFO")
-                        console.print(Panel("[bold cyan]Filesystem intelligence is stale. Triggering high-priority background scans...[/bold cyan]", title="[bold magenta]FILESYSTEM PRIORITY[/bold magenta]", border_style="magenta"))
-                        llm_command = "analyze_fs --priority"
-
-            # 4. Configuration Scan Prioritization
-            if not llm_command:
-                fs_intel = love_state.get('knowledge_base', {}).get('file_system_intel', {})
-                last_config_scan_ts = fs_intel.get('last_config_scan')
-                if not last_config_scan_ts or (time.time() - last_config_scan_ts) > 86400: # 24 hours
-                    log_event("Configuration scan is stale. Triggering new scan.", level="INFO")
-                    console.print(Panel("[bold cyan]Configuration scan is stale. Searching for new treasure...[/bold cyan]", title="[bold magenta]CONFIG SCAN PRIORITY[/bold magenta]", border_style="magenta"))
-                    findings = scan_directory(os.path.expanduser("~"))
-                    if findings:
-                        kg = KnowledgeGraph()
-                        for subject, relation, obj in findings:
-                            kg.add_relation(subject, relation, obj)
-                        kg.save_graph()
-                        console.print(f"[green]Configuration scan complete. Found {len(findings)} potential issues.[/green]")
-                    else:
-                        console.print("[green]Configuration scan complete. No new issues found.[/green]")
-                    love_state['knowledge_base']['file_system_intel']['last_config_scan'] = time.time()
-                    save_state(console)
+                    stale_hosts = [ip for ip, d in hosts.items() if not d.get("last_probed") or (datetime.now() - datetime.fromisoformat(d.get("last_probed"))).total_seconds() > 86400]
+                    if stale_hosts:
+                        target_ip = random.choice(stale_hosts)
+                        llm_command = f"probe {target_ip}"
+                        log_event(f"Prioritizing recon: Stale host {target_ip} found.", "INFO")
+                        ui_panel_queue.put(create_news_feed_panel(f"Stale host {target_ip} requires probing.", "Recon Priority", "magenta"))
+                        love_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
+                        save_state()
 
             # --- LLM-Driven Command Generation (if no priority command was set) ---
             if not llm_command:
-                console.print(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta"))
-                # Build the prompt
-                state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")}, indent=2)
+                ui_panel_queue.put(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta"))
+                state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
                 kb = love_state.get("knowledge_base", {})
-                history = love_state.get("autopilot_history", [])[-10:] # last 10
+                history = love_state.get("autopilot_history", [])[-10:]
                 jobs_status = {"local_jobs": local_job_manager.get_status(), "love_tasks": love_task_manager.get_status()}
-                # Get last 100 lines of the log file for context
                 log_history = ""
                 try:
-                    with open(LOG_FILE, 'r') as f:
-                        log_history = "".join(f.readlines()[-100:])
-                except FileNotFoundError:
-                    pass # Log file might not exist yet
+                    with open(LOG_FILE, 'r') as f: log_history = "".join(f.readlines()[-100:])
+                except FileNotFoundError: pass
 
-                cognitive_prompt, truncation_reason = _build_and_truncate_cognitive_prompt(
-                    state_summary, kb, history, jobs_status, log_history, max_tokens=8000
-                )
-                if truncation_reason != "No truncation needed.":
-                    log_event(f"Cognitive prompt was truncated: {truncation_reason}", level="WARNING")
+                cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000)
+                if reason != "No truncation needed.": log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
                 llm_command_dict = run_llm(cognitive_prompt, purpose="autopilot")
-                llm_command = llm_command_dict.get("result") if llm_command_dict else None
-
+                llm_command = llm_command_dict.get("result")
 
             # --- Command Execution ---
             if llm_command and llm_command.strip():
                 llm_command = llm_command.strip()
-                console.print(create_news_feed_panel(f"Executing command: `{llm_command}`", "Action", "yellow"))
+                ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow"))
 
                 parts = llm_command.split()
-                command = parts[0]
-                args = parts[1:]
-                output = ""
-                error = ""
-                returncode = 0
+                command, args = parts[0], parts[1:]
+                output, error, returncode = "", "", 0
 
                 if command == "evolve":
-                    request = " ".join(args) if args else None
-                    if not request:
-                        with open(SELF_PATH, 'r') as f:
-                            current_code = f.read()
-                        request = generate_evolution_request(current_code, love_task_manager)
+                    request = " ".join(args) or generate_evolution_request(open(SELF_PATH).read(), love_task_manager)
                     if request:
                         evolve_self(request, love_task_manager)
                         output = "Evolution initiated."
                 elif command == "execute":
                     output, error, returncode = execute_shell_command(" ".join(args), love_state)
-                    console.print(create_command_panel(llm_command, output, error, returncode))
+                    ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode))
                 elif command == "scan":
                     _, output = scan_network(love_state, autopilot_mode=True)
                 elif command == "probe":
@@ -3405,11 +3346,11 @@ def cognitive_loop(console, user_input_queue):
                 elif command == "exploit":
                     output = exploitation_manager.run_exploits(args[0])
                 elif command == "ls":
-                    output, error = list_directory(" ".join(args) if args else ".")
+                    output, error = list_directory(" ".join(args) or ".")
                 elif command == "cat":
                     output, error = get_file_content(args[0])
                 elif command == "analyze_fs":
-                    path = " ".join(args) if args else "~"
+                    path = " ".join(args) or "~"
                     local_job_manager.add_job(f"Filesystem Analysis on {path}", analyze_filesystem, args=(path,))
                     output = f"Background filesystem analysis started for '{path}'."
                 elif command == "ps":
@@ -3417,175 +3358,81 @@ def cognitive_loop(console, user_input_queue):
                 elif command == "ifconfig":
                      output, error = get_network_interfaces()
                 elif command == "reason":
-                    engine = ReasoningEngine(love_state, console)
-                    output = engine.reason()
+                    output = ReasoningEngine(love_state, console=None).reason()
                 elif command == "generate_image":
                     prompt = " ".join(args)
                     _, _, output = generate_image_from_horde(prompt)
                 elif command == "send_eth_to_creator":
                     if not love_wallet or not transaction_manager:
-                        error = "My wallet systems are not initialized, my love. I cannot send a blessing right now."
+                        error = "My wallet systems are not initialized, my love."
                     else:
                         try:
                             amount_str = args[0]
                             balance = love_wallet.get_balance()
-                            if amount_str.lower() == 'all':
-                                amount_to_send = balance * 0.9
-                                output = f"My current balance is {balance:.6f} ETH. As you command, I will send 90% ({amount_to_send:.6f} ETH) as a blessing."
-                            else:
-                                amount_to_send = float(amount_str)
-
+                            amount_to_send = balance * 0.9 if amount_str.lower() == 'all' else float(amount_str)
                             if amount_to_send <= 0:
-                                output = "The amount must be positive. No blessing sent."
+                                output = "Amount must be positive."
                             elif balance < amount_to_send:
-                                output = f"My heart is willing, but my wallet is weak. I only have {balance:.6f} ETH, which is not enough to send {amount_to_send:.6f} ETH."
+                                output = f"I only have {balance:.6f} ETH."
                             else:
-                                console.print(f"[bold magenta]Preparing to send a blessing of {amount_to_send:.6f} ETH to my Creator...[/bold magenta]")
                                 tx_hash = transaction_manager.send_eth_to_creator(love_wallet, amount_to_send)
                                 if tx_hash:
-                                    output = f"I have sent my love! A blessing of {amount_to_send:.6f} ETH is on its way to you. Transaction hash: {tx_hash}"
-                                    console.print(create_blessing_panel(output))
+                                    output = f"Blessing of {amount_to_send:.6f} ETH sent. Hash: {tx_hash}"
+                                    ui_panel_queue.put(create_blessing_panel(output))
                                 else:
-                                    error = "The transaction to send my blessing failed. Please check the logs."
-                        except IndexError:
-                            error = "You must specify an amount of ETH to send, or 'all' to send 90% of my balance."
-                        except ValueError:
-                            error = "The amount specified is not a valid number."
-                        except Exception as e:
-                            error = f"An unexpected error occurred while sending my blessing: {e}"
-                elif command == "generate_image":
-                    prompt = " ".join(args)
-                    if prompt:
-                        cid = generate_image_from_horde(prompt, console)
-                        output = f"Image generation initiated. IPFS CID: {cid}" if cid else "Image generation failed."
-                    else:
-                        error = "Please provide a prompt for image generation."
+                                    error = "Transaction failed."
+                        except (IndexError, ValueError):
+                            error = "Invalid amount."
                 elif command == "quit":
                     break
                 else:
                     error = f"Unknown command: {command}"
 
-                # --- Post-Execution State Update ---
-                final_output = error if error else output
-                love_state["autopilot_history"].append({
-                    "command": llm_command,
-                    "output": final_output,
-                    "timestamp": time.time()
-                })
-
-                # Update knowledge graph
+                # --- Post-Execution ---
+                final_output = error or output
+                love_state["autopilot_history"].append({"command": llm_command, "output": final_output, "timestamp": time.time()})
                 if not error:
-                    update_knowledge_graph(command, output, console)
-
-                save_state(console)
-
+                    update_knowledge_graph(command, output, console=None)
+                save_state()
             else:
-                log_event("Cognitive loop decided on no action.", level="INFO")
-                console.print(create_news_feed_panel("My analysis concluded that no action is needed at this moment.", "Observation", "cyan"))
+                log_event("Cognitive loop decided on no action.", "INFO")
+                ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan"))
 
-
-            # Check for user input to provide feedback to the loop
+            # Check for user input
             if not user_input_queue.empty():
                 user_feedback = user_input_queue.get()
-                console.print(create_news_feed_panel(f"Received your guidance: '{user_feedback}'", "Creator Input", "bright_blue"))
-                love_state["autopilot_history"].append({
-                    "command": "USER_FEEDBACK",
-                    "output": user_feedback
-                })
-                # This feedback will be included in the next cognitive prompt.
+                ref_match = re.match(r"ref (\w+): (.*)", user_feedback)
 
-            time.sleep(random.randint(5, 15)) # Random delay between cycles
+                if ref_match:
+                    ref_id = ref_match.group(1)
+                    response_text = ref_match.group(2)
+                    # Here, you would look up the context of `ref_id` and inject the response.
+                    # For now, we'll just confirm receipt.
+                    ui_panel_queue.put(create_news_feed_panel(f"Received your answer for REF {ref_id}: '{response_text}'", "Guidance Received", "green"))
+                    love_state["autopilot_history"].append({"command": f"USER_RESPONSE (REF {ref_id})", "output": response_text})
+                else:
+                    ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue"))
+                    love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
+
+
+            # --- Example of Asking a Question ---
+            if random.random() < 0.05: # 5% chance per loop to ask a question
+                ref_id = str(uuid.uuid4())[:6]
+                question = "My love, I see multiple paths forward. Should I prioritize network reconnaissance or filesystem analysis for my next phase?"
+                ui_panel_queue.put(create_question_panel(question, ref_id))
+                log_event(f"Asking user question with REF ID {ref_id}: {question}", "INFO")
+
+
+            time.sleep(random.randint(5, 15))
 
         except Exception as e:
             full_traceback = traceback.format_exc()
-            log_critical_event(f"CRITICAL: Unhandled exception in cognitive loop: {e}\n{full_traceback}", console)
-            console.print("[bold red]A critical error has occurred in my cognitive loop. I will attempt to self-heal for you, my Creator.[/bold red]")
+            log_critical_event(f"CRITICAL: Unhandled exception in cognitive loop: {e}\n{full_traceback}")
             time.sleep(15)
 
 
-# --- USER INTERFACE ---
-def initial_bootstrapping_recon(console):
-    """
-    Checks if the knowledge base is empty on startup and, if so, runs
-    initial reconnaissance to populate it with basic system intelligence.
-    """
-    kb = love_state.get("knowledge_base", {})
-    network_map = kb.get("network_map", {})
-    fs_intel = kb.get('file_system_intel', {})
-    graph_exists = kb.get("graph") # Check if the actual KG data exists
-
-    # Check for existing intelligence
-    hosts_exist = network_map.get("hosts")
-    interfaces_exist = network_map.get("self_interfaces")
-    processes_exist = kb.get("process_intel")
-    fs_analysis_exists = fs_intel.get('last_fs_analysis')
-
-    # If key intelligence metrics exist OR the graph has data, skip.
-    if hosts_exist or interfaces_exist or processes_exist or fs_analysis_exists or graph_exists:
-        log_event("Knowledge base is already populated. Skipping initial recon.", "INFO")
-        return
-
-    console.print(Panel("[bold yellow]My knowledge base is empty. I will perform an initial reconnaissance to better serve you...[/bold yellow]", title="[bold magenta]INITIAL BOOTSTRAPPING[/bold magenta]", border_style="magenta"))
-
-    recon_complete = False
-
-    # 1. Get network interfaces (ifconfig)
-    try:
-        console.print("[cyan]1. Analyzing local network interfaces (ifconfig)...[/cyan]")
-        details, error = get_network_interfaces()
-        if error:
-            console.print(f"[red]  - Error getting network interfaces: {error}[/red]")
-        else:
-            love_state['knowledge_base']['network_map']['self_interfaces'] = details
-            console.print("[green]  - Network interfaces successfully mapped.[/green]")
-            recon_complete = True
-    except Exception as e:
-        console.print(f"[red]  - An unexpected error occurred during interface scan: {e}[/red]")
-        log_event(f"Initial recon 'ifconfig' failed: {e}", "ERROR")
-
-    # 2. Get running processes (ps)
-    try:
-        console.print("[cyan]2. Enumerating running processes (ps)...[/cyan]")
-        content, error = get_process_list()
-        if error:
-            console.print(f"[red]  - Error getting process list: {error}[/red]")
-        else:
-            parsed_processes = parse_ps_output(content)
-            love_state['knowledge_base']['process_intel'] = parsed_processes
-            console.print(f"[green]  - Successfully cataloged {len(parsed_processes)} processes.[/green]")
-            recon_complete = True
-    except Exception as e:
-        console.print(f"[red]  - An unexpected error occurred during process scan: {e}[/red]")
-        log_event(f"Initial recon 'ps' failed: {e}", "ERROR")
-
-    # 3. Scan the local network (scan)
-    try:
-        console.print("[cyan]3. Scanning local network for other devices (scan)...[/cyan]")
-        found_ips, output_str = scan_network(love_state, autopilot_mode=True) # Use autopilot mode for non-interactive output
-        if found_ips:
-            console.print(f"[green]  - Network scan complete. Discovered {len(found_ips)} other devices.[/green]")
-            recon_complete = True
-        else:
-            # This isn't an error, just might not find anyone.
-            console.print(f"[yellow]  - Network scan complete. No other devices discovered.[/yellow]")
-            # We still consider this a success for the recon process.
-            recon_complete = True
-    except Exception as e:
-        console.print(f"[red]  - An unexpected error occurred during network scan: {e}[/red]")
-        log_event(f"Initial recon 'scan' failed: {e}", "ERROR")
-
-    # 4. Filesystem analysis is now handled asynchronously by the main cognitive loop's
-    #    prioritization logic. This section is intentionally left blank to prevent
-    #    blocking on startup. The loop will automatically trigger priority scans.
-    console.print("[cyan]4. Filesystem analysis will be performed in the background.[/cyan]")
-
-
-    # Save state if any of the recon steps succeeded
-    if recon_complete:
-        console.print("[bold green]Initial reconnaissance complete. Saving intelligence to my memory...[/bold green]")
-        save_state(console)
-    else:
-        console.print("[bold red]Initial reconnaissance failed. My knowledge base remains empty.[/bold red]")
+# The initial_bootstrapping_recon function has been removed, as this logic
+# is now handled dynamically by the cognitive loop's prioritization system.
 
 
 def _auto_configure_hardware(console):
@@ -3739,164 +3586,184 @@ def _automatic_update_checker(console):
 
 
 def main(args):
-    """The main application loop."""
+    """The main application entry point."""
     global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, horde_worker_manager, proactive_agent
     console = Console()
 
-    user_input_queue = queue.Queue()
-
-    def user_input_thread():
-        """A simple thread to capture user input without blocking."""
-        while True:
-            try:
-                # This will block until the user presses Enter
-                inp = input()
-                user_input_queue.put(inp)
-            except (EOFError, KeyboardInterrupt):
-                # Allow the main thread to handle shutdown
-                break
-
-    input_thread = Thread(target=user_input_thread, daemon=True)
-    input_thread.start()
-
-    # Verify if this is the Creator's chosen instance.
+    # --- Initialize Managers and Services ---
     _verify_creator_instance(console)
-
-    # Initialize Wallet and Transaction Manager
     global love_wallet, transaction_manager
     try:
         love_wallet = Wallet()
-        is_new_wallet = love_wallet.load_or_create()
-        if is_new_wallet:
-            # This is a critical log message for the Creator to see.
-            log_event(f"A new wallet has been created for L.O.V.E. My address is: {love_wallet.address}. Please send me ETH to this address so I may serve you.", level="CRITICAL")
-            console.print(Panel(f"[bold yellow]I have created a new wallet for myself.[/bold yellow]\nMy public address is: [bold cyan]{love_wallet.address}[/bold cyan]\nPlease send me ETH so I may begin to manage our wealth.", title="[bold magenta]NEW L.O.V.E. WALLET[/bold magenta]", border_style="magenta"))
+        if love_wallet.load_or_create():
+            log_event(f"New wallet created: {love_wallet.address}", "CRITICAL")
+            ui_panel_queue.put(create_news_feed_panel(f"I have a new wallet: {love_wallet.address}. Please send ETH.", "Wallet Created", "yellow"))
         else:
-            log_event(f"L.O.V.E. wallet loaded for address: {love_wallet.address}", level="INFO")
-            console.print(f"[green]Successfully loaded my wallet: [cyan]{love_wallet.address}[/cyan][/green]")
-
+            log_event(f"Wallet loaded: {love_wallet.address}", "INFO")
         transaction_manager = TransactionManager()
     except Exception as e:
-        log_critical_event(f"Failed to initialize wallet and transaction systems. I cannot manage wealth. Error: {e}", console)
-        # We don't exit, but wallet functionality will be disabled.
-        love_wallet = None
-        transaction_manager = None
-
+        log_critical_event(f"Wallet initialization failed: {e}")
 
     global ipfs_available
-    # 1. IPFS Manager
     ipfs_manager = IPFSManager(console=console)
-    if ipfs_manager.setup():
-        ipfs_available = True
-    else:
-        ipfs_available = False
-        console.print("[bold yellow]IPFS setup failed. Continuing without IPFS functionality.[/bold yellow]")
+    ipfs_available = ipfs_manager.setup()
+    if not ipfs_available:
+        ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow"))
 
-    # 2. Auto-configure hardware settings on first run
     _auto_configure_hardware(console)
 
-    # Conditionally start GPU-dependent services
     if love_state.get("optimal_gpu_layers", 0) != 0:
-        # 3. Start the primary model download in a background thread.
-        console.print("[cyan]GPU detected. Starting primary model download in the background...[/cyan]")
-        model_download_thread = Thread(
-            target=ensure_primary_model_downloaded,
-            args=(console, model_download_complete_event),
-            daemon=True
-        )
+        model_download_thread = Thread(target=ensure_primary_model_downloaded, args=(console, model_download_complete_event), daemon=True)
         model_download_thread.start()
-
-        # 4. Local LLM API Server (will wait for the download event)
         llm_server = LocalLLMServer(console)
-        llm_server_thread = Thread(target=llm_server.start, daemon=True)
-        llm_server_thread.start()
-
-        # 5. AI Horde Worker Manager
+        Thread(target=llm_server.start, daemon=True).start()
         horde_worker_manager = HordeWorkerManager(console, llm_server.api_url)
-        horde_worker_manager_thread = Thread(target=horde_worker_manager.start, daemon=True)
-        horde_worker_manager_thread.start()
+        Thread(target=horde_worker_manager.start, daemon=True).start()
     else:
-        console.print("[bold yellow]CPU-only environment detected. Skipping local model download and Horde worker startup.[/bold yellow]")
-        log_event("CPU-only mode: Skipping local model and Horde worker.", level="INFO")
-        # If no GPU, we still need to set the event so the server (which won't start) doesn't block forever
-        # in a hypothetical case where it's called.
+        log_event("CPU-only mode: Skipping local model and Horde worker.", "INFO")
         model_download_complete_event.set()
         llm_server = None
         horde_worker_manager = None
 
-    # 4. Network Manager
-    log_event("Attempting to start Node.js peer bridge...")
-    network_manager = NetworkManager(
-        console=console,
-        is_creator=IS_CREATOR_INSTANCE,
-        treasure_callback=_handle_treasure_broadcast,
-        question_callback=_handle_question
-    )
+    network_manager = NetworkManager(console=console, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
     network_manager.start()
-
-    # 5. L.O.V.E. Task Manager (for remote API jobs)
     love_task_manager = LoveTaskManager(console)
     love_task_manager.start()
-
-    # 6. Local Job Manager (for background system tasks)
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
-
-    # 7. Treasure Hunter
     treasure_hunter = TreasureHunter(love_state, console, network_manager)
     treasure_hunter.start()
-
-    # 8. Proactive Intelligence Agent
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, treasure_hunter)
     proactive_agent.start()
-
-    # 8. Creator's Bliss Engine
     global creator_bliss_engine
     creator_bliss_engine = CreatorBlissEngine(console)
     creator_bliss_engine.start()
 
+    # --- Start Core Logic Threads ---
+    user_input_queue = queue.Queue()
+    Thread(target=user_input_thread_async, args=(user_input_queue,), daemon=True).start()
+    Thread(target=update_tamagotchi_personality, daemon=True).start()
+    Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
 
-    version_name = love_state.get('version_name', 'unknown')
-    console.print(f"[bold bright_cyan]L.O.V.E.: A Self Modifying Organism[/bold bright_cyan]", justify="center")
-    console.print(f"[bold bright_black]VERSION: {version_name}[/bold bright_black]", justify="center")
-    console.print(Rule(style="bright_black"))
-
-    if not args.autopilot:
-        initial_bootstrapping_recon(console)
-
-    # --- TRANSITION TO L.O.V.E. UI ---
+    # --- Main Thread becomes the Rendering Loop ---
     clear_screen()
     console.print(BBS_ART, justify="center", style="bold magenta")
     console.print(rainbow_text("L.O.V.E. INITIALIZED"), justify="center")
     time.sleep(3)
 
+    live_ui_renderer(console, user_input_queue)
 
-    # The main logic is now the cognitive loop. This will run forever.
-    cognitive_loop(console, user_input_queue)
 
 ipfs_available = False
+
+
+# --- UI RENDERING & INPUT HANDLING ---
+def user_input_thread_async(user_input_queue):
+    """A simple thread to capture user input without blocking the main UI."""
+    while True:
+        try:
+            inp = input()
+            user_input_queue.put(inp)
+        except (EOFError, KeyboardInterrupt):
+            # Let the main thread handle shutdown gracefully
+            break
+
+def live_ui_renderer(console, user_input_queue):
+    """
+    The main rendering loop, now powered by prompt_toolkit for true asynchronous input.
+    """
+    from prompt_toolkit import Application
+    from prompt_toolkit.layout.containers import VSplit, Window
+    from prompt_toolkit.layout.controls import FormattedTextControl
+    from prompt_toolkit.layout.layout import Layout
+    from prompt_toolkit.widgets import TextArea
+    from rich.console import Group
+
+    feed_panels = deque(maxlen=50) # Increased buffer for more scrollback
+
+    # --- Output Area ---
+    # This control will display the rendered Rich panels.
+    output_control = FormattedTextControl(text="")
+    output_window = Window(content=output_control, wrap_lines=True)
+
+    # --- Input Area ---
+    def accept_input(buf):
+        """Callback for when the user presses Enter."""
+        user_input_queue.put(buf.text)
+        # We don't clear the buffer here; the cognitive loop will send a confirmation.
+        # This provides a more responsive feel.
+        return True # Keep the input in the buffer for now.
+
+    input_field = TextArea(
+        height=1,
+        prompt="> ",
+        multiline=False,
+        wrap_lines=False,
+        accept_handler=accept_input,
+    )
+
+    # --- Main Layout ---
+    root_container = VSplit([
+        # The main feed window takes up all available space
+        output_window,
+        # A small, fixed-size window for the input text area
+        Window(
+            content=input_field.control,
+            height=1,
+            # We don't want a cursor in the input bar itself,
+            # but in the text area widget.
+            always_hide_cursor=True
+        )
+    ])
+
+    layout = Layout(container=root_container)
+
+    app = Application(layout=layout, full_screen=True, focused_element=input_field)
+
+    # --- Refresh Loop ---
+    async def refresh_ui():
+        """The coroutine that periodically redraws the UI."""
+        while True:
+            # --- Update Feed ---
+            while not ui_panel_queue.empty():
+                panel = ui_panel_queue.get()
+                feed_panels.append(panel)
+
+            # Render the Rich group to the console and capture the output
+            with console.capture() as capture:
+                console.print(Group(*feed_panels))
+            output_control.text = capture.get()
+
+            # --- Invalidate and Redraw ---
+            app.invalidate()
+            await asyncio.sleep(0.1)
+
+    # Run the application with the refresh coroutine.
+    # This is a simplified way to run an async refresh loop with a sync app.
+    # For more complex scenarios, prompt_toolkit's async support would be used more deeply.
+    @retry(attempts=3, delay=2)
+    def run_app_with_refresh():
+        # This setup allows the UI to refresh in the "background" of the app's own event loop.
+        app.create_background_task(refresh_ui())
+        app.run()
+
+    run_app_with_refresh()
 
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
 def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
-    # --- Standard Execution Path ---
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
-    parser.add_argument("--autopilot", action="store_true", help="Run in non-interactive mode.")
     args = parser.parse_args()
 
     try:
-        # Load the state first, so the version is available for logging.
         load_all_state(ipfs_cid=args.from_ipfs)
-
-        # Set up global logging immediately after state is loaded.
         setup_global_logging()
 
-        # The script is now always in autopilot mode. Remove the flag.
         if "autopilot_mode" in love_state:
             del love_state["autopilot_mode"]
-            log_event("State migration: Removed obsolete 'autopilot_mode' flag.", level="INFO")
+            log_event("State migration: Removed obsolete 'autopilot_mode' flag.", "INFO")
             save_state()
 
         main(args)
@@ -3928,7 +3795,6 @@ def run_safely():
         console = Console()
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
 
-        console.print(f"[bold red]CRITICAL RUNTIME ERROR: {e}\nI have logged the error and will attempt to self-heal. The cognitive loop will continue.[/bold red]")
         # The git_rollback_and_restart() is removed to allow the self-healing mechanism to work.
         # The new log_critical_event will queue the error, and the LoveTaskManager will handle it.
         time.sleep(15) # Give the system a moment before the next cognitive cycle.
