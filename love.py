@@ -226,7 +226,7 @@ def _check_and_install_dependencies():
     _install_pip_package("langchain")
     _install_pip_package("langchain-community")
     _install_pip_package("scapy")
-    _install_pip_package("wallet")
+
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
