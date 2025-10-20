@@ -15,8 +15,5 @@ pytest
 pytest-asyncio
 pycvesearch
 pycryptodome
-langgraph
-langchain
-langchain-community
 numpy==1.26.4
 tiktoken
