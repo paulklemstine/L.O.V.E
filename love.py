@@ -166,6 +166,7 @@ def setup_global_logging():
 
 
 # --- PRE-FLIGHT DEPENDENCY CHECKS ---
+from core.storage import save_all_state
 from core.capabilities import CAPS
 
 def is_dependency_met(dependency_name):
@@ -484,7 +485,6 @@ from ipfs_manager import IPFSManager
 from sandbox import Sandbox
 from filesystem import analyze_filesystem
 from ipfs import pin_to_ipfs_sync
-from core.storage import save_all_state
 from threading import Thread, Lock, RLock
 import uuid
 import yaml
