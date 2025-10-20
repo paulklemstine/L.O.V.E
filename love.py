@@ -3280,6 +3280,13 @@ def cognitive_loop(console, user_input_queue):
                     output, error = probe_target(args[0], love_state)
                 elif command == "webrequest":
                     output, error = perform_webrequest(args[0], love_state)
+                    if not error:
+                        # Don't try to extract knowledge from the summary message.
+                        # The knowledge was already stored in the webrequest function.
+                        love_state["autopilot_history"].append({"command": llm_command, "output": output})
+                        save_state(console)
+                        time.sleep(random.randint(5, 10)) # Give time for thought
+                        continue # Skip knowledge extraction for this command
                 elif command == "exploit":
                     output = exploitation_manager.run_exploits(args[0])
                 elif command == "ls":
