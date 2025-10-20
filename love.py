@@ -3279,7 +3279,7 @@ def cognitive_loop(console, user_input_queue):
                 elif command == "probe":
                     output, error = probe_target(args[0], love_state)
                 elif command == "webrequest":
-                    output, error = perform_webrequest(args[0])
+                    output, error = perform_webrequest(args[0], love_state)
                 elif command == "exploit":
                     output = exploitation_manager.run_exploits(args[0])
                 elif command == "ls":
