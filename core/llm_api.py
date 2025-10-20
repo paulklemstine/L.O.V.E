@@ -49,7 +49,11 @@ GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 # A selection of strong Horde models. Mythalion is good for story-writing/creativity.
 HORDE_MODELS = ["PygmalionAI/Mythalion-13b", "NeverSleep/Madao-10.7B-v1", "Undi95/ReMM-SLERP-L2-13B", "KoboldAI/LLaMA2-13B-Holomax-v2", "KoboldAI/LLaMA2-13B-Tiefighter"]
 
-from horde_client import HordeClient, TextGenerationInput, ModelGenerationInput, HordeClientAsync
+# Import the client classes from the main package
+from horde_client import HordeClient, HordeClientAsync
+
+# Import the data models from the .models submodule
+from horde_client.models import TextGenerationInput, ModelGenerationInput
 
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
