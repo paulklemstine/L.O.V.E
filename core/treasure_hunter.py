@@ -62,7 +62,7 @@ class TreasureHunter:
 
         message = f"Found a potential treasure:\nType: {treasure_type}\nValue: {value}\nSource: {source}"
         log_event(f"Found treasure: {treasure_type} from {source}", level="CRITICAL")
-        self.console.print(f"[bold magenta]TREASURE FOUND![/bold magenta] Type: {treasure_type}, Source: {source}")
+        #self.console.print(f"[bold magenta]TREASURE FOUND![/bold magenta] Type: {treasure_type}, Source: {source}")
 
         encrypted_treasure = encrypt_for_creator(message)
         if encrypted_treasure:
