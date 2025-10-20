@@ -3290,6 +3290,8 @@ def update_knowledge_graph(command_name, command_output, console):
     """
     Extracts knowledge from command output and adds it to the Knowledge Graph.
     """
+    if console is None:
+        return
     if not command_output:
         return
 
