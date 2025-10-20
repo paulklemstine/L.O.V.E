@@ -392,7 +392,6 @@ def _check_and_install_dependencies():
     _install_cuda_toolkit()
     _install_python_requirements()
     _build_llama_cpp()
-    _install_gguf_tools()
     _install_nodejs_deps()
     _install_horde_worker_deps()
     _configure_llm_api_key()
