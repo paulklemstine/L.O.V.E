@@ -16,11 +16,13 @@ HUNT_LOOP_INTERVAL_SECONDS = 300 # 5 minutes between each hunting cycle.
 class ProactiveIntelligenceAgent:
     """
     Operates in the background to autonomously identify and queue new,
-    previously uninvestigated targets for reconnaissance.
+    previously uninvestigated targets for reconnaissance and treasure hunting.
     """
-    def __init__(self, love_state, console):
+    def __init__(self, love_state, console, job_manager, treasure_hunter):
         self.love_state = love_state
         self.console = console
+        self.job_manager = job_manager
+        self.treasure_hunter = treasure_hunter
         self.active = False
         self.thread = threading.Thread(target=self._hunt_loop, daemon=True)
         self.lock = threading.RLock()
@@ -36,6 +38,12 @@ class ProactiveIntelligenceAgent:
         self.active = True
         self.thread.start()
 
+        # Start the network sniffer as a persistent background job
+        self.job_manager.add_job(
+            description="Continuous network treasure sniffing",
+            target_func=self.treasure_hunter.start_network_sniffer
+        )
+
     def stop(self):
         """Stops the agent's hunting thread."""
         self.active = False
@@ -50,6 +58,7 @@ class ProactiveIntelligenceAgent:
                 self._hunt_in_knowledge_graph()
                 self._hunt_in_webrequest_cache()
                 self._hunt_in_shell_history()
+                self._hunt_for_live_secrets()
 
                 self.console.print("[cyan]Proactive Agent: Hunt cycle complete.[/cyan]")
 
@@ -189,3 +198,19 @@ class ProactiveIntelligenceAgent:
                         self._add_lead('domain', domain, f"Found in {history_file}")
 
                 self._track_source(source_key)
+
+    def _hunt_for_live_secrets(self):
+        """
+        Periodically triggers scans for secrets in live systems (e.g., process memory).
+        """
+        source_key = "live_process_secret_scan"
+        if not self._is_source_stale(source_key):
+            return
+
+        self.console.print("[cyan]Proactive Agent: Hunting for live secrets in processes...[/cyan]")
+
+        # This is a synchronous call for now, as it's part of the agent's loop.
+        # It could be delegated to a job if it becomes too slow.
+        self.treasure_hunter.scan_processes_for_secrets()
+
+        self._track_source(source_key)

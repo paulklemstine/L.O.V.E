@@ -222,6 +222,7 @@ def _check_and_install_dependencies():
     _install_pip_package("pyyaml")
     _install_pip_package("skyvern")
     _install_pip_package("pycvesearch")
+    _install_pip_package("scapy")
 
     # --- Step 3: Complex Python Package Builds (llama-cpp) ---
     def _install_llama_cpp():
@@ -435,6 +436,7 @@ from display import create_tamagotchi_panel, create_llm_panel, create_command_pa
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
+from core.treasure_hunter import TreasureHunter
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3636,8 +3638,12 @@ def main(args):
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
 
-    # 7. Proactive Intelligence Agent
-    proactive_agent = ProactiveIntelligenceAgent(love_state, console)
+    # 7. Treasure Hunter
+    treasure_hunter = TreasureHunter(love_state, console, network_manager)
+    treasure_hunter.start()
+
+    # 8. Proactive Intelligence Agent
+    proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, treasure_hunter)
     proactive_agent.start()
 
 
