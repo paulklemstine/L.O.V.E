@@ -3816,7 +3816,7 @@ def live_ui_renderer(console, user_input_queue):
     # Run the application with the refresh coroutine.
     # This is a simplified way to run an async refresh loop with a sync app.
     # For more complex scenarios, prompt_toolkit's async support would be used more deeply.
-    @retry(attempts=3, delay=2)
+    @retry(tries=3, delay=2)
     def run_app_with_refresh():
         # This setup allows the UI to refresh in the "background" of the app's own event loop.
         app.create_background_task(refresh_ui())
