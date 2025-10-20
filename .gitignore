@@ -21,3 +21,4 @@ kubo/
 .ipfs_repo/
 ipfs.log
 :memory:
+kg.json
