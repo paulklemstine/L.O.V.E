@@ -3819,8 +3819,7 @@ def live_ui_renderer(console, user_input_queue):
     @retry(tries=3, delay=2)
     def run_app_with_refresh():
         # This setup allows the UI to refresh in the "background" of the app's own event loop.
-        app.create_background_task(refresh_ui())
-        app.run()
+        app.run(pre_run=lambda: app.create_background_task(refresh_ui()))
 
     run_app_with_refresh()
 
