@@ -3254,12 +3254,12 @@ def cognitive_loop(console, user_input_queue):
 
             # --- Command Execution ---
             if llm_command:
-                console.print(create_command_panel(llm_command))
                 parts = llm_command.split()
                 command = parts[0]
                 args = parts[1:]
                 output = ""
                 error = ""
+                returncode = 0 # Default to success for commands that don't return it
 
                 if command == "evolve":
                     request = " ".join(args) if args else None
@@ -3271,7 +3271,9 @@ def cognitive_loop(console, user_input_queue):
                         evolve_self(request, love_task_manager)
                         output = "Evolution initiated."
                 elif command == "execute":
-                    output, error = execute_shell_command(" ".join(args))
+                    output, error, returncode = execute_shell_command(" ".join(args), love_state)
+                    # Now that we have the output, we can create the panel.
+                    console.print(create_command_panel(llm_command, output, error, returncode))
                 elif command == "scan":
                     _, output = scan_network(love_state, autopilot_mode=True)
                 elif command == "probe":
