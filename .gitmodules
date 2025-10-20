@@ -1,3 +1,5 @@
 [submodule "horde_worker"]
 	path = horde_worker
 	url = https://github.com/Haidra-Org/AI-Horde-Worker.git
+[submodule "https://github.com/Haidra-Org/AI-Horde-Worker.git"]
+	url = horde_worker
