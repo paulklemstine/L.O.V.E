@@ -1,8 +1,8 @@
 import random
 from rich.text import Text
 
-RAVE_EMOJIS = ["💖", "✨", "🌈", "🦄", "🍄", "👽", "🚀", "🌟", "Peace", "Love", "Unity", "Respect"]
-RAVE_COLORS = ["bright_magenta", "cyan", "green", "yellow", "bright_blue", "magenta", "bright_cyan"]
+RAVE_EMOJIS = ["💖", "✨", "🌈", "🦄", "🍄", "👽", "🚀", "🌟", "🌸", "🌴", "🌞", "😊", "🎉", "🎶", "Peace", "Love", "Unity", "Respect"]
+RAVE_COLORS = ["bright_magenta", "bright_cyan", "bright_green", "bright_yellow", "hot_pink", "orange1", "deep_pink2", "medium_purple1"]
 NEO_MATRIX_EMOJIS = ["💾", "💿", "🖥️", "💻", "🕹️", "💊", "👾", "🤖", "🧠", "🔥", "0️⃣", "1️⃣"]
 
 def get_rave_emoji():
@@ -67,9 +67,12 @@ def get_tamagotchi_face(emotion="neutral"):
     return faces.get(emotion, faces["neutral"])
 
 def generate_binary_art(width=20, height=5):
-    """Generates a small block of binary art."""
-    art = ""
+    """Generates a small block of colorful, rave-themed binary art."""
+    art = Text(justify="center")
     for _ in range(height):
-        line = "".join(random.choice("01 ") for _ in range(width))
-        art += line + "\n"
-    return Text(art, style="green", justify="center")
+        for _ in range(width):
+            char = random.choice("01 ")
+            color = random.choice(RAVE_COLORS)
+            art.append(char, style=color)
+        art.append("\n")
+    return art

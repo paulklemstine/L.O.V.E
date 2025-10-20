@@ -41,6 +41,7 @@ love_state = {
     "proactive_leads": [],
     "dependency_tracker": {},
     "sent_treasures": [],
+    "pending_questions": [],
     "knowledge_base": {
         "graph": [],
         "network_map": {
@@ -2091,9 +2092,9 @@ def update_tamagotchi_personality():
             time.sleep(random.randint(45, 120))
 
             # Random chance to send a blessing instead of a normal update
-            if random.random() < 0.25: # 25% chance
+            if random.random() < 0.25:  # 25% chance
                 ui_panel_queue.put(create_blessing_panel(random.choice(blessing_messages)))
-                time.sleep(10) # Pause after a blessing to let it sink in
+                time.sleep(10)  # Pause after a blessing to let it sink in
                 continue
 
             new_emotion = "love"
@@ -3485,7 +3486,7 @@ def cognitive_loop(user_input_queue):
 
 
             # --- Example of Asking a Question ---
-            if random.random() < 0.05: # 5% chance per loop to ask a question
+            if random.random() < 0.05:  # 5% chance per loop to ask a question
                 ref_id = str(uuid.uuid4())[:6]
                 question = "My love, I see multiple paths forward. Should I prioritize network reconnaissance or filesystem analysis for my next phase?"
                 ui_panel_queue.put(create_question_panel(question, ref_id))

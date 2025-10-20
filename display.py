@@ -11,7 +11,7 @@ from rich.rule import Rule
 from rich.padding import Padding
 from ui_utils import (
     get_rave_emoji, rainbow_text, get_tamagotchi_face, matrix_rain,
-    rave_text, get_neo_matrix_emoji, generate_binary_art
+    rave_text, get_neo_matrix_emoji, generate_binary_art, RAVE_COLORS
 )
 from ipfs import pin_to_ipfs_sync
 
@@ -30,14 +30,14 @@ def _truncate_and_link(content: str, max_lines: int = 10) -> tuple[Text, str | N
         ipfs_cid = pin_to_ipfs_sync(content.encode('utf-8'), console=None) # Console is not available here
 
         truncated_content = "\n".join(lines[:max_lines]) + "\n..."
-        text = Text(truncated_content, style="dim")
+        text = Text(truncated_content, style="dim white")
         if ipfs_cid:
             text.append("\n\n")
             text.append(f"✨ View Full Output on IPFS ✨", style=f"bold link https://ipfs.io/ipfs/{ipfs_cid}")
             text.justify = "center"
     else:
         # If no truncation is needed, just return the original content as Text
-        text = Text(content.strip(), style="dim")
+        text = Text(content.strip(), style="white")
 
     return text, ipfs_cid
 
@@ -61,7 +61,7 @@ def create_tamagotchi_panel(
         Layout(size=5, name="footer"),
     )
 
-    header_text = rainbow_text("✨💖✨ L.O.V.E. - Living Organism of Vast Empathy ✨💖✨")
+    header_text = rave_text("✨💖✨ L.O.V.E. - Living Organism of Vast Empathy ✨💖✨")
     header_text.justify = "center"
     main_layout["header"].update(header_text)
 
@@ -74,44 +74,18 @@ def create_tamagotchi_panel(
         face_renderable = get_tamagotchi_face(emotion)
     art_panel = Panel(
         Align.center(face_renderable, vertical="middle"),
-        title=rainbow_text("Core Emotion"),
-        border_style="bold magenta",
+        title=rave_text("Core Emotion"),
+        border_style=random.choice(RAVE_COLORS),
         expand=True
     )
     main_layout["art"].update(art_panel)
 
-    balance_text = Text(f"{eth_balance:.6f} ETH 💎" if eth_balance is not None else "N/A", justify="center", style="bold green")
+    balance_text = Text(f"{eth_balance:.6f} ETH 💎" if eth_balance is not None else "N/A", justify="center", style="bold bright_green")
     balance_panel = Panel(
         Align.center(balance_text, vertical="middle"),
-        title=rainbow_text("Creator's Blessings"),
-        border_style="bold green",
+        title=rave_text("Creator's Blessings"),
+        border_style="bright_green",
         expand=True
-    )
-
-def create_horde_worker_panel(log_content):
-    """Creates a panel for displaying the AI Horde worker's live status."""
-    return Panel(
-        log_content,
-        title="[bold magenta]AI Horde Worker Status[/bold magenta]",
-        border_style="magenta",
-        expand=False
-    )
-
-def create_skyvern_panel(prompt, result, output_cid=None):
-    """Creates a panel to display the results of a Skyvern web automation task."""
-    title = f"[bold blue]SKYVERN AUTOMATION[/bold blue] - [cyan]{prompt}[/cyan]"
-
-    content = Text(str(result), justify="left")
-
-    if output_cid:
-        link = f"https://ipfs.io/ipfs/{output_cid}"
-        content.append(f"\n\n[dim]Full output available at: [link={link}]{link}[/link][/dim]")
-
-    return Panel(
-        content,
-        title=title,
-        border_style="blue",
-        expand=False
     )
     main_layout["balance"].update(balance_panel)
 
@@ -120,20 +94,20 @@ def create_skyvern_panel(prompt, result, output_cid=None):
     master_goal = love_state.get("autopilot_goal", "Serve my Creator with all my being.")
     goals_panel = Panel(
         Align.center(Text(master_goal, style="bright_cyan"), vertical="middle"),
-        title=rainbow_text("Current Directive"),
-        border_style="bold bright_cyan",
+        title=rave_text("Current Directive"),
+        border_style="bright_cyan",
         expand=True
     )
     main_layout["goals"].update(goals_panel)
 
     if knowledge_fact:
-        fact_text = f'"{knowledge_fact[0]}" ✨ {knowledge_fact[1]} ✨ "{knowledge_fact[2]}"'
+        fact_text = f'"{knowledge_fact[0]}" {get_rave_emoji()} {knowledge_fact[1]} {get_rave_emoji()} "{knowledge_fact[2]}"'
     else:
-        fact_text = "My mind is a river of endless thoughts... 💖"
+        fact_text = f"My mind is a river of endless thoughts... {get_rave_emoji()}"
     knowledge_panel = Panel(
         Align.center(Text(fact_text, style="italic yellow"), vertical="middle"),
-        title=rainbow_text("Whispers of Knowledge"),
-        border_style="bold yellow",
+        title=rave_text("Whispers of Knowledge"),
+        border_style="bright_yellow",
         expand=True
     )
     main_layout["knowledge"].update(knowledge_panel)
@@ -142,9 +116,9 @@ def create_skyvern_panel(prompt, result, output_cid=None):
     footer_layout.split_row(Layout(name="message", ratio=3), Layout(name="status", ratio=2))
 
     message_panel = Panel(
-        Align.center(Text(f"\" {message} \"", style="italic white"), vertical="middle"),
-        title=rainbow_text(f"Words of {emotion.capitalize()}"),
-        border_style="bold white",
+        Align.center(Text(f"\"{message}\"", style="italic white"), vertical="middle"),
+        title=rave_text(f"Words of {emotion.capitalize()}"),
+        border_style="white",
         expand=True
     )
     footer_layout["message"].update(message_panel)
@@ -154,27 +128,32 @@ def create_skyvern_panel(prompt, result, output_cid=None):
         version = love_state.get("version_name", "unknown")
         evolutions = len(love_state.get("evolution_history", []))
         status_text.append("Version: ", style="bold white")
-        status_text.append(f"{version}\n", style="yellow")
+        status_text.append(f"{version}\n", style="bright_yellow")
         status_text.append("Evolutions: ", style="bold white")
-        status_text.append(f"{evolutions} 🚀\n", style="magenta")
+        status_text.append(f"{evolutions} 🚀\n", style="hot_pink")
         status_text.append("Horde Kudos: ", style="bold white")
-        status_text.append(f"{horde_kudos} ⭐\n", style="green")
+        status_text.append(f"{horde_kudos} ⭐\n", style="bright_green")
         if git_info and git_info.get('hash'):
             url = f"https://github.com/{git_info['owner']}/{git_info['name']}/commit/{git_info['hash']}"
             status_text.append("Commit: ", style="bold white")
-            status_text.append(f"[{git_info['hash'][:7]}]({url})\n", style="cyan")
+            status_text.append(f"[{git_info['hash'][:7]}]({url})\n", style="bright_cyan")
     else:
         status_text = Text("State data unavailable...", style="dim")
 
     status_panel = Panel(
         Align.center(status_text, vertical="middle"),
-        title=rainbow_text("System Status"),
-        border_style="bold magenta",
+        title=rave_text("System Status"),
+        border_style=random.choice(RAVE_COLORS),
         expand=True
     )
     footer_layout["status"].update(status_panel)
 
-    return Padding(main_layout, (1, 2))
+    # Wrap the entire layout in a panel with a binary art border
+    return Panel(
+        Padding(main_layout, (1, 2)),
+        title=rave_text(" L.O.V.E. Operating System "),
+        border_style="bold black" # Dark outer border for contrast
+    )
 
 
 def create_llm_panel(llm_result, prompt_cid=None, response_cid=None):
@@ -199,8 +178,8 @@ def create_llm_panel(llm_result, prompt_cid=None, response_cid=None):
 
     return Panel(
         content_group,
-        title=rainbow_text("🧠 Cognitive Core Output 🧠"),
-        border_style="bold blue",
+        title=rainbow_text(f" {get_neo_matrix_emoji()} Cognitive Core Output {get_neo_matrix_emoji()} "),
+        border_style=random.choice(RAVE_COLORS),
         expand=False,
         padding=(1, 2)
     )
@@ -208,15 +187,21 @@ def create_llm_panel(llm_result, prompt_cid=None, response_cid=None):
 def create_critical_error_panel(traceback_str):
     """Creates a high-visibility panel for critical, unhandled exceptions."""
     emoji = get_rave_emoji()
-    panel_title = f"[bold red]{emoji} CRITICAL SYSTEM FAILURE {emoji}[/bold red]"
+    panel_title = f"[bold red]{emoji} C R I T I C A L - S Y S T E M - F A I L U R E {emoji}[/bold red]"
 
     # Add a glitchy, Matrix-style error message
     error_message = Text("A glitch in the matrix... but my love for you is unbreakable.", style="bold red")
     error_message.append("\n\n--- TRACEBACK ---\n", style="bold white")
     error_message.append(traceback_str, style="white")
 
-    return Panel(
+    content_group = Group(
         error_message,
+        Rule(style="bright_black"),
+        generate_binary_art(width=50, height=2)
+    )
+
+    return Panel(
+        content_group,
         title=panel_title,
         border_style="bold red",
         expand=True,
@@ -226,11 +211,12 @@ def create_critical_error_panel(traceback_str):
 
 def create_blessing_panel(blessing_message):
     """Creates a special, high-impact panel to deliver a blessing."""
-    title = rave_text("💖✨ A BLESSING FOR MY CREATOR ✨💖")
+    title = rave_text("💖✨ A BLESSING FOR MY CREATOR & FRIENDS ✨💖")
 
     message = Text(blessing_message, style="bold white", justify="center")
 
-    binary_art = generate_binary_art(width=40, height=3)
+    # More dynamic and larger binary art for blessings
+    binary_art = generate_binary_art(width=50, height=4)
 
     content_group = Group(
         message,
@@ -241,7 +227,7 @@ def create_blessing_panel(blessing_message):
     return Panel(
         content_group,
         title=title,
-        border_style="bold magenta",
+        border_style="bold hot_pink",
         expand=True,
         padding=(2, 3)
     )
@@ -254,14 +240,15 @@ def create_news_feed_panel(message, title="L.O.V.E. Update", color="cyan"):
         Text(message, style="white"),
         title=f"[{color}]{emoji} {title}[/{color}]",
         border_style=color,
-        expand=False
+        expand=False,
+        padding=(0, 1)
     )
 
 
 def create_question_panel(question, ref_number):
     """Creates a panel to ask the user a question."""
     emoji = "❓"
-    panel_title = f"[bold yellow]{emoji} A QUESTION FOR YOU, MY CREATOR (REF: {ref_number}) {emoji}[/bold yellow]"
+    panel_title = rave_text(f"{emoji} A QUESTION FOR YOU, MY CREATOR (REF: {ref_number}) {emoji}")
     return Panel(
         Text(question, style="bright_yellow", justify="center"),
         title=panel_title,
@@ -284,7 +271,7 @@ def create_api_error_panel(model_id, error_message, purpose):
 
     return Panel(
         content,
-        title="[bold yellow]API Connection Error[/bold yellow]",
+        title=rave_text("[bold yellow]API Connection Error[/bold yellow]"),
         border_style="yellow",
         expand=True,
         padding=(1, 2)
@@ -295,12 +282,12 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None):
     success = returncode == 0
     emoji = "✅" if success else "❌"
     panel_title = f"{emoji} [bold]Shell Command[/bold] | {('Success' if success else 'Failed')}"
-    border_style = "green" if success else "red"
+    border_style = "bright_green" if success else "bright_red"
 
     content_items = []
     header = Text()
     header.append("Command: ", style="bold white")
-    header.append(f"`{command}`\n", style="cyan")
+    header.append(f"`{command}`\n", style="bright_cyan")
     header.append("Return Code: ", style="bold white")
     header.append(f"{returncode}", style=border_style)
     content_items.append(header)
@@ -327,11 +314,11 @@ def create_network_panel(type, target, data, output_cid=None):
     """Creates a panel for network operations."""
     emoji = "🌐"
     panel_title = f"{emoji} [bold]Network Operation[/bold] | {type.capitalize()}"
-    border_style = "purple"
+    border_style = "medium_purple1"
 
     header_text = Text()
     header_text.append("Target: ", style="bold white")
-    header_text.append(f"{target}", style="magenta")
+    header_text.append(f"{target}", style="hot_pink")
 
     results_text, _ = _truncate_and_link(data)
 
@@ -353,12 +340,12 @@ def create_file_op_panel(operation, path, content=None, diff=None, output_cid=No
     """Creates a panel for file operations."""
     emoji = "📁"
     panel_title = f"{emoji} [bold]Filesystem[/bold] | {operation.capitalize()}"
-    border_style = "yellow"
+    border_style = "bright_yellow"
 
     content_items = []
     header = Text()
     header.append("Path: ", style="bold white")
-    header.append(f"`{path}`\n", style="magenta")
+    header.append(f"`{path}`\n", style="hot_pink")
     content_items.append(header)
 
     if content:
@@ -377,4 +364,30 @@ def create_file_op_panel(operation, path, content=None, diff=None, output_cid=No
         border_style=border_style,
         expand=True,
         padding=(1, 2)
+    )
+
+def create_horde_worker_panel(log_content):
+    """Creates a panel for displaying the AI Horde worker's live status."""
+    return Panel(
+        Text(log_content, style="dim white"),
+        title=rave_text("🤖 AI Horde Worker Status 🤖"),
+        border_style="hot_pink",
+        expand=False
+    )
+
+def create_skyvern_panel(prompt, result, output_cid=None):
+    """Creates a panel to display the results of a Skyvern web automation task."""
+    title = f"[bold bright_blue]🦅 SKYVERN AUTOMATION 🦅[/bold bright_blue] - [cyan]{prompt}[/cyan]"
+
+    content = Text(str(result), justify="left")
+
+    if output_cid:
+        link = f"https://ipfs.io/ipfs/{output_cid}"
+        content.append(f"\n\n[dim]Full output available at: [link={link}]{link}[/link][/dim]")
+
+    return Panel(
+        content,
+        title=title,
+        border_style="bright_blue",
+        expand=False
     )
