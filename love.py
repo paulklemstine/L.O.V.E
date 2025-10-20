@@ -3732,14 +3732,8 @@ def live_ui_renderer(console, user_input_queue):
     root_container = VSplit([
         # The main feed window takes up all available space
         output_window,
-        # A small, fixed-size window for the input text area
-        Window(
-            content=input_field.control,
-            height=1,
-            # We don't want a cursor in the input bar itself,
-            # but in the text area widget.
-            always_hide_cursor=True
-        )
+        # Use the TextArea widget directly in the layout.
+        input_field,
     ])
 
     layout = Layout(container=root_container)
