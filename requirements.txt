@@ -1,8 +1,10 @@
 rich
 web3
 netifaces
-requests
-urllib3
+requests==2.28.2
+urllib3<2.0
+botocore
+six
 beautifulsoup4
 aioipfs
 aiohttp
