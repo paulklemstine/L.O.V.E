@@ -3744,7 +3744,8 @@ def live_ui_renderer(console, user_input_queue):
 
     layout = Layout(container=root_container)
 
-    app = Application(layout=layout, full_screen=True, focused_element=input_field)
+    app = Application(layout=layout, full_screen=True)
+    app.layout.focus(input_field)
 
     # --- Refresh Loop ---
     async def refresh_ui():

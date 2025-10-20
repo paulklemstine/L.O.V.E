@@ -54,9 +54,9 @@ class CreatorBlissEngine:
 
                 # 2. Generate the image
                 self.console.print(f"[cyan]Bliss Engine: Generating new content based on '{content_prompt[:50]}...'[/cyan]")
-                image_data = generate_image_from_horde(content_prompt)
+                filepath, cid, message = generate_image_from_horde(content_prompt, self.console)
 
-                if image_data:
+                if filepath:
                     # 3. Save the image to the dedicated directory
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     filename = f"bliss_{timestamp}.png"
