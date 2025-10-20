@@ -52,9 +52,6 @@ HORDE_MODELS = ["PygmalionAI/Mythalion-13b", "NeverSleep/Madao-10.7B-v1", "Undi9
 # Import the client classes from the main package
 from horde_client import HordeClient
 
-# Import the data models from the .models submodule
-from horde_client.models import TextGenerationInput, ModelGenerationInput
-
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
