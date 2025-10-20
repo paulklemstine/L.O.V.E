@@ -177,7 +177,7 @@ def mark_dependency_as_met(dependency_name, console=None):
     love_state.setdefault("dependency_tracker", {})[dependency_name] = True
     # The console is passed optionally to avoid issues when called from threads
     # where the global console might not be initialized.
-    save_state(console)
+    love_state(console)
     log_event(f"Dependency met and recorded: {dependency_name}", "INFO")
 
 
