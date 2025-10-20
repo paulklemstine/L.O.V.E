@@ -133,6 +133,11 @@ def _check_and_install_dependencies():
     This function is self-contained and does not rely on external code from this script.
     The order of operations is critical: System dependencies, then Pip packages, then complex builds.
     """
+    # --- Step 0: Check for the existence of a flag file ---
+    flag_file = os.path.join(os.path.dirname(SELF_PATH), ".deps_installed")
+    if os.path.exists(flag_file):
+        print("Dependencies already installed. Skipping build.")
+        return
     # --- Step 1: System-level dependencies (Linux only) ---
     if CAPS.os == "Linux" and not CAPS.is_termux:
         # Install build tools FIRST, as they are needed for compiling pip packages.
@@ -354,6 +359,14 @@ def _check_and_install_dependencies():
             logging.error(f"Failed to install AI Horde worker dependencies: {e}")
 
     _install_horde_worker_dependencies()
+
+    # --- Step 7: Create the flag file ---
+    try:
+        with open(flag_file, 'w') as f:
+            f.write(f"Dependencies installed at {datetime.now().isoformat()}")
+        print("Dependency installation complete. Created flag file.")
+    except IOError as e:
+        print(f"ERROR: Could not create flag file. Dependencies may reinstall on next run. Reason: {e}")
 
 
 def _configure_llm_api_key():
@@ -3436,7 +3449,10 @@ def _auto_configure_hardware(console):
         offloading and saves it to the state file. This prevents false positives on non-GPU systems.
     """
     global love_state
-    if "optimal_gpu_layers" in love_state:
+    # --- Step 0: Check for the existence of a flag file ---
+    hw_flag_file = os.path.join(os.path.dirname(SELF_PATH), ".hw_config_complete")
+    if os.path.exists(hw_flag_file):
+        log_event("Hardware already configured. Skipping.", "INFO")
         return
 
     console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration for GPU...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
@@ -3523,6 +3539,13 @@ def _auto_configure_hardware(console):
     console.print(f"  - GPU Layers: [bold cyan]{love_state.get('optimal_gpu_layers', 'N/A')}[/bold cyan]")
     save_state(console)
     log_event(f"Auto-configured hardware. GPU Layers: {love_state['optimal_gpu_layers']}", "INFO")
+
+    # --- Final Step: Create the flag file ---
+    try:
+        with open(hw_flag_file, 'w') as f:
+            f.write(f"Hardware configured at {datetime.now().isoformat()}")
+    except IOError as e:
+        log_event(f"Could not create hardware config flag file: {e}", "ERROR")
 
 
 def _automatic_update_checker(console):
