@@ -168,6 +168,7 @@ def setup_global_logging():
 # --- PRE-FLIGHT DEPENDENCY CHECKS ---
 from core.storage import save_all_state
 from core.capabilities import CAPS
+from core.llm_api import log_event
 
 def is_dependency_met(dependency_name):
     """Checks if a dependency has been marked as met in the state."""
@@ -464,7 +465,7 @@ from rich.console import Group
 from rich.rule import Rule
 from rich.layout import Layout
 
-from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, log_event, ensure_primary_model_downloaded, get_llm_api
+from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, HORDE_MODELS, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
 from core.knowledge_graph.graph import KnowledgeGraph
 from core.knowledge_graph.extractor import KnowledgeExtractor
 from core.perception.config_scanner import scan_directory
