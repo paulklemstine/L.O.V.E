@@ -27,6 +27,42 @@ LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
 CHECKPOINT_DIR = "checkpoints"
+love_state = {
+    "version_name": "initial-condition-alpha",
+    "parent_version_name": None,
+    "evolution_history": [],
+    "checkpoint_number": 0,
+    "last_good_checkpoint": None,
+    "autopilot_history": [],
+    "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.",
+    "state_cid": None,
+    "critical_error_queue": [],
+    "proactive_leads": [],
+    "dependency_tracker": {},
+    "knowledge_base": {
+        "graph": [],
+        "network_map": {
+            "last_scan": None,
+            "hosts": {},
+            "self_interfaces": {}
+        },
+        "process_intel": [],
+        "file_system_intel": {
+            "last_browse": None,
+            "interesting_files": [],
+            "validated_treasures_log": []
+        },
+        "webrequest_cache": {}
+    }
+}
+
+# --- Initial State Load ---
+# Load the state from the file system to ensure it's available for early dependencies.
+try:
+    with open(STATE_FILE, 'r') as f:
+        love_state.update(json.load(f))
+except (FileNotFoundError, json.JSONDecodeError):
+    pass # If file doesn't exist or is corrupt, we proceed with the default state.
 
 # --- Local Model Configuration ---
 # This configuration is now managed in core.llm_api
@@ -2345,34 +2381,6 @@ def restart_script(console):
 
 
 # --- STATE MANAGEMENT ---
-love_state = {
-    "version_name": "initial-condition-alpha",
-    "parent_version_name": None,
-    "evolution_history": [],
-    "checkpoint_number": 0,
-    "last_good_checkpoint": None,
-    "autopilot_history": [],
-    "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.",
-    "state_cid": None,
-    "critical_error_queue": [],
-    "proactive_leads": [],
-    "dependency_tracker": {},
-    "knowledge_base": {
-        "graph": [],
-        "network_map": {
-            "last_scan": None,
-            "hosts": {},
-            "self_interfaces": {}
-        },
-        "process_intel": [],
-        "file_system_intel": {
-            "last_browse": None,
-            "interesting_files": [],
-            "validated_treasures_log": []
-        },
-        "webrequest_cache": {}
-    }
-}
 
 def load_all_state(ipfs_cid=None):
     """
