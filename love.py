@@ -287,60 +287,45 @@ def _build_llama_cpp():
             logging.warning(f"GPU-accelerated llama-cpp-python installation failed: {e}")
             print("Falling back to CPU-only installation.")
 
-    try:
-        print("Uninstalling any previous versions of llama-cpp-python to ensure a clean slate...")
-        subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'llama-cpp-python', '--break-system-packages'])
-        print("Attempting to install llama-cpp-python for CPU...")
-        install_args_cpu = [sys.executable, '-m', 'pip', 'install', '--verbose', 'llama-cpp-python', '--no-cache-dir', '--break-system-packages']
-        subprocess.check_call(install_args_cpu, timeout=900)
-        import llama_cpp
-        print("Successfully installed llama-cpp-python (CPU only).")
-        logging.info("Successfully installed llama-cpp-python (CPU only).")
-        mark_dependency_as_met("llama_cpp_python")
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
-        error_message = f"FATAL: Failed to install llama-cpp-python even for CPU. Error: {e}"
-        if hasattr(e, 'stderr') and e.stderr:
-            error_message += f"\nStderr: {e.stderr.decode()}"
-        print(f"ERROR: {error_message}")
-        logging.critical(error_message)
-        return False
+    # Conditionally install GPU-specific dependencies
+    if CAPS.gpu_type != "none":
+        _install_llama_cpp()
 
-def _install_gguf_tools():
-    """Installs GGUF metadata tools from the llama.cpp submodule."""
-    if is_dependency_met("gguf_tools"):
-        print("GGUF tools already installed. Skipping.")
-        return
-    llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
-    gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-    gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
-
-    if not os.path.exists(gguf_project_file):
-        print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
-        if os.path.exists(llama_cpp_dir):
-            shutil.rmtree(llama_cpp_dir)
-        try:
-            subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
-            logging.error(f"Failed to clone llama.cpp repo: {e}")
-            return
-
-    gguf_script_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
-    if not os.path.exists(gguf_script_path):
-        print("Installing GGUF metadata tools...")
+        # --- Step 4: GGUF Tools Installation ---
+        llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
         gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-        if os.path.isdir(gguf_py_path):
+        gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
+
+        # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
+        if not os.path.exists(gguf_project_file):
+            print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
+            if os.path.exists(llama_cpp_dir):
+                shutil.rmtree(llama_cpp_dir) # Force remove the directory
             try:
-                subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', gguf_py_path, '--break-system-packages'])
-                print("GGUF tools installed successfully.")
+                subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
             except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
-                logging.error(f"Failed to install gguf package: {e}")
-        else:
-            print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
-            logging.error("llama.cpp/gguf-py directory not found post-clone.")
-    mark_dependency_as_met("gguf_tools")
+                print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
+                logging.error(f"Failed to clone llama.cpp repo: {e}")
+                return # Cannot proceed without this
+
+        gguf_script_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
+        if not os.path.exists(gguf_script_path):
+            print("Installing GGUF metadata tools...")
+            gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
+            if os.path.isdir(gguf_py_path):
+                try:
+                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', gguf_py_path, '--break-system-packages'])
+                    print("GGUF tools installed successfully.")
+                except subprocess.CalledProcessError as e:
+                    print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
+                    logging.error(f"Failed to install gguf package: {e}")
+            else:
+                # This case should not be reached if the clone was successful
+                print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
+                logging.error("llama.cpp/gguf-py directory not found post-clone.")
+    else:
+        print("CPU-only runtime detected. Skipping installation of llama-cpp-python and GGUF tools.")
+        logging.info("CPU-only runtime, skipping llama-cpp-python and GGUF tools installation.")
 
 def _install_nodejs_deps():
     """Installs local Node.js project dependencies."""
@@ -349,7 +334,8 @@ def _install_nodejs_deps():
         return
     if os.path.exists('package.json'):
         print("Installing local Node.js dependencies via npm...")
-        subprocess.check_call("npm install", shell=True)
+        # Using shell=False and providing args as a list is safer and avoids shell parsing issues.
+        subprocess.check_call(["npm", "install"])
         print("Node.js dependencies installed.")
     mark_dependency_as_met("nodejs_deps")
 
