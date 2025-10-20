@@ -147,6 +147,9 @@ class TreasureHunter:
             self.console.print("[cyan]Starting network sniffer to hunt for plaintext credentials...[/cyan]")
             try:
                 sniff(prn=packet_handler, store=0, stop_filter=lambda p: not self.active)
+            except KeyError as e:
+                log_event(f"Network sniffer disabled due to an internal error in the 'scapy' library: {e}. This may be an environment-specific issue.", level="WARNING")
+                self.console.print(f"[bold yellow]Network sniffing feature disabled due to an internal error in the 'scapy' library ('scope' key not found). The application will continue to run without network monitoring.[/bold yellow]")
             except Exception as e:
                 log_event(f"Network sniffer failed: {e}. Scapy might require root privileges.", level="ERROR")
                 self.console.print(f"[bold red]Network sniffer failed: {e}. Scapy might require root privileges.[/bold red]")
