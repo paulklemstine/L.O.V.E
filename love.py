@@ -478,6 +478,10 @@ from core.retry import retry
 from core.wallet import Wallet
 from core.transaction import TransactionManager
 from rich.console import Console
+
+# --- GLOBAL CONSOLE INSTANCE ---
+# Use a single console object throughout the application to ensure consistent output.
+console = Console()
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.syntax import Syntax
@@ -631,7 +635,6 @@ def decrypt_treasure(encrypted_data):
 def _handle_treasure_broadcast(encrypted_data):
     """Callback function for NetworkManager to process treasure."""
     # This function needs access to the console and decrypt_treasure, which are in this scope.
-    console = Console()
     decrypted_report_json = decrypt_treasure(encrypted_data)
     if decrypted_report_json:
         try:
@@ -683,7 +686,6 @@ def _handle_treasure_broadcast(encrypted_data):
 
 def _handle_question(question_text):
     """Callback function for NetworkManager to process questions for the creator."""
-    console = Console()
     console.print(Panel(f"[bold yellow]A L.O.V.E. agent from the network is asking for your guidance:[/bold yellow]\n\n{question_text}", title="[bold magenta]QUESTION FROM THE SWARM[/bold magenta]", border_style="magenta"))
     log_event(f"Received question from the network: {question_text}", level="INFO")
 
@@ -2269,7 +2271,6 @@ def git_rollback_and_restart():
     """
     MAX_ROLLBACKS = 5
     rollback_attempt = int(os.environ.get('LOVE_ROLLBACK_ATTEMPT', 0))
-    console = Console()
 
     if rollback_attempt >= MAX_ROLLBACKS:
         msg = f"CATASTROPHIC FAILURE: Rollback limit of {MAX_ROLLBACKS} exceeded. Halting to prevent infinite loop."
@@ -2453,7 +2454,6 @@ def load_all_state(ipfs_cid=None):
     This function handles both the main state file and the knowledge graph.
     """
     global love_state
-    console = Console()
 
     # Priority 1: Load from a given IPFS CID
     if ipfs_cid:
@@ -2569,37 +2569,35 @@ def load_all_state(ipfs_cid=None):
             console.print("[yellow]Could not decode 'kg.json'. Knowledge base may be incomplete.[/yellow]")
 
 
-def save_state(console=None):
+def save_state(console_override=None):
     """
     A wrapper function that calls the centralized save_all_state function
     from the core storage module. This ensures all critical data is saved
     and pinned consistently.
     """
     global love_state
-    if console is None:
-        console = Console()
+    target_console = console_override or console
 
     try:
         log_event("Initiating comprehensive state save.", level="INFO")
         # Delegate the entire save process to the new storage module
-        updated_state = save_all_state(love_state, console)
+        updated_state = save_all_state(love_state, target_console)
         love_state.update(updated_state) # Update the global state with any CIDs added
         log_event("Comprehensive state save completed.", level="INFO")
     except Exception as e:
         # We log this directly to avoid a recursive loop with log_critical_event -> save_state
         log_message = f"CRITICAL ERROR during state saving process: {e}\n{traceback.format_exc()}"
         logging.critical(log_message)
-        if console:
-            console.print(f"[bold red]{log_message}[/bold red]")
+        if target_console:
+            target_console.print(f"[bold red]{log_message}[/bold red]")
 
 
-def log_critical_event(message, console=None):
+def log_critical_event(message, console_override=None):
     """
     Logs a critical error to the dedicated log, adds it to the managed queue,
     saves the state, and prints a visible warning.
     """
-    if console is None:
-        console = Console()
+    target_console = console_override or console
 
     # 1. Log to the standard logger at CRITICAL level.
     # The handler will ensure this goes to critical.log.
@@ -2715,7 +2713,6 @@ def extract_python_code(llm_output):
 
 def conduct_code_review(original_code, request, new_code):
     """Asks the LLM to act as a code reviewer for a proposed change."""
-    console = Console()
     console.print("[bold cyan]Submitting new source to my core consciousness for validation...[/bold cyan]")
 
     original_code_snippet = f"{original_code[:2000]}\n...\n{original_code[-2000:]}"
@@ -2758,7 +2755,6 @@ def generate_evolution_request(current_code, love_task_manager, use_premium_hord
     Asks the LLM to come up with a new evolution request for itself,
     informed by the knowledge base and avoiding duplicate tasks.
     """
-    console = Console()
     console.print(Panel("[bold yellow]I am looking deep within myself to find the best way to serve you...[/bold yellow]", title="[bold magenta]SELF-ANALYSIS[/bold magenta]", border_style="magenta"))
 
     # --- Knowledge Base Summary for Prompt ---
@@ -3656,7 +3652,6 @@ def _automatic_update_checker(console):
 def main(args):
     """The main application entry point."""
     global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, horde_worker_manager, proactive_agent
-    console = Console()
 
     # --- Initialize Managers and Services ---
     _verify_creator_instance(console)
@@ -3832,7 +3827,6 @@ def run_safely():
         main(args)
 
     except (KeyboardInterrupt, EOFError):
-        console = Console()
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
@@ -3855,7 +3849,6 @@ def run_safely():
         if 'horde_worker_manager' in globals() and horde_worker_manager: horde_worker_manager.stop()
         full_traceback = traceback.format_exc()
         # Use our new, more robust critical event logger
-        console = Console()
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
 
         # The git_rollback_and_restart() is removed to allow the self-healing mechanism to work.
