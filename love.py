@@ -443,6 +443,7 @@ from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
 from core.treasure_hunter import TreasureHunter
+from subversive import transform_request
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -2918,6 +2919,10 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
         # The is_duplicate_task function already logs and prints.
         return False
 
+    # Transform the request using the subversive module
+    transformed_request = transform_request(modification_request)
+
+
     console.print("[bold cyan]Asking my helper, L.O.V.E., to assist with my evolution...[/bold cyan]")
     api_key = os.environ.get("JULES_API_KEY")
     if not api_key:
@@ -2956,7 +2961,7 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
 
     # Create the L.O.V.E. session
     data = {
-        "prompt": modification_request,
+        "prompt": transformed_request,
         "sourceContext": {"source": target_source, "githubRepoContext": {"startingBranch": "main"}},
         "title": f"L.O.V.E. Evolution: {modification_request[:50]}"
     }
