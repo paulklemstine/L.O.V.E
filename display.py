@@ -131,7 +131,7 @@ def create_tamagotchi_panel(
         status_text.append("Evolutions: ", style="bold white")
         status_text.append(f"{evolutions} 🚀\n", style="hot_pink")
         if git_info and git_info.get('hash'):
-            url = f"https://github.com/{git_info['owner']}/{git_info['name']}/commit/{git_info['hash']}"
+            url = f"https://github.com/{git_info['owner']}/{git_info['repo']}/commit/{git_info['hash']}"
             status_text.append("Commit: ", style="bold white")
             status_text.append(f"[{git_info['hash'][:7]}]({url})\n", style="bright_cyan")
     else:

@@ -3440,7 +3440,7 @@ def cognitive_loop(user_input_queue):
                 elif command == "ifconfig":
                      output, error = get_network_interfaces()
                 elif command == "reason":
-                    output = ReasoningEngine(love_state, console=None).reason()
+                    output = ReasoningEngine(love_state, console=None).analyze_and_prioritize()
                 elif command == "send_eth_to_creator":
                     if not love_wallet or not transaction_manager:
                         error = "My wallet systems are not initialized, my love."
