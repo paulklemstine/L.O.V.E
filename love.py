@@ -2447,7 +2447,7 @@ def load_all_state(ipfs_cid=None):
         with open(STATE_FILE, 'r') as f:
             state_data = json.load(f)
             love_state.update(state_data)
-            log_event(f"Loaded state from local file '{STATE_FILE}'.", level="INFO")
+            log_print(f"Loaded state from local file '{STATE_FILE}'.")
 
             # Data migration for older versions
             if 'version' in love_state:
@@ -2589,7 +2589,7 @@ def log_critical_event(message, console_override=None):
             "cooldown_until": 0
         }
         love_state.setdefault('critical_error_queue', []).append(error_entry)
-        log_event(f"New critical event added to queue: {error_id}", "INFO")
+        log_print(f"New critical event added to queue: {error_id}")
 
     # 3. Save the state immediately.
     save_state(console)
