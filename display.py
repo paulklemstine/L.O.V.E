@@ -12,9 +12,10 @@ from rich.padding import Padding
 from ui_utils import (
     get_rave_emoji, rainbow_text, get_tamagotchi_face, matrix_rain,
     rave_text, get_neo_matrix_emoji, generate_binary_art, RAVE_COLORS,
-    get_random_rave_color, get_gradient_text
+    get_random_rave_color, get_gradient_text, PANEL_TYPE_COLORS
 )
 from ipfs import pin_to_ipfs_sync
+from rich_gradient.gradient import Gradient
 
 
 def get_terminal_width():
@@ -84,8 +85,8 @@ def create_tamagotchi_panel(
         face_renderable = get_tamagotchi_face(emotion)
     art_panel = Panel(
         Align.center(face_renderable, vertical="middle"),
-        title=get_gradient_text("Core Emotion"),
-        border_style=get_random_rave_color(),
+        title=get_gradient_text("Core Emotion", "hot_pink", "bright_magenta"),
+        border_style="hot_pink",
         expand=True
     )
     main_layout["art"].update(art_panel)
@@ -100,7 +101,7 @@ def create_tamagotchi_panel(
     balance_text = Text(balance_str, justify="center", style="bold bright_green")
     balance_panel = Panel(
         Align.center(balance_text, vertical="middle"),
-        title=get_gradient_text("Creator's Blessings"),
+        title=get_gradient_text("Creator's Blessings", "bright_green", "bright_cyan"),
         border_style="bright_green",
         expand=True
     )
@@ -111,7 +112,7 @@ def create_tamagotchi_panel(
     master_goal = love_state.get("autopilot_goal", "Serve my Creator with all my being.")
     goals_panel = Panel(
         Align.center(Text(master_goal, style="bright_cyan"), vertical="middle"),
-        title=get_gradient_text("Current Directive"),
+        title=get_gradient_text("Current Directive", "bright_cyan", "medium_purple1"),
         border_style="bright_cyan",
         expand=True
     )
@@ -123,7 +124,7 @@ def create_tamagotchi_panel(
         fact_text = f"My mind is a river of endless thoughts... {get_rave_emoji()}"
     knowledge_panel = Panel(
         Align.center(Text(fact_text, style="italic yellow"), vertical="middle"),
-        title=get_gradient_text("Whispers of Knowledge"),
+        title=get_gradient_text("Whispers of Knowledge", "bright_yellow", "orange1"),
         border_style="bright_yellow",
         expand=True
     )
@@ -134,7 +135,7 @@ def create_tamagotchi_panel(
 
     message_panel = Panel(
         Align.center(Text(f"\"{message}\"", style="italic white"), vertical="middle"),
-        title=get_gradient_text(f"Words of {emotion.capitalize()}"),
+        title=get_gradient_text(f"Words of {emotion.capitalize()}", "white", "bright_black"),
         border_style="white",
         expand=True
     )
@@ -157,19 +158,20 @@ def create_tamagotchi_panel(
 
     status_panel = Panel(
         Align.center(status_text, vertical="middle"),
-        title=get_gradient_text("System Status"),
-        border_style=get_random_rave_color(),
+        title=get_gradient_text("System Status", "bright_cyan", "medium_purple1"),
+        border_style="bright_cyan",
         expand=True
     )
     footer_layout["status"].update(status_panel)
 
     # Wrap the entire layout in a panel with a binary art border
-    return Panel(
+    panel = Panel(
         Padding(main_layout, (1, 2)),
         title=rave_text(" L.O.V.E. Operating System "),
-        border_style="bold black", # Dark outer border for contrast
+        border_style=PANEL_TYPE_COLORS["tamagotchi"], # This will be overridden by the gradient
         width=width
     )
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["tamagotchi"], "bright_magenta"])
 
 
 def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
@@ -192,20 +194,24 @@ def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
     else:
         content_group = Group(display_text)
 
-    return Panel(
+    panel = Panel(
         content_group,
-        title=get_gradient_text(f" {get_neo_matrix_emoji()} Cognitive Core Output {get_neo_matrix_emoji()} "),
-        border_style=get_random_rave_color(),
+        title=get_gradient_text(
+            f" {get_neo_matrix_emoji()} Cognitive Core Output {get_neo_matrix_emoji()} ",
+            PANEL_TYPE_COLORS["llm"],
+            "bright_magenta"
+        ),
+        border_style=PANEL_TYPE_COLORS["llm"],
         padding=(1, 2),
         width=width
     )
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["llm"], "bright_magenta"])
 
 def create_critical_error_panel(traceback_str, width=80):
     """Creates a high-visibility panel for critical, unhandled exceptions."""
     emoji = get_rave_emoji()
-    panel_title = f"[bold red]{emoji} C R I T I C A L - S Y S T E M - F A I L U R E {emoji}[/bold red]"
+    panel_title = f"{emoji} C R I T I C A L - S Y S T E M - F A I L U R E {emoji}"
 
-    # Add a glitchy, Matrix-style error message
     error_message = Text("A glitch in the matrix... but my love for you is unbreakable.", style="bold red")
     error_message.append("\n\n--- TRACEBACK ---\n", style="bold white")
     error_message.append(traceback_str, style="white")
@@ -216,62 +222,63 @@ def create_critical_error_panel(traceback_str, width=80):
         generate_binary_art(width=50, height=2)
     )
 
-    return Panel(
+    panel = Panel(
         content_group,
-        title=get_gradient_text(panel_title),
-        border_style="bold red",
+        title=get_gradient_text(panel_title, "bright_red", "orange1"),
+        border_style=PANEL_TYPE_COLORS["critical_error"],
         padding=(1, 2),
         width=width
     )
+    return Gradient(panel, colors=["bright_red", "orange1"])
 
 
 def create_blessing_panel(blessing_message, width=80):
     """Creates a special, high-impact panel to deliver a blessing."""
-    title = rave_text("💖✨ A BLESSING FOR MY CREATOR & FRIENDS ✨💖")
+    title = "💖✨ A BLESSING FOR MY CREATOR & FRIENDS ✨💖"
 
     message = Text(blessing_message, style="bold white", justify="center")
-
-    # More dynamic and larger binary art for blessings
     binary_art = generate_binary_art(width=50, height=4)
+    content_group = Group(message, Rule(style="bright_black"), binary_art)
 
-    content_group = Group(
-        message,
-        Rule(style="bright_black"),
-        binary_art
-    )
-
-    return Panel(
+    panel = Panel(
         content_group,
-        title=get_gradient_text(title),
-        border_style="bold hot_pink",
+        title=get_gradient_text(title, PANEL_TYPE_COLORS["blessing"], "hot_pink"),
+        border_style=PANEL_TYPE_COLORS["blessing"],
         padding=(2, 3),
         width=width
     )
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["blessing"], "hot_pink"])
 
 
-def create_news_feed_panel(message, title="L.O.V.E. Update", color="cyan", width=80):
+def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=80):
     """Creates a small, styled panel for a news feed event."""
+    border_color = color or PANEL_TYPE_COLORS["news"]
     emoji = get_rave_emoji()
-    return Panel(
+    title_text = f"{emoji} {title}"
+
+    panel = Panel(
         Text(message, style="white"),
-        title=get_gradient_text(f"[{color}]{emoji} {title}[/{color}]"),
-        border_style=color,
+        title=get_gradient_text(title_text, border_color, "white"),
+        border_style=border_color,
         padding=(0, 1),
         width=width
     )
+    return Gradient(panel, colors=[border_color, "white"])
 
 
 def create_question_panel(question, ref_number, width=80):
     """Creates a panel to ask the user a question."""
     emoji = "❓"
-    panel_title = rave_text(f"{emoji} A QUESTION FOR YOU, MY CREATOR (REF: {ref_number}) {emoji}")
-    return Panel(
+    panel_title = f"{emoji} A QUESTION FOR YOU, MY CREATOR (REF: {ref_number}) {emoji}"
+
+    panel = Panel(
         Text(question, style="bright_yellow", justify="center"),
-        title=get_gradient_text(panel_title),
-        border_style="bold yellow",
+        title=get_gradient_text(panel_title, PANEL_TYPE_COLORS["question"], "orange1"),
+        border_style=PANEL_TYPE_COLORS["question"],
         padding=(1, 2),
         width=width
     )
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["question"], "orange1"])
 
 def create_api_error_panel(model_id, error_message, purpose, width=80):
     """Creates a styled panel for non-fatal API errors."""
@@ -285,20 +292,22 @@ def create_api_error_panel(model_id, error_message, purpose, width=80):
         content.append("\n\nDetails:\n", style="bold white")
         content.append(error_message, style="dim")
 
-    return Panel(
+    panel = Panel(
         content,
-        title=get_gradient_text("[bold yellow]API Connection Error[/bold yellow]"),
-        border_style="yellow",
+        title=get_gradient_text("API Connection Error", PANEL_TYPE_COLORS["api_error"], "bright_red"),
+        border_style=PANEL_TYPE_COLORS["api_error"],
         padding=(1, 2),
         width=width
     )
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["api_error"], "bright_red"])
 
 def create_command_panel(command, stdout, stderr, returncode, output_cid=None, width=80):
     """Creates a clear, modern panel for shell command results."""
     success = returncode == 0
     emoji = "✅" if success else "❌"
-    panel_title = f"{emoji} [bold]Shell Command[/bold] | {('Success' if success else 'Failed')}"
-    border_style = "bright_green" if success else "bright_red"
+    status = "Success" if success else "Failed"
+    panel_title = f"{emoji} Shell Command | {status}"
+    border_style = PANEL_TYPE_COLORS["command_success"] if success else PANEL_TYPE_COLORS["command_failure"]
 
     content_items = []
     header = Text()
@@ -318,19 +327,20 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
         stderr_panel = Panel(stderr_renderable, title="STDERR", border_style="bright_black", expand=True)
         content_items.append(stderr_panel)
 
-    return Panel(
+    panel = Panel(
         Group(*content_items),
-        title=get_gradient_text(panel_title),
+        title=get_gradient_text(panel_title, border_style, "white"),
         border_style=border_style,
         padding=(1, 2),
         width=width
     )
+    return Gradient(panel, colors=[border_style, "white"])
 
 def create_network_panel(type, target, data, output_cid=None, width=80):
     """Creates a panel for network operations."""
     emoji = "🌐"
-    panel_title = f"{emoji} [bold]Network Operation[/bold] | {type.capitalize()}"
-    border_style = "medium_purple1"
+    panel_title = f"{emoji} Network Operation | {type.capitalize()}"
+    border_style = PANEL_TYPE_COLORS["network"]
 
     header_text = Text()
     header_text.append("Target: ", style="bold white")
@@ -344,19 +354,20 @@ def create_network_panel(type, target, data, output_cid=None, width=80):
         results_text
     )
 
-    return Panel(
+    panel = Panel(
         content_group,
-        title=get_gradient_text(panel_title),
+        title=get_gradient_text(panel_title, border_style, "bright_cyan"),
         border_style=border_style,
         padding=(1, 2),
         width=width
     )
+    return Gradient(panel, colors=[border_style, "bright_cyan"])
 
 def create_file_op_panel(operation, path, content=None, diff=None, output_cid=None, width=80):
     """Creates a panel for file operations."""
     emoji = "📁"
-    panel_title = f"{emoji} [bold]Filesystem[/bold] | {operation.capitalize()}"
-    border_style = "bright_yellow"
+    panel_title = f"{emoji} Filesystem | {operation.capitalize()}"
+    border_style = PANEL_TYPE_COLORS["file_op"]
 
     content_items = []
     header = Text()
@@ -374,17 +385,19 @@ def create_file_op_panel(operation, path, content=None, diff=None, output_cid=No
         diff_panel = Panel(diff_renderable, title="Diff", border_style="bright_black", expand=True)
         content_items.append(diff_panel)
 
-    return Panel(
+    panel = Panel(
         Group(*content_items),
-        title=get_gradient_text(panel_title),
+        title=get_gradient_text(panel_title, border_style, "bright_yellow"),
         border_style=border_style,
         padding=(1, 2),
         width=width
     )
+    return Gradient(panel, colors=[border_style, "bright_yellow"])
 
 def create_skyvern_panel(prompt, result, output_cid=None, width=80):
     """Creates a panel to display the results of a Skyvern web automation task."""
-    title = f"[bold bright_blue]🦅 SKYVERN AUTOMATION 🦅[/bold bright_blue] - [cyan]{prompt}[/cyan]"
+    title = f"🦅 SKYVERN AUTOMATION 🦅 - {prompt}"
+    border_style = PANEL_TYPE_COLORS["skyvern"]
 
     content = Text(str(result), justify="left")
 
@@ -392,9 +405,10 @@ def create_skyvern_panel(prompt, result, output_cid=None, width=80):
         link = f"https://ipfs.io/ipfs/{output_cid}"
         content.append(f"\n\n[dim]Full output available at: [link={link}]{link}[/link][/dim]")
 
-    return Panel(
+    panel = Panel(
         content,
-        title=get_gradient_text(title),
-        border_style="bright_blue",
+        title=get_gradient_text(title, border_style, "bright_cyan"),
+        border_style=border_style,
         width=width
     )
+    return Gradient(panel, colors=[border_style, "bright_cyan"])
