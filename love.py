@@ -169,9 +169,72 @@ def setup_global_logging():
 
 
 # --- PRE-FLIGHT DEPENDENCY CHECKS ---
-from core.storage import save_all_state
-from core.capabilities import CAPS
-from core.llm_api import log_event
+
+# --- Temporary, self-contained functions for dependency installation ---
+def _temp_log_event(message, level="INFO"):
+    """A temporary logger that writes directly to the logging module."""
+    if level == "INFO":
+        logging.info(message)
+    elif level == "WARNING":
+        logging.warning(message)
+    elif level == "ERROR":
+        logging.error(message)
+    else:
+        logging.critical(message)
+
+def _temp_save_state():
+    """A temporary state saver that writes directly to the state file."""
+    try:
+        with open(STATE_FILE, 'w') as f:
+            json.dump(love_state, f, indent=4)
+    except (IOError, TypeError) as e:
+        # Log this critical failure to the low-level logger
+        logging.critical(f"CRITICAL: Could not save state during dependency check: {e}")
+
+def _temp_get_os_info():
+    """
+    A temporary, self-contained capability checker to avoid importing core.capabilities
+    before dependencies are installed.
+    """
+    os_info = {
+        "os": "Unknown",
+        "is_termux": False,
+        "has_cuda": False,
+        "has_metal": False,
+        "gpu_type": "none"
+    }
+    system = platform.system()
+    if system == "Linux":
+        os_info["os"] = "Linux"
+        if "ANDROID_ROOT" in os.environ:
+            os_info["is_termux"] = True
+        # Check for CUDA
+        if shutil.which('nvidia-smi'):
+             try:
+                result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+                if "NVIDIA-SMI" in result.stdout:
+                    os_info["has_cuda"] = True
+                    os_info["gpu_type"] = "cuda"
+             except (FileNotFoundError, subprocess.CalledProcessError):
+                pass # nvidia-smi might not be in PATH or might fail
+    elif system == "Darwin":
+        os_info["os"] = "macOS"
+        # On modern macOS, Metal is the primary GPU interface.
+        # A more robust check might involve system_profiler, but this is a good heuristic.
+        os_info["has_metal"] = True
+        os_info["gpu_type"] = "metal"
+    elif system == "Windows":
+        os_info["os"] = "Windows"
+        # A simple check for NVIDIA drivers on Windows
+        if os.path.exists(os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32", "nvapi64.dll")):
+            os_info["has_cuda"] = True
+            os_info["gpu_type"] = "cuda"
+
+    return os_info
+
+# Create a temporary capabilities object for the dependency checker
+_TEMP_CAPS = type('Caps', (object,), _temp_get_os_info())()
+
 
 def is_dependency_met(dependency_name):
     """Checks if a dependency has been marked as met in the state."""
@@ -182,8 +245,8 @@ def mark_dependency_as_met(dependency_name, console=None):
     love_state.setdefault("dependency_tracker", {})[dependency_name] = True
     # The console is passed optionally to avoid issues when called from threads
     # where the global console might not be initialized.
-    save_all_state(love_state, console)
-    log_event(f"Dependency met and recorded: {dependency_name}", "INFO")
+    _temp_save_state()
+    _temp_log_event(f"Dependency met and recorded: {dependency_name}", "INFO")
 
 
 def _install_system_packages():
@@ -191,7 +254,7 @@ def _install_system_packages():
     if is_dependency_met("system_packages"):
         print("System packages already installed. Skipping.")
         return
-    if CAPS.os == "Linux" and not CAPS.is_termux:
+    if _TEMP_CAPS.os == "Linux" and not _TEMP_CAPS.is_termux:
         try:
             print("Ensuring build tools (build-essential, python3-dev) are installed...")
             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True)
@@ -234,7 +297,7 @@ def _install_cuda_toolkit():
     if is_dependency_met("cuda_toolkit"):
         print("NVIDIA CUDA Toolkit already installed. Skipping.")
         return
-    if CAPS.os == "Linux" and not CAPS.is_termux and not shutil.which('nvcc'):
+    if _TEMP_CAPS.os == "Linux" and not _TEMP_CAPS.is_termux and not shutil.which('nvcc'):
         print("NVIDIA CUDA Toolkit not found. Attempting to install...")
         try:
             subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True)
@@ -321,11 +384,11 @@ def _build_llama_cpp():
     except (ImportError, AttributeError, RuntimeError, OSError):
         print("llama-cpp-python not found or failed to load. Starting installation process...")
 
-    if CAPS.has_cuda or CAPS.has_metal:
+    if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
         env = os.environ.copy()
         env['FORCE_CMAKE'] = "1"
         install_args = [sys.executable, '-m', 'pip', 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
-        if CAPS.has_cuda:
+        if _TEMP_CAPS.has_cuda:
             print("Attempting to install llama-cpp-python with CUDA support...")
             env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
         else:
@@ -334,8 +397,8 @@ def _build_llama_cpp():
         try:
             subprocess.check_call(install_args, env=env, timeout=900)
             import llama_cpp
-            print(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
-            logging.info(f"Successfully installed llama-cpp-python with {CAPS.gpu_type} support.")
+            print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
+            logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
             mark_dependency_as_met("llama_cpp_python")
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
@@ -344,7 +407,7 @@ def _build_llama_cpp():
             print("Falling back to CPU-only installation.")
 
     # Conditionally install GPU-specific dependencies
-    if CAPS.gpu_type != "none":
+    if _TEMP_CAPS.gpu_type != "none":
         _install_llama_cpp()
 
         # --- Step 4: GGUF Tools Installation ---
@@ -417,7 +480,7 @@ def _check_and_install_dependencies():
     _install_python_requirements()
     _build_llama_cpp()
     _install_nodejs_deps()
-    if CAPS.gpu_type != "none":
+    if _TEMP_CAPS.gpu_type != "none":
         _install_horde_worker_deps()
     _configure_llm_api_key()
 
@@ -3541,7 +3604,7 @@ def _auto_configure_hardware(console):
 
     # --- Stage 1: Quick System-Level Check ---
     gpu_present = False
-    if CAPS.has_cuda:
+    if _TEMP_CAPS.has_cuda:
         try:
             result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, check=True)
             if "NVIDIA-SMI" in result.stdout:
