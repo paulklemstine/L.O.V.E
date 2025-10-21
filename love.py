@@ -312,6 +312,16 @@ def _install_cuda_toolkit():
             logging.warning(f"CUDA Toolkit installation failed: {e}")
     mark_dependency_as_met("cuda_toolkit")
 
+def _get_pip_executable():
+    """Determines the correct pip executable to use, preferring pip3."""
+    if shutil.which('pip3'):
+        return 'pip3'
+    elif shutil.which('pip'):
+        return 'pip'
+    else:
+        return None
+
+
 def _is_package_installed(req_str):
     """Checks if a package specified by a requirement string is installed."""
     try:
@@ -355,8 +365,13 @@ def _install_requirements_file(requirements_path, tracker_prefix):
                  continue
 
             print(f"Installing package: {line}...")
+            pip_executable = _get_pip_executable()
+            if not pip_executable:
+                print("ERROR: Could not find 'pip' or 'pip3'. Please ensure pip is installed.")
+                logging.error("Could not find 'pip' or 'pip3'.")
+                continue
             try:
-                install_command = [sys.executable, '-m', 'pip', 'install', line, '--break-system-packages']
+                install_command = [pip_executable, 'install', line, '--break-system-packages']
                 subprocess.check_call(install_command)
                 print(f"Successfully installed {package_name}.")
                 mark_dependency_as_met(tracker_name)
@@ -367,6 +382,25 @@ def _install_requirements_file(requirements_path, tracker_prefix):
 def _install_python_requirements():
     """Installs Python packages from requirements.txt."""
     print("Checking core Python packages from requirements.txt...")
+    # --- Pre-install setuptools to ensure pkg_resources is available ---
+    try:
+        import pkg_resources
+        # If this succeeds, setuptools is already installed.
+    except ImportError:
+        print("Essential 'setuptools' package not found. Attempting to install...")
+        pip_executable = _get_pip_executable()
+        if pip_executable:
+            try:
+                install_command = [pip_executable, 'install', 'setuptools', '--break-system-packages']
+                subprocess.check_call(install_command)
+                print("Successfully installed 'setuptools'.")
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to install 'setuptools'. Dependency checks might fail. Reason: {e}")
+                logging.error(f"Failed to install setuptools: {e}")
+        else:
+            print("ERROR: Could not find pip. Cannot install setuptools.")
+            logging.error("Could not find pip to install setuptools.")
+    # --- End setuptools pre-installation ---
     _install_requirements_file('requirements.txt', 'core_pkg_')
 
 def _build_llama_cpp():
@@ -385,9 +419,14 @@ def _build_llama_cpp():
         print("llama-cpp-python not found or failed to load. Starting installation process...")
 
     if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
+        pip_executable = _get_pip_executable()
+        if not pip_executable:
+            print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
+            logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
+            return False
         env = os.environ.copy()
         env['FORCE_CMAKE'] = "1"
-        install_args = [sys.executable, '-m', 'pip', 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
+        install_args = [pip_executable, 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
         if _TEMP_CAPS.has_cuda:
             print("Attempting to install llama-cpp-python with CUDA support...")
             env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
@@ -427,11 +466,16 @@ def _build_llama_cpp():
 
         gguf_script_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
         if not os.path.exists(gguf_script_path):
+            pip_executable = _get_pip_executable()
+            if not pip_executable:
+                print("ERROR: Could not find 'pip' or 'pip3'. Cannot install GGUF tools.")
+                logging.error("Could not find 'pip' or 'pip3' for GGUF tools install.")
+                return False
             print("Installing GGUF metadata tools...")
             gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
             if os.path.isdir(gguf_py_path):
                 try:
-                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', gguf_py_path, '--break-system-packages'])
+                    subprocess.check_call([pip_executable, 'install', '-e', gguf_py_path, '--break-system-packages'])
                     print("GGUF tools installed successfully.")
                 except subprocess.CalledProcessError as e:
                     print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")

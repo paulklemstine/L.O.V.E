@@ -22,3 +22,4 @@ scapy
 aioboto3
 pydantic==2.3.0
 horde-client==1.0.3
+eth-typing<3.0.0
