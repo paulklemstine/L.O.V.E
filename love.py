@@ -76,7 +76,7 @@ local_llm_instance = None
 # This stream is dedicated to the log file, capturing all raw output.
 log_file_stream = None
 
-def log_print(*args, **kwargs):
+def log_event(*args, **kwargs):
     """
     A custom print function that writes to both the log file and the
     standard logging module, ensuring everything is captured.
@@ -115,9 +115,9 @@ class AnsiStrippingTee(object):
             except (IOError, ValueError):
                 pass
 
-            # Also write the stripped data to our central log_print function
+            # Also write the stripped data to our central log_event function
             clean_data = self.ansi_escape.sub('', data)
-            log_print(f"[STDERR] {clean_data.strip()}")
+            log_event(f"[STDERR] {clean_data.strip()}")
 
     def flush(self):
         with self.lock:
@@ -135,7 +135,7 @@ def setup_global_logging():
     """
     Configures logging.
     - The `logging` module writes formatted logs to love.log.
-    - `log_file_stream` provides a raw file handle to love.log for the custom `log_print`.
+    - `log_file_stream` provides a raw file handle to love.log for the custom `log_event`.
     - `sys.stderr` is redirected to our Tee to capture errors from external libraries.
     - `sys.stdout` is NOT redirected, so `rich.Console` can print UI panels directly.
     """
@@ -533,11 +533,11 @@ def _check_and_install_dependencies():
 def _configure_llm_api_key():
     """Checks for the Gemini API key and configures it for the llm tool."""
     if is_dependency_met("llm_api_key_configured"):
-        log_print("SUCCESS: Google API key is already configured for the 'llm' tool.")
+        log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
         return
     gemini_api_key = os.environ.get("LLM_GEMINI_KEY")
     if not gemini_api_key:
-        log_print("INFO: LLM_GEMINI_KEY environment variable not found. Skipping llm configuration.")
+        log_event("INFO: LLM_GEMINI_KEY environment variable not found. Skipping llm configuration.")
         return
 
     try:
@@ -549,12 +549,12 @@ def _configure_llm_api_key():
             check=True
         )
         if "google" in result.stdout:
-            log_print("SUCCESS: Google API key is already configured for the 'llm' tool.")
+            log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
             mark_dependency_as_met("llm_api_key_configured")
             return
 
         # If not set, configure it
-        log_print("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
+        log_event("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
         configure_result = subprocess.run(
             ["llm", "keys", "set", "google"],
             input=gemini_api_key,
@@ -562,16 +562,16 @@ def _configure_llm_api_key():
             check=True,
             capture_output=True
         )
-        log_print(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
+        log_event(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
         mark_dependency_as_met("llm_api_key_configured")
     except FileNotFoundError:
-        log_print("ERROR: The 'llm' command-line tool was not found. Please ensure it is installed and in your PATH.")
+        log_event("ERROR: The 'llm' command-line tool was not found. Please ensure it is installed and in your PATH.")
     except subprocess.CalledProcessError as e:
         error_message = f"ERROR: Failed to configure llm API key via 'llm keys set google'.\n"
         error_message += f"  Return Code: {e.returncode}\n"
         error_message += f"  Stdout: {e.stdout.strip()}\n"
         error_message += f"  Stderr: {e.stderr.strip()}"
-        log_print(error_message)
+        log_event(error_message)
 
 
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---

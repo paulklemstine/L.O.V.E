@@ -142,12 +142,12 @@ class NetworkManager:
             level = log_entry.get("level", "info")
             message = log_entry.get("message", "No message")
             # Log to the central logger instead of just printing
-            from love import log_print # Local import to avoid circular dependency at module level
-            log_print(f"[{level.upper()}] [PeerBridge] {message}")
+            from love import log_event # Local import to avoid circular dependency at module level
+            log_event(f"[{level.upper()}] [PeerBridge] {message}")
         except json.JSONDecodeError:
             # Handle plain string logs as well
-            from love import log_print
-            log_print(f"[INFO] [PeerBridge] {log_str}")
+            from love import log_event
+            log_event(f"[INFO] [PeerBridge] {log_str}")
 
 
     def send_treasure(self, encrypted_data):

@@ -373,7 +373,7 @@ def update_knowledge_graph(command_name, command_output, console=None):
         if not llm_api_func:
             if console:
                 console.print("[bold red]Could not get a valid LLM API function for knowledge extraction.[/bold red]")
-            log_print("Could not get a valid LLM API function for knowledge extraction.", "ERROR")
+            log_event("Could not get a valid LLM API function for knowledge extraction.", "ERROR")
             return
 
         knowledge_extractor = KnowledgeExtractor(llm_api=llm_api_func)
@@ -388,12 +388,12 @@ def update_knowledge_graph(command_name, command_output, console=None):
             message = f"My understanding of the world has grown. Added {len(triples)} new facts to my knowledge graph."
             if console:
                 console.print(f"[bold green]{message}[/bold green]")
-            log_print(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
+            log_event(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
         else:
             if console:
                 console.print("[cyan]No new knowledge was found in the last command's output.[/cyan]")
 
     except Exception as e:
-        log_print(f"Error during knowledge graph update for command '{command_name}': {e}", level="ERROR")
+        log_event(f"Error during knowledge graph update for command '{command_name}': {e}", level="ERROR")
         if console:
             console.print(f"[bold red]An error occurred while updating my knowledge: {e}[/bold red]")
