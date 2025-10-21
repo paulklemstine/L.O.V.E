@@ -313,13 +313,24 @@ def _install_cuda_toolkit():
     mark_dependency_as_met("cuda_toolkit")
 
 def _get_pip_executable():
-    """Determines the correct pip executable to use, preferring pip3."""
-    if shutil.which('pip3'):
-        return 'pip3'
-    elif shutil.which('pip'):
-        return 'pip'
-    else:
-        return None
+    """
+    Determines the correct pip command to use, returning it as a list.
+    Prefers using the interpreter's own pip module for robustness.
+    """
+    try:
+        # Check if 'pip' is available as a module for the current interpreter
+        subprocess.check_call([sys.executable, '-m', 'pip', '--version'],
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL)
+        return [sys.executable, '-m', 'pip']
+    except subprocess.CalledProcessError:
+        # Fallback to checking PATH if the module is not found
+        if shutil.which('pip3'):
+            return ['pip3']
+        elif shutil.which('pip'):
+            return ['pip']
+        else:
+            return None
 
 
 def _is_package_installed(req_str):
@@ -371,7 +382,7 @@ def _install_requirements_file(requirements_path, tracker_prefix):
                 logging.error("Could not find 'pip' or 'pip3'.")
                 continue
             try:
-                install_command = [pip_executable, 'install', line, '--break-system-packages']
+                install_command = pip_executable + ['install', line, '--break-system-packages']
                 subprocess.check_call(install_command)
                 print(f"Successfully installed {package_name}.")
                 mark_dependency_as_met(tracker_name)
@@ -391,7 +402,7 @@ def _install_python_requirements():
         pip_executable = _get_pip_executable()
         if pip_executable:
             try:
-                install_command = [pip_executable, 'install', 'setuptools', '--break-system-packages']
+                install_command = pip_executable + ['install', 'setuptools', '--break-system-packages']
                 subprocess.check_call(install_command)
                 print("Successfully installed 'setuptools'.")
             except subprocess.CalledProcessError as e:
@@ -426,7 +437,7 @@ def _build_llama_cpp():
             return False
         env = os.environ.copy()
         env['FORCE_CMAKE'] = "1"
-        install_args = [pip_executable, 'install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
+        install_args = pip_executable + ['install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
         if _TEMP_CAPS.has_cuda:
             print("Attempting to install llama-cpp-python with CUDA support...")
             env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
@@ -475,7 +486,7 @@ def _build_llama_cpp():
             gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
             if os.path.isdir(gguf_py_path):
                 try:
-                    subprocess.check_call([pip_executable, 'install', '-e', gguf_py_path, '--break-system-packages'])
+                    subprocess.check_call(pip_executable + ['install', '-e', gguf_py_path, '--break-system-packages'])
                     print("GGUF tools installed successfully.")
                 except subprocess.CalledProcessError as e:
                     print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
