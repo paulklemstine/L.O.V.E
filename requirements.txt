@@ -22,3 +22,4 @@ scapy
 aioboto3
 pydantic
 eth-typing
+rich-gradient
