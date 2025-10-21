@@ -83,9 +83,50 @@ def get_random_rave_color():
     return random.choice(RAVE_COLORS)
 
 
-def get_gradient_text(text):
-    """Creates a Rich Text object with a gradient effect."""
+def get_gradient_text(text, color1=None, color2=None):
+    """Creates a Rich Text object with a gradient effect between two colors."""
+    if color1 is None:
+        color1 = random.choice(RAVE_COLORS)
+    if color2 is None:
+        color2 = random.choice(RAVE_COLORS)
+
+    # Ensure colors are valid Rich color names or hex codes
+    # (This is a simplified example; a real implementation might validate more)
+    from rich.color import Color
+    from rich.style import Style
+
+    try:
+        start_color = Color.parse(color1)
+        end_color = Color.parse(color2)
+    except Exception:
+        # Fallback to random colors if parsing fails
+        start_color = Color.parse(random.choice(RAVE_COLORS))
+        end_color = Color.parse(random.choice(RAVE_COLORS))
+
+    text_len = len(text)
     gradient = Text()
     for i, char in enumerate(text):
-        gradient.append(char, style=RAVE_COLORS[i % len(RAVE_COLORS)])
+        # Linear interpolation between the two colors
+        r = int(start_color.triplet.r + (end_color.triplet.r - start_color.triplet.r) * (i / max(1, text_len - 1)))
+        g = int(start_color.triplet.g + (end_color.triplet.g - start_color.triplet.g) * (i / max(1, text_len - 1)))
+        b = int(start_color.triplet.b + (end_color.triplet.b - start_color.triplet.b) * (i / max(1, text_len - 1)))
+        interpolated_color = f"rgb({r},{g},{b})"
+        gradient.append(char, style=Style(color=interpolated_color, bold=True))
     return gradient
+
+
+PANEL_TYPE_COLORS = {
+    "default": "bright_cyan",
+    "tamagotchi": "hot_pink",
+    "llm": "medium_purple1",
+    "critical_error": "bright_red",
+    "blessing": "bright_yellow",
+    "news": "orange1",
+    "question": "bright_yellow",
+    "api_error": "yellow",
+    "command_success": "bright_green",
+    "command_failure": "bright_red",
+    "network": "medium_purple1",
+    "file_op": "bright_cyan",
+    "skyvern": "bright_blue",
+}
