@@ -18,11 +18,10 @@ class ProactiveIntelligenceAgent:
     Operates in the background to autonomously identify and queue new,
     previously uninvestigated targets for reconnaissance and treasure hunting.
     """
-    def __init__(self, love_state, console, job_manager, treasure_hunter):
+    def __init__(self, love_state, console, job_manager):
         self.love_state = love_state
         self.console = console
         self.job_manager = job_manager
-        self.treasure_hunter = treasure_hunter
         self.active = False
         self.thread = threading.Thread(target=self._hunt_loop, daemon=True)
         self.lock = threading.RLock()
@@ -37,12 +36,6 @@ class ProactiveIntelligenceAgent:
         self.console.print("[bold cyan]Proactive Intelligence Agent starting its hunt...[/bold cyan]")
         self.active = True
         self.thread.start()
-
-        # Start the network sniffer as a persistent background job
-        self.job_manager.add_job(
-            description="Continuous network treasure sniffing",
-            target_func=self.treasure_hunter.start_network_sniffer
-        )
 
     def stop(self):
         """Stops the agent's hunting thread."""
@@ -211,6 +204,5 @@ class ProactiveIntelligenceAgent:
 
         # This is a synchronous call for now, as it's part of the agent's loop.
         # It could be delegated to a job if it becomes too slow.
-        self.treasure_hunter.scan_processes_for_secrets()
 
         self._track_source(source_key)
