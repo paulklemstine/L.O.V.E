@@ -86,6 +86,7 @@ def get_random_rave_color():
 def get_gradient_text(text):
     """Creates a Rich Text object with a gradient effect."""
     gradient = Text()
-    for i, char in enumerate(text):
-        gradient.append(char, style=RAVE_COLORS[i % len(RAVE_COLORS)])
+    text_to_process = text.plain if isinstance(text, Text) else str(text)
+    for i, char_str in enumerate(text_to_process):
+        gradient.append(Text(char_str, style=RAVE_COLORS[i % len(RAVE_COLORS)]))
     return gradient
