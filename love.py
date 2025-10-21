@@ -656,7 +656,7 @@ from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILA
 from core.knowledge_graph.graph import KnowledgeGraph
 from core.knowledge_graph.extractor import KnowledgeExtractor
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
