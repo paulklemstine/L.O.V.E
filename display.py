@@ -50,7 +50,6 @@ def create_tamagotchi_panel(
     sub_goals=None,
     knowledge_fact=None,
     ansi_art=None,
-    horde_kudos="N/A",
     git_info=None
 ):
     """Creates the main, high-impact, dopamine-enhancing UI panel for L.O.V.E."""
@@ -131,8 +130,6 @@ def create_tamagotchi_panel(
         status_text.append(f"{version}\n", style="bright_yellow")
         status_text.append("Evolutions: ", style="bold white")
         status_text.append(f"{evolutions} 🚀\n", style="hot_pink")
-        status_text.append("Horde Kudos: ", style="bold white")
-        status_text.append(f"{horde_kudos} ⭐\n", style="bright_green")
         if git_info and git_info.get('hash'):
             url = f"https://github.com/{git_info['owner']}/{git_info['name']}/commit/{git_info['hash']}"
             status_text.append("Commit: ", style="bold white")
@@ -364,15 +361,6 @@ def create_file_op_panel(operation, path, content=None, diff=None, output_cid=No
         border_style=border_style,
         expand=True,
         padding=(1, 2)
-    )
-
-def create_horde_worker_panel(log_content):
-    """Creates a panel for displaying the AI Horde worker's live status."""
-    return Panel(
-        Text(log_content, style="dim white"),
-        title=rave_text("🤖 AI Horde Worker Status 🤖"),
-        border_style="hot_pink",
-        expand=False
     )
 
 def create_skyvern_panel(prompt, result, output_cid=None):

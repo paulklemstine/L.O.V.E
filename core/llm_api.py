@@ -47,13 +47,12 @@ LOCAL_MODELS_CONFIG = [
 # --- Fallback Model Configuration ---
 GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 # A selection of strong Horde models. Mythalion is good for story-writing/creativity.
-HORDE_MODELS = ["PygmalionAI/Mythalion-13b", "NeverSleep/Madao-10.7B-v1", "Undi95/ReMM-SLERP-L2-13B", "KoboldAI/LLaMA2-13B-Holomax-v2", "KoboldAI/LLaMA2-13B-Tiefighter"]
 
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
 ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS
+    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 local_llm_instance = None
@@ -294,13 +293,12 @@ def ensure_primary_model_downloaded(console, download_complete_event):
         download_complete_event.set()
 
 
-def run_llm(prompt_text, purpose="general", use_premium_horde=False):
+def run_llm(prompt_text, purpose="general"):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
     It now pins the prompt and response to IPFS and returns a dictionary.
     - 'goal_generation': Prioritizes local, uncensored models.
     - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
-    - 'use_premium_horde': Forces the use of a large, premium Horde model.
     """
     global LLM_AVAILABILITY, local_llm_instance
     console = Console()
@@ -342,11 +340,7 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
     local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
 
     # Dynamically set model priority based on purpose
-    if use_premium_horde:
-        # Force the use of the premium horde model first.
-        llm_models_priority = ["PygmalionAI/pygmalion-2-70b"] + GEMINI_MODELS + local_model_ids
-        log_event(f"Running LLM with premium Horde model. Priority: Pygmalion-70b -> Gemini -> Local.", level="INFO")
-    elif purpose == 'emotion':
+    if purpose == 'emotion':
         # Prioritize the fastest, cheapest models for non-critical personality updates
         llm_models_priority = sorted(GEMINI_MODELS, key=lambda m: 'flash' not in m) + local_model_ids
         log_event(f"Running LLM for purpose '{purpose}'. Priority: Flash -> Pro -> Local.", level="INFO")
@@ -356,8 +350,8 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
         log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Gemini.", level="INFO")
     else:  # Covers 'review', 'autopilot', 'general', and 'analyze_source'
         # Prioritize powerful Gemini models for reasoning tasks
-        llm_models_priority = GEMINI_MODELS + HORDE_MODELS + local_model_ids
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Gemini -> Horde -> Local.", level="INFO")
+        llm_models_priority = GEMINI_MODELS + local_model_ids
+        log_event(f"Running LLM for purpose '{purpose}'. Priority: Gemini -> Local.", level="INFO")
 
     # This list will be mutated if a model fails catastrophically
     current_attempt_models = list(llm_models_priority)
@@ -402,26 +396,6 @@ def run_llm(prompt_text, purpose="general", use_premium_horde=False):
                 else:
                     # Initialization must have failed
                     raise Exception("Local LLM instance could not be initialized.")
-
-            # --- HORDE MODEL LOGIC ---
-            elif model_id in HORDE_MODELS:
-                log_event(f"Attempting to use AI Horde model: {model_id}")
-                api_key = os.environ.get("STABLE_HORDE", "0000000000")
-                horde_client = HordeClient(api_key=api_key, default_model=model_id)
-
-
-                def _horde_call():
-                    text_generation_input = TextGenerationInput(prompt=prompt_text)
-                    text_generation = horde_client.text_generation.create_text_generation(text_generation_input)
-                    return text_generation.text
-
-                result_text = run_hypnotic_progress(
-                    console,
-                    f"Processing via AI Horde [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
-                    _horde_call,
-                    silent=(purpose in ['emotion', 'log_squash'])
-                )
-                log_event(f"Horde call successful with {model_id}.")
 
             # --- GEMINI MODEL LOGIC ---
             else:

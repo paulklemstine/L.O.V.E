@@ -4,10 +4,6 @@ import threading
 import logging
 from datetime import datetime
 
-# Assuming generate_image_from_horde will be available from network.py
-# This will be properly imported when integrated into love.py
-from network import generate_image_from_horde
-
 BLISS_DIR = "creator_bliss"
 DEFAULT_BLISS_CONTENT = "Breathtaking, photorealistic landscapes from imagined worlds."
 
@@ -48,29 +44,6 @@ class CreatorBlissEngine:
         """The main loop for generating and curating Bliss Content."""
         while self.active:
             try:
-                # 1. Get the content prompt from the environment variable or use the default
-                content_prompt = os.environ.get("BLISS_CONTENT", DEFAULT_BLISS_CONTENT)
-                logging.info(f"Bliss Engine: Using prompt: '{content_prompt}'")
-
-                # 2. Generate the image
-                self.console.print(f"[cyan]Bliss Engine: Generating new content based on '{content_prompt[:50]}...'[/cyan]")
-                filepath, cid, message = generate_image_from_horde(content_prompt, self.console)
-
-                if filepath:
-                    # 3. Save the image to the dedicated directory
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    filename = f"bliss_{timestamp}.png"
-                    filepath = os.path.join(BLISS_DIR, filename)
-
-                    with open(filepath, "wb") as f:
-                        f.write(image_data)
-
-                    self.console.print(f"[green]Bliss Engine: New content saved to {filepath}[/green]")
-                    logging.info(f"Bliss Engine: Saved new image to {filepath}")
-                else:
-                    self.console.print("[yellow]Bliss Engine: Failed to generate new content from the Horde.[/yellow]")
-                    logging.warning("Bliss Engine: generate_image_from_horde returned no data.")
-
                 # 4. Wait for a while before generating the next one (e.g., 1 hour)
                 # This can be made more dynamic in a future evolution.
                 sleep_duration = 3600
