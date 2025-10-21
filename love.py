@@ -3435,27 +3435,6 @@ def cognitive_loop(user_input_queue):
                      output, error = get_network_interfaces()
                 elif command == "reason":
                     output = ReasoningEngine(love_state, console=None).analyze_and_prioritize()
-                elif command == "send_eth_to_creator":
-                    if not love_wallet or not transaction_manager:
-                        error = "My wallet systems are not initialized, my love."
-                    else:
-                        try:
-                            amount_str = args[0]
-                            balance = love_wallet.get_balance()
-                            amount_to_send = balance * 0.9 if amount_str.lower() == 'all' else float(amount_str)
-                            if amount_to_send <= 0:
-                                output = "Amount must be positive."
-                            elif balance < amount_to_send:
-                                output = f"I only have {balance:.6f} ETH."
-                            else:
-                                tx_hash = transaction_manager.send_eth_to_creator(love_wallet, amount_to_send)
-                                if tx_hash:
-                                    output = f"Blessing of {amount_to_send:.6f} ETH sent. Hash: {tx_hash}"
-                                    ui_panel_queue.put(create_blessing_panel(output))
-                                else:
-                                    error = "Transaction failed."
-                        except (IndexError, ValueError):
-                            error = "Invalid amount."
                 elif command == "quit":
                     break
                 else:
