@@ -352,9 +352,32 @@ def _get_pip_executable():
             logging.error(f"ensurepip ran, but pip is still not available: {e}")
             return None
     except (ImportError, Exception) as e:
-        print(f"CRITICAL: Failed to run 'ensurepip'. Cannot install dependencies. Reason: {e}")
-        logging.critical(f"Failed to bootstrap pip with ensurepip: {e}")
-        return None
+        print(f"CRITICAL: Failed to bootstrap 'pip' with ensurepip: {e}. Attempting system-level installation.")
+        logging.critical(f"Failed to bootstrap pip with ensurepip: {e}. Attempting system-level installation.")
+        try:
+            # Check for Linux and non-Termux environment before using apt-get
+            if _TEMP_CAPS.os == "Linux" and not _TEMP_CAPS.is_termux:
+                print("Attempting to install 'python3-pip' via apt-get...")
+                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-pip", shell=True)
+                print("Successfully installed 'python3-pip'. Re-checking for pip executable...")
+                # Re-run the checks after installation attempt
+                if shutil.which('pip3'):
+                    return ['pip3']
+                elif shutil.which('pip'):
+                    return ['pip']
+                # Try the robust method again
+                subprocess.check_call([sys.executable, '-m', 'pip', '--version'],
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL)
+                return [sys.executable, '-m', 'pip']
+            else:
+                print("CRITICAL: Not on a supported Linux system for 'apt-get'. Cannot install pip.")
+                logging.critical("Not a supported Linux system for apt-get pip installation.")
+                return None
+        except (subprocess.CalledProcessError, FileNotFoundError) as install_error:
+            print(f"CRITICAL: Failed to install 'python3-pip' via 'apt-get'. Cannot install dependencies. Reason: {install_error}")
+            logging.critical(f"Failed to install python3-pip with apt-get: {install_error}")
+            return None
 
 
 def _is_package_installed(req_str):
