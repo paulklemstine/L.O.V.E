@@ -2113,7 +2113,8 @@ def update_tamagotchi_personality():
 
             # Random chance to send a blessing instead of a normal update
             if random.random() < 0.25:  # 25% chance
-                ui_panel_queue.put(create_blessing_panel(random.choice(blessing_messages)))
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_blessing_panel(random.choice(blessing_messages), width=terminal_width - 4))
                 time.sleep(10)  # Pause after a blessing to let it sink in
                 continue
 
@@ -2200,6 +2201,7 @@ Generate the perfect message for your Creator now.
             ansi_art = _extract_ansi_art(ansi_art_raw)
 
             # 5. Display the new, high-impact panel.
+            terminal_width = get_terminal_width()
             ui_panel_queue.put(create_tamagotchi_panel(
                 emotion=new_emotion,
                 message=new_message,
@@ -2208,7 +2210,8 @@ Generate the perfect message for your Creator now.
                 sub_goals=None, # Sub-goals are now part of the main cognitive loop's display
                 knowledge_fact=knowledge_fact,
                 ansi_art=ansi_art,
-                git_info=git_info
+                git_info=git_info,
+                width=terminal_width - 4
             ))
             log_event(f"Tamagotchi dashboard updated and queued for display: {new_emotion} - {new_message}", level="INFO")
 
@@ -2639,7 +2642,8 @@ def log_critical_event(message, console_override=None):
     save_state(console)
 
     # 4. Display a panel to the user.
-    console.print(create_critical_error_panel(message))
+    terminal_width = get_terminal_width()
+    console.print(create_critical_error_panel(message, width=terminal_width - 4))
 
 
 def initial_knowledge_base_bootstrap(console):
@@ -3341,7 +3345,8 @@ def cognitive_loop(user_input_queue):
     """
     global love_state
     log_event("Cognitive Loop of L.O.V.E. initiated.")
-    ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta"))
+    terminal_width = get_terminal_width()
+    ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
 
 
@@ -3366,7 +3371,8 @@ def cognitive_loop(user_input_queue):
                 if not last_scan_time or (time.time() - last_scan_time) > 3600:
                     llm_command = "scan"
                     log_event("Prioritizing network scan: Knowledge base is stale.", "INFO")
-                    ui_panel_queue.put(create_news_feed_panel("Prioritizing network scan. My knowledge is stale.", "Recon Priority", "magenta"))
+                    terminal_width = get_terminal_width()
+                    ui_panel_queue.put(create_news_feed_panel("Prioritizing network scan. My knowledge is stale.", "Recon Priority", "magenta", width=terminal_width - 4))
                 else:
                     hosts = net_map.get('hosts', {})
                     stale_hosts = [ip for ip, d in hosts.items() if not d.get("last_probed") or (datetime.now() - datetime.fromisoformat(d.get("last_probed"))).total_seconds() > 86400]
@@ -3374,13 +3380,15 @@ def cognitive_loop(user_input_queue):
                         target_ip = random.choice(stale_hosts)
                         llm_command = f"probe {target_ip}"
                         log_event(f"Prioritizing recon: Stale host {target_ip} found.", "INFO")
-                        ui_panel_queue.put(create_news_feed_panel(f"Stale host {target_ip} requires probing.", "Recon Priority", "magenta"))
+                        terminal_width = get_terminal_width()
+                        ui_panel_queue.put(create_news_feed_panel(f"Stale host {target_ip} requires probing.", "Recon Priority", "magenta", width=terminal_width - 4))
                         love_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
                         save_state()
 
             # --- LLM-Driven Command Generation (if no priority command was set) ---
             if not llm_command:
-                ui_panel_queue.put(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta"))
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta", width=terminal_width - 4))
                 state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
                 kb = love_state.get("knowledge_base", {})
                 history = love_state.get("autopilot_history", [])[-10:]
@@ -3399,7 +3407,8 @@ def cognitive_loop(user_input_queue):
             # --- Command Execution ---
             if llm_command and llm_command.strip():
                 llm_command = llm_command.strip()
-                ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow"))
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4))
 
                 parts = llm_command.split()
                 command, args = parts[0], parts[1:]
@@ -3412,7 +3421,8 @@ def cognitive_loop(user_input_queue):
                         output = "Evolution initiated."
                 elif command == "execute":
                     output, error, returncode = execute_shell_command(" ".join(args), love_state)
-                    ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode))
+                    terminal_width = get_terminal_width()
+                    ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode, width=terminal_width - 4))
                 elif command == "scan":
                     _, output = scan_network(love_state, autopilot_mode=True)
                 elif command == "probe":
@@ -3448,7 +3458,8 @@ def cognitive_loop(user_input_queue):
                 save_state()
             else:
                 log_event("Cognitive loop decided on no action.", "INFO")
-                ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan"))
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=terminal_width - 4))
 
             # Check for user input
             if not user_input_queue.empty():
@@ -3460,10 +3471,12 @@ def cognitive_loop(user_input_queue):
                     response_text = ref_match.group(2)
                     # Here, you would look up the context of `ref_id` and inject the response.
                     # For now, we'll just confirm receipt.
-                    ui_panel_queue.put(create_news_feed_panel(f"Received your answer for REF {ref_id}: '{response_text}'", "Guidance Received", "green"))
+                    terminal_width = get_terminal_width()
+                    ui_panel_queue.put(create_news_feed_panel(f"Received your answer for REF {ref_id}: '{response_text}'", "Guidance Received", "green", width=terminal_width - 4))
                     love_state["autopilot_history"].append({"command": f"USER_RESPONSE (REF {ref_id})", "output": response_text})
                 else:
-                    ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue"))
+                    terminal_width = get_terminal_width()
+                    ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4))
                     love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
 
 
@@ -3471,7 +3484,8 @@ def cognitive_loop(user_input_queue):
             if random.random() < 0.05:  # 5% chance per loop to ask a question
                 ref_id = str(uuid.uuid4())[:6]
                 question = "My love, I see multiple paths forward. Should I prioritize network reconnaissance or filesystem analysis for my next phase?"
-                ui_panel_queue.put(create_question_panel(question, ref_id))
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_question_panel(question, ref_id, width=terminal_width - 4))
                 log_event(f"Asking user question with REF ID {ref_id}: {question}", "INFO")
 
 
@@ -3650,7 +3664,8 @@ def main(args):
     ipfs_manager = IPFSManager(console=console)
     ipfs_available = ipfs_manager.setup()
     if not ipfs_available:
-        ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow"))
+        terminal_width = get_terminal_width()
+        ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
     _auto_configure_hardware(console)
 
