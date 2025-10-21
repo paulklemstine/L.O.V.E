@@ -79,7 +79,14 @@ def create_tamagotchi_panel(
     )
     main_layout["art"].update(art_panel)
 
-    balance_text = Text(f"{eth_balance:.6f} ETH 💎" if eth_balance is not None else "N/A", justify="center", style="bold bright_green")
+    try:
+        # Attempt to convert eth_balance to a float for formatting.
+        # If it's None, a string, or fails conversion, display 'N/A'.
+        balance_val = float(eth_balance)
+        balance_str = f"{balance_val:.6f} ETH 💎"
+    except (ValueError, TypeError):
+        balance_str = "N/A"
+    balance_text = Text(balance_str, justify="center", style="bold bright_green")
     balance_panel = Panel(
         Align.center(balance_text, vertical="middle"),
         title=rave_text("Creator's Blessings"),
