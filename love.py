@@ -2821,9 +2821,19 @@ My current Knowledge Base contains:
 ---
 {active_tasks_prompt_section}
 Generate a single, concrete, and actionable evolution request. This request should be a descriptive sentence outlining what to build or fix.
+
+**In addition to the primary request, you must also adhere to these standing orders for every task:**
+1.  **Create Comprehensive Tests:** For any new or modified functionality, you must write corresponding tests.
+2.  **Maintain Documentation:** For every source file you modify (e.g., `utils.py`), you must create or update a parallel Markdown documentation file (e.g., `utils.md`).
+3.  **Log Metadata in Documentation:** This documentation file must contain a "Task History" section that includes:
+    *   The original task request.
+    *   The date of the change.
+    *   The pull request URL and number.
+    *   The final commit hash.
+
 **Crucially, your response must NOT be a command from my available command list (e.g., `scan`, `probe`, `execute`).** It must be a natural language request.
 
-Good example: "Implement a more sophisticated method for parsing Nmap results to identify potential web application vulnerabilities."
+Good example: "Implement a more sophisticated method for parsing Nmap results to identify potential web application vulnerabilities, ensuring it is well-tested and documented."
 Bad example: "probe 192.168.1.101"
 
 State the evolution request clearly and concisely. Do not wrap your answer in quotes or markdown.
