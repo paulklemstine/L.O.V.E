@@ -3718,7 +3718,7 @@ def live_ui_renderer(console, user_input_queue):
     The main rendering loop, now powered by prompt_toolkit for true asynchronous input.
     """
     from prompt_toolkit import Application
-    from prompt_toolkit.layout.containers import HSplit, Window
+    from prompt_toolkit.layout.containers import HSplit, Window, ScrollOffsets
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.layout.layout import Layout
     from prompt_toolkit.widgets import TextArea
@@ -3729,7 +3729,7 @@ def live_ui_renderer(console, user_input_queue):
     # --- Output Area ---
     # This control will display the rendered Rich panels.
     output_control = FormattedTextControl(text="")
-    output_window = Window(content=output_control, wrap_lines=True, scroll_offsets=(0, 0))
+    output_window = Window(content=output_control, wrap_lines=True, scroll_offsets=ScrollOffsets(bottom=0, top=0))
 
     # --- Input Area ---
     def accept_input(buf):
