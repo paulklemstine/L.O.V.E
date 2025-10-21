@@ -408,8 +408,6 @@ def _build_llama_cpp():
 
     # Conditionally install GPU-specific dependencies
     if _TEMP_CAPS.gpu_type != "none":
-        _install_llama_cpp()
-
         # --- Step 4: GGUF Tools Installation ---
         llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
         gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
