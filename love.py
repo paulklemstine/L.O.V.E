@@ -2129,7 +2129,13 @@ def update_tamagotchi_personality():
                 eth_balance = love_wallet.get_balance()
 
             # 2. Get git info
-            git_info = get_git_repo_info(get_hash=True)
+            owner, repo = get_git_repo_info()
+            try:
+                hash_result = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True)
+                git_hash = hash_result.stdout.strip()
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                git_hash = "N/A"
+            git_info = {"owner": owner, "repo": repo, "hash": git_hash}
 
 
             # 3. Get a random fact from the knowledge base
