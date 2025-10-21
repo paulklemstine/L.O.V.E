@@ -1,8 +1,8 @@
 rich
-web3<=6.11.1
+web3
 netifaces
 requests
-urllib3==1.26.18
+urllib3
 beautifulsoup4
 aioipfs
 aiohttp
@@ -20,6 +20,5 @@ numpy
 tiktoken
 scapy
 aioboto3
-pydantic==2.3.0
-horde-client==1.0.3
-eth-typing<3.0.0
+pydantic
+eth-typing
