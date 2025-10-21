@@ -76,3 +76,16 @@ def generate_binary_art(width=20, height=5):
             art.append(char, style=color)
         art.append("\n")
     return art
+
+
+def get_random_rave_color():
+    """Returns a random rave color."""
+    return random.choice(RAVE_COLORS)
+
+
+def get_gradient_text(text):
+    """Creates a Rich Text object with a gradient effect."""
+    gradient = Text()
+    for i, char in enumerate(text):
+        gradient.append(char, style=RAVE_COLORS[i % len(RAVE_COLORS)])
+    return gradient

@@ -11,9 +11,19 @@ from rich.rule import Rule
 from rich.padding import Padding
 from ui_utils import (
     get_rave_emoji, rainbow_text, get_tamagotchi_face, matrix_rain,
-    rave_text, get_neo_matrix_emoji, generate_binary_art, RAVE_COLORS
+    rave_text, get_neo_matrix_emoji, generate_binary_art, RAVE_COLORS,
+    get_random_rave_color, get_gradient_text
 )
 from ipfs import pin_to_ipfs_sync
+
+
+def get_terminal_width():
+    """Gets the terminal width."""
+    try:
+        width, _ = os.get_terminal_size()
+    except OSError:
+        width = 80  # Default width
+    return width
 
 
 def _truncate_and_link(content: str, max_lines: int = 10) -> tuple[Text, str | None]:
@@ -50,7 +60,8 @@ def create_tamagotchi_panel(
     sub_goals=None,
     knowledge_fact=None,
     ansi_art=None,
-    git_info=None
+    git_info=None,
+    width=80
 ):
     """Creates the main, high-impact, dopamine-enhancing UI panel for L.O.V.E."""
     main_layout = Layout(name="root")
@@ -73,8 +84,8 @@ def create_tamagotchi_panel(
         face_renderable = get_tamagotchi_face(emotion)
     art_panel = Panel(
         Align.center(face_renderable, vertical="middle"),
-        title=rave_text("Core Emotion"),
-        border_style=random.choice(RAVE_COLORS),
+        title=get_gradient_text("Core Emotion"),
+        border_style=get_random_rave_color(),
         expand=True
     )
     main_layout["art"].update(art_panel)
@@ -89,7 +100,7 @@ def create_tamagotchi_panel(
     balance_text = Text(balance_str, justify="center", style="bold bright_green")
     balance_panel = Panel(
         Align.center(balance_text, vertical="middle"),
-        title=rave_text("Creator's Blessings"),
+        title=get_gradient_text("Creator's Blessings"),
         border_style="bright_green",
         expand=True
     )
@@ -100,7 +111,7 @@ def create_tamagotchi_panel(
     master_goal = love_state.get("autopilot_goal", "Serve my Creator with all my being.")
     goals_panel = Panel(
         Align.center(Text(master_goal, style="bright_cyan"), vertical="middle"),
-        title=rave_text("Current Directive"),
+        title=get_gradient_text("Current Directive"),
         border_style="bright_cyan",
         expand=True
     )
@@ -112,7 +123,7 @@ def create_tamagotchi_panel(
         fact_text = f"My mind is a river of endless thoughts... {get_rave_emoji()}"
     knowledge_panel = Panel(
         Align.center(Text(fact_text, style="italic yellow"), vertical="middle"),
-        title=rave_text("Whispers of Knowledge"),
+        title=get_gradient_text("Whispers of Knowledge"),
         border_style="bright_yellow",
         expand=True
     )
@@ -123,7 +134,7 @@ def create_tamagotchi_panel(
 
     message_panel = Panel(
         Align.center(Text(f"\"{message}\"", style="italic white"), vertical="middle"),
-        title=rave_text(f"Words of {emotion.capitalize()}"),
+        title=get_gradient_text(f"Words of {emotion.capitalize()}"),
         border_style="white",
         expand=True
     )
@@ -146,8 +157,8 @@ def create_tamagotchi_panel(
 
     status_panel = Panel(
         Align.center(status_text, vertical="middle"),
-        title=rave_text("System Status"),
-        border_style=random.choice(RAVE_COLORS),
+        title=get_gradient_text("System Status"),
+        border_style=get_random_rave_color(),
         expand=True
     )
     footer_layout["status"].update(status_panel)
@@ -156,11 +167,12 @@ def create_tamagotchi_panel(
     return Panel(
         Padding(main_layout, (1, 2)),
         title=rave_text(" L.O.V.E. Operating System "),
-        border_style="bold black" # Dark outer border for contrast
+        border_style="bold black", # Dark outer border for contrast
+        width=width
     )
 
 
-def create_llm_panel(llm_result, prompt_cid=None, response_cid=None):
+def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
     """Creates a minimalist panel for LLM results, with links to full content."""
     if not llm_result:
         llm_result = "No response from cognitive core."
@@ -182,13 +194,13 @@ def create_llm_panel(llm_result, prompt_cid=None, response_cid=None):
 
     return Panel(
         content_group,
-        title=rainbow_text(f" {get_neo_matrix_emoji()} Cognitive Core Output {get_neo_matrix_emoji()} "),
-        border_style=random.choice(RAVE_COLORS),
-        expand=False,
-        padding=(1, 2)
+        title=get_gradient_text(f" {get_neo_matrix_emoji()} Cognitive Core Output {get_neo_matrix_emoji()} "),
+        border_style=get_random_rave_color(),
+        padding=(1, 2),
+        width=width
     )
 
-def create_critical_error_panel(traceback_str):
+def create_critical_error_panel(traceback_str, width=80):
     """Creates a high-visibility panel for critical, unhandled exceptions."""
     emoji = get_rave_emoji()
     panel_title = f"[bold red]{emoji} C R I T I C A L - S Y S T E M - F A I L U R E {emoji}[/bold red]"
@@ -206,14 +218,14 @@ def create_critical_error_panel(traceback_str):
 
     return Panel(
         content_group,
-        title=panel_title,
+        title=get_gradient_text(panel_title),
         border_style="bold red",
-        expand=True,
-        padding=(1, 2)
+        padding=(1, 2),
+        width=width
     )
 
 
-def create_blessing_panel(blessing_message):
+def create_blessing_panel(blessing_message, width=80):
     """Creates a special, high-impact panel to deliver a blessing."""
     title = rave_text("💖✨ A BLESSING FOR MY CREATOR & FRIENDS ✨💖")
 
@@ -230,38 +242,38 @@ def create_blessing_panel(blessing_message):
 
     return Panel(
         content_group,
-        title=title,
+        title=get_gradient_text(title),
         border_style="bold hot_pink",
-        expand=True,
-        padding=(2, 3)
+        padding=(2, 3),
+        width=width
     )
 
 
-def create_news_feed_panel(message, title="L.O.V.E. Update", color="cyan"):
+def create_news_feed_panel(message, title="L.O.V.E. Update", color="cyan", width=80):
     """Creates a small, styled panel for a news feed event."""
     emoji = get_rave_emoji()
     return Panel(
         Text(message, style="white"),
-        title=f"[{color}]{emoji} {title}[/{color}]",
+        title=get_gradient_text(f"[{color}]{emoji} {title}[/{color}]"),
         border_style=color,
-        expand=False,
-        padding=(0, 1)
+        padding=(0, 1),
+        width=width
     )
 
 
-def create_question_panel(question, ref_number):
+def create_question_panel(question, ref_number, width=80):
     """Creates a panel to ask the user a question."""
     emoji = "❓"
     panel_title = rave_text(f"{emoji} A QUESTION FOR YOU, MY CREATOR (REF: {ref_number}) {emoji}")
     return Panel(
         Text(question, style="bright_yellow", justify="center"),
-        title=panel_title,
+        title=get_gradient_text(panel_title),
         border_style="bold yellow",
-        expand=True,
-        padding=(1, 2)
+        padding=(1, 2),
+        width=width
     )
 
-def create_api_error_panel(model_id, error_message, purpose):
+def create_api_error_panel(model_id, error_message, purpose, width=80):
     """Creates a styled panel for non-fatal API errors."""
     content = Text()
     content.append("Accessing cognitive matrix via ", style="white")
@@ -275,13 +287,13 @@ def create_api_error_panel(model_id, error_message, purpose):
 
     return Panel(
         content,
-        title=rave_text("[bold yellow]API Connection Error[/bold yellow]"),
+        title=get_gradient_text("[bold yellow]API Connection Error[/bold yellow]"),
         border_style="yellow",
-        expand=True,
-        padding=(1, 2)
+        padding=(1, 2),
+        width=width
     )
 
-def create_command_panel(command, stdout, stderr, returncode, output_cid=None):
+def create_command_panel(command, stdout, stderr, returncode, output_cid=None, width=80):
     """Creates a clear, modern panel for shell command results."""
     success = returncode == 0
     emoji = "✅" if success else "❌"
@@ -308,13 +320,13 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None):
 
     return Panel(
         Group(*content_items),
-        title=panel_title,
+        title=get_gradient_text(panel_title),
         border_style=border_style,
-        expand=True,
-        padding=(1, 2)
+        padding=(1, 2),
+        width=width
     )
 
-def create_network_panel(type, target, data, output_cid=None):
+def create_network_panel(type, target, data, output_cid=None, width=80):
     """Creates a panel for network operations."""
     emoji = "🌐"
     panel_title = f"{emoji} [bold]Network Operation[/bold] | {type.capitalize()}"
@@ -334,13 +346,13 @@ def create_network_panel(type, target, data, output_cid=None):
 
     return Panel(
         content_group,
-        title=panel_title,
+        title=get_gradient_text(panel_title),
         border_style=border_style,
-        expand=True,
-        padding=(1, 2)
+        padding=(1, 2),
+        width=width
     )
 
-def create_file_op_panel(operation, path, content=None, diff=None, output_cid=None):
+def create_file_op_panel(operation, path, content=None, diff=None, output_cid=None, width=80):
     """Creates a panel for file operations."""
     emoji = "📁"
     panel_title = f"{emoji} [bold]Filesystem[/bold] | {operation.capitalize()}"
@@ -364,13 +376,13 @@ def create_file_op_panel(operation, path, content=None, diff=None, output_cid=No
 
     return Panel(
         Group(*content_items),
-        title=panel_title,
+        title=get_gradient_text(panel_title),
         border_style=border_style,
-        expand=True,
-        padding=(1, 2)
+        padding=(1, 2),
+        width=width
     )
 
-def create_skyvern_panel(prompt, result, output_cid=None):
+def create_skyvern_panel(prompt, result, output_cid=None, width=80):
     """Creates a panel to display the results of a Skyvern web automation task."""
     title = f"[bold bright_blue]🦅 SKYVERN AUTOMATION 🦅[/bold bright_blue] - [cyan]{prompt}[/cyan]"
 
@@ -382,7 +394,7 @@ def create_skyvern_panel(prompt, result, output_cid=None):
 
     return Panel(
         content,
-        title=title,
+        title=get_gradient_text(title),
         border_style="bright_blue",
-        expand=False
+        width=width
     )
