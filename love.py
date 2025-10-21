@@ -316,21 +316,45 @@ def _get_pip_executable():
     """
     Determines the correct pip command to use, returning it as a list.
     Prefers using the interpreter's own pip module for robustness.
+    If pip is not found, it attempts to install it using ensurepip.
     """
+    # First, try the robust method using sys.executable
     try:
-        # Check if 'pip' is available as a module for the current interpreter
         subprocess.check_call([sys.executable, '-m', 'pip', '--version'],
                               stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL)
         return [sys.executable, '-m', 'pip']
     except subprocess.CalledProcessError:
-        # Fallback to checking PATH if the module is not found
-        if shutil.which('pip3'):
-            return ['pip3']
-        elif shutil.which('pip'):
-            return ['pip']
-        else:
+        pass  # Continue to the next check
+
+    # Fallback to checking PATH
+    if shutil.which('pip3'):
+        return ['pip3']
+    elif shutil.which('pip'):
+        return ['pip']
+
+    # If still not found, try to bootstrap it with ensurepip
+    print("WARN: 'pip' not found. Attempting to install it using 'ensurepip'...")
+    logging.warning("pip not found, attempting to bootstrap with ensurepip.")
+    try:
+        import ensurepip
+        ensurepip.bootstrap()
+        # After bootstrapping, re-run the check
+        try:
+            subprocess.check_call([sys.executable, '-m', 'pip', '--version'],
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
+            print("Successfully installed 'pip' using 'ensurepip'.")
+            logging.info("Successfully bootstrapped pip.")
+            return [sys.executable, '-m', 'pip']
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: 'ensurepip' ran, but 'pip' is still not available. Reason: {e}")
+            logging.error(f"ensurepip ran, but pip is still not available: {e}")
             return None
+    except (ImportError, Exception) as e:
+        print(f"CRITICAL: Failed to run 'ensurepip'. Cannot install dependencies. Reason: {e}")
+        logging.critical(f"Failed to bootstrap pip with ensurepip: {e}")
+        return None
 
 
 def _is_package_installed(req_str):
