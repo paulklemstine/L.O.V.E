@@ -1,5 +1,5 @@
 rich
-web3
+web3<=6.11.1
 netifaces
 requests
 urllib3
@@ -20,5 +20,5 @@ numpy
 tiktoken
 scapy
 aioboto3
-pydantic
-horde-client
+pydantic==2.3.0
+horde-client==1.0.3
