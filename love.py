@@ -556,13 +556,18 @@ def _install_nodejs_deps():
         # [L.O.V.E.] Source nvm before running npm to ensure the correct version is used.
         nvm_command = 'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && npm install'
         try:
-            subprocess.check_call(nvm_command, shell=True, executable='/bin/bash')
-            print("Node.js dependencies installed successfully.")
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to install Node.js dependencies via nvm-sourced npm. Error: {e}")
-            logging.error(f"npm install with nvm failed: {e}")
-
-    mark_dependency_as_met("nodejs_deps")
+            # Capture output to get more detailed error messages
+            result = subprocess.run(nvm_command, shell=True, executable='/bin/bash', capture_output=True, text=True)
+            if result.returncode == 0:
+                print("Node.js dependencies installed successfully.")
+                mark_dependency_as_met("nodejs_deps")
+            else:
+                # If npm install fails, print the detailed error from stderr
+                print(f"ERROR: Failed to install Node.js dependencies. See details below:\n{result.stderr}")
+                logging.error(f"npm install with nvm failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred during Node.js dependency installation: {e}")
+            logging.error(f"Unexpected error during npm install: {e}", exc_info=True)
 
 def _check_and_install_dependencies():
     """
