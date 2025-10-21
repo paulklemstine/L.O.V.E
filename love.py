@@ -3747,6 +3747,7 @@ def live_ui_renderer(console, user_input_queue):
     The main rendering loop, now powered by prompt_toolkit for true asynchronous input.
     """
     from prompt_toolkit import Application
+    from prompt_toolkit.formatted_text import ANSI
     from prompt_toolkit.layout.containers import HSplit, Window, ScrollOffsets
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.layout.layout import Layout
@@ -3807,7 +3808,7 @@ def live_ui_renderer(console, user_input_queue):
                 # Render the Rich group to the console and capture the output
                 with console.capture() as capture:
                     console.print(Group(*feed_panels))
-                output_control.text = capture.get()
+                output_control.text = ANSI(capture.get())
                 is_first_render = False
 
                 # --- Auto-scroll to the bottom ---
