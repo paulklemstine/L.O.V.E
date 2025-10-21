@@ -581,6 +581,8 @@ _check_and_install_dependencies()
 
 import requests
 # Now, it's safe to import everything else.
+from core.storage import save_all_state
+from core.capabilities import CAPS
 from core.constants import CREATOR_ETH_ADDRESS
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
 from core.retry import retry
@@ -3510,7 +3512,7 @@ def _auto_configure_hardware(console):
         except (FileNotFoundError, subprocess.CalledProcessError) as e:
             console.print("[yellow]Stage 1: `nvidia-smi` command failed or not found. Assuming no functional NVIDIA GPU.[/yellow]")
             log_event(f"nvidia-smi check failed: {e}", "WARNING")
-    elif CAPS.has_metal:
+    elif _TEMP_CAPS.has_metal:
         # On macOS, the presence of the Metal capability is a strong indicator.
         gpu_present = True
         console.print("[cyan]Stage 1: Metal capability detected for macOS.[/cyan]")
