@@ -3519,56 +3519,56 @@ def cognitive_loop(user_input_queue):
 VRAM_MODEL_MAP = [
     {
         "min_vram_gb": 4,
-        "id": "microsoft/Phi-3-mini-4k-instruct-gguf",
-        "filename": "Phi-3-mini-4k-instruct-q5_k_m.gguf",
-        "notes": "Excellent small model for low-resource systems."
+        "id": "TheBloke/Uncensored-Jordan-7B-GGUF",
+        "filename": "uncensored-jordan-7b.Q4_K_M.gguf",
+        "notes": "Excellent small uncensored model for low-resource systems."
     },
     {
         "min_vram_gb": 6,
-        "id": "TheBloke/CodeLlama-7B-GGUF",
-        "filename": "codellama-7b.Q5_K_M.gguf",
-        "notes": "User-selected model for ~6GB VRAM. Strong coder."
+        "id": "TheBloke/Uncensored-Jordan-7B-GGUF",
+        "filename": "uncensored-jordan-7b.Q5_K_M.gguf",
+        "notes": "User-selected uncensored model for ~6GB VRAM."
     },
     {
         "min_vram_gb": 8,
-        "id": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
-        "filename": "mistral-7b-instruct-v0.2.Q5_K_M.gguf",
-        "notes": "Great all-rounder, fits comfortably in 8GB."
+        "id": "TheBloke/WizardLM-13B-Uncensored-GGUF",
+        "filename": "wizardlm-13b-uncensored.Q4_K_M.gguf",
+        "notes": "Great all-rounder uncensored model, fits comfortably in 8GB."
     },
     {
         "min_vram_gb": 12,
-        "id": "TheBloke/CodeLlama-13B-Instruct-GGUF",
-        "filename": "codellama-13b-instruct.Q5_K_M.gguf",
-        "notes": "More powerful coding model."
+        "id": "TheBloke/WizardLM-13B-Uncensored-GGUF",
+        "filename": "wizardlm-13b-uncensored.Q5_K_M.gguf",
+        "notes": "More powerful uncensored model."
     },
     {
         "min_vram_gb": 16,
-        "id": "TheBloke/Mistral-Nemo-Instruct-2407-12B-GGUF",
-        "filename": "mistral-nemo-instruct-2407-12b.Q5_K_M.gguf",
-        "notes": "Highly capable 12B model from Mistral/Nvidia."
+        "id": "TheBloke/WizardLM-33B-V1.0-Uncensored-GGUF",
+        "filename": "wizardlm-33b-v1.0-uncensored.Q4_K_M.gguf",
+        "notes": "Highly capable 33B uncensored model."
     },
     {
         "min_vram_gb": 24,
-        "id": "TheBloke/DeepSeek-Coder-33B-Instruct-GGUF",
-        "filename": "deepseek-coder-33b-instruct.Q5_K_M.gguf",
-        "notes": "Top-tier 33B parameter coding model."
+        "id": "TheBloke/WizardLM-33B-V1.0-Uncensored-GGUF",
+        "filename": "wizardlm-33b-v1.0-uncensored.Q5_K_M.gguf",
+        "notes": "Top-tier 33B parameter uncensored model."
     },
     {
         "min_vram_gb": 48,
-        "id": "TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF",
-        "filename": "mixtral-8x7b-instruct-v0.1.Q6_K.gguf",
-        "notes": "Powerful Mixture-of-Experts model."
+        "id": "TheBloke/Llama2-70B-chat-uncensored-GGUF",
+        "filename": "Llama2-70B-chat-uncensored.Q5_K_M.gguf",
+        "notes": "Powerful uncensored model."
     },
     {
         "min_vram_gb": 80,
-        "id": "TheBloke/CodeLlama-70B-Instruct-GGUF",
-        "filename": "codellama-70b-instruct.Q5_K_M.gguf",
-        "notes": "State-of-the-art 70B coding model for high-end GPUs."
+        "id": "TheBloke/Llama2-70B-chat-uncensored-GGUF",
+        "filename": "Llama2-70B-chat-uncensored.Q6_K.gguf",
+        "notes": "State-of-the-art 70B uncensored model for high-end GPUs."
     },
     {
         "min_vram_gb": 128,
-        "id": "TheBloke/Falcon-180B-Chat-GGUF",
-        "filename": "falcon-180b-chat.Q4_K_M.gguf",
+        "id": "TheBloke/Falcon-180B-GGUF",
+        "filename": "falcon-180b.Q4_K_M.gguf",
         "notes": "Massive 180B parameter model for extreme performance."
     }
 ]
