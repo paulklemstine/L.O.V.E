@@ -53,13 +53,24 @@ GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
 def get_openrouter_models():
-    """Returns a curated list of reliable, free models from OpenRouter."""
-    return [
-        "microsoft/phi-3-medium-4k-instruct:free",
-        "google/gemma-2-9b-it:free",
-        "meta-llama/llama-3-8b-instruct:free",
-        "mistralai/mistral-7b-instruct:free",
-    ]
+    """Fetches the list of free models from the OpenRouter API."""
+    try:
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            return []
+
+        headers = {"Authorization": f"Bearer {api_key}"}
+        response = requests.get(f"{OPENROUTER_API_URL}/models", headers=headers)
+        response.raise_for_status()
+        models = response.json().get("data", [])
+
+        # Filter for models that are free
+        free_models = [model['id'] for model in models if "free" in model['id'].lower()]
+        return free_models
+    except Exception as e:
+        # Log the error, but don't crash the application
+        log_event(f"Could not fetch OpenRouter models: {e}", "WARNING")
+        return []
 
 OPENROUTER_MODELS = get_openrouter_models()
 
