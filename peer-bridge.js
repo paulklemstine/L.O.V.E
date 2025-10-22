@@ -9,6 +9,7 @@ const WebSocket = require('ws');
 global.WebSocket = WebSocket;
 const { Peer } = require('peerjs');
 const { Readable } = require('stream');
+const { v4: uuidv4 } = require('uuid');
 
 // --- Configuration ---
 const RECONNECT_DELAY = 5000; // 5 seconds
@@ -17,9 +18,10 @@ const RECONNECT_DELAY = 5000; // 5 seconds
 let peer = null;
 const connections = new Map();
 let isReconnecting = false;
+let isClient = false; // Flag to indicate if this instance is a client
 // [L.O.V.E.] Changed to a static ID to create a discoverable lobby.
-// Keep the peerId consistent across reconnections.
 let peerId = 'love-lobby';
+const LOBBY_HOST_ID = 'love-lobby';
 
 // --- Logging ---
 // Use stderr for logs to keep stdout clean for data exchange with Python
@@ -77,13 +79,40 @@ function connectToPeer(targetPeerId) {
 
 function handleNewConnection(conn) {
     log('info', `Handling new connection with ${conn.peer}`);
-    connections.set(conn.peer, conn);
-    process.stdout.write(JSON.stringify({ type: 'connection', peer: conn.peer }) + '\n');
+
+    // This 'open' event is the reliable way to know the data connection is ready.
+    conn.on('open', () => {
+        log('info', `Data connection is now open with ${conn.peer}.`);
+        connections.set(conn.peer, conn);
+        process.stdout.write(JSON.stringify({ type: 'connection', peer: conn.peer }) + '\n');
+
+        // If this is a client that just connected to the host, request the peer list.
+        if (isClient && conn.peer === LOBBY_HOST_ID) {
+            log('info', `Client connected to host. Requesting peer list.`);
+            conn.send({ type: 'request-peer-list' });
+        }
+    });
 
     conn.on('data', (data) => {
-        log('info', `Received data from ${conn.peer}`);
-        const messageToPython = { type: 'p2p-data', peer: conn.peer, payload: data };
-        process.stdout.write(JSON.stringify(messageToPython) + '\n');
+        // Handle control messages for peer list synchronization
+        if (data.type === 'request-peer-list' && !isClient) {
+            log('info', `Received peer list request from ${conn.peer}`);
+            const peerIds = Array.from(connections.keys());
+            const response = { type: 'peer-list', peers: peerIds };
+            conn.send(response);
+            log('info', `Sent peer list to ${conn.peer}: ${JSON.stringify(peerIds)}`);
+
+        } else if (data.type === 'peer-list' && isClient) {
+            log('info', `Received peer list from host: ${JSON.stringify(data.peers)}`);
+            // Pass the list to Python to decide who to connect to
+            process.stdout.write(JSON.stringify({ type: 'peer-list-update', peers: data.peers }) + '\n');
+
+        } else {
+            // Handle regular data messages
+            log('info', `Received data from ${conn.peer}`);
+            const messageToPython = { type: 'p2p-data', peer: conn.peer, payload: data };
+            process.stdout.write(JSON.stringify(messageToPython) + '\n');
+        }
     });
 
     conn.on('close', () => {
@@ -122,10 +151,17 @@ function initializePeer() {
 
     peer.on('open', (id) => {
         log('info', `PeerJS connection opened with ID: ${id}`);
-        // Update the global peerId in case it was dynamically assigned (shouldn't happen with static ID)
         peerId = id;
-        // Signal to Python that the bridge is ready.
-        process.stdout.write(JSON.stringify({ type: 'status', status: 'online', peerId: id }) + '\n');
+
+        // If we are a client, we now connect to the lobby host.
+        if (isClient) {
+            log('info', `Acting as a client, attempting to connect to host '${LOBBY_HOST_ID}'.`);
+            process.stdout.write(JSON.stringify({ type: 'status', status: 'client-online', peerId: id }) + '\n');
+            connectToPeer(LOBBY_HOST_ID);
+        } else {
+            // Signal to Python that we are the host and ready.
+            process.stdout.write(JSON.stringify({ type: 'status', status: 'host-online', peerId: id }) + '\n');
+        }
     });
 
     peer.on('connection', (conn) => {
@@ -135,19 +171,29 @@ function initializePeer() {
     peer.on('error', (err) => {
         log('error', `PeerJS error: ${err.type} - ${err.message}`);
 
-        // Define which errors should trigger a reconnect vs. a fatal exit
-        const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc'];
+        if (err.type === 'id-taken' && peerId === LOBBY_HOST_ID) {
+            log('warn', `Lobby ID '${LOBBY_HOST_ID}' is taken. Switching to client mode.`);
+            isClient = true;
+            peerId = `love-${uuidv4()}`; // Generate a unique ID
+            log('info', `Generated new client ID: ${peerId}`);
 
-        if (recoverableErrors.includes(err.type)) {
-            log('warn', 'A recoverable error occurred. Triggering reconnection.');
-            // Signal a transient error to Python without exiting
-            process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: err.message }) + '\n');
+            // Notify Python that we are now a client and will reconnect with a new ID
+            process.stdout.write(JSON.stringify({ type: 'status', status: 'client-initializing', peerId: peerId, message: "Lobby is hosted, becoming a client." }) + '\n');
+
+            // Reconnect with the new client ID
             reconnect();
+
         } else {
-            log('error', 'An unrecoverable error occurred. Exiting.');
-            // Signal a critical error to Python.
-            process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
-            process.exit(1);
+            const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc'];
+            if (recoverableErrors.includes(err.type)) {
+                log('warn', 'A recoverable error occurred. Triggering reconnection.');
+                process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: err.message }) + '\n');
+                reconnect();
+            } else {
+                log('error', 'An unrecoverable error occurred. Exiting.');
+                process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
+                process.exit(1);
+            }
         }
     });
 
@@ -203,7 +249,14 @@ function handlePythonMessage(jsonString) {
             }
         } else if (message.type === 'connect-to-peer' && message.peerId) {
             connectToPeer(message.peerId);
-        }
+        } else if (message.type === 'broadcast' && message.payload) {
+             log('info', `Broadcasting message to all ${connections.size} peers.`);
+             for (const conn of connections.values()) {
+                 if (conn && conn.open) {
+                     conn.send(message.payload);
+                 }
+             }
+         }
     } catch (e) {
         log('error', `Error parsing JSON from Python: ${e.message}`);
     }

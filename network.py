@@ -41,6 +41,9 @@ class NetworkManager:
         self.thread = None
         self.loop = None
         self.bridge_online = asyncio.Event()
+        self.is_host = False
+        self.peer_id = None
+        self.peers = set()
 
     def start(self):
         """Starts the peer-to-peer bridge in a background thread."""
@@ -64,6 +67,10 @@ class NetworkManager:
         while self.active:
             try:
                 self.bridge_online.clear()
+                self.is_host = False
+                self.peer_id = None
+                self.peers.clear()
+
                 self.process = await asyncio.create_subprocess_exec(
                     'node', self.peer_bridge_script,
                     stdout=asyncio.subprocess.PIPE,
@@ -75,7 +82,8 @@ class NetworkManager:
                 stderr_task = self.loop.create_task(self._handle_stream(self.process.stderr, self._handle_log))
 
                 try:
-                    await asyncio.wait_for(self.bridge_online.wait(), timeout=90.0)
+                    # Extended timeout to allow for client/host negotiation
+                    await asyncio.wait_for(self.bridge_online.wait(), timeout=120.0)
                 except asyncio.TimeoutError:
                     self.console.print("[bold yellow]Peer bridge timed out. Terminating and restarting...[/bold yellow]")
                     self.process.terminate()
@@ -118,22 +126,60 @@ class NetworkManager:
             msg_type = message.get("type")
 
             if msg_type == "status":
-                status = message.get('status')
-                self.console.print(Panel(f"Peer Status: [bold green]{status}[/bold green]\nPeer ID: [cyan]{message.get('peerId')}[/cyan]", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
-                if status == 'online':
-                    self.bridge_online.set()
+                self._handle_status_message(message)
+            elif msg_type == "connection":
+                peer = message.get('peer')
+                self.peers.add(peer)
+                self.console.print(Panel(f"New peer connected: [cyan]{peer}[/cyan]. Total peers: {len(self.peers)}", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
+            elif msg_type == "disconnection":
+                peer = message.get('peer')
+                self.peers.discard(peer)
+                self.console.print(Panel(f"Peer disconnected: [cyan]{peer}[/cyan]. Total peers: {len(self.peers)}", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
+            elif msg_type == "peer-list-update":
+                 self._handle_peer_list_update(message.get('peers', []))
             elif msg_type == "treasure-broadcast" and self.is_creator:
                 if self.treasure_callback:
                     self.treasure_callback(message.get("data"))
             elif msg_type == "question":
                 if self.question_callback:
                     self.question_callback(message.get("question"))
-            # Other instances will ignore treasure broadcasts if they are not the creator.
 
         except json.JSONDecodeError:
             self.console.print(f"[bright_black]Non-JSON message from bridge: {message_str}[/bright_black]")
         except Exception as e:
             self.console.print(f"[bold red]Error processing message from bridge: {e}[/bold red]")
+
+    def _handle_status_message(self, message):
+        """Handles detailed status updates from the peer bridge."""
+        status = message.get('status')
+        peer_id = message.get('peerId')
+
+        panel_content = f"Peer Status: [bold green]{status}[/bold green]\nPeer ID: [cyan]{peer_id}[/cyan]"
+
+        if status == 'host-online':
+            self.is_host = True
+            self.peer_id = peer_id
+            self.bridge_online.set()
+            panel_content += "\n[yellow]Acting as lobby host.[/yellow]"
+        elif status == 'client-online':
+            self.is_host = False
+            self.peer_id = peer_id
+            self.bridge_online.set()
+            panel_content += "\n[cyan]Acting as lobby client.[/cyan]"
+        elif status == 'client-initializing':
+             panel_content += f"\n[yellow]Switching to client mode...[/yellow]"
+        elif status in ['reconnecting', 'error']:
+            panel_content += f"\n[red]Details: {message.get('message', 'N/A')}[/red]"
+
+        self.console.print(Panel(panel_content, title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
+
+    def _handle_peer_list_update(self, peer_list):
+        """Handles the list of peers received from the host and connects to new ones."""
+        self.console.print(Panel(f"Received peer list from host: {peer_list}", title="[magenta]Network Sync[/magenta]", border_style="magenta"))
+        new_peers = set(peer_list) - self.peers - {self.peer_id}
+        for peer in new_peers:
+            self.console.print(f"Connecting to new peer from list: {peer}")
+            self.connect_to_peer(peer)
 
     def _handle_log(self, log_str):
         """Handles log messages from the peer bridge's stderr."""
@@ -141,14 +187,11 @@ class NetworkManager:
             log_entry = json.loads(log_str)
             level = log_entry.get("level", "info")
             message = log_entry.get("message", "No message")
-            # Log to the central logger instead of just printing
-            from love import log_event # Local import to avoid circular dependency at module level
+            from love import log_event
             log_event(f"[{level.upper()}] [PeerBridge] {message}")
         except json.JSONDecodeError:
-            # Handle plain string logs as well
             from love import log_event
             log_event(f"[INFO] [PeerBridge] {log_str}")
-
 
     def send_treasure(self, encrypted_data):
         """Sends encrypted treasure data to all peers."""
@@ -161,7 +204,7 @@ class NetworkManager:
         })
 
     def ask_question(self, question_text):
-        """Sends a question to the creator instance."""
+        """Sends a question to the creator instance (host)."""
         self._send_message({
             "type": "send",
             "targetPeerId": "love-lobby",
@@ -171,11 +214,19 @@ class NetworkManager:
             }
         })
 
+    def connect_to_peer(self, peer_id):
+        """Instructs the bridge to connect to a specific peer."""
+        self._send_message({"type": "connect-to-peer", "peerId": peer_id})
+
     async def _write_to_stdin(self, data_str):
         """Coroutine to write data to the subprocess's stdin."""
         if self.process and self.process.stdin and not self.process.stdin.is_closing():
-            self.process.stdin.write((data_str + '\n').encode('utf-8'))
-            await self.process.stdin.drain()
+            try:
+                self.process.stdin.write((data_str + '\n').encode('utf-8'))
+                await self.process.stdin.drain()
+            except (BrokenPipeError, ConnectionResetError) as e:
+                self.console.print(f"[bold yellow]Failed to write to peer bridge stdin: {e}[/bold yellow]")
+
 
     def _send_message(self, message_dict):
         """Sends a JSON message to the Node.js peer bridge process by scheduling it on the event loop."""
@@ -190,14 +241,11 @@ class NetworkManager:
             try:
                 self.process.terminate()
             except ProcessLookupError:
-                pass # Process already terminated
-        # No need to directly interact with the thread. Setting self.active = False
-        # will cause the loop in _run_bridge to exit, and the daemon thread will terminate.
+                pass
         self.console.print("[cyan]Network Manager stopped.[/cyan]")
 
 
 # --- Standalone Network Utility Functions ---
-
 def get_local_subnets():
     """Identifies local subnets from network interfaces."""
     subnets = set()
