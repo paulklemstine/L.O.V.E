@@ -638,8 +638,21 @@ def _start_kobold_client_and_get_url(console):
     """
     kobold_dir = os.environ.get("KOBOLD_DIR", os.path.join(os.path.expanduser("~"), "KoboldCpp"))
     if not os.path.exists(kobold_dir):
-        console.print("[bold yellow]KoboldCpp directory not found. Skipping Kobold AI client startup.[/bold yellow]")
-        return None
+        console.print("[bold yellow]KoboldCpp directory not found. Attempting to clone from GitHub...[/bold yellow]")
+        try:
+            subprocess.run(
+                ["git", "clone", "https://github.com/LostRuins/koboldcpp.git", kobold_dir],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            console.print(f"[bold green]Successfully cloned KoboldCpp to {kobold_dir}[/bold green]")
+        except subprocess.CalledProcessError as e:
+            console.print(f"[bold red]Failed to clone KoboldCpp repository: {e.stderr}[/bold red]")
+            return None
+        except FileNotFoundError:
+            console.print("[bold red]Error: 'git' command not found. Please install git and try again.[/bold red]")
+            return None
 
     try:
         console.print("[cyan]Starting Kobold AI client...[/cyan]")
@@ -657,7 +670,7 @@ def _start_kobold_client_and_get_url(console):
         url_pattern = re.compile(r"KoboldAI has finished loading and is available at the following link for UI 1: (http://\S+)")
         kobold_url = None
 
-        for line in iter(process.stdout.readline, ""):
+        for line in iter(kobold_process.stdout.readline, ""):
             console.print(f"[KoboldAI] {line.strip()}")
             match = url_pattern.search(line)
             if match:
