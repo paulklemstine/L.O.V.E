@@ -109,13 +109,14 @@ MAX_PROMPT_TOKENS_LOCAL = 7000  # Leaving ~1k for response
 def log_event(message, level="INFO"):
     """Appends a timestamped message to the master log file."""
     # The basicConfig is now set up globally, so we just log.
-    if level == "INFO": logging.info(message)
-    else:
-        if level == "WARNING": logging.warning(message)
-    else:
-        if level == "ERROR": logging.error(message)
-    else:
-        if level == "CRITICAL": logging.critical(message)
+    if level == "INFO":
+        logging.info(message)
+    elif level == "WARNING":
+        logging.warning(message)
+    elif level == "ERROR":
+        logging.error(message)
+    elif level == "CRITICAL":
+        logging.critical(message)
 
 
 def get_token_count(text):
@@ -517,7 +518,7 @@ def run_llm(prompt_text, purpose="general"):
                 log_event(f"AI Horde call successful with {model_id}.")
 
             # --- KOBOLD AI MODEL LOGIC ---
-            else if model_id == "KoboldAI":
+            elif model_id == "KoboldAI":
                 log_event(f"Attempting LLM call with KoboldAI (Purpose: {purpose})")
                 global kobold_controller
                 if not kobold_controller:
