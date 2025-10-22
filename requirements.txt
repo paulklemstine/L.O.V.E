@@ -24,3 +24,4 @@ pydantic
 eth-typing
 rich-gradient
 prompt-toolkit
+customtkinter
