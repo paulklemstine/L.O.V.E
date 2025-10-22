@@ -516,26 +516,6 @@ def run_llm(prompt_text, purpose="general"):
                 )
                 log_event(f"AI Horde call successful with {model_id}.")
 
-            # --- KOBOLD AI MODEL LOGIC ---
-            elif model_id == "KoboldAI":
-                log_event(f"Attempting LLM call with KoboldAI (Purpose: {purpose})")
-                global kobold_controller
-                if not kobold_controller:
-                    kobold_controller = KoboldController()
-                    if not kobold_controller.Initialise(KOBOLD_API_URL):
-                        raise Exception("KoboldAI controller failed to initialize.")
-
-                def _kobold_call():
-                    return kobold_controller.Generate(prompt_text)
-
-                result_text = run_hypnotic_progress(
-                    console,
-                    f"Accessing cognitive matrix via [bold yellow]KoboldAI[/bold yellow] (Purpose: {purpose})",
-                    _kobold_call,
-                    silent=(purpose in ['emotion', 'log_squash'])
-                )
-                log_event(f"KoboldAI call successful.")
-
             # --- Success Case ---
             if result_text is not None:
                 LLM_AVAILABILITY[model_id] = time.time()
