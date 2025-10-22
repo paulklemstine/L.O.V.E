@@ -593,30 +593,34 @@ def _configure_llm_api_key():
         return
 
     try:
-        # Check if the key is already set
+        log_event("INFO: Checking 'llm' tool API key configuration...")
         llm_executable = [sys.executable, '-m', 'llm']
         result = subprocess.run(
             llm_executable + ["keys", "list"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=60
         )
+        log_event(f"INFO: 'llm keys list' output: {result.stdout.strip()}")
         if "google" in result.stdout:
             log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
             mark_dependency_as_met("llm_api_key_configured")
             return
 
-        # If not set, configure it
         log_event("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
         configure_result = subprocess.run(
             llm_executable + ["keys", "set", "google"],
             input=gemini_api_key,
             text=True,
             check=True,
-            capture_output=True
+            capture_output=True,
+            timeout=60
         )
         log_event(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
         mark_dependency_as_met("llm_api_key_configured")
+    except subprocess.TimeoutExpired:
+        log_event("ERROR: Timeout expired while trying to configure the 'llm' tool API key. The command is likely hanging.")
     except subprocess.CalledProcessError as e:
         error_message = f"ERROR: Failed to configure llm API key via 'llm keys set google'.\n"
         error_message += f"  Return Code: {e.returncode}\n"
