@@ -18,6 +18,7 @@ from xml.etree import ElementTree as ET
 from pycvesearch import CVESearch
 from core.retry import retry
 from ipfs import pin_to_ipfs_sync
+from core.image_api import generate_image
 import uuid
 
 cve_search_client = CVESearch("https://cve.circl.lu")
@@ -92,7 +93,7 @@ def _get_valid_command_prefixes():
     """Returns a list of all valid command prefixes for parsing and validation."""
     return [
         "evolve", "execute", "scan", "probe", "webrequest", "autopilot", "quit",
-        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask", "mrl_call", "browse"
+        "ls", "cat", "ps", "ifconfig", "analyze_json", "analyze_fs", "crypto_scan", "ask", "mrl_call", "browse", "generate_image"
     ]
 
 def _parse_llm_command(raw_text):

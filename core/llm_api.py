@@ -46,13 +46,27 @@ LOCAL_MODELS_CONFIG = [
 
 # --- Fallback Model Configuration ---
 GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
-# A selection of strong Horde models. Mythalion is good for story-writing/creativity.
+
+def get_top_horde_models(count=3):
+    """Fetches the list of active text models from the AI Horde and returns the top `count` models by performance."""
+    try:
+        response = requests.get("https://aihorde.net/api/v2/models?type=text")
+        response.raise_for_status()
+        models = response.json()
+        # Sort by performance (higher is better), filtering out queued models
+        sorted_models = sorted([m for m in models if m.get('performance')], key=lambda x: x['performance'], reverse=True)
+        return [model['name'] for model in sorted_models[:count]]
+    except Exception as e:
+        # Fallback to a default if the API call fails
+        return ["Mythalion-13B"]
+
+HORDE_MODELS = get_top_horde_models()
 
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
 ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS
+    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 local_llm_instance = None
@@ -342,16 +356,16 @@ def run_llm(prompt_text, purpose="general"):
     # Dynamically set model priority based on purpose
     if purpose == 'emotion':
         # Prioritize the fastest, cheapest models for non-critical personality updates
-        llm_models_priority = sorted(GEMINI_MODELS, key=lambda m: 'flash' not in m) + local_model_ids
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Flash -> Pro -> Local.", level="INFO")
+        llm_models_priority = sorted(GEMINI_MODELS, key=lambda m: 'flash' not in m) + local_model_ids + HORDE_MODELS
+        log_event(f"Running LLM for purpose '{purpose}'. Priority: Flash -> Pro -> Local -> Horde.", level="INFO")
     elif purpose == 'goal_generation':
         # Prioritize local ablated models for creative/unrestricted tasks
-        llm_models_priority = local_model_ids + GEMINI_MODELS
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Gemini.", level="INFO")
+        llm_models_priority = local_model_ids + HORDE_MODELS + GEMINI_MODELS
+        log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Horde -> Gemini.", level="INFO")
     else:  # Covers 'review', 'autopilot', 'general', and 'analyze_source'
         # Prioritize powerful Gemini models for reasoning tasks
-        llm_models_priority = GEMINI_MODELS + local_model_ids
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Gemini -> Local.", level="INFO")
+        llm_models_priority = GEMINI_MODELS + local_model_ids + HORDE_MODELS
+        log_event(f"Running LLM for purpose '{purpose}'. Priority: Gemini -> Local -> Horde.", level="INFO")
 
     # This list will be mutated if a model fails catastrophically
     current_attempt_models = list(llm_models_priority)
@@ -398,7 +412,7 @@ def run_llm(prompt_text, purpose="general"):
                     raise Exception("Local LLM instance could not be initialized.")
 
             # --- GEMINI MODEL LOGIC ---
-            else:
+            elif model_id in GEMINI_MODELS:
                 log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
                 command = ["llm", "-m", model_id]
 
@@ -413,6 +427,43 @@ def run_llm(prompt_text, purpose="general"):
                 )
                 result_text = result.stdout
                 log_event(f"LLM call successful with {model_id}.")
+
+            # --- AI HORDE MODEL LOGIC ---
+            else:
+                log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})")
+                api_key = os.environ.get("STABLE_HORDE", "0000000000")
+                headers = {"apikey": api_key, "Content-Type": "application/json"}
+                payload = {
+                    "prompt": prompt_text,
+                    "params": {"max_length": 2048, "max_context_length": 8192},
+                    "models": [model_id]
+                }
+
+                def _horde_call():
+                    # Submit the request
+                    api_url = "https://aihorde.net/api/v2/generate/text/async"
+                    response = requests.post(api_url, json=payload, headers=headers)
+                    response.raise_for_status()
+                    job_id = response.json()["id"]
+
+                    # Poll for the result
+                    check_url = f"https://aihorde.net/api/v2/generate/text/status/{job_id}"
+                    for _ in range(30):  # Poll for 5 minutes
+                        time.sleep(10)
+                        check_response = requests.get(check_url, headers=headers)
+                        check_response.raise_for_status()
+                        status = check_response.json()
+                        if status["done"]:
+                            return status["generations"][0]["text"]
+                    raise Exception("AI Horde job timed out.")
+
+                result_text = run_hypnotic_progress(
+                    console,
+                    f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow] (Purpose: {purpose})",
+                    _horde_call,
+                    silent=(purpose in ['emotion', 'log_squash'])
+                )
+                log_event(f"AI Horde call successful with {model_id}.")
 
             # --- Success Case ---
             if result_text is not None:
