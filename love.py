@@ -657,15 +657,27 @@ def _start_kobold_client_and_get_url(console):
     try:
         console.print("[cyan]Starting Kobold AI client...[/cyan]")
         global kobold_process
-        kobold_process = subprocess.Popen(
-            ["python", "koboldcpp.py"],
-            cwd=kobold_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
-        )
+        try:
+            kobold_process = subprocess.Popen(
+                ["python", "koboldcpp.py"],
+                cwd=kobold_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+            )
+        except FileNotFoundError:
+            console.print("[yellow]'python' not found, trying 'python3'...[/yellow]")
+            kobold_process = subprocess.Popen(
+                ["python3", "koboldcpp.py"],
+                cwd=kobold_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+            )
 
         url_pattern = re.compile(r"KoboldAI has finished loading and is available at the following link for UI 1: (http://\S+)")
         kobold_url = None
