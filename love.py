@@ -2083,6 +2083,37 @@ class LocalLLMServer:
         # Determine optimal GPU layers from the saved state
         n_gpu_layers = love_state.get("optimal_gpu_layers", 0)
 
+        # --- Dynamically determine context size from GGUF file ---
+        n_ctx = 8192 # Default value
+        try:
+            log_event(f"Attempting to read context length from {model_path} using gguf-dump")
+            # Construct the command to be robust
+            gguf_dump_executable = os.path.join(os.path.dirname(sys.executable), 'gguf-dump')
+            if not os.path.exists(gguf_dump_executable):
+                 # Fallback for virtual environments where scripts might be in a different bin
+                 gguf_dump_executable = shutil.which('gguf-dump')
+
+            if gguf_dump_executable:
+                result = subprocess.run(
+                    [gguf_dump_executable, "--json", model_path],
+                    capture_output=True, text=True, check=True, timeout=60
+                )
+                model_metadata = json.loads(result.stdout)
+                context_length = model_metadata.get("llama.context_length")
+                if context_length:
+                    n_ctx = int(context_length)
+                    log_event(f"Successfully read context length from model: {n_ctx}")
+                    self.console.print(f"[green]Successfully read context length from model: {n_ctx}[/green]")
+                else:
+                    log_event("'llama.context_length' not found in model metadata. Using default.", "WARNING")
+            else:
+                log_event("Could not find gguf-dump executable. Using default context size.", "ERROR")
+
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, FileNotFoundError) as e:
+            log_event(f"Failed to get context length from GGUF file: {e}. Using default value {n_ctx}.", level="ERROR")
+            self.console.print(f"[bold yellow]WARN: Could not determine model's context length. Using default: {n_ctx}. Reason: {e}[/bold yellow]")
+        # --- End context size determination ---
+
         # Command to start the server
         command = [
             sys.executable,
@@ -2091,7 +2122,7 @@ class LocalLLMServer:
             "--host", self.host,
             "--port", str(self.port),
             "--n_gpu_layers", str(n_gpu_layers),
-            "--n_ctx", "8192" # Standard context size for the server
+            "--n_ctx", str(n_ctx)
         ]
 
         self.console.print(f"[cyan]Starting Local LLM API Server on {self.api_url}...[/cyan]")
