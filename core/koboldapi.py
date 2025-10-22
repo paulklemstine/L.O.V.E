@@ -155,7 +155,7 @@ class Controller:
             self.ResetStory()
 
         if new_only:
-            output = textin.replace("\\n", "\n") + self.chunks[len(self.chunks)]
+            output = textin.replace("\\n", "\n") + self.chunks[-1]
 
         if not output.endswith("\n") and not output.endswith(" "):
             self.addSpaceBefore = True
