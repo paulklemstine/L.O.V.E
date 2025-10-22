@@ -3752,7 +3752,9 @@ def _auto_configure_hardware(console):
 
         stderr_output = stderr_capture.getvalue()
         log_event(f"DEBUG: Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
-        if "backend" in stderr_output:
+        # Use a more reliable regex to confirm GPU backend initialization.
+        gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
+        if gpu_init_pattern.search(stderr_output):
             love_state["optimal_gpu_layers"] = -1 # -1 means offload all possible layers
             console.print("[green]Success! llama.cpp confirmed model layers were offloaded to VRAM.[/green]")
             log_event(f"GPU offload confirmed for model {model_id} via llama.cpp verbose output.", "INFO")
