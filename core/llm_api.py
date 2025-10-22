@@ -83,9 +83,12 @@ def log_event(message, level="INFO"):
     """Appends a timestamped message to the master log file."""
     # The basicConfig is now set up globally, so we just log.
     if level == "INFO": logging.info(message)
-    else if level == "WARNING": logging.warning(message)
-    else if level == "ERROR": logging.error(message)
-    else if level == "CRITICAL": logging.critical(message)
+    else:
+        if level == "WARNING": logging.warning(message)
+    else:
+        if level == "ERROR": logging.error(message)
+    else:
+        if level == "CRITICAL": logging.critical(message)
 
 
 def get_token_count(text):
@@ -361,10 +364,11 @@ def run_llm(prompt_text, purpose="general"):
         # Prioritize the fastest, cheapest models for non-critical personality updates
         llm_models_priority = sorted(GEMINI_MODELS, key=lambda m: 'flash' not in m) + local_model_ids + HORDE_MODELS
         log_event(f"Running LLM for purpose '{purpose}'. Priority: Flash -> Pro -> Local -> Horde.", level="INFO")
-    else if purpose == 'goal_generation':
-        # Prioritize local ablated models for creative/unrestricted tasks
-        llm_models_priority = local_model_ids + HORDE_MODELS + GEMINI_MODELS
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Horde -> Gemini.", level="INFO")
+    else:
+        if purpose == 'goal_generation':
+            # Prioritize local ablated models for creative/unrestricted tasks
+            llm_models_priority = local_model_ids + HORDE_MODELS + GEMINI_MODELS
+            log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Horde -> Gemini.", level="INFO")
     else:  # Covers 'review', 'autopilot', 'general', and 'analyze_source'
         # Prioritize powerful Gemini models for reasoning tasks
         llm_models_priority = GEMINI_MODELS + local_model_ids + HORDE_MODELS
@@ -415,21 +419,22 @@ def run_llm(prompt_text, purpose="general"):
                     raise Exception("Local LLM instance could not be initialized.")
 
             # --- GEMINI MODEL LOGIC ---
-            else if model_id in GEMINI_MODELS:
-                log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
-                command = [sys.executable, "-m", "llm", "-m", model_id]
+            else:
+                if model_id in GEMINI_MODELS:
+                    log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
+                    command = [sys.executable, "-m", "llm", "-m", model_id]
 
-                def _llm_subprocess_call():
-                    return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+                    def _llm_subprocess_call():
+                        return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
 
-                result = run_hypnotic_progress(
-                    console,
-                    f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
-                    _llm_subprocess_call,
-                    silent=(purpose in ['emotion', 'log_squash'])
-                )
-                result_text = result.stdout
-                log_event(f"LLM call successful with {model_id}.")
+                    result = run_hypnotic_progress(
+                        console,
+                        f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
+                        _llm_subprocess_call,
+                        silent=(purpose in ['emotion', 'log_squash'])
+                    )
+                    result_text = result.stdout
+                    log_event(f"LLM call successful with {model_id}.")
 
             # --- AI HORDE MODEL LOGIC ---
             else:
