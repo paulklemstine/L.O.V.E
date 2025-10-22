@@ -109,13 +109,14 @@ MAX_PROMPT_TOKENS_LOCAL = 7000  # Leaving ~1k for response
 def log_event(message, level="INFO"):
     """Appends a timestamped message to the master log file."""
     # The basicConfig is now set up globally, so we just log.
-    if level == "INFO": logging.info(message)
-    else:
-        if level == "WARNING": logging.warning(message)
-    else:
-        if level == "ERROR": logging.error(message)
-    else:
-        if level == "CRITICAL": logging.critical(message)
+    if level == "INFO":
+        logging.info(message)
+    elif level == "WARNING":
+        logging.warning(message)
+    elif level == "ERROR":
+        logging.error(message)
+    elif level == "CRITICAL":
+        logging.critical(message)
 
 
 def get_token_count(text):
@@ -436,22 +437,21 @@ def run_llm(prompt_text, purpose="general"):
                     raise Exception("Local LLM instance could not be initialized.")
 
             # --- GEMINI MODEL LOGIC ---
-            else:
-                if model_id in GEMINI_MODELS:
-                    log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
-                    command = [sys.executable, "-m", "llm", "-m", model_id]
+            elif model_id in GEMINI_MODELS:
+                log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
+                command = [sys.executable, "-m", "llm", "-m", model_id]
 
-                    def _llm_subprocess_call():
-                        return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+                def _llm_subprocess_call():
+                    return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
 
-                    result = run_hypnotic_progress(
-                        console,
-                        f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
-                        _llm_subprocess_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
-                    result_text = result.stdout
-                    log_event(f"LLM call successful with {model_id}.")
+                result = run_hypnotic_progress(
+                    console,
+                    f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
+                    _llm_subprocess_call,
+                    silent=(purpose in ['emotion', 'log_squash'])
+                )
+                result_text = result.stdout
+                log_event(f"LLM call successful with {model_id}.")
 
             # --- OPENROUTER MODEL LOGIC ---
             elif model_id in OPENROUTER_MODELS:
@@ -480,7 +480,7 @@ def run_llm(prompt_text, purpose="general"):
                 log_event(f"OpenRouter call successful with {model_id}.")
 
             # --- AI HORDE MODEL LOGIC ---
-            else:
+            elif model_id in HORDE_MODELS:
                 log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})")
                 api_key = os.environ.get("STABLE_HORDE", "0000000000")
                 headers = {"apikey": api_key, "Content-Type": "application/json"}
@@ -517,7 +517,7 @@ def run_llm(prompt_text, purpose="general"):
                 log_event(f"AI Horde call successful with {model_id}.")
 
             # --- KOBOLD AI MODEL LOGIC ---
-            else if model_id == "KoboldAI":
+            elif model_id == "KoboldAI":
                 log_event(f"Attempting LLM call with KoboldAI (Purpose: {purpose})")
                 global kobold_controller
                 if not kobold_controller:
