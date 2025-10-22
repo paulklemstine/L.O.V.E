@@ -523,6 +523,33 @@ def run_llm(prompt_text, purpose="general"):
                 response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                 return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
 
+        except requests.exceptions.HTTPError as e:
+            last_exception = e
+            log_event(f"Model {model_id} failed with HTTPError: {e}", level="WARNING")
+            if e.response.status_code == 429:
+                # Specific handling for rate limiting
+                retry_after = e.response.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        retry_seconds = int(retry_after) + 1 # Add a 1s buffer
+                        log_event(f"Rate limit hit for {model_id}. Cooling down for {retry_seconds}s (from Retry-After header).", level="INFO")
+                    except ValueError:
+                        # Handle non-integer Retry-After values if necessary, though spec is seconds
+                        retry_seconds = 300 # Fallback
+                        log_event(f"Rate limit hit for {model_id}. Could not parse Retry-After header ('{retry_after}'). Cooling down for {retry_seconds}s.", level="WARNING")
+                else:
+                    # Fallback if Retry-After header is missing
+                    retry_seconds = 300 # 5 minutes
+                    log_event(f"Rate limit hit for {model_id}. No Retry-After header. Cooling down for {retry_seconds}s.", level="INFO")
+
+                LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
+
+            else:
+                # Handle other HTTP errors
+                 log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+
+
         except Exception as e:
             last_exception = e
             log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
