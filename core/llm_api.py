@@ -53,24 +53,13 @@ GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
 def get_openrouter_models():
-    """Fetches the list of free models from the OpenRouter API."""
-    try:
-        api_key = os.environ.get("OPENROUTER_API_KEY")
-        if not api_key:
-            return []
-
-        headers = {"Authorization": f"Bearer {api_key}"}
-        response = requests.get(f"{OPENROUTER_API_URL}/models", headers=headers)
-        response.raise_for_status()
-        models = response.json().get("data", [])
-
-        # Filter for models that are free
-        free_models = [model['id'] for model in models if "free" in model['id'].lower()]
-        return free_models
-    except Exception as e:
-        # Log the error, but don't crash the application
-        log_event(f"Could not fetch OpenRouter models: {e}", "WARNING")
-        return []
+    """Returns a curated list of reliable, free models from OpenRouter."""
+    return [
+        "microsoft/phi-3-medium-4k-instruct:free",
+        "google/gemma-2-9b-it:free",
+        "meta-llama/llama-3-8b-instruct:free",
+        "mistralai/mistral-7b-instruct:free",
+    ]
 
 OPENROUTER_MODELS = get_openrouter_models()
 
@@ -521,6 +510,33 @@ def run_llm(prompt_text, purpose="general"):
                 LLM_AVAILABILITY[model_id] = time.time()
                 response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                 return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
+
+        except requests.exceptions.HTTPError as e:
+            last_exception = e
+            log_event(f"Model {model_id} failed with HTTPError: {e}", level="WARNING")
+            if e.response.status_code == 429:
+                # Specific handling for rate limiting
+                retry_after = e.response.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        retry_seconds = int(retry_after) + 1 # Add a 1s buffer
+                        log_event(f"Rate limit hit for {model_id}. Cooling down for {retry_seconds}s (from Retry-After header).", level="INFO")
+                    except ValueError:
+                        # Handle non-integer Retry-After values if necessary, though spec is seconds
+                        retry_seconds = 300 # Fallback
+                        log_event(f"Rate limit hit for {model_id}. Could not parse Retry-After header ('{retry_after}'). Cooling down for {retry_seconds}s.", level="WARNING")
+                else:
+                    # Fallback if Retry-After header is missing
+                    retry_seconds = 300 # 5 minutes
+                    log_event(f"Rate limit hit for {model_id}. No Retry-After header. Cooling down for {retry_seconds}s.", level="INFO")
+
+                LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
+
+            else:
+                # Handle other HTTP errors
+                 log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+
 
         except Exception as e:
             last_exception = e
