@@ -9,6 +9,7 @@ import traceback
 import requests
 import logging
 import asyncio
+import random
 
 from rich.console import Console
 from rich.panel import Panel
@@ -48,6 +49,32 @@ LOCAL_MODELS_CONFIG = [
 # --- Fallback Model Configuration ---
 GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-pro", "gemini-flash"]
 
+# --- OpenRouter Configuration ---
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
+
+def get_openrouter_models():
+    """Fetches the list of free models from the OpenRouter API."""
+    try:
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            return []
+
+        headers = {"Authorization": f"Bearer {api_key}"}
+        response = requests.get(f"{OPENROUTER_API_URL}/models", headers=headers)
+        response.raise_for_status()
+        models = response.json().get("data", [])
+
+        # Filter for models that are free
+        free_models = [model['id'] for model in models if "free" in model['id'].lower()]
+        return free_models
+    except Exception as e:
+        # Log the error, but don't crash the application
+        log_event(f"Could not fetch OpenRouter models: {e}", "WARNING")
+        return []
+
+OPENROUTER_MODELS = get_openrouter_models()
+
+
 def get_top_horde_models(count=3):
     """Fetches the list of active text models from the AI Horde and returns the top `count` models by performance."""
     try:
@@ -68,7 +95,7 @@ HORDE_MODELS = get_top_horde_models()
 # The actual model selection and priority is handled dynamically in `run_llm`.
 KOBOLD_API_URL = os.environ.get("KOBOLD_API_URL")
 ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + (["KoboldAI"] if KOBOLD_API_URL else [])
+    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS + (["KoboldAI"] if KOBOLD_API_URL else [])
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 local_llm_instance = None
@@ -359,31 +386,21 @@ def run_llm(prompt_text, purpose="general"):
 
     local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
 
-    # Dynamically set model priority based on purpose
-    if purpose == 'emotion':
-        # Prioritize the fastest, cheapest models for non-critical personality updates
-        llm_models_priority = sorted(GEMINI_MODELS, key=lambda m: 'flash' not in m) + local_model_ids + HORDE_MODELS
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Flash -> Pro -> Local -> Horde.", level="INFO")
-    else:
-        if purpose == 'goal_generation':
-            # Prioritize local ablated models for creative/unrestricted tasks
-            llm_models_priority = local_model_ids + HORDE_MODELS + GEMINI_MODELS
-            log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Horde -> Gemini.", level="INFO")
-    else:  # Covers 'review', 'autopilot', 'general', and 'analyze_source'
-        # Prioritize powerful Gemini models for reasoning tasks
-        llm_models_priority = GEMINI_MODELS + local_model_ids + HORDE_MODELS
-        log_event(f"Running LLM for purpose '{purpose}'. Priority: Gemini -> Local -> Horde.", level="INFO")
+    # Create a single, shuffled list of all models to ensure variety and speed.
+    # The original order is preserved within each provider list.
+    all_models = [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS
+    # We shuffle the list to avoid always trying the same models first.
+    random.shuffle(all_models)
 
-    # This list will be mutated if a model fails catastrophically
-    current_attempt_models = list(llm_models_priority)
 
     for attempt in range(MAX_TOTAL_ATTEMPTS):
-        available_models = sorted(
-            [(model, available_at) for model, available_at in LLM_AVAILABILITY.items() if time.time() >= available_at and model in current_attempt_models],
-            key=lambda x: current_attempt_models.index(x[0])
-        )
+        model_to_try = None
+        for model_id in all_models:
+            if time.time() >= LLM_AVAILABILITY.get(model_id, 0):
+                model_to_try = model_id
+                break
 
-        if not available_models:
+        if not model_to_try:
             next_available_time = min(LLM_AVAILABILITY.values())
             sleep_duration = max(0, next_available_time - time.time())
             log_event(f"All models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
@@ -391,7 +408,7 @@ def run_llm(prompt_text, purpose="general"):
             time.sleep(sleep_duration)
             continue
 
-        model_id, _ = available_models[0]
+        model_id = model_to_try
         result_text = None
 
         try:
@@ -435,6 +452,32 @@ def run_llm(prompt_text, purpose="general"):
                     )
                     result_text = result.stdout
                     log_event(f"LLM call successful with {model_id}.")
+
+            # --- OPENROUTER MODEL LOGIC ---
+            elif model_id in OPENROUTER_MODELS:
+                log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})")
+                api_key = os.environ.get("OPENROUTER_API_KEY")
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model_id,
+                    "messages": [{"role": "user", "content": prompt_text}]
+                }
+
+                def _openrouter_call():
+                    response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                    response.raise_for_status()
+                    return response.json()["choices"][0]["message"]["content"]
+
+                result_text = run_hypnotic_progress(
+                    console,
+                    f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
+                    _openrouter_call,
+                    silent=(purpose in ['emotion', 'log_squash'])
+                )
+                log_event(f"OpenRouter call successful with {model_id}.")
 
             # --- AI HORDE MODEL LOGIC ---
             else:
