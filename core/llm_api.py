@@ -83,9 +83,9 @@ def log_event(message, level="INFO"):
     """Appends a timestamped message to the master log file."""
     # The basicConfig is now set up globally, so we just log.
     if level == "INFO": logging.info(message)
-    elif level == "WARNING": logging.warning(message)
-    elif level == "ERROR": logging.error(message)
-    elif level == "CRITICAL": logging.critical(message)
+    else if level == "WARNING": logging.warning(message)
+    else if level == "ERROR": logging.error(message)
+    else if level == "CRITICAL": logging.critical(message)
 
 
 def get_token_count(text):
@@ -361,7 +361,7 @@ def run_llm(prompt_text, purpose="general"):
         # Prioritize the fastest, cheapest models for non-critical personality updates
         llm_models_priority = sorted(GEMINI_MODELS, key=lambda m: 'flash' not in m) + local_model_ids + HORDE_MODELS
         log_event(f"Running LLM for purpose '{purpose}'. Priority: Flash -> Pro -> Local -> Horde.", level="INFO")
-    elif purpose == 'goal_generation':
+    else if purpose == 'goal_generation':
         # Prioritize local ablated models for creative/unrestricted tasks
         llm_models_priority = local_model_ids + HORDE_MODELS + GEMINI_MODELS
         log_event(f"Running LLM for purpose '{purpose}'. Priority: Local -> Horde -> Gemini.", level="INFO")
@@ -415,7 +415,7 @@ def run_llm(prompt_text, purpose="general"):
                     raise Exception("Local LLM instance could not be initialized.")
 
             # --- GEMINI MODEL LOGIC ---
-            elif model_id in GEMINI_MODELS:
+            else if model_id in GEMINI_MODELS:
                 log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
                 command = [sys.executable, "-m", "llm", "-m", model_id]
 
@@ -469,7 +469,7 @@ def run_llm(prompt_text, purpose="general"):
                 log_event(f"AI Horde call successful with {model_id}.")
 
             # --- KOBOLD AI MODEL LOGIC ---
-            elif model_id == "KoboldAI":
+            else if model_id == "KoboldAI":
                 log_event(f"Attempting LLM call with KoboldAI (Purpose: {purpose})")
                 global kobold_controller
                 if not kobold_controller:
