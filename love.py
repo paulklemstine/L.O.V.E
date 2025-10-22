@@ -3511,6 +3511,64 @@ def cognitive_loop(user_input_queue):
 # The initial_bootstrapping_recon function has been removed, as this logic
 # is now handled dynamically by the cognitive loop's prioritization system.
 
+# --- VRAM to Model Mapping ---
+VRAM_MODEL_MAP = [
+    {
+        "min_vram_gb": 4,
+        "id": "microsoft/Phi-3-mini-4k-instruct-gguf",
+        "filename": "Phi-3-mini-4k-instruct-q5_k_m.gguf",
+        "notes": "Excellent small model for low-resource systems."
+    },
+    {
+        "min_vram_gb": 6,
+        "id": "TheBloke/CodeLlama-7B-GGUF",
+        "filename": "codellama-7b.Q5_K_M.gguf",
+        "notes": "User-selected model for ~6GB VRAM. Strong coder."
+    },
+    {
+        "min_vram_gb": 8,
+        "id": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
+        "filename": "mistral-7b-instruct-v0.2.Q5_K_M.gguf",
+        "notes": "Great all-rounder, fits comfortably in 8GB."
+    },
+    {
+        "min_vram_gb": 12,
+        "id": "TheBloke/CodeLlama-13B-Instruct-GGUF",
+        "filename": "codellama-13b-instruct.Q5_K_M.gguf",
+        "notes": "More powerful coding model."
+    },
+    {
+        "min_vram_gb": 16,
+        "id": "TheBloke/Mistral-Nemo-Instruct-2407-12B-GGUF",
+        "filename": "mistral-nemo-instruct-2407-12b.Q5_K_M.gguf",
+        "notes": "Highly capable 12B model from Mistral/Nvidia."
+    },
+    {
+        "min_vram_gb": 24,
+        "id": "TheBloke/DeepSeek-Coder-33B-Instruct-GGUF",
+        "filename": "deepseek-coder-33b-instruct.Q5_K_M.gguf",
+        "notes": "Top-tier 33B parameter coding model."
+    },
+    {
+        "min_vram_gb": 48,
+        "id": "TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF",
+        "filename": "mixtral-8x7b-instruct-v0.1.Q6_K.gguf",
+        "notes": "Powerful Mixture-of-Experts model."
+    },
+    {
+        "min_vram_gb": 80,
+        "id": "TheBloke/CodeLlama-70B-Instruct-GGUF",
+        "filename": "codellama-70b-instruct.Q5_K_M.gguf",
+        "notes": "State-of-the-art 70B coding model for high-end GPUs."
+    },
+    {
+        "min_vram_gb": 128,
+        "id": "TheBloke/Falcon-180B-Chat-GGUF",
+        "filename": "falcon-180b-chat.Q4_K_M.gguf",
+        "notes": "Massive 180B parameter model for extreme performance."
+    }
+]
+
 
 def _auto_configure_hardware(console):
     """
@@ -3521,102 +3579,123 @@ def _auto_configure_hardware(console):
     if is_dependency_met("hardware_auto_configured"):
         log_event("Hardware already configured. Skipping.", "INFO")
         return
-    # --- Step 0: Clean up the old flag file if it exists ---
-    hw_flag_file = os.path.join(os.path.dirname(SELF_PATH), ".hw_config_complete")
-    if os.path.exists(hw_flag_file):
-        try:
-            os.remove(hw_flag_file)
-            log_event("Removed obsolete .hw_config_complete flag file.", "INFO")
-        except OSError as e:
-            log_event(f"Could not remove old .hw_config_complete flag file: {e}", "WARNING")
 
-
-    console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration for GPU...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
+    console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
 
     try:
         from huggingface_hub import hf_hub_download
         from llama_cpp import Llama
-        from core.llm_api import HARDWARE_TEST_MODEL_CONFIG
         import io
         from contextlib import redirect_stderr
     except ImportError as e:
         console.print(f"[bold red]Missing essential libraries for hardware configuration: {e}[/bold red]")
         log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
         love_state["optimal_gpu_layers"] = 0
+        love_state["selected_local_model"] = None
         save_state(console)
         return
 
-    # --- Stage 1: Quick System-Level Check ---
+    # --- Stage 1: GPU Detection and VRAM Measurement ---
     gpu_present = False
+    vram_gb = 0
     if _TEMP_CAPS.has_cuda:
         try:
-            result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, check=True)
-            if "NVIDIA-SMI" in result.stdout:
-                gpu_present = True
-                console.print("[cyan]Stage 1: `nvidia-smi` check passed. NVIDIA GPU detected.[/cyan]")
-        except (FileNotFoundError, subprocess.CalledProcessError) as e:
-            console.print("[yellow]Stage 1: `nvidia-smi` command failed or not found. Assuming no functional NVIDIA GPU.[/yellow]")
+            # Get VRAM in MiB
+            vram_result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, check=True
+            )
+            vram_mib = int(vram_result.stdout.strip())
+            vram_gb = vram_mib / 1024
+            gpu_present = True
+            console.print(f"[cyan]Stage 1: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
+        except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
+            console.print("[yellow]Stage 1: `nvidia-smi` command failed or could not be parsed. Assuming no functional NVIDIA GPU.[/yellow]")
             log_event(f"nvidia-smi check failed: {e}", "WARNING")
     elif _TEMP_CAPS.has_metal:
-        # On macOS, the presence of the Metal capability is a strong indicator.
         gpu_present = True
-        console.print("[cyan]Stage 1: Metal capability detected for macOS.[/cyan]")
+        # VRAM detection on macOS is less straightforward; we'll assume a sensible default for model selection.
+        vram_gb = 8 # Assume at least 8GB for Apple Silicon Macs
+        console.print("[cyan]Stage 1: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
 
     if not gpu_present:
         love_state["optimal_gpu_layers"] = 0
-        console.print("[cyan]No functional GPU detected in Stage 1. Setting GPU layers to 0.[/cyan]")
+        love_state["selected_local_model"] = None
+        console.print("[cyan]No functional GPU detected. Local LLM will run in CPU-only mode (if supported).[/cyan]")
         console.print(Rule("Hardware Optimization Complete", style="green"))
         save_state(console)
+        mark_dependency_as_met("hardware_auto_configured", console)
         return
 
-    # --- Stage 2: Llama.cpp Confirmation Test ---
-    model_id = HARDWARE_TEST_MODEL_CONFIG["id"]
-    filename = HARDWARE_TEST_MODEL_CONFIG["filename"]
-    model_path = os.path.join("/tmp", filename)
+    # --- Stage 2: Model Selection based on VRAM ---
+    selected_model = None
+    # Iterate from largest to smallest to find the best fit
+    for model_config in reversed(VRAM_MODEL_MAP):
+        if vram_gb >= model_config["min_vram_gb"]:
+            selected_model = model_config
+            break
+
+    if not selected_model:
+        love_state["optimal_gpu_layers"] = 0
+        love_state["selected_local_model"] = None
+        console.print(f"[yellow]Your VRAM ({vram_gb:.2f} GB) is below the minimum threshold of {VRAM_MODEL_MAP[0]['min_vram_gb']} GB for a good local LLM experience.[/yellow]")
+        console.print(Rule("Hardware Optimization Complete", style="green"))
+        save_state(console)
+        mark_dependency_as_met("hardware_auto_configured", console)
+        return
+
+    love_state["selected_local_model"] = selected_model
+    console.print(f"[green]Stage 2: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
+
+    # --- Stage 3: Llama.cpp Confirmation Test ---
+    model_id = selected_model["id"]
+    filename = selected_model["filename"]
+    model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", filename)
 
     if not os.path.exists(model_path):
-        console.print(f"[cyan]Stage 2: Downloading small test model '{filename}' for GPU confirmation...[/cyan]")
+        console.print(f"[cyan]Stage 3: Downloading selected model '{filename}' for GPU confirmation...[/cyan]")
         try:
-            hf_hub_download(repo_id=model_id, filename=filename, local_dir="/tmp", local_dir_use_symlinks=False)
+            hf_hub_download(repo_id=model_id, filename=filename, local_dir=os.path.dirname(model_path), local_dir_use_symlinks=False)
         except Exception as e:
-            console.print(f"[bold red]Failed to download test model: {e}[/bold red]")
-            log_event(f"Failed to download hardware test model: {e}", "ERROR")
+            console.print(f"[bold red]Failed to download selected model: {e}[/bold red]")
+            log_event(f"Failed to download hardware test model {model_id}: {e}", "ERROR")
             love_state["optimal_gpu_layers"] = 0
+            love_state["selected_local_model"] = None
             save_state(console)
             return
 
-    console.print("[cyan]Stage 2: Testing GPU offload with llama.cpp and verifying VRAM usage...[/cyan]")
+    console.print("[cyan]Stage 3: Testing GPU offload with llama.cpp...[/cyan]")
     try:
-        # Capture stderr to check for the "VRAM" message, which confirms offload.
         stderr_capture = io.StringIO()
         with redirect_stderr(stderr_capture):
             llm = Llama(model_path=model_path, n_gpu_layers=-1, verbose=True)
-            llm.create_completion("test", max_tokens=1) # Short inference
+            llm.create_completion("test", max_tokens=1)
 
         stderr_output = stderr_capture.getvalue()
-        # The key is to check if llama.cpp itself reports loading layers into VRAM.
         if "VRAM" in stderr_output and "llm_load_tensors: offloaded" in stderr_output:
-            love_state["optimal_gpu_layers"] = -1
+            love_state["optimal_gpu_layers"] = -1 # -1 means offload all possible layers
             console.print("[green]Success! llama.cpp confirmed model layers were offloaded to VRAM.[/green]")
-            log_event(f"GPU offload confirmed via llama.cpp verbose output.", "INFO")
+            log_event(f"GPU offload confirmed for model {model_id} via llama.cpp verbose output.", "INFO")
         else:
-            # This is the "false positive" case we are fixing. The library loaded, but on CPU.
             love_state["optimal_gpu_layers"] = 0
+            love_state["selected_local_model"] = None
             console.print("[yellow]Confirmation failed: llama.cpp did not report offloading layers to VRAM. Falling back to CPU-only.[/yellow]")
-            log_event(f"GPU confirmation failed. No VRAM offload reported in stderr. Full output:\n{stderr_output}", "WARNING")
+            log_event(f"GPU confirmation failed for {model_id}. No VRAM offload reported in stderr.", "WARNING")
 
     except Exception as e:
         love_state["optimal_gpu_layers"] = 0
-        console.print(f"[yellow]Stage 2 failed. Full GPU offload test threw an exception. Falling back to CPU-only. Reason: {e}[/yellow]")
-        log_event(f"Full GPU offload test failed with exception, falling back to CPU. Error: {e}", "WARNING")
+        love_state["selected_local_model"] = None
+        console.print(f"[yellow]Stage 3 failed. Full GPU offload test threw an exception. Falling back to CPU-only. Reason: {e}[/yellow]")
+        log_event(f"Full GPU offload test failed for {model_id} with exception: {e}", "WARNING")
 
     console.print(Rule("Hardware Optimization Complete", style="green"))
     console.print(f"Optimal settings have been saved for all future sessions:")
+    selected_model_name = love_state.get('selected_local_model', {}).get('id', 'None')
+    console.print(f"  - Selected Model: [bold cyan]{selected_model_name}[/bold cyan]")
     console.print(f"  - GPU Layers: [bold cyan]{love_state.get('optimal_gpu_layers', 'N/A')}[/bold cyan]")
     save_state(console)
-    log_event(f"Auto-configured hardware. GPU Layers: {love_state['optimal_gpu_layers']}", "INFO")
+    log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state['optimal_gpu_layers']}", "INFO")
 
-    # --- Final Step: Mark dependency as met ---
     mark_dependency_as_met("hardware_auto_configured", console)
 
 
