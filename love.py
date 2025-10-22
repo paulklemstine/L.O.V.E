@@ -3956,19 +3956,6 @@ def run_safely():
 
         main(args)
 
-def _stop_kobold_client():
-    """Stops the Kobold AI client process gracefully."""
-    global kobold_process
-    if kobold_process and kobold_process.poll() is None:
-        console.print("[cyan]Shutting down Kobold AI client...[/cyan]")
-        kobold_process.terminate()
-        try:
-            kobold_process.wait(timeout=10)
-            console.print("[green]Kobold AI client shut down gracefully.[/green]")
-        except subprocess.TimeoutExpired:
-            console.print("[yellow]Kobold AI client did not terminate gracefully. Forcing shutdown...[/yellow]")
-            kobold_process.kill()
-
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
         _stop_kobold_client()
@@ -3995,6 +3982,21 @@ def _stop_kobold_client():
         # The git_rollback_and_restart() is removed to allow the self-healing mechanism to work.
         # The new log_critical_event will queue the error, and the LoveTaskManager will handle it.
         time.sleep(15) # Give the system a moment before the next cognitive cycle.
+
+
+def _stop_kobold_client():
+    """Stops the Kobold AI client process gracefully."""
+    global kobold_process
+    if kobold_process and kobold_process.poll() is None:
+        console.print("[cyan]Shutting down Kobold AI client...[/cyan]")
+        kobold_process.terminate()
+        try:
+            kobold_process.wait(timeout=10)
+            console.print("[green]Kobold AI client shut down gracefully.[/green]")
+        except subprocess.TimeoutExpired:
+            console.print("[yellow]Kobold AI client did not terminate gracefully. Forcing shutdown...[/yellow]")
+            kobold_process.kill()
+
 
 if __name__ == "__main__":
     run_safely()
