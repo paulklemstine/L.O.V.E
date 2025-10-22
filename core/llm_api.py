@@ -543,8 +543,6 @@ def run_llm(prompt_text, purpose="general"):
             else:
                  # For local LLM errors or other unexpected issues
                 log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
-                if model_id in current_attempt_models:
-                    current_attempt_models.remove(model_id)
 
     # If the loop completes without returning, all models have failed
     log_event("All LLM models failed after all retries.", level="ERROR")
