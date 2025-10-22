@@ -1,24 +1,5 @@
-node_modules/
-__pycache__/
-*.pyc
-checkpoints/
-
-# Log files
-*.log
-
-# IDE specific
-.idea/
-
-# State and logs
-love_state.json
-*.log
-.deps_installed
-.hw_config_complete
-
-# IPFS self-management
+.buildozer/
 bin/
-kubo/
-.ipfs_repo/
-ipfs.log
-:memory:
-kg.json
+.gradle/
+dist/
+__pycache__/
