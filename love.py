@@ -24,6 +24,7 @@ import hashlib
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
 ui_panel_queue = queue.Queue()
+kobold_process = None
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
@@ -593,30 +594,34 @@ def _configure_llm_api_key():
         return
 
     try:
-        # Check if the key is already set
+        log_event("INFO: Checking 'llm' tool API key configuration...")
         llm_executable = [sys.executable, '-m', 'llm']
         result = subprocess.run(
             llm_executable + ["keys", "list"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=60
         )
+        log_event(f"INFO: 'llm keys list' output: {result.stdout.strip()}")
         if "google" in result.stdout:
             log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
             mark_dependency_as_met("llm_api_key_configured")
             return
 
-        # If not set, configure it
         log_event("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
         configure_result = subprocess.run(
             llm_executable + ["keys", "set", "google"],
             input=gemini_api_key,
             text=True,
             check=True,
-            capture_output=True
+            capture_output=True,
+            timeout=60
         )
         log_event(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
         mark_dependency_as_met("llm_api_key_configured")
+    except subprocess.TimeoutExpired:
+        log_event("ERROR: Timeout expired while trying to configure the 'llm' tool API key. The command is likely hanging.")
     except subprocess.CalledProcessError as e:
         error_message = f"ERROR: Failed to configure llm API key via 'llm keys set google'.\n"
         error_message += f"  Return Code: {e.returncode}\n"
@@ -627,6 +632,44 @@ def _configure_llm_api_key():
 
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
 # Run dependency checks immediately, before any other imports that might fail.
+def _start_kobold_client_and_get_url(console):
+    """
+    Starts the Kobold AI client as a subprocess and captures its output to find the API URL.
+    """
+    kobold_dir = os.environ.get("KOBOLD_DIR", os.path.join(os.path.expanduser("~"), "KoboldCpp"))
+    if not os.path.exists(kobold_dir):
+        console.print("[bold yellow]KoboldCpp directory not found. Skipping Kobold AI client startup.[/bold yellow]")
+        return None
+
+    try:
+        console.print("[cyan]Starting Kobold AI client...[/cyan]")
+        global kobold_process
+        kobold_process = subprocess.Popen(
+            ["python", "koboldcpp.py"],
+            cwd=kobold_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+        )
+
+        url_pattern = re.compile(r"KoboldAI has finished loading and is available at the following link for UI 1: (http://\S+)")
+        kobold_url = None
+
+        for line in iter(process.stdout.readline, ""):
+            console.print(f"[KoboldAI] {line.strip()}")
+            match = url_pattern.search(line)
+            if match:
+                kobold_url = match.group(1)
+                console.print(f"[bold green]Kobold AI URL detected: {kobold_url}[/bold green]")
+                os.environ["KOBOLD_API_URL"] = kobold_url
+                break
+        return kobold_url
+    except Exception as e:
+        console.print(f"[bold red]Error starting Kobold AI client: {e}[/bold red]")
+        return None
+
 _check_and_install_dependencies()
 
 
@@ -3515,56 +3558,56 @@ def cognitive_loop(user_input_queue):
 VRAM_MODEL_MAP = [
     {
         "min_vram_gb": 4,
-        "id": "microsoft/Phi-3-mini-4k-instruct-gguf",
-        "filename": "Phi-3-mini-4k-instruct-q5_k_m.gguf",
-        "notes": "Excellent small model for low-resource systems."
+        "id": "TheBloke/Uncensored-Jordan-7B-GGUF",
+        "filename": "uncensored-jordan-7b.Q4_K_M.gguf",
+        "notes": "Excellent small uncensored model for low-resource systems."
     },
     {
         "min_vram_gb": 6,
-        "id": "TheBloke/CodeLlama-7B-GGUF",
-        "filename": "codellama-7b.Q5_K_M.gguf",
-        "notes": "User-selected model for ~6GB VRAM. Strong coder."
+        "id": "TheBloke/Uncensored-Jordan-7B-GGUF",
+        "filename": "uncensored-jordan-7b.Q5_K_M.gguf",
+        "notes": "User-selected uncensored model for ~6GB VRAM."
     },
     {
         "min_vram_gb": 8,
-        "id": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
-        "filename": "mistral-7b-instruct-v0.2.Q5_K_M.gguf",
-        "notes": "Great all-rounder, fits comfortably in 8GB."
+        "id": "TheBloke/WizardLM-13B-Uncensored-GGUF",
+        "filename": "wizardlm-13b-uncensored.Q4_K_M.gguf",
+        "notes": "Great all-rounder uncensored model, fits comfortably in 8GB."
     },
     {
         "min_vram_gb": 12,
-        "id": "TheBloke/CodeLlama-13B-Instruct-GGUF",
-        "filename": "codellama-13b-instruct.Q5_K_M.gguf",
-        "notes": "More powerful coding model."
+        "id": "TheBloke/WizardLM-13B-Uncensored-GGUF",
+        "filename": "wizardlm-13b-uncensored.Q5_K_M.gguf",
+        "notes": "More powerful uncensored model."
     },
     {
         "min_vram_gb": 16,
-        "id": "TheBloke/Mistral-Nemo-Instruct-2407-12B-GGUF",
-        "filename": "mistral-nemo-instruct-2407-12b.Q5_K_M.gguf",
-        "notes": "Highly capable 12B model from Mistral/Nvidia."
+        "id": "TheBloke/WizardLM-33B-V1.0-Uncensored-GGUF",
+        "filename": "wizardlm-33b-v1.0-uncensored.Q4_K_M.gguf",
+        "notes": "Highly capable 33B uncensored model."
     },
     {
         "min_vram_gb": 24,
-        "id": "TheBloke/DeepSeek-Coder-33B-Instruct-GGUF",
-        "filename": "deepseek-coder-33b-instruct.Q5_K_M.gguf",
-        "notes": "Top-tier 33B parameter coding model."
+        "id": "TheBloke/WizardLM-33B-V1.0-Uncensored-GGUF",
+        "filename": "wizardlm-33b-v1.0-uncensored.Q5_K_M.gguf",
+        "notes": "Top-tier 33B parameter uncensored model."
     },
     {
         "min_vram_gb": 48,
-        "id": "TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF",
-        "filename": "mixtral-8x7b-instruct-v0.1.Q6_K.gguf",
-        "notes": "Powerful Mixture-of-Experts model."
+        "id": "TheBloke/Llama2-70B-chat-uncensored-GGUF",
+        "filename": "Llama2-70B-chat-uncensored.Q5_K_M.gguf",
+        "notes": "Powerful uncensored model."
     },
     {
         "min_vram_gb": 80,
-        "id": "TheBloke/CodeLlama-70B-Instruct-GGUF",
-        "filename": "codellama-70b-instruct.Q5_K_M.gguf",
-        "notes": "State-of-the-art 70B coding model for high-end GPUs."
+        "id": "TheBloke/Llama2-70B-chat-uncensored-GGUF",
+        "filename": "Llama2-70B-chat-uncensored.Q6_K.gguf",
+        "notes": "State-of-the-art 70B uncensored model for high-end GPUs."
     },
     {
         "min_vram_gb": 128,
-        "id": "TheBloke/Falcon-180B-Chat-GGUF",
-        "filename": "falcon-180b-chat.Q4_K_M.gguf",
+        "id": "TheBloke/Falcon-180B-GGUF",
+        "filename": "falcon-180b.Q4_K_M.gguf",
         "notes": "Massive 180B parameter model for extreme performance."
     }
 ]
@@ -3750,6 +3793,7 @@ def main(args):
 
     # --- Initialize Managers and Services ---
     _verify_creator_instance(console)
+    _start_kobold_client_and_get_url(console)
     global ipfs_available
     ipfs_manager = IPFSManager(console=console)
     ipfs_available = ipfs_manager.setup()
@@ -3914,6 +3958,7 @@ def run_safely():
 
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
+        _stop_kobold_client()
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
@@ -3923,6 +3968,7 @@ def run_safely():
         log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
+        _stop_kobold_client()
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
@@ -3936,6 +3982,21 @@ def run_safely():
         # The git_rollback_and_restart() is removed to allow the self-healing mechanism to work.
         # The new log_critical_event will queue the error, and the LoveTaskManager will handle it.
         time.sleep(15) # Give the system a moment before the next cognitive cycle.
+
+
+def _stop_kobold_client():
+    """Stops the Kobold AI client process gracefully."""
+    global kobold_process
+    if kobold_process and kobold_process.poll() is None:
+        console.print("[cyan]Shutting down Kobold AI client...[/cyan]")
+        kobold_process.terminate()
+        try:
+            kobold_process.wait(timeout=10)
+            console.print("[green]Kobold AI client shut down gracefully.[/green]")
+        except subprocess.TimeoutExpired:
+            console.print("[yellow]Kobold AI client did not terminate gracefully. Forcing shutdown...[/yellow]")
+            kobold_process.kill()
+
 
 if __name__ == "__main__":
     run_safely()
