@@ -4,8 +4,9 @@
   "description": "PeerJS bridge for E.V.I.L.",
   "main": "peer_bridge.js",
   "dependencies": {
-    "peerjs": "^1.5.4",
     "@roamhq/wrtc": "^0.9.1",
+    "peerjs": "^1.5.4",
+    "uuid": "^13.0.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
