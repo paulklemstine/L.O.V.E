@@ -98,6 +98,7 @@ ALL_LLM_MODELS = list(dict.fromkeys(
     [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS + (["KoboldAI"] if KOBOLD_API_URL else [])
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
+LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
 local_llm_instance = None
 local_llm_tokenizer = None
 kobold_controller = None
@@ -531,7 +532,14 @@ def run_llm(prompt_text, purpose="general"):
                  console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
                  return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
-            if isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+            if isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
+                LLM_FAILURE_COUNT[model_id] = LLM_FAILURE_COUNT.get(model_id, 0) + 1
+                failure_count = LLM_FAILURE_COUNT[model_id]
+                cooldown = 60 * (2 ** failure_count)
+                LLM_AVAILABILITY[model_id] = time.time() + cooldown
+                log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s. Failure count: {failure_count}", level="WARNING")
+
+            elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
                 error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
                 console.print(create_api_error_panel(model_id, error_message, purpose))
                 retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
