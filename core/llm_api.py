@@ -109,7 +109,7 @@ MAX_PROMPT_TOKENS_LOCAL = 7000  # Leaving ~1k for response
 def log_event(message, level="INFO"):
     """Appends a timestamped message to the master log file."""
     # The basicConfig is now set up globally, so we just log.
-    if level == "INFO": logging.info(message):
+    if level == "INFO": logging.info(message)
     else:
         if level == "WARNING": logging.warning(message)
     else:
