@@ -3970,36 +3970,51 @@ def live_ui_renderer(console, user_input_queue):
 
     # --- Refresh Loop ---
     async def refresh_ui():
-        """The coroutine that periodically redraws the UI."""
+        """
+        The coroutine that periodically redraws the UI. It ensures that each new
+        panel is logged exactly once and that the on-screen display is kept
+        up-to-date.
+        """
         is_first_render = True
         while True:
-            # --- Update Feed ---
-            new_content = False
+            # --- Ingest & Log New Panels ---
+            # This is the most critical part of the new logic. We process items
+            # from the queue, log them immediately, and store the pre-rendered
+            # string representation for display. This avoids object consumption issues.
+            new_panels_were_added = False
+            newly_rendered_panels = []
             while not ui_panel_queue.empty():
                 panel = ui_panel_queue.get()
-                feed_panels.append(panel)
-                new_content = True
-                # --- Centralized Logging ---
-                # Log the plain text of every panel that goes to the UI.
-                log_console = Console(file=io.StringIO(), force_terminal=False)
-                with log_console.capture() as capture:
-                    log_console.print(panel)
-                log_event(f"[UI_PANEL]\n{capture.get()}")
 
-
-            # Only re-render if there's new content or it's the first run
-            if new_content or is_first_render:
-                # Render the Rich group to the console and capture the output
+                # Render the panel to a string once.
                 with console.capture() as capture:
-                    console.print(Group(*feed_panels))
-                output_control.text = ANSI(capture.get())
+                    console.print(panel)
+                rendered_panel = capture.get()
+
+                # 1. Log the rendered string.
+                log_event(f"[UI_PANEL]\n{rendered_panel}")
+
+                # 2. Store the rendered string for the UI.
+                newly_rendered_panels.append(rendered_panel)
+                new_panels_were_added = True
+
+            # Add all new, pre-rendered panels to the main display deque.
+            if newly_rendered_panels:
+                feed_panels.extend(newly_rendered_panels)
+
+            # --- Update Screen Display ---
+            if new_panels_were_added or is_first_render:
+                # The `feed_panels` deque now contains only strings. We can safely
+                # join them to create the final screen output.
+                full_output = "".join(feed_panels)
+                output_control.text = ANSI(full_output)
+
                 is_first_render = False
 
-                # --- Auto-scroll to the bottom ---
-                # By setting the vertical scroll to a large number, we ensure it's at the end.
+                # Auto-scroll to the bottom on new content.
                 output_window.vertical_scroll = 100000
 
-            # --- Invalidate and Redraw ---
+            # Invalidate the application to trigger a redraw.
             app.invalidate()
             await asyncio.sleep(0.1)
 
