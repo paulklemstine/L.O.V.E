@@ -437,8 +437,7 @@ def run_llm(prompt_text, purpose="general"):
                     raise Exception("Local LLM instance could not be initialized.")
 
             # --- GEMINI MODEL LOGIC ---
-            else:
-                if model_id in GEMINI_MODELS:
+            elif model_id in GEMINI_MODELS:
                     log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
                     command = [sys.executable, "-m", "llm", "-m", model_id]
 
