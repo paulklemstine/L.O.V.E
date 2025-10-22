@@ -594,8 +594,9 @@ def _configure_llm_api_key():
 
     try:
         # Check if the key is already set
+        llm_executable = [sys.executable, '-m', 'llm']
         result = subprocess.run(
-            ["llm", "keys", "list"],
+            llm_executable + ["keys", "list"],
             capture_output=True,
             text=True,
             check=True
@@ -608,7 +609,7 @@ def _configure_llm_api_key():
         # If not set, configure it
         log_event("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
         configure_result = subprocess.run(
-            ["llm", "keys", "set", "google"],
+            llm_executable + ["keys", "set", "google"],
             input=gemini_api_key,
             text=True,
             check=True,
@@ -616,8 +617,6 @@ def _configure_llm_api_key():
         )
         log_event(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
         mark_dependency_as_met("llm_api_key_configured")
-    except FileNotFoundError:
-        log_event("ERROR: The 'llm' command-line tool was not found. Please ensure it is installed and in your PATH.")
     except subprocess.CalledProcessError as e:
         error_message = f"ERROR: Failed to configure llm API key via 'llm keys set google'.\n"
         error_message += f"  Return Code: {e.returncode}\n"
