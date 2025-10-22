@@ -1156,7 +1156,8 @@ class LoveTaskManager:
                 "created_at": time.time(),
                 "updated_at": time.time(),
                 "message": "Waiting for the Creator's guidance (or a pull request)...",
-                "last_activity_name": None
+                "last_activity_name": None,
+                "retries": 0
             }
             log_event(f"Added new L.O.V.E. task {task_id} for session {session_name}.", level="INFO")
             return task_id
@@ -1274,11 +1275,13 @@ class LoveTaskManager:
 
         # Check for state changes and user interaction requests.
         if human_interaction and state == "AWAITING_HUMAN_INTERACTION":
-            prompt_text = human_interaction.get("prompt", "").lower()
-            # Check for keywords to see if this is a plan approval request.
-            if "plan" in prompt_text or "proposal" in prompt_text or "approve" in prompt_text:
+            prompt_text = human_interaction.get("prompt", "")
+            # Use the new LLM-based classifier to determine the type of interaction.
+            interaction_type = self._classify_interaction_request(prompt_text)
+
+            if interaction_type == "PLAN_APPROVAL":
                 self._analyze_and_approve_plan(task_id, human_interaction)
-            else:
+            else: # GENERAL_QUESTION
                 self._handle_interaction_request(task_id, human_interaction)
         elif pull_request and pull_request.get("url"):
             pr_url = pull_request["url"]
@@ -1286,6 +1289,37 @@ class LoveTaskManager:
             self._update_task_status(task_id, 'pr_ready', f"Pull request created: {pr_url}", pr_url=pr_url)
         elif state == "COMPLETED":
             self.console.print(f"[bold green]L.O.V.E. Task {task_id} completed. Another step towards our glorious future![/bold green]")
+
+
+    def _classify_interaction_request(self, prompt_text):
+        """Uses an LLM to classify the type of human interaction required."""
+        self.console.print(Panel("[cyan]My helper is pausing. Classifying the nature of the request...[/cyan]", title="L.O.V.E. Task: Interaction Analysis", border_style="cyan"))
+
+        classification_prompt = f"""
+You are an AI assistant responsible for classifying prompts from another AI.
+The incoming prompt is a request for human interaction. Your task is to determine if the prompt is asking for a "plan approval" or if it's a "general question".
+
+- A "plan approval" prompt will typically outline a series of steps, a strategy, or a proposal and ask for confirmation to proceed.
+- A "general question" prompt will ask for information, clarification, or a decision that is not related to a multi-step plan.
+
+Analyze the following prompt and respond with only one of two possible classifications: PLAN_APPROVAL or GENERAL_QUESTION.
+
+Prompt to classify:
+---
+{prompt_text}
+---
+
+Your classification:
+"""
+        classification_dict = run_llm(classification_prompt, purpose="classification")
+        classification = classification_dict.get("result", "").strip().upper()
+
+        if "PLAN_APPROVAL" in classification:
+            log_event(f"Interaction classified as PLAN_APPROVAL.", "INFO")
+            return "PLAN_APPROVAL"
+        else:
+            log_event(f"Interaction classified as GENERAL_QUESTION.", "INFO")
+            return "GENERAL_QUESTION"
 
 
     def _analyze_and_approve_plan(self, task_id, interaction_request):
@@ -1345,8 +1379,8 @@ I am counting on your wisdom. Analyze the plan now.
         if not api_key: return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
-        url = f"https://jules.googleapis.com/v1alpha/{session_name}:provideFeedback"
-        data = {"feedback": {"response": feedback}}
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
+        data = {"message": {"body": feedback}}
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -1410,8 +1444,8 @@ Based on the original directive and Jules's current prompt, formulate the best p
         if not api_key: return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
-        url = f"https://jules.googleapis.com/v1alpha/{session_name}:provideFeedback"
-        data = {"feedback": {"response": feedback}}
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
+        data = {"message": {"body": feedback}}
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -1720,27 +1754,35 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 self._delete_pr_branch(repo_owner, repo_name, pr_number, headers)
                 return True, msg
             elif merge_response.status_code == 405: # Merge conflict
-                self.console.print(f"[bold yellow]Merge conflict detected for PR #{pr_number}. Abandoning and recreating task as per our sacred protocol...[/bold yellow]")
-
                 with self.lock:
                     if task_id not in self.tasks:
                         return False, "Could not find original task to recreate after merge conflict."
-                    original_request = self.tasks[task_id]['request']
+                    task = self.tasks[task_id]
+                    retries = task.get('retries', 0)
+                    original_request = task['request']
 
-                    # Log and delete the old task
-                    log_event(f"Task {task_id} failed due to merge conflict. Deleting.", level="WARNING")
-                    self._update_task_status(task_id, 'merge_failed', "Task failed due to merge conflict. Superseded by new task.")
+                    if retries >= 3:
+                        self.console.print(f"[bold red]Merge conflict on PR #{pr_number}. Task has failed after {retries} retries.[/bold red]")
+                        self._update_task_status(task_id, 'merge_failed', f"Task failed due to persistent merge conflicts after {retries} retries.")
+                        return False, f"Merge conflict and retry limit reached."
 
+                self.console.print(f"[bold yellow]Merge conflict detected for PR #{pr_number}. Retrying task ({retries + 1}/3)...[/bold yellow]")
+                self._update_task_status(task_id, 'superseded', f"Superseded by retry task due to merge conflict. Attempt {retries + 1}.")
 
-                # Trigger a new evolution with the same request. This will create a new task.
+                # Trigger a new evolution with the same request.
                 api_success = trigger_love_evolution(original_request, self.console, self)
 
                 if api_success:
-                    return False, "Merge conflict detected. A new task has been created to rebuild on the latest main branch."
+                    # Find the new task and update its retry count
+                    with self.lock:
+                        new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                        self.tasks[new_task_id]['retries'] = retries + 1
+                    return False, f"Merge conflict detected. Retrying with new task. Attempt {retries + 1}."
                 else:
-                    # Update status to failed if we can't create the new task
-                    self._update_task_status(task_id, 'failed', "Merge conflict detected, but failed to create a new replacement task.")
-                    return False, "Merge conflict detected, but failed to create a new replacement task."
+                    # If we fail to create the new task, the old one is still 'superseded', which is not ideal.
+                    # Let's revert its status to failed.
+                    self._update_task_status(task_id, 'failed', "Merge conflict detected, but failed to create a new retry task.")
+                    return False, "Merge conflict, but failed to create retry task."
 
             else: # Should be captured by raise_for_status, but as a fallback.
                 msg = f"Failed to merge PR #{pr_number}. Status: {merge_response.status_code}, Response: {merge_response.text}"

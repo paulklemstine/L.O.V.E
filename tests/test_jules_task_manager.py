@@ -199,3 +199,61 @@ async def test_jules_increment_counter_lifecycle(task_manager, console):
                     _delete_pr_branch(repo_owner, repo_name, pr_number, headers)
                     subprocess.run(["git", "branch", "-D", branch_name], capture_output=True)
                     console.print(f"[bold green]Cleanup complete for branch {branch_name}.[/bold green]")
+
+@pytest.mark.real_api
+@pytest.mark.asyncio
+async def test_jules_merge_conflict_retry_logic(task_manager, console, mocker):
+    """
+    Tests that the LoveTaskManager correctly retries a task up to 3 times
+    when faced with a persistent merge conflict, and then fails.
+    """
+    request = "Create a new file named 'test_retry.txt' with the content 'hello'."
+
+    # --- Mock GitHub API to always return a merge conflict ---
+    mock_response = mocker.Mock()
+    mock_response.status_code = 405  # 405 Method Not Allowed indicates a merge conflict
+    mocker.patch('love.requests.put', return_value=mock_response)
+
+    # --- Trigger the task ---
+    success = trigger_love_evolution(request, console, task_manager)
+    assert success, "Failed to trigger the L.O.V.E. evolution task."
+
+    # --- Monitor the retry logic ---
+    start_time = time.time()
+    final_status = None
+    task_id = max(task_manager.tasks.keys(), key=lambda t: task_manager.tasks[t]['created_at'])
+
+    retry_count = 0
+    max_retries = 3
+
+    try:
+        while time.time() - start_time < TEST_TIMEOUT:
+            task = task_manager.tasks.get(task_id)
+
+            if not task:
+                all_tasks = task_manager.get_status()
+                # Find the next task in the retry chain
+                new_task = next((t for t in all_tasks if t['request'] == request and t.get('retries', 0) == retry_count + 1), None)
+                if new_task:
+                    retry_count += 1
+                    console.print(f"[bold yellow]Merge conflict triggered retry. Now monitoring new task {new_task['id']} (Attempt {retry_count}).[/bold yellow]")
+                    task_id = new_task['id']
+                    task = new_task
+                else:
+                    # If we can't find the next task, something is wrong, or the process is complete
+                    pass
+
+            if task and task['status'] == 'merge_failed':
+                final_status = task['status']
+                console.print(f"[bold green]Success! Task {task_id} failed with merge_failed status after {retry_count} retries.[/bold green]")
+                break
+
+            # This is a short test, so we can poll more frequently
+            time.sleep(10)
+
+        assert final_status == 'merge_failed', f"Test timed out. Final status: {final_status}"
+        assert retry_count == max_retries, f"Expected {max_retries} retries, but {retry_count} occurred."
+
+    finally:
+        # No cleanup needed as no PR was ever actually merged.
+        pass
