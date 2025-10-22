@@ -85,23 +85,36 @@ def get_random_rave_color():
 
 def get_gradient_text(text, color1=None, color2=None):
     """Creates a Rich Text object with a gradient effect between two colors."""
+    from rich.color import Color
+    from rich.style import Style
+    from rich.console import Console
+
+    # Create a temporary console to resolve colors to their RGB triplets.
+    # This is the key to ensuring that standard terminal colors like "magenta"
+    # are converted into a format that has a .triplet attribute for interpolation.
+    console = Console()
+
     if color1 is None:
         color1 = random.choice(RAVE_COLORS)
     if color2 is None:
         color2 = random.choice(RAVE_COLORS)
 
-    # Ensure colors are valid Rich color names or hex codes
-    # (This is a simplified example; a real implementation might validate more)
-    from rich.color import Color
-    from rich.style import Style
+    # Use the console to get a Style object, from which we can extract a
+    # Color object that is guaranteed to have its triplet populated.
+    try:
+        start_color = console.get_style(color1).color
+    except Exception:
+        # Fallback to a known-good color if the name is truly invalid
+        start_color = console.get_style(random.choice(RAVE_COLORS)).color
 
     try:
-        start_color = Color.parse(color1)
-        end_color = Color.parse(color2)
+        end_color = console.get_style(color2).color
     except Exception:
-        # Fallback to random colors if parsing fails
-        start_color = Color.parse(random.choice(RAVE_COLORS))
-        end_color = Color.parse(random.choice(RAVE_COLORS))
+        end_color = console.get_style(random.choice(RAVE_COLORS)).color
+
+    # Defensive check to ensure we have valid color objects.
+    if not all([start_color, end_color, start_color.triplet, end_color.triplet]):
+         return Text(text, style="bold red") # Failsafe return
 
     text_len = len(text)
     gradient = Text()
