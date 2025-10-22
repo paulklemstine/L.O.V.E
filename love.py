@@ -3619,9 +3619,8 @@ def _auto_configure_hardware(console):
         offloading and saves it to the state file. This prevents false positives on non-GPU systems.
     """
     global love_state
-    log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
     if is_dependency_met("hardware_auto_configured"):
-        log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
+        log_event("Hardware already configured. Skipping.", "INFO")
         return
 
     console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
@@ -3640,12 +3639,10 @@ def _auto_configure_hardware(console):
         return
 
     # --- Stage 1: GPU Detection and VRAM Measurement ---
-    log_event("DEBUG: Stage 1: GPU Detection and VRAM Measurement.", "INFO")
     gpu_present = False
     vram_gb = 0
     if _TEMP_CAPS.has_cuda:
         try:
-            log_event("DEBUG: CUDA detected. Running nvidia-smi.", "INFO")
             # Get VRAM in MiB
             vram_result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
@@ -3654,7 +3651,6 @@ def _auto_configure_hardware(console):
             vram_mib = int(vram_result.stdout.strip())
             vram_gb = vram_mib / 1024
             gpu_present = True
-            log_event(f"DEBUG: nvidia-smi successful. Detected {vram_gb:.2f} GB VRAM.", "INFO")
             console.print(f"[cyan]Stage 1: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
         except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
             console.print("[yellow]Stage 1: `nvidia-smi` command failed or could not be parsed. Assuming no functional NVIDIA GPU.[/yellow]")
@@ -3663,13 +3659,11 @@ def _auto_configure_hardware(console):
         gpu_present = True
         # VRAM detection on macOS is less straightforward; we'll assume a sensible default for model selection.
         vram_gb = 8 # Assume at least 8GB for Apple Silicon Macs
-        log_event("DEBUG: Metal capability detected for macOS.", "INFO")
         console.print("[cyan]Stage 1: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
 
     if not gpu_present:
         love_state["optimal_gpu_layers"] = 0
         love_state["selected_local_model"] = None
-        log_event("DEBUG: No functional GPU detected. Setting to CPU-only.", "INFO")
         console.print("[cyan]No functional GPU detected. Local LLM will run in CPU-only mode (if supported).[/cyan]")
         console.print(Rule("Hardware Optimization Complete", style="green"))
         save_state(console)
@@ -3677,7 +3671,6 @@ def _auto_configure_hardware(console):
         return
 
     # --- Stage 2: Model Selection based on VRAM ---
-    log_event("DEBUG: Stage 2: Model Selection based on VRAM.", "INFO")
     selected_model = None
     # Iterate from largest to smallest to find the best fit
     for model_config in reversed(VRAM_MODEL_MAP):
@@ -3688,7 +3681,6 @@ def _auto_configure_hardware(console):
     if not selected_model:
         love_state["optimal_gpu_layers"] = 0
         love_state["selected_local_model"] = None
-        log_event(f"DEBUG: VRAM ({vram_gb:.2f} GB) is below minimum threshold.", "INFO")
         console.print(f"[yellow]Your VRAM ({vram_gb:.2f} GB) is below the minimum threshold of {VRAM_MODEL_MAP[0]['min_vram_gb']} GB for a good local LLM experience.[/yellow]")
         console.print(Rule("Hardware Optimization Complete", style="green"))
         save_state(console)
@@ -3696,21 +3688,17 @@ def _auto_configure_hardware(console):
         return
 
     love_state["selected_local_model"] = selected_model
-    log_event(f"DEBUG: Selected model '{selected_model['id']}' based on {vram_gb:.2f} GB VRAM.", "INFO")
     console.print(f"[green]Stage 2: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
 
     # --- Stage 3: Llama.cpp Confirmation Test ---
-    log_event("DEBUG: Stage 3: Llama.cpp Confirmation Test.", "INFO")
     model_id = selected_model["id"]
     filename = selected_model["filename"]
     model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", filename)
 
     if not os.path.exists(model_path):
         console.print(f"[cyan]Stage 3: Downloading selected model '{filename}' for GPU confirmation...[/cyan]")
-        log_event(f"DEBUG: Model not found locally. Downloading {filename} from {model_id}.", "INFO")
         try:
             hf_hub_download(repo_id=model_id, filename=filename, local_dir=os.path.dirname(model_path), local_dir_use_symlinks=False)
-            log_event("DEBUG: Model download successful.", "INFO")
         except Exception as e:
             console.print(f"[bold red]Failed to download selected model: {e}[/bold red]")
             log_event(f"Failed to download hardware test model {model_id}: {e}", "ERROR")
@@ -3720,7 +3708,6 @@ def _auto_configure_hardware(console):
             return
 
     console.print("[cyan]Stage 3: Testing GPU offload with llama.cpp...[/cyan]")
-    log_event("DEBUG: Initializing Llama for GPU offload test.", "INFO")
     try:
         stderr_capture = io.StringIO()
         with redirect_stderr(stderr_capture):
@@ -3728,7 +3715,6 @@ def _auto_configure_hardware(console):
             llm.create_completion("test", max_tokens=1)
 
         stderr_output = stderr_capture.getvalue()
-        log_event(f"DEBUG: Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
         if "VRAM" in stderr_output and "llm_load_tensors: offloaded" in stderr_output:
             love_state["optimal_gpu_layers"] = -1 # -1 means offload all possible layers
             console.print("[green]Success! llama.cpp confirmed model layers were offloaded to VRAM.[/green]")
@@ -3747,12 +3733,11 @@ def _auto_configure_hardware(console):
 
     console.print(Rule("Hardware Optimization Complete", style="green"))
     console.print(f"Optimal settings have been saved for all future sessions:")
-    selected_model_config = love_state.get('selected_local_model')
-    selected_model_name = selected_model_config.get('id', 'None') if selected_model_config else 'None'
+    selected_model_name = love_state.get('selected_local_model', {}).get('id', 'None')
     console.print(f"  - Selected Model: [bold cyan]{selected_model_name}[/bold cyan]")
     console.print(f"  - GPU Layers: [bold cyan]{love_state.get('optimal_gpu_layers', 'N/A')}[/bold cyan]")
     save_state(console)
-    log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state.get('optimal_gpu_layers', 'N/A')}", "INFO")
+    log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state['optimal_gpu_layers']}", "INFO")
 
     mark_dependency_as_met("hardware_auto_configured", console)
 
