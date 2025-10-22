@@ -659,7 +659,7 @@ def _start_kobold_client_and_get_url(console):
         global kobold_process
         try:
             kobold_process = subprocess.Popen(
-                ["python", "koboldcpp.py"],
+                ["python", "koboldcpp.py", "--skiplauncher"],
                 cwd=kobold_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -670,7 +670,7 @@ def _start_kobold_client_and_get_url(console):
         except FileNotFoundError:
             console.print("[yellow]'python' not found, trying 'python3'...[/yellow]")
             kobold_process = subprocess.Popen(
-                ["python3", "koboldcpp.py"],
+                ["python3", "koboldcpp.py", "--skiplauncher"],
                 cwd=kobold_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
