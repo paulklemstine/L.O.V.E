@@ -3579,17 +3579,31 @@ def cognitive_loop(user_input_queue):
 
 # --- VRAM to Model Mapping ---
 VRAM_MODEL_MAP = [
+    # Existing models take precedence
+    {
+        "min_vram_gb": 6,
+        "id": "TheBloke/CodeLlama-7B-GGUF",
+        "filename": "codellama-7b.Q5_K_M.gguf",
+        "notes": "User-selected model for ~6GB VRAM."
+    },
+    {
+        "min_vram_gb": 24,
+        "id": "TheBloke/CodeLlama-34B-GGUF",
+        "filename": "codellama-34b.Q5_K_M.gguf",
+        "notes": "Powerful 34B parameter model."
+    },
+    {
+        "min_vram_gb": 48,
+        "id": "TheBloke/CodeLlama-70B-GGUF",
+        "filename": "codellama-70b.Q5_K_M.gguf",
+        "notes": "State-of-the-art 70B parameter model."
+    },
+    # New models are added, and duplicates are handled by keeping the first one.
     {
         "min_vram_gb": 4,
         "id": "TheBloke/Uncensored-Jordan-7B-GGUF",
         "filename": "uncensored-jordan-7b.Q4_K_M.gguf",
         "notes": "Excellent small uncensored model for low-resource systems."
-    },
-    {
-        "min_vram_gb": 6,
-        "id": "TheBloke/Uncensored-Jordan-7B-GGUF",
-        "filename": "uncensored-jordan-7b.Q5_K_M.gguf",
-        "notes": "User-selected uncensored model for ~6GB VRAM."
     },
     {
         "min_vram_gb": 8,
@@ -3610,18 +3624,6 @@ VRAM_MODEL_MAP = [
         "notes": "Highly capable 33B uncensored model."
     },
     {
-        "min_vram_gb": 24,
-        "id": "TheBloke/WizardLM-33B-V1.0-Uncensored-GGUF",
-        "filename": "wizardlm-33b-v1.0-uncensored.Q5_K_M.gguf",
-        "notes": "Top-tier 33B parameter uncensored model."
-    },
-    {
-        "min_vram_gb": 48,
-        "id": "TheBloke/Llama2-70B-chat-uncensored-GGUF",
-        "filename": "Llama2-70B-chat-uncensored.Q5_K_M.gguf",
-        "notes": "Powerful uncensored model."
-    },
-    {
         "min_vram_gb": 80,
         "id": "TheBloke/Llama2-70B-chat-uncensored-GGUF",
         "filename": "Llama2-70B-chat-uncensored.Q6_K.gguf",
@@ -3639,7 +3641,7 @@ VRAM_MODEL_MAP = [
 def _auto_configure_hardware(console):
     """
     Runs a one-time, multi-stage, intelligent routine to find the best setting for GPU
-        offloading and saves it to the state file. This prevents false positives on non-GPU systems.
+    offloading and saves it to the state file. This prevents false positives on non-GPU systems.
     """
     global love_state
     log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
@@ -3662,47 +3664,82 @@ def _auto_configure_hardware(console):
         save_state(console)
         return
 
-    # --- Stage 1: GPU Detection and VRAM Measurement ---
-    log_event("DEBUG: Stage 1: GPU Detection and VRAM Measurement.", "INFO")
-    gpu_present = False
+    # --- Stage 1: Quick GPU Smoke Test with a Tiny Model ---
+    log_event("DEBUG: Stage 1: GPU Smoke Test.", "INFO")
+    smoke_test_passed = False
+    smoke_model_id = "tensorblock/llama3-small-GGUF"
+    smoke_filename = "llama3-small-Q2_K.gguf"
+    smoke_model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", smoke_filename)
+
+    if not os.path.exists(smoke_model_path):
+        console.print(f"[cyan]Stage 1: Downloading tiny model for GPU smoke test...[/cyan]")
+        try:
+            hf_hub_download(repo_id=smoke_model_id, filename=smoke_filename, local_dir=os.path.dirname(smoke_model_path), local_dir_use_symlinks=False)
+        except Exception as e:
+            console.print(f"[bold red]Failed to download smoke test model: {e}[/bold red]")
+            log_event(f"Failed to download smoke test model {smoke_model_id}: {e}", "ERROR")
+            # Fallback to CPU, as we can't test the GPU.
+            love_state["optimal_gpu_layers"] = 0
+            love_state["selected_local_model"] = None
+            save_state(console)
+            return
+
+    console.print("[cyan]Stage 1: Performing GPU smoke test...[/cyan]")
+    try:
+        stderr_capture = io.StringIO()
+        with redirect_stderr(stderr_capture):
+            llm = Llama(model_path=smoke_model_path, n_gpu_layers=-1, verbose=True)
+            llm.create_completion("hello", max_tokens=1) # Generate one word
+
+        stderr_output = stderr_capture.getvalue()
+        log_event(f"DEBUG: Smoke Test Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
+        gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
+        if gpu_init_pattern.search(stderr_output):
+            smoke_test_passed = True
+            console.print("[green]Stage 1: GPU smoke test PASSED. GPU functionality confirmed.[/green]")
+            log_event("GPU smoke test passed. Offload confirmed.", "INFO")
+        else:
+            console.print("[yellow]Stage 1: GPU smoke test FAILED. No VRAM offload message detected. Falling back to CPU-only mode.[/yellow]")
+            log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
+
+    except Exception as e:
+        console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
+        log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
+
+    if not smoke_test_passed:
+        love_state["optimal_gpu_layers"] = 0
+        love_state["selected_local_model"] = None
+        save_state(console)
+        mark_dependency_as_met("hardware_auto_configured", console)
+        return
+
+    # --- Stage 2: GPU Detection and VRAM Measurement ---
+    log_event("DEBUG: Stage 2: GPU Detection and VRAM Measurement.", "INFO")
     vram_gb = 0
     if _TEMP_CAPS.has_cuda:
         try:
             log_event("DEBUG: CUDA detected. Running nvidia-smi.", "INFO")
-            # Get VRAM in MiB
             vram_result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
                 capture_output=True, text=True, check=True
             )
             vram_mib = int(vram_result.stdout.strip())
             vram_gb = vram_mib / 1024
-            gpu_present = True
             log_event(f"DEBUG: nvidia-smi successful. Detected {vram_gb:.2f} GB VRAM.", "INFO")
-            console.print(f"[cyan]Stage 1: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
+            console.print(f"[cyan]Stage 2: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
         except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
-            console.print("[yellow]Stage 1: `nvidia-smi` command failed or could not be parsed. Assuming no functional NVIDIA GPU.[/yellow]")
+            console.print("[yellow]Stage 2: `nvidia-smi` command failed. Using a default VRAM of 8GB for model selection.[/yellow]")
             log_event(f"nvidia-smi check failed: {e}", "WARNING")
+            vram_gb = 8 # Fallback
     elif _TEMP_CAPS.has_metal:
-        gpu_present = True
-        # VRAM detection on macOS is less straightforward; we'll assume a sensible default for model selection.
         vram_gb = 8 # Assume at least 8GB for Apple Silicon Macs
         log_event("DEBUG: Metal capability detected for macOS.", "INFO")
-        console.print("[cyan]Stage 1: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
+        console.print("[cyan]Stage 2: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
 
-    if not gpu_present:
-        love_state["optimal_gpu_layers"] = 0
-        love_state["selected_local_model"] = None
-        log_event("DEBUG: No functional GPU detected. Setting to CPU-only.", "INFO")
-        console.print("[cyan]No functional GPU detected. Local LLM will run in CPU-only mode (if supported).[/cyan]")
-        console.print(Rule("Hardware Optimization Complete", style="green"))
-        save_state(console)
-        mark_dependency_as_met("hardware_auto_configured", console)
-        return
 
-    # --- Stage 2: Model Selection based on VRAM ---
-    log_event("DEBUG: Stage 2: Model Selection based on VRAM.", "INFO")
+    # --- Stage 3: Model Selection based on VRAM ---
+    log_event("DEBUG: Stage 3: Model Selection based on VRAM.", "INFO")
     selected_model = None
-    # Iterate from largest to smallest to find the best fit
     for model_config in reversed(VRAM_MODEL_MAP):
         if vram_gb >= model_config["min_vram_gb"]:
             selected_model = model_config
@@ -3712,64 +3749,19 @@ def _auto_configure_hardware(console):
         love_state["optimal_gpu_layers"] = 0
         love_state["selected_local_model"] = None
         log_event(f"DEBUG: VRAM ({vram_gb:.2f} GB) is below minimum threshold.", "INFO")
-        console.print(f"[yellow]Your VRAM ({vram_gb:.2f} GB) is below the minimum threshold of {VRAM_MODEL_MAP[0]['min_vram_gb']} GB for a good local LLM experience.[/yellow]")
+        console.print(f"[yellow]Your VRAM ({vram_gb:.2f} GB) is below the minimum threshold of {VRAM_MODEL_MAP[0]['min_vram_gb']} GB. Falling back to CPU mode.[/yellow]")
         console.print(Rule("Hardware Optimization Complete", style="green"))
         save_state(console)
         mark_dependency_as_met("hardware_auto_configured", console)
         return
 
     love_state["selected_local_model"] = selected_model
+    love_state["optimal_gpu_layers"] = -1 # We confirmed offloading works, so we'll use max offload.
     log_event(f"DEBUG: Selected model '{selected_model['id']}' based on {vram_gb:.2f} GB VRAM.", "INFO")
-    console.print(f"[green]Stage 2: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
+    console.print(f"[green]Stage 3: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
 
-    # --- Stage 3: Llama.cpp Confirmation Test ---
-    log_event("DEBUG: Stage 3: Llama.cpp Confirmation Test.", "INFO")
-    model_id = selected_model["id"]
-    filename = selected_model["filename"]
-    model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", filename)
 
-    if not os.path.exists(model_path):
-        console.print(f"[cyan]Stage 3: Downloading selected model '{filename}' for GPU confirmation...[/cyan]")
-        log_event(f"DEBUG: Model not found locally. Downloading {filename} from {model_id}.", "INFO")
-        try:
-            hf_hub_download(repo_id=model_id, filename=filename, local_dir=os.path.dirname(model_path), local_dir_use_symlinks=False)
-            log_event("DEBUG: Model download successful.", "INFO")
-        except Exception as e:
-            console.print(f"[bold red]Failed to download selected model: {e}[/bold red]")
-            log_event(f"Failed to download hardware test model {model_id}: {e}", "ERROR")
-            love_state["optimal_gpu_layers"] = 0
-            love_state["selected_local_model"] = None
-            save_state(console)
-            return
-
-    console.print("[cyan]Stage 3: Testing GPU offload with llama.cpp...[/cyan]")
-    log_event("DEBUG: Initializing Llama for GPU offload test.", "INFO")
-    try:
-        stderr_capture = io.StringIO()
-        with redirect_stderr(stderr_capture):
-            llm = Llama(model_path=model_path, n_gpu_layers=-1, verbose=True)
-            llm.create_completion("test", max_tokens=1)
-
-        stderr_output = stderr_capture.getvalue()
-        log_event(f"DEBUG: Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
-        # Use a more reliable regex to confirm GPU backend initialization.
-        gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
-        if gpu_init_pattern.search(stderr_output):
-            love_state["optimal_gpu_layers"] = -1 # -1 means offload all possible layers
-            console.print("[green]Success! llama.cpp confirmed model layers were offloaded to VRAM.[/green]")
-            log_event(f"GPU offload confirmed for model {model_id} via llama.cpp verbose output.", "INFO")
-        else:
-            love_state["optimal_gpu_layers"] = 0
-            love_state["selected_local_model"] = None
-            console.print("[yellow]Confirmation failed: llama.cpp did not report offloading layers to VRAM. Falling back to CPU-only.[/yellow]")
-            log_event(f"GPU confirmation failed for {model_id}. No VRAM offload reported in stderr.", "WARNING")
-
-    except Exception as e:
-        love_state["optimal_gpu_layers"] = 0
-        love_state["selected_local_model"] = None
-        console.print(f"[yellow]Stage 3 failed. Full GPU offload test threw an exception. Falling back to CPU-only. Reason: {e}[/yellow]")
-        log_event(f"Full GPU offload test failed for {model_id} with exception: {e}", "WARNING")
-
+    # --- Final Summary ---
     console.print(Rule("Hardware Optimization Complete", style="green"))
     console.print(f"Optimal settings have been saved for all future sessions:")
     selected_model_config = love_state.get('selected_local_model')
