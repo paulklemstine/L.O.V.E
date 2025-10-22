@@ -237,8 +237,28 @@ class IPFSManager:
         """Installs IPFS by compiling it from source."""
         return self._install_ipfs_from_source()
 
+    def _is_daemon_running(self):
+        """Checks if an IPFS daemon is already running and responsive."""
+        # This check requires the binary to exist.
+        if not os.path.exists(self.bin_path):
+            return False
+
+        # Set the IPFS_PATH environment variable for the check
+        env = os.environ.copy()
+        env['IPFS_PATH'] = self.repo_path
+
+        # The 'ipfs id' command will succeed if the daemon is running.
+        # We can ignore the output.
+        success, _ = self._run_command([self.bin_path, "id"], env=env)
+        return success
+
     def start_daemon(self):
         """Initializes the repo and starts the IPFS daemon."""
+        # Don't start a new daemon if one is already running
+        if self._is_daemon_running():
+            self.console.print("[green]An existing IPFS daemon is already running. Skipping startup.[/green]")
+            return True
+
         if not os.path.exists(self.bin_path):
             self.console.print("[bold red]IPFS binary not found. Cannot start daemon.[/bold red]")
             return False
@@ -308,14 +328,23 @@ class IPFSManager:
         Orchestrates the checking, installation, and running of the daemon.
         """
         self.console.print("[bold magenta]=== IPFS Self-Management Initialized ===[/bold magenta]")
+
+        # First, check if a daemon is already running. If so, our work is done.
+        # This requires the binary to exist, so we handle that case inside.
+        if self._is_daemon_running():
+            self.console.print("[green]IPFS daemon is already running. Setup complete.[/green]")
+            return True
+
+        # If no daemon is running, ensure the binary is present, installing if necessary.
         if not os.path.exists(self.bin_path):
-            self.console.print("[yellow]IPFS binary not found. Proceeding with installation.[/yellow]")
+            self.console.print("[yellow]IPFS binary not found and no daemon running. Proceeding with installation.[/yellow]")
             if not self._install_ipfs():
                 self.console.print("[bold red]FATAL: IPFS installation failed. IPFS features will be disabled.[/bold red]")
                 return False
         else:
-            self.console.print("[green]IPFS binary found. Skipping installation.[/green]")
+            self.console.print("[green]IPFS binary found. Proceeding to start daemon.[/green]")
 
+        # Finally, start the daemon.
         if not self.start_daemon():
             self.console.print("[bold red]FATAL: Could not start the IPFS daemon. IPFS features will be disabled.[/bold red]")
             return False
