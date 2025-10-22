@@ -3685,14 +3685,21 @@ def _auto_configure_hardware(console):
             return
 
     console.print("[cyan]Stage 1: Performing GPU smoke test...[/cyan]")
+    stderr_capture = io.StringIO()
     try:
-        stderr_capture = io.StringIO()
         with redirect_stderr(stderr_capture):
+            # This is where the C-level libraries print to stderr
             llm = Llama(model_path=smoke_model_path, n_gpu_layers=-1, verbose=True)
             llm.create_completion("hello", max_tokens=1) # Generate one word
-
+    except Exception as e:
+        console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
+        log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
+    finally:
+        # This block ensures the output is always logged, even if Llama() fails.
         stderr_output = stderr_capture.getvalue()
         log_event(f"DEBUG: Smoke Test Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
+
+        # Now, analyze the captured output
         gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
         if gpu_init_pattern.search(stderr_output):
             smoke_test_passed = True
@@ -3701,10 +3708,6 @@ def _auto_configure_hardware(console):
         else:
             console.print("[yellow]Stage 1: GPU smoke test FAILED. No VRAM offload message detected. Falling back to CPU-only mode.[/yellow]")
             log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
-
-    except Exception as e:
-        console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
-        log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
 
     if not smoke_test_passed:
         love_state["optimal_gpu_layers"] = 0
