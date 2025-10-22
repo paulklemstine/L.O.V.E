@@ -45,7 +45,7 @@ LOCAL_MODELS_CONFIG = [
 ]
 
 # --- Fallback Model Configuration ---
-GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-pro", "gemini-flash"]
 
 def get_top_horde_models(count=3):
     """Fetches the list of active text models from the AI Horde and returns the top `count` models by performance."""
