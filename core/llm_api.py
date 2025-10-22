@@ -19,6 +19,7 @@ from display import create_api_error_panel
 from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
+from core.koboldapi import Controller as KoboldController
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
@@ -45,7 +46,7 @@ LOCAL_MODELS_CONFIG = [
 ]
 
 # --- Fallback Model Configuration ---
-GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-pro", "gemini-flash"]
 
 def get_top_horde_models(count=3):
     """Fetches the list of active text models from the AI Horde and returns the top `count` models by performance."""
@@ -65,12 +66,14 @@ HORDE_MODELS = get_top_horde_models()
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
+KOBOLD_API_URL = os.environ.get("KOBOLD_API_URL")
 ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS
+    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + (["KoboldAI"] if KOBOLD_API_URL else [])
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 local_llm_instance = None
 local_llm_tokenizer = None
+kobold_controller = None
 
 # Constants
 MAX_PROMPT_TOKENS_LOCAL = 7000  # Leaving ~1k for response
@@ -464,6 +467,26 @@ def run_llm(prompt_text, purpose="general"):
                     silent=(purpose in ['emotion', 'log_squash'])
                 )
                 log_event(f"AI Horde call successful with {model_id}.")
+
+            # --- KOBOLD AI MODEL LOGIC ---
+            elif model_id == "KoboldAI":
+                log_event(f"Attempting LLM call with KoboldAI (Purpose: {purpose})")
+                global kobold_controller
+                if not kobold_controller:
+                    kobold_controller = KoboldController()
+                    if not kobold_controller.Initialise(KOBOLD_API_URL):
+                        raise Exception("KoboldAI controller failed to initialize.")
+
+                def _kobold_call():
+                    return kobold_controller.Generate(prompt_text)
+
+                result_text = run_hypnotic_progress(
+                    console,
+                    f"Accessing cognitive matrix via [bold yellow]KoboldAI[/bold yellow] (Purpose: {purpose})",
+                    _kobold_call,
+                    silent=(purpose in ['emotion', 'log_squash'])
+                )
+                log_event(f"KoboldAI call successful.")
 
             # --- Success Case ---
             if result_text is not None:
