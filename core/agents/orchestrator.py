@@ -31,6 +31,7 @@ class Orchestrator:
         self.tool_registry = ToolRegistry()
         # self.tool_registry.register_tool("web_search", web_search)
         # self.tool_registry.register_tool("read_file", read_file)
+        self.tool_registry.register_tool("generate_image", generate_image)
 
         # Initialize IPFS and decentralized storage
         self.ipfs_client = get_ipfs_client(None)

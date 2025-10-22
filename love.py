@@ -3454,6 +3454,8 @@ def cognitive_loop(user_input_queue):
                      output, error = get_network_interfaces()
                 elif command == "reason":
                     output = ReasoningEngine(love_state, console=None).analyze_and_prioritize()
+                elif command == "generate_image":
+                    output = generate_image(" ".join(args))
                 elif command == "quit":
                     break
                 else:
