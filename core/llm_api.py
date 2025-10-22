@@ -414,7 +414,7 @@ def run_llm(prompt_text, purpose="general"):
             # --- GEMINI MODEL LOGIC ---
             elif model_id in GEMINI_MODELS:
                 log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
-                command = ["llm", "-m", model_id]
+                command = [sys.executable, "-m", "llm", "-m", model_id]
 
                 def _llm_subprocess_call():
                     return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
