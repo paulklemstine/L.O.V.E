@@ -20,6 +20,7 @@ import asyncio
 from collections import deque
 import queue
 import hashlib
+import io
 
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
@@ -146,14 +147,14 @@ def setup_global_logging():
         level=logging.INFO,
         format='%(asctime)s [%(levelname)s] - %(message)s',
         filename=LOG_FILE,
-        filemode='a',
+        filemode='w',
         force=True # Override any existing handlers
     )
 
     # 2. Open a raw file stream to the same log file for our custom print.
     # This captures unformatted text and stderr.
     if log_file_stream is None:
-        log_file_stream = open(LOG_FILE, 'a')
+        log_file_stream = open(LOG_FILE, 'w')
 
     # 3. Redirect ONLY stderr to our custom Tee.
     # This is crucial for capturing errors from subprocesses or libraries (e.g., llama.cpp)
@@ -2710,7 +2711,7 @@ def log_critical_event(message, console_override=None):
 
     # 4. Display a panel to the user.
     terminal_width = get_terminal_width()
-    console.print(create_critical_error_panel(message, width=terminal_width - 4))
+    ui_panel_queue.put(create_critical_error_panel(message, width=terminal_width - 4, log_event=log_event))
 
 
 def initial_knowledge_base_bootstrap(console):
@@ -3947,6 +3948,13 @@ def live_ui_renderer(console, user_input_queue):
                 panel = ui_panel_queue.get()
                 feed_panels.append(panel)
                 new_content = True
+                # --- Centralized Logging ---
+                # Log the plain text of every panel that goes to the UI.
+                log_console = Console(file=io.StringIO(), force_terminal=False)
+                with log_console.capture() as capture:
+                    log_console.print(panel)
+                log_event(f"[UI_PANEL]\n{capture.get()}")
+
 
             # Only re-render if there's new content or it's the first run
             if new_content or is_first_render:

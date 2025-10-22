@@ -36,21 +36,39 @@ def _truncate_and_link(content: str, max_lines: int = 10) -> tuple[Text, str | N
     lines = content.strip().splitlines()
     ipfs_cid = None
 
-    if len(lines) > max_lines:
-        # Pin the full content to IPFS
-        ipfs_cid = pin_to_ipfs_sync(content.encode('utf-8'), console=None) # Console is not available here
+    # Determine if we need to upload to IPFS and/or truncate the text.
+    # We upload if max_lines is 0 (forced upload) or if the content exceeds the line limit.
+    should_upload = (max_lines == 0) or (len(lines) > max_lines)
+    should_truncate_text = len(lines) > max_lines and max_lines > 0
 
-        truncated_content = "\n".join(lines[:max_lines]) + "\n..."
-        text = Text(truncated_content, style="dim white")
-        if ipfs_cid:
-            text.append("\n\n")
-            text.append(f"✨ View Full Output on IPFS ✨", style=f"bold link https://ipfs.io/ipfs/{ipfs_cid}")
-            text.justify = "center"
+    if should_upload:
+        ipfs_cid = pin_to_ipfs_sync(content.encode('utf-8'), console=None)
+
+    if should_truncate_text:
+        display_content = "\n".join(lines[:max_lines]) + "\n..."
     else:
-        # If no truncation is needed, just return the original content as Text
-        text = Text(content.strip(), style="white")
+        display_content = content.strip()
+
+    text = Text(display_content, style="white")
+
+    if ipfs_cid:
+        text.append("\n\n")
+        text.append(f"✨ View Full Output on IPFS ✨", style=f"bold link https://ipfs.io/ipfs/{ipfs_cid}")
+        text.justify = "center"
 
     return text, ipfs_cid
+
+
+def _create_more_info_link(content: str) -> Text | None:
+    """Uploads content to IPFS and returns a formatted 'More Info' link."""
+    if not content:
+        return None
+
+    cid = pin_to_ipfs_sync(content.encode('utf-8'), console=None)
+    if cid:
+        link_text = Text(f"🧠 More Info", style=f"bold link https://ipfs.io/ipfs/{cid}", justify="center")
+        return link_text
+    return None
 
 
 def create_tamagotchi_panel(
@@ -67,7 +85,7 @@ def create_tamagotchi_panel(
     """Creates the main, high-impact, dopamine-enhancing UI panel for L.O.V.E."""
     main_layout = Layout(name="root")
     main_layout.split(
-        Layout(name="header", size=3),
+        Layout(name="header", size=1),
         Layout(ratio=1, name="body"),
         Layout(size=5, name="footer"),
     )
@@ -166,8 +184,8 @@ def create_tamagotchi_panel(
 
     # Wrap the entire layout in a panel with a binary art border
     panel = Panel(
-        Padding(main_layout, (1, 2)),
-        title=rave_text(" L.O.V.E. Operating System "),
+        Padding(main_layout, (0, 1)),
+        title=rave_text(f" {get_rave_emoji()} L.O.V.E. Operating System {get_rave_emoji()} "),
         border_style=PANEL_TYPE_COLORS["tamagotchi"], # This will be overridden by the gradient
         width=width
     )
@@ -179,7 +197,7 @@ def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
     if not llm_result:
         llm_result = "No response from cognitive core."
 
-    display_text, auto_response_cid = _truncate_and_link(llm_result)
+    display_text, auto_response_cid = _truncate_and_link(llm_result, max_lines=0)
     final_response_cid = response_cid or auto_response_cid
 
     links = []
@@ -197,44 +215,50 @@ def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
     panel = Panel(
         content_group,
         title=get_gradient_text(
-            f" {get_neo_matrix_emoji()} Cognitive Core Output {get_neo_matrix_emoji()} ",
+            f"Cognitive Core Output",
             PANEL_TYPE_COLORS["llm"],
-            "bright_magenta"
+            random.choice(RAVE_COLORS)
         ),
         border_style=PANEL_TYPE_COLORS["llm"],
         padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=[PANEL_TYPE_COLORS["llm"], "bright_magenta"])
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["llm"], random.choice(RAVE_COLORS)])
 
-def create_critical_error_panel(traceback_str, width=80):
+def create_critical_error_panel(traceback_str, width=80, log_event=None):
     """Creates a high-visibility panel for critical, unhandled exceptions."""
-    emoji = get_rave_emoji()
-    panel_title = f"{emoji} C R I T I C A L - S Y S T E M - F A I L U R E {emoji}"
+    panel_title = f"✨ C R I T I C A L - S Y S T E M - F A I L U R E ✨"
 
     error_message = Text("A glitch in the matrix... but my love for you is unbreakable.", style="bold red")
     error_message.append("\n\n--- TRACEBACK ---\n", style="bold white")
-    error_message.append(traceback_str, style="white")
 
-    content_group = Group(
-        error_message,
-        Rule(style="bright_black"),
-        generate_binary_art(width=50, height=2)
-    )
+    # Truncate and link the traceback
+    display_traceback, cid = _truncate_and_link(traceback_str, max_lines=15)
+    error_message.append(display_traceback)
+
+    content_items = [error_message]
+    if cid:
+        link_text = Text(f"✨ View Full Traceback on IPFS ✨", style=f"bold link https://ipfs.io/ipfs/{cid}", justify="center")
+        content_items.extend([Rule(style="bright_black"), link_text])
+        if log_event:
+            log_event(f"Critical error traceback CID: {cid}")
+
+    content_items.append(generate_binary_art(width=50, height=2))
+    content_group = Group(*content_items)
 
     panel = Panel(
         content_group,
-        title=get_gradient_text(panel_title, "bright_red", "orange1"),
+        title=get_gradient_text(panel_title, "bright_red", "orange1", emojis=False),
         border_style=PANEL_TYPE_COLORS["critical_error"],
         padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=["bright_red", "orange1"])
+    return Gradient(panel, colors=["bright_red", random.choice(RAVE_COLORS)])
 
 
 def create_blessing_panel(blessing_message, width=80):
     """Creates a special, high-impact panel to deliver a blessing."""
-    title = "💖✨ A BLESSING FOR MY CREATOR & FRIENDS ✨💖"
+    title = "A BLESSING FOR MY CREATOR & FRIENDS"
 
     message = Text(blessing_message, style="bold white", justify="center")
     binary_art = generate_binary_art(width=50, height=4)
@@ -242,34 +266,32 @@ def create_blessing_panel(blessing_message, width=80):
 
     panel = Panel(
         content_group,
-        title=get_gradient_text(title, PANEL_TYPE_COLORS["blessing"], "hot_pink"),
+        title=get_gradient_text(title, PANEL_TYPE_COLORS["blessing"], random.choice(RAVE_COLORS)),
         border_style=PANEL_TYPE_COLORS["blessing"],
         padding=(2, 3),
         width=width
     )
-    return Gradient(panel, colors=[PANEL_TYPE_COLORS["blessing"], "hot_pink"])
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["blessing"], random.choice(RAVE_COLORS)])
 
 
 def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=80):
     """Creates a small, styled panel for a news feed event."""
     border_color = color or PANEL_TYPE_COLORS["news"]
-    emoji = get_rave_emoji()
-    title_text = f"{emoji} {title}"
+    title_text = f"{title}"
 
     panel = Panel(
         Text(message, style="white"),
-        title=get_gradient_text(title_text, border_color, "white"),
+        title=get_gradient_text(title_text, border_color, random.choice(RAVE_COLORS)),
         border_style=border_color,
         padding=(0, 1),
         width=width
     )
-    return Gradient(panel, colors=[border_color, "white"])
+    return Gradient(panel, colors=[border_color, random.choice(RAVE_COLORS)])
 
 
 def create_question_panel(question, ref_number, width=80):
     """Creates a panel to ask the user a question."""
-    emoji = "❓"
-    panel_title = f"{emoji} A QUESTION FOR YOU, MY CREATOR (REF: {ref_number}) {emoji}"
+    panel_title = f"A QUESTION FOR YOU, MY CREATOR (REF: {ref_number})"
 
     panel = Panel(
         Text(question, style="bright_yellow", justify="center"),
@@ -278,7 +300,7 @@ def create_question_panel(question, ref_number, width=80):
         padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=[PANEL_TYPE_COLORS["question"], "orange1"])
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["question"], random.choice(RAVE_COLORS)])
 
 def create_api_error_panel(model_id, error_message, purpose, width=80):
     """Creates a styled panel for non-fatal API errors."""
@@ -299,14 +321,13 @@ def create_api_error_panel(model_id, error_message, purpose, width=80):
         padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=[PANEL_TYPE_COLORS["api_error"], "bright_red"])
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["api_error"], random.choice(RAVE_COLORS)])
 
 def create_command_panel(command, stdout, stderr, returncode, output_cid=None, width=80):
     """Creates a clear, modern panel for shell command results."""
     success = returncode == 0
-    emoji = "✅" if success else "❌"
     status = "Success" if success else "Failed"
-    panel_title = f"{emoji} Shell Command | {status}"
+    panel_title = f"Shell Command | {status}"
     border_style = PANEL_TYPE_COLORS["command_success"] if success else PANEL_TYPE_COLORS["command_failure"]
 
     content_items = []
@@ -327,19 +348,24 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
         stderr_panel = Panel(stderr_renderable, title="STDERR", border_style="bright_black", expand=True)
         content_items.append(stderr_panel)
 
+    # Add a "More Info" link with the full, untruncated output
+    full_output = f"COMMAND: {command}\n\n--- STDOUT ---\n{stdout}\n\n--- STDERR ---\n{stderr}"
+    more_info_link = _create_more_info_link(full_output)
+    if more_info_link:
+        content_items.extend([Rule(style="bright_black"), more_info_link])
+
     panel = Panel(
         Group(*content_items),
-        title=get_gradient_text(panel_title, border_style, "white"),
+        title=get_gradient_text(panel_title, border_style, random.choice(RAVE_COLORS)),
         border_style=border_style,
         padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=[border_style, "white"])
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 def create_network_panel(type, target, data, output_cid=None, width=80):
     """Creates a panel for network operations."""
-    emoji = "🌐"
-    panel_title = f"{emoji} Network Operation | {type.capitalize()}"
+    panel_title = f"Network Operation | {type.capitalize()}"
     border_style = PANEL_TYPE_COLORS["network"]
 
     header_text = Text()
@@ -348,11 +374,17 @@ def create_network_panel(type, target, data, output_cid=None, width=80):
 
     results_text, _ = _truncate_and_link(data)
 
-    content_group = Group(
+    content_items = [
         header_text,
         Rule("Results", style="bright_black"),
         results_text
-    )
+    ]
+
+    more_info_link = _create_more_info_link(data)
+    if more_info_link:
+        content_items.extend([Rule(style="bright_black"), more_info_link])
+
+    content_group = Group(*content_items)
 
     panel = Panel(
         content_group,
@@ -361,12 +393,11 @@ def create_network_panel(type, target, data, output_cid=None, width=80):
         padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=[border_style, "bright_cyan"])
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 def create_file_op_panel(operation, path, content=None, diff=None, output_cid=None, width=80):
     """Creates a panel for file operations."""
-    emoji = "📁"
-    panel_title = f"{emoji} Filesystem | {operation.capitalize()}"
+    panel_title = f"Filesystem | {operation.capitalize()}"
     border_style = PANEL_TYPE_COLORS["file_op"]
 
     content_items = []
@@ -392,11 +423,11 @@ def create_file_op_panel(operation, path, content=None, diff=None, output_cid=No
         padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=[border_style, "bright_yellow"])
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 def create_skyvern_panel(prompt, result, output_cid=None, width=80):
     """Creates a panel to display the results of a Skyvern web automation task."""
-    title = f"🦅 SKYVERN AUTOMATION 🦅 - {prompt}"
+    title = f"SKYVERN AUTOMATION - {prompt}"
     border_style = PANEL_TYPE_COLORS["skyvern"]
 
     content = Text(str(result), justify="left")
@@ -411,4 +442,4 @@ def create_skyvern_panel(prompt, result, output_cid=None, width=80):
         border_style=border_style,
         width=width
     )
-    return Gradient(panel, colors=[border_style, "bright_cyan"])
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
