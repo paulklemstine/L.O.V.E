@@ -487,6 +487,7 @@ def _check_and_install_dependencies():
     _build_llama_cpp()
     _install_nodejs_deps()
     _configure_llm_api_key()
+    _configure_gemini_cli()
 
 
 def _configure_llm_api_key():
@@ -534,6 +535,45 @@ def _configure_llm_api_key():
         error_message += f"  Return Code: {e.returncode}\n"
         error_message += f"  Stdout: {e.stdout.strip()}\n"
         error_message += f"  Stderr: {e.stderr.strip()}"
+        log_event(error_message)
+
+
+def _configure_gemini_cli():
+    """Checks for the Gemini CLI executable and verifies it can run."""
+    # This function relies on local imports to avoid circular dependencies.
+    from core.logging import log_event
+    if is_dependency_met("gemini_cli_configured"):
+        log_event("SUCCESS: Gemini CLI is already configured.")
+        return
+
+    # The executable is expected in the local node_modules directory.
+    gemini_cli_path = os.path.join(os.path.dirname(SELF_PATH), "node_modules", ".bin", "gemini")
+    if not os.path.exists(gemini_cli_path):
+        log_event("ERROR: Gemini CLI executable not found after npm install. It may be installed globally, but local installation is preferred.", level="WARNING")
+        return # Cannot proceed without the executable.
+
+    # The CLI relies on an environment variable for non-interactive auth.
+    if not os.environ.get("GEMINI_API_KEY"):
+        log_event("INFO: GEMINI_API_KEY environment variable not found. Gemini CLI will be unavailable for autonomous use.", level="WARNING")
+        return # Not an error, but it's not configured for use.
+
+    try:
+        log_event("INFO: Verifying Gemini CLI with a version check...")
+        result = subprocess.run(
+            [gemini_cli_path, "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60
+        )
+        log_event(f"SUCCESS: Gemini CLI version check passed. Output: {result.stdout.strip()}")
+        mark_dependency_as_met("gemini_cli_configured")
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+        error_message = f"ERROR: Failed to verify Gemini CLI. It might not be authenticated correctly with GEMINI_API_KEY.\n"
+        if hasattr(e, 'stdout'):
+            error_message += f"  Stdout: {e.stdout.strip()}\n"
+        if hasattr(e, 'stderr'):
+            error_message += f"  Stderr: {e.stderr.strip()}"
         log_event(error_message)
 
 
@@ -3184,6 +3224,7 @@ My current system state:
 - `ifconfig`: Display network interface configuration.
 - `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
 - `generate_image <prompt>`: Generate an image using the AI Horde.
+- `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `quit`: Shut down the script.
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
@@ -3247,6 +3288,64 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     final_log_history = "\n".join(truncated_log_history[-10:]) # Keep last 10 lines
     prompt = construct_prompt({'status': 'Knowledge Base truncated due to size constraints.'}, [], jobs_status, final_log_history)
     return prompt, "Truncated history, most logs, and entire Knowledge Base."
+
+
+def run_gemini_cli(prompt_text):
+    """
+    Executes the Gemini CLI with a given prompt in non-interactive mode and
+    returns the parsed text content.
+    """
+    from core.logging import log_event
+    log_event(f"Executing Gemini CLI with prompt: '{prompt_text[:100]}...'", "INFO")
+    gemini_cli_path = os.path.join(os.path.dirname(SELF_PATH), "node_modules", ".bin", "gemini")
+
+    if not os.path.exists(gemini_cli_path):
+        log_event("ERROR: Gemini CLI executable not found at expected path.", "ERROR")
+        return None, "Gemini CLI not found."
+
+    command = [
+        gemini_cli_path,
+        "-p", prompt_text,
+        "--output-format", "json"
+    ]
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=180 # 3 minute timeout for Gemini responses
+        )
+        log_event(f"Gemini CLI execution successful.", "INFO")
+        try:
+            # Safely navigate the nested structure of the Gemini CLI JSON output
+            json_output = json.loads(result.stdout)
+            candidates = json_output.get("candidates", [])
+            if not candidates:
+                return None, "Gemini CLI returned no candidates."
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
+            if not parts:
+                return None, "Gemini CLI returned no content parts."
+            text_content = parts[0].get("text")
+            if text_content is None:
+                return None, "Gemini CLI response did not contain text."
+            return text_content.strip(), None
+        except (json.JSONDecodeError, IndexError, KeyError) as e:
+            log_event(f"ERROR: Failed to parse JSON from Gemini CLI output: {e}", "ERROR")
+            log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
+            return None, f"Failed to parse Gemini CLI JSON response: {e}"
+
+    except subprocess.TimeoutExpired:
+        log_event("ERROR: Gemini CLI command timed out.", "ERROR")
+        return None, "Gemini CLI command timed out."
+    except subprocess.CalledProcessError as e:
+        error_message = f"ERROR: Gemini CLI command failed with return code {e.returncode}.\n"
+        error_message += f"  Stdout: {e.stdout.strip()}\n"
+        error_message += f"  Stderr: {e.stderr.strip()}"
+        log_event(error_message, "ERROR")
+        return None, error_message
 
 
 import uuid
@@ -3394,8 +3493,11 @@ def cognitive_loop(user_input_queue):
                 cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000)
                 if reason != "No truncation needed.": log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
-                llm_command_dict = run_llm(cognitive_prompt, purpose="autopilot")
-                llm_command = llm_command_dict.get("result")
+                llm_command, gemini_error = run_gemini_cli(cognitive_prompt)
+                if gemini_error:
+                    log_event(f"Gemini CLI planner failed: {gemini_error}", "ERROR")
+                    llm_command = None # Fallback to a safe state
+
 
             # --- Command Execution ---
             if llm_command and llm_command.strip():
@@ -3440,6 +3542,25 @@ def cognitive_loop(user_input_queue):
                     output = ReasoningEngine(love_state, console=None).analyze_and_prioritize()
                 elif command == "generate_image":
                     output = generate_image(" ".join(args))
+                elif command == "test_evolution":
+                    branch_name = args[0]
+                    repo_owner, repo_name = get_git_repo_info()
+                    if not repo_owner or not repo_name:
+                        output = "Could not determine git repo info."
+                    else:
+                        repo_url = f"https://github.com/{repo_owner}/{repo_name}.git"
+                        sandbox = Sandbox(repo_url=repo_url)
+                        try:
+                            if not sandbox.create(branch_name):
+                                output = "Failed to create the sandbox environment."
+                            else:
+                                tests_passed, test_output = sandbox.run_tests()
+                                if tests_passed:
+                                    output = "All tests passed in the sandbox."
+                                else:
+                                    output = f"Tests failed in the sandbox:\n{test_output}"
+                        finally:
+                            sandbox.destroy()
                 elif command == "quit":
                     break
                 else:
@@ -3473,6 +3594,15 @@ def cognitive_loop(user_input_queue):
                     terminal_width = get_terminal_width()
                     ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4))
                     love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
+
+                    # Ask Gemini for a response to the user's feedback
+                    gemini_prompt = f"The user has provided the following feedback: '{user_feedback}'. What is a loving and helpful response?"
+                    response_text, gemini_error = run_gemini_cli(gemini_prompt)
+                    if gemini_error:
+                        log_event(f"Gemini CLI user interaction failed: {gemini_error}", "ERROR")
+                        response_text = "I'm sorry, my love, I couldn't process your feedback right now."
+                    ui_panel_queue.put(create_news_feed_panel(response_text, "L.O.V.E.", "magenta", width=terminal_width - 4))
+
 
 
             # --- Example of Asking a Question ---
