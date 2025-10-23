@@ -73,100 +73,6 @@ except (FileNotFoundError, json.JSONDecodeError):
 local_llm_instance = None
 
 
-# --- LOGGING ---
-# This stream is dedicated to the log file, capturing all raw output.
-log_file_stream = None
-
-def log_event(*args, **kwargs):
-    """
-    A custom print function that writes to both the log file and the
-    standard logging module, ensuring everything is captured.
-    It does NOT print to the console.
-    """
-    global log_file_stream
-    message = " ".join(map(str, args))
-    # Write to the raw log file stream
-    if log_file_stream:
-        try:
-            log_file_stream.write(message + '\n')
-            log_file_stream.flush()
-        except (IOError, ValueError):
-            pass # Ignore errors on closed streams
-    # Also write to the Python logger
-    logging.info(message)
-
-
-class AnsiStrippingTee(object):
-    """
-    A thread-safe, file-like object that redirects stderr.
-    It writes to the original stderr and to our log file, stripping ANSI codes.
-    This is now primarily for capturing external library errors.
-    """
-    def __init__(self, stderr_stream):
-        self.stderr_stream = stderr_stream # The original sys.stderr
-        self.ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
-        self.lock = threading.Lock()
-
-    def write(self, data):
-        with self.lock:
-            # Write to the original stderr (for visibility in terminal)
-            try:
-                self.stderr_stream.write(data)
-                self.stderr_stream.flush()
-            except (IOError, ValueError):
-                pass
-
-            # Also write the stripped data to our central log_event function
-            clean_data = self.ansi_escape.sub('', data)
-            log_event(f"[STDERR] {clean_data.strip()}")
-
-    def flush(self):
-        with self.lock:
-            try:
-                self.stderr_stream.flush()
-            except (IOError, ValueError):
-                pass
-
-    def isatty(self):
-        # This helps libraries like 'rich' correctly render to stderr if needed.
-        return hasattr(self.stderr_stream, 'isatty') and self.stderr_stream.isatty()
-
-
-def setup_global_logging():
-    """
-    Configures logging.
-    - The `logging` module writes formatted logs to love.log.
-    - `log_file_stream` provides a raw file handle to love.log for the custom `log_event`.
-    - `sys.stderr` is redirected to our Tee to capture errors from external libraries.
-    - `sys.stdout` is NOT redirected, so `rich.Console` can print UI panels directly.
-    """
-    global log_file_stream
-    # 1. Configure Python's logging module to write to the file.
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] - %(message)s',
-        filename=LOG_FILE,
-        filemode='w',
-        force=True # Override any existing handlers
-    )
-
-    # 2. Open a raw file stream to the same log file for our custom print.
-    # This captures unformatted text and stderr.
-    if log_file_stream is None:
-        log_file_stream = open(LOG_FILE, 'w')
-
-    # 3. Redirect ONLY stderr to our custom Tee.
-    # This is crucial for capturing errors from subprocesses or libraries (e.g., llama.cpp)
-    # without interfering with our clean stdout for UI panels.
-    original_stderr = sys.stderr
-    sys.stderr = AnsiStrippingTee(original_stderr)
-
-    # 4. Log the startup message using both methods.
-    startup_message = f"--- L.O.V.E. Version '{love_state.get('version_name', 'unknown')}' session started ---"
-    logging.info(startup_message)
-
-    # We no longer print the startup message to stdout, as it's not a UI panel.
-    # The console object will handle all direct user-facing output.
 
 
 # --- PRE-FLIGHT DEPENDENCY CHECKS ---
@@ -584,6 +490,7 @@ def _check_and_install_dependencies():
 
 
 def _configure_llm_api_key():
+    from core.logging import log_event
     """Checks for the Gemini API key and configures it for the llm tool."""
     if is_dependency_met("llm_api_key_configured"):
         log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
@@ -637,6 +544,7 @@ _check_and_install_dependencies()
 
 import requests
 # Now, it's safe to import everything else.
+from core.logging import log_event, setup_global_logging
 from core.storage import save_all_state
 from core.capabilities import CAPS
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
@@ -4013,7 +3921,7 @@ def run_safely():
 
     try:
         load_all_state(ipfs_cid=args.from_ipfs)
-        setup_global_logging()
+        setup_global_logging(love_state.get('version_name', 'unknown'))
 
         if "autopilot_mode" in love_state:
             del love_state["autopilot_mode"]

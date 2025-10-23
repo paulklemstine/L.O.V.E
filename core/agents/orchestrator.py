@@ -2,6 +2,7 @@ from core.planning import Planner, mock_llm_call
 from core.tools import ToolRegistry, SecureExecutor
 from core.execution_engine import ExecutionEngine
 from ipfs import get_ipfs_client, DecentralizedStorage, DataManifest
+from core.image_api import generate_image
 
 class Orchestrator:
     """
