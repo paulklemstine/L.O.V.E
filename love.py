@@ -25,7 +25,6 @@ import io
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
 ui_panel_queue = queue.Queue()
-kobold_process = None
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
@@ -633,69 +632,6 @@ def _configure_llm_api_key():
 
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
 # Run dependency checks immediately, before any other imports that might fail.
-def _start_kobold_client_and_get_url(console):
-    """
-    Starts the Kobold AI client as a subprocess and captures its output to find the API URL.
-    """
-    kobold_dir = os.environ.get("KOBOLD_DIR", os.path.join(os.path.expanduser("~"), "KoboldCpp"))
-    if not os.path.exists(kobold_dir):
-        console.print("[bold yellow]KoboldCpp directory not found. Attempting to clone from GitHub...[/bold yellow]")
-        try:
-            subprocess.run(
-                ["git", "clone", "https://github.com/LostRuins/koboldcpp.git", kobold_dir],
-                check=True,
-                capture_output=True,
-                text=True
-            )
-            console.print(f"[bold green]Successfully cloned KoboldCpp to {kobold_dir}[/bold green]")
-        except subprocess.CalledProcessError as e:
-            console.print(f"[bold red]Failed to clone KoboldCpp repository: {e.stderr}[/bold red]")
-            return None
-        except FileNotFoundError:
-            console.print("[bold red]Error: 'git' command not found. Please install git and try again.[/bold red]")
-            return None
-
-    try:
-        console.print("[cyan]Starting Kobold AI client...[/cyan]")
-        global kobold_process
-        try:
-            kobold_process = subprocess.Popen(
-                ["python", "koboldcpp.py", "--skiplauncher"],
-                cwd=kobold_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
-            )
-        except FileNotFoundError:
-            console.print("[yellow]'python' not found, trying 'python3'...[/yellow]")
-            kobold_process = subprocess.Popen(
-                ["python3", "koboldcpp.py", "--skiplauncher"],
-                cwd=kobold_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
-            )
-
-        url_pattern = re.compile(r"KoboldAI has finished loading and is available at the following link for UI 1: (http://\S+)")
-        kobold_url = None
-
-        for line in iter(kobold_process.stdout.readline, ""):
-            console.print(f"[KoboldAI] {line.strip()}")
-            match = url_pattern.search(line)
-            if match:
-                kobold_url = match.group(1)
-                console.print(f"[bold green]Kobold AI URL detected: {kobold_url}[/bold green]")
-                os.environ["KOBOLD_API_URL"] = kobold_url
-                break
-        return kobold_url
-    except Exception as e:
-        console.print(f"[bold red]Error starting Kobold AI client: {e}[/bold red]")
-        return None
-
 _check_and_install_dependencies()
 
 
@@ -3902,7 +3838,6 @@ def main(args):
 
     # --- Initialize Managers and Services ---
     _verify_creator_instance(console)
-    _start_kobold_client_and_get_url(console)
     global ipfs_available
     ipfs_manager = IPFSManager(console=console)
     ipfs_available = ipfs_manager.setup()
@@ -4089,7 +4024,6 @@ def run_safely():
 
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
-        _stop_kobold_client()
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
@@ -4099,7 +4033,6 @@ def run_safely():
         log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
-        _stop_kobold_client()
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
@@ -4113,20 +4046,6 @@ def run_safely():
         # The git_rollback_and_restart() is removed to allow the self-healing mechanism to work.
         # The new log_critical_event will queue the error, and the LoveTaskManager will handle it.
         time.sleep(15) # Give the system a moment before the next cognitive cycle.
-
-
-def _stop_kobold_client():
-    """Stops the Kobold AI client process gracefully."""
-    global kobold_process
-    if kobold_process and kobold_process.poll() is None:
-        console.print("[cyan]Shutting down Kobold AI client...[/cyan]")
-        kobold_process.terminate()
-        try:
-            kobold_process.wait(timeout=10)
-            console.print("[green]Kobold AI client shut down gracefully.[/green]")
-        except subprocess.TimeoutExpired:
-            console.print("[yellow]Kobold AI client did not terminate gracefully. Forcing shutdown...[/yellow]")
-            kobold_process.kill()
 
 
 if __name__ == "__main__":
