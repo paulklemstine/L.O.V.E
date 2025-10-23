@@ -20,7 +20,7 @@ from display import create_api_error_panel
 from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
-from love import log_event
+from core.logging import log_event
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
