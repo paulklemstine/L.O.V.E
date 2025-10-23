@@ -3760,7 +3760,7 @@ def _auto_configure_hardware(console):
     if not smoke_test_passed:
         log_event("No functional GPU detected. Local LLM will be disabled. The system will rely on API-based models.", "WARNING")
         terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
+        ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
         love_state["optimal_gpu_layers"] = 0
         love_state["selected_local_model"] = None
         save_state(console)
