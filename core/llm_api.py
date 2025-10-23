@@ -17,6 +17,7 @@ from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, Trans
 from bbs import run_hypnotic_progress
 from huggingface_hub import hf_hub_download
 from display import create_api_error_panel
+from huggingface_hub import hf_hub_download
 from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
@@ -734,13 +735,46 @@ def run_llm(prompt_text, purpose="general"):
                 log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
                 LLM_AVAILABILITY[model_id] = time.time() + 60 # Default 60s cooldown
 
-    # If the loop completes without returning, all models have failed
-    log_event("All LLM models failed after all retries.", level="ERROR")
-    error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
-    if last_exception:
-        error_msg_text += f"\nLast known error from '{model_id}':\n{last_exception}"
+    # --- Emergency CPU Fallback ---
+    # If the loop completes, it means all API and GPU models failed.
+    # As a last resort, we will try to spin up a small model on the CPU.
+    if purpose != "emergency_cpu_fallback": # Prevent recursion
+        log_event("EMERGENCY: All API/GPU models failed. Attempting to initialize a small CPU model.", "CRITICAL")
+        console.print(Panel("[bold orange1]EMERGENCY FALLBACK[/bold orange1]\nAll remote and GPU models are unresponsive. Attempting to initialize a small, local model on the CPU. This may be slow.", title="[bold red]COGNITIVE CORE FAILURE[/bold red]", border_style="red"))
+        try:
+            from llama_cpp import Llama
+            emergency_model_config = HARDWARE_TEST_MODEL_CONFIG
+            model_id = emergency_model_config["id"]
+            filename = emergency_model_config["filename"]
+            local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
+            model_path = os.path.join(local_dir, filename)
 
-    console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
+            if not os.path.exists(model_path):
+                console.print(f"[cyan]Downloading emergency model: {filename}...[/cyan]")
+                hf_hub_download(repo_id=model_id, filename=filename, local_dir=local_dir, local_dir_use_symlinks=False)
+
+            console.print("[cyan]Loading emergency CPU model...[/cyan]")
+            emergency_llm = Llama(model_path=model_path, n_gpu_layers=0, n_ctx=2048, verbose=False)
+
+            response = emergency_llm(prompt_text, max_tokens=1024, stop=["<|eot_id|>", "```"], echo=False)
+            result_text = response['choices'][0]['text']
+
+            if result_text is not None:
+                log_event("Emergency CPU fallback successful.", "CRITICAL")
+                response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "emergency_cpu_fallback"}
+
+        except Exception as emergency_e:
+            log_event(f"EMERGENCY CPU FALLBACK FAILED: {emergency_e}", "CRITICAL")
+            last_exception = emergency_e # Update for the final error message
+
+    # If we reach here, even the emergency fallback failed.
+    log_event("All LLM models, including emergency CPU fallback, have failed.", "CRITICAL")
+    error_msg_text = "Cognitive Matrix Unresponsive. All models, retries, and emergency fallbacks failed."
+    if last_exception:
+        error_msg_text += f"\nLast known error:\n{last_exception}"
+
+    console.print(Panel(error_msg_text, title="[bold red]CATASTROPHIC SYSTEM FAULT[/bold red]", border_style="red"))
     return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
 def get_llm_api():
