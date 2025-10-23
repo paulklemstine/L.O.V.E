@@ -3480,7 +3480,7 @@ def cognitive_loop(user_input_queue):
                 jobs_status = {"local_jobs": local_job_manager.get_status(), "love_tasks": love_task_manager.get_status()}
                 log_history = ""
                 try:
-                    with open(LOG_FILE, 'r') as f: log_history = "".join(f.readlines()[-100:])
+                    with open(LOG_FILE, 'r', errors='ignore') as f: log_history = "".join(f.readlines()[-100:])
                 except FileNotFoundError: pass
 
                 cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000)
