@@ -139,15 +139,13 @@ HORDE_MODELS = get_top_horde_models()
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
-KOBOLD_API_URL = os.environ.get("KOBOLD_API_URL")
 ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS + (["KoboldAI"] if KOBOLD_API_URL else [])
+    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
 local_llm_instance = None
 local_llm_tokenizer = None
-kobold_controller = None
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
