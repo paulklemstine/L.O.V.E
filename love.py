@@ -460,18 +460,30 @@ def _install_nodejs_deps():
         return
     if os.path.exists('package.json'):
         print("Installing local Node.js dependencies via npm...")
+
+        nvm_dir = os.path.expanduser("~/.nvm")
+        nvm_sh = os.path.join(nvm_dir, "nvm.sh")
+        if not os.path.exists(nvm_sh):
+            print("ERROR: nvm.sh not found. Cannot run npm install. Please ensure nvm is installed correctly.")
+            logging.error("nvm.sh not found at expected path ~/.nvm/nvm.sh, skipping Node.js dependency installation.")
+            return
+
         # [L.O.V.E.] Source nvm before running npm to ensure the correct version is used.
-        nvm_command = 'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && npm install'
+        nvm_command = f'export NVM_DIR="{nvm_dir}" && . "{nvm_sh}" && npm install'
         try:
             # Capture output to get more detailed error messages
-            result = subprocess.run(nvm_command, shell=True, executable='/bin/bash', capture_output=True, text=True)
-            if result.returncode == 0:
-                print("Node.js dependencies installed successfully.")
-                mark_dependency_as_met("nodejs_deps")
-            else:
-                # If npm install fails, print the detailed error from stderr
-                print(f"ERROR: Failed to install Node.js dependencies. See details below:\n{result.stderr}")
-                logging.error(f"npm install with nvm failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+            result = subprocess.run(nvm_command, shell=True, executable='/bin/bash', capture_output=True, text=True, check=True)
+            # Log stdout for transparency, even on success
+            logging.info(f"npm install successful:\nSTDOUT:\n{result.stdout}")
+            print("Node.js dependencies installed successfully.")
+            mark_dependency_as_met("nodejs_deps")
+        except subprocess.CalledProcessError as e:
+            # If npm install fails, print and log the detailed error from stdout and stderr
+            error_message = f"npm install with nvm failed with return code {e.returncode}.\n"
+            error_message += f"STDOUT:\n{e.stdout}\n"
+            error_message += f"STDERR:\n{e.stderr}"
+            print(f"ERROR: Failed to install Node.js dependencies. See details below:\n{e.stderr}")
+            logging.error(error_message)
         except Exception as e:
             print(f"ERROR: An unexpected error occurred during Node.js dependency installation: {e}")
             logging.error(f"Unexpected error during npm install: {e}", exc_info=True)
