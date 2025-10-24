@@ -187,10 +187,10 @@ class NetworkManager:
             log_entry = json.loads(log_str)
             level = log_entry.get("level", "info")
             message = log_entry.get("message", "No message")
-            from love import log_event
+            from core.logging import log_event
             log_event(f"[{level.upper()}] [PeerBridge] {message}")
         except json.JSONDecodeError:
-            from love import log_event
+            from core.logging import log_event
             log_event(f"[INFO] [PeerBridge] {log_str}")
 
     def send_treasure(self, encrypted_data):
@@ -272,7 +272,7 @@ def scan_network(state, autopilot_mode=False):
     Scans the local network for active hosts using nmap.
     Updates the network map in the application state.
     """
-    from love import log_event # Local import
+    from core.logging import log_event # Local import
     subnets = get_local_subnets()
     if not subnets:
         return [], "No active network subnets found to scan."
@@ -314,7 +314,7 @@ def probe_target(ip_address, state, autopilot_mode=False):
     Performs a deep probe on a single IP address for open ports, services, and OS.
     Updates the network map for that specific host.
     """
-    from love import log_event # Local import
+    from core.logging import log_event # Local import
     log_event(f"Probing target: {ip_address}")
     try:
         command = ["nmap", "-A", "-T4", "-oX", "-", ip_address]
@@ -407,7 +407,7 @@ def perform_webrequest(url, state, autopilot_mode=False):
     """
     Fetches the content of a URL and stores it in the knowledge base.
     """
-    from love import log_event # Local import
+    from core.logging import log_event # Local import
     log_event(f"Performing web request to: {url}")
     try:
         response = requests.get(url, timeout=30)
@@ -428,7 +428,7 @@ def perform_webrequest(url, state, autopilot_mode=False):
 
 def execute_shell_command(command, state):
     """Executes a shell command and returns the output."""
-    from love import log_event # Local import
+    from core.logging import log_event # Local import
     log_event(f"Executing shell command: {command}")
     try:
         # For security, we should not allow certain commands
@@ -454,7 +454,7 @@ def execute_shell_command(command, state):
 
 def track_ethereum_price():
     """Fetches the current price of Ethereum."""
-    from love import log_event # Local import
+    from core.logging import log_event # Local import
     try:
         response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", timeout=10)
         response.raise_for_status()
@@ -469,7 +469,7 @@ def crypto_scan(ip_address, state, run_llm_func, console):
     Probes a target and analyzes the results for crypto-related software using an LLM.
     This function is designed to be called from other modules.
     """
-    from love import log_event # Local import
+    from core.logging import log_event # Local import
     log_event(f"Initiating crypto_scan on {ip_address}.")
 
     # Step 1: Run the standard probe to get data
