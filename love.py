@@ -4004,10 +4004,12 @@ def live_ui_renderer(console, user_input_queue):
             while not ui_panel_queue.empty():
                 panel = ui_panel_queue.get()
 
-                # Render the panel to a string once.
-                with console.capture() as capture:
-                    console.print(panel)
-                rendered_panel = capture.get()
+                # Create a temporary, in-memory console that isn't bound by screen
+                # dimensions to get the full, untruncated render of the panel.
+                buffer_console = Console(file=io.StringIO(), force_terminal=True, width=console.width)
+                buffer_console.print(panel)
+                rendered_panel = buffer_console.file.getvalue()
+
 
                 # 1. Log the rendered string.
                 log_event(f"[UI_PANEL]\n{rendered_panel}")
