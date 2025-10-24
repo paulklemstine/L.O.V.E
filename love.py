@@ -3332,13 +3332,31 @@ def run_gemini_cli(prompt_text):
             env=env
         )
         core.logging.log_event(f"Gemini CLI execution successful.", "INFO")
+        core.logging.log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
         try:
             json_output = json.loads(result.stdout)
+
+            # New Case A: Handle raw string output
+            if isinstance(json_output, str):
+                core.logging.log_event("Interpreting Gemini CLI output as a raw JSON string.", "INFO")
+                return json_output.strip(), None
+
+            # New Case B: Handle list output
+            if isinstance(json_output, list):
+                if json_output and isinstance(json_output[0], str):
+                    core.logging.log_event("Interpreting Gemini CLI output as a list of strings.", "INFO")
+                    return json_output[0].strip(), None
+
+            # All subsequent cases assume a dictionary object.
+            if not isinstance(json_output, dict):
+                core.logging.log_event(f"ERROR: Gemini CLI output was valid JSON but not a recognized object structure (type: {type(json_output)}).", "ERROR")
+                return None, "Unrecognized JSON structure from Gemini CLI."
+
 
             # Case 1: The CLI returned a structured error
             if "error" in json_output:
                 error_details = json_output["error"].get("message", "Unknown error from Gemini CLI")
-                log_event(f"ERROR: Gemini CLI returned an error: {error_details}", "ERROR")
+                core.logging.log_event(f"ERROR: Gemini CLI returned an error: {error_details}", "ERROR")
                 return None, f"Gemini CLI returned an error: {error_details}"
 
             # Case 2: The expected successful structure
