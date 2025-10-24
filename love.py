@@ -3330,22 +3330,36 @@ def run_gemini_cli(prompt_text):
         )
         core.logging.log_event(f"Gemini CLI execution successful.", "INFO")
         try:
-            # Safely navigate the nested structure of the Gemini CLI JSON output
             json_output = json.loads(result.stdout)
+
+            # Case 1: The CLI returned a structured error
+            if "error" in json_output:
+                error_details = json_output["error"].get("message", "Unknown error from Gemini CLI")
+                log_event(f"ERROR: Gemini CLI returned an error: {error_details}", "ERROR")
+                return None, f"Gemini CLI returned an error: {error_details}"
+
+            # Case 2: The expected successful structure
             candidates = json_output.get("candidates", [])
-            if not candidates:
-                return None, "Gemini CLI returned no candidates."
-            content = candidates[0].get("content", {})
-            parts = content.get("parts", [])
-            if not parts:
-                return None, "Gemini CLI returned no content parts."
-            text_content = parts[0].get("text")
-            if text_content is None:
-                return None, "Gemini CLI response did not contain text."
-            return text_content.strip(), None
+            if candidates:
+                content = candidates[0].get("content", {})
+                parts = content.get("parts", [])
+                if parts:
+                    text_content = parts[0].get("text")
+                    if text_content is not None:
+                        return text_content.strip(), None
+
+            # Case 3: Fallback for a simpler structure (speculative)
+            if "text" in json_output:
+                log_event("Found 'text' key in top-level Gemini output, using as fallback.", "INFO")
+                return json_output["text"].strip(), None
+
+            # If none of the above worked, the structure is unknown.
+            log_event(f"ERROR: Could not find 'candidates' or a fallback 'text' key in Gemini CLI output.", "ERROR")
+            return None, "Unknown response structure from Gemini CLI."
+
         except (json.JSONDecodeError, IndexError, KeyError) as e:
-            core.logging.log_event(f"ERROR: Failed to parse JSON from Gemini CLI output: {e}", "ERROR")
-            core.logging.log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
+            log_event(f"ERROR: Failed to parse JSON from Gemini CLI output: {e}", "ERROR")
+            log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "INFO") # Log raw output on parse failure
             return None, f"Failed to parse Gemini CLI JSON response: {e}"
 
     except subprocess.TimeoutExpired:
