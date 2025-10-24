@@ -3805,6 +3805,9 @@ def _auto_configure_hardware(console):
         ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
         love_state["optimal_gpu_layers"] = 0
         love_state["selected_local_model"] = None
+        log_event(f"DEBUG: VRAM ({vram_gb:.2f} GB) is below minimum threshold.", "INFO")
+        console.print(f"[yellow]Your VRAM ({vram_gb:.2f} GB) is below the minimum threshold of {VRAM_MODEL_MAP[0]['min_vram_gb']} GB. Falling back to CPU mode.[/yellow]")
+        console.print(Rule("Hardware Optimization Complete", style="green"))
         save_state(console)
         mark_dependency_as_met("hardware_auto_configured", console)
         return
