@@ -3802,7 +3802,7 @@ def _auto_configure_hardware(console):
     if not selected_model:
         log_event(f"VRAM ({vram_gb:.2f} GB) is below the minimum threshold. Local LLM will be disabled.", "WARNING")
         terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
+        ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
         love_state["optimal_gpu_layers"] = 0
         love_state["selected_local_model"] = None
         save_state(console)
