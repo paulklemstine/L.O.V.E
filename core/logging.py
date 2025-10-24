@@ -6,24 +6,54 @@ import threading
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "love.log"
 log_file_stream = None
+ui_panel_queue = None
 
-def log_event(*args, **kwargs):
+
+def initialize_logging_with_ui_queue(queue):
     """
-    A custom print function that writes to both the log file and the
-    standard logging module, ensuring everything is captured.
-    It does NOT print to the console.
+    Initializes the logging system with the UI panel queue.
+    This must be called from the main script after the queue is created.
+    """
+    global ui_panel_queue
+    ui_panel_queue = queue
+
+
+def log_event(*args, level="INFO", from_ui=False, **kwargs):
+    """
+    A custom print function that writes to the log file, the standard
+    logging module, and optionally to the UI queue. It now supports log levels.
     """
     global log_file_stream
     message = " ".join(map(str, args))
-    # Write to the raw log file stream
-    if log_file_stream:
+
+    # Also write to the Python logger with the specified level
+    level_upper = level.upper()
+    if level_upper == "INFO":
+        logging.info(message)
+    elif level_upper == "WARNING":
+        logging.warning(message)
+    elif level_upper == "ERROR":
+        logging.error(message)
+    elif level_upper == "CRITICAL":
+        logging.critical(message)
+    else:
+        logging.info(message)  # Default to INFO
+
+    # If the UI queue is configured and this log didn't come from the UI,
+    # create a panel and send it to the display.
+    if ui_panel_queue is not None and not from_ui:
         try:
-            log_file_stream.write(message + '\n')
-            log_file_stream.flush()
-        except (IOError, ValueError):
-            pass # Ignore errors on closed streams
-    # Also write to the Python logger
-    logging.info(message)
+            # Local imports to prevent circular dependencies
+            from display import create_news_feed_panel, get_terminal_width
+            # We create a generic "Log Event" panel
+            terminal_width = get_terminal_width()
+            # Use a neutral color for generic log events to distinguish them
+            panel = create_news_feed_panel("Log", message, "grey70", width=terminal_width - 4)
+            ui_panel_queue.put(panel)
+        except (ImportError, Exception) as e:
+            # If this fails, we can't display it, but we should log the failure.
+            # We must set from_ui=True here to prevent a loop!
+            logging.error(f"Failed to queue log event for UI display: {e}")
 
 
 class AnsiStrippingTee(object):
@@ -76,14 +106,14 @@ def setup_global_logging(version_name='unknown'):
         level=logging.INFO,
         format='%(asctime)s [%(levelname)s] - %(message)s',
         filename=LOG_FILE,
-        filemode='w',
+        filemode='a',
         force=True # Override any existing handlers
     )
 
     # 2. Open a raw file stream to the same log file for our custom print.
     # This captures unformatted text and stderr.
     if log_file_stream is None:
-        log_file_stream = open(LOG_FILE, 'w')
+        log_file_stream = open(LOG_FILE, 'a')
 
     # 3. Redirect ONLY stderr to our custom Tee.
     # This is crucial for capturing errors from subprocesses or libraries (e.g., llama.cpp)
