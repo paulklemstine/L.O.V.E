@@ -2456,17 +2456,28 @@ def restart_script(console):
 
         time.sleep(3) # Give all threads a moment to stop gracefully
 
-        # Pull the latest code
-        console.print("[cyan]Pulling latest source code from repository...[/cyan]")
-        pull_result = subprocess.run(["git", "pull"], capture_output=True, text=True)
+        # Fetch the latest changes from the remote repository
+        console.print("[cyan]Fetching the latest source code from the repository...[/cyan]")
+        fetch_result = subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True)
 
-        if pull_result.returncode != 0:
-            log_event(f"Git pull failed with code {pull_result.returncode}: {pull_result.stderr}", level="ERROR")
-            console.print(f"[bold red]Error pulling from git:\n{pull_result.stderr}[/bold red]")
-            # Even if pull fails, attempt a restart to recover.
+        if fetch_result.returncode != 0:
+            log_event(f"Git fetch failed with code {fetch_result.returncode}: {fetch_result.stderr}", level="ERROR")
+            console.print(f"[bold red]Error fetching from git:\n{fetch_result.stderr}[/bold red]")
         else:
-            log_event(f"Git pull successful: {pull_result.stdout}", level="INFO")
-            console.print(f"[green]Git pull successful:\n{pull_result.stdout}[/green]")
+            log_event(f"Git fetch successful: {fetch_result.stdout}", level="INFO")
+            console.print(f"[green]Git fetch successful:\n{fetch_result.stdout}[/green]")
+
+        # Hard reset to the latest version from the remote repository
+        console.print("[cyan]Resetting to the latest source code from the repository...[/cyan]")
+        reset_result = subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, text=True)
+
+        if reset_result.returncode != 0:
+            log_event(f"Git reset failed with code {reset_result.returncode}: {reset_result.stderr}", level="ERROR")
+            console.print(f"[bold red]Error resetting git repository:\n{reset_result.stderr}[/bold red]")
+            # Even if reset fails, attempt a restart to recover.
+        else:
+            log_event(f"Git reset successful: {reset_result.stdout}", level="INFO")
+            console.print(f"[green]Git reset successful:\n{reset_result.stdout}[/green]")
 
         # Restart the script
         console.print("[bold green]Restarting now.[/bold green]")
