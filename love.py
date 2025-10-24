@@ -491,9 +491,9 @@ def _configure_llm_api_key():
     if is_dependency_met("llm_api_key_configured"):
         log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
         return
-    gemini_api_key = os.environ.get("LLM_GEMINI_KEY")
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_api_key:
-        log_event("INFO: LLM_GEMINI_KEY environment variable not found. Skipping llm configuration.")
+        log_event("INFO: GEMINI_API_KEY environment variable not found. Skipping llm configuration.")
         return
 
     try:
@@ -3316,12 +3316,19 @@ def run_gemini_cli(prompt_text):
     ]
 
     try:
+        # Create a copy of the current environment and add the Gemini API key
+        env = os.environ.copy()
+        gemini_api_key = os.environ.get("GEMINI_API_KEY")
+        if gemini_api_key:
+            env["GEMINI_API_KEY"] = gemini_api_key
+
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
             check=True,
-            timeout=180 # 3 minute timeout for Gemini responses
+            timeout=180, # 3 minute timeout for Gemini responses
+            env=env
         )
         log_event(f"Gemini CLI execution successful.", "INFO")
         try:
