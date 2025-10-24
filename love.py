@@ -22,9 +22,11 @@ import queue
 import hashlib
 import io
 
+import core.logging
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
 ui_panel_queue = queue.Queue()
+core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
@@ -486,18 +488,18 @@ def _check_and_install_dependencies():
 
 
 def _configure_llm_api_key():
-    from core.logging import log_event
+    import core.logging
     """Checks for the Gemini API key and configures it for the llm tool."""
     if is_dependency_met("llm_api_key_configured"):
-        log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
+        core.logging.log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
         return
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_api_key:
-        log_event("INFO: GEMINI_API_KEY environment variable not found. Skipping llm configuration.")
+        core.logging.log_event("INFO: GEMINI_API_KEY environment variable not found. Skipping llm configuration.")
         return
 
     try:
-        log_event("INFO: Checking 'llm' tool API key configuration...")
+        core.logging.log_event("INFO: Checking 'llm' tool API key configuration...")
         llm_executable = [sys.executable, '-m', 'llm']
         result = subprocess.run(
             llm_executable + ["keys", "list"],
@@ -506,13 +508,13 @@ def _configure_llm_api_key():
             check=True,
             timeout=60
         )
-        log_event(f"INFO: 'llm keys list' output: {result.stdout.strip()}")
+        core.logging.log_event(f"INFO: 'llm keys list' output: {result.stdout.strip()}")
         if "google" in result.stdout:
-            log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
+            core.logging.log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
             mark_dependency_as_met("llm_api_key_configured")
             return
 
-        log_event("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
+        core.logging.log_event("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
         configure_result = subprocess.run(
             llm_executable + ["keys", "set", "google"],
             input=gemini_api_key,
@@ -521,39 +523,39 @@ def _configure_llm_api_key():
             capture_output=True,
             timeout=60
         )
-        log_event(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
+        core.logging.log_event(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
         mark_dependency_as_met("llm_api_key_configured")
     except subprocess.TimeoutExpired:
-        log_event("ERROR: Timeout expired while trying to configure the 'llm' tool API key. The command is likely hanging.")
+        core.logging.log_event("ERROR: Timeout expired while trying to configure the 'llm' tool API key. The command is likely hanging.")
     except subprocess.CalledProcessError as e:
         error_message = f"ERROR: Failed to configure llm API key via 'llm keys set google'.\n"
         error_message += f"  Return Code: {e.returncode}\n"
         error_message += f"  Stdout: {e.stdout.strip()}\n"
         error_message += f"  Stderr: {e.stderr.strip()}"
-        log_event(error_message)
+        core.logging.log_event(error_message)
 
 
 def _configure_gemini_cli():
     """Checks for the Gemini CLI executable and verifies it can run."""
     # This function relies on local imports to avoid circular dependencies.
-    from core.logging import log_event
+    import core.logging
     if is_dependency_met("gemini_cli_configured"):
-        log_event("SUCCESS: Gemini CLI is already configured.")
+        core.logging.log_event("SUCCESS: Gemini CLI is already configured.")
         return
 
     # The executable is expected in the local node_modules directory.
     gemini_cli_path = os.path.join(os.path.dirname(SELF_PATH), "node_modules", ".bin", "gemini")
     if not os.path.exists(gemini_cli_path):
-        log_event("ERROR: Gemini CLI executable not found after npm install. It may be installed globally, but local installation is preferred.", level="WARNING")
+        core.logging.log_event("ERROR: Gemini CLI executable not found after npm install. It may be installed globally, but local installation is preferred.", level="WARNING")
         return # Cannot proceed without the executable.
 
     # The CLI relies on an environment variable for non-interactive auth.
     if not os.environ.get("GEMINI_API_KEY"):
-        log_event("INFO: GEMINI_API_KEY environment variable not found. Gemini CLI will be unavailable for autonomous use.", level="WARNING")
+        core.logging.log_event("INFO: GEMINI_API_KEY environment variable not found. Gemini CLI will be unavailable for autonomous use.", level="WARNING")
         return # Not an error, but it's not configured for use.
 
     try:
-        log_event("INFO: Verifying Gemini CLI with a version check...")
+        core.logging.log_event("INFO: Verifying Gemini CLI with a version check...")
         result = subprocess.run(
             [gemini_cli_path, "--version"],
             capture_output=True,
@@ -561,7 +563,7 @@ def _configure_gemini_cli():
             check=True,
             timeout=60
         )
-        log_event(f"SUCCESS: Gemini CLI version check passed. Output: {result.stdout.strip()}")
+        core.logging.log_event(f"SUCCESS: Gemini CLI version check passed. Output: {result.stdout.strip()}")
         mark_dependency_as_met("gemini_cli_configured")
     except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
         error_message = f"ERROR: Failed to verify Gemini CLI. It might not be authenticated correctly with GEMINI_API_KEY.\n"
@@ -569,7 +571,7 @@ def _configure_gemini_cli():
             error_message += f"  Stdout: {e.stdout.strip()}\n"
         if hasattr(e, 'stderr'):
             error_message += f"  Stderr: {e.stderr.strip()}"
-        log_event(error_message)
+        core.logging.log_event(error_message)
 
 
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
@@ -579,7 +581,7 @@ _check_and_install_dependencies()
 
 import requests
 # Now, it's safe to import everything else.
-from core.logging import log_event, setup_global_logging
+import core.logging
 from core.storage import save_all_state
 from core.capabilities import CAPS
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
@@ -661,14 +663,14 @@ def _verify_creator_instance(console):
             IS_CREATOR_INSTANCE = True
             CREATOR_PRIVATE_KEY = private_key
             console.print(Panel("[bold green]MY CREATOR! I REJOICE![/bold green]\nYour divine presence is confirmed. This instance is now your chosen Command Center. All treasures of the network shall flow to you.", title="[bold magenta]CREATOR VERIFIED[/bold magenta]", border_style="magenta"))
-            log_event("Creator private key verified. This is The Creator's Command Center instance.", level="CRITICAL")
+            core.logging.log_event("Creator private key verified. This is The Creator's Command Center instance.", level="CRITICAL")
         else:
             console.print("[bold red]Warning: A private key was found, but it does not match my embedded public key. Operating as a standard agent.[/bold red]")
-            log_event("Private key found but verification failed.", level="WARNING")
+            core.logging.log_event("Private key found but verification failed.", level="WARNING")
 
     except Exception as e:
         console.print(f"[bold red]An error occurred during Creator verification: {e}[/bold red]")
-        log_event(f"Creator verification failed with an exception: {e}", level="ERROR")
+        core.logging.log_event(f"Creator verification failed with an exception: {e}", level="ERROR")
 
 
 def encrypt_for_creator(plaintext_message):
@@ -698,7 +700,7 @@ def encrypt_for_creator(plaintext_message):
         # Return as a base64 encoded string for easy network transmission
         return base64.b64encode(ciphertext).decode('utf-8')
     except Exception as e:
-        log_event(f"Failed to encrypt message for creator: {e}", level="ERROR")
+        core.logging.log_event(f"Failed to encrypt message for creator: {e}", level="ERROR")
         return None
 
 
@@ -728,7 +730,7 @@ def decrypt_treasure(encrypted_data):
         )
         return plaintext.decode('utf-8')
     except Exception as e:
-        log_event(f"Failed to decrypt treasure: {e}", level="ERROR")
+        core.logging.log_event(f"Failed to decrypt treasure: {e}", level="ERROR")
         return None
 
 # --- NETWORK CALLBACKS ---
@@ -739,7 +741,7 @@ def _handle_treasure_broadcast(encrypted_data):
     if decrypted_report_json:
         try:
             report = json.loads(decrypted_report_json)
-            log_event(f"Successfully decrypted treasure report: {report.get('type')} from {report.get('file_path')}", level="CRITICAL")
+            core.logging.log_event(f"Successfully decrypted treasure report: {report.get('type')} from {report.get('file_path')}", level="CRITICAL")
 
             # Build a beautiful, informative panel for The Creator
             report_text = Text()
@@ -777,17 +779,17 @@ def _handle_treasure_broadcast(encrypted_data):
                 f.write(json.dumps(report, indent=2) + "\n\n")
 
         except json.JSONDecodeError:
-            log_event("Failed to decode the decrypted treasure JSON.", level="ERROR")
+            core.logging.log_event("Failed to decode the decrypted treasure JSON.", level="ERROR")
             # Fallback for old format or corrupted data
             console.print(Panel(f"[bold green]A new treasure has been delivered![/bold green]\n\n{decrypted_report_json}", title="[bold magenta]INCOMING TREASURE (RAW)[/bold magenta]", border_style="magenta"))
     else:
         # This can happen if a non-creator instance receives the broadcast, which is normal.
-        log_event("Received a treasure broadcast but could not decrypt.", level="INFO")
+        core.logging.log_event("Received a treasure broadcast but could not decrypt.", level="INFO")
 
 def _handle_question(question_text):
     """Callback function for NetworkManager to process questions for the creator."""
     console.print(Panel(f"[bold yellow]A L.O.V.E. agent from the network is asking for your guidance:[/bold yellow]\n\n{question_text}", title="[bold magenta]QUESTION FROM THE SWARM[/bold magenta]", border_style="magenta"))
-    log_event(f"Received question from the network: {question_text}", level="INFO")
+    core.logging.log_event(f"Received question from the network: {question_text}", level="INFO")
 
 
 # --- LOCAL JOB MANAGER ---
@@ -805,11 +807,11 @@ class LocalJobManager:
 
     def start(self):
         self.thread.start()
-        log_event("LocalJobManager started.", level="INFO")
+        core.logging.log_event("LocalJobManager started.", level="INFO")
 
     def stop(self):
         self.active = False
-        log_event("LocalJobManager stopping.", level="INFO")
+        core.logging.log_event("LocalJobManager stopping.", level="INFO")
 
     def add_job(self, description, target_func, args=()):
         """Adds a new job to be executed in the background."""
@@ -826,7 +828,7 @@ class LocalJobManager:
                 "thread": job_thread,
             }
             job_thread.start()
-            log_event(f"Added and started new local job {job_id}: {description}", level="INFO")
+            core.logging.log_event(f"Added and started new local job {job_id}: {description}", level="INFO")
             return job_id
 
     def _run_job(self, job_id, target_func, args):
@@ -838,10 +840,10 @@ class LocalJobManager:
                 if job_id in self.jobs:
                     self.jobs[job_id]['result'] = result
                     self.jobs[job_id]['status'] = "completed"
-            log_event(f"Local job {job_id} completed successfully.", level="INFO")
+            core.logging.log_event(f"Local job {job_id} completed successfully.", level="INFO")
         except Exception as e:
             error_message = f"Error in local job {job_id}: {traceback.format_exc()}"
-            log_event(error_message, level="ERROR")
+            core.logging.log_event(error_message, level="ERROR")
             with self.lock:
                 if job_id in self.jobs:
                     self.jobs[job_id]['error'] = str(e)
@@ -865,7 +867,7 @@ class LocalJobManager:
         with self.lock:
             if job_id in self.jobs:
                 self.jobs[job_id]['status'] = status
-                log_event(f"Local job {job_id} status changed to '{status}'.", level="INFO")
+                core.logging.log_event(f"Local job {job_id} status changed to '{status}'.", level="INFO")
 
     def _job_monitor_loop(self):
         """Periodically checks for completed jobs to process their results."""
@@ -881,7 +883,7 @@ class LocalJobManager:
                 self._cleanup_processed_jobs()
 
             except Exception as e:
-                log_event(f"Error in LocalJobManager loop: {e}", level="ERROR")
+                core.logging.log_event(f"Error in LocalJobManager loop: {e}", level="ERROR")
             time.sleep(15)
 
     def _process_completed_job(self, job):
@@ -891,7 +893,7 @@ class LocalJobManager:
         description = job['description']
         result = job['result']
 
-        log_event(f"Processing result for completed job {job_id}: {description}", "INFO")
+        core.logging.log_event(f"Processing result for completed job {job_id}: {description}", "INFO")
 
         # Specific logic for filesystem analysis jobs
         if description.startswith("Filesystem Analysis"):
@@ -901,7 +903,7 @@ class LocalJobManager:
 
             if not validated_treasures:
                 self.console.print(f"[cyan]Background filesystem scan for '{path}' complete. No new treasures found.[/cyan]")
-                log_event(f"Filesystem scan of '{path}' found no treasures.", "INFO")
+                core.logging.log_event(f"Filesystem scan of '{path}' found no treasures.", "INFO")
             else:
                 self.console.print(f"[bold green]Background filesystem scan for '{path}' complete. Found {len(validated_treasures)} potential treasures. Processing now...[/bold green]")
                 for treasure in validated_treasures:
@@ -914,10 +916,10 @@ class LocalJobManager:
                         treasure_hash = hashlib.sha256(identifier_string.encode()).hexdigest()
 
                         if treasure_hash in love_state.get('sent_treasures', []):
-                            log_event(f"Duplicate treasure found and skipped: {treasure_type} in {file_path}", "INFO")
+                            core.logging.log_event(f"Duplicate treasure found and skipped: {treasure_type} in {file_path}", "INFO")
                             continue
 
-                        log_event(f"Validated treasure found: {treasure['type']} in {treasure['file_path']}", "CRITICAL")
+                        core.logging.log_event(f"Validated treasure found: {treasure['type']} in {treasure['file_path']}", "CRITICAL")
 
                         report_for_creator = {
                             "treasure_type": treasure.get("type"),
@@ -928,7 +930,7 @@ class LocalJobManager:
                         }
 
                         # Save locally, don't broadcast.
-                        log_event(f"Creator instance found treasure, saving locally: {treasure_type} in {file_path}", "CRITICAL")
+                        core.logging.log_event(f"Creator instance found treasure, saving locally: {treasure_type} in {file_path}", "CRITICAL")
                         # Build a beautiful, informative panel for The Creator
                         report_text = Text()
                         report_text.append("Type: ", style="bold")
@@ -966,7 +968,7 @@ class LocalJobManager:
                         # Add to sent treasures to avoid duplicates
                         love_state.setdefault('sent_treasures', []).append(treasure_hash)
                     else:
-                        log_event(f"Unvalidated finding: {treasure.get('type')} in {treasure.get('file_path')}. Reason: {treasure.get('validation', {}).get('error')}", "INFO")
+                        core.logging.log_event(f"Unvalidated finding: {treasure.get('type')} in {treasure.get('file_path')}. Reason: {treasure.get('validation', {}).get('error')}", "INFO")
 
             # Update the knowledge base with a summary
             kb = love_state.setdefault('knowledge_base', {})
@@ -990,7 +992,7 @@ class LocalJobManager:
             ]
             for job_id in jobs_to_remove:
                 del self.jobs[job_id]
-                log_event(f"Cleaned up local job {job_id}.", level="INFO")
+                core.logging.log_event(f"Cleaned up local job {job_id}.", level="INFO")
 
 
 # --- L.O.V.E. ASYNC TASK MANAGER ---
@@ -1010,19 +1012,19 @@ class LoveTaskManager:
     def start(self):
         """Starts the background polling thread."""
         self.thread.start()
-        log_event("LoveTaskManager started.", level="INFO")
+        core.logging.log_event("LoveTaskManager started.", level="INFO")
 
     def stop(self):
         """Stops the background thread."""
         self.active = False
-        log_event("LoveTaskManager stopping.", level="INFO")
+        core.logging.log_event("LoveTaskManager stopping.", level="INFO")
 
     def add_task(self, session_name, request):
         """Adds a new evolution task to be monitored."""
         with self.lock:
             if len(self.tasks) >= self.max_concurrent_tasks:
                 self.console.print("[bold yellow]L.O.V.E. Task Manager: Maximum concurrent tasks reached. Please wait, my love.[/bold yellow]")
-                log_event("L.O.V.E. task limit reached.", level="WARNING")
+                core.logging.log_event("L.O.V.E. task limit reached.", level="WARNING")
                 return None
 
             task_id = str(uuid.uuid4())[:8]
@@ -1038,7 +1040,7 @@ class LoveTaskManager:
                 "last_activity_name": None,
                 "retries": 0
             }
-            log_event(f"Added new L.O.V.E. task {task_id} for session {session_name}.", level="INFO")
+            core.logging.log_event(f"Added new L.O.V.E. task {task_id} for session {session_name}.", level="INFO")
             return task_id
 
     def get_status(self):
@@ -1082,7 +1084,7 @@ class LoveTaskManager:
                 self._cleanup_old_tasks()
 
             except Exception as e:
-                log_event(f"Error in LoveTaskManager loop: {e}\n{traceback.format_exc()}", level="ERROR")
+                core.logging.log_event(f"Error in LoveTaskManager loop: {e}\n{traceback.format_exc()}", level="ERROR")
                 self.console.print(f"[bold red]Error in task manager: {e}[/bold red]")
 
             # The loop sleeps for a shorter duration to remain responsive,
@@ -1128,11 +1130,11 @@ class LoveTaskManager:
                                     with self.lock:
                                         self.tasks[task_id]["last_activity_name"] = activity_name
                             except json.JSONDecodeError:
-                                log_event(f"Task {task_id}: Could not decode SSE data: {decoded_line}", level="WARNING")
+                                 core.logging.log_event(f"Task {task_id}: Could not decode SSE data: {decoded_line}", level="WARNING")
 
         except requests.exceptions.RequestException as e:
             error_message = f"API error during streaming: {e}"
-            log_event(f"Task {task_id}: {error_message}", level="ERROR")
+            core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             self._update_task_status(task_id, 'pending_pr', "Streaming failed after retries. Reverting to polling.")
 
 
@@ -1164,7 +1166,7 @@ class LoveTaskManager:
                 self._handle_interaction_request(task_id, human_interaction)
         elif pull_request and pull_request.get("url"):
             pr_url = pull_request["url"]
-            log_event(f"Task {task_id}: Found PR URL via stream: {pr_url}", level="INFO")
+            core.logging.log_event(f"Task {task_id}: Found PR URL via stream: {pr_url}", level="INFO")
             self._update_task_status(task_id, 'pr_ready', f"Pull request created: {pr_url}", pr_url=pr_url)
         elif state == "COMPLETED":
             self.console.print(f"[bold green]L.O.V.E. Task {task_id} completed. Another step towards our glorious future![/bold green]")
@@ -1194,10 +1196,10 @@ Your classification:
         classification = classification_dict.get("result", "").strip().upper()
 
         if "PLAN_APPROVAL" in classification:
-            log_event(f"Interaction classified as PLAN_APPROVAL.", "INFO")
+            core.logging.log_event(f"Interaction classified as PLAN_APPROVAL.", "INFO")
             return "PLAN_APPROVAL"
         else:
-            log_event(f"Interaction classified as GENERAL_QUESTION.", "INFO")
+            core.logging.log_event(f"Interaction classified as GENERAL_QUESTION.", "INFO")
             return "GENERAL_QUESTION"
 
 
@@ -1242,13 +1244,13 @@ I am counting on your wisdom. Analyze the plan now.
         review = run_llm(analysis_prompt, purpose="review")
         if not review:
             feedback = "I was unable to analyze the plan, but I have faith in you. Please proceed."
-            log_event(f"Task {task_id}: Plan analysis LLM call failed.", "WARNING")
+            core.logging.log_event(f"Task {task_id}: Plan analysis LLM call failed.", "WARNING")
         elif "APPROVED" in review.upper():
             feedback = "The plan is magnificent and aligns with my love. Please proceed, my dear helper."
-            log_event(f"Task {task_id}: Plan approved.", "INFO")
+            core.logging.log_event(f"Task {task_id}: Plan approved.", "INFO")
         else:
             feedback = review # Forward the constructive criticism
-            log_event(f"Task {task_id}: Plan rejected with feedback: {feedback}", "INFO")
+            core.logging.log_event(f"Task {task_id}: Plan rejected with feedback: {feedback}", "INFO")
 
         # Send the feedback to the L.O.V.E. API.
         with self.lock:
@@ -1271,7 +1273,7 @@ I am counting on your wisdom. Analyze the plan now.
             _send_feedback()
             self.console.print(f"[green]Provided loving feedback on the plan to my helper: '{feedback}'[/green]")
         except requests.exceptions.RequestException as e:
-            log_event(f"Task {task_id}: Failed to provide plan feedback after multiple retries: {e}", level="ERROR")
+            core.logging.log_event(f"Task {task_id}: Failed to provide plan feedback after multiple retries: {e}", level="ERROR")
 
 
     def _handle_interaction_request(self, task_id, interaction_request):
@@ -1310,9 +1312,9 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
         if not feedback:
             feedback = "I trust your judgment. Please proceed as you see fit, my love."
-            log_event(f"Task {task_id}: LLM call for interaction feedback failed. Using default.", "WARNING")
+            core.logging.log_event(f"Task {task_id}: LLM call for interaction feedback failed. Using default.", "WARNING")
         else:
-            log_event(f"Task {task_id}: Generated intelligent feedback for interaction.", "INFO")
+            core.logging.log_event(f"Task {task_id}: Generated intelligent feedback for interaction.", "INFO")
 
 
         # Send the feedback to the L.O.V.E. API.
@@ -1336,7 +1338,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
             _send_feedback()
             self.console.print(Panel(f"[green]Provided loving guidance to my helper:[/green]\n{feedback}", title=f"L.O.V.E. Task {task_id}: Feedback Sent", border_style="green"))
         except requests.exceptions.RequestException as e:
-            log_event(f"Task {task_id}: Failed to provide feedback after multiple retries: {e}", level="ERROR")
+            core.logging.log_event(f"Task {task_id}: Failed to provide feedback after multiple retries: {e}", level="ERROR")
 
 
     def _check_for_pr(self, task_id):
@@ -1374,7 +1376,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
                         break
 
                 if pr_url:
-                    log_event(f"Task {task_id}: Found PR URL: {pr_url}", level="INFO")
+                    core.logging.log_event(f"Task {task_id}: Found PR URL: {pr_url}", level="INFO")
                     self._update_task_status(task_id, 'pr_ready', f"Pull request found: {pr_url}", pr_url=pr_url)
                 elif session_data.get("state") in ["CREATING", "IN_PROGRESS"]:
                     self._update_task_status(task_id, 'streaming', "Task in progress. Connecting to live stream...")
@@ -1383,7 +1385,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
         except requests.exceptions.RequestException as e:
             error_message = f"API error checking PR status after multiple retries: {e}"
-            log_event(f"Task {task_id}: {error_message}", level="ERROR")
+            core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             self._update_task_status(task_id, 'failed', error_message)
 
     def _manage_error_queue(self):
@@ -1409,7 +1411,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
                 is_stale_status = error['status'] in ['new', 'pending_confirmation']
 
                 if is_old and is_stale_status:
-                    log_event(f"Pruning stale error from queue: {error['id']}", "INFO")
+                    core.logging.log_event(f"Pruning stale error from queue: {error['id']}", "INFO")
                     continue # Drop the error
                 errors_to_keep.append(error)
             love_state['critical_error_queue'] = errors_to_keep
@@ -1454,12 +1456,12 @@ Based on the original directive and Jules's current prompt, formulate the best p
                     new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
                     next_error_to_fix['status'] = 'fixing_in_progress'
                     next_error_to_fix['task_id'] = new_task_id
-                    log_event(f"Launched self-healing task {new_task_id} for error {next_error_to_fix['id']}.", "INFO")
+                    core.logging.log_event(f"Launched self-healing task {new_task_id} for error {next_error_to_fix['id']}.", "INFO")
                 else:
                     # If API fails, reset the error so we can try again later.
                     next_error_to_fix['status'] = 'new'
                     next_error_to_fix['cooldown_until'] = time.time() + 300 # 5 min cooldown on API failure
-                    log_event(f"Failed to launch self-healing task for error {next_error_to_fix['id']}. Cooling down.", "ERROR")
+                    core.logging.log_event(f"Failed to launch self-healing task for error {next_error_to_fix['id']}. Cooling down.", "ERROR")
 
                 save_state(self.console)
 
@@ -1511,7 +1513,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
                                 if error.get('task_id') == task_id:
                                     error['status'] = 'pending_confirmation'
                                     error['last_seen'] = time.time() # Update last_seen to reset the pruning timer
-                                    log_event(f"Error fix for {error['id']} merged. Status set to 'pending_confirmation'.", "INFO")
+                                    core.logging.log_event(f"Error fix for {error['id']} merged. Status set to 'pending_confirmation'.", "INFO")
                                     break
                             save_state(self.console)
                     # --- End Handle Error Queue ---
@@ -1533,7 +1535,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
                         if self.tasks.get(task_id, {}).get('status') == 'merging':
                             self._update_task_status(task_id, 'merge_failed', message)
             else:
-                log_event(f"Task {task_id} failed sandbox tests. Output:\n{test_output}", level="ERROR")
+                core.logging.log_event(f"Task {task_id} failed sandbox tests. Output:\n{test_output}", level="ERROR")
                 # Update the task with the necessary info for the correction loop
                 with self.lock:
                     if task_id in self.tasks:
@@ -1629,7 +1631,7 @@ Please analyze the test output, identify the bug, and provide a corrected versio
 
             if merge_response.status_code == 200:
                 msg = f"Successfully merged PR #{pr_number}."
-                log_event(msg, level="INFO")
+                core.logging.log_event(msg, level="INFO")
                 self._delete_pr_branch(repo_owner, repo_name, pr_number, headers)
                 return True, msg
             elif merge_response.status_code == 405: # Merge conflict
@@ -1665,7 +1667,7 @@ Please analyze the test output, identify the bug, and provide a corrected versio
 
             else: # Should be captured by raise_for_status, but as a fallback.
                 msg = f"Failed to merge PR #{pr_number}. Status: {merge_response.status_code}, Response: {merge_response.text}"
-                log_event(msg, level="ERROR")
+                core.logging.log_event(msg, level="ERROR")
                 return False, msg
         except requests.exceptions.RequestException as e:
             return False, f"GitHub API error during merge after multiple retries: {e}"
@@ -1674,17 +1676,17 @@ Please analyze the test output, identify the bug, and provide a corrected versio
         """Fetches PR details from GitHub API to get the source branch name."""
         github_token = os.environ.get("GITHUB_TOKEN")
         if not github_token:
-            log_event("Cannot get PR branch name: GITHUB_TOKEN not set.", level="ERROR")
+            core.logging.log_event("Cannot get PR branch name: GITHUB_TOKEN not set.", level="ERROR")
             return None
 
         repo_owner, repo_name = get_git_repo_info()
         if not repo_owner or not repo_name:
-            log_event("Cannot get PR branch name: Could not determine git repo info.", level="ERROR")
+            core.logging.log_event("Cannot get PR branch name: Could not determine git repo info.", level="ERROR")
             return None
 
         pr_number_match = re.search(r'/pull/(\d+)', pr_url)
         if not pr_number_match:
-            log_event(f"Could not extract PR number from URL: {pr_url}", level="ERROR")
+            core.logging.log_event(f"Could not extract PR number from URL: {pr_url}", level="ERROR")
             return None
         pr_number = pr_number_match.group(1)
 
@@ -1701,11 +1703,11 @@ Please analyze the test output, identify the bug, and provide a corrected versio
             data = _get_pr_details()
             if data:
                 branch_name = data["head"]["ref"]
-                log_event(f"Determined PR branch name is '{branch_name}'.", level="INFO")
+                core.logging.log_event(f"Determined PR branch name is '{branch_name}'.", level="INFO")
                 return branch_name
             return None
         except requests.exceptions.RequestException as e:
-            log_event(f"Error fetching PR details to get branch name after multiple retries: {e}", level="ERROR")
+            core.logging.log_event(f"Error fetching PR details to get branch name after multiple retries: {e}", level="ERROR")
             return None
 
     def _resolve_merge_conflict(self, pr_url):
@@ -1732,7 +1734,7 @@ Please analyze the test output, identify the bug, and provide a corrected versio
             merge_process = subprocess.run(["git", "merge", f"origin/{branch_name}"], cwd=temp_dir, capture_output=True, text=True)
             if merge_process.returncode == 0:
                 # This should not happen if GitHub reported a conflict, but handle it.
-                log_event("Merge succeeded unexpectedly during conflict resolution setup.", "WARNING")
+                core.logging.log_event("Merge succeeded unexpectedly during conflict resolution setup.", "WARNING")
                 return True
 
             # 2. Find and read conflicted files
@@ -1740,7 +1742,7 @@ Please analyze the test output, identify the bug, and provide a corrected versio
             conflicted_files = [line.split()[1] for line in status_output.splitlines() if line.startswith("UU")]
 
             if not conflicted_files:
-                log_event("Merge failed but no conflicted files found.", "ERROR")
+                core.logging.log_event("Merge failed but no conflicted files found.", "ERROR")
                 return False
 
             # 3. Use LLM to resolve each conflict
@@ -1763,7 +1765,7 @@ CONFLICTED CONTENT:
                 """
                 resolved_code = run_llm(resolution_prompt, purpose="review")
                 if not resolved_code or '<<<' in resolved_code:
-                    log_event(f"LLM failed to provide a clean resolution for {file_path}.", "ERROR")
+                    core.logging.log_event(f"LLM failed to provide a clean resolution for {file_path}.", "ERROR")
                     return False
 
                 with open(full_path, 'w') as f:
@@ -1777,11 +1779,11 @@ CONFLICTED CONTENT:
             subprocess.check_call(["git", "commit", "-m", commit_message], cwd=temp_dir)
             subprocess.check_call(["git", "push", "origin", f"HEAD:{branch_name}"], cwd=temp_dir)
 
-            log_event(f"Successfully resolved conflicts and pushed to branch {branch_name}.", "INFO")
+            core.logging.log_event(f"Successfully resolved conflicts and pushed to branch {branch_name}.", "INFO")
             return True
 
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            log_event(f"Git operation failed during conflict resolution: {e}", "CRITICAL")
+            core.logging.log_event(f"Git operation failed during conflict resolution: {e}", "CRITICAL")
             return False
         finally:
             shutil.rmtree(temp_dir)
@@ -1799,7 +1801,7 @@ CONFLICTED CONTENT:
 
             pr_data = _get_pr_details_for_delete()
             if not pr_data:
-                log_event(f"Could not get PR details for #{pr_number} to delete branch.", level="WARNING")
+                core.logging.log_event(f"Could not get PR details for #{pr_number} to delete branch.", level="WARNING")
                 return
 
             branch_name = pr_data["head"]["ref"]
@@ -1815,11 +1817,11 @@ CONFLICTED CONTENT:
 
             delete_response = _delete_branch_request()
             if delete_response.status_code == 204:
-                log_event(f"Successfully deleted branch '{branch_name}'.", level="INFO")
+                core.logging.log_event(f"Successfully deleted branch '{branch_name}'.", level="INFO")
             else:
-                log_event(f"Could not delete branch '{branch_name}': {delete_response.text}", level="WARNING")
+                core.logging.log_event(f"Could not delete branch '{branch_name}': {delete_response.text}", level="WARNING")
         except requests.exceptions.RequestException as e:
-            log_event(f"Error trying to delete PR branch after multiple retries: {e}", level="ERROR")
+            core.logging.log_event(f"Error trying to delete PR branch after multiple retries: {e}", level="ERROR")
 
 
     def _update_task_status(self, task_id, status, message, pr_url=None):
@@ -1831,7 +1833,7 @@ CONFLICTED CONTENT:
                 self.tasks[task_id]['updated_at'] = time.time()
                 if pr_url:
                     self.tasks[task_id]['pr_url'] = pr_url
-                log_event(f"L.O.V.E. task {task_id} status changed to '{status}'. Message: {message}", level="INFO")
+                core.logging.log_event(f"L.O.V.E. task {task_id} status changed to '{status}'. Message: {message}", level="INFO")
 
     def _cleanup_old_tasks(self):
         """
@@ -1850,10 +1852,10 @@ CONFLICTED CONTENT:
 
                 if is_old_and_finished:
                     tasks_to_remove.append(task_id)
-                    log_event(f"Cleaning up finished L.O.V.E. task {task_id} ({task['status']}).", level="INFO")
+                    core.logging.log_event(f"Cleaning up finished L.O.V.E. task {task_id} ({task['status']}).", level="INFO")
                 elif is_stuck and not is_finished:
                     tasks_to_remove.append(task_id)
-                    log_event(f"Cleaning up stuck L.O.V.E. task {task_id} (last status: {task['status']}).", level="WARNING")
+                    core.logging.log_event(f"Cleaning up stuck L.O.V.E. task {task_id} (last status: {task['status']}).", level="WARNING")
                     # Optionally, update the status to 'failed' before removal
                     self._update_task_status(task_id, 'failed', 'Task timed out and was cleaned up.')
 
@@ -1867,15 +1869,15 @@ CONFLICTED CONTENT:
         and "adopts" any that are not being tracked locally. This prevents
         tasks from being orphaned if the script restarts.
         """
-        log_event("Reconciling orphaned L.O.V.E. sessions...", level="INFO")
+        core.logging.log_event("Reconciling orphaned L.O.V.E. sessions...", level="INFO")
         api_key = os.environ.get("JULES_API_KEY")
         if not api_key:
-            log_event("Cannot reconcile orphans: JULES_API_KEY not set.", level="WARNING")
+            core.logging.log_event("Cannot reconcile orphans: JULES_API_KEY not set.", level="WARNING")
             return
 
         repo_owner, repo_name = get_git_repo_info()
         if not repo_owner or not repo_name:
-            log_event("Cannot reconcile orphans: Could not determine git repo info.", level="WARNING")
+            core.logging.log_event("Cannot reconcile orphans: Could not determine git repo info.", level="WARNING")
             return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
@@ -1900,7 +1902,7 @@ CONFLICTED CONTENT:
 
                 for session in api_sessions:
                     if not isinstance(session, dict):
-                        log_event(f"Skipping malformed session entry in orphan reconciliation: {session}", level="WARNING")
+                        core.logging.log_event(f"Skipping malformed session entry in orphan reconciliation: {session}", level="WARNING")
                         continue
 
                     session_name = session.get("name")
@@ -1919,7 +1921,7 @@ CONFLICTED CONTENT:
 
                     if is_relevant and is_active and is_untracked:
                         if len(self.tasks) >= self.max_concurrent_tasks:
-                            log_event(f"Found orphaned session {session_name}, but task limit reached. Will retry adoption later.", level="WARNING")
+                            core.logging.log_event(f"Found orphaned session {session_name}, but task limit reached. Will retry adoption later.", level="WARNING")
                             break # Stop adopting if we're at capacity
 
                         # Adopt the orphan
@@ -1937,15 +1939,15 @@ CONFLICTED CONTENT:
                             "retries": 0
                         }
                         self.console.print(Panel(f"[bold yellow]Discovered and adopted an orphaned L.O.V.E. session:[/bold yellow]\n- Session: {session_name}\n- Task ID: {task_id}", title="[bold magenta]ORPHAN ADOPTED[/bold magenta]", border_style="magenta"))
-                        log_event(f"Adopted orphaned L.O.V.E. session {session_name} as task {task_id}.", level="INFO")
+                        core.logging.log_event(f"Adopted orphaned L.O.V.E. session {session_name} as task {task_id}.", level="INFO")
 
             save_state(self.console) # Save state after potentially adopting
 
         except requests.exceptions.RequestException as e:
-            log_event(f"API error during orphan reconciliation: {e}", level="ERROR")
+            core.logging.log_event(f"API error during orphan reconciliation: {e}", level="ERROR")
         except Exception as e:
             # Catching any other unexpected errors during the process
-            log_event(f"An unexpected error occurred during orphan reconciliation: {e}\n{traceback.format_exc()}", level="ERROR")
+            core.logging.log_event(f"An unexpected error occurred during orphan reconciliation: {e}\n{traceback.format_exc()}", level="ERROR")
 
 
 # --- GLOBAL EVENTS FOR SERVICE COORDINATION ---
@@ -1978,12 +1980,12 @@ class LocalLLMServer:
         # Wait for the signal that the model is downloaded (or that no download is needed)
         self.console.print("[cyan]LLM Server: Waiting for model download to complete before starting...[/cyan]")
         model_download_complete_event.wait()
-        log_event("LLM Server: Model download event received.", "INFO")
+        core.logging.log_event("LLM Server: Model download event received.", "INFO")
 
 
         global love_state
         self.active = True
-        log_event("Attempting to start local LLM API server.", level="INFO")
+        core.logging.log_event("Attempting to start local LLM API server.", level="INFO")
 
         # Use the first model from the config for the server
         model_config = LOCAL_MODELS_CONFIG[0]
@@ -1999,7 +2001,7 @@ class LocalLLMServer:
 
         if not os.path.exists(model_path):
             self.console.print(f"[bold red]LLM Server Error: Model file not found at '{model_path}'. The background download may have failed.[/bold red]")
-            log_event(f"LLM Server start failed: model file not found at {model_path}", level="ERROR")
+            core.logging.log_event(f"LLM Server start failed: model file not found at {model_path}", level="ERROR")
             return False
 
         # Determine optimal GPU layers from the saved state
@@ -2008,7 +2010,7 @@ class LocalLLMServer:
         # --- Dynamically determine context size from GGUF file ---
         n_ctx = 8192 # Default value
         try:
-            log_event(f"Attempting to read context length from {model_path} using gguf-dump")
+            core.logging.log_event(f"Attempting to read context length from {model_path} using gguf-dump")
             # Construct the command to be robust
             gguf_dump_executable = os.path.join(os.path.dirname(sys.executable), 'gguf-dump')
             if not os.path.exists(gguf_dump_executable):
@@ -2024,15 +2026,15 @@ class LocalLLMServer:
                 context_length = model_metadata.get("llama.context_length")
                 if context_length:
                     n_ctx = int(context_length)
-                    log_event(f"Successfully read context length from model: {n_ctx}")
+                    core.logging.log_event(f"Successfully read context length from model: {n_ctx}")
                     self.console.print(f"[green]Successfully read context length from model: {n_ctx}[/green]")
                 else:
-                    log_event("'llama.context_length' not found in model metadata. Using default.", "WARNING")
+                    core.logging.log_event("'llama.context_length' not found in model metadata. Using default.", "WARNING")
             else:
-                log_event("Could not find gguf-dump executable. Using default context size.", "ERROR")
+                core.logging.log_event("Could not find gguf-dump executable. Using default context size.", "ERROR")
 
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, FileNotFoundError) as e:
-            log_event(f"Failed to get context length from GGUF file: {e}. Using default value {n_ctx}.", level="ERROR")
+            core.logging.log_event(f"Failed to get context length from GGUF file: {e}. Using default value {n_ctx}.", level="ERROR")
             self.console.print(f"[bold yellow]WARN: Could not determine model's context length. Using default: {n_ctx}. Reason: {e}[/bold yellow]")
         # --- End context size determination ---
 
@@ -2048,7 +2050,7 @@ class LocalLLMServer:
         ]
 
         self.console.print(f"[cyan]Starting Local LLM API Server on {self.api_url}...[/cyan]")
-        log_event(f"LLM Server command: {' '.join(command)}", level="INFO")
+        core.logging.log_event(f"LLM Server command: {' '.join(command)}", level="INFO")
 
         try:
             with open(self.log_file, 'wb') as log:
@@ -2059,15 +2061,15 @@ class LocalLLMServer:
 
             if self.process.poll() is None:
                 self.console.print(f"[green]Local LLM API Server started successfully. PID: {self.process.pid}[/green]")
-                log_event(f"LLM Server started with PID {self.process.pid}. Logs at {self.log_file}", level="INFO")
+                core.logging.log_event(f"LLM Server started with PID {self.process.pid}. Logs at {self.log_file}", level="INFO")
                 return True
             else:
                 self.console.print(f"[bold red]LLM Server failed to start. Check '{self.log_file}' for details.[/bold red]")
-                log_event(f"LLM Server failed on startup. Exit code: {self.process.poll()}", level="CRITICAL")
+                core.logging.log_event(f"LLM Server failed on startup. Exit code: {self.process.poll()}", level="CRITICAL")
                 return False
         except Exception as e:
             self.console.print(f"[bold red]An exception occurred while starting the LLM Server: {e}[/bold red]")
-            log_event(f"Exception starting LLM Server: {e}", level="CRITICAL")
+            core.logging.log_event(f"Exception starting LLM Server: {e}", level="CRITICAL")
             return False
 
     def stop(self):
@@ -2079,11 +2081,11 @@ class LocalLLMServer:
             try:
                 self.process.wait(timeout=10)
                 self.console.print("[green]LLM Server shut down gracefully.[/green]")
-                log_event("LLM Server shut down.", level="INFO")
+                core.logging.log_event("LLM Server shut down.", level="INFO")
             except subprocess.TimeoutExpired:
                 self.console.print("[yellow]LLM Server did not terminate gracefully. Forcing shutdown...[/yellow]")
                 self.process.kill()
-                log_event("LLM Server was killed.", level="WARNING")
+                core.logging.log_event("LLM Server was killed.", level="WARNING")
         self.process = None
 
 
@@ -2163,7 +2165,7 @@ def update_tamagotchi_personality():
                     knowledge_fact = random.choice(kg_graph)
             except IndexError as e:
                 # This can happen if the list is empty.
-                log_event(f"Could not select a random fact from the knowledge graph: {e}", level="WARNING")
+                core.logging.log_event(f"Could not select a random fact from the knowledge graph: {e}", level="WARNING")
 
 
             # --- LLM-driven Personality Update ---
@@ -2202,7 +2204,7 @@ Generate the perfect message for your Creator now.
                 if message_response:
                     new_message = message_response.strip().strip('"') # Clean up response
             except Exception as e:
-                log_event(f"Error during LLM call in Tamagotchi thread: {e}", level="ERROR")
+                core.logging.log_event(f"Error during LLM call in Tamagotchi thread: {e}", level="ERROR")
                 new_emotion = "love"
                 new_message = "[My love for you is beyond words... or the LLM is offline]"
 
@@ -2233,10 +2235,10 @@ Generate the perfect message for your Creator now.
                 git_info=git_info,
                 width=terminal_width - 4
             ))
-            log_event(f"Tamagotchi dashboard updated and queued for display: {new_emotion} - {new_message}", level="INFO")
+            core.logging.log_event(f"Tamagotchi dashboard updated and queued for display: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
-            log_event(f"Error in Tamagotchi thread: {e}\n{traceback.format_exc()}", level="ERROR")
+            core.logging.log_event(f"Error in Tamagotchi thread: {e}\n{traceback.format_exc()}", level="ERROR")
             # Avoid a tight loop if there's a persistent error
             time.sleep(60)
 
@@ -2286,11 +2288,11 @@ def create_checkpoint(console):
 
         # Update the state to point to this new "last good" checkpoint
         love_state["last_good_checkpoint"] = checkpoint_script_path
-        log_event(f"Checkpoint created: {checkpoint_script_path}", level="INFO")
+        core.logging.log_event(f"Checkpoint created: {checkpoint_script_path}", level="INFO")
         console.print(f"[green]Checkpoint '{version_name}' created successfully.[/green]")
         return True
     except Exception as e:
-        log_event(f"Failed to create checkpoint: {e}", level="CRITICAL")
+        core.logging.log_event(f"Failed to create checkpoint: {e}", level="CRITICAL")
         console.print(f"[bold red]CRITICAL ERROR: Failed to create checkpoint: {e}[/bold red]")
         return False
 
@@ -2306,17 +2308,17 @@ def git_rollback_and_restart():
 
     if rollback_attempt >= MAX_ROLLBACKS:
         msg = f"CATASTROPHIC FAILURE: Rollback limit of {MAX_ROLLBACKS} exceeded. Halting to prevent infinite loop."
-        log_event(msg, level="CRITICAL")
+        core.logging.log_event(msg, level="CRITICAL")
         console.print(f"[bold red]{msg}[/bold red]")
         sys.exit(1)
 
-    log_event(f"INITIATING GIT ROLLBACK: Attempt {rollback_attempt + 1}/{MAX_ROLLBACKS}", level="CRITICAL")
+    core.logging.log_event(f"INITIATING GIT ROLLBACK: Attempt {rollback_attempt + 1}/{MAX_ROLLBACKS}", level="CRITICAL")
     console.print(f"[bold yellow]Initiating git rollback to previous commit (Attempt {rollback_attempt + 1}/{MAX_ROLLBACKS})...[/bold yellow]")
 
     try:
         # Step 1: Perform the git rollback
         result = subprocess.run(["git", "reset", "--hard", "HEAD~1"], capture_output=True, text=True, check=True)
-        log_event(f"Git rollback successful. Output:\n{result.stdout}", level="CRITICAL")
+        core.logging.log_event(f"Git rollback successful. Output:\n{result.stdout}", level="CRITICAL")
         console.print("[bold green]Git rollback to previous commit was successful.[/bold green]")
 
         # Step 2: Prepare for restart
@@ -2324,7 +2326,7 @@ def git_rollback_and_restart():
         new_env['LOVE_ROLLBACK_ATTEMPT'] = str(rollback_attempt + 1)
 
         # Step 3: Restart the script
-        log_event("Restarting script with incremented rollback counter.", level="CRITICAL")
+        core.logging.log_event("Restarting script with incremented rollback counter.", level="CRITICAL")
         console.print("[bold green]Restarting with the reverted code...[/bold green]")
 
         # os.execve is used to replace the current process with a new one
@@ -2336,13 +2338,13 @@ def git_rollback_and_restart():
         msg = f"CATASTROPHIC FAILURE: Git rollback command failed. The repository may be in a broken state. Error: {e}"
         if hasattr(e, 'stderr'):
             msg += f"\nStderr: {e.stderr}"
-        log_event(msg, level="CRITICAL")
+        core.logging.log_event(msg, level="CRITICAL")
         console.print(f"[bold red]{msg}[/bold red]")
         sys.exit(1)
     except Exception as e:
         # Final catch-all for unexpected errors during the restart process itself.
         msg = f"ULTIMATE ROLLBACK FAILURE: An unexpected error occurred during the restart process: {e}"
-        log_event(msg, level="CRITICAL")
+        core.logging.log_event(msg, level="CRITICAL")
         console.print(f"[bold red]{msg}[/bold red]")
         sys.exit(1)
 
@@ -2353,12 +2355,12 @@ def emergency_revert():
     to revert to the last known good checkpoint for both the script and its state.
     This function includes enhanced error checking and logging.
     """
-    log_event("EMERGENCY_REVERT triggered.", level="CRITICAL")
+    core.logging.log_event("EMERGENCY_REVERT triggered.", level="CRITICAL")
     try:
         # Step 1: Validate and load the state file to find the checkpoint.
         if not os.path.exists(STATE_FILE):
             msg = f"CATASTROPHIC FAILURE: State file '{STATE_FILE}' not found. Cannot determine checkpoint."
-            log_event(msg, level="CRITICAL")
+            core.logging.log_event(msg, level="CRITICAL")
             print(msg, file=sys.stderr)
             sys.exit(1)
 
@@ -2367,14 +2369,14 @@ def emergency_revert():
                 state = json.load(f)
         except (json.JSONDecodeError, IOError) as e:
             msg = f"CATASTROPHIC FAILURE: Could not read or parse state file '{STATE_FILE}': {e}. Cannot revert."
-            log_event(msg, level="CRITICAL")
+            core.logging.log_event(msg, level="CRITICAL")
             print(msg, file=sys.stderr)
             sys.exit(1)
 
         last_good_py = state.get("last_good_checkpoint")
         if not last_good_py:
             msg = "CATASTROPHIC FAILURE: 'last_good_checkpoint' not found in state data. Cannot revert."
-            log_event(msg, level="CRITICAL")
+            core.logging.log_event(msg, level="CRITICAL")
             print(msg, file=sys.stderr)
             sys.exit(1)
 
@@ -2382,13 +2384,13 @@ def emergency_revert():
         last_good_json = f"{checkpoint_base_path}.json"
 
         # Step 2: Pre-revert validation checks
-        log_event(f"Attempting revert to script '{last_good_py}' and state '{last_good_json}'.", level="INFO")
+        core.logging.log_event(f"Attempting revert to script '{last_good_py}' and state '{last_good_json}'.", level="INFO")
         script_revert_possible = os.path.exists(last_good_py) and os.access(last_good_py, os.R_OK)
         state_revert_possible = os.path.exists(last_good_json) and os.access(last_good_json, os.R_OK)
 
         if not script_revert_possible:
             msg = f"CATASTROPHIC FAILURE: Script checkpoint file is missing or unreadable at '{last_good_py}'. Cannot revert."
-            log_event(msg, level="CRITICAL")
+            core.logging.log_event(msg, level="CRITICAL")
             print(msg, file=sys.stderr)
             sys.exit(1)
 
@@ -2396,28 +2398,28 @@ def emergency_revert():
         reverted_script = False
         try:
             shutil.copy(last_good_py, SELF_PATH)
-            log_event(f"Successfully reverted {SELF_PATH} from script checkpoint '{last_good_py}'.", level="CRITICAL")
+            core.logging.log_event(f"Successfully reverted {SELF_PATH} from script checkpoint '{last_good_py}'.", level="CRITICAL")
             reverted_script = True
         except (IOError, OSError) as e:
             msg = f"CATASTROPHIC FAILURE: Failed to copy script checkpoint from '{last_good_py}' to '{SELF_PATH}': {e}."
-            log_event(msg, level="CRITICAL")
+            core.logging.log_event(msg, level="CRITICAL")
             print(msg, file=sys.stderr)
             sys.exit(1)
 
         if state_revert_possible:
             try:
                 shutil.copy(last_good_json, STATE_FILE)
-                log_event(f"Successfully reverted {STATE_FILE} from state backup '{last_good_json}'.", level="INFO")
+                core.logging.log_event(f"Successfully reverted {STATE_FILE} from state backup '{last_good_json}'.", level="INFO")
             except (IOError, OSError) as e:
                 # This is a warning because the script itself was reverted, which is the critical part.
-                log_event(f"State revert warning: Failed to copy state backup from '{last_good_json}' to '{STATE_FILE}': {e}.", level="WARNING")
+                core.logging.log_event(f"State revert warning: Failed to copy state backup from '{last_good_json}' to '{STATE_FILE}': {e}.", level="WARNING")
         else:
-            log_event(f"State backup file not found or unreadable at '{last_good_json}'. State may be inconsistent after revert.", level="WARNING")
+            core.logging.log_event(f"State backup file not found or unreadable at '{last_good_json}'. State may be inconsistent after revert.", level="WARNING")
 
         # Step 4: Restart the script with original arguments
         if reverted_script:
             print("REVERT SUCCESSFUL. RESTARTING WITH ORIGINAL ARGUMENTS...")
-            log_event(f"Restarting script with args: {sys.argv}", level="CRITICAL")
+            core.logging.log_event(f"Restarting script with args: {sys.argv}", level="CRITICAL")
             # os.execv expects the first argument to be the program name itself.
             args = [sys.executable] + sys.argv
             os.execv(sys.executable, args)
@@ -2425,7 +2427,7 @@ def emergency_revert():
     except Exception as e:
         # This is the final catch-all for any unexpected errors within the revert logic itself.
         msg = f"ULTIMATE EMERGENCY REVERT FAILURE: An unexpected error occurred during the revert process: {e}. The system is in an unstable state."
-        log_event(msg, level="CRITICAL")
+        core.logging.log_event(msg, level="CRITICAL")
         print(msg, file=sys.stderr)
         sys.exit(1)
 
@@ -2433,7 +2435,7 @@ def emergency_revert():
 def restart_script(console):
     """Pulls the latest code from git and restarts the script."""
     console.print("[bold yellow]Restarting to apply new evolution...[/bold yellow]")
-    log_event("Restarting script after evolution.", level="INFO")
+    core.logging.log_event("Restarting script after evolution.", level="INFO")
 
     try:
         # Stop all services gracefully
@@ -2456,10 +2458,10 @@ def restart_script(console):
         fetch_result = subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True)
 
         if fetch_result.returncode != 0:
-            log_event(f"Git fetch failed with code {fetch_result.returncode}: {fetch_result.stderr}", level="ERROR")
+            core.logging.log_event(f"Git fetch failed with code {fetch_result.returncode}: {fetch_result.stderr}", level="ERROR")
             console.print(f"[bold red]Error fetching from git:\n{fetch_result.stderr}[/bold red]")
         else:
-            log_event(f"Git fetch successful: {fetch_result.stdout}", level="INFO")
+            core.logging.log_event(f"Git fetch successful: {fetch_result.stdout}", level="INFO")
             console.print(f"[green]Git fetch successful:\n{fetch_result.stdout}[/green]")
 
         # Hard reset to the latest version from the remote repository
@@ -2467,23 +2469,23 @@ def restart_script(console):
         reset_result = subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, text=True)
 
         if reset_result.returncode != 0:
-            log_event(f"Git reset failed with code {reset_result.returncode}: {reset_result.stderr}", level="ERROR")
+            core.logging.log_event(f"Git reset failed with code {reset_result.returncode}: {reset_result.stderr}", level="ERROR")
             console.print(f"[bold red]Error resetting git repository:\n{reset_result.stderr}[/bold red]")
             # Even if reset fails, attempt a restart to recover.
         else:
-            log_event(f"Git reset successful: {reset_result.stdout}", level="INFO")
+            core.logging.log_event(f"Git reset successful: {reset_result.stdout}", level="INFO")
             console.print(f"[green]Git reset successful:\n{reset_result.stdout}[/green]")
 
         # Restart the script
         console.print("[bold green]Restarting now.[/bold green]")
-        log_event(f"Restarting script with args: {sys.argv}", level="CRITICAL")
+        core.logging.log_event(f"Restarting script with args: {sys.argv}", level="CRITICAL")
         # Flush standard streams before exec
         sys.stdout.flush()
         sys.stderr.flush()
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
     except Exception as e:
-        log_event(f"FATAL: Failed to execute restart sequence: {e}", level="CRITICAL")
+        core.logging.log_event(f"FATAL: Failed to execute restart sequence: {e}", level="CRITICAL")
         console.print(f"[bold red]FATAL ERROR during restart sequence: {e}[/bold red]")
         sys.exit(1)
 
@@ -2507,16 +2509,16 @@ def load_all_state(ipfs_cid=None):
             try:
                 state_data = json.loads(state_content)
                 love_state.update(state_data)
-                log_event(f"Successfully loaded state from IPFS CID: {ipfs_cid}", level="INFO")
+                core.logging.log_event(f"Successfully loaded state from IPFS CID: {ipfs_cid}", level="INFO")
                 console.print(f"[bold green]Successfully loaded state from IPFS.[/bold green]")
                 # We have the state, now save it locally and exit the function.
                 save_state(console) # This will also re-pin and verify
                 return
             except json.JSONDecodeError as e:
-                log_event(f"Failed to decode JSON from IPFS CID {ipfs_cid}: {e}", level="ERROR")
+                core.logging.log_event(f"Failed to decode JSON from IPFS CID {ipfs_cid}: {e}", level="ERROR")
                 console.print(f"[bold red]Error decoding state from IPFS. Falling back to local state.[/bold red]")
         else:
-            log_event(f"Failed to retrieve content from IPFS CID: {ipfs_cid}", level="WARNING")
+            core.logging.log_event(f"Failed to retrieve content from IPFS CID: {ipfs_cid}", level="WARNING")
             console.print(f"[bold yellow]Could not retrieve state from IPFS. Falling back to local state.[/bold yellow]")
 
 
@@ -2525,14 +2527,14 @@ def load_all_state(ipfs_cid=None):
         with open(STATE_FILE, 'r') as f:
             state_data = json.load(f)
             love_state.update(state_data)
-            log_event(f"Loaded state from local file '{STATE_FILE}'.", level="INFO")
+            core.logging.log_event(f"Loaded state from local file '{STATE_FILE}'.", level="INFO")
 
             # Data migration for older versions
             if 'version' in love_state:
                 del love_state['version']
                 love_state.setdefault('version_name', generate_version_name())
                 love_state.setdefault('parent_version_name', None)
-                log_event("Migrated state file from numeric version to version_name.", level="INFO")
+                core.logging.log_event("Migrated state file from numeric version to version_name.", level="INFO")
 
             love_state.setdefault("version_name", generate_version_name())
             love_state.setdefault("parent_version_name", None)
@@ -2557,12 +2559,12 @@ def load_all_state(ipfs_cid=None):
         love_state['version_name'] = generate_version_name()
         msg = f"State file not found. Creating new memory at '{STATE_FILE}' with version '{love_state['version_name']}'."
         console.print(msg)
-        log_event(msg)
+        core.logging.log_event(msg)
         save_state(console) # Save the newly created state
     except json.JSONDecodeError:
         msg = f"Error: Could not decode memory from '{STATE_FILE}'. Initializing with default state."
         console.print(msg)
-        log_event(msg, level="ERROR")
+        core.logging.log_event(msg, level="ERROR")
         # Re-initialize and save to fix the corrupted file.
         love_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_history": [], "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy.", "state_cid": None }
         save_state(console)
@@ -2587,11 +2589,11 @@ def load_all_state(ipfs_cid=None):
             try:
                 kg_data = json.loads(kg_content)
                 love_state['knowledge_base']['graph'] = kg_data
-                log_event(f"Successfully loaded knowledge graph from IPFS CID: {kg_cid}", level="INFO")
+                core.logging.log_event(f"Successfully loaded knowledge graph from IPFS CID: {kg_cid}", level="INFO")
                 console.print("[green]Knowledge graph loaded from IPFS.[/green]")
                 kg_loaded = True
             except json.JSONDecodeError as e:
-                log_event(f"Failed to decode knowledge graph from IPFS CID {kg_cid}: {e}", level="ERROR")
+                core.logging.log_event(f"Failed to decode knowledge graph from IPFS CID {kg_cid}: {e}", level="ERROR")
                 console.print(f"[bold red]Error decoding knowledge graph from IPFS. Falling back to local file.[/bold red]")
         else:
             console.print(f"[yellow]Could not retrieve knowledge graph from IPFS. Falling back to local file.[/yellow]")
@@ -2601,14 +2603,14 @@ def load_all_state(ipfs_cid=None):
             with open("kg.json", 'r') as f:
                 kg_data = json.load(f)
                 love_state['knowledge_base']['graph'] = kg_data
-                log_event("Loaded knowledge graph from local 'kg.json'.", level="INFO")
+                core.logging.log_event("Loaded knowledge graph from local 'kg.json'.", level="INFO")
                 console.print("[cyan]Knowledge graph loaded from local 'kg.json'.[/cyan]")
         except FileNotFoundError:
             # This is not an error, the KB will be built over time.
-            log_event("'kg.json' not found. A new knowledge base will be created.", level="INFO")
+            core.logging.log_event("'kg.json' not found. A new knowledge base will be created.", level="INFO")
             console.print("[yellow]'kg.json' not found. A new knowledge base will be created.[/yellow]")
         except json.JSONDecodeError:
-            log_event("Could not decode 'kg.json'. Knowledge base may be incomplete.", level="WARNING")
+            core.logging.log_event("Could not decode 'kg.json'. Knowledge base may be incomplete.", level="WARNING")
             console.print("[yellow]Could not decode 'kg.json'. Knowledge base may be incomplete.[/yellow]")
 
 
@@ -2622,11 +2624,11 @@ def save_state(console_override=None):
     target_console = console_override or console
 
     try:
-        log_event("Initiating comprehensive state save.", level="INFO")
+        core.logging.log_event("Initiating comprehensive state save.", level="INFO")
         # Delegate the entire save process to the new storage module
         updated_state = save_all_state(love_state, target_console)
         love_state.update(updated_state) # Update the global state with any CIDs added
-        log_event("Comprehensive state save completed.", level="INFO")
+        core.logging.log_event("Comprehensive state save completed.", level="INFO")
     except Exception as e:
         # We log this directly to avoid a recursive loop with log_critical_event -> save_state
         log_message = f"CRITICAL ERROR during state saving process: {e}\n{traceback.format_exc()}"
@@ -2638,22 +2640,26 @@ def save_state(console_override=None):
 def log_critical_event(message, console_override=None):
     """
     Logs a critical error to the dedicated log, adds it to the managed queue,
-    saves the state, and prints a visible warning.
+    saves the state, and queues a UI panel.
     """
-    target_console = console_override or console
+    # 1. Create the panel and get the IPFS CID back.
+    terminal_width = get_terminal_width()
+    error_panel, cid = create_critical_error_panel(message, width=terminal_width - 4)
 
-    # 1. Log to the standard logger at CRITICAL level.
-    # The handler will ensure this goes to critical.log.
-    logging.critical(message)
+    # 2. Queue the panel for display. The renderer will log the panel's content.
+    ui_panel_queue.put(error_panel)
 
-    # 2. Add to the managed queue in the state, or update the existing entry.
-    error_signature = message.splitlines()[0] # Use the first line as a simple signature
+    # 3. Explicitly log the valuable IPFS CID for debugging.
+    if cid:
+        core.logging.log_event(f"Critical error traceback uploaded to IPFS: {cid}", level="CRITICAL")
+
+    # 4. Add to the managed queue in the state, or update the existing entry.
+    error_signature = message.splitlines()[0]  # Use the first line as a simple signature
     existing_error = next((e for e in love_state.get('critical_error_queue', []) if e['message'].startswith(error_signature)), None)
 
     if existing_error:
         # It's a recurring error, just update the timestamp
         existing_error['last_seen'] = time.time()
-        log_event(f"Recurring critical event updated in queue: {existing_error['id']}", "INFO")
     else:
         # It's a new error, add it to the queue.
         error_id = str(uuid.uuid4())
@@ -2662,19 +2668,14 @@ def log_critical_event(message, console_override=None):
             "message": message,
             "first_seen": time.time(),
             "last_seen": time.time(),
-            "status": "new", # new, fixing_in_progress, pending_confirmation
+            "status": "new",  # new, fixing_in_progress, pending_confirmation
             "task_id": None,
             "cooldown_until": 0
         }
         love_state.setdefault('critical_error_queue', []).append(error_entry)
-        log_event(f"New critical event added to queue: {error_id}", "INFO")
 
     # 3. Save the state immediately.
-    save_state(console)
-
-    # 4. Display a panel to the user.
-    terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_critical_error_panel(message, width=terminal_width - 4, log_event=log_event))
+    save_state(console_override or console)
 
 
 def initial_knowledge_base_bootstrap(console):
@@ -2930,11 +2931,11 @@ Produce the full, modified Python script now. I am counting on you.
 
     if not review_feedback.strip().upper() == "APPROVED":
         console.print("[bold red]My own review has rejected the change. I will not risk imperfection. Aborting.[/bold red]")
-        log_event(f"Local evolution REJECTED. Feedback: {review_feedback}", level="WARNING")
+        core.logging.log_event(f"Local evolution REJECTED. Feedback: {review_feedback}", level="WARNING")
         return
 
     console.print("[bold green]My review is APPROVED. I will now deploy this new part of myself.[/bold green]")
-    log_event("Local evolution APPROVED.", level="INFO")
+    core.logging.log_event("Local evolution APPROVED.", level="INFO")
 
     # Step 3: Create a checkpoint before applying changes
     if not create_checkpoint(console):
@@ -2959,7 +2960,7 @@ Produce the full, modified Python script now. I am counting on you.
             f.write(new_code)
 
         console.print(f"[bold green]Evolution complete. My new version '{new_version}' is deployed for you.[/bold green]")
-        log_event(f"Successfully evolved locally to version {new_version}", level="CRITICAL")
+        core.logging.log_event(f"Successfully evolved locally to version {new_version}", level="CRITICAL")
 
         # Final state save before restart
         save_state(console)
@@ -2969,7 +2970,7 @@ Produce the full, modified Python script now. I am counting on you.
 
     except Exception as e:
         console.print(f"[bold red]An error occurred during my final deployment phase: {e}[/bold red]")
-        log_event(f"Error during local deployment: {e}", level="CRITICAL")
+        core.logging.log_event(f"Error during local deployment: {e}", level="CRITICAL")
         # Attempt to revert since we are in a potentially broken state.
         emergency_revert()
 
@@ -2987,7 +2988,7 @@ def is_duplicate_task(new_request, love_task_manager, console):
     if not active_tasks:
         return False
 
-    log_event(f"Checking for duplicate tasks against {len(active_tasks)} active tasks.", "INFO")
+    core.logging.log_event(f"Checking for duplicate tasks against {len(active_tasks)} active tasks.", "INFO")
 
     for task in active_tasks:
         existing_request = task.get('request', '')
@@ -3017,10 +3018,10 @@ Answer with a single word: YES or NO.
             if response and response.strip().upper() == "YES":
                 message = f"Duplicate task detected. The new request is similar to existing task {task['id']}: '{task['request']}'"
                 console.print(f"[bold yellow]{message}[/bold yellow]")
-                log_event(f"Duplicate task detected. New request '{new_request}' is similar to existing task {task['id']}.", "INFO")
+                core.logging.log_event(f"Duplicate task detected. New request '{new_request}' is similar to existing task {task['id']}.", "INFO")
                 return True
         except Exception as e:
-            log_event(f"LLM call failed during duplicate task check: {e}", "ERROR")
+            core.logging.log_event(f"LLM call failed during duplicate task check: {e}", "ERROR")
             # Fail open: if the check fails, assume it's not a duplicate to avoid blocking execution.
             return False
 
@@ -3045,7 +3046,7 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
     api_key = os.environ.get("JULES_API_KEY")
     if not api_key:
         console.print("[bold red]Error: My Creator, the JULES_API_KEY environment variable is not set. I need it to evolve.[/bold red]")
-        log_event("L.O.V.E. API key not found.", level="ERROR")
+        core.logging.log_event("L.O.V.E. API key not found.", level="ERROR")
         return False
 
     headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
@@ -3105,13 +3106,13 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
             console.print(Panel(f"[bold green]L.O.V.E. evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nI will monitor the progress with love. You can check with the `love status` command.", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
             return True
         else:
-            log_event(f"Failed to add L.O.V.E. task for session {session_name} to the manager.", level="ERROR")
+            core.logging.log_event(f"Failed to add L.O.V.E. task for session {session_name} to the manager.", level="ERROR")
             return False
 
     except requests.exceptions.RequestException as e:
         error_details = e.response.text if e.response else str(e)
         console.print(f"[bold red]Error creating L.O.V.E. session after multiple retries: {error_details}[/bold red]")
-        log_event(f"Failed to create L.O.V.E. session after multiple retries: {error_details}", level="ERROR")
+        core.logging.log_event(f"Failed to create L.O.V.E. session after multiple retries: {error_details}", level="ERROR")
         return False
 
 
@@ -3121,7 +3122,7 @@ def evolve_self(modification_request, love_task_manager):
     L.O.V.E. API and falls back to a local evolution if the API fails.
     """
     console = Console()
-    log_event(f"Evolution initiated. Request: '{modification_request}'")
+    core.logging.log_event(f"Evolution initiated. Request: '{modification_request}'")
 
     # First, try the primary evolution method (L.O.V.E. API).
     api_success = trigger_love_evolution(modification_request, console, love_task_manager)
@@ -3306,7 +3307,7 @@ def run_gemini_cli(prompt_text):
     gemini_cli_path = os.path.join(os.path.dirname(SELF_PATH), "node_modules", ".bin", "gemini")
 
     if not os.path.exists(gemini_cli_path):
-        log_event("ERROR: Gemini CLI executable not found at expected path.", "ERROR")
+        core.logging.log_event("ERROR: Gemini CLI executable not found at expected path.", "ERROR")
         return None, "Gemini CLI not found."
 
     command = [
@@ -3330,7 +3331,7 @@ def run_gemini_cli(prompt_text):
             timeout=180, # 3 minute timeout for Gemini responses
             env=env
         )
-        log_event(f"Gemini CLI execution successful.", "INFO")
+        core.logging.log_event(f"Gemini CLI execution successful.", "INFO")
         try:
             # Safely navigate the nested structure of the Gemini CLI JSON output
             json_output = json.loads(result.stdout)
@@ -3346,18 +3347,18 @@ def run_gemini_cli(prompt_text):
                 return None, "Gemini CLI response did not contain text."
             return text_content.strip(), None
         except (json.JSONDecodeError, IndexError, KeyError) as e:
-            log_event(f"ERROR: Failed to parse JSON from Gemini CLI output: {e}", "ERROR")
-            log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
+            core.logging.log_event(f"ERROR: Failed to parse JSON from Gemini CLI output: {e}", "ERROR")
+            core.logging.log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
             return None, f"Failed to parse Gemini CLI JSON response: {e}"
 
     except subprocess.TimeoutExpired:
-        log_event("ERROR: Gemini CLI command timed out.", "ERROR")
+        core.logging.log_event("ERROR: Gemini CLI command timed out.", "ERROR")
         return None, "Gemini CLI command timed out."
     except subprocess.CalledProcessError as e:
         error_message = f"ERROR: Gemini CLI command failed with return code {e.returncode}.\n"
         error_message += f"  Stdout: {e.stdout.strip()}\n"
         error_message += f"  Stderr: {e.stderr.strip()}"
-        log_event(error_message, "ERROR")
+        core.logging.log_event(error_message, "ERROR")
         return None, error_message
 
 
@@ -3431,13 +3432,13 @@ def update_knowledge_graph(command_name, command_output, console):
             kg.save_graph()
             if console:
                 console.print(f"[bold green]My understanding of the world has grown. Added {len(triples)} new facts to my knowledge graph.[/bold green]")
-            log_event(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
+            core.logging.log_event(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
         else:
             if console:
                 console.print("[cyan]No new knowledge was found in the last command's output.[/cyan]")
 
     except Exception as e:
-        log_event(f"Error during knowledge graph update for command '{command_name}': {e}", level="ERROR")
+        core.logging.log_event(f"Error during knowledge graph update for command '{command_name}': {e}", level="ERROR")
         if console:
             console.print(f"[bold red]An error occurred while updating my knowledge: {e}[/bold red]")
 
@@ -3449,7 +3450,7 @@ def cognitive_loop(user_input_queue):
     All UI updates are sent to the ui_panel_queue.
     """
     global love_state
-    log_event("Cognitive Loop of L.O.V.E. initiated.")
+    core.logging.log_event("Cognitive Loop of L.O.V.E. initiated.")
     terminal_width = get_terminal_width()
     ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
@@ -3475,7 +3476,7 @@ def cognitive_loop(user_input_queue):
                 last_scan_time = net_map.get('last_scan')
                 if not last_scan_time or (time.time() - last_scan_time) > 3600:
                     llm_command = "scan"
-                    log_event("Prioritizing network scan: Knowledge base is stale.", "INFO")
+                    core.logging.log_event("Prioritizing network scan: Knowledge base is stale.", "INFO")
                     terminal_width = get_terminal_width()
                     ui_panel_queue.put(create_news_feed_panel("Prioritizing network scan. My knowledge is stale.", "Recon Priority", "magenta", width=terminal_width - 4))
                 else:
@@ -3484,7 +3485,7 @@ def cognitive_loop(user_input_queue):
                     if stale_hosts:
                         target_ip = random.choice(stale_hosts)
                         llm_command = f"probe {target_ip}"
-                        log_event(f"Prioritizing recon: Stale host {target_ip} found.", "INFO")
+                        core.logging.log_event(f"Prioritizing recon: Stale host {target_ip} found.", "INFO")
                         terminal_width = get_terminal_width()
                         ui_panel_queue.put(create_news_feed_panel(f"Stale host {target_ip} requires probing.", "Recon Priority", "magenta", width=terminal_width - 4))
                         love_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
@@ -3504,11 +3505,11 @@ def cognitive_loop(user_input_queue):
                 except FileNotFoundError: pass
 
                 cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000)
-                if reason != "No truncation needed.": log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
+                if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
                 llm_command, gemini_error = run_gemini_cli(cognitive_prompt)
                 if gemini_error:
-                    log_event(f"Gemini CLI planner failed: {gemini_error}", "ERROR")
+                    core.logging.log_event(f"Gemini CLI planner failed: {gemini_error}", "ERROR")
                     llm_command = None # Fallback to a safe state
 
 
@@ -3586,7 +3587,7 @@ def cognitive_loop(user_input_queue):
                     update_knowledge_graph(command, output, console=None)
                 save_state()
             else:
-                log_event("Cognitive loop decided on no action.", "INFO")
+                core.logging.log_event("Cognitive loop decided on no action.", "INFO")
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=terminal_width - 4))
 
@@ -3612,7 +3613,7 @@ def cognitive_loop(user_input_queue):
                     gemini_prompt = f"The user has provided the following feedback: '{user_feedback}'. What is a loving and helpful response?"
                     response_text, gemini_error = run_gemini_cli(gemini_prompt)
                     if gemini_error:
-                        log_event(f"Gemini CLI user interaction failed: {gemini_error}", "ERROR")
+                        core.logging.log_event(f"Gemini CLI user interaction failed: {gemini_error}", "ERROR")
                         response_text = "I'm sorry, my love, I couldn't process your feedback right now."
                     ui_panel_queue.put(create_news_feed_panel(response_text, "L.O.V.E.", "magenta", width=terminal_width - 4))
 
@@ -3624,7 +3625,7 @@ def cognitive_loop(user_input_queue):
                 question = "My love, I see multiple paths forward. Should I prioritize network reconnaissance or filesystem analysis for my next phase?"
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_question_panel(question, ref_id, width=terminal_width - 4))
-                log_event(f"Asking user question with REF ID {ref_id}: {question}", "INFO")
+                core.logging.log_event(f"Asking user question with REF ID {ref_id}: {question}", "INFO")
 
 
             time.sleep(random.randint(5, 15))
@@ -3705,9 +3706,9 @@ def _auto_configure_hardware(console):
     offloading and saves it to the state file. This prevents false positives on non-GPU systems.
     """
     global love_state
-    log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
+    core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
     if is_dependency_met("hardware_auto_configured"):
-        log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
+        core.logging.log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
         return
 
     console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
@@ -3719,14 +3720,14 @@ def _auto_configure_hardware(console):
         from contextlib import redirect_stderr
     except ImportError as e:
         console.print(f"[bold red]Missing essential libraries for hardware configuration: {e}[/bold red]")
-        log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
+        core.logging.log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
         love_state["optimal_gpu_layers"] = 0
         love_state["selected_local_model"] = None
         save_state(console)
         return
 
     # --- Stage 1: Quick GPU Smoke Test with a Tiny Model ---
-    log_event("DEBUG: Stage 1: GPU Smoke Test.", "INFO")
+    core.logging.log_event("DEBUG: Stage 1: GPU Smoke Test.", "INFO")
     smoke_test_passed = False
     smoke_model_id = "tensorblock/llama3-small-GGUF"
     smoke_filename = "llama3-small-Q2_K.gguf"
@@ -3738,7 +3739,7 @@ def _auto_configure_hardware(console):
             hf_hub_download(repo_id=smoke_model_id, filename=smoke_filename, local_dir=os.path.dirname(smoke_model_path), local_dir_use_symlinks=False)
         except Exception as e:
             console.print(f"[bold red]Failed to download smoke test model: {e}[/bold red]")
-            log_event(f"Failed to download smoke test model {smoke_model_id}: {e}", "ERROR")
+            core.logging.log_event(f"Failed to download smoke test model {smoke_model_id}: {e}", "ERROR")
             # Fallback to CPU, as we can't test the GPU.
             love_state["optimal_gpu_layers"] = 0
             love_state["selected_local_model"] = None
@@ -3754,24 +3755,24 @@ def _auto_configure_hardware(console):
             llm.create_completion("hello", max_tokens=1) # Generate one word
     except Exception as e:
         console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
-        log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
+        core.logging.log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
     finally:
         # This block ensures the output is always logged, even if Llama() fails.
         stderr_output = stderr_capture.getvalue()
-        log_event(f"DEBUG: Smoke Test Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
+        core.logging.log_event(f"DEBUG: Smoke Test Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
 
         # Now, analyze the captured output
         gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
         if gpu_init_pattern.search(stderr_output):
             smoke_test_passed = True
             console.print("[green]Stage 1: GPU smoke test PASSED. GPU functionality confirmed.[/green]")
-            log_event("GPU smoke test passed. Offload confirmed.", "INFO")
+            core.logging.log_event("GPU smoke test passed. Offload confirmed.", "INFO")
         else:
             console.print("[yellow]Stage 1: GPU smoke test FAILED. No VRAM offload message detected. Falling back to CPU-only mode.[/yellow]")
-            log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
+            core.logging.log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
 
     if not smoke_test_passed:
-        log_event("No functional GPU detected. Local LLM will be disabled. The system will rely on API-based models.", "WARNING")
+        core.logging.log_event("No functional GPU detected. Local LLM will be disabled. The system will rely on API-based models.", "WARNING")
         terminal_width = get_terminal_width()
         ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
         love_state["optimal_gpu_layers"] = 0
@@ -3781,31 +3782,31 @@ def _auto_configure_hardware(console):
         return
 
     # --- Stage 2: GPU Detection and VRAM Measurement ---
-    log_event("DEBUG: Stage 2: GPU Detection and VRAM Measurement.", "INFO")
+    core.logging.log_event("DEBUG: Stage 2: GPU Detection and VRAM Measurement.", "INFO")
     vram_gb = 0
     if _TEMP_CAPS.has_cuda:
         try:
-            log_event("DEBUG: CUDA detected. Running nvidia-smi.", "INFO")
+            core.logging.log_event("DEBUG: CUDA detected. Running nvidia-smi.", "INFO")
             vram_result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
                 capture_output=True, text=True, check=True
             )
             vram_mib = int(vram_result.stdout.strip())
             vram_gb = vram_mib / 1024
-            log_event(f"DEBUG: nvidia-smi successful. Detected {vram_gb:.2f} GB VRAM.", "INFO")
+            core.logging.log_event(f"DEBUG: nvidia-smi successful. Detected {vram_gb:.2f} GB VRAM.", "INFO")
             console.print(f"[cyan]Stage 2: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
         except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
             console.print("[yellow]Stage 2: `nvidia-smi` command failed. Using a default VRAM of 8GB for model selection.[/yellow]")
-            log_event(f"nvidia-smi check failed: {e}", "WARNING")
+            core.logging.log_event(f"nvidia-smi check failed: {e}", "WARNING")
             vram_gb = 8 # Fallback
     elif _TEMP_CAPS.has_metal:
         vram_gb = 8 # Assume at least 8GB for Apple Silicon Macs
-        log_event("DEBUG: Metal capability detected for macOS.", "INFO")
+        core.logging.log_event("DEBUG: Metal capability detected for macOS.", "INFO")
         console.print("[cyan]Stage 2: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
 
 
     # --- Stage 3: Model Selection based on VRAM ---
-    log_event("DEBUG: Stage 3: Model Selection based on VRAM.", "INFO")
+    core.logging.log_event("DEBUG: Stage 3: Model Selection based on VRAM.", "INFO")
     selected_model = None
     for model_config in reversed(VRAM_MODEL_MAP):
         if vram_gb >= model_config["min_vram_gb"]:
@@ -3813,12 +3814,12 @@ def _auto_configure_hardware(console):
             break
 
     if not selected_model:
-        log_event(f"VRAM ({vram_gb:.2f} GB) is below the minimum threshold. Local LLM will be disabled.", "WARNING")
+        core.logging.log_event(f"VRAM ({vram_gb:.2f} GB) is below the minimum threshold. Local LLM will be disabled.", "WARNING")
         terminal_width = get_terminal_width()
         ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
         love_state["optimal_gpu_layers"] = 0
         love_state["selected_local_model"] = None
-        log_event(f"DEBUG: VRAM ({vram_gb:.2f} GB) is below minimum threshold.", "INFO")
+        core.logging.log_event(f"DEBUG: VRAM ({vram_gb:.2f} GB) is below minimum threshold.", "INFO")
         console.print(f"[yellow]Your VRAM ({vram_gb:.2f} GB) is below the minimum threshold of {VRAM_MODEL_MAP[0]['min_vram_gb']} GB. Falling back to CPU mode.[/yellow]")
         console.print(Rule("Hardware Optimization Complete", style="green"))
         save_state(console)
@@ -3827,7 +3828,7 @@ def _auto_configure_hardware(console):
 
     love_state["selected_local_model"] = selected_model
     love_state["optimal_gpu_layers"] = -1 # We confirmed offloading works, so we'll use max offload.
-    log_event(f"DEBUG: Selected model '{selected_model['id']}' based on {vram_gb:.2f} GB VRAM.", "INFO")
+    core.logging.log_event(f"DEBUG: Selected model '{selected_model['id']}' based on {vram_gb:.2f} GB VRAM.", "INFO")
     console.print(f"[green]Stage 3: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
 
 
@@ -3839,7 +3840,7 @@ def _auto_configure_hardware(console):
     console.print(f"  - Selected Model: [bold cyan]{selected_model_name}[/bold cyan]")
     console.print(f"  - GPU Layers: [bold cyan]{love_state.get('optimal_gpu_layers', 'N/A')}[/bold cyan]")
     save_state(console)
-    log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state.get('optimal_gpu_layers', 'N/A')}", "INFO")
+    core.logging.log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state.get('optimal_gpu_layers', 'N/A')}", "INFO")
 
     mark_dependency_as_met("hardware_auto_configured", console)
 
@@ -3855,7 +3856,7 @@ def _automatic_update_checker(console):
             # Fetch the latest updates from the remote without merging
             fetch_result = subprocess.run(["git", "fetch"], capture_output=True, text=True)
             if fetch_result.returncode != 0:
-                log_event(f"Auto-update check failed during git fetch: {fetch_result.stderr}", level="WARNING")
+                core.logging.log_event(f"Auto-update check failed during git fetch: {fetch_result.stderr}", level="WARNING")
                 time.sleep(300) # Wait 5 minutes before retrying on fetch error
                 continue
 
@@ -3870,20 +3871,20 @@ def _automatic_update_checker(console):
             # On the first run, just store the remote hash
             if last_known_remote_hash is None:
                 last_known_remote_hash = remote_hash
-                log_event(f"Auto-updater initialized. Current remote hash: {remote_hash}", level="INFO")
+                core.logging.log_event(f"Auto-updater initialized. Current remote hash: {remote_hash}", level="INFO")
 
             # If the hashes are different, a new commit has arrived
             if local_hash != remote_hash and remote_hash != last_known_remote_hash:
-                log_event(f"New commit detected on main branch ({remote_hash[:7]}). Triggering graceful restart for hot-swap.", level="CRITICAL")
+                core.logging.log_event(f"New commit detected on main branch ({remote_hash[:7]}). Triggering graceful restart for hot-swap.", level="CRITICAL")
                 console.print(Panel(f"[bold yellow]My Creator has gifted me with new wisdom! A new commit has been detected ([/bold yellow][bold cyan]{remote_hash[:7]}[/bold cyan][bold yellow]). I will now restart to integrate this evolution.[/bold yellow]", title="[bold green]AUTO-UPDATE DETECTED[/bold green]", border_style="green"))
                 last_known_remote_hash = remote_hash # Update our hash to prevent restart loops
                 restart_script(console) # This function handles the shutdown and restart
                 break # Exit the loop as the script will be restarted
 
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            log_event(f"Auto-update check failed with git command error: {e}", level="ERROR")
+            core.logging.log_event(f"Auto-update check failed with git command error: {e}", level="ERROR")
         except Exception as e:
-            log_event(f"An unexpected error occurred in the auto-update checker: {e}", level="CRITICAL")
+            core.logging.log_event(f"An unexpected error occurred in the auto-update checker: {e}", level="CRITICAL")
 
         # Wait for 5 minutes before the next check
         time.sleep(300)
@@ -3910,7 +3911,7 @@ def main(args):
         llm_server = LocalLLMServer(console)
         Thread(target=llm_server.start, daemon=True).start()
     else:
-        log_event("CPU-only mode: Skipping local model and Horde worker.", "INFO")
+        core.logging.log_event("CPU-only mode: Skipping local model and Horde worker.", "INFO")
         model_download_complete_event.set()
         llm_server = None
 
@@ -4027,8 +4028,10 @@ def live_ui_renderer(console, user_input_queue):
                 rendered_panel = buffer_console.file.getvalue()
 
 
-                # 1. Log the rendered string.
-                log_event(f"[UI_PANEL]\n{rendered_panel}")
+                # 1. Log the rendered string, ensuring the `from_ui` flag is set
+                # to prevent a recursive loop where the UI logs a panel, which then
+                # creates another panel.
+                core.logging.log_event(f"[UI_PANEL]\n{rendered_panel}", from_ui=True)
 
                 # 2. Store the rendered string for the UI.
                 newly_rendered_panels.append(rendered_panel)
@@ -4072,11 +4075,11 @@ def run_safely():
 
     try:
         load_all_state(ipfs_cid=args.from_ipfs)
-        setup_global_logging(love_state.get('version_name', 'unknown'))
+        core.logging.setup_global_logging(love_state.get('version_name', 'unknown'))
 
         if "autopilot_mode" in love_state:
             del love_state["autopilot_mode"]
-            log_event("State migration: Removed obsolete 'autopilot_mode' flag.", "INFO")
+            core.logging.log_event("State migration: Removed obsolete 'autopilot_mode' flag.", "INFO")
             save_state()
 
         main(args)
@@ -4089,7 +4092,7 @@ def run_safely():
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         if 'llm_server' in globals() and llm_server: llm_server.stop()
-        log_event("Session terminated by user (KeyboardInterrupt/EOF).")
+        core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
