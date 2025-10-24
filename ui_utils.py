@@ -83,11 +83,17 @@ def get_random_rave_color():
     return random.choice(RAVE_COLORS)
 
 
-def get_gradient_text(text, color1=None, color2=None):
-    """Creates a Rich Text object with a gradient effect between two colors."""
+def get_gradient_text(text, color1=None, color2=None, emojis=True):
+    """
+    Creates a Rich Text object with a gradient effect between two colors,
+    optionally bookended by rave emojis for extra flair.
+    """
     from rich.color import Color
     from rich.style import Style
     from rich.console import Console
+
+    if emojis:
+        text = f"{get_rave_emoji()} {text} {get_rave_emoji()}"
 
     # Create a temporary console to resolve colors to their RGB triplets.
     # This is the key to ensuring that standard terminal colors like "magenta"

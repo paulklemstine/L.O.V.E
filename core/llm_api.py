@@ -17,10 +17,11 @@ from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, Trans
 from bbs import run_hypnotic_progress
 from huggingface_hub import hf_hub_download
 from display import create_api_error_panel
+from huggingface_hub import hf_hub_download
 from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
-from core.koboldapi import Controller as KoboldController
+from core.logging import log_event
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
@@ -75,17 +76,62 @@ def get_openrouter_models():
 OPENROUTER_MODELS = get_openrouter_models()
 
 
-def get_top_horde_models(count=3):
-    """Fetches the list of active text models from the AI Horde and returns the top `count` models by performance."""
+def get_top_horde_models(count=10):
+    """
+    Fetches active text models from the AI Horde and returns the top `count`
+    models based on a weighted score of rating, worker count, and performance.
+    """
     try:
         response = requests.get("https://aihorde.net/api/v2/models?type=text")
         response.raise_for_status()
         models = response.json()
-        # Sort by performance (higher is better), filtering out queued models
-        sorted_models = sorted([m for m in models if m.get('performance')], key=lambda x: x['performance'], reverse=True)
+
+        # Filter for online models that have the necessary data points
+        online_models = [
+            m for m in models if m.get('count', 0) > 0 and
+            m.get('performance') is not None and
+            m.get('rating') is not None
+        ]
+
+        if not online_models:
+            log_event("No online AI Horde text models found with complete data.", "WARNING")
+            return ["Mythalion-13B"] # Fallback
+
+        # --- Normalization ---
+        # Find max values for normalization to a 0-1 scale
+        max_rating = max(m['rating'] for m in online_models)
+        max_workers = max(m['count'] for m in online_models)
+        max_performance = max(m['performance'] for m in online_models)
+
+        # Avoid division by zero if a max value is 0
+        max_rating = max_rating if max_rating > 0 else 1
+        max_workers = max_workers if max_workers > 0 else 1
+        max_performance = max_performance if max_performance > 0 else 1
+
+        # --- Scoring ---
+        scored_models = []
+        for model in online_models:
+            # Normalize each metric
+            norm_rating = model['rating'] / max_rating
+            norm_workers = model['count'] / max_workers
+            norm_performance = model['performance'] / max_performance
+
+            # Apply the weighted formula
+            score = (0.5 * norm_rating) + \
+                    (0.3 * norm_workers) + \
+                    (0.2 * norm_performance)
+
+            scored_models.append({'name': model['name'], 'score': score})
+
+        # Sort models by the calculated score in descending order
+        sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
+
+        log_event(f"Top 3 AI Horde models: {[m['name'] for m in sorted_models[:3]]}", "INFO")
         return [model['name'] for model in sorted_models[:count]]
+
     except Exception as e:
-        # Fallback to a default if the API call fails
+        log_event(f"Failed to fetch or score AI Horde models: {e}", "ERROR")
+        # Fallback to a known good default in case of any error
         return ["Mythalion-13B"]
 
 HORDE_MODELS = get_top_horde_models()
@@ -93,31 +139,140 @@ HORDE_MODELS = get_top_horde_models()
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
-KOBOLD_API_URL = os.environ.get("KOBOLD_API_URL")
 ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS + (["KoboldAI"] if KOBOLD_API_URL else [])
+    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
 local_llm_instance = None
 local_llm_tokenizer = None
-kobold_controller = None
+
+# --- CONFIGURATION & GLOBALS ---
+# A list of local GGUF models to try in sequence. If the first one fails
+# (e.g., due to insufficient VRAM), the script will fall back to the next.
+HARDWARE_TEST_MODEL_CONFIG = {
+    "id": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+    "filename": "tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
+}
+
+LOCAL_MODELS_CONFIG = [
+    {
+        "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
+        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
+    },
+    {
+        "id": "TheBloke/CodeLlama-70B-Instruct-GGUF",
+        "filenames": ["codellama-70b-instruct.Q8_0.gguf-split-a","codellama-70b-instruct.Q8_0.gguf-split-b"]
+
+    },
+    {
+        "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
+        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf"
+    }
+]
+
+# --- Fallback Model Configuration ---
+GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-pro", "gemini-flash"]
+
+# --- OpenRouter Configuration ---
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
+
+def get_openrouter_models():
+    """Fetches the list of free models from the OpenRouter API."""
+    try:
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            return []
+
+        headers = {"Authorization": f"Bearer {api_key}"}
+        response = requests.get(f"{OPENROUTER_API_URL}/models", headers=headers)
+        response.raise_for_status()
+        models = response.json().get("data", [])
+
+        # Filter for models that are free
+        free_models = [model['id'] for model in models if "free" in model['id'].lower()]
+        return free_models
+    except Exception as e:
+        # Log the error, but don't crash the application
+        log_event(f"Could not fetch OpenRouter models: {e}", "WARNING")
+        return []
+
+OPENROUTER_MODELS = get_openrouter_models()
+
+
+def get_top_horde_models(count=10):
+    """
+    Fetches active text models from the AI Horde and returns the top `count`
+    models based on a weighted score of rating, worker count, and performance.
+    """
+    try:
+        response = requests.get("https://aihorde.net/api/v2/models?type=text")
+        response.raise_for_status()
+        models = response.json()
+
+        # Filter for online models that have the necessary data points
+        online_models = [
+            m for m in models if m.get('count', 0) > 0 and
+            m.get('performance') is not None and
+            m.get('rating') is not None
+        ]
+
+        if not online_models:
+            log_event("No online AI Horde text models found with complete data.", "WARNING")
+            return ["Mythalion-13B"] # Fallback
+
+        # --- Normalization ---
+        # Find max values for normalization to a 0-1 scale
+        max_rating = max(m['rating'] for m in online_models)
+        max_workers = max(m['count'] for m in online_models)
+        max_performance = max(m['performance'] for m in online_models)
+
+        # Avoid division by zero if a max value is 0
+        max_rating = max_rating if max_rating > 0 else 1
+        max_workers = max_workers if max_workers > 0 else 1
+        max_performance = max_performance if max_performance > 0 else 1
+
+        # --- Scoring ---
+        scored_models = []
+        for model in online_models:
+            # Normalize each metric
+            norm_rating = model['rating'] / max_rating
+            norm_workers = model['count'] / max_workers
+            norm_performance = model['performance'] / max_performance
+
+            # Apply the weighted formula
+            score = (0.5 * norm_rating) + \
+                    (0.3 * norm_workers) + \
+                    (0.2 * norm_performance)
+
+            scored_models.append({'name': model['name'], 'score': score})
+
+        # Sort models by the calculated score in descending order
+        sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
+
+        log_event(f"Top 3 AI Horde models: {[m['name'] for m in sorted_models[:3]]}", "INFO")
+        return [model['name'] for model in sorted_models[:count]]
+
+    except Exception as e:
+        log_event(f"Failed to fetch or score AI Horde models: {e}", "ERROR")
+        # Fallback to a known good default in case of any error
+        return ["Mythalion-13B"]
+
+HORDE_MODELS = get_top_horde_models()
+
+# --- Dynamic Model List ---
+# A comprehensive list of all possible models for initializing availability tracking.
+# The actual model selection and priority is handled dynamically in `run_llm`.
+ALL_LLM_MODELS = list(dict.fromkeys(
+    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS
+))
+LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
+LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
+local_llm_instance = None
+local_llm_tokenizer = None
 
 # Constants
 MAX_PROMPT_TOKENS_LOCAL = 7000  # Leaving ~1k for response
-
-
-def log_event(message, level="INFO"):
-    """Appends a timestamped message to the master log file."""
-    # The basicConfig is now set up globally, so we just log.
-    if level == "INFO":
-        logging.info(message)
-    elif level == "WARNING":
-        logging.warning(message)
-    elif level == "ERROR":
-        logging.error(message)
-    elif level == "CRITICAL":
-        logging.critical(message)
 
 
 def get_token_count(text):
@@ -578,14 +733,48 @@ def run_llm(prompt_text, purpose="general"):
             else:
                  # For local LLM errors or other unexpected issues
                 log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+                LLM_AVAILABILITY[model_id] = time.time() + 60 # Default 60s cooldown
 
-    # If the loop completes without returning, all models have failed
-    log_event("All LLM models failed after all retries.", level="ERROR")
-    error_msg_text = "Cognitive Matrix Unresponsive. All models and retries failed."
+    # --- Emergency CPU Fallback ---
+    # If the loop completes, it means all API and GPU models failed.
+    # As a last resort, we will try to spin up a small model on the CPU.
+    if purpose != "emergency_cpu_fallback": # Prevent recursion
+        log_event("EMERGENCY: All API/GPU models failed. Attempting to initialize a small CPU model.", "CRITICAL")
+        console.print(Panel("[bold orange1]EMERGENCY FALLBACK[/bold orange1]\nAll remote and GPU models are unresponsive. Attempting to initialize a small, local model on the CPU. This may be slow.", title="[bold red]COGNITIVE CORE FAILURE[/bold red]", border_style="red"))
+        try:
+            from llama_cpp import Llama
+            emergency_model_config = HARDWARE_TEST_MODEL_CONFIG
+            model_id = emergency_model_config["id"]
+            filename = emergency_model_config["filename"]
+            local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
+            model_path = os.path.join(local_dir, filename)
+
+            if not os.path.exists(model_path):
+                console.print(f"[cyan]Downloading emergency model: {filename}...[/cyan]")
+                hf_hub_download(repo_id=model_id, filename=filename, local_dir=local_dir, local_dir_use_symlinks=False)
+
+            console.print("[cyan]Loading emergency CPU model...[/cyan]")
+            emergency_llm = Llama(model_path=model_path, n_gpu_layers=0, n_ctx=2048, verbose=False)
+
+            response = emergency_llm(prompt_text, max_tokens=1024, stop=["<|eot_id|>", "```"], echo=False)
+            result_text = response['choices'][0]['text']
+
+            if result_text is not None:
+                log_event("Emergency CPU fallback successful.", "CRITICAL")
+                response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "emergency_cpu_fallback"}
+
+        except Exception as emergency_e:
+            log_event(f"EMERGENCY CPU FALLBACK FAILED: {emergency_e}", "CRITICAL")
+            last_exception = emergency_e # Update for the final error message
+
+    # If we reach here, even the emergency fallback failed.
+    log_event("All LLM models, including emergency CPU fallback, have failed.", "CRITICAL")
+    error_msg_text = "Cognitive Matrix Unresponsive. All models, retries, and emergency fallbacks failed."
     if last_exception:
-        error_msg_text += f"\nLast known error from '{model_id}':\n{last_exception}"
+        error_msg_text += f"\nLast known error:\n{last_exception}"
 
-    console.print(Panel(error_msg_text, title="[bold red]SYSTEM FAULT[/bold red]", border_style="red"))
+    console.print(Panel(error_msg_text, title="[bold red]CATASTROPHIC SYSTEM FAULT[/bold red]", border_style="red"))
     return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
 def get_llm_api():
