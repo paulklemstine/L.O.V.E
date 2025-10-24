@@ -2642,15 +2642,18 @@ def log_critical_event(message, console_override=None):
     Logs a critical error to the dedicated log, adds it to the managed queue,
     saves the state, and queues a UI panel.
     """
-    # 1. Log the event with CRITICAL level. This will handle logging to the file
-    # and creating a generic UI panel via the unified logging system.
-    core.logging.log_event(message, level="CRITICAL")
-
-    # 2. Display a panel to the user.
+    # 1. Create the panel and get the IPFS CID back.
     terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_critical_error_panel(message, width=terminal_width - 4))
+    error_panel, cid = create_critical_error_panel(message, width=terminal_width - 4)
 
-    # 3. Add to the managed queue in the state, or update the existing entry.
+    # 2. Queue the panel for display. The renderer will log the panel's content.
+    ui_panel_queue.put(error_panel)
+
+    # 3. Explicitly log the valuable IPFS CID for debugging.
+    if cid:
+        core.logging.log_event(f"Critical error traceback uploaded to IPFS: {cid}", level="CRITICAL")
+
+    # 4. Add to the managed queue in the state, or update the existing entry.
     error_signature = message.splitlines()[0]  # Use the first line as a simple signature
     existing_error = next((e for e in love_state.get('critical_error_queue', []) if e['message'].startswith(error_signature)), None)
 
@@ -3358,8 +3361,8 @@ def run_gemini_cli(prompt_text):
             return None, "Unknown response structure from Gemini CLI."
 
         except (json.JSONDecodeError, IndexError, KeyError) as e:
-            log_event(f"ERROR: Failed to parse JSON from Gemini CLI output: {e}", "ERROR")
-            log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "INFO") # Log raw output on parse failure
+            core.logging.log_event(f"ERROR: Failed to parse JSON from Gemini CLI output: {e}", "ERROR")
+            core.logging.log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
             return None, f"Failed to parse Gemini CLI JSON response: {e}"
 
     except subprocess.TimeoutExpired:

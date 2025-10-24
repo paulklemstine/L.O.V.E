@@ -40,19 +40,14 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
         logging.info(message)  # Default to INFO
 
     # If the UI queue is configured and this log didn't come from the UI,
-    # create a panel and send it to the display.
+    # create a simple string and send it to the display.
     if ui_panel_queue is not None and not from_ui:
         try:
-            # Local imports to prevent circular dependencies
-            from display import create_news_feed_panel, get_terminal_width
-            # We create a generic "Log Event" panel
-            terminal_width = get_terminal_width()
-            # Use a neutral color for generic log events to distinguish them
-            panel = create_news_feed_panel("Log", message, "grey70", width=terminal_width - 4)
-            ui_panel_queue.put(panel)
-        except (ImportError, Exception) as e:
+            # Create a simple formatted string instead of a panel
+            log_line = f"[{level.upper()}] {message}"
+            ui_panel_queue.put(log_line)
+        except Exception as e:
             # If this fails, we can't display it, but we should log the failure.
-            # We must set from_ui=True here to prevent a loop!
             logging.error(f"Failed to queue log event for UI display: {e}")
 
 

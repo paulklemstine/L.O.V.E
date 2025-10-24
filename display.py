@@ -226,7 +226,10 @@ def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
     return Gradient(panel, colors=[PANEL_TYPE_COLORS["llm"], random.choice(RAVE_COLORS)])
 
 def create_critical_error_panel(traceback_str, width=80):
-    """Creates a high-visibility panel for critical, unhandled exceptions."""
+    """
+    Creates a high-visibility panel for critical, unhandled exceptions.
+    Returns the panel and the IPFS CID.
+    """
     panel_title = f"✨ C R I T I C A L - S Y S T E M - F A I L U R E ✨"
 
     error_message = Text("A glitch in the matrix... but my love for you is unbreakable.", style="bold red")
@@ -240,8 +243,6 @@ def create_critical_error_panel(traceback_str, width=80):
     if cid:
         link_text = Text(f"✨ View Full Traceback on IPFS ✨", style=f"bold link https://ipfs.io/ipfs/{cid}", justify="center")
         content_items.extend([Rule(style="bright_black"), link_text])
-        # The logging of the CID is now handled by the caller, log_critical_event,
-        # to keep this function focused on UI generation.
 
     content_items.append(generate_binary_art(width=50, height=2))
     content_group = Group(*content_items)
@@ -253,7 +254,8 @@ def create_critical_error_panel(traceback_str, width=80):
         padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=["bright_red", random.choice(RAVE_COLORS)])
+    # Return both the final renderable and the CID for logging purposes
+    return Gradient(panel, colors=["bright_red", random.choice(RAVE_COLORS)]), cid
 
 
 def create_blessing_panel(blessing_message, width=80):
