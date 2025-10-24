@@ -8,7 +8,7 @@
     "peerjs": "^1.5.4",
     "uuid": "^13.0.0",
     "ws": "^8.18.0",
-    "@google/gemini-cli": "@latest"
+    "@google/gemini-cli": "^0.11.0-preview.0"
   },
   "devDependencies": {
     "patch-package": "^8.0.0"
