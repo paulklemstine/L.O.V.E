@@ -4255,3 +4255,5 @@ def run_safely():
 
 if __name__ == "__main__":
     run_safely()
+
+# End of love.py
