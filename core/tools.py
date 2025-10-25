@@ -52,6 +52,10 @@ class ToolRegistry:
         """Returns a dictionary of all registered tools."""
         return self._tools
 
+    def get_tool_names(self) -> list[str]:
+        """Returns a list of all registered tool names."""
+        return list(self._tools.keys())
+
 class SecureExecutor:
     """
     A secure environment for running tool code.
