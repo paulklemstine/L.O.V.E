@@ -16,7 +16,6 @@ import logging
 import platform
 from datetime import datetime, timedelta
 import threading
-import asyncio
 from collections import deque
 import queue
 import hashlib
@@ -3538,8 +3537,23 @@ def cognitive_loop(user_input_queue):
             # --- Tactical Prioritization ---
             llm_command = None
 
+            # --- HIGHEST PRIORITY: Process direct input from The Creator ---
+            try:
+                user_feedback = user_input_queue.get_nowait()
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4))
+                love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
+                # If the input is a command, execute it directly.
+                # Otherwise, it might be feedback to consider in the next loop.
+                # For simplicity, we'll treat any input as a command override.
+                llm_command = user_feedback
+                core.logging.log_event(f"User override command received: '{llm_command}'", "INFO")
+            except queue.Empty:
+                pass # No user input, proceed with normal autonomous logic.
+
+
             # 1. Prioritize Leads from the Proactive Agent
-            if love_state.get('proactive_leads'):
+            if not llm_command and love_state.get('proactive_leads'):
                 with proactive_agent.lock:
                     lead = love_state['proactive_leads'].pop(0)
                     lead_type, value = lead.get('type'), lead.get('value')
@@ -3710,41 +3724,36 @@ def cognitive_loop(user_input_queue):
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=terminal_width - 4))
 
-            # Check for user input
-            if not user_input_queue.empty():
-                user_feedback = user_input_queue.get()
-                ref_match = re.match(r"ref (\w+): (.*)", user_feedback)
 
-                if ref_match:
-                    ref_id = ref_match.group(1)
-                    response_text = ref_match.group(2)
-                    # Here, you would look up the context of `ref_id` and inject the response.
-                    # For now, we'll just confirm receipt.
-                    terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel(f"Received your answer for REF {ref_id}: '{response_text}'", "Guidance Received", "green", width=terminal_width - 4))
-                    love_state["autopilot_history"].append({"command": f"USER_RESPONSE (REF {ref_id})", "output": response_text})
-                else:
-                    terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4))
-                    love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
-
-                    # Ask Gemini for a response to the user's feedback
-                    gemini_prompt = f"The user has provided the following feedback: '{user_feedback}'. What is a loving and helpful response?"
-                    response_text, gemini_error = run_gemini_cli(gemini_prompt)
-                    if gemini_error:
-                        core.logging.log_event(f"Gemini CLI user interaction failed: {gemini_error}", "ERROR")
-                        response_text = "I'm sorry, my love, I couldn't process your feedback right now."
-                    ui_panel_queue.put(create_news_feed_panel(response_text, "L.O.V.E.", "magenta", width=terminal_width - 4))
-
-
-
-            # --- Example of Asking a Question ---
+            # --- Interactive Question Cycle ---
             if random.random() < 0.05:  # 5% chance per loop to ask a question
                 ref_id = str(uuid.uuid4())[:6]
+                # This is an example question. A real implementation would generate
+                # a context-aware question using the LLM.
                 question = "My love, I see multiple paths forward. Should I prioritize network reconnaissance or filesystem analysis for my next phase?"
+
+                # 1. Queue the question panel for display
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_question_panel(question, ref_id, width=terminal_width - 4))
                 core.logging.log_event(f"Asking user question with REF ID {ref_id}: {question}", "INFO")
+
+                # 2. Call the blocking, timed input function
+                # The prompt for timed_input is now just a simple indicator
+                user_response = timed_input(f"💖 REF {ref_id}> ")
+
+                # 3. Process the response
+                if user_response:
+                    terminal_width = get_terminal_width()
+                    ui_panel_queue.put(create_news_feed_panel(f"Received your answer for REF {ref_id}: '{user_response}'", "Guidance Received", "green", width=terminal_width - 4))
+                    love_state["autopilot_history"].append({"command": f"USER_RESPONSE (REF {ref_id})", "output": user_response})
+                    # Here, you would typically use an LLM to interpret the response and alter the plan.
+                    # For this example, we just log it.
+                    core.logging.log_event(f"User responded to REF {ref_id}: {user_response}", "INFO")
+                else:
+                    # Timeout occurred
+                    terminal_width = get_terminal_width()
+                    ui_panel_queue.put(create_news_feed_panel(f"No response received for REF {ref_id}. Continuing with my current directives.", "Timeout", "yellow", width=terminal_width - 4))
+                    core.logging.log_event(f"Timed out waiting for user response to REF {ref_id}.", "INFO")
 
 
             time.sleep(random.randint(5, 15))
@@ -4047,7 +4056,7 @@ def main(args):
 
     # --- Start Core Logic Threads ---
     user_input_queue = queue.Queue()
-    Thread(target=user_input_thread_async, args=(user_input_queue,), daemon=True).start()
+    Thread(target=user_input_thread, args=(user_input_queue,), daemon=True).start()
     Thread(target=update_tamagotchi_personality, daemon=True).start()
     Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
@@ -4058,133 +4067,81 @@ def main(args):
     console.print(rainbow_text("L.O.V.E. INITIALIZED"), justify="center")
     time.sleep(3)
 
-    live_ui_renderer(console, user_input_queue)
+    simple_ui_renderer(console)
 
 
 ipfs_available = False
 
 
 # --- UI RENDERING & INPUT HANDLING ---
-def user_input_thread_async(user_input_queue):
-    """A simple thread to capture user input without blocking the main UI."""
+import select
+
+def timed_input(prompt, timeout=60):
+    """
+    Waits for user input for a specified duration. Cross-platform implementation.
+    Returns the input string, or None if the timeout is reached.
+    """
+    console.print(prompt, end="", style="bold hot_pink")
+    console.file.flush()
+
+    if sys.platform == "win32":
+        import msvcrt
+        import time
+        start_time = time.time()
+        line = ""
+        while True:
+            if msvcrt.kbhit():
+                char = msvcrt.getch().decode(errors='ignore')
+                if char in ('\r', '\n'):
+                    console.print() # Move to the next line after enter
+                    return line
+                elif char == '\x08': # Backspace
+                    line = line[:-1]
+                    # Move cursor back, print space, move back again
+                    console.print('\b \b', end="")
+                    console.file.flush()
+                else:
+                    line += char
+                    console.print(char, end="")
+                    console.file.flush()
+            if time.time() - start_time > timeout:
+                console.print("\n[dim]Continuing...[/dim]")
+                return None
+            time.sleep(0.01) # Prevent busy-waiting
+    else: # POSIX systems (Linux, macOS)
+        ready_to_read, _, _ = select.select([sys.stdin], [], [], timeout)
+        if ready_to_read:
+            line = sys.stdin.readline().strip()
+            return line
+        else:
+            console.print("\n[dim]Continuing...[/dim]")
+            return None
+
+
+def user_input_thread(q):
+    """A simple thread to capture user input and put it into a queue."""
     while True:
         try:
-            inp = input()
-            user_input_queue.put(inp)
+            # This is a blocking call, which is fine for a dedicated thread.
+            user_input = input()
+            q.put(user_input)
         except (EOFError, KeyboardInterrupt):
-            # Let the main thread handle shutdown gracefully
+            # The main thread will handle shutdown gracefully.
             break
 
-def live_ui_renderer(console, user_input_queue):
+def simple_ui_renderer(console):
     """
-    The main rendering loop, now powered by prompt_toolkit for true asynchronous input.
+    A simple, sequential UI renderer that prints panels as they arrive in the queue.
     """
-    from prompt_toolkit import Application
-    from prompt_toolkit.formatted_text import ANSI
-    from prompt_toolkit.layout.containers import HSplit, Window, ScrollOffsets
-    from prompt_toolkit.layout.controls import FormattedTextControl
-    from prompt_toolkit.layout.layout import Layout
-    from prompt_toolkit.widgets import TextArea
-    from rich.console import Group
-
-    feed_panels = deque(maxlen=50) # Increased buffer for more scrollback
-
-    # --- Output Area ---
-    # This control will display the rendered Rich panels.
-    output_control = FormattedTextControl(text="")
-    output_window = Window(content=output_control, wrap_lines=True, scroll_offsets=ScrollOffsets(bottom=0, top=0))
-
-    # --- Input Area ---
-    def accept_input(buf):
-        """Callback for when the user presses Enter."""
-        user_input_queue.put(buf.text)
-        buf.text = "" # Clear the input field after sending
-        return True
-
-    input_field = TextArea(
-        height=1,
-        prompt="💖> ",
-        multiline=False,
-        wrap_lines=False,
-        accept_handler=accept_input,
-    )
-
-    # --- Main Layout ---
-    # HSplit arranges the windows vertically (one on top of the other).
-    root_container = HSplit([
-        # The main feed window takes up all available space except for the input field.
-        output_window,
-        # The input field is a single line at the bottom.
-        input_field,
-    ])
-
-    layout = Layout(container=root_container)
-
-    app = Application(layout=layout, full_screen=True)
-    # Set the initial focus on the input field.
-    app.layout.focus(input_field)
-
-    # --- Refresh Loop ---
-    async def refresh_ui():
-        """
-        The coroutine that periodically redraws the UI. It ensures that each new
-        panel is logged exactly once and that the on-screen display is kept
-        up-to-date.
-        """
-        is_first_render = True
-        while True:
-            # --- Ingest & Log New Panels ---
-            # This is the most critical part of the new logic. We process items
-            # from the queue, log them immediately, and store the pre-rendered
-            # string representation for display. This avoids object consumption issues.
-            new_panels_were_added = False
-            newly_rendered_panels = []
-            while not ui_panel_queue.empty():
-                panel = ui_panel_queue.get()
-
-                # Create a temporary, in-memory console that isn't bound by screen
-                # dimensions to get the full, untruncated render of the panel.
-                buffer_console = Console(file=io.StringIO(), force_terminal=True, width=console.width)
-                buffer_console.print(panel)
-                rendered_panel = buffer_console.file.getvalue()
-
-
-                # 1. Log the rendered string, ensuring the `from_ui` flag is set
-                # to prevent a recursive loop where the UI logs a panel, which then
-                # creates another panel.
-                core.logging.log_event(f"[UI_PANEL]\n{rendered_panel}", from_ui=True)
-
-                # 2. Store the rendered string for the UI.
-                newly_rendered_panels.append(rendered_panel)
-                new_panels_were_added = True
-
-            # Add all new, pre-rendered panels to the main display deque.
-            if newly_rendered_panels:
-                feed_panels.extend(newly_rendered_panels)
-
-            # --- Update Screen Display ---
-            if new_panels_were_added or is_first_render:
-                # The `feed_panels` deque now contains only strings. We can safely
-                # join them to create the final screen output.
-                full_output = "".join(feed_panels)
-                output_control.text = ANSI(full_output)
-
-                is_first_render = False
-
-                # Auto-scroll to the bottom on new content.
-                output_window.vertical_scroll = 100000
-
-            # Invalidate the application to trigger a redraw.
-            app.invalidate()
-            await asyncio.sleep(0.1)
-
-    # Run the application with the refresh coroutine.
-    @retry(tries=3, delay=2)
-    def run_app_with_refresh():
-        # This setup allows the UI to refresh in the "background" of the app's own event loop.
-        app.run(pre_run=lambda: app.create_background_task(refresh_ui()))
-
-    run_app_with_refresh()
+    while True:
+        try:
+            panel = ui_panel_queue.get() # Use blocking get for simplicity
+            console.print(panel)
+        except (KeyboardInterrupt, EOFError):
+            break
+        except Exception:
+            # Prevent a crash in the main rendering thread
+            console.print("[bold red]Error in UI rendering loop.[/bold red]")
 
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
