@@ -612,6 +612,10 @@ from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
 from subversive import transform_request
+from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
+from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
+from core.talent_utils.manager import ContactManager
+from core.talent_utils.matcher import OpportunityMatcher, encrypt_params
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3233,6 +3237,7 @@ My current system state:
 - `ifconfig`: Display network interface configuration.
 - `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
 - `generate_image <prompt>`: Generate an image using the AI Horde.
+- `talent_scout <keywords>`: Find and analyze creative professionals based on keywords.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `quit`: Shut down the script.
 
@@ -3586,6 +3591,48 @@ def cognitive_loop(user_input_queue):
                     output = ReasoningEngine(love_state, console=None).analyze_and_prioritize()
                 elif command == "generate_image":
                     output = generate_image(" ".join(args))
+                elif command == "talent_scout":
+                    keywords = args
+                    if not keywords:
+                        error = "No keywords provided for talent_scout."
+                    else:
+                        terminal_width = get_terminal_width()
+                        ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4))
+
+                        # 1. Configure and run the aggregator
+                        filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
+                        aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky"], ethical_filters=filters)
+                        profiles = aggregator.search_and_collect()
+
+                        if not profiles:
+                            output = "Talent scout protocol complete. No profiles found for the given keywords."
+                        else:
+                            # 2. Configure and run the analyzer
+                            scorers = {
+                                "aesthetics": AestheticScorer(),
+                                "professionalism": ProfessionalismRater()
+                            }
+                            analyzer = TraitAnalyzer(scorers=scorers)
+
+                            analysis_results = []
+                            for profile in profiles:
+                                # In a real implementation, we would fetch posts for each profile.
+                                # For now, we'll pass an empty list.
+                                posts = []
+                                scores = analyzer.analyze(profile, posts)
+                                analysis_results.append({
+                                    "profile": profile,
+                                    "scores": scores
+                                })
+
+                            # 3. Log results
+                            output = f"Talent scout protocol complete. Analyzed {len(profiles)} profiles.\n"
+                            output += json.dumps(analysis_results, indent=2)
+
+                            bias_warnings = analyzer.detect_bias()
+                            if bias_warnings:
+                                output += "\n\nBias Warnings:\n" + "\n".join(bias_warnings)
+
                 elif command == "test_evolution":
                     branch_name = args[0]
                     repo_owner, repo_name = get_git_repo_info()

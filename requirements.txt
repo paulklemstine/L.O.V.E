@@ -26,3 +26,4 @@ eth-typing
 rich-gradient
 prompt-toolkit
 customtkinter
+atproto
