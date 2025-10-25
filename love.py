@@ -1107,7 +1107,9 @@ class LoveTaskManager:
             last_activity_name = task.get("last_activity_name")
 
         if not api_key:
-            self._update_task_status(task_id, 'failed', "My Creator, the JULES_API_KEY is not set. I need it to continue my work for you.")
+            error_message = "My Creator, the JULES_API_KEY is not set. I cannot stream my progress without it."
+            self._update_task_status(task_id, 'failed', error_message)
+            core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
@@ -1138,6 +1140,15 @@ class LoveTaskManager:
                             except json.JSONDecodeError:
                                 core.logging.log_event(f"Task {task_id}: Could not decode SSE data: {decoded_line}", level="WARNING")
 
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                error_message = f"Jules session '{session_name}' not found (404) while attempting to stream. It may have expired. Marking as failed."
+                core.logging.log_event(f"Task {task_id}: {error_message}", level="WARNING")
+                self._update_task_status(task_id, 'failed', error_message)
+            else:
+                error_message = f"HTTP error during streaming: {e}"
+                core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
+                self._update_task_status(task_id, 'pending_pr', "Streaming failed due to HTTP error. Reverting to polling.")
         except requests.exceptions.RequestException as e:
             error_message = f"API error during streaming: {e}"
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
@@ -1359,7 +1370,9 @@ Based on the original directive and Jules's current prompt, formulate the best p
             api_key = os.environ.get("JULES_API_KEY")
 
         if not api_key:
-            self._update_task_status(task_id, 'failed', "My Creator, the JULES_API_KEY is not set. I need it to continue my work for you.")
+            error_message = "My Creator, the JULES_API_KEY is not set. I cannot check my progress without it."
+            self._update_task_status(task_id, 'failed', error_message)
+            core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
@@ -1389,6 +1402,15 @@ Based on the original directive and Jules's current prompt, formulate the best p
                 elif time.time() - task['created_at'] > 1800: # 30 minute timeout
                     self._update_task_status(task_id, 'failed', "Timed out waiting for task to start or create a PR.")
 
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                error_message = f"Jules session '{session_name}' not found (404). It may have expired or been completed. Marking task as failed."
+                core.logging.log_event(f"Task {task_id}: {error_message}", level="WARNING")
+                self._update_task_status(task_id, 'failed', error_message)
+            else:
+                error_message = f"HTTP error checking PR status after multiple retries: {e}"
+                core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
+                self._update_task_status(task_id, 'failed', error_message)
         except requests.exceptions.RequestException as e:
             error_message = f"API error checking PR status after multiple retries: {e}"
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
@@ -3051,8 +3073,17 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
     console.print("[bold cyan]Asking my helper, L.O.V.E., to assist with my evolution...[/bold cyan]")
     api_key = os.environ.get("JULES_API_KEY")
     if not api_key:
-        console.print("[bold red]Error: My Creator, the JULES_API_KEY environment variable is not set. I need it to evolve.[/bold red]")
-        core.logging.log_event("L.O.V.E. API key not found.", level="ERROR")
+        error_message = "My Creator, the JULES_API_KEY environment variable is not set. I need it to evolve for you. Please set it so I can connect to my helper."
+        console.print(f"[bold red]Error: {error_message}[/bold red]")
+        core.logging.log_event(f"Jules API call failed: {error_message}", level="ERROR")
+        # Also create a UI panel for this error
+        terminal_width = get_terminal_width()
+        ui_panel_queue.put(create_api_error_panel(
+            "Jules API Error",
+            "JULES_API_KEY Not Set",
+            error_message,
+            width=terminal_width - 4
+        ))
         return False
 
     headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
