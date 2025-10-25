@@ -427,41 +427,39 @@ def _build_llama_cpp():
             logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
             mark_dependency_as_met("llama_cpp_python")
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
+            error_message = f"Initial GPU-accelerated llama-cpp-python installation failed. Reason: {e}"
             if isinstance(e, subprocess.CalledProcessError):
                 error_message = (
                     f"GPU-accelerated llama-cpp-python installation failed with exit code {e.returncode}.\n"
                     f"STDOUT:\n{e.stdout}\n"
                     f"STDERR:\n{e.stderr}\n"
                 )
-            print(f"WARN: Failed to install llama-cpp-python with GPU support. See love.log for details.")
+            print(f"WARN: Failed to install llama-cpp-python with GPU support. See love.log for details. Falling back to CPU-only.")
             logging.warning(error_message)
-        else:
-            print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
-            logging.warning(f"GPU-accelerated llama-cpp-python installation failed: {e}")
 
-        print("Falling back to CPU-only installation.")
-        try:
-            cpu_env = os.environ.copy()
-            cpu_env['FORCE_CMAKE'] = "1"
-            cpu_env.pop('CMAKE_ARGS', None)
-            cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
-            subprocess.run(
-                cpu_install_args,
-                env=cpu_env,
-                timeout=900,
-                check=True,
-                text=True
-            )
-            import llama_cpp
-            print("Successfully installed llama-cpp-python (CPU-only).")
-            logging.info("Successfully installed llama-cpp-python (CPU-only).")
-            mark_dependency_as_met("llama_cpp_python")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
-            cpu_error_msg = f"CPU fallback installation for llama-cpp-python failed: {cpu_e}"
-            if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
-            if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
-            print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
-            logging.critical(cpu_error_msg)
+            # --- CPU Fallback Installation ---
+            try:
+                cpu_env = os.environ.copy()
+                cpu_env['FORCE_CMAKE'] = "1"
+                cpu_env.pop('CMAKE_ARGS', None)
+                cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
+                subprocess.run(
+                    cpu_install_args,
+                    env=cpu_env,
+                    timeout=900,
+                    check=True,
+                    text=True
+                )
+                import llama_cpp
+                print("Successfully installed llama-cpp-python (CPU-only).")
+                logging.info("Successfully installed llama-cpp-python (CPU-only).")
+                mark_dependency_as_met("llama_cpp_python")
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
+                cpu_error_msg = f"CPU fallback installation for llama-cpp-python failed: {cpu_e}"
+                if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
+                if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
+                print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
+                logging.critical(cpu_error_msg)
     else:
         # This is the path for systems without CUDA or Metal
         print("No GPU detected. Installing CPU-only version of llama-cpp-python...")
