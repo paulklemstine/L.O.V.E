@@ -1105,14 +1105,14 @@ class LoveTaskManager:
             return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
-        # The `alt=sse` parameter is what enables Server-Sent Events (SSE) for streaming.
-        # The URL was changed from `{session_name}:stream` to `{session_name}/stream` to fix a 400 error.
-        url = f"https://jules.googleapis.com/v1alpha/{session_name}/stream?alt=sse"
+        # The `alt=sse` parameter enables Server-Sent Events (SSE). A POST request is required.
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}:stream?alt=sse"
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
             def _stream_request():
-                return requests.get(url, headers=headers, stream=True, timeout=30)
+                # Use a POST request as required by the API for custom methods
+                return requests.post(url, headers=headers, stream=True, timeout=30)
 
             with _stream_request() as response:
                 response.raise_for_status()
