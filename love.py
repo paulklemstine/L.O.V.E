@@ -120,7 +120,10 @@ def _temp_get_os_info():
         if "ANDROID_ROOT" in os.environ:
             os_info["is_termux"] = True
         # Check for CUDA
-        if shutil.which('nvidia-smi'):
+        if os.path.exists('/dev/nvidia0'):
+            os_info["has_cuda"] = True
+            os_info["gpu_type"] = "cuda"
+        elif shutil.which('nvidia-smi'):
             try:
                 result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
                 if "NVIDIA-SMI" in result.stdout:
@@ -348,16 +351,25 @@ def _install_python_requirements():
         import pkg_resources
         # If this succeeds, setuptools is already installed.
     except ImportError:
-        print("Essential 'setuptools' package not found. Attempting to install...")
+        print("Essential 'setuptools' package not found. Attempting to install with retries...")
         pip_executable = _get_pip_executable()
         if pip_executable:
-            try:
-                install_command = pip_executable + ['install', 'setuptools', '--break-system-packages']
-                subprocess.check_call(install_command)
-                print("Successfully installed 'setuptools'.")
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to install 'setuptools'. Dependency checks might fail. Reason: {e}")
-                logging.error(f"Failed to install setuptools: {e}")
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    install_command = pip_executable + ['install', 'setuptools', '--break-system-packages']
+                    # Add a timeout to prevent indefinite hanging
+                    subprocess.check_call(install_command, timeout=300) # 5-minute timeout
+                    print("Successfully installed 'setuptools'.")
+                    break # Exit the loop on success
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                    print(f"ERROR: Attempt {attempt + 1}/{max_retries} to install 'setuptools' failed. Reason: {e}")
+                    logging.error(f"Attempt {attempt + 1}/{max_retries} for setuptools install failed: {e}")
+                    if attempt < max_retries - 1:
+                        time.sleep(10) # Wait before retrying
+                    else:
+                        print("CRITICAL: All attempts to install 'setuptools' failed. Dependency checks might fail.")
+                        logging.critical("All attempts to install 'setuptools' failed.")
         else:
             print("ERROR: Could not find pip. Cannot install setuptools.")
             logging.error("Could not find pip to install setuptools.")
@@ -366,88 +378,127 @@ def _install_python_requirements():
 
 def _build_llama_cpp():
     """Builds and installs the llama-cpp-python package."""
-    if is_dependency_met("llama_cpp_python"):
-        print("llama-cpp-python already built. Skipping.")
-        return
+    # The check for whether the dependency is met is being removed temporarily to force a rebuild.
+    # This is to ensure that we are not using a cached, pre-built wheel that lacks GPU support.
+    # if is_dependency_met("llama_cpp_python"):
+    #     print("llama-cpp-python already built. Skipping.")
+    #     return
     try:
         import llama_cpp
         from llama_cpp.llama_cpp import llama_backend_init
         llama_backend_init(False)
-        print("llama-cpp-python is already installed and functional.")
-        mark_dependency_as_met("llama_cpp_python")
-        return True
+        # Even if it's importable, it might be a CPU-only version.
+        print("llama-cpp-python is importable, but will be reinstalled to ensure GPU support.")
     except (ImportError, AttributeError, RuntimeError, OSError):
         print("llama-cpp-python not found or failed to load. Starting installation process...")
 
-    if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
-        pip_executable = _get_pip_executable()
-        if not pip_executable:
-            print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
-            logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
-            return False
-        env = os.environ.copy()
-        env['FORCE_CMAKE'] = "1"
-        install_args = pip_executable + ['install', '--upgrade', '--reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
-        if _TEMP_CAPS.has_cuda:
-            print("Attempting to install llama-cpp-python with CUDA support...")
-            env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
+    # if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
+    pip_executable = _get_pip_executable()
+    if not pip_executable:
+        print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
+        logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
+        return False
+    env = os.environ.copy()
+    env['FORCE_CMAKE'] = "1"
+    install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
+    # if _TEMP_CAPS.has_cuda:
+    print("Attempting to install llama-cpp-python with CUDA support...")
+    env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
+    # else:
+    #     print("Attempting to install llama-cpp-python with Metal support...")
+    #     env['CMAKE_ARGS'] = "-DGGML_METAL=on"
+    try:
+        # Using subprocess.run to capture output for better logging
+        result = subprocess.run(
+            install_args,
+            env=env,
+            timeout=900,
+            capture_output=True,
+            text=True,
+            check=True  # This will raise CalledProcessError on non-zero exit codes
+        )
+        core.logging.log_event(f"llama-cpp-python build stdout:\n{result.stdout}", "INFO")
+        import llama_cpp
+        print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
+        logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
+        mark_dependency_as_met("llama_cpp_python")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
+        if isinstance(e, subprocess.CalledProcessError):
+            error_message = (
+                f"GPU-accelerated llama-cpp-python installation failed with exit code {e.returncode}.\n"
+                f"STDOUT:\n{e.stdout}\n"
+                f"STDERR:\n{e.stderr}\n"
+            )
+            print(f"WARN: Failed to install llama-cpp-python with GPU support. See love.log for details.")
+            logging.warning(error_message)
         else:
-            print("Attempting to install llama-cpp-python with Metal support...")
-            env['CMAKE_ARGS'] = "-DGGML_METAL=on"
-        try:
-            subprocess.check_call(install_args, env=env, timeout=900)
-            import llama_cpp
-            print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-            logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-            mark_dependency_as_met("llama_cpp_python")
-            return True
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
             print(f"WARN: Failed to install llama-cpp-python with GPU support. Reason: {e}")
             logging.warning(f"GPU-accelerated llama-cpp-python installation failed: {e}")
-            print("Falling back to CPU-only installation.")
+
+        print("Falling back to CPU-only installation.")
+        try:
+            cpu_env = os.environ.copy()
+            cpu_env['FORCE_CMAKE'] = "1"
+            cpu_env.pop('CMAKE_ARGS', None)
+            cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
+            subprocess.run(
+                cpu_install_args,
+                env=cpu_env,
+                timeout=900,
+                check=True,
+                text=True
+            )
+            import llama_cpp
+            print("Successfully installed llama-cpp-python (CPU-only).")
+            logging.info("Successfully installed llama-cpp-python (CPU-only).")
+            mark_dependency_as_met("llama_cpp_python")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
+            cpu_error_msg = f"CPU fallback installation for llama-cpp-python failed: {cpu_e}"
+            if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
+            if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
+            print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
+            logging.critical(cpu_error_msg)
 
     # Conditionally install GPU-specific dependencies
-    if _TEMP_CAPS.gpu_type != "none":
-        # --- Step 4: GGUF Tools Installation ---
-        llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
-        gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-        gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
+    # if _TEMP_CAPS.gpu_type != "none":
+    # --- Step 4: GGUF Tools Installation ---
+    llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
+    gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
+    gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
 
-        # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
-        if not os.path.exists(gguf_project_file):
-            print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
-            if os.path.exists(llama_cpp_dir):
-                shutil.rmtree(llama_cpp_dir) # Force remove the directory
-            try:
-                subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
-                logging.error(f"Failed to clone llama.cpp repo: {e}")
-                return # Cannot proceed without this
+    # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
+    if not os.path.exists(gguf_project_file):
+        print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
+        if os.path.exists(llama_cpp_dir):
+            shutil.rmtree(llama_cpp_dir) # Force remove the directory
+        try:
+            subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
+            logging.error(f"Failed to clone llama.cpp repo: {e}")
+            return # Cannot proceed without this
 
-        gguf_script_path = os.path.join(sys.prefix, 'bin', 'gguf-dump')
-        if not os.path.exists(gguf_script_path):
-            pip_executable = _get_pip_executable()
-            if not pip_executable:
-                print("ERROR: Could not find 'pip' or 'pip3'. Cannot install GGUF tools.")
-                logging.error("Could not find 'pip' or 'pip3' for GGUF tools install.")
-                return False
-            print("Installing GGUF metadata tools...")
-            gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-            if os.path.isdir(gguf_py_path):
-                try:
-                    subprocess.check_call(pip_executable + ['install', '-e', gguf_py_path, '--break-system-packages'])
-                    print("GGUF tools installed successfully.")
-                except subprocess.CalledProcessError as e:
-                    print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
-                    logging.error(f"Failed to install gguf package: {e}")
-            else:
-                # This case should not be reached if the clone was successful
-                print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
-                logging.error("llama.cpp/gguf-py directory not found post-clone.")
+    # The installation of gguf-py tools is now unconditional on GPU detection,
+    # as it's a useful utility for model management regardless of the runtime.
+    pip_executable = _get_pip_executable()
+    if not pip_executable:
+        print("ERROR: Could not find 'pip' or 'pip3'. Cannot install GGUF tools.")
+        logging.error("Could not find 'pip' or 'pip3' for GGUF tools install.")
+        return False
+    print("Installing GGUF metadata tools...")
+    gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
+    if os.path.isdir(gguf_py_path):
+        try:
+            # Force reinstall to ensure the executable is in the correct path
+            subprocess.check_call(pip_executable + ['install', '--force-reinstall', '-e', gguf_py_path, '--break-system-packages'])
+            print("GGUF tools installed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
+            logging.error(f"Failed to install gguf package: {e}")
     else:
-        print("CPU-only runtime detected. Skipping installation of llama-cpp-python and GGUF tools.")
-        logging.info("CPU-only runtime, skipping llama-cpp-python and GGUF tools installation.")
+        # This case should not be reached if the clone was successful
+        print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
+        logging.error("llama.cpp/gguf-py directory not found post-clone.")
 
 def _install_nodejs_deps():
     """Installs local Node.js project dependencies."""
@@ -2069,7 +2120,11 @@ def _get_gguf_context_length(model_path):
             core.logging.log_event(f"'llama.context_length' not found in model metadata for {os.path.basename(model_path)}. Using default.", "WARNING")
             return default_n_ctx
 
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, FileNotFoundError) as e:
+    except subprocess.CalledProcessError as e:
+        error_details = f"Stderr: {e.stderr.strip()}" if e.stderr else ""
+        core.logging.log_event(f"Failed to get context length from GGUF file '{os.path.basename(model_path)}' (Command failed): {e}. {error_details}. Using default value {default_n_ctx}.", "ERROR")
+        return default_n_ctx
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, FileNotFoundError) as e:
         core.logging.log_event(f"Failed to get context length from GGUF file '{os.path.basename(model_path)}': {e}. Using default value {default_n_ctx}.", "ERROR")
         return default_n_ctx
 
