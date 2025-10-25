@@ -700,9 +700,17 @@ def run_llm(prompt_text, purpose="general"):
                 LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
                 console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
 
+            elif e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
+                LLM_FAILURE_COUNT[model_id] = LLM_FAILURE_COUNT.get(model_id, 0) + 1
+                failure_count = LLM_FAILURE_COUNT[model_id]
+                cooldown = 60 * (2 ** failure_count)
+                LLM_AVAILABILITY[model_id] = time.time() + cooldown
+                log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s. Failure count: {failure_count}", level="WARNING")
+
             else:
                 # Handle other HTTP errors
                  log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+            continue
 
 
         except Exception as e:
@@ -713,13 +721,6 @@ def run_llm(prompt_text, purpose="general"):
             if isinstance(e, FileNotFoundError):
                  console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
                  return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
-
-            if isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
-                LLM_FAILURE_COUNT[model_id] = LLM_FAILURE_COUNT.get(model_id, 0) + 1
-                failure_count = LLM_FAILURE_COUNT[model_id]
-                cooldown = 60 * (2 ** failure_count)
-                LLM_AVAILABILITY[model_id] = time.time() + cooldown
-                log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s. Failure count: {failure_count}", level="WARNING")
 
             elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
                 error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
