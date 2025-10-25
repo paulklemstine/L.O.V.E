@@ -3332,13 +3332,42 @@ def run_gemini_cli(prompt_text):
             env=env
         )
         core.logging.log_event(f"Gemini CLI execution successful.", "INFO")
+        core.logging.log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
         try:
             json_output = json.loads(result.stdout)
+
+            # New Case A: Handle raw string output
+            if isinstance(json_output, str):
+                core.logging.log_event("Interpreting Gemini CLI output as a raw JSON string.", "INFO")
+                return json_output.strip(), None
+
+            # New Case B: Handle list output
+            if isinstance(json_output, list):
+                if json_output and isinstance(json_output[0], str):
+                    core.logging.log_event("Interpreting Gemini CLI output as a list of strings.", "INFO")
+                    return json_output[0].strip(), None
+
+            # All subsequent cases assume a dictionary object.
+            if not isinstance(json_output, dict):
+                core.logging.log_event(f"ERROR: Gemini CLI output was valid JSON but not a recognized object structure (type: {type(json_output)}).", "ERROR")
+                return None, "Unrecognized JSON structure from Gemini CLI."
+
+            # Case 0: Handle the 'response' key provided in the new output format
+            if "response" in json_output:
+                core.logging.log_event("Found 'response' key in top-level Gemini output.", "INFO")
+                response_content = json_output.get("response")
+                # Ensure we handle cases where 'response' might be None or not a string
+                if isinstance(response_content, str):
+                    return response_content.strip(), None
+                # If it's not a string but exists, it's an unknown format. Fall through might be risky.
+                # Let's log it and continue to other checks as a fallback.
+                core.logging.log_event(f"Found 'response' key, but content is not a string (type: {type(response_content)}). Continuing to other parsers.", "WARNING")
+
 
             # Case 1: The CLI returned a structured error
             if "error" in json_output:
                 error_details = json_output["error"].get("message", "Unknown error from Gemini CLI")
-                log_event(f"ERROR: Gemini CLI returned an error: {error_details}", "ERROR")
+                core.logging.log_event(f"ERROR: Gemini CLI returned an error: {error_details}", "ERROR")
                 return None, f"Gemini CLI returned an error: {error_details}"
 
             # Case 2: The expected successful structure
