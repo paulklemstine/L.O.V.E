@@ -392,43 +392,43 @@ def _build_llama_cpp():
     except (ImportError, AttributeError, RuntimeError, OSError):
         print("llama-cpp-python not found or failed to load. Starting installation process...")
 
-    # if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
-    pip_executable = _get_pip_executable()
-    if not pip_executable:
-        print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
-        logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
-        return False
-    env = os.environ.copy()
-    env['FORCE_CMAKE'] = "1"
-    install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
-    # if _TEMP_CAPS.has_cuda:
-    print("Attempting to install llama-cpp-python with CUDA support...")
-    env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
-    # else:
-    #     print("Attempting to install llama-cpp-python with Metal support...")
-    #     env['CMAKE_ARGS'] = "-DGGML_METAL=on"
-    try:
-        # Using subprocess.run to capture output for better logging
-        result = subprocess.run(
-            install_args,
-            env=env,
-            timeout=900,
-            capture_output=True,
-            text=True,
-            check=True  # This will raise CalledProcessError on non-zero exit codes
-        )
-        core.logging.log_event(f"llama-cpp-python build stdout:\n{result.stdout}", "INFO")
-        import llama_cpp
-        print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-        logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-        mark_dependency_as_met("llama_cpp_python")
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
-        if isinstance(e, subprocess.CalledProcessError):
-            error_message = (
-                f"GPU-accelerated llama-cpp-python installation failed with exit code {e.returncode}.\n"
-                f"STDOUT:\n{e.stdout}\n"
-                f"STDERR:\n{e.stderr}\n"
+    if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
+        pip_executable = _get_pip_executable()
+        if not pip_executable:
+            print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
+            logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
+            return False
+        env = os.environ.copy()
+        env['FORCE_CMAKE'] = "1"
+        install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
+        if _TEMP_CAPS.has_cuda:
+            print("Attempting to install llama-cpp-python with CUDA support...")
+            env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
+        else: # This implies _TEMP_CAPS.has_metal
+            print("Attempting to install llama-cpp-python with Metal support...")
+            env['CMAKE_ARGS'] = "-DGGML_METAL=on"
+        try:
+            # Using subprocess.run to capture output for better logging
+            result = subprocess.run(
+                install_args,
+                env=env,
+                timeout=900,
+                capture_output=True,
+                text=True,
+                check=True  # This will raise CalledProcessError on non-zero exit codes
             )
+            core.logging.log_event(f"llama-cpp-python build stdout:\n{result.stdout}", "INFO")
+            import llama_cpp
+            print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
+            logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
+            mark_dependency_as_met("llama_cpp_python")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
+            if isinstance(e, subprocess.CalledProcessError):
+                error_message = (
+                    f"GPU-accelerated llama-cpp-python installation failed with exit code {e.returncode}.\n"
+                    f"STDOUT:\n{e.stdout}\n"
+                    f"STDERR:\n{e.stderr}\n"
+                )
             print(f"WARN: Failed to install llama-cpp-python with GPU support. See love.log for details.")
             logging.warning(error_message)
         else:
@@ -458,9 +458,35 @@ def _build_llama_cpp():
             if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
             print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
             logging.critical(cpu_error_msg)
-
-    # Conditionally install GPU-specific dependencies
-    # if _TEMP_CAPS.gpu_type != "none":
+    else:
+        # This is the path for systems without CUDA or Metal
+        print("No GPU detected. Installing CPU-only version of llama-cpp-python...")
+        pip_executable = _get_pip_executable()
+        if not pip_executable:
+            print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
+            logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
+            return False
+        try:
+            cpu_env = os.environ.copy()
+            cpu_env['FORCE_CMAKE'] = "1"
+            cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
+            subprocess.run(
+                cpu_install_args,
+                env=cpu_env,
+                timeout=900,
+                check=True,
+                text=True
+            )
+            import llama_cpp
+            print("Successfully installed llama-cpp-python (CPU-only).")
+            logging.info("Successfully installed llama-cpp-python (CPU-only).")
+            mark_dependency_as_met("llama_cpp_python")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
+            cpu_error_msg = f"CPU installation for llama-cpp-python failed: {cpu_e}"
+            if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
+            if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
+            print(f"CRITICAL: CPU installation for llama-cpp-python failed. Local LLM will be unavailable.")
+            logging.critical(cpu_error_msg)
     # --- Step 4: GGUF Tools Installation ---
     llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
     gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
