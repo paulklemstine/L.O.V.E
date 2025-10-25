@@ -4095,7 +4095,7 @@ def _automatic_update_checker(console):
         time.sleep(300)
 
 
-def main(args):
+async def main(args):
     """The main application entry point."""
     global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, proactive_agent
 
@@ -4144,7 +4144,7 @@ def main(args):
     time.sleep(3)
 
     # Start the new prompt-toolkit based UI
-    prompt_toolkit_ui_renderer(user_input_queue)
+    await prompt_toolkit_ui_renderer(user_input_queue)
 
 
 ipfs_available = False
@@ -4179,7 +4179,7 @@ def timed_input(prompt, timeout=60):
         is_timed_input_active = False
 
 
-def prompt_toolkit_ui_renderer(user_input_queue):
+async def prompt_toolkit_ui_renderer(user_input_queue):
     """
     An advanced UI renderer using prompt-toolkit to create a persistent
     input box at the bottom of the screen.
@@ -4234,12 +4234,12 @@ def prompt_toolkit_ui_renderer(user_input_queue):
     # Run the update function in the background
     app.create_background_task(update_content())
 
-    # Run the application
-    app.run()
+    # Run the application asynchronously
+    await app.run_async()
 
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
-def run_safely():
+async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
@@ -4254,7 +4254,7 @@ def run_safely():
             core.logging.log_event("State migration: Removed obsolete 'autopilot_mode' flag.", "INFO")
             save_state()
 
-        main(args)
+        await main(args)
 
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
@@ -4283,6 +4283,6 @@ def run_safely():
 
 
 if __name__ == "__main__":
-    run_safely()
+    asyncio.run(run_safely())
 
 # End of love.py
