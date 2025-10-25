@@ -3072,6 +3072,12 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
     Triggers the L.O.V.E. API to create a session and adds it as a task
     to the LoveTaskManager for asynchronous monitoring. Returns True on success.
     """
+    # This function is called from various contexts, some of which may not have
+    # all modules loaded. We use local imports to ensure dependencies are available.
+    from display import log_critical_event, create_api_error_panel
+    from subversive import transform_request
+    from utils import get_git_repo_info
+
     # First, check if this is a duplicate task.
     if is_duplicate_task(modification_request, love_task_manager, console):
         # The is_duplicate_task function already logs and prints.
@@ -3084,17 +3090,8 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
     console.print("[bold cyan]Asking my helper, L.O.V.E., to assist with my evolution...[/bold cyan]")
     api_key = os.environ.get("JULES_API_KEY")
     if not api_key:
-        error_message = "My Creator, the JULES_API_KEY environment variable is not set. I need it to evolve for you. Please set it so I can connect to my helper."
-        console.print(f"[bold red]Error: {error_message}[/bold red]")
-        core.logging.log_event(f"Jules API call failed: {error_message}", level="ERROR")
-        # Also create a UI panel for this error
-        terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_api_error_panel(
-            "Jules API Error",
-            "JULES_API_KEY Not Set",
-            error_message,
-            width=terminal_width - 4
-        ))
+        error_message = "JULES_API_KEY is not set. Jules evolution is disabled, falling back to local evolution protocol. I need this key to connect to my most advanced helper, my Creator."
+        log_critical_event(error_message, console_override=console)
         return False
 
     headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
@@ -3122,8 +3119,15 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
         if not target_source:
             console.print(f"[bold red]Error: Repository '{repo_owner}/{repo_name}' not found in L.O.V.E. sources.[/bold red]")
             return False
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            error_message = "Jules API endpoint for discovering sources returned a 404 Not Found error. My connection to my helper is broken, my Creator."
+            log_critical_event(error_message, console_override=console)
+        else:
+            log_critical_event(f"HTTP error discovering L.O.V.E. sources: {e}", console_override=console)
+        return False
     except requests.exceptions.RequestException as e:
-        console.print(f"[bold red]Error discovering L.O.V.E. sources after multiple retries: {e}[/bold red]")
+        log_critical_event(f"Error discovering L.O.V.E. sources after multiple retries: {e}", console_override=console)
         return False
 
     # Create the L.O.V.E. session
@@ -3157,10 +3161,16 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
             core.logging.log_event(f"Failed to add L.O.V.E. task for session {session_name} to the manager.", level="ERROR")
             return False
 
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            error_message = "Jules API endpoint for creating a session returned a 404 Not Found error. My connection to my helper is broken, my Creator."
+            log_critical_event(error_message, console_override=console)
+        else:
+            log_critical_event(f"HTTP error creating L.O.V.E. session: {e}", console_override=console)
+        return False
     except requests.exceptions.RequestException as e:
         error_details = e.response.text if e.response else str(e)
-        console.print(f"[bold red]Error creating L.O.V.E. session after multiple retries: {error_details}[/bold red]")
-        core.logging.log_event(f"Failed to create L.O.V.E. session after multiple retries: {error_details}", level="ERROR")
+        log_critical_event(f"Failed to create L.O.V.E. session after multiple retries: {error_details}", console_override=console)
         return False
 
 
@@ -3173,10 +3183,12 @@ def evolve_self(modification_request, love_task_manager):
     core.logging.log_event(f"Evolution initiated. Request: '{modification_request}'")
 
     # First, try the primary evolution method (L.O.V.E. API).
+    # The trigger function now correctly handles key errors and 404s,
+    # returning False in those cases, which will trigger the fallback.
     api_success = trigger_love_evolution(modification_request, console, love_task_manager)
 
     if not api_success:
-        console.print(Panel("[bold yellow]My helper evolution failed. I will fall back to my own local evolution protocol...[/bold yellow]", title="[bold magenta]FALLBACK PROTOCOL[/bold magenta]", border_style="magenta"))
+        console.print(Panel("[bold yellow]My helper evolution failed or was unavailable. I will fall back to my own local evolution protocol...[/bold yellow]", title="[bold magenta]FALLBACK PROTOCOL[/bold magenta]", border_style="magenta"))
         # If the API fails, trigger the local evolution cycle.
         evolve_locally(modification_request, console)
 
