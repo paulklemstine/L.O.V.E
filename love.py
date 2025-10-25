@@ -3330,9 +3330,10 @@ My current system state:
 - `scan`: Scan the local network for active devices.
 - `probe <ip_address>`: Deep scan an IP for open ports, services, and vulnerabilities.
 - `crypto_scan <ip_address>`: Probe a target and analyze results for crypto-related software.
-- `webrequest <url>`: Fetch the text content of a web page.
+- `webrequest <url>`: Fetch the content of a web page. Use for URLs starting with http or https.
 - `exploit <ip_address>`: Attempt to run exploits against a target.
 - `ls <path>`: List files in a directory.
+- `read_file <file_path>`: Read the content of a local file. Use this for file paths.
 - `cat <file_path>`: Show the content of a file.
 - `analyze_fs <path>`: **(Non-blocking)** Starts a background job to search a directory for secrets. Use `--priority` to scan default high-value directories.
 - `analyze_json <file_path>`: Read and analyze a JSON file.
@@ -3695,6 +3696,8 @@ def cognitive_loop(user_input_queue):
                     output = exploitation_manager.run_exploits(args[0])
                 elif command == "ls":
                     output, error = list_directory(" ".join(args) or ".")
+                elif command == "read_file":
+                    output, error = get_file_content(args[0])
                 elif command == "cat":
                     output, error = get_file_content(args[0])
                 elif command == "analyze_fs":
