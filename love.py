@@ -1981,6 +1981,43 @@ CONFLICTED CONTENT:
 # --- GLOBAL EVENTS FOR SERVICE COORDINATION ---
 model_download_complete_event = threading.Event()
 
+def _get_gguf_context_length(model_path):
+    """
+    Reads the GGUF model file metadata to determine its context length.
+    Falls back to a default value if the metadata cannot be read.
+    """
+    default_n_ctx = 8192
+    try:
+        # Construct the command to be robust, checking common locations for the script.
+        gguf_dump_executable = os.path.join(os.path.dirname(sys.executable), 'gguf-dump')
+        if not os.path.exists(gguf_dump_executable):
+            gguf_dump_executable = shutil.which('gguf-dump') # Fallback to PATH
+
+        if not gguf_dump_executable:
+            core.logging.log_event("Could not find gguf-dump executable. Using default context size.", "ERROR")
+            return default_n_ctx
+
+        core.logging.log_event(f"Attempting to read context length from {os.path.basename(model_path)} using gguf-dump")
+        result = subprocess.run(
+            [gguf_dump_executable, "--json", model_path],
+            capture_output=True, text=True, check=True, timeout=60
+        )
+        model_metadata = json.loads(result.stdout)
+        context_length = model_metadata.get("llama.context_length")
+
+        if context_length:
+            n_ctx = int(context_length)
+            core.logging.log_event(f"Successfully read context length from model: {n_ctx}")
+            return n_ctx
+        else:
+            core.logging.log_event(f"'llama.context_length' not found in model metadata for {os.path.basename(model_path)}. Using default.", "WARNING")
+            return default_n_ctx
+
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, FileNotFoundError) as e:
+        core.logging.log_event(f"Failed to get context length from GGUF file '{os.path.basename(model_path)}': {e}. Using default value {default_n_ctx}.", "ERROR")
+        return default_n_ctx
+
+
 # --- LOCAL LLM API SERVER ---
 class LocalLLMServer:
     """
@@ -2036,34 +2073,8 @@ class LocalLLMServer:
         n_gpu_layers = love_state.get("optimal_gpu_layers", 0)
 
         # --- Dynamically determine context size from GGUF file ---
-        n_ctx = 8192 # Default value
-        try:
-            core.logging.log_event(f"Attempting to read context length from {model_path} using gguf-dump")
-            # Construct the command to be robust
-            gguf_dump_executable = os.path.join(os.path.dirname(sys.executable), 'gguf-dump')
-            if not os.path.exists(gguf_dump_executable):
-                # Fallback for virtual environments where scripts might be in a different bin
-                gguf_dump_executable = shutil.which('gguf-dump')
-
-            if gguf_dump_executable:
-                result = subprocess.run(
-                    [gguf_dump_executable, "--json", model_path],
-                    capture_output=True, text=True, check=True, timeout=60
-                )
-                model_metadata = json.loads(result.stdout)
-                context_length = model_metadata.get("llama.context_length")
-                if context_length:
-                    n_ctx = int(context_length)
-                    core.logging.log_event(f"Successfully read context length from model: {n_ctx}")
-                    self.console.print(f"[green]Successfully read context length from model: {n_ctx}[/green]")
-                else:
-                    core.logging.log_event("'llama.context_length' not found in model metadata. Using default.", "WARNING")
-            else:
-                core.logging.log_event("Could not find gguf-dump executable. Using default context size.", "ERROR")
-
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, FileNotFoundError) as e:
-            core.logging.log_event(f"Failed to get context length from GGUF file: {e}. Using default value {n_ctx}.", level="ERROR")
-            self.console.print(f"[bold yellow]WARN: Could not determine model's context length. Using default: {n_ctx}. Reason: {e}[/bold yellow]")
+        n_ctx = _get_gguf_context_length(model_path)
+        self.console.print(f"[green]LLM Server: Context size for the main model set to {n_ctx}.[/green]")
         # --- End context size determination ---
 
         # Command to start the server
@@ -3859,7 +3870,9 @@ def _auto_configure_hardware(console):
     try:
         with redirect_stderr(stderr_capture):
             # This is where the C-level libraries print to stderr
-            llm = Llama(model_path=smoke_model_path, n_gpu_layers=-1, verbose=True)
+            n_ctx = _get_gguf_context_length(smoke_model_path)
+            console.print(f"[cyan]Stage 1: Smoke test model context size set to {n_ctx}.[/cyan]")
+            llm = Llama(model_path=smoke_model_path, n_gpu_layers=-1, n_ctx=n_ctx, verbose=True)
             llm.create_completion("hello", max_tokens=1) # Generate one word
     except Exception as e:
         console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
