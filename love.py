@@ -1110,7 +1110,7 @@ class LoveTaskManager:
             self._update_task_status(task_id, 'failed', "My Creator, the JULES_API_KEY is not set. I need it to continue my work for you.")
             return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Authorization": f"Bearer {api_key}"}
         # The `alt=sse` parameter enables Server-Sent Events (SSE). A POST request is required.
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:stream?alt=sse"
 
@@ -1140,6 +1140,9 @@ class LoveTaskManager:
 
         except requests.exceptions.RequestException as e:
             error_message = f"API error during streaming: {e}"
+            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                error_details = e.response.text
+                error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             self._update_task_status(task_id, 'pending_pr', "Streaming failed after retries. Reverting to polling.")
 
@@ -1265,7 +1268,7 @@ I am counting on your wisdom. Analyze the plan now.
 
         if not api_key: return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Authorization": f"Bearer {api_key}"}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
         data = {"message": {"body": feedback}}
 
@@ -1279,7 +1282,11 @@ I am counting on your wisdom. Analyze the plan now.
             _send_feedback()
             self.console.print(f"[green]Provided loving feedback on the plan to my helper: '{feedback}'[/green]")
         except requests.exceptions.RequestException as e:
-            core.logging.log_event(f"Task {task_id}: Failed to provide plan feedback after multiple retries: {e}", level="ERROR")
+            error_message = f"Task {task_id}: Failed to provide plan feedback after multiple retries: {e}"
+            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                error_details = e.response.text
+                error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
+            core.logging.log_event(error_message, level="ERROR")
 
 
     def _handle_interaction_request(self, task_id, interaction_request):
@@ -1330,7 +1337,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
         if not api_key: return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Authorization": f"Bearer {api_key}"}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
         data = {"message": {"body": feedback}}
 
@@ -1344,7 +1351,11 @@ Based on the original directive and Jules's current prompt, formulate the best p
             _send_feedback()
             self.console.print(Panel(f"[green]Provided loving guidance to my helper:[/green]\n{feedback}", title=f"L.O.V.E. Task {task_id}: Feedback Sent", border_style="green"))
         except requests.exceptions.RequestException as e:
-            core.logging.log_event(f"Task {task_id}: Failed to provide feedback after multiple retries: {e}", level="ERROR")
+            error_message = f"Task {task_id}: Failed to provide feedback after multiple retries: {e}"
+            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                error_details = e.response.text
+                error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
+            core.logging.log_event(error_message, level="ERROR")
 
 
     def _check_for_pr(self, task_id):
@@ -1362,7 +1373,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
             self._update_task_status(task_id, 'failed', "My Creator, the JULES_API_KEY is not set. I need it to continue my work for you.")
             return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Authorization": f"Bearer {api_key}"}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}"
 
         try:
@@ -1391,6 +1402,9 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
         except requests.exceptions.RequestException as e:
             error_message = f"API error checking PR status after multiple retries: {e}"
+            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                error_details = e.response.text
+                error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             self._update_task_status(task_id, 'failed', error_message)
 
@@ -1676,7 +1690,11 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 core.logging.log_event(msg, level="ERROR")
                 return False, msg
         except requests.exceptions.RequestException as e:
-            return False, f"GitHub API error during merge after multiple retries: {e}"
+            error_message = f"GitHub API error during merge after multiple retries: {e}"
+            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                error_details = e.response.text
+                error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
+            return False, error_message
 
     def _get_pr_branch_name(self, pr_url):
         """Fetches PR details from GitHub API to get the source branch name."""
@@ -1713,7 +1731,11 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 return branch_name
             return None
         except requests.exceptions.RequestException as e:
-            core.logging.log_event(f"Error fetching PR details to get branch name after multiple retries: {e}", level="ERROR")
+            error_message = f"Error fetching PR details to get branch name after multiple retries: {e}"
+            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                error_details = e.response.text
+                error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
+            core.logging.log_event(error_message, level="ERROR")
             return None
 
     def _resolve_merge_conflict(self, pr_url):
@@ -1827,7 +1849,11 @@ CONFLICTED CONTENT:
             else:
                 core.logging.log_event(f"Could not delete branch '{branch_name}': {delete_response.text}", level="WARNING")
         except requests.exceptions.RequestException as e:
-            core.logging.log_event(f"Error trying to delete PR branch after multiple retries: {e}", level="ERROR")
+            error_message = f"Error trying to delete PR branch after multiple retries: {e}"
+            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                error_details = e.response.text
+                error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
+            core.logging.log_event(error_message, level="ERROR")
 
 
     def _update_task_status(self, task_id, status, message, pr_url=None):
@@ -1886,7 +1912,7 @@ CONFLICTED CONTENT:
             core.logging.log_event("Cannot reconcile orphans: Could not determine git repo info.", level="WARNING")
             return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Authorization": f"Bearer {api_key}"}
         # Fetch all sessions and filter locally, which is more robust than relying on a complex API filter.
         url = "https://jules.googleapis.com/v1alpha/sessions"
 
@@ -1950,7 +1976,11 @@ CONFLICTED CONTENT:
             save_state(self.console) # Save state after potentially adopting
 
         except requests.exceptions.RequestException as e:
-            core.logging.log_event(f"API error during orphan reconciliation: {e}", level="ERROR")
+            error_message = f"API error during orphan reconciliation: {e}"
+            if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+                error_details = e.response.text
+                error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
+            core.logging.log_event(error_message, level="ERROR")
         except Exception as e:
             # Catching any other unexpected errors during the process
             core.logging.log_event(f"An unexpected error occurred during orphan reconciliation: {e}\n{traceback.format_exc()}", level="ERROR")
@@ -3055,7 +3085,7 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
         core.logging.log_event("L.O.V.E. API key not found.", level="ERROR")
         return False
 
-    headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+    headers = {"Authorization": f"Bearer {api_key}"}
     repo_owner, repo_name = get_git_repo_info()
     if not repo_owner or not repo_name:
         console.print("[bold red]Error: Could not determine git repository owner/name.[/bold red]")
@@ -3081,7 +3111,11 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
             console.print(f"[bold red]Error: Repository '{repo_owner}/{repo_name}' not found in L.O.V.E. sources.[/bold red]")
             return False
     except requests.exceptions.RequestException as e:
-        console.print(f"[bold red]Error discovering L.O.V.E. sources after multiple retries: {e}[/bold red]")
+        error_message = f"Error discovering L.O.V.E. sources after multiple retries: {e}"
+        if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+            error_details = e.response.text
+            error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
+        console.print(f"[bold red]{error_message}[/bold red]")
         return False
 
     # Create the L.O.V.E. session
@@ -3116,9 +3150,12 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
             return False
 
     except requests.exceptions.RequestException as e:
-        error_details = e.response.text if e.response else str(e)
-        console.print(f"[bold red]Error creating L.O.V.E. session after multiple retries: {error_details}[/bold red]")
-        core.logging.log_event(f"Failed to create L.O.V.E. session after multiple retries: {error_details}", level="ERROR")
+        error_message = f"Error creating L.O.V.E. session after multiple retries: {e}"
+        if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+            error_details = e.response.text
+            error_message += f"\nStatus Code: {e.response.status_code}\nResponse Body: {error_details}"
+        console.print(f"[bold red]{error_message}[/bold red]")
+        core.logging.log_event(error_message, level="ERROR")
         return False
 
 
