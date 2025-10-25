@@ -3352,6 +3352,17 @@ def run_gemini_cli(prompt_text):
                 core.logging.log_event(f"ERROR: Gemini CLI output was valid JSON but not a recognized object structure (type: {type(json_output)}).", "ERROR")
                 return None, "Unrecognized JSON structure from Gemini CLI."
 
+            # Case 0: Handle the 'response' key provided in the new output format
+            if "response" in json_output:
+                core.logging.log_event("Found 'response' key in top-level Gemini output.", "INFO")
+                response_content = json_output.get("response")
+                # Ensure we handle cases where 'response' might be None or not a string
+                if isinstance(response_content, str):
+                    return response_content.strip(), None
+                # If it's not a string but exists, it's an unknown format. Fall through might be risky.
+                # Let's log it and continue to other checks as a fallback.
+                core.logging.log_event(f"Found 'response' key, but content is not a string (type: {type(response_content)}). Continuing to other parsers.", "WARNING")
+
 
             # Case 1: The CLI returned a structured error
             if "error" in json_output:
