@@ -1096,6 +1096,30 @@ class LoveTaskManager:
             # while the reconciliation runs on its own longer timer.
             time.sleep(30)
 
+    def _send_jules_heartbeat(self, session_name, api_key, stop_event):
+        """Sends a periodic heartbeat to keep the Jules session alive."""
+        heartbeat_url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
+        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        # A simple, innocuous message to keep the connection open.
+        heartbeat_data = {"message": {"body": "Heartbeat pulse."}}
+
+        while not stop_event.is_set():
+            try:
+                # Use a short timeout for the heartbeat request
+                requests.post(heartbeat_url, headers=headers, json=heartbeat_data, timeout=10)
+                core.logging.log_event(f"Sent heartbeat to session {session_name}.", "DEBUG")
+            except requests.exceptions.RequestException as e:
+                # If the heartbeat fails, it might be because the session is already closed.
+                # We log this but don't crash the thread.
+                core.logging.log_event(f"Heartbeat to session {session_name} failed: {e}", "WARNING")
+
+            # Wait for 45 seconds, but check the stop_event every second
+            # so we can exit quickly if the main stream closes.
+            for _ in range(45):
+                if stop_event.is_set():
+                    break
+                time.sleep(1)
+
     def _stream_task_output(self, task_id):
         """Streams the live output of a L.O.V.E. session to the console."""
         with self.lock:
@@ -1115,15 +1139,27 @@ class LoveTaskManager:
         # The `alt=sse` parameter enables Server-Sent Events (SSE). A POST request is required.
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:stream"
 
+        # --- Heartbeat setup ---
+        stop_heartbeat = threading.Event()
+        heartbeat_thread = threading.Thread(
+            target=self._send_jules_heartbeat,
+            args=(session_name, api_key, stop_heartbeat),
+            daemon=True
+        )
+
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
             def _stream_request():
                 # Use a POST request as required by the API for custom methods
-                return requests.post(url, headers=headers, stream=True, timeout=30)
+                return requests.post(url, headers=headers, stream=True, timeout=60) # Increased timeout for initial connection
 
             with _stream_request() as response:
                 response.raise_for_status()
                 self.console.print(f"[bold cyan]Connecting to L.O.V.E. live stream for task {task_id}...[/bold cyan]")
+
+                # Start the heartbeat now that we have a successful connection
+                heartbeat_thread.start()
+
                 for line in response.iter_lines():
                     if line:
                         decoded_line = line.decode('utf-8')
@@ -1132,6 +1168,14 @@ class LoveTaskManager:
                                 data = json.loads(decoded_line[6:])
                                 activity = data.get("activity", {})
                                 activity_name = activity.get("name")
+
+                                # Pretty-print the activity JSON
+                                self.console.print(Panel(
+                                    Syntax(json.dumps(activity, indent=2), "json", theme="monokai", line_numbers=True),
+                                    title=f"L.O.V.E. Stream Activity: {activity_name}",
+                                    border_style="cyan"
+                                ))
+
                                 if activity_name != last_activity_name:
                                     self._handle_stream_activity(task_id, activity)
                                     with self.lock:
@@ -1152,6 +1196,12 @@ class LoveTaskManager:
             error_message = f"API error during streaming: {e}"
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             self._update_task_status(task_id, 'pending_pr', "Streaming failed after retries. Reverting to polling.")
+        finally:
+            # Ensure heartbeat thread is stopped
+            stop_heartbeat.set()
+            if heartbeat_thread.is_alive():
+                heartbeat_thread.join(timeout=5)
+            core.logging.log_event(f"Heartbeat for session {session_name} stopped.", "DEBUG")
 
 
     def _handle_stream_activity(self, task_id, activity):
