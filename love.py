@@ -119,12 +119,12 @@ def _temp_get_os_info():
             os_info["is_termux"] = True
         # Check for CUDA
         if shutil.which('nvidia-smi'):
-             try:
+            try:
                 result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
                 if "NVIDIA-SMI" in result.stdout:
                     os_info["has_cuda"] = True
                     os_info["gpu_type"] = "cuda"
-             except (FileNotFoundError, subprocess.CalledProcessError):
+            except (FileNotFoundError, subprocess.CalledProcessError):
                 pass # nvidia-smi might not be in PATH or might fail
     elif system == "Darwin":
         os_info["os"] = "macOS"
@@ -319,9 +319,9 @@ def _install_requirements_file(requirements_path, tracker_prefix):
                 continue
 
             if _is_package_installed(line):
-                 print(f"Package '{package_name}' is already installed, marking as met.")
-                 mark_dependency_as_met(tracker_name)
-                 continue
+                print(f"Package '{package_name}' is already installed, marking as met.")
+                mark_dependency_as_met(tracker_name)
+                continue
 
             print(f"Installing package: {line}...")
             pip_executable = _get_pip_executable()
@@ -1130,7 +1130,7 @@ class LoveTaskManager:
                                     with self.lock:
                                         self.tasks[task_id]["last_activity_name"] = activity_name
                             except json.JSONDecodeError:
-                                 core.logging.log_event(f"Task {task_id}: Could not decode SSE data: {decoded_line}", level="WARNING")
+                                core.logging.log_event(f"Task {task_id}: Could not decode SSE data: {decoded_line}", level="WARNING")
 
         except requests.exceptions.RequestException as e:
             error_message = f"API error during streaming: {e}"
@@ -2014,8 +2014,8 @@ class LocalLLMServer:
             # Construct the command to be robust
             gguf_dump_executable = os.path.join(os.path.dirname(sys.executable), 'gguf-dump')
             if not os.path.exists(gguf_dump_executable):
-                 # Fallback for virtual environments where scripts might be in a different bin
-                 gguf_dump_executable = shutil.which('gguf-dump')
+                # Fallback for virtual environments where scripts might be in a different bin
+                gguf_dump_executable = shutil.which('gguf-dump')
 
             if gguf_dump_executable:
                 result = subprocess.run(
@@ -3583,7 +3583,7 @@ def cognitive_loop(user_input_queue):
                 elif command == "ps":
                     output, error = get_process_list()
                 elif command == "ifconfig":
-                     output, error = get_network_interfaces()
+                    output, error = get_network_interfaces()
                 elif command == "reason":
                     output = ReasoningEngine(love_state, console=None).analyze_and_prioritize()
                 elif command == "generate_image":
