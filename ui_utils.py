@@ -41,7 +41,7 @@ RAVE_COLORS = [
     # Added
     "lime",
     "yellow",
-    "electric_blue",
+    "bright_blue",
     "chartreuse1",
     "spring_green2",
     "turquoise2",
