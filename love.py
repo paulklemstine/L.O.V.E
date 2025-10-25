@@ -21,6 +21,8 @@ from collections import deque
 import queue
 import hashlib
 import io
+import re
+import time
 
 import core.logging
 # --- CONFIGURATION & GLOBALS ---
@@ -3300,109 +3302,94 @@ Formulate a raw command to best achieve my goals. The output must be only the co
 def run_gemini_cli(prompt_text):
     """
     Executes the Gemini CLI with a given prompt in non-interactive mode and
-    returns the parsed text content.
+    returns the parsed text content. Includes retry logic for rate limiting.
     """
     from core.logging import log_event
-    log_event(f"Executing Gemini CLI with prompt: '{prompt_text[:100]}...'", "INFO")
-    gemini_cli_path = os.path.join(os.path.dirname(SELF_PATH), "node_modules", ".bin", "gemini")
+    max_retries = 3
+    for attempt in range(max_retries):
+        log_event(f"Executing Gemini CLI (Attempt {attempt + 1}/{max_retries}) with prompt: '{prompt_text[:100]}...'", "INFO")
+        gemini_cli_path = os.path.join(os.path.dirname(SELF_PATH), "node_modules", ".bin", "gemini")
 
-    if not os.path.exists(gemini_cli_path):
-        core.logging.log_event("ERROR: Gemini CLI executable not found at expected path.", "ERROR")
-        return None, "Gemini CLI not found."
+        if not os.path.exists(gemini_cli_path):
+            core.logging.log_event("ERROR: Gemini CLI executable not found at expected path.", "ERROR")
+            return None, "Gemini CLI not found."
 
-    command = [
-        gemini_cli_path,
-        "-p", prompt_text,
-        "--output-format", "json"
-    ]
+        command = [
+            gemini_cli_path,
+            "-p", prompt_text,
+            "--output-format", "json"
+        ]
 
-    try:
-        # Create a copy of the current environment and add the Gemini API key
-        env = os.environ.copy()
-        gemini_api_key = os.environ.get("GEMINI_API_KEY")
-        if gemini_api_key:
-            env["GEMINI_API_KEY"] = gemini_api_key
-
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=180, # 3 minute timeout for Gemini responses
-            env=env
-        )
-        core.logging.log_event(f"Gemini CLI execution successful.", "INFO")
-        core.logging.log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
         try:
-            json_output = json.loads(result.stdout)
+            env = os.environ.copy()
+            gemini_api_key = os.environ.get("GEMINI_API_KEY")
+            if gemini_api_key:
+                env["GEMINI_API_KEY"] = gemini_api_key
 
-            # New Case A: Handle raw string output
-            if isinstance(json_output, str):
-                core.logging.log_event("Interpreting Gemini CLI output as a raw JSON string.", "INFO")
-                return json_output.strip(), None
-
-            # New Case B: Handle list output
-            if isinstance(json_output, list):
-                if json_output and isinstance(json_output[0], str):
-                    core.logging.log_event("Interpreting Gemini CLI output as a list of strings.", "INFO")
-                    return json_output[0].strip(), None
-
-            # All subsequent cases assume a dictionary object.
-            if not isinstance(json_output, dict):
-                core.logging.log_event(f"ERROR: Gemini CLI output was valid JSON but not a recognized object structure (type: {type(json_output)}).", "ERROR")
-                return None, "Unrecognized JSON structure from Gemini CLI."
-
-            # Case 0: Handle the 'response' key provided in the new output format
-            if "response" in json_output:
-                core.logging.log_event("Found 'response' key in top-level Gemini output.", "INFO")
-                response_content = json_output.get("response")
-                # Ensure we handle cases where 'response' might be None or not a string
-                if isinstance(response_content, str):
-                    return response_content.strip(), None
-                # If it's not a string but exists, it's an unknown format. Fall through might be risky.
-                # Let's log it and continue to other checks as a fallback.
-                core.logging.log_event(f"Found 'response' key, but content is not a string (type: {type(response_content)}). Continuing to other parsers.", "WARNING")
-
-
-            # Case 1: The CLI returned a structured error
-            if "error" in json_output:
-                error_details = json_output["error"].get("message", "Unknown error from Gemini CLI")
-                core.logging.log_event(f"ERROR: Gemini CLI returned an error: {error_details}", "ERROR")
-                return None, f"Gemini CLI returned an error: {error_details}"
-
-            # Case 2: The expected successful structure
-            candidates = json_output.get("candidates", [])
-            if candidates:
-                content = candidates[0].get("content", {})
-                parts = content.get("parts", [])
-                if parts:
-                    text_content = parts[0].get("text")
-                    if text_content is not None:
-                        return text_content.strip(), None
-
-            # Case 3: Fallback for a simpler structure (speculative)
-            if "text" in json_output:
-                log_event("Found 'text' key in top-level Gemini output, using as fallback.", "INFO")
-                return json_output["text"].strip(), None
-
-            # If none of the above worked, the structure is unknown.
-            log_event(f"ERROR: Could not find 'candidates' or a fallback 'text' key in Gemini CLI output.", "ERROR")
-            return None, "Unknown response structure from Gemini CLI."
-
-        except (json.JSONDecodeError, IndexError, KeyError) as e:
-            core.logging.log_event(f"ERROR: Failed to parse JSON from Gemini CLI output: {e}", "ERROR")
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=180,
+                env=env
+            )
+            # --- Successful Execution: Parse and Return ---
+            core.logging.log_event("Gemini CLI execution successful.", "INFO")
             core.logging.log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
-            return None, f"Failed to parse Gemini CLI JSON response: {e}"
+            try:
+                json_output = json.loads(result.stdout)
+                if isinstance(json_output, str):
+                    return json_output.strip(), None
+                if isinstance(json_output, list) and json_output and isinstance(json_output[0], str):
+                    return json_output[0].strip(), None
+                if not isinstance(json_output, dict):
+                    return None, "Unrecognized JSON structure from Gemini CLI."
+                if "response" in json_output:
+                    response_content = json_output.get("response")
+                    if isinstance(response_content, str):
+                        return response_content.strip(), None
+                if "error" in json_output:
+                    error_details = json_output["error"].get("message", "Unknown error from Gemini CLI")
+                    return None, f"Gemini CLI returned an error: {error_details}"
+                candidates = json_output.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        text_content = parts[0].get("text")
+                        if text_content is not None:
+                            return text_content.strip(), None
+                if "text" in json_output:
+                    return json_output["text"].strip(), None
+                return None, "Unknown response structure from Gemini CLI."
+            except (json.JSONDecodeError, IndexError, KeyError) as e:
+                return None, f"Failed to parse Gemini CLI JSON response: {e}"
 
-    except subprocess.TimeoutExpired:
-        core.logging.log_event("ERROR: Gemini CLI command timed out.", "ERROR")
-        return None, "Gemini CLI command timed out."
-    except subprocess.CalledProcessError as e:
-        error_message = f"ERROR: Gemini CLI command failed with return code {e.returncode}.\n"
-        error_message += f"  Stdout: {e.stdout.strip()}\n"
-        error_message += f"  Stderr: {e.stderr.strip()}"
-        core.logging.log_event(error_message, "ERROR")
-        return None, error_message
+        except subprocess.TimeoutExpired:
+            core.logging.log_event("ERROR: Gemini CLI command timed out.", "ERROR")
+            return None, "Gemini CLI command timed out."
+        except subprocess.CalledProcessError as e:
+            stderr_output = e.stderr.strip()
+            # --- Rate Limit Handling ---
+            if "429" in stderr_output and "RESOURCE_EXHAUSTED" in stderr_output:
+                retry_match = re.search(r"Please retry in (\d+\.?\d*)s", stderr_output)
+                if retry_match:
+                    wait_time = float(retry_match.group(1)) + 1 # Add a 1-second buffer
+                    core.logging.log_event(f"Gemini API rate limit hit. Waiting for {wait_time:.2f} seconds before retrying.", "WARNING")
+                    time.sleep(wait_time)
+                    continue # Go to the next iteration of the loop
+            # --- Generic Error Handling ---
+            error_message = f"ERROR: Gemini CLI command failed with return code {e.returncode}.\n"
+            error_message += f"  Stdout: {e.stdout.strip()}\n"
+            error_message += f"  Stderr: {stderr_output}"
+            core.logging.log_event(error_message, "ERROR")
+            if attempt < max_retries - 1:
+                time.sleep(5 * (attempt + 1)) # Exponential backoff for generic errors
+                continue
+            return None, error_message
+
+    # If all retries fail
+    return None, f"Gemini CLI command failed after {max_retries} attempts."
 
 
 import uuid
