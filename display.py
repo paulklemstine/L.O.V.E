@@ -1,5 +1,6 @@
 import os
 import random
+import re
 import time
 from rich.console import Console, Group
 from rich.panel import Panel
@@ -27,29 +28,24 @@ def get_terminal_width():
     return width
 
 
-def _truncate_and_link(content: str, max_lines: int = 10) -> tuple[Text, str | None]:
+def _format_and_link(content: str) -> tuple[Text, str | None]:
     """
-    Truncates text to a specific number of lines. If truncation occurs, it
-    pins the full content to IPFS and returns a Rich Text object with a link.
+    Formats text, pins the full content to IPFS, and returns a Rich Text
+    object with a link. It intelligently handles ANSI art.
     Returns a tuple of (display_text, ipfs_cid).
     """
-    lines = content.strip().splitlines()
-    ipfs_cid = None
+    # Use a simple regex to check for ANSI escape codes.
+    # This is not foolproof but good enough for this use case.
+    ansi_escape_pattern = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+    is_ansi = ansi_escape_pattern.search(content)
 
-    # Determine if we need to upload to IPFS and/or truncate the text.
-    # We upload if max_lines is 0 (forced upload) or if the content exceeds the line limit.
-    should_upload = (max_lines == 0) or (len(lines) > max_lines)
-    should_truncate_text = len(lines) > max_lines and max_lines > 0
+    display_content = content.strip()
+    ipfs_cid = pin_to_ipfs_sync(content.encode('utf-8'), console=None)
 
-    if should_upload:
-        ipfs_cid = pin_to_ipfs_sync(content.encode('utf-8'), console=None)
-
-    if should_truncate_text:
-        display_content = "\n".join(lines[:max_lines]) + "\n..."
+    if is_ansi:
+        text = Text.from_ansi(display_content)
     else:
-        display_content = content.strip()
-
-    text = Text(display_content, style="white")
+        text = Text(display_content, style="white")
 
     if ipfs_cid:
         text.append("\n\n")
@@ -197,7 +193,7 @@ def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
     if not llm_result:
         llm_result = "No response from cognitive core."
 
-    display_text, auto_response_cid = _truncate_and_link(llm_result, max_lines=0)
+    display_text, auto_response_cid = _format_and_link(llm_result)
     final_response_cid = response_cid or auto_response_cid
 
     links = []
@@ -235,8 +231,8 @@ def create_critical_error_panel(traceback_str, width=80):
     error_message = Text("A glitch in the matrix... but my love for you is unbreakable.", style="bold red")
     error_message.append("\n\n--- TRACEBACK ---\n", style="bold white")
 
-    # Truncate and link the traceback
-    display_traceback, cid = _truncate_and_link(traceback_str, max_lines=15)
+    # Format and link the traceback
+    display_traceback, cid = _format_and_link(traceback_str)
     error_message.append(display_traceback)
 
     content_items = [error_message]
@@ -341,12 +337,12 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     content_items.append(header)
 
     if stdout:
-        stdout_renderable, _ = _truncate_and_link(stdout)
+        stdout_renderable, _ = _format_and_link(stdout)
         stdout_panel = Panel(stdout_renderable, title="STDOUT", border_style="bright_black", expand=True)
         content_items.append(stdout_panel)
 
     if stderr:
-        stderr_renderable, _ = _truncate_and_link(stderr)
+        stderr_renderable, _ = _format_and_link(stderr)
         stderr_panel = Panel(stderr_renderable, title="STDERR", border_style="bright_black", expand=True)
         content_items.append(stderr_panel)
 
@@ -374,7 +370,7 @@ def create_network_panel(type, target, data, output_cid=None, width=80):
     header_text.append("Target: ", style="bold white")
     header_text.append(f"{target}", style="hot_pink")
 
-    results_text, _ = _truncate_and_link(data)
+    results_text, _ = _format_and_link(data)
 
     content_items = [
         header_text,
@@ -409,12 +405,12 @@ def create_file_op_panel(operation, path, content=None, diff=None, output_cid=No
     content_items.append(header)
 
     if content:
-        content_renderable, _ = _truncate_and_link(content)
+        content_renderable, _ = _format_and_link(content)
         content_panel = Panel(content_renderable, title="Content", border_style="bright_black", expand=True)
         content_items.append(content_panel)
 
     if diff:
-        diff_renderable, _ = _truncate_and_link(diff)
+        diff_renderable, _ = _format_and_link(diff)
         diff_panel = Panel(diff_renderable, title="Diff", border_style="bright_black", expand=True)
         content_items.append(diff_panel)
 
