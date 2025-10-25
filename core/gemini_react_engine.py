@@ -1,13 +1,13 @@
 import inspect
+import json
 from typing import List, Dict, Any, Tuple
-from core.gemini_cli_wrapper import GeminiCLIWrapper
+from core.llm_api import execute_reasoning_task
 import core.tools
 
 class GeminiReActEngine:
     """Manages the state of a Thought-Action-Observation loop."""
 
-    def __init__(self, gemini_cli_wrapper: GeminiCLIWrapper, tool_registry: core.tools.ToolRegistry):
-        self.gemini_cli_wrapper = gemini_cli_wrapper
+    def __init__(self, tool_registry: core.tools.ToolRegistry):
         self.tool_registry = tool_registry
         self.history: List[Tuple[str, str, str]] = []
 
@@ -16,11 +16,22 @@ class GeminiReActEngine:
         Main entry point for the ReAct engine.
         Continues the loop until the Action is a "Finish" action.
         """
-        tool_names = self.tool_registry.get_tool_names()
+        tool_metadata = self.tool_registry.get_formatted_tool_metadata()
         while True:
-            prompt = self._create_prompt(goal, tool_names)
-            response = self.gemini_cli_wrapper.run(prompt)
-            parsed_response = self.gemini_cli_wrapper.parse_json_output(response)
+            prompt = self._create_prompt(goal, tool_metadata)
+            response_dict = execute_reasoning_task(prompt)
+
+            if not response_dict or not response_dict.get("result"):
+                return "The reasoning engine failed to produce a response."
+
+            try:
+                parsed_response = json.loads(response_dict["result"])
+            except json.JSONDecodeError:
+                # If parsing fails, we can add the raw response to the observation
+                # to allow the agent to self-correct on the next loop.
+                observation = f"Error: The reasoning engine produced invalid JSON. Raw response: {response_dict['result']}"
+                self.history.append(("Error parsing LLM response", "N/A", observation))
+                continue
 
             thought = parsed_response.get("thought", "")
             action = parsed_response.get("action", {})
@@ -46,15 +57,14 @@ class GeminiReActEngine:
 
             self.history.append((thought, action, str(observation)))
 
-    def _create_prompt(self, goal: str, tool_names: List[str]) -> str:
+    def _create_prompt(self, goal: str, tool_metadata: str) -> str:
         """Creates the ReAct prompt template."""
         prompt = f"""
 You are a large language model tasked with achieving a goal.
 
 Goal: {goal}
 
-You have access to the following tools:
-{tool_names}
+{tool_metadata}
 
 To achieve the goal, you must output a JSON object with two keys: "thought" and "action".
 The "thought" key should contain your reasoning about the current state and what to do next.
