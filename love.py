@@ -404,6 +404,10 @@ def _build_llama_cpp():
         if _TEMP_CAPS.has_cuda:
             print("Attempting to install llama-cpp-python with CUDA support...")
             env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
+            # Add CUDA paths to environment to assist CMake in finding the compiler
+            cuda_path = '/usr/local/cuda'
+            env['PATH'] = f'{cuda_path}/bin:' + env.get('PATH', '')
+            env['LD_LIBRARY_PATH'] = f'{cuda_path}/lib64:' + env.get('LD_LIBRARY_PATH', '')
         else: # This implies _TEMP_CAPS.has_metal
             print("Attempting to install llama-cpp-python with Metal support...")
             env['CMAKE_ARGS'] = "-DGGML_METAL=on"
