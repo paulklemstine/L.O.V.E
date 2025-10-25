@@ -1114,7 +1114,7 @@ class LoveTaskManager:
 
         headers = {"Authorization": f"Bearer {api_key}"}
         # The `alt=sse` parameter enables Server-Sent Events (SSE). A POST request is required.
-        url = f"https://jules.googleapis.com/v1alpha/{session_name}:stream?alt=sse"
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}:stream"
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
