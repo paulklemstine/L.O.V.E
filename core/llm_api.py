@@ -82,7 +82,7 @@ def get_top_horde_models(count=10):
     models based on a weighted score of rating, worker count, and performance.
     """
     try:
-        response = requests.get("https://aihorde.net/api/v2/models?type=text")
+        response = requests.get("https://aihorde.net/api/v2/status/models?type=text")
         response.raise_for_status()
         models = response.json()
 
