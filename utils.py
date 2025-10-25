@@ -5,6 +5,7 @@ import platform
 import shutil
 import logging
 import netifaces
+import re
 
 
 def get_network_interfaces(autopilot_mode=False):
@@ -153,3 +154,28 @@ def parse_ps_output(ps_output):
             process_info = dict(zip(header, parts))
             processes.append(process_info)
     return processes
+
+
+def replace_in_file(file_path, pattern, replacement):
+    """
+    Replaces all occurrences of a regex pattern in a file.
+    Returns a tuple of (success_boolean, message_string).
+    """
+    if not os.path.isfile(file_path):
+        return False, f"Error: File not found at '{file_path}'"
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+
+        # Perform the replacement using re.sub for regex capabilities
+        new_content, num_replacements = re.subn(pattern, replacement, content)
+
+        if num_replacements == 0:
+            return True, f"Pattern '{pattern}' not found in '{file_path}'. No changes made."
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+
+        return True, f"Successfully replaced {num_replacements} instance(s) in '{file_path}'."
+    except Exception as e:
+        return False, f"Error processing file '{file_path}': {e}"

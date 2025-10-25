@@ -637,7 +637,7 @@ import requests
 import core.logging
 from core.storage import save_all_state
 from core.capabilities import CAPS
-from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output
+from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output, replace_in_file
 from core.retry import retry
 from rich.console import Console
 
@@ -3401,6 +3401,7 @@ My current system state:
 - `webrequest <url>`: Fetch the content of a web page. Use for URLs starting with http or https.
 - `exploit <ip_address>`: Attempt to run exploits against a target.
 - `ls <path>`: List files in a directory.
+- `replace <file_path> <pattern> <replacement>`: Replace text in a file using a regex pattern.
 - `read_file <file_path>`: Read the content of a local file. Use this for file paths.
 - `cat <file_path>`: Show the content of a file.
 - `analyze_fs <path>`: **(Non-blocking)** Starts a background job to search a directory for secrets. Use `--priority` to scan default high-value directories.
@@ -3763,6 +3764,15 @@ def cognitive_loop(user_input_queue):
                     output, error = list_directory(" ".join(args) or ".")
                 elif command == "read_file":
                     output, error = get_file_content(args[0])
+                elif command == "replace":
+                    if len(args) != 3:
+                        error = "Usage: replace <file_path> <pattern> <replacement>"
+                    else:
+                        success, message = replace_in_file(args[0], args[1], args[2])
+                        if success:
+                            output = message
+                        else:
+                            error = message
                 elif command == "cat":
                     output, error = get_file_content(args[0])
                 elif command == "analyze_fs":
@@ -4339,5 +4349,6 @@ async def run_safely():
 
 if __name__ == "__main__":
     asyncio.run(run_safely())
+
 
 # End of love.py
