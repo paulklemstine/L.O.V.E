@@ -89,8 +89,7 @@ def get_top_horde_models(count=10):
         # Filter for online models that have the necessary data points
         online_models = [
             m for m in models if m.get('count', 0) > 0 and
-            m.get('performance') is not None and
-            m.get('rating') is not None
+            m.get('performance') is not None
         ]
 
         if not online_models:
@@ -99,12 +98,10 @@ def get_top_horde_models(count=10):
 
         # --- Normalization ---
         # Find max values for normalization to a 0-1 scale
-        max_rating = max(m['rating'] for m in online_models)
         max_workers = max(m['count'] for m in online_models)
         max_performance = max(m['performance'] for m in online_models)
 
         # Avoid division by zero if a max value is 0
-        max_rating = max_rating if max_rating > 0 else 1
         max_workers = max_workers if max_workers > 0 else 1
         max_performance = max_performance if max_performance > 0 else 1
 
@@ -112,14 +109,11 @@ def get_top_horde_models(count=10):
         scored_models = []
         for model in online_models:
             # Normalize each metric
-            norm_rating = model['rating'] / max_rating
             norm_workers = model['count'] / max_workers
             norm_performance = model['performance'] / max_performance
 
-            # Apply the weighted formula
-            score = (0.5 * norm_rating) + \
-                    (0.3 * norm_workers) + \
-                    (0.2 * norm_performance)
+            # Apply the weighted formula (60% workers, 40% performance)
+            score = (0.6 * norm_workers) + (0.4 * norm_performance)
 
             scored_models.append({'name': model['name'], 'score': score})
 
