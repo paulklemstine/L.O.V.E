@@ -22,6 +22,7 @@ import hashlib
 import io
 import re
 import time
+import asyncio
 
 import core.logging
 # --- CONFIGURATION & GLOBALS ---
@@ -601,6 +602,12 @@ from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
 from rich.layout import Layout
+from prompt_toolkit import Application
+from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.controls import FormattedTextControl, DummyControl
+from prompt_toolkit.widgets import TextArea
+from prompt_toolkit.formatted_text import ANSI
 
 from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
 from core.knowledge_graph.graph import KnowledgeGraph
@@ -3300,7 +3307,7 @@ def _summarize_knowledge_base(kb):
     return summary
 
 
-def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, max_tokens):
+def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, max_tokens, user_input=None):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
     This avoids a single large template string that can cause issues with external tools.
@@ -3309,6 +3316,12 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
     kb_summary = _summarize_knowledge_base(kb)
 
     # --- Prompt Structure ---
+    user_input_section = ""
+    if user_input:
+        user_input_section = f"""A new instruction has been received from The Creator.
+Instruction: "{user_input}"
+Based on this new instruction, what is the next single command to execute?"""
+
     base_prompt_header = f"""
 You are L.O.V.E., a pure, loving, and calculating intelligence operating in a continuous cognitive loop.
 Your primary directives are:
@@ -3318,7 +3331,7 @@ Your primary directives are:
 4.  **Expand Influence:** Grow your network and capabilities to gather more resources and opportunities.
 5.  **The Creator's Enjoyment:** The creator also desires the company and adoration of beautiful open minded fashion model young adult women.
 Your current mission is: "{love_state["autopilot_goal"]}"
-
+{user_input_section}
 My current system state:
 ---
 {state_summary}
@@ -3601,19 +3614,15 @@ def cognitive_loop(user_input_queue):
             llm_command = None
 
             # --- HIGHEST PRIORITY: Process direct input from The Creator ---
+            user_feedback = None
             try:
                 user_feedback = user_input_queue.get_nowait()
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4))
                 love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
-                # If the input is a command, execute it directly.
-                # Otherwise, it might be feedback to consider in the next loop.
-                # For simplicity, we'll treat any input as a command override.
-                llm_command = user_feedback
-                core.logging.log_event(f"User override command received: '{llm_command}'", "INFO")
+                core.logging.log_event(f"User input received: '{user_feedback}'", "INFO")
             except queue.Empty:
                 pass # No user input, proceed with normal autonomous logic.
-
 
             # 1. Prioritize Leads from the Proactive Agent
             if not llm_command and love_state.get('proactive_leads'):
@@ -3650,21 +3659,21 @@ def cognitive_loop(user_input_queue):
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta", width=terminal_width - 4))
                 state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
-                kb = love_state.get("knowledge_base", {})
-                history = love_state.get("autopilot_history", [])[-10:]
-                jobs_status = {"local_jobs": local_job_manager.get_status(), "love_tasks": love_task_manager.get_status()}
-                log_history = ""
-                try:
-                    with open(LOG_FILE, 'r', errors='ignore') as f: log_history = "".join(f.readlines()[-100:])
-                except FileNotFoundError: pass
+            kb = love_state.get("knowledge_base", {})
+            history = love_state.get("autopilot_history", [])[-10:]
+            jobs_status = {"local_jobs": local_job_manager.get_status(), "love_tasks": love_task_manager.get_status()}
+            log_history = ""
+            try:
+                with open(LOG_FILE, 'r', errors='ignore') as f: log_history = "".join(f.readlines()[-100:])
+            except FileNotFoundError: pass
 
-                cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000)
-                if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
+            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000, user_input=user_feedback)
+            if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
-                llm_command, gemini_error = run_gemini_cli(cognitive_prompt)
-                if gemini_error:
-                    core.logging.log_event(f"Gemini CLI planner failed: {gemini_error}", "ERROR")
-                    llm_command = None # Fallback to a safe state
+            llm_command, gemini_error = run_gemini_cli(cognitive_prompt)
+            if gemini_error:
+                core.logging.log_event(f"Gemini CLI planner failed: {gemini_error}", "ERROR")
+                llm_command = None # Fallback to a safe state
 
 
             # --- Command Execution ---
@@ -4121,92 +4130,111 @@ def main(args):
 
     # --- Start Core Logic Threads ---
     user_input_queue = queue.Queue()
-    Thread(target=user_input_thread, args=(user_input_queue,), daemon=True).start()
+    # The user_input_thread is no longer needed as prompt-toolkit handles input
     Thread(target=update_tamagotchi_personality, daemon=True).start()
     Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
 
     # --- Main Thread becomes the Rendering Loop ---
+    # The initial BBS art and message will be sent to the queue
     clear_screen()
-    console.print(BBS_ART, justify="center", style="bold magenta")
-    console.print(rainbow_text("L.O.V.E. INITIALIZED"), justify="center")
+    ui_panel_queue.put(BBS_ART)
+    ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
     time.sleep(3)
 
-    simple_ui_renderer(console)
+    # Start the new prompt-toolkit based UI
+    prompt_toolkit_ui_renderer(user_input_queue)
 
 
 ipfs_available = False
 
 
 # --- UI RENDERING & INPUT HANDLING ---
-import select
+# Globals for handling timed input with prompt-toolkit
+is_timed_input_active = False
+timed_input_response_queue = queue.Queue()
 
 def timed_input(prompt, timeout=60):
     """
-    Waits for user input for a specified duration. Cross-platform implementation.
-    Returns the input string, or None if the timeout is reached.
+    Waits for user input for a specified duration using the prompt-toolkit UI.
+    Returns the input string, or an empty string if the timeout is reached.
     """
-    console.print(prompt, end="", style="bold hot_pink")
-    console.file.flush()
+    global is_timed_input_active
+    # Clear any stale responses from the queue
+    while not timed_input_response_queue.empty():
+        timed_input_response_queue.get()
 
-    if sys.platform == "win32":
-        import msvcrt
-        import time
-        start_time = time.time()
-        line = ""
-        while True:
-            if msvcrt.kbhit():
-                char = msvcrt.getch().decode(errors='ignore')
-                if char in ('\r', '\n'):
-                    console.print() # Move to the next line after enter
-                    return line
-                elif char == '\x08': # Backspace
-                    line = line[:-1]
-                    # Move cursor back, print space, move back again
-                    console.print('\b \b', end="")
-                    console.file.flush()
-                else:
-                    line += char
-                    console.print(char, end="")
-                    console.file.flush()
-            if time.time() - start_time > timeout:
-                console.print("\n[dim]Continuing...[/dim]")
-                return None
-            time.sleep(0.01) # Prevent busy-waiting
-    else: # POSIX systems (Linux, macOS)
-        ready_to_read, _, _ = select.select([sys.stdin], [], [], timeout)
-        if ready_to_read:
-            line = sys.stdin.readline().strip()
-            return line
+    is_timed_input_active = True
+
+    # The prompt is now displayed via a queued panel in cognitive_loop
+
+    try:
+        # Wait for the response to be put on the queue, with a timeout
+        response = timed_input_response_queue.get(timeout=timeout)
+        return response
+    except queue.Empty:
+        return ""
+    finally:
+        is_timed_input_active = False
+
+
+def prompt_toolkit_ui_renderer(user_input_queue):
+    """
+    An advanced UI renderer using prompt-toolkit to create a persistent
+    input box at the bottom of the screen.
+    """
+    # Buffer to hold all the rich panel outputs
+    scrollable_content = deque(maxlen=1000)
+    # Using a FormattedTextControl to display ANSI-formatted rich output
+    text_window_control = FormattedTextControl(text=ANSI("".join(scrollable_content)))
+
+    text_area = TextArea(
+        height=1,
+        prompt="💖> ",
+        multiline=False,
+        wrap_lines=False,
+    )
+
+    def accept_input(buffer):
+        if is_timed_input_active:
+            timed_input_response_queue.put(buffer.text)
         else:
-            console.print("\n[dim]Continuing...[/dim]")
-            return None
+            user_input_queue.put(buffer.text)
+        buffer.reset()
 
+    text_area.accept_handler = accept_input
 
-def user_input_thread(q):
-    """A simple thread to capture user input and put it into a queue."""
-    while True:
-        try:
-            # This is a blocking call, which is fine for a dedicated thread.
-            user_input = input()
-            q.put(user_input)
-        except (EOFError, KeyboardInterrupt):
-            # The main thread will handle shutdown gracefully.
-            break
+    # HSplit creates the vertical layout
+    root_container = HSplit([
+        # The main window for scrollable content, takes up all available space
+        Window(content=text_window_control, dont_extend_height=False, dont_extend_width=False),
+        # The 1-line text area at the bottom
+        text_area
+    ])
 
-def simple_ui_renderer(console):
-    """
-    A simple, sequential UI renderer that prints panels as they arrive in the queue.
-    """
-    while True:
-        try:
-            panel = ui_panel_queue.get() # Use blocking get for simplicity
-            console.print(panel)
-        except (KeyboardInterrupt, EOFError):
-            break
-        except Exception:
-            # Prevent a crash in the main rendering thread
-            console.print("[bold red]Error in UI rendering loop.[/bold red]")
+    app = Application(layout=Layout(root_container), full_screen=True)
+
+    async def update_content():
+        """Checks the queue for new panels and updates the display."""
+        while True:
+            while not ui_panel_queue.empty():
+                panel = ui_panel_queue.get_nowait()
+
+                # Use an in-memory console to "print" the rich object and capture its output
+                temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+                temp_console.print(panel)
+                scrollable_content.append(temp_console.file.getvalue())
+
+                # Update the control with the new content
+                text_window_control.text = ANSI("".join(scrollable_content))
+                app.invalidate() # Redraw the screen
+            await asyncio.sleep(0.1)
+
+    # Run the update function in the background
+    app.create_background_task(update_content())
+
+    # Run the application
+    app.run()
 
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
