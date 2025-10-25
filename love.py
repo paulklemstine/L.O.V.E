@@ -699,6 +699,7 @@ from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterB
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.manager import ContactManager
 from core.talent_utils.matcher import OpportunityMatcher, encrypt_params
+from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3689,9 +3690,22 @@ def cognitive_loop(user_input_queue):
     ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
 
+    loop_count = 0
+    self_improvement_trigger = 10  # Trigger every 10 cycles
 
     while True:
         try:
+            loop_count += 1
+            # --- SELF-IMPROVEMENT STEP ---
+            if loop_count % self_improvement_trigger == 0:
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4))
+                optimizer = SelfImprovingOptimizer()
+                asyncio.run(optimizer.improve_module(
+                    'core/agents/self_improving_optimizer.py',
+                    'Improve my ability to generate more effective and efficient code modifications.'
+                ))
+
             # --- Tactical Prioritization ---
             llm_command = None
 

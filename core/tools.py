@@ -22,6 +22,25 @@ from core.image_api import generate_image
 import uuid
 
 
+def read_file(filepath: str) -> str:
+    """Reads the content of a file."""
+    try:
+        with open(filepath, 'r') as f:
+            return f.read()
+    except Exception as e:
+        return f"Error reading file: {e}"
+
+
+def write_file(filepath: str, content: str) -> str:
+    """Writes content to a file."""
+    try:
+        with open(filepath, 'w') as f:
+            f.write(content)
+        return f"File '{filepath}' written successfully."
+    except Exception as e:
+        return f"Error writing file: {e}"
+
+
 async def decompose_and_solve_subgoal(sub_goal: str, parent_engine: 'GeminiReActEngine') -> str:
     """
     Recursively calls the ReAct engine to solve a sub-goal.
