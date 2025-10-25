@@ -1106,7 +1106,7 @@ class LoveTaskManager:
     def _send_jules_heartbeat(self, session_name, api_key, stop_event):
         """Sends a periodic heartbeat to keep the Jules session alive."""
         heartbeat_url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
         # A simple, innocuous message to keep the connection open.
         heartbeat_data = {"message": {"body": "Heartbeat pulse."}}
 
@@ -1142,7 +1142,7 @@ class LoveTaskManager:
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
         # The `alt=sse` parameter enables Server-Sent Events (SSE). A POST request is required.
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:stream"
 
@@ -1332,7 +1332,7 @@ I am counting on your wisdom. Analyze the plan now.
 
         if not api_key: return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
         data = {"message": {"body": feedback}}
 
@@ -1397,7 +1397,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
         if not api_key: return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
         data = {"message": {"body": feedback}}
 
@@ -1431,7 +1431,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}"
 
         try:
@@ -1964,7 +1964,7 @@ CONFLICTED CONTENT:
             core.logging.log_event("Cannot reconcile orphans: Could not determine git repo info.", level="WARNING")
             return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
         # Fetch all sessions and filter locally, which is more robust than relying on a complex API filter.
         url = "https://jules.googleapis.com/v1alpha/sessions"
 
@@ -3150,7 +3150,7 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
         log_critical_event(error_message, console_override=console)
         return False
 
-    headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
     repo_owner, repo_name = get_git_repo_info()
     if not repo_owner or not repo_name:
         console.print("[bold red]Error: Could not determine git repository owner/name.[/bold red]")
