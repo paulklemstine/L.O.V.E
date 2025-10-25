@@ -30,8 +30,6 @@ RAVE_EMOJIS = [
     "🌻", # Sunflower
     "🌊", # Wave
     "☮️", # Peace Symbol
-    # Original Strings
-    "Peace", "Love", "Unity", "Respect"
 ]
 
 # Expanded list of colors, assuming a library like 'rich'
