@@ -3658,7 +3658,8 @@ def cognitive_loop(user_input_queue):
             if not llm_command:
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta", width=terminal_width - 4))
-                state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
+
+            state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
             kb = love_state.get("knowledge_base", {})
             history = love_state.get("autopilot_history", [])[-10:]
             jobs_status = {"local_jobs": local_job_manager.get_status(), "love_tasks": love_task_manager.get_status()}
