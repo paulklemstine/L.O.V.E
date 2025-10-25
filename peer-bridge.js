@@ -181,6 +181,7 @@ function initializePeer() {
             process.stdout.write(JSON.stringify({ type: 'status', status: 'client-initializing', peerId: peerId, message: "Lobby is hosted, becoming a client." }) + '\n');
 
             // Reconnect with the new client ID
+            isReconnecting = true;
             reconnect();
 
         } else {
