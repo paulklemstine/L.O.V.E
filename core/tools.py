@@ -21,6 +21,28 @@ from ipfs import pin_to_ipfs_sync
 from core.image_api import generate_image
 import uuid
 
+
+async def decompose_and_solve_subgoal(sub_goal: str, parent_engine: 'GeminiReActEngine') -> str:
+    """
+    Recursively calls the ReAct engine to solve a sub-goal.
+    This enables hierarchical planning.
+    """
+    from core.gemini_react_engine import GeminiReActEngine
+    print(f"Decomposing goal: Starting sub-goal: {sub_goal}")
+
+    # Create a new, nested ReAct engine instance.
+    # It inherits the configuration from its parent.
+    nested_engine = GeminiReActEngine(
+        gemini_cli_wrapper=parent_engine.gemini_cli_wrapper,
+        tool_registry=parent_engine.tool_registry
+    )
+
+    # Execute the sub-goal in isolation.
+    result = await nested_engine.execute_goal(sub_goal)
+
+    print(f"Sub-goal '{sub_goal}' finished with result: {result}")
+    return result
+
 cve_search_client = CVESearch("https://cve.circl.lu")
 
 

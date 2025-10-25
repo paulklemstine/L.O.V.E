@@ -1,6 +1,6 @@
 from core.gemini_cli_wrapper import GeminiCLIWrapper
 from core.gemini_react_engine import GeminiReActEngine
-from core.tools import ToolRegistry
+from core.tools import ToolRegistry, decompose_and_solve_subgoal
 from core.image_api import generate_image
 from core.knowledge_graph.graph import KnowledgeGraph
 
@@ -26,6 +26,7 @@ class Orchestrator:
         # self.tool_registry.register_tool("web_search", web_search)
         # self.tool_registry.register_tool("read_file", read_file)
         self.tool_registry.register_tool("generate_image", generate_image)
+        self.tool_registry.register_tool("decompose_and_solve_subgoal", decompose_and_solve_subgoal)
 
         print("Orchestrator is ready.")
 
