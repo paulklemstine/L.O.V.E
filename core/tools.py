@@ -67,35 +67,59 @@ cve_search_client = CVESearch("https://cve.circl.lu")
 
 class ToolRegistry:
     """
-    A registry for discovering and managing available tools.
+    A registry for discovering and managing available tools with rich metadata.
     """
     def __init__(self):
-        self._tools: Dict[str, Callable] = {}
+        self._tools: Dict[str, Dict[str, Any]] = {}
 
-    def register_tool(self, name: str, tool: Callable):
+    def register_tool(self, name: str, tool: Callable, metadata: Dict[str, Any]):
         """
-        Registers a tool.
+        Registers a tool with its metadata.
+        Metadata must include 'description' and 'arguments' (as a JSON schema).
         """
         if name in self._tools:
             print(f"Warning: Tool '{name}' is already registered. Overwriting.")
-        self._tools[name] = tool
-        print(f"Tool '{name}' registered.")
+        self._tools[name] = {"tool": tool, "metadata": metadata}
+        print(f"Tool '{name}' registered with metadata.")
 
     def get_tool(self, name: str) -> Callable:
         """
-        Retrieves a tool by its name.
+        Retrieves a tool's callable function by its name.
         """
         if name not in self._tools:
             raise KeyError(f"Tool '{name}' not found in registry.")
-        return self._tools[name]
+        return self._tools[name]["tool"]
 
-    def list_tools(self) -> Dict[str, Callable]:
-        """Returns a dictionary of all registered tools."""
+    def list_tools(self) -> Dict[str, Dict[str, Any]]:
+        """Returns a dictionary of all registered tools and their metadata."""
         return self._tools
 
     def get_tool_names(self) -> list[str]:
         """Returns a list of all registered tool names."""
         return list(self._tools.keys())
+
+    def get_formatted_tool_metadata(self) -> str:
+        """
+        Returns a formatted string of all tool metadata, designed to be
+        injected into an LLM prompt.
+        """
+        if not self._tools:
+            return "No tools are available."
+
+        output = "You have access to the following tools:\n\n"
+        for name, data in self._tools.items():
+            metadata = data['metadata']
+            description = metadata.get('description', 'No description available.')
+            args_schema = metadata.get('arguments', {})
+
+            output += f"Tool Name: `{name}`\n"
+            output += f"Description: {description}\n"
+            if args_schema and args_schema.get('properties'):
+                output += f"Arguments JSON Schema:\n```json\n{json.dumps(args_schema, indent=2)}\n```\n"
+            else:
+                output += "Arguments: None\n"
+            output += "---\n"
+        return output
 
 class SecureExecutor:
     """

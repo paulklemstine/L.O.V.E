@@ -4,7 +4,6 @@ from core.agents.code_gen_agent import CodeGenerationAgent
 from core.benchmarker import AutomatedBenchmarker
 from core.version_control import GitManager
 from core.gemini_react_engine import GeminiReActEngine
-from core.gemini_cli_wrapper import GeminiCLIWrapper
 from core.tools import ToolRegistry, read_file, write_file
 
 
@@ -22,14 +21,6 @@ class SelfImprovingOptimizer:
         self.benchmarker = AutomatedBenchmarker()
         self.git_manager = GitManager()
 
-        # Setup the ReAct engine internally
-        gemini_cli_wrapper = GeminiCLIWrapper()
-        tool_registry = ToolRegistry()
-        tool_registry.register_tool("read_file", read_file)
-        tool_registry.register_tool("write_file", write_file)
-        tool_registry.register_tool("AutomatedBenchmarker.run_experiment", self.benchmarker.run_experiment)
-        self.gemini_react_engine = GeminiReActEngine(gemini_cli_wrapper, tool_registry)
-
     async def improve_module(self, module_path: str, objective: str):
         """
         Applies intelligence to improve its own code.
@@ -41,6 +32,17 @@ class SelfImprovingOptimizer:
         print(f"\n===== Starting Self-Improvement Cycle for {module_path} =====")
         print(f"Objective: {objective}")
 
+        try:
+            # Lazily initialize the ReAct engine to avoid circular dependencies
+            tool_registry = ToolRegistry()
+            tool_registry.register_tool("read_file", read_file, {"description": "Reads a file.", "arguments": {"filepath": "string"}})
+            tool_registry.register_tool("write_file", write_file, {"description": "Writes to a file.", "arguments": {"filepath": "string", "content": "string"}})
+            tool_registry.register_tool("run_experiment", self.benchmarker.run_experiment, {"description": "Runs a benchmark.", "arguments": {"plan": "object", "code": "string"}})
+            gemini_react_engine = GeminiReActEngine(tool_registry)
+        except FileNotFoundError:
+            print("Error: gemini-cli is not available. Cannot run self-improvement cycle.")
+            return "Self-improvement cycle failed because the Gemini CLI is not available."
+
         goal = (
             f"Analyze the code at '{module_path}' and any relevant performance data. "
             f"Then, generate and validate an improved version of the code that achieves the objective: '{objective}'. "
@@ -48,7 +50,7 @@ class SelfImprovingOptimizer:
             "Use the AutomatedBenchmarker tool to validate your changes before finishing."
         )
 
-        result = await self.gemini_react_engine.execute_goal(goal)
+        result = await gemini_react_engine.execute_goal(goal)
         print(f"===== Self-Improvement Cycle Finished =====")
         print(f"Result: {result}")
         return result
