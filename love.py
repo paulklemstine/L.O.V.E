@@ -3074,7 +3074,7 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
     """
     # This function is called from various contexts, some of which may not have
     # all modules loaded. We use local imports to ensure dependencies are available.
-    from display import log_critical_event, create_api_error_panel
+    from display import create_api_error_panel
     from subversive import transform_request
     from utils import get_git_repo_info
 
