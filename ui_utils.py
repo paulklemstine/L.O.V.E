@@ -1,9 +1,95 @@
 import random
 from rich.text import Text
 
-RAVE_EMOJIS = ["💖", "✨", "🌈", "🦄", "🍄", "👽", "🚀", "🌟", "🌸", "🌴", "🌞", "😊", "🎉", "🎶", "Peace", "Love", "Unity", "Respect"]
-RAVE_COLORS = ["bright_magenta", "bright_cyan", "bright_green", "bright_yellow", "hot_pink", "orange1", "deep_pink2", "medium_purple1"]
-NEO_MATRIX_EMOJIS = ["💾", "💿", "🖥️", "💻", "🕹️", "💊", "👾", "🤖", "🧠", "🔥", "0️⃣", "1️⃣"]
+# Expanded list of emojis for a "Rave" or "PLUR" theme
+RAVE_EMOJIS = [
+    # Original
+    "💖", "✨", "🌈", "🦄", "🍄", "👽", "🚀", "🌟", "🌸", "🌴", "🌞", "😊", "🎉", "🎶",
+    # Added
+    "🪩", # Disco Ball
+    "🎧", # Headphones
+    "🎵", # Music Note
+    "🔊", # Speaker
+    "💃", # Dancer
+    "🕺", # Man Dancing
+    "🌀", # Cyclone/Spiral
+    "🌌", # Milky Way
+    "🎆", # Fireworks
+    "🪐", # Saturn
+    "💫", # Dizzy
+    "🦋", # Butterfly
+    "🍭", # Lollipop
+    "🔮", # Crystal Ball
+    "🧿", # Nazar Amulet
+    "🥰", # Smiling Face with Hearts
+    "😎", "🤩", "🤯", # Faces
+    "🙌", # Raising Hands
+    "🥳", # Partying Face
+    "✌️", # Peace Sign
+    "🌙", # Moon
+    "🌻", # Sunflower
+    "🌊", # Wave
+    "☮️", # Peace Symbol
+    # Original Strings
+    "Peace", "Love", "Unity", "Respect"
+]
+
+# Expanded list of colors, assuming a library like 'rich'
+# Added more bright, neon, and contrasting colors.
+RAVE_COLORS = [
+    # Original
+    "bright_magenta", "bright_cyan", "bright_green", "bright_yellow",
+    "hot_pink", "orange1", "deep_pink2", "medium_purple1",
+    # Added
+    "lime",
+    "yellow",
+    "electric_blue",
+    "chartreuse1",
+    "spring_green2",
+    "turquoise2",
+    "dodger_blue1",
+    "magenta1",
+    "deep_pink1",
+    "dark_orange",
+    "red1",
+    "gold1",
+    "deep_sky_blue1",
+    "violet",
+]
+
+# Expanded list of emojis for a "Neo-Matrix" or "Cyberpunk" theme
+NEO_MATRIX_EMOJIS = [
+    # Original
+    "💾", "💿", "🖥️", "💻", "🕹️", "💊", "👾", "🤖", "🧠", "🔥", "0️⃣", "1️⃣",
+    # Added
+    "🕶️", # Sunglasses (Neo!)
+    "🕴️", # Man in Suit Levitating (Agent Smith!)
+    "🐇", # Rabbit (White Rabbit)
+    "🗝️", # Key
+    "🚪", # Door
+    "☎️", # Telephone (Exits)
+    "📞", # Telephone Receiver
+    "📟", # Pager
+    "📠", # Fax Machine
+    "📼", # Videocassette
+    "📱", # Mobile Phone
+    "🔌", # Electric Plug
+    "⌨️", # Keyboard
+    "🔗", # Link
+    "⛓️", # Chains
+    "🧬", # DNA (Code)
+    "🧪", # Test Tube
+    "🔬", # Microscope
+    "📡", # Satellite Antenna
+    "🛰️", # Satellite
+    "⏳", # Hourglass
+    "👁️", # Eye
+    "🌃", # Night with Stars
+    "🏙️", # Cityscape
+    # All numbers
+    "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"
+]
+
 
 def get_rave_emoji():
     """Returns a random rave emoji."""
