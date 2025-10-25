@@ -21,11 +21,11 @@ class GeminiCLIWrapper:
         self.cli_path = self._find_cli_path()
 
     def _find_cli_path(self) -> str:
-        """Locates the gemini-cli executable within the project's node_modules directory."""
+        """Locates the gemini executable within the project's node_modules directory."""
         # This assumes the script is run from the root of the project.
-        path = os.path.join("node_modules", ".bin", "gemini-cli")
+        path = os.path.join("node_modules", ".bin", "gemini")
         if not os.path.exists(path):
-            raise FileNotFoundError(f"gemini-cli not found at {path}")
+            raise FileNotFoundError(f"gemini not found at {path}")
         return path
 
     def run(self, prompt: str, timeout: int = 60) -> GeminiCLIResponse:
