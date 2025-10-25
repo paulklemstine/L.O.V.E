@@ -26,4 +26,4 @@ rich-gradient
 prompt-toolkit
 customtkinter
 atproto
-PIL
+
