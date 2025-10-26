@@ -578,7 +578,6 @@ def run_llm(prompt_text, purpose="general", is_source_code=False):
     final_result = None
     last_model_id = None
     provider_map = {
-        "local": [model['id'] for model in LOCAL_MODELS_CONFIG],
         "gemini": GEMINI_MODELS,
         "horde": HORDE_MODELS,
         "openrouter": OPENROUTER_MODELS
