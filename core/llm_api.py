@@ -89,6 +89,23 @@ LOCAL_MODELS_CONFIG = [
 # --- Fallback Model Configuration ---
 GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 
+# https://ai.google.dev/gemini-api/docs/models/gemini
+MODEL_CONTEXT_SIZES = {
+    # Gemini Models
+    "gemini-2.5-pro": 1000000,
+    "gemini-2.5-flash": 1000000,
+    "gemini-2.5-flash-lite": 1000000,
+
+    # Local Models
+    "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF": 8192,
+    "TheBloke/CodeLlama-70B-Instruct-GGUF": 4096,
+    "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF": 32768,
+
+    # Horde and OpenRouter models are fetched dynamically.
+    # Their context sizes will be handled within the run_llm logic if needed.
+}
+
+
 # --- OpenRouter Configuration ---
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
@@ -531,7 +548,7 @@ def ensure_primary_model_downloaded(console, download_complete_event):
         download_complete_event.set()
 
 
-def run_llm(prompt_text, purpose="general"):
+def run_llm(prompt_text, purpose="general", is_source_code=False):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
     It now pins the prompt and response to IPFS and returns a dictionary.
@@ -544,41 +561,21 @@ def run_llm(prompt_text, purpose="general"):
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
 
     # --- Token Count & Prompt Management ---
+    prompt_cid = pin_to_ipfs_sync(prompt_text.encode('utf-8'), console)
+    original_prompt_text = prompt_text
+
     try:
         token_count = get_token_count(prompt_text)
         log_event(f"Initial prompt token count: {token_count}", "INFO")
-
-        # Truncate if necessary, primarily for local models
-        if token_count > MAX_PROMPT_TOKENS_LOCAL:
-            log_event(f"Prompt token count ({token_count}) exceeds limit ({MAX_PROMPT_TOKENS_LOCAL}). Truncating...", "WARNING")
-            # This is a simple truncation, more sophisticated methods could be used.
-            # We tokenize, truncate the token list, and then decode back to text.
-            if local_llm_tokenizer:
-                tokens = local_llm_tokenizer.tokenize(prompt_text.encode('utf-8'))
-                truncated_tokens = tokens[:MAX_PROMPT_TOKENS_LOCAL]
-                prompt_text = local_llm_tokenizer.detokenize(truncated_tokens).decode('utf-8', errors='ignore')
-                token_count = len(truncated_tokens)
-                log_event(f"Truncated prompt token count: {token_count}", "INFO")
-            else:
-                # A less precise method for API models if truncation is ever needed for them
-                # This path is less likely given their larger context windows.
-                avg_chars_per_token = len(prompt_text) / token_count
-                estimated_cutoff = int(MAX_PROMPT_TOKENS_LOCAL * avg_chars_per_token)
-                prompt_text = prompt_text[:estimated_cutoff]
-                log_event(f"Truncated prompt for API model (approximate).", "WARNING")
-
-
     except Exception as e:
-        log_event(f"Error during token counting/truncation: {e}", "ERROR")
-        # Decide if we should proceed or return, for now we proceed cautiously.
-
-    # Pin the potentially truncated prompt to IPFS
-    prompt_cid = pin_to_ipfs_sync(prompt_text.encode('utf-8'), console)
+        log_event(f"Could not count tokens for prompt: {e}", "WARNING")
+        token_count = 0 # Assume it's fine if we can't count
 
     local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
 
     # --- Provider-based Fallback Logic ---
     final_result = None
+    last_model_id = None
     provider_map = {
         "local": [model['id'] for model in LOCAL_MODELS_CONFIG],
         "gemini": GEMINI_MODELS,
@@ -597,8 +594,33 @@ def run_llm(prompt_text, purpose="general"):
 
         # Try up to 3 models from the selected provider
         for i, model_id in enumerate(models_to_try[:3]):
+            last_model_id = model_id
             result_text = None
+            prompt_text = original_prompt_text # Reset for each model attempt
             try:
+                # --- Context Window Check ---
+                max_tokens = MODEL_CONTEXT_SIZES.get(model_id)
+                # If model not in our map, estimate based on name, or use a default
+                if not max_tokens:
+                    if "16k" in model_id.lower(): max_tokens = 16384
+                    elif "8k" in model_id.lower(): max_tokens = 8192
+                    elif "32k" in model_id.lower(): max_tokens = 32768
+                    else: max_tokens = 8192 # Default fallback
+
+                # Leave a buffer for the response
+                max_prompt_tokens = int(max_tokens * 0.85)
+
+                if token_count > max_prompt_tokens:
+                    if is_source_code:
+                        log_event(f"Prompt ({token_count} tokens) too long for {model_id} ({max_prompt_tokens} tokens) and contains source code. Skipping.", "INFO")
+                        continue # Skip to the next model in the list
+                    else:
+                        log_event(f"Prompt ({token_count} tokens) too long for {model_id} ({max_prompt_tokens} tokens). Truncating...", "WARNING")
+                        # We can use a simple character-based truncation here as a fallback
+                        avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
+                        estimated_cutoff = int(max_prompt_tokens * avg_chars_per_token)
+                        prompt_text = prompt_text[:estimated_cutoff]
+
                 # --- LOCAL MODEL LOGIC ---
                 if model_id in local_model_ids:
                     log_event(f"Attempting to use local model: {model_id}")
@@ -772,17 +794,79 @@ def run_llm(prompt_text, purpose="general"):
         if final_result:
             break
 
-        # If we reach here, it means all attempts for this provider have failed.
-        PROVIDER_FAILURE_COUNT[provider] = PROVIDER_FAILURE_COUNT.get(provider, 0) + 1
-        failure_count = PROVIDER_FAILURE_COUNT[provider]
-        cooldown = 60 * (2 ** (failure_count - 1)) # Exponential backoff
-        log_event(f"Provider {provider} failed {failure_count} times. Applying cooldown of {cooldown}s to all its models.", "WARNING")
-        for model_in_provider in provider_map[provider]:
-            LLM_AVAILABILITY[model_in_provider] = time.time() + cooldown
+        # If we reach here, it means all attempts for this provider have failed,
+        # or all models were skipped.
+        if not final_result:
+            PROVIDER_FAILURE_COUNT[provider] = PROVIDER_FAILURE_COUNT.get(provider, 0) + 1
+            failure_count = PROVIDER_FAILURE_COUNT[provider]
+            cooldown = 60 * (2 ** (failure_count - 1)) # Exponential backoff
+            log_event(f"Provider {provider} failed {failure_count} times. Applying cooldown of {cooldown}s to all its models.", "WARNING")
+            for model_in_provider in provider_map[provider]:
+                LLM_AVAILABILITY[model_in_provider] = time.time() + cooldown
 
     # If we have a result, return it. Otherwise, proceed to emergency fallback.
     if final_result:
         return final_result
+
+    # --- Fallback for oversized source code prompts ---
+    if is_source_code and not final_result and last_model_id:
+        log_event(f"All models skipped for oversized source code prompt. Forcing truncation as a fallback with model {last_model_id}.", "WARNING")
+        prompt_text = original_prompt_text
+        max_tokens = MODEL_CONTEXT_SIZES.get(last_model_id, 8192) # Default to 8k if not found
+        max_prompt_tokens = int(max_tokens * 0.85)
+
+        if token_count > max_prompt_tokens:
+             avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
+             estimated_cutoff = int(max_prompt_tokens * avg_chars_per_token)
+             prompt_text = prompt_text[:estimated_cutoff]
+             log_event(f"Forced truncation to ~{max_prompt_tokens} tokens.", "WARNING")
+
+        # This is a simplified, single retry. We are not re-doing the whole loop.
+        # A more robust implementation could be added later if needed.
+        # For now, this handles the edge case of all models having too small a context.
+        try:
+            # This is a bit repetitive, but it's the simplest way to retry
+            # without majorly refactoring the loop above.
+            if last_model_id in local_model_ids:
+                 _initialize_local_llm(console)
+                 if local_llm_instance:
+                     response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
+                     result_text = response['choices'][0]['text']
+            elif last_model_id in GEMINI_MODELS:
+                command = [sys.executable, "-m", "llm", "-m", last_model_id]
+                result = subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+                result_text = result.stdout
+            elif last_model_id in OPENROUTER_MODELS:
+                api_key = os.environ.get("OPENROUTER_API_KEY")
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                payload = {"model": last_model_id, "messages": [{"role": "user", "content": prompt_text}]}
+                response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                response.raise_for_status()
+                result_text = response.json()["choices"][0]["message"]["content"]
+            elif last_model_id in HORDE_MODELS:
+                api_key = os.environ.get("STABLE_HORDE", "0000000000")
+                headers = {"apikey": api_key, "Content-Type": "application/json"}
+                payload = {"prompt": prompt_text, "params": {"max_length": 2048}, "models": [last_model_id]}
+                api_url = "https://aihorde.net/api/v2/generate/text/async"
+                response = requests.post(api_url, json=payload, headers=headers)
+                response.raise_for_status()
+                job_id = response.json()["id"]
+                check_url = f"https://aihorde.net/api/v2/generate/text/status/{job_id}"
+                for _ in range(30):
+                    time.sleep(10)
+                    check_response = requests.get(check_url, headers=headers)
+                    check_response.raise_for_status()
+                    status = check_response.json()
+                    if status["done"]:
+                        result_text = status["generations"][0]["text"]
+                        break
+            if result_text:
+                response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
+
+        except Exception as e:
+            log_event(f"Fallback truncation attempt failed for model {last_model_id}: {e}", "ERROR")
+
 
     # After iterating through all providers, if we still haven't succeeded, we wait for the next available model.
     all_available_times = [t for t in LLM_AVAILABILITY.values() if t > time.time()]
