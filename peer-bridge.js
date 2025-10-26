@@ -169,10 +169,10 @@ function initializePeer() {
     });
 
     peer.on('error', (err) => {
-        log('error', `PeerJS error: ${err.type} - ${err.message}`);
-
         if (err.type === 'id-taken' && peerId === LOBBY_HOST_ID) {
-            log('warn', `Lobby ID '${LOBBY_HOST_ID}' is taken. Switching to client mode.`);
+            // This is an expected event when another instance is already the host.
+            // Log it as info and switch to client mode.
+            log('info', `Lobby host found at '${LOBBY_HOST_ID}'. This instance will become a client.`);
             isClient = true;
             peerId = `love-lobby-client-${uuidv4()}`; // Generate a unique ID
             log('info', `Generated new client ID: ${peerId}`);
@@ -183,8 +183,11 @@ function initializePeer() {
             // Reconnect with the new client ID
             reconnect();
             return;
+        }
 
-        } else {
+        // For all other errors, log them and decide whether to reconnect.
+        log('error', `PeerJS error: ${err.type} - ${err.message}`);
+        {
             const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc'];
             if (recoverableErrors.includes(err.type)) {
                 log('warn', 'A recoverable error occurred. Triggering reconnection.');
