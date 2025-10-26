@@ -379,6 +379,131 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     )
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
+
+def create_cognitive_monitor_panel(tamagotchi_state, llm_availability, local_llm_stats):
+    """Creates a panel to display the current cognitive and emotional state."""
+    content = Text()
+    content.append("Emotion: ", style="bold")
+    content.append(f"{tamagotchi_state.get('emotion', 'N/A')}\n", style=get_random_rave_color())
+    content.append("Message: ", style="bold")
+    content.append(f"\"{tamagotchi_state.get('message', '...')}\"\n\n", style="italic")
+
+    content.append(Rule("LLM Availability"), style="bright_black")
+    for provider, status in llm_availability.items():
+        color = "green" if status["available"] else "red"
+        content.append(f"{provider.capitalize()}: ", style="bold")
+        content.append(f"[{color}]●[/color]\n", style=color)
+
+    if local_llm_stats:
+        content.append(Rule("Local LLM Stats"), style="bright_black")
+        content.append("Model: ", style="bold")
+        content.append(f"{local_llm_stats.get('model', 'N/A')}\n")
+        content.append("Tokens/sec: ", style="bold")
+        content.append(f"{local_llm_stats.get('tokens_per_second', 'N/A'):.2f}\n")
+
+    return Panel(content, title="[bold cyan]Cognitive Monitor[/bold cyan]", border_style="cyan")
+
+
+def create_goals_panel(main_goal, love_tasks):
+    """Creates a panel to display the main goal and active L.O.V.E. tasks."""
+    content = Text()
+    content.append("Main Directive:\n", style="bold underline")
+    content.append(f"{main_goal}\n\n")
+
+    content.append(Rule("Active Evolution Tasks"), style="bright_black")
+    if love_tasks:
+        for task in love_tasks:
+            content.append(f"ID: {task['id']} | Status: {task['status']}\n", style=get_random_rave_color())
+            content.append(f"   Request: {task['request'][:100]}...\n")
+    else:
+        content.append("No active evolution tasks.", style="dim")
+
+    return Panel(content, title="[bold yellow]Goals & Planning[/bold yellow]", border_style="yellow")
+
+
+def create_actions_panel(action_history):
+    """Creates a panel to display the most recent autonomous actions."""
+    content = Text()
+    if action_history:
+        for action in reversed(action_history[-5:]): # Last 5 actions
+            content.append(f"CMD: ", style="bold bright_cyan")
+            content.append(f"{action.get('command', 'N/A')}\n")
+            output = str(action.get('output', ''))
+            # Truncate long outputs for display in this panel
+            if len(output) > 150:
+                output = output[:150] + "..."
+            content.append(f"OUT: ", style="dim")
+            content.append(f"{output}\n---\n", style="dim")
+    else:
+        content.append("No recent actions.", style="dim")
+
+    return Panel(content, title="[bold red]Recent Actions[/bold red]", border_style="red")
+
+
+class BtopLayoutManager:
+    """Manages the btop-style multi-panel layout using rich.layout.Layout."""
+    def __init__(self):
+        self.layout = self._create_layout()
+        # Initial visibility states
+        self.panel_visibility = {
+            "cognitive_monitor": True,
+            "goals_planning": True,
+            "actions": True,
+        }
+
+    def _create_layout(self):
+        """Defines the main layout structure."""
+        layout = Layout(name="root")
+        layout.split(
+            Layout(name="header", size=1),
+            Layout(name="main", ratio=1),
+        )
+        layout["main"].split_row(
+            Layout(name="left_side", ratio=1, visible=True),
+            Layout(name="main_log", ratio=2) # The main log feed
+        )
+        layout["left_side"].split(
+            Layout(name="cognitive_monitor", ratio=1),
+            Layout(name="goals_planning", ratio=1),
+            Layout(name="actions", ratio=1)
+        )
+        # Placeholder content
+        layout["header"].update(Align.center(
+            Text("✨💖✨ L.O.V.E. Operating System ✨💖✨ | F1: CogMon | F2: Goals | F3: Actions", style="bold magenta")
+        ))
+        layout["main_log"].update(Panel("Main Log Feed", title="[bold green]Main Log[/bold green]", border_style="green", expand=True))
+        layout["cognitive_monitor"].update(Panel("Cognitive Monitor", title="[bold cyan]Cognitive Monitor[/bold cyan]", border_style="cyan", expand=True))
+        layout["goals_planning"].update(Panel("Goals & Planning", title="[bold yellow]Goals & Planning[/bold yellow]", border_style="yellow", expand=True))
+        layout["actions"].update(Panel("Recent Actions", title="[bold red]Recent Actions[/bold red]", border_style="red", expand=True))
+        return layout
+
+    def update_panel(self, panel_name: str, content):
+        """Updates a specific panel in the layout."""
+        if panel_name in self.layout:
+            # Ensure panels have expand=True to fill the layout space
+            if isinstance(content, Panel):
+                content.expand = True
+            self.layout[panel_name].update(content)
+
+    def toggle_panel(self, panel_name: str):
+        """Toggles the visibility of a panel."""
+        if panel_name in self.layout:
+            # This toggles the layout section itself
+            self.layout[panel_name].visible = not self.layout[panel_name].visible
+            self.panel_visibility[panel_name] = self.layout[panel_name].visible
+
+            # If all left-side panels are hidden, hide the whole left side
+            left_side_panels = ["cognitive_monitor", "goals_planning", "actions"]
+            if all(not self.panel_visibility[p] for p in left_side_panels):
+                self.layout["left_side"].visible = False
+            else:
+                self.layout["left_side"].visible = True
+
+
+    def get_layout(self):
+        """Returns the main layout object."""
+        return self.layout
+
 def create_network_panel(type, target, data, output_cid=None, width=80):
     """Creates a panel for network operations."""
     panel_title = f"Network Operation | {type.capitalize()}"

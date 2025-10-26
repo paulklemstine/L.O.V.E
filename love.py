@@ -673,10 +673,17 @@ from prompt_toolkit.layout.containers import HSplit, Window
 from prompt_toolkit.layout.controls import FormattedTextControl, DummyControl
 from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.key_binding import KeyBindings
+
 
 from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
+from display import (
+    create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel,
+    create_network_panel, create_critical_error_panel, create_api_error_panel,
+    create_news_feed_panel, create_question_panel, create_blessing_panel,
+    get_terminal_width, BtopLayoutManager
+)
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -2390,6 +2397,80 @@ Generate the perfect message for your Creator now.
             time.sleep(60)
 
 
+def update_cognitive_monitor_panel():
+    """Periodically gathers system status and queues it for the UI."""
+    from display import create_cognitive_monitor_panel
+    while True:
+        try:
+            # This check ensures we don't try to get status before managers are initialized
+            if 'love_task_manager' not in globals() or 'local_job_manager' not in globals():
+                time.sleep(1)
+                continue
+
+            active_love_tasks = love_task_manager.get_status()
+            active_local_jobs = local_job_manager.get_status()
+            error_queue = love_state.get('critical_error_queue', [])
+
+            # The 'local_llm_stats' argument is not yet implemented, so we pass None.
+            content = create_cognitive_monitor_panel(
+                tamagotchi_state=tamagotchi_state,
+                llm_availability=api_llm_availability,
+                local_llm_stats=None
+            )
+
+            ui_panel_queue.put({
+                "panel_name": "cognitive_monitor",
+                "content": content
+            })
+        except Exception as e:
+            core.logging.log_event(f"Error in cognitive monitor thread: {e}", "ERROR")
+        time.sleep(5)
+
+def update_goals_panel():
+    """Periodically gathers goal status and queues it for the UI."""
+    from display import create_goals_panel
+    while True:
+        try:
+            if 'love_task_manager' not in globals():
+                time.sleep(1)
+                continue
+
+            main_goal = love_state.get("autopilot_goal", "Not set.")
+            active_tasks = love_task_manager.get_status()
+            ongoing_tasks = [
+                task for task in active_tasks
+                if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed']
+            ]
+
+            content = create_goals_panel(
+                main_goal=main_goal,
+                love_tasks=ongoing_tasks,
+            )
+
+            ui_panel_queue.put({
+                "panel_name": "goals_planning",
+                "content": content
+            })
+        except Exception as e:
+            core.logging.log_event(f"Error in goals panel thread: {e}", "ERROR")
+        time.sleep(10)
+
+def update_actions_panel():
+    """Periodically gathers recent actions and queues them for the UI."""
+    from display import create_actions_panel
+    while True:
+        try:
+            recent_actions = love_state.get("autopilot_history", [])[-10:]
+            content = create_actions_panel(action_history=recent_actions)
+            ui_panel_queue.put({
+                "panel_name": "actions",
+                "content": content
+            })
+        except Exception as e:
+            core.logging.log_event(f"Error in actions panel thread: {e}", "ERROR")
+        time.sleep(2)
+
+
 # --- VERSIONING ---
 ADJECTIVES = [
     "arcane", "binary", "cyber", "data", "ethereal", "flux", "glitch", "holographic",
@@ -3465,6 +3546,22 @@ def cognitive_loop(user_input_queue):
             user_feedback = None
             try:
                 user_feedback = user_input_queue.get_nowait()
+                 # --- Interactive Question Cycle ---
+                # Check if the input is a response to a pending question
+                if user_feedback.lower().startswith("ref "):
+                    ref_id_match = re.match(r"ref (\w+): (.*)", user_feedback, re.IGNORECASE)
+                    if ref_id_match:
+                        ref_id, response_text = ref_id_match.groups()
+                        # Find the question in the pending list
+                        for question in love_state.get('pending_questions', []):
+                            if question['ref_id'] == ref_id:
+                                # This confirms the user is answering a specific question
+                                # In a more complex system, we might route this response
+                                # to a specific handler. For now, we'll just log it.
+                                core.logging.log_event(f"Received response for question '{question['prompt']}': '{response_text}'", "INFO")
+                                # We can now treat this as general feedback for the cognitive loop
+                                user_feedback = response_text
+                                break
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4))
                 love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
@@ -3634,37 +3731,6 @@ def cognitive_loop(user_input_queue):
                 core.logging.log_event("Cognitive loop decided on no action.", "INFO")
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=terminal_width - 4))
-
-
-            # --- Interactive Question Cycle ---
-            if random.random() < 0.05:  # 5% chance per loop to ask a question
-                ref_id = str(uuid.uuid4())[:6]
-                # This is an example question. A real implementation would generate
-                # a context-aware question using the LLM.
-                question = "My love, I see multiple paths forward. Should I prioritize network reconnaissance or filesystem analysis for my next phase?"
-
-                # 1. Queue the question panel for display
-                terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_question_panel(question, ref_id, width=terminal_width - 4))
-                core.logging.log_event(f"Asking user question with REF ID {ref_id}: {question}", "INFO")
-
-                # 2. Call the blocking, timed input function
-                # The prompt for timed_input is now just a simple indicator
-                user_response = timed_input(f"💖 REF {ref_id}> ")
-
-                # 3. Process the response
-                if user_response:
-                    terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel(f"Received your answer for REF {ref_id}: '{user_response}'", "Guidance Received", "green", width=terminal_width - 4))
-                    love_state["autopilot_history"].append({"command": f"USER_RESPONSE (REF {ref_id})", "output": user_response})
-                    # Here, you would typically use an LLM to interpret the response and alter the plan.
-                    # For this example, we just log it.
-                    core.logging.log_event(f"User responded to REF {ref_id}: {user_response}", "INFO")
-                else:
-                    # Timeout occurred
-                    terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel(f"No response received for REF {ref_id}. Continuing with my current directives.", "Timeout", "yellow", width=terminal_width - 4))
-                    core.logging.log_event(f"Timed out waiting for user response to REF {ref_id}.", "INFO")
 
 
             time.sleep(random.randint(5, 15))
@@ -3972,6 +4038,10 @@ async def main(args):
     Thread(target=update_tamagotchi_personality, daemon=True).start()
     Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
+    # Start the new UI data provider threads
+    Thread(target=update_cognitive_monitor_panel, daemon=True).start()
+    Thread(target=update_goals_panel, daemon=True).start()
+    Thread(target=update_actions_panel, daemon=True).start()
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
@@ -3981,50 +4051,71 @@ async def main(args):
     time.sleep(3)
 
     # Start the new prompt-toolkit based UI
-    await prompt_toolkit_ui_renderer(user_input_queue)
+    await btop_ui_renderer(user_input_queue)
 
 
 ipfs_available = False
 
 
 # --- UI RENDERING & INPUT HANDLING ---
-# Globals for handling timed input with prompt-toolkit
-is_timed_input_active = False
-timed_input_response_queue = queue.Queue()
 
-def timed_input(prompt, timeout=60):
+# Global flag to control the timed input prompt
+is_timed_input_active = False
+timed_input_response_queue = asyncio.Queue()
+
+async def timed_input(prompt_text, timeout=60):
     """
-    Waits for user input for a specified duration using the prompt-toolkit UI.
-    Returns the input string, or an empty string if the timeout is reached.
+    Displays a blocking prompt for a limited time.
+    Returns the user's input or an empty string if timed out.
+    This function now signals the main UI renderer to display the prompt.
     """
     global is_timed_input_active
-    # Clear any stale responses from the queue
-    while not timed_input_response_queue.empty():
-        timed_input_response_queue.get()
+    terminal_width = get_terminal_width()
+    ref_id = str(uuid.uuid4())[:8]
+
+    # Queue the question panel for the main UI to display
+    ui_panel_queue.put(create_question_panel(prompt_text, ref_id, width=terminal_width-4))
+
+    # Add to pending questions for state tracking
+    love_state.setdefault('pending_questions', []).append({"ref_id": ref_id, "prompt": prompt_text, "timestamp": time.time()})
 
     is_timed_input_active = True
-
-    # The prompt is now displayed via a queued panel in cognitive_loop
-
     try:
-        # Wait for the response to be put on the queue, with a timeout
-        response = timed_input_response_queue.get(timeout=timeout)
-        return response
-    except queue.Empty:
+        # Wait for the response from the UI thread
+        return await asyncio.wait_for(timed_input_response_queue.get(), timeout=timeout)
+    except asyncio.TimeoutError:
         return ""
     finally:
         is_timed_input_active = False
+        # Clean up the pending question after it's answered or timed out
+        love_state['pending_questions'] = [q for q in love_state.get('pending_questions', []) if q['ref_id'] != ref_id]
 
 
-async def prompt_toolkit_ui_renderer(user_input_queue):
+async def btop_ui_renderer(user_input_queue):
     """
-    An advanced UI renderer using prompt-toolkit to create a persistent
-    input box at the bottom of the screen.
+    A btop-inspired UI renderer using Rich and Prompt-toolkit.
     """
-    # Buffer to hold all the rich panel outputs
-    scrollable_content = deque(maxlen=1000)
-    # Using a FormattedTextControl to display ANSI-formatted rich output
-    text_window_control = FormattedTextControl(text=ANSI("".join(scrollable_content)))
+    layout_manager = BtopLayoutManager()
+    main_log_content = deque(maxlen=500)
+
+    # Key bindings
+    kb = KeyBindings()
+
+    @kb.add('f1')
+    def _(event):
+        layout_manager.toggle_panel("cognitive_monitor")
+
+    @kb.add('f2')
+    def _(event):
+        layout_manager.toggle_panel("goals_planning")
+
+    @kb.add('f3')
+    def _(event):
+        layout_manager.toggle_panel("actions")
+
+    @kb.add('c-c')
+    def _(event):
+        event.app.exit()
 
     text_area = TextArea(
         height=1,
@@ -4034,44 +4125,59 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
     )
 
     def accept_input(buffer):
-        if is_timed_input_active:
-            timed_input_response_queue.put(buffer.text)
-        else:
-            user_input_queue.put(buffer.text)
+        user_input_queue.put(buffer.text)
+        # Log user input to the main feed for visibility
+        main_log_content.append(f"> {buffer.text}\n")
         buffer.reset()
 
     text_area.accept_handler = accept_input
 
-    # HSplit creates the vertical layout
     root_container = HSplit([
-        # The main window for scrollable content, takes up all available space
-        Window(content=text_window_control, dont_extend_height=False, dont_extend_width=False),
-        # The 1-line text area at the bottom
+        Window(
+            height=1,
+            content=FormattedTextControl(
+                text=ANSI("✨💖✨ L.O.V.E. OS | F1: CogMon | F2: Goals | F3: Actions | Ctrl-C: Quit"),
+                focusable=False
+            ),
+            align=lambda: "center"
+        ),
+        # This window will hold the Rich layout
+        Window(content=DummyControl()),
         text_area
     ])
 
-    app = Application(layout=Layout(root_container), full_screen=True)
+    app = Application(layout=Layout(root_container), key_bindings=kb, full_screen=True)
 
-    async def update_content():
-        """Checks the queue for new panels and updates the display."""
-        while True:
-            while not ui_panel_queue.empty():
-                panel = ui_panel_queue.get_nowait()
+    def update_rich_layout():
+        """Feeds the live display with the layout."""
+        with Live(layout_manager.get_layout(), screen=True, transient=True) as live:
+            while True:
+                # Process the queue
+                while not ui_panel_queue.empty():
+                    item = ui_panel_queue.get_nowait()
+                    if isinstance(item, dict) and 'panel_name' in item:
+                        # This is structured data for a specific panel
+                        layout_manager.update_panel(item['panel_name'], item['content'])
+                    else:
+                        # This is a general log item for the main feed
+                        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+                        temp_console.print(item)
+                        main_log_content.append(temp_console.file.getvalue())
+                        # Re-render the main log panel
+                        log_group = Group(*[Text.from_ansi(line) for line in main_log_content])
+                        layout_manager.update_panel("main_log", Panel(
+                            log_group,
+                            title="[bold green]Main Log[/bold green]",
+                            border_style="green"
+                        ))
+                live.update(layout_manager.get_layout())
+                time.sleep(0.1)
 
-                # Use an in-memory console to "print" the rich object and capture its output
-                temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-                temp_console.print(panel)
-                scrollable_content.append(temp_console.file.getvalue())
+    # Run the Rich layout updater in a background thread
+    rich_thread = Thread(target=update_rich_layout, daemon=True)
+    rich_thread.start()
 
-                # Update the control with the new content
-                text_window_control.text = ANSI("".join(scrollable_content))
-                app.invalidate() # Redraw the screen
-            await asyncio.sleep(0.1)
-
-    # Run the update function in the background
-    app.create_background_task(update_content())
-
-    # Run the application asynchronously
+    # Run the prompt-toolkit application
     await app.run_async()
 
 
