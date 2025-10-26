@@ -182,6 +182,7 @@ function initializePeer() {
 
             // Reconnect with the new client ID
             reconnect();
+            return;
 
         } else {
             const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc'];
