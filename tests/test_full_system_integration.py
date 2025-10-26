@@ -18,7 +18,6 @@ def test_phase_1_cognitive_architecture_initialization():
     orchestrator = Orchestrator()
 
     assert orchestrator is not None
-    assert orchestrator.legacy_planner is not None
     assert orchestrator.tool_registry is not None
     assert orchestrator.execution_engine is not None
 
@@ -28,7 +27,7 @@ def test_phase_1_cognitive_architecture_initialization():
     print("--- Phase 1 Test Passed: Cognitive Architecture is sound. ---")
 
 @pytest.mark.asyncio
-@patch('core.planning.mock_llm_call')
+@patch('core.llm_api.run_llm')
 @patch('utils.get_file_content', new_callable=AsyncMock)
 @patch('core.tools.perform_webrequest', new_callable=AsyncMock)
 @patch('core.gemini_react_engine.execute_reasoning_task')

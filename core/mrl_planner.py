@@ -1,7 +1,7 @@
 import json
 from typing import List, Dict, Any
 from core.knowledge_graph.graph import KnowledgeGraph
-from core.planning import mock_llm_call
+from core.llm_api import run_llm
 
 class MRLPlanner:
     """
@@ -28,7 +28,7 @@ class MRLPlanner:
         )
 
         try:
-            response = mock_llm_call(prompt, purpose="mrl_planning")
+            response = run_llm(prompt, purpose="mrl_planning")
             plan = json.loads(response)
             return plan
         except json.JSONDecodeError:

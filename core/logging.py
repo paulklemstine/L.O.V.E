@@ -45,7 +45,7 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
         try:
             # Create a simple formatted string instead of a panel
             log_line = f"[{level.upper()}] {message}"
-            ui_panel_queue.put(log_line)
+            ui_panel_queue.put({'type': 'log', 'content': log_line})
         except Exception as e:
             # If this fails, we can't display it, but we should log the failure.
             logging.error(f"Failed to queue log event for UI display: {e}")

@@ -62,7 +62,7 @@ class TestPhase2Integration(unittest.IsolatedAsyncioTestCase):
 
     #     print("\n--- Test 'test_full_execution_flow' PASSED ---")
 
-    @patch('core.planning.mock_llm_call')
+    @patch('core.llm_api.run_llm')
     async def test_error_handling_for_unknown_tool(self, mock_llm_call_func):
         """
         Tests how the system handles a task that requires a tool that is not registered.

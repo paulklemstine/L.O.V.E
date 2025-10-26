@@ -177,8 +177,15 @@ ALL_LLM_MODELS = list(dict.fromkeys(
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
+LLM_STATS = {
+    model: {"status": "idle", "success": 0, "failure": 0, "last_used": 0} for model in ALL_LLM_MODELS
+}
 local_llm_instance = None
 local_llm_tokenizer = None
+
+def get_llm_provider_stats():
+    """Returns the current stats for all LLM providers."""
+    return LLM_STATS
 
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
@@ -602,6 +609,8 @@ def run_llm(prompt_text, purpose="general"):
         result_text = None
 
         try:
+            LLM_STATS[model_id]["status"] = "active"
+            LLM_STATS[model_id]["last_used"] = time.time()
             # --- LOCAL MODEL LOGIC ---
             if model_id in local_model_ids:
                 log_event(f"Attempting to use local model: {model_id}")
@@ -708,11 +717,15 @@ def run_llm(prompt_text, purpose="general"):
             # --- Success Case ---
             if result_text is not None:
                 LLM_AVAILABILITY[model_id] = time.time()
+                LLM_STATS[model_id]["success"] += 1
+                LLM_STATS[model_id]["status"] = "idle"
                 response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                 return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
 
         except requests.exceptions.HTTPError as e:
             last_exception = e
+            LLM_STATS[model_id]["failure"] += 1
+            LLM_STATS[model_id]["status"] = "error"
             log_event(f"Model {model_id} failed with HTTPError: {e}", level="WARNING")
             if e.response.status_code == 429:
                 # Specific handling for rate limiting
@@ -748,6 +761,8 @@ def run_llm(prompt_text, purpose="general"):
 
         except Exception as e:
             last_exception = e
+            LLM_STATS[model_id]["failure"] += 1
+            LLM_STATS[model_id]["status"] = "error"
             log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
 
             # Handle different kinds of errors

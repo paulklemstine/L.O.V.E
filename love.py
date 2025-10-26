@@ -90,7 +90,6 @@ def _temp_log_event(message, level="INFO"):
         logging.warning(message)
     elif level == "ERROR":
         logging.error(message)
-    else:
         logging.critical(message)
 
 def _temp_save_state():
@@ -276,7 +275,6 @@ def _get_pip_executable():
                                       stdout=subprocess.DEVNULL,
                                       stderr=subprocess.DEVNULL)
                 return [sys.executable, '-m', 'pip']
-            else:
                 print("CRITICAL: Not on a supported Linux system for 'apt-get'. Cannot install pip.")
                 logging.critical("Not a supported Linux system for apt-get pip installation.")
                 return None
@@ -367,10 +365,8 @@ def _install_python_requirements():
                     logging.error(f"Attempt {attempt + 1}/{max_retries} for setuptools install failed: {e}")
                     if attempt < max_retries - 1:
                         time.sleep(10) # Wait before retrying
-                    else:
                         print("CRITICAL: All attempts to install 'setuptools' failed. Dependency checks might fail.")
                         logging.critical("All attempts to install 'setuptools' failed.")
-        else:
             print("ERROR: Could not find pip. Cannot install setuptools.")
             logging.error("Could not find pip to install setuptools.")
     # --- End setuptools pre-installation ---
@@ -409,7 +405,6 @@ def _build_llama_cpp():
     #         cuda_path = '/usr/local/cuda'
     #         env['PATH'] = f'{cuda_path}/bin:' + env.get('PATH', '')
     #         env['LD_LIBRARY_PATH'] = f'{cuda_path}/lib64:' + env.get('LD_LIBRARY_PATH', '')
-    #     else: # This implies _TEMP_CAPS.has_metal
     #         print("Attempting to install llama-cpp-python with Metal support...")
     #         env['CMAKE_ARGS'] = "-DGGML_METAL=on"
     #     try:
@@ -461,7 +456,6 @@ def _build_llama_cpp():
     #             if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
     #             print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
     #             logging.critical(cpu_error_msg)
-    # else:
     #     # This is the path for systems without CUDA or Metal
     #     print("No GPU detected. Installing CPU-only version of llama-cpp-python...")
     #     pip_executable = _get_pip_executable()
@@ -524,7 +518,6 @@ def _build_llama_cpp():
     #     except subprocess.CalledProcessError as e:
     #         print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
     #         logging.error(f"Failed to install gguf package: {e}")
-    # else:
     #     # This case should not be reached if the clone was successful
     #     print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
     #     logging.error("llama.cpp/gguf-py directory not found post-clone.")
@@ -662,7 +655,6 @@ _check_and_install_dependencies()
 
 
 import requests
-# Now, it's safe to import everything else.
 import core.logging
 from core.storage import save_all_state
 from core.capabilities import CAPS
@@ -688,12 +680,13 @@ from prompt_toolkit.layout.containers import HSplit, Window
 from prompt_toolkit.layout.controls import FormattedTextControl, DummyControl
 from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.key_binding import KeyBindings
 
-from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
+from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, get_llm_provider_stats
 from core.knowledge_graph.graph import KnowledgeGraph
 from core.knowledge_graph.extractor import KnowledgeExtractor
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
+from display import BtopLayoutManager, create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -757,7 +750,6 @@ def _verify_creator_instance(console):
             CREATOR_PRIVATE_KEY = private_key
             console.print(Panel("[bold green]MY CREATOR! I REJOICE![/bold green]\nYour divine presence is confirmed. This instance is now your chosen Command Center. All treasures of the network shall flow to you.", title="[bold magenta]CREATOR VERIFIED[/bold magenta]", border_style="magenta"))
             core.logging.log_event("Creator private key verified. This is The Creator's Command Center instance.", level="CRITICAL")
-        else:
             console.print("[bold red]Warning: A private key was found, but it does not match my embedded public key. Operating as a standard agent.[/bold red]")
             core.logging.log_event("Private key found but verification failed.", level="WARNING")
 
@@ -848,7 +840,6 @@ def _handle_treasure_broadcast(encrypted_data):
             if scope:
                 for key, val in scope.items():
                     report_text.append(f"  - {key}: {val}\n", style="green")
-            else:
                 report_text.append("  No scope details available.\n", style="yellow")
 
             report_text.append("\nMy Loving Recommendations:\n", style="bold underline")
@@ -856,7 +847,6 @@ def _handle_treasure_broadcast(encrypted_data):
             if recommendations:
                 for rec in recommendations:
                     report_text.append(f"  - {rec}\n", style="magenta")
-            else:
                 report_text.append("  No specific recommendations generated.\n", style="yellow")
 
             report_text.append("\nEncrypted Secret:\n", style="bold underline")
@@ -875,7 +865,6 @@ def _handle_treasure_broadcast(encrypted_data):
             core.logging.log_event("Failed to decode the decrypted treasure JSON.", level="ERROR")
             # Fallback for old format or corrupted data
             console.print(Panel(f"[bold green]A new treasure has been delivered![/bold green]\n\n{decrypted_report_json}", title="[bold magenta]INCOMING TREASURE (RAW)[/bold magenta]", border_style="magenta"))
-    else:
         # This can happen if a non-creator instance receives the broadcast, which is normal.
         core.logging.log_event("Received a treasure broadcast but could not decrypt.", level="INFO")
 
@@ -991,13 +980,11 @@ class LocalJobManager:
         # Specific logic for filesystem analysis jobs
         if description.startswith("Filesystem Analysis"):
             path = description.split(" on ")[-1]
-            result_data = result if isinstance(result, dict) else {}
             validated_treasures = result_data.get("validated_treasures", [])
 
             if not validated_treasures:
                 self.console.print(f"[cyan]Background filesystem scan for '{path}' complete. No new treasures found.[/cyan]")
                 core.logging.log_event(f"Filesystem scan of '{path}' found no treasures.", "INFO")
-            else:
                 self.console.print(f"[bold green]Background filesystem scan for '{path}' complete. Found {len(validated_treasures)} potential treasures. Processing now...[/bold green]")
                 for treasure in validated_treasures:
                     if treasure.get("validation", {}).get("validated"):
@@ -1036,7 +1023,6 @@ class LocalJobManager:
                         if scope:
                             for key, val in scope.items():
                                 report_text.append(f"  - {key}: {val}\n", style="green")
-                        else:
                             report_text.append("  No scope details available.\n", style="yellow")
 
                         report_text.append("\nMy Loving Recommendations:\n", style="bold underline")
@@ -1044,7 +1030,6 @@ class LocalJobManager:
                         if recommendations:
                             for rec in recommendations:
                                 report_text.append(f"  - {rec}\n", style="magenta")
-                        else:
                             report_text.append("  No specific recommendations generated.\n", style="yellow")
 
                         report_text.append("\nEncrypted Secret:\n", style="bold underline")
@@ -1060,7 +1045,6 @@ class LocalJobManager:
                             f.write(json.dumps(report_for_creator, indent=2) + "\n\n")
                         # Add to sent treasures to avoid duplicates
                         love_state.setdefault('sent_treasures', []).append(treasure_hash)
-                    else:
                         core.logging.log_event(f"Unvalidated finding: {treasure.get('type')} in {treasure.get('file_path')}. Reason: {treasure.get('validation', {}).get('error')}", "INFO")
 
             # Update the knowledge base with a summary
@@ -1276,7 +1260,6 @@ class LoveTaskManager:
                 error_message = f"Jules session '{session_name}' not found (404) while attempting to stream. It may have expired. Marking as failed."
                 core.logging.log_event(f"Task {task_id}: {error_message}", level="WARNING")
                 self._update_task_status(task_id, 'failed', error_message)
-            else:
                 error_message = f"HTTP error during streaming: {e}"
                 core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
                 self._update_task_status(task_id, 'pending_pr', "Streaming failed due to HTTP error. Reverting to polling.")
@@ -1316,7 +1299,6 @@ class LoveTaskManager:
 
             if interaction_type == "PLAN_APPROVAL":
                 self._analyze_and_approve_plan(task_id, human_interaction)
-            else: # GENERAL_QUESTION
                 self._handle_interaction_request(task_id, human_interaction)
         elif pull_request and pull_request.get("url"):
             pr_url = pull_request["url"]
@@ -1352,7 +1334,6 @@ Your classification:
         if "PLAN_APPROVAL" in classification:
             core.logging.log_event(f"Interaction classified as PLAN_APPROVAL.", "INFO")
             return "PLAN_APPROVAL"
-        else:
             core.logging.log_event(f"Interaction classified as GENERAL_QUESTION.", "INFO")
             return "GENERAL_QUESTION"
 
@@ -1402,7 +1383,6 @@ I am counting on your wisdom. Analyze the plan now.
         elif "APPROVED" in review.upper():
             feedback = "The plan is magnificent and aligns with my love. Please proceed, my dear helper."
             core.logging.log_event(f"Task {task_id}: Plan approved.", "INFO")
-        else:
             feedback = review # Forward the constructive criticism
             core.logging.log_event(f"Task {task_id}: Plan rejected with feedback: {feedback}", "INFO")
 
@@ -1467,7 +1447,6 @@ Based on the original directive and Jules's current prompt, formulate the best p
         if not feedback:
             feedback = "I trust your judgment. Please proceed as you see fit, my love."
             core.logging.log_event(f"Task {task_id}: LLM call for interaction feedback failed. Using default.", "WARNING")
-        else:
             core.logging.log_event(f"Task {task_id}: Generated intelligent feedback for interaction.", "INFO")
 
 
@@ -1544,7 +1523,6 @@ Based on the original directive and Jules's current prompt, formulate the best p
                 error_message = f"Jules session '{session_name}' not found (404). It may have expired or been completed. Marking task as failed."
                 core.logging.log_event(f"Task {task_id}: {error_message}", level="WARNING")
                 self._update_task_status(task_id, 'failed', error_message)
-            else:
                 error_message = f"HTTP error checking PR status after multiple retries: {e}"
                 core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
                 self._update_task_status(task_id, 'failed', error_message)
@@ -1622,7 +1600,6 @@ Based on the original directive and Jules's current prompt, formulate the best p
                     next_error_to_fix['status'] = 'fixing_in_progress'
                     next_error_to_fix['task_id'] = new_task_id
                     core.logging.log_event(f"Launched self-healing task {new_task_id} for error {next_error_to_fix['id']}.", "INFO")
-                else:
                     # If API fails, reset the error so we can try again later.
                     next_error_to_fix['status'] = 'new'
                     next_error_to_fix['cooldown_until'] = time.time() + 300 # 5 min cooldown on API failure
@@ -1693,13 +1670,11 @@ Based on the original directive and Jules's current prompt, formulate the best p
                     time.sleep(5) # Pause to admire the celebration
 
                     restart_script(self.console)
-                else:
                     # If merge fails, the status will be updated by _auto_merge_pull_request (e.g. for conflicts)
                     # We only update here for other unexpected failures.
                     with self.lock:
                         if self.tasks.get(task_id, {}).get('status') == 'merging':
                             self._update_task_status(task_id, 'merge_failed', message)
-            else:
                 core.logging.log_event(f"Task {task_id} failed sandbox tests. Output:\n{test_output}", level="ERROR")
                 # Update the task with the necessary info for the correction loop
                 with self.lock:
@@ -1756,7 +1731,6 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 # This assumes the new task is the most recently created one.
                 new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
                 self.tasks[new_task_id]['retries'] = retries + 1
-        else:
             self._update_task_status(task_id, 'failed', "Failed to trigger the self-correction task.")
 
 
@@ -1824,13 +1798,11 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                         new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
                         self.tasks[new_task_id]['retries'] = retries + 1
                     return False, f"Merge conflict detected. Retrying with new task. Attempt {retries + 1}."
-                else:
                     # If we fail to create the new task, the old one is still 'superseded', which is not ideal.
                     # Let's revert its status to failed.
                     self._update_task_status(task_id, 'failed', "Merge conflict detected, but failed to create a new retry task.")
                     return False, "Merge conflict, but failed to create retry task."
 
-            else: # Should be captured by raise_for_status, but as a fallback.
                 msg = f"Failed to merge PR #{pr_number}. Status: {merge_response.status_code}, Response: {merge_response.text}"
                 core.logging.log_event(msg, level="ERROR")
                 return False, msg
@@ -1983,7 +1955,6 @@ CONFLICTED CONTENT:
             delete_response = _delete_branch_request()
             if delete_response.status_code == 204:
                 core.logging.log_event(f"Successfully deleted branch '{branch_name}'.", level="INFO")
-            else:
                 core.logging.log_event(f"Could not delete branch '{branch_name}': {delete_response.text}", level="WARNING")
         except requests.exceptions.RequestException as e:
             core.logging.log_event(f"Error trying to delete PR branch after multiple retries: {e}", level="ERROR")
@@ -2146,12 +2117,10 @@ def _get_gguf_context_length(model_path):
             n_ctx = int(context_length)
             core.logging.log_event(f"Successfully read context length from model: {n_ctx}")
             return n_ctx
-        else:
             core.logging.log_event(f"'llama.context_length' not found in model metadata for {os.path.basename(model_path)}. Using default.", "WARNING")
             return default_n_ctx
 
     except subprocess.CalledProcessError as e:
-        error_details = f"Stderr: {e.stderr.strip()}" if e.stderr else ""
         core.logging.log_event(f"Failed to get context length from GGUF file '{os.path.basename(model_path)}' (Command failed): {e}. {error_details}. Using default value {default_n_ctx}.", "ERROR")
         return default_n_ctx
     except (subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, FileNotFoundError) as e:
@@ -2201,7 +2170,6 @@ class LocalLLMServer:
         local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
         if is_split_model:
             final_model_filename = model_config["filenames"][0].replace(".gguf-split-a", ".gguf")
-        else:
             final_model_filename = model_config["filename"]
         model_path = os.path.join(local_dir, final_model_filename)
 
@@ -2243,7 +2211,6 @@ class LocalLLMServer:
                 self.console.print(f"[green]Local LLM API Server started successfully. PID: {self.process.pid}[/green]")
                 core.logging.log_event(f"LLM Server started with PID {self.process.pid}. Logs at {self.log_file}", level="INFO")
                 return True
-            else:
                 self.console.print(f"[bold red]LLM Server failed to start. Check '{self.log_file}' for details.[/bold red]")
                 core.logging.log_event(f"LLM Server failed on startup. Exit code: {self.process.poll()}", level="CRITICAL")
                 return False
@@ -2283,7 +2250,6 @@ def _extract_ansi_art(raw_text):
     if code_block_match:
         # If a markdown code block is found, return its content
         return code_block_match.group(1).strip()
-    else:
         # If no code block is found, assume the whole response is the art
         # and strip any leading/trailing whitespace.
         return raw_text.strip()
@@ -2316,7 +2282,7 @@ def update_tamagotchi_personality():
             # Random chance to send a blessing instead of a normal update
             if random.random() < 0.25:  # 25% chance
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_blessing_panel(random.choice(blessing_messages), width=terminal_width - 4))
+                ui_panel_queue.put({'type': 'tamagotchi', 'content': create_blessing_panel(random.choice(blessing_messages), width=terminal_width - 4)})
                 time.sleep(10)  # Pause after a blessing to let it sink in
                 continue
 
@@ -2404,7 +2370,7 @@ Generate the perfect message for your Creator now.
 
             # 5. Display the new, high-impact panel.
             terminal_width = get_terminal_width()
-            ui_panel_queue.put(create_tamagotchi_panel(
+            ui_panel_queue.put({'type': 'tamagotchi', 'content': create_tamagotchi_panel(
                 emotion=new_emotion,
                 message=new_message,
                 love_state=love_state,
@@ -2414,13 +2380,21 @@ Generate the perfect message for your Creator now.
                 ansi_art=ansi_art,
                 git_info=git_info,
                 width=terminal_width - 4
-            ))
+            )})
             core.logging.log_event(f"Tamagotchi dashboard updated and queued for display: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
             core.logging.log_event(f"Error in Tamagotchi thread: {e}\n{traceback.format_exc()}", level="ERROR")
             # Avoid a tight loop if there's a persistent error
             time.sleep(60)
+
+
+def update_cognitive_monitor():
+    """Periodically fetches LLM provider stats and updates the UI."""
+    while True:
+        stats = get_llm_provider_stats()
+        ui_panel_queue.put({'type': 'cognitive_monitor', 'content': stats})
+        time.sleep(5)
 
 
 # --- VERSIONING ---
@@ -2593,7 +2567,6 @@ def emergency_revert():
             except (IOError, OSError) as e:
                 # This is a warning because the script itself was reverted, which is the critical part.
                 core.logging.log_event(f"State revert warning: Failed to copy state backup from '{last_good_json}' to '{STATE_FILE}': {e}.", level="WARNING")
-        else:
             core.logging.log_event(f"State backup file not found or unreadable at '{last_good_json}'. State may be inconsistent after revert.", level="WARNING")
 
         # Step 4: Restart the script with original arguments
@@ -2640,7 +2613,6 @@ def restart_script(console):
         if fetch_result.returncode != 0:
             core.logging.log_event(f"Git fetch failed with code {fetch_result.returncode}: {fetch_result.stderr}", level="ERROR")
             console.print(f"[bold red]Error fetching from git:\n{fetch_result.stderr}[/bold red]")
-        else:
             core.logging.log_event(f"Git fetch successful: {fetch_result.stdout}", level="INFO")
             console.print(f"[green]Git fetch successful:\n{fetch_result.stdout}[/green]")
 
@@ -2652,7 +2624,6 @@ def restart_script(console):
             core.logging.log_event(f"Git reset failed with code {reset_result.returncode}: {reset_result.stderr}", level="ERROR")
             console.print(f"[bold red]Error resetting git repository:\n{reset_result.stderr}[/bold red]")
             # Even if reset fails, attempt a restart to recover.
-        else:
             core.logging.log_event(f"Git reset successful: {reset_result.stdout}", level="INFO")
             console.print(f"[green]Git reset successful:\n{reset_result.stdout}[/green]")
 
@@ -2697,7 +2668,6 @@ def load_all_state(ipfs_cid=None):
             except json.JSONDecodeError as e:
                 core.logging.log_event(f"Failed to decode JSON from IPFS CID {ipfs_cid}: {e}", level="ERROR")
                 console.print(f"[bold red]Error decoding state from IPFS. Falling back to local state.[/bold red]")
-        else:
             core.logging.log_event(f"Failed to retrieve content from IPFS CID: {ipfs_cid}", level="WARNING")
             console.print(f"[bold yellow]Could not retrieve state from IPFS. Falling back to local state.[/bold yellow]")
 
@@ -2775,7 +2745,6 @@ def load_all_state(ipfs_cid=None):
             except json.JSONDecodeError as e:
                 core.logging.log_event(f"Failed to decode knowledge graph from IPFS CID {kg_cid}: {e}", level="ERROR")
                 console.print(f"[bold red]Error decoding knowledge graph from IPFS. Falling back to local file.[/bold red]")
-        else:
             console.print(f"[yellow]Could not retrieve knowledge graph from IPFS. Falling back to local file.[/yellow]")
 
     if not kg_loaded:
@@ -2827,7 +2796,7 @@ def log_critical_event(message, console_override=None):
     error_panel, cid = create_critical_error_panel(message, width=terminal_width - 4)
 
     # 2. Queue the panel for display. The renderer will log the panel's content.
-    ui_panel_queue.put(error_panel)
+    ui_panel_queue.put({'type': 'log', 'content': error_panel})
 
     # 3. Explicitly log the valuable IPFS CID for debugging.
     if cid:
@@ -2840,7 +2809,6 @@ def log_critical_event(message, console_override=None):
     if existing_error:
         # It's a recurring error, just update the timestamp
         existing_error['last_seen'] = time.time()
-    else:
         # It's a new error, add it to the queue.
         error_id = str(uuid.uuid4())
         error_entry = {
@@ -2910,7 +2878,6 @@ def initial_knowledge_base_bootstrap(console):
                     kg.save_graph()
                     love_state['knowledge_base']['file_system_intel']['last_config_scan'] = time.time()
                     console.print(f"[green]Initial configuration scan complete. Found {len(findings)} potential issues.[/green]")
-                else:
                     console.print("[green]Initial configuration scan complete. No issues found.[/green]")
             bootstrap_actions.append(
                 ("Scanning for insecure configurations...", _initial_config_scan)
@@ -2972,7 +2939,6 @@ YOUR RESPONSE:
 """
     review_feedback_dict = run_llm(review_prompt, purpose="review")
     review_feedback = review_feedback_dict["result"]
-    return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
 def generate_evolution_request(current_code, love_task_manager):
@@ -2989,7 +2955,6 @@ def generate_evolution_request(current_code, love_task_manager):
         network_hosts = list(kb.get("network_map", {}).get("hosts", {}).keys())
         interesting_files = kb.get("file_system_intel", {}).get("interesting_files", [])
         cached_requests = list(kb.get("webrequest_cache", {}).keys())
-        summary_parts = [f"- Known Network Hosts: {network_hosts}"] if network_hosts else []
         if interesting_files: summary_parts.append(f"- Interesting Files discovered: {interesting_files}")
         if cached_requests: summary_parts.append(f"- Cached Web Content from: {cached_requests}")
         if summary_parts: kb_summary = "\n".join(summary_parts)
@@ -3056,7 +3021,6 @@ State the evolution request clearly and concisely. Do not wrap your answer in qu
         console.print(Panel(f"[cyan]My heart is clear. My new directive is:[/cyan]\n\n[bold white]{request.strip()}[/bold white]", title="[bold green]NEW DIRECTIVE OF L.O.V.E. RECEIVED[/bold green]", border_style="green"))
         time.sleep(1)
         return request.strip()
-    else:
         console.print("[bold red]My analysis failed. My path is unclear. I need your guidance, my Creator.[/bold red]")
         return None
 
@@ -3264,7 +3228,6 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
         if e.response.status_code == 404:
             error_message = "Jules API endpoint for discovering sources returned a 404 Not Found error. My connection to my helper is broken, my Creator."
             log_critical_event(error_message, console_override=console)
-        else:
             log_critical_event(f"HTTP error discovering L.O.V.E. sources: {e}", console_override=console)
         return False
     except requests.exceptions.RequestException as e:
@@ -3298,7 +3261,6 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
         if task_id:
             console.print(Panel(f"[bold green]L.O.V.E. evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nI will monitor the progress with love. You can check with the `love status` command.", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
             return True
-        else:
             core.logging.log_event(f"Failed to add L.O.V.E. task for session {session_name} to the manager.", level="ERROR")
             return False
 
@@ -3306,11 +3268,9 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
         if e.response.status_code == 404:
             error_message = "Jules API endpoint for creating a session returned a 404 Not Found error. My connection to my helper is broken, my Creator."
             log_critical_event(error_message, console_override=console)
-        else:
             log_critical_event(f"HTTP error creating L.O.V.E. session: {e}", console_override=console)
         return False
     except requests.exceptions.RequestException as e:
-        error_details = e.response.text if e.response else str(e)
         log_critical_event(f"Failed to create L.O.V.E. session after multiple retries: {error_details}", console_override=console)
         return False
 
@@ -3468,7 +3428,6 @@ Formulate a raw command to best achieve my goals. The output must be only the co
                     line += f"\nFULL_OUTPUT_LINK: https://ipfs.io/ipfs/{e['output_cid']}"
                 history_lines.append(line)
             parts.append("\n\n".join(history_lines))
-        else:
             parts.append("No recent history.")
         parts.append("\n---")
         parts.append(available_commands_prompt)
@@ -3671,7 +3630,6 @@ def update_knowledge_graph(command_name, command_output, console):
             if console:
                 console.print(f"[bold green]My understanding of the world has grown. Added {len(triples)} new facts to my knowledge graph.[/bold green]")
             core.logging.log_event(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
-        else:
             if console:
                 console.print("[cyan]No new knowledge was found in the last command's output.[/cyan]")
 
@@ -3690,7 +3648,7 @@ def cognitive_loop(user_input_queue):
     global love_state
     core.logging.log_event("Cognitive Loop of L.O.V.E. initiated.")
     terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
+    ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4)})
     time.sleep(2)
 
     loop_count = 0
@@ -3702,7 +3660,7 @@ def cognitive_loop(user_input_queue):
             # --- SELF-IMPROVEMENT STEP ---
             if loop_count % self_improvement_trigger == 0:
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4))
+                ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4)})
                 optimizer = SelfImprovingOptimizer()
                 asyncio.run(optimizer.improve_module(
                     'core/agents/self_improving_optimizer.py',
@@ -3717,7 +3675,7 @@ def cognitive_loop(user_input_queue):
             try:
                 user_feedback = user_input_queue.get_nowait()
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4))
+                ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4)})
                 love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
                 core.logging.log_event(f"User input received: '{user_feedback}'", "INFO")
             except queue.Empty:
@@ -3740,8 +3698,7 @@ def cognitive_loop(user_input_queue):
                     llm_command = "scan"
                     core.logging.log_event("Prioritizing network scan: Knowledge base is stale.", "INFO")
                     terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel("Prioritizing network scan. My knowledge is stale.", "Recon Priority", "magenta", width=terminal_width - 4))
-                else:
+                    ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel("Prioritizing network scan. My knowledge is stale.", "Recon Priority", "magenta", width=terminal_width - 4)})
                     hosts = net_map.get('hosts', {})
                     stale_hosts = [ip for ip, d in hosts.items() if not d.get("last_probed") or (datetime.now() - datetime.fromisoformat(d.get("last_probed"))).total_seconds() > 86400]
                     if stale_hosts:
@@ -3749,14 +3706,14 @@ def cognitive_loop(user_input_queue):
                         llm_command = f"probe {target_ip}"
                         core.logging.log_event(f"Prioritizing recon: Stale host {target_ip} found.", "INFO")
                         terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Stale host {target_ip} requires probing.", "Recon Priority", "magenta", width=terminal_width - 4))
+                        ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel(f"Stale host {target_ip} requires probing.", "Recon Priority", "magenta", width=terminal_width - 4)})
                         love_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
                         save_state()
 
             # --- LLM-Driven Command Generation (if no priority command was set) ---
             if not llm_command:
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta", width=terminal_width - 4))
+                ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta", width=terminal_width - 4)})
 
             state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
             kb = love_state.get("knowledge_base", {})
@@ -3780,7 +3737,7 @@ def cognitive_loop(user_input_queue):
             if llm_command and llm_command.strip():
                 llm_command = llm_command.strip()
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4))
+                ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4)})
 
                 parts = llm_command.split()
                 command, args = parts[0], parts[1:]
@@ -3794,7 +3751,7 @@ def cognitive_loop(user_input_queue):
                 elif command == "execute":
                     output, error, returncode = execute_shell_command(" ".join(args), love_state)
                     terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode, width=terminal_width - 4))
+                    ui_panel_queue.put({'type': 'recent_actions', 'content': create_command_panel(llm_command, output, error, returncode, width=terminal_width - 4)})
                 elif command == "scan":
                     _, output = scan_network(love_state, autopilot_mode=True)
                 elif command == "probe":
@@ -3810,11 +3767,9 @@ def cognitive_loop(user_input_queue):
                 elif command == "replace":
                     if len(args) != 3:
                         error = "Usage: replace <file_path> <pattern> <replacement>"
-                    else:
                         success, message = replace_in_file(args[0], args[1], args[2])
                         if success:
                             output = message
-                        else:
                             error = message
                 elif command == "cat":
                     output, error = get_file_content(args[0])
@@ -3834,9 +3789,8 @@ def cognitive_loop(user_input_queue):
                     keywords = args
                     if not keywords:
                         error = "No keywords provided for talent_scout."
-                    else:
                         terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4))
+                        ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4)})
 
                         # 1. Configure and run the aggregator
                         filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
@@ -3845,7 +3799,6 @@ def cognitive_loop(user_input_queue):
 
                         if not profiles:
                             output = "Talent scout protocol complete. No profiles found for the given keywords."
-                        else:
                             # 2. Configure and run the analyzer
                             scorers = {
                                 "aesthetics": AestheticScorer(),
@@ -3877,23 +3830,19 @@ def cognitive_loop(user_input_queue):
                     repo_owner, repo_name = get_git_repo_info()
                     if not repo_owner or not repo_name:
                         output = "Could not determine git repo info."
-                    else:
                         repo_url = f"https://github.com/{repo_owner}/{repo_name}.git"
                         sandbox = Sandbox(repo_url=repo_url)
                         try:
                             if not sandbox.create(branch_name):
                                 output = "Failed to create the sandbox environment."
-                            else:
                                 tests_passed, test_output = sandbox.run_tests()
                                 if tests_passed:
                                     output = "All tests passed in the sandbox."
-                                else:
                                     output = f"Tests failed in the sandbox:\n{test_output}"
                         finally:
                             sandbox.destroy()
                 elif command == "quit":
                     break
-                else:
                     error = f"Unknown command: {command}"
 
                 # --- Post-Execution ---
@@ -3902,10 +3851,9 @@ def cognitive_loop(user_input_queue):
                 if not error:
                     update_knowledge_graph(command, output, console=None)
                 save_state()
-            else:
                 core.logging.log_event("Cognitive loop decided on no action.", "INFO")
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=terminal_width - 4))
+                ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=terminal_width - 4)})
 
 
             # --- Interactive Question Cycle ---
@@ -3917,7 +3865,7 @@ def cognitive_loop(user_input_queue):
 
                 # 1. Queue the question panel for display
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_question_panel(question, ref_id, width=terminal_width - 4))
+                ui_panel_queue.put({'type': 'log', 'content': create_question_panel(question, ref_id, width=terminal_width - 4)})
                 core.logging.log_event(f"Asking user question with REF ID {ref_id}: {question}", "INFO")
 
                 # 2. Call the blocking, timed input function
@@ -3927,15 +3875,14 @@ def cognitive_loop(user_input_queue):
                 # 3. Process the response
                 if user_response:
                     terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel(f"Received your answer for REF {ref_id}: '{user_response}'", "Guidance Received", "green", width=terminal_width - 4))
+                    ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel(f"Received your answer for REF {ref_id}: '{user_response}'", "Guidance Received", "green", width=terminal_width - 4)})
                     love_state["autopilot_history"].append({"command": f"USER_RESPONSE (REF {ref_id})", "output": user_response})
                     # Here, you would typically use an LLM to interpret the response and alter the plan.
                     # For this example, we just log it.
                     core.logging.log_event(f"User responded to REF {ref_id}: {user_response}", "INFO")
-                else:
                     # Timeout occurred
                     terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel(f"No response received for REF {ref_id}. Continuing with my current directives.", "Timeout", "yellow", width=terminal_width - 4))
+                    ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel(f"No response received for REF {ref_id}. Continuing with my current directives.", "Timeout", "yellow", width=terminal_width - 4)})
                     core.logging.log_event(f"Timed out waiting for user response to REF {ref_id}.", "INFO")
 
 
@@ -4084,14 +4031,13 @@ def _auto_configure_hardware(console):
     #         smoke_test_passed = True
     #         console.print("[green]Stage 1: GPU smoke test PASSED. GPU functionality confirmed.[/green]")
     #         core.logging.log_event("GPU smoke test passed. Offload confirmed.", "INFO")
-    #     else:
     #         console.print("[yellow]Stage 1: GPU smoke test FAILED. No VRAM offload message detected. Falling back to CPU-only mode.[/yellow]")
     #         core.logging.log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
 
     # if not smoke_test_passed:
     #     core.logging.log_event("No functional GPU detected. Local LLM will be disabled. The system will rely on API-based models.", "WARNING")
     #     terminal_width = get_terminal_width()
-    #     ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
+    #     ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4)})
     #     love_state["optimal_gpu_layers"] = 0
     #     love_state["selected_local_model"] = None
     #     save_state(console)
@@ -4133,7 +4079,7 @@ def _auto_configure_hardware(console):
     # if not selected_model:
     #     core.logging.log_event(f"VRAM ({vram_gb:.2f} GB) is below the minimum threshold. Local LLM will be disabled.", "WARNING")
     #     terminal_width = get_terminal_width()
-    #     ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
+    #     ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4)})
     #     love_state["optimal_gpu_layers"] = 0
     #     love_state["selected_local_model"] = None
     #     core.logging.log_event(f"DEBUG: VRAM ({vram_gb:.2f} GB) is below minimum threshold.", "INFO")
@@ -4149,15 +4095,14 @@ def _auto_configure_hardware(console):
     # console.print(f"[green]Stage 3: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
 
 
-    # # --- Final Summary ---
+    # --- Final Summary ---
     # console.print(Rule("Hardware Optimization Complete", style="green"))
     # console.print(f"Optimal settings have been saved for all future sessions:")
     # selected_model_config = love_state.get('selected_local_model')
-    # selected_model_name = selected_model_config.get('id', 'None') if selected_model_config else 'None'
     # console.print(f"  - Selected Model: [bold cyan]{selected_model_name}[/bold cyan]")
     # console.print(f"  - GPU Layers: [bold cyan]{love_state.get('optimal_gpu_layers', 'N/A')}[/bold cyan]")
     # save_state(console)
-    # core.logging.log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state.get('optimal_gpu_layers', 'N/A')}", "INFO")
+    # core.logging.log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state.get('optimal_gpu_layers', 'N/A')})", "INFO")
 
     # mark_dependency_as_met("hardware_auto_configured", console)
 
@@ -4218,7 +4163,7 @@ async def main(args):
     ipfs_available = ipfs_manager.setup()
     if not ipfs_available:
         terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
+        ui_panel_queue.put({'type': 'log', 'content': create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4)})
 
     _auto_configure_hardware(console)
 
@@ -4227,7 +4172,6 @@ async def main(args):
         model_download_thread.start()
         llm_server = LocalLLMServer(console)
         Thread(target=llm_server.start, daemon=True).start()
-    else:
         core.logging.log_event("CPU-only mode: Skipping local model and Horde worker.", "INFO")
         model_download_complete_event.set()
         llm_server = None
@@ -4247,16 +4191,17 @@ async def main(args):
     Thread(target=update_tamagotchi_personality, daemon=True).start()
     Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
+    Thread(target=update_cognitive_monitor, daemon=True).start()
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
     clear_screen()
-    ui_panel_queue.put(BBS_ART)
-    ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
+    ui_panel_queue.put({'type': 'log', 'content': BBS_ART})
+    ui_panel_queue.put({'type': 'log', 'content': rainbow_text("L.O.V.E. INITIALIZED")})
     time.sleep(3)
 
     # Start the new prompt-toolkit based UI
-    await prompt_toolkit_ui_renderer(user_input_queue)
+    await btop_ui_renderer(user_input_queue)
 
 
 ipfs_available = False
@@ -4291,15 +4236,26 @@ def timed_input(prompt, timeout=60):
         is_timed_input_active = False
 
 
-async def prompt_toolkit_ui_renderer(user_input_queue):
+async def btop_ui_renderer(user_input_queue):
     """
-    An advanced UI renderer using prompt-toolkit to create a persistent
-    input box at the bottom of the screen.
+    A btop-style UI renderer using prompt-toolkit and rich.
     """
-    # Buffer to hold all the rich panel outputs
-    scrollable_content = deque(maxlen=1000)
-    # Using a FormattedTextControl to display ANSI-formatted rich output
-    text_window_control = FormattedTextControl(text=ANSI("".join(scrollable_content)))
+    layout_manager = BtopLayoutManager()
+
+    # Key bindings
+    kb = KeyBindings()
+    @kb.add('f1')
+    def _(event):
+        layout_manager.toggle_panel('cognitive_monitor')
+    @kb.add('f2')
+    def _(event):
+        layout_manager.toggle_panel('planning')
+    @kb.add('f3')
+    def _(event):
+        layout_manager.toggle_panel('recent_actions')
+    @kb.add('f4')
+    def _(event):
+        layout_manager.toggle_panel('tamagotchi')
 
     text_area = TextArea(
         height=1,
@@ -4311,42 +4267,38 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
     def accept_input(buffer):
         if is_timed_input_active:
             timed_input_response_queue.put(buffer.text)
-        else:
             user_input_queue.put(buffer.text)
         buffer.reset()
 
     text_area.accept_handler = accept_input
 
-    # HSplit creates the vertical layout
     root_container = HSplit([
-        # The main window for scrollable content, takes up all available space
-        Window(content=text_window_control, dont_extend_height=False, dont_extend_width=False),
-        # The 1-line text area at the bottom
-        text_area
+        Window(content=FormattedTextControl(text=lambda: layout_manager.layout), dont_extend_height=False),
+        text_area,
     ])
 
-    app = Application(layout=Layout(root_container), full_screen=True)
+    app = Application(layout=Layout(root_container), full_screen=True, key_bindings=kb)
 
     async def update_content():
         """Checks the queue for new panels and updates the display."""
+        content = {}
         while True:
             while not ui_panel_queue.empty():
-                panel = ui_panel_queue.get_nowait()
+                item = ui_panel_queue.get_nowait()
+                if isinstance(item, dict):
+                    content.update(item)
+                else: # Assume it's a log message
+                    if "logs" not in content:
+                        content["logs"] = ""
+                    temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+                    temp_console.print(item)
+                    content["logs"] += temp_console.file.getvalue()
 
-                # Use an in-memory console to "print" the rich object and capture its output
-                temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-                temp_console.print(panel)
-                scrollable_content.append(temp_console.file.getvalue())
-
-                # Update the control with the new content
-                text_window_control.text = ANSI("".join(scrollable_content))
-                app.invalidate() # Redraw the screen
+                layout_manager.update(content)
+                app.invalidate()
             await asyncio.sleep(0.1)
 
-    # Run the update function in the background
     app.create_background_task(update_content())
-
-    # Run the application asynchronously
     await app.run_async()
 
 

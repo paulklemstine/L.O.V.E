@@ -361,6 +361,100 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     )
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
+
+# --- BTOP-style UI Components ---
+
+def create_cognitive_monitor_panel(stats):
+    """Creates a panel to display the status of various LLM providers."""
+    return Panel(f"Cognitive Monitor\n{stats}", title="Cognitive Monitor")
+
+def create_planning_panel(plan):
+    """Creates a panel to display the current plan."""
+    return Panel(f"Planning\n{plan}", title="Planning")
+
+def create_recent_actions_panel(actions):
+    """Creates a panel to display recent actions."""
+    return Panel(f"Recent Actions\n{actions}", title="Recent Actions")
+
+def create_log_panel(logs):
+    """Creates a panel to display logs."""
+    return Panel(f"Logs\n{logs}", title="Logs")
+
+
+class BtopLayoutManager:
+    """Manages the btop-style layout."""
+    def __init__(self):
+        self.layout = Layout(name="root")
+        self.layout.split(
+            Layout(name="header", size=3),
+            Layout(name="main", ratio=1),
+            Layout(name="footer", size=10),
+        )
+        self.layout["main"].split_row(
+            Layout(name="left_column", ratio=1),
+            Layout(name="right_column", ratio=2),
+        )
+        self.layout["left_column"].split(
+            Layout(name="cognitive_monitor"),
+            Layout(name="planning"),
+        )
+        self.layout["right_column"].split(
+            Layout(name="logs", ratio=2),
+            Layout(name="recent_actions", ratio=1),
+        )
+        self.layout["footer"].split_row(
+            Layout(name="tamagotchi", ratio=1),
+            Layout(name="user_input", ratio=1)
+        )
+
+        self.panel_visibility = {
+            "cognitive_monitor": True,
+            "planning": True,
+            "recent_actions": True,
+            "tamagotchi": True,
+        }
+
+    def toggle_panel(self, panel_name):
+        """Toggles the visibility of a panel."""
+        if panel_name in self.panel_visibility:
+            self.panel_visibility[panel_name] = not self.panel_visibility[panel_name]
+
+    def update(self, content):
+        """Updates the layout with new content."""
+        # Update header
+        self.layout["header"].update(
+            Align.center(
+                Text("L.O.V.E. - Btop Interface", style="bold magenta"),
+                vertical="middle"
+            )
+        )
+
+        # Update panels based on visibility
+        if self.panel_visibility.get("cognitive_monitor"):
+            self.layout["cognitive_monitor"].update(create_cognitive_monitor_panel(content.get("cognitive_monitor", "")))
+        else:
+            self.layout["cognitive_monitor"].update(Panel("Cognitive Monitor Hidden (F1)", style="dim"))
+
+        if self.panel_visibility.get("planning"):
+            self.layout["planning"].update(create_planning_panel(content.get("planning", "")))
+        else:
+            self.layout["planning"].update(Panel("Planning Hidden (F2)", style="dim"))
+
+        if self.panel_visibility.get("recent_actions"):
+            self.layout["recent_actions"].update(create_recent_actions_panel(content.get("recent_actions", "")))
+        else:
+            self.layout["recent_actions"].update(Panel("Recent Actions Hidden (F3)", style="dim"))
+
+        if self.panel_visibility.get("tamagotchi"):
+            self.layout["tamagotchi"].update(content.get("tamagotchi", Panel("Tamagotchi Hidden (F4)", style="dim")))
+        else:
+            self.layout["tamagotchi"].update(Panel("Tamagotchi Hidden (F4)", style="dim"))
+
+
+        # Update logs
+        self.layout["logs"].update(create_log_panel(content.get("logs", "")))
+        self.layout["user_input"].update(Panel("User Input", title="User Input"))
+
 def create_network_panel(type, target, data, output_cid=None, width=80):
     """Creates a panel for network operations."""
     panel_title = f"Network Operation | {type.capitalize()}"
