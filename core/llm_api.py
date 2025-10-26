@@ -112,7 +112,34 @@ def get_openrouter_models():
         log_event(f"Could not fetch OpenRouter models: {e}", "WARNING")
         return []
 
+# Start with dynamically fetched free models
 OPENROUTER_MODELS = get_openrouter_models()
+
+# Add the specific Google AI Studio models from the URL
+GOOGLE_AI_STUDIO_MODELS = [
+    "google/gemini-2.5-flash-image",
+    "google/gemini-2.5-flash-preview-09-2025",
+    "google/gemini-2.5-flash-lite-preview-09-2025",
+    "google/gemini-2.5-flash-image-preview",
+    "google/gemini-2.5-flash-lite",
+    "google/gemma-3n-e2b-it:free",
+    "google/gemini-2.5-flash-lite-preview-06-17",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-pro",
+    "google/gemma-3n-e4b-it:free",
+    "google/gemini-2.5-pro-preview-05-06",
+    "google/gemma-3-4b-it:free",
+    "google/gemma-3-12b-it:free",
+    "google/gemma-3-27b-it:free",
+    "google/gemini-2.0-flash-lite-001",
+    "google/gemini-2.0-flash-001",
+    "google/gemini-2.0-flash-exp:free"
+]
+
+# Add the new models to the list, avoiding duplicates
+for model in GOOGLE_AI_STUDIO_MODELS:
+    if model not in OPENROUTER_MODELS:
+        OPENROUTER_MODELS.append(model)
 
 
 def get_top_horde_models(count=10):
