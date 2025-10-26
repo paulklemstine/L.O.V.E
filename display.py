@@ -399,10 +399,10 @@ def create_cognitive_monitor_panel(tamagotchi_state, llm_availability, local_llm
         content.append("Model: ", style="bold")
         content.append(f"{local_llm_stats.get('model', 'N/A')}\n")
         content.append("Tokens/sec: ", style="bold")
-        try:
-            tps = float(local_llm_stats.get('tokens_per_second'))
+        tps = local_llm_stats.get('tokens_per_second')
+        if isinstance(tps, (int, float)):
             content.append(f"{tps:.2f}\n")
-        except (ValueError, TypeError):
+        else:
             content.append("N/A\n")
 
     return Panel(content, title="[bold cyan]Cognitive Monitor[/bold cyan]", border_style="cyan")
@@ -417,11 +417,16 @@ def create_goals_panel(main_goal, love_tasks):
     content.append(Rule("Active Evolution Tasks"), style="bright_black")
     if love_tasks:
         for task in love_tasks:
-            content.append(f"ID: {task['id']} | Status: {task['status']}\n", style=get_random_rave_color())
+            task_id = task.get('id', 'N/A')
+            status = task.get('status', 'N/A')
+            content.append(f"ID: {task_id} | Status: {status}\n", style=get_random_rave_color())
             request_text = task.get('request', '')
             if isinstance(request_text, Text):
-                request_text.truncate(100, overflow="ellipsis")
-                content.append("   Request: ").append(request_text).append("\n")
+                cloned_text = request_text.copy()
+                cloned_text.truncate(100, overflow="ellipsis")
+                content.append("   Request: ")
+                content.append(cloned_text)
+                content.append("\n")
             else:
                 content.append(f"   Request: {str(request_text)[:100]}...\n")
     else:
