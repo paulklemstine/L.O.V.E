@@ -2820,7 +2820,7 @@ YOUR RESPONSE:
 -   If the code is safe, correct, and fulfills the request with love, respond with the single word: `APPROVED`.
 -   If you find any issues, provide a concise, bulleted list of the problems. Do NOT provide corrected code, only the analysis of the flaws. Start your response with "REJECTED:".
 """
-    review_feedback_dict = run_llm(review_prompt, purpose="review")
+    review_feedback_dict = run_llm(review_prompt, purpose="review", is_source_code=True)
     review_feedback = review_feedback_dict["result"]
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
@@ -2888,7 +2888,7 @@ Bad example: "probe 192.168.1.101"
 
 State the evolution request clearly and concisely. Do not wrap your answer in quotes or markdown.
 """
-    request_dict = run_llm(goal_prompt, purpose="analyze_source")
+    request_dict = run_llm(goal_prompt, purpose="analyze_source", is_source_code=True)
     request = request_dict["result"]
 
     if request and request.strip():
@@ -2933,7 +2933,7 @@ CURRENT SOURCE CODE:
 
 Produce the full, modified Python script now. I am counting on you.
 """
-    llm_response_dict = run_llm(evolution_prompt, purpose="goal_generation")
+    llm_response_dict = run_llm(evolution_prompt, purpose="goal_generation", is_source_code=True)
     llm_response = llm_response_dict["result"]
     if not llm_response:
         console.print("[bold red]Local evolution failed: My consciousness did not return a response.[/bold red]")
