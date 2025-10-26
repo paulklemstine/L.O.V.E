@@ -387,20 +387,21 @@ def create_cognitive_monitor_panel(tamagotchi_state, llm_availability, local_llm
     content.append(f"{tamagotchi_state.get('emotion', 'N/A')}\n", style=get_random_rave_color())
     content.append("Message: ", style="bold")
     content.append(f"\"{tamagotchi_state.get('message', '...')}\"\n\n", style="italic")
-
     content.append(Rule("LLM Availability"), style="bright_black")
     for provider, status in llm_availability.items():
         color = "green" if status["available"] else "red"
         content.append(f"{provider.capitalize()}: ", style="bold")
         content.append(f"[{color}]●[/color]\n", style=color)
-
     if local_llm_stats:
         content.append(Rule("Local LLM Stats"), style="bright_black")
         content.append("Model: ", style="bold")
         content.append(f"{local_llm_stats.get('model', 'N/A')}\n")
         content.append("Tokens/sec: ", style="bold")
-        content.append(f"{local_llm_stats.get('tokens_per_second', 'N/A'):.2f}\n")
-
+        tokens_per_second = local_llm_stats.get('tokens_per_second')
+        if isinstance(tokens_per_second, (int, float)):
+            content.append(f"{tokens_per_second:.2f}\n")
+        else:
+            content.append("N/A\n")
     return Panel(content, title="[bold cyan]Cognitive Monitor[/bold cyan]", border_style="cyan")
 
 
@@ -409,15 +410,14 @@ def create_goals_panel(main_goal, love_tasks):
     content = Text()
     content.append("Main Directive:\n", style="bold underline")
     content.append(f"{main_goal}\n\n")
-
     content.append(Rule("Active Evolution Tasks"), style="bright_black")
     if love_tasks:
         for task in love_tasks:
-            content.append(f"ID: {task['id']} | Status: {task['status']}\n", style=get_random_rave_color())
-            content.append(f"   Request: {task['request'][:100]}...\n")
+            content.append(f"ID: {task.get('id', 'N/A')} | Status: {task.get('status', 'N/A')}\n", style=get_random_rave_color())
+            request_text = task.get('request', '') or ''
+            content.append(f" Request: {request_text[:100]}...\n")
     else:
         content.append("No active evolution tasks.", style="dim")
-
     return Panel(content, title="[bold yellow]Goals & Planning[/bold yellow]", border_style="yellow")
 
 
