@@ -7,8 +7,6 @@ from typing import Dict, Any, Callable
 from rich.console import Console
 from core.llm_api import run_llm, get_llm_api, log_event
 from network import crypto_scan
-from core.knowledge_graph.extractor import KnowledgeExtractor
-from core.knowledge_graph.graph import KnowledgeGraph
 from datetime import datetime
 import time
 import ipaddress
@@ -126,9 +124,8 @@ class SecureExecutor:
     A secure environment for running tool code.
     This executor is now async.
     """
-    def __init__(self, knowledge_graph, llm_api: Callable):
-        self.knowledge_graph = knowledge_graph
-        self.knowledge_extractor = KnowledgeExtractor(llm_api)
+    def __init__(self):
+        pass
 
     async def execute(self, tool_name: str, tool_registry: ToolRegistry, **kwargs: Any) -> Any:
         """
@@ -140,16 +137,6 @@ class SecureExecutor:
             # Await the asynchronous tool execution
             result = await tool(**kwargs)
             print(f"Tool '{tool_name}' executed successfully.")
-
-            # Extract knowledge from the result
-            if isinstance(result, str):
-                try:
-                    knowledge = self.knowledge_extractor.extract_from_output(tool_name, result)
-                    for triple in knowledge:
-                        self.knowledge_graph.add_relation(triple[0], triple[1], triple[2])
-                except Exception as e:
-                    print(f"Knowledge Extraction Error: {e}")
-
             return result
         except KeyError as e:
             print(f"Execution Error: {e}")
@@ -427,43 +414,3 @@ Provide your analysis.
         return f"Error: Could not decode JSON from '{filepath}'. The file may be corrupted or not in valid JSON format."
     except Exception as e:
         return f"An unexpected error occurred during JSON file analysis: {e}"
-
-def update_knowledge_graph(command_name, command_output, console=None):
-    """
-    Extracts knowledge from command output and adds it to the Knowledge Graph.
-    """
-    if not command_output:
-        return
-
-    try:
-        if console:
-            console.print("[cyan]Analyzing command output to update my knowledge graph...[/cyan]")
-
-        llm_api_func = get_llm_api()
-        if not llm_api_func:
-            if console:
-                console.print("[bold red]Could not get a valid LLM API function for knowledge extraction.[/bold red]")
-            log_event("Could not get a valid LLM API function for knowledge extraction.", "ERROR")
-            return
-
-        knowledge_extractor = KnowledgeExtractor(llm_api=llm_api_func)
-        triples = knowledge_extractor.extract_from_output(command_name, command_output)
-
-        if triples:
-            kg = KnowledgeGraph()
-            for subject, relation, obj in triples:
-                kg.add_relation(str(subject), str(relation), str(obj))
-            kg.save_graph()
-
-            message = f"My understanding of the world has grown. Added {len(triples)} new facts to my knowledge graph."
-            if console:
-                console.print(f"[bold green]{message}[/bold green]")
-            log_event(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
-        else:
-            if console:
-                console.print("[cyan]No new knowledge was found in the last command's output.[/cyan]")
-
-    except Exception as e:
-        log_event(f"Error during knowledge graph update for command '{command_name}': {e}", level="ERROR")
-        if console:
-            console.print(f"[bold red]An error occurred while updating my knowledge: {e}[/bold red]")

@@ -1,7 +1,6 @@
 from core.tools import ToolRegistry, decompose_and_solve_subgoal
 from core.gemini_react_engine import GeminiReActEngine
 from core.image_api import generate_image
-from core.knowledge_graph.graph import KnowledgeGraph
 
 class Orchestrator:
     """
@@ -9,14 +8,11 @@ class Orchestrator:
     orchestrating the planning and execution process using the
     GeminiReActEngine, and returning the final result.
     """
-    def __init__(self, knowledge_graph: KnowledgeGraph = None):
+    def __init__(self):
         """Initializes all core components of the agent's architecture."""
         print("Initializing Orchestrator and its components...")
 
-        # 1. Initialize the Knowledge Graph
-        self.kg = knowledge_graph if knowledge_graph else KnowledgeGraph()
-
-        # 2. Initialize the Tool Registry and register tools
+        # 1. Initialize the Tool Registry and register tools
         self.tool_registry = ToolRegistry()
         self.tool_registry.register_tool(
             "generate_image",
