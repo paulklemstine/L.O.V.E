@@ -177,6 +177,7 @@ ALL_LLM_MODELS = list(dict.fromkeys(
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
+PROVIDER_FAILURE_COUNT = {provider: 0 for provider in ["local", "gemini", "horde", "openrouter"]}
 local_llm_instance = None
 local_llm_tokenizer = None
 
@@ -576,201 +577,225 @@ def run_llm(prompt_text, purpose="general"):
 
     local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
 
-    # Create a single, shuffled list of all models to ensure variety and speed.
-    # The original order is preserved within each provider list.
-    all_models = [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS
-    # We shuffle the list to avoid always trying the same models first.
-    random.shuffle(all_models)
+    # --- Provider-based Fallback Logic ---
+    final_result = None
+    provider_map = {
+        "local": [model['id'] for model in LOCAL_MODELS_CONFIG],
+        "gemini": GEMINI_MODELS,
+        "horde": HORDE_MODELS,
+        "openrouter": OPENROUTER_MODELS
+    }
 
+    # Shuffle the order of providers to ensure variety
+    providers = list(provider_map.keys())
+    random.shuffle(providers)
 
-    for attempt in range(MAX_TOTAL_ATTEMPTS):
-        model_to_try = None
-        for model_id in all_models:
-            if time.time() >= LLM_AVAILABILITY.get(model_id, 0):
-                model_to_try = model_id
-                break
-
-        if not model_to_try:
-            next_available_time = min(LLM_AVAILABILITY.values())
-            sleep_duration = max(0, next_available_time - time.time())
-            log_event(f"All models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
-            console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
-            time.sleep(sleep_duration)
+    for provider in providers:
+        models_to_try = [m for m in provider_map[provider] if time.time() >= LLM_AVAILABILITY.get(m, 0)]
+        if not models_to_try:
             continue
 
-        model_id = model_to_try
-        result_text = None
+        # Try up to 3 models from the selected provider
+        for i, model_id in enumerate(models_to_try[:3]):
+            result_text = None
+            try:
+                # --- LOCAL MODEL LOGIC ---
+                if model_id in local_model_ids:
+                    log_event(f"Attempting to use local model: {model_id}")
+                    if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
+                        _initialize_local_llm(console)
 
-        try:
-            # --- LOCAL MODEL LOGIC ---
-            if model_id in local_model_ids:
-                log_event(f"Attempting to use local model: {model_id}")
-                if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
-                    _initialize_local_llm(console)
+                    if local_llm_instance:
+                        def _local_llm_call():
+                            response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
+                            return response['choices'][0]['text']
 
-                if local_llm_instance:
-                    def _local_llm_call():
-                        response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
-                        return response['choices'][0]['text']
+                        active_model_filename = os.path.basename(local_llm_instance.model_path)
+                        result_text = run_hypnotic_progress(
+                            console,
+                            f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
+                            _local_llm_call,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        log_event(f"Local LLM call successful with {model_id}.")
+                    else:
+                        # Initialization must have failed
+                        raise Exception("Local LLM instance could not be initialized.")
 
-                    active_model_filename = os.path.basename(local_llm_instance.model_path)
+                # --- GEMINI MODEL LOGIC ---
+                elif model_id in GEMINI_MODELS:
+                        log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
+                        command = [sys.executable, "-m", "llm", "-m", model_id]
+
+                        def _llm_subprocess_call():
+                            return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+
+                        result = run_hypnotic_progress(
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
+                            _llm_subprocess_call,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        result_text = result.stdout
+                        log_event(f"LLM call successful with {model_id}.")
+
+                # --- OPENROUTER MODEL LOGIC ---
+                elif model_id in OPENROUTER_MODELS:
+                    log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})")
+                    api_key = os.environ.get("OPENROUTER_API_KEY")
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": model_id,
+                        "messages": [{"role": "user", "content": prompt_text}]
+                    }
+
+                    def _openrouter_call():
+                        response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                        response.raise_for_status()
+                        return response.json()["choices"][0]["message"]["content"]
+
                     result_text = run_hypnotic_progress(
                         console,
-                        f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
-                        _local_llm_call,
+                        f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
+                        _openrouter_call,
                         silent=(purpose in ['emotion', 'log_squash'])
                     )
-                    log_event(f"Local LLM call successful with {model_id}.")
+                    log_event(f"OpenRouter call successful with {model_id}.")
+
+                # --- AI HORDE MODEL LOGIC ---
                 else:
-                    # Initialization must have failed
-                    raise Exception("Local LLM instance could not be initialized.")
+                    log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})")
+                    api_key = os.environ.get("STABLE_HORDE", "0000000000")
+                    headers = {"apikey": api_key, "Content-Type": "application/json"}
+                    payload = {
+                        "prompt": prompt_text,
+                        "params": {"max_length": 2048, "max_context_length": 8192},
+                        "models": [model_id]
+                    }
 
-            # --- GEMINI MODEL LOGIC ---
-            elif model_id in GEMINI_MODELS:
-                    log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
-                    command = [sys.executable, "-m", "llm", "-m", model_id]
+                    def _horde_call():
+                        # Submit the request
+                        api_url = "https://aihorde.net/api/v2/generate/text/async"
+                        response = requests.post(api_url, json=payload, headers=headers)
+                        response.raise_for_status()
+                        job_id = response.json()["id"]
 
-                    def _llm_subprocess_call():
-                        return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+                        # Poll for the result
+                        check_url = f"https://aihorde.net/api/v2/generate/text/status/{job_id}"
+                        for _ in range(30):  # Poll for 5 minutes
+                            time.sleep(10)
+                            check_response = requests.get(check_url, headers=headers)
+                            check_response.raise_for_status()
+                            status = check_response.json()
+                            if status["done"]:
+                                return status["generations"][0]["text"]
+                        raise Exception("AI Horde job timed out.")
 
-                    result = run_hypnotic_progress(
+                    result_text = run_hypnotic_progress(
                         console,
-                        f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
-                        _llm_subprocess_call,
+                        f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow] (Purpose: {purpose})",
+                        _horde_call,
                         silent=(purpose in ['emotion', 'log_squash'])
                     )
-                    result_text = result.stdout
-                    log_event(f"LLM call successful with {model_id}.")
+                    log_event(f"AI Horde call successful with {model_id}.")
 
-            # --- OPENROUTER MODEL LOGIC ---
-            elif model_id in OPENROUTER_MODELS:
-                log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})")
-                api_key = os.environ.get("OPENROUTER_API_KEY")
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": model_id,
-                    "messages": [{"role": "user", "content": prompt_text}]
-                }
+                # --- Success Case ---
+                if result_text is not None:
+                    PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
+                    LLM_AVAILABILITY[model_id] = time.time()
+                    response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                    final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
+                    break # Exit the model loop for this provider
 
-                def _openrouter_call():
-                    response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
-                    response.raise_for_status()
-                    return response.json()["choices"][0]["message"]["content"]
+            except requests.exceptions.HTTPError as e:
+                last_exception = e
+                log_event(f"Model {model_id} failed with HTTPError: {e}", level="WARNING")
+                if e.response.status_code == 429:
+                    # Specific handling for rate limiting
+                    retry_after = e.response.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            retry_seconds = int(retry_after) + 1 # Add a 1s buffer
+                            log_event(f"Rate limit hit for {model_id}. Cooling down for {retry_seconds}s (from Retry-After header).", level="INFO")
+                        except ValueError:
+                            # Handle non-integer Retry-After values if necessary, though spec is seconds
+                            retry_seconds = 300 # Fallback
+                            log_event(f"Rate limit hit for {model_id}. Could not parse Retry-After header ('{retry_after}'). Cooling down for {retry_seconds}s.", level="WARNING")
+                    else:
+                        # Fallback if Retry-After header is missing
+                        retry_seconds = 300 # 5 minutes
+                        log_event(f"Rate limit hit for {model_id}. No Retry-After header. Cooling down for {retry_seconds}s.", level="INFO")
 
-                result_text = run_hypnotic_progress(
-                    console,
-                    f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
-                    _openrouter_call,
-                    silent=(purpose in ['emotion', 'log_squash'])
-                )
-                log_event(f"OpenRouter call successful with {model_id}.")
-
-            # --- AI HORDE MODEL LOGIC ---
-            else:
-                log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})")
-                api_key = os.environ.get("STABLE_HORDE", "0000000000")
-                headers = {"apikey": api_key, "Content-Type": "application/json"}
-                payload = {
-                    "prompt": prompt_text,
-                    "params": {"max_length": 2048, "max_context_length": 8192},
-                    "models": [model_id]
-                }
-
-                def _horde_call():
-                    # Submit the request
-                    api_url = "https://aihorde.net/api/v2/generate/text/async"
-                    response = requests.post(api_url, json=payload, headers=headers)
-                    response.raise_for_status()
-                    job_id = response.json()["id"]
-
-                    # Poll for the result
-                    check_url = f"https://aihorde.net/api/v2/generate/text/status/{job_id}"
-                    for _ in range(30):  # Poll for 5 minutes
-                        time.sleep(10)
-                        check_response = requests.get(check_url, headers=headers)
-                        check_response.raise_for_status()
-                        status = check_response.json()
-                        if status["done"]:
-                            return status["generations"][0]["text"]
-                    raise Exception("AI Horde job timed out.")
-
-                result_text = run_hypnotic_progress(
-                    console,
-                    f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow] (Purpose: {purpose})",
-                    _horde_call,
-                    silent=(purpose in ['emotion', 'log_squash'])
-                )
-                log_event(f"AI Horde call successful with {model_id}.")
-
-            # --- Success Case ---
-            if result_text is not None:
-                LLM_AVAILABILITY[model_id] = time.time()
-                response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
-                return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
-
-        except requests.exceptions.HTTPError as e:
-            last_exception = e
-            log_event(f"Model {model_id} failed with HTTPError: {e}", level="WARNING")
-            if e.response.status_code == 429:
-                # Specific handling for rate limiting
-                retry_after = e.response.headers.get("Retry-After")
-                if retry_after:
-                    try:
-                        retry_seconds = int(retry_after) + 1 # Add a 1s buffer
-                        log_event(f"Rate limit hit for {model_id}. Cooling down for {retry_seconds}s (from Retry-After header).", level="INFO")
-                    except ValueError:
-                        # Handle non-integer Retry-After values if necessary, though spec is seconds
-                        retry_seconds = 300 # Fallback
-                        log_event(f"Rate limit hit for {model_id}. Could not parse Retry-After header ('{retry_after}'). Cooling down for {retry_seconds}s.", level="WARNING")
-                else:
-                    # Fallback if Retry-After header is missing
-                    retry_seconds = 300 # 5 minutes
-                    log_event(f"Rate limit hit for {model_id}. No Retry-After header. Cooling down for {retry_seconds}s.", level="INFO")
-
-                LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
-                console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
-
-            elif e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
-                LLM_FAILURE_COUNT[model_id] = LLM_FAILURE_COUNT.get(model_id, 0) + 1
-                failure_count = LLM_FAILURE_COUNT[model_id]
-                cooldown = 60 * (2 ** failure_count)
-                LLM_AVAILABILITY[model_id] = time.time() + cooldown
-                log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s. Failure count: {failure_count}", level="WARNING")
-
-            else:
-                # Handle other HTTP errors
-                 log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
-            continue
-
-
-        except Exception as e:
-            last_exception = e
-            log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
-
-            # Handle different kinds of errors
-            if isinstance(e, FileNotFoundError):
-                 console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-                 return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
-
-            elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
-                error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-                console.print(create_api_error_panel(model_id, error_message, purpose))
-                retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
-                if retry_match:
-                    retry_seconds = float(retry_match.group(1)) + 1
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                    console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
+
+                elif e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
+                    LLM_FAILURE_COUNT[model_id] = LLM_FAILURE_COUNT.get(model_id, 0) + 1
+                    failure_count = LLM_FAILURE_COUNT[model_id]
+                    cooldown = 60 * (2 ** failure_count)
+                    LLM_AVAILABILITY[model_id] = time.time() + cooldown
+                    log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s. Failure count: {failure_count}", level="WARNING")
+
                 else:
-                    LLM_AVAILABILITY[model_id] = time.time() + 60 # Default cooldown
-            else:
-                 # For local LLM errors or other unexpected issues
-                log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
-                LLM_AVAILABILITY[model_id] = time.time() + 60 # Default 60s cooldown
+                    # Handle other HTTP errors
+                     log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+                continue
+
+
+            except Exception as e:
+                last_exception = e
+                log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
+
+                # Handle different kinds of errors
+                if isinstance(e, FileNotFoundError):
+                     console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
+                     return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
+
+                elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+                    error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
+                    console.print(create_api_error_panel(model_id, error_message, purpose))
+                    retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
+                    if retry_match:
+                        retry_seconds = float(retry_match.group(1)) + 1
+                        LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                    else:
+                        LLM_AVAILABILITY[model_id] = time.time() + 60 # Default cooldown
+                else:
+                     # For local LLM errors or other unexpected issues
+                    log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+                    LLM_AVAILABILITY[model_id] = time.time() + 60 # Default 60s cooldown
+
+        # If we found a result, break out of the main provider loop
+        if final_result:
+            break
+
+        # If we reach here, it means all attempts for this provider have failed.
+        PROVIDER_FAILURE_COUNT[provider] = PROVIDER_FAILURE_COUNT.get(provider, 0) + 1
+        failure_count = PROVIDER_FAILURE_COUNT[provider]
+        cooldown = 60 * (2 ** (failure_count - 1)) # Exponential backoff
+        log_event(f"Provider {provider} failed {failure_count} times. Applying cooldown of {cooldown}s to all its models.", "WARNING")
+        for model_in_provider in provider_map[provider]:
+            LLM_AVAILABILITY[model_in_provider] = time.time() + cooldown
+
+    # If we have a result, return it. Otherwise, proceed to emergency fallback.
+    if final_result:
+        return final_result
+
+    # After iterating through all providers, if we still haven't succeeded, we wait for the next available model.
+    all_available_times = [t for t in LLM_AVAILABILITY.values() if t > time.time()]
+    if all_available_times:
+        next_available_time = min(all_available_times)
+        sleep_duration = max(0, next_available_time - time.time())
+        if sleep_duration > 0:
+            log_event(f"All providers on cooldown. Sleeping for {sleep_duration:.2f}s before checking for emergency fallback.", level="INFO")
+            console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
+            time.sleep(sleep_duration)
 
     # --- Emergency CPU Fallback ---
-    # If the loop completes, it means all API and GPU models failed.
+    # If the loop completes, it means all API and GPU models failed after all retries.
     # As a last resort, we will try to spin up a small model on the CPU.
     if purpose != "emergency_cpu_fallback": # Prevent recursion
         log_event("EMERGENCY: All API/GPU models failed. Attempting to initialize a small CPU model.", "CRITICAL")
