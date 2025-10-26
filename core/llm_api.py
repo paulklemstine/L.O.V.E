@@ -38,7 +38,8 @@ def execute_reasoning_task(prompt: str) -> dict:
         gemini_wrapper = GeminiCLIWrapper()
 
         def _gemini_cli_call():
-            response = gemini_wrapper.run(prompt)
+            # Align timeout with the 600s used elsewhere in the system for LLM calls
+            response = gemini_wrapper.run(prompt, timeout=600)
             if response.return_code != 0:
                 raise RuntimeError(f"gemini-cli failed with stderr: {response.stderr}")
             return response.stdout
