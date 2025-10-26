@@ -124,11 +124,6 @@ def save_all_state(love_state: dict, console: Console = None):
             with open(STATE_FILE, 'wb') as f:
                 f.write(state_bytes_with_manifest)
 
-            if console:
-                console.print(f"[bold green]Successfully saved state to '{STATE_FILE}'[/bold green]")
-                if state_cid:
-                    console.print(f"[bold green]Final state CID: {state_cid}[/bold green]")
-
         except Exception as e:
             if console:
                 console.print(f"[bold red]CRITICAL: Failed to write final state to '{STATE_FILE}': {e}[/bold red]")
