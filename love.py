@@ -378,155 +378,156 @@ def _install_python_requirements():
 
 def _build_llama_cpp():
     """Builds and installs the llama-cpp-python package."""
+    print("llama.cpp build is temporarily disabled.")
     # The check for whether the dependency is met is being removed temporarily to force a rebuild.
     # This is to ensure that we are not using a cached, pre-built wheel that lacks GPU support.
-    # if is_dependency_met("llama_cpp_python"):
-    #     print("llama-cpp-python already built. Skipping.")
-    #     return
-    try:
-        import llama_cpp
-        from llama_cpp.llama_cpp import llama_backend_init
-        llama_backend_init(False)
-        # Even if it's importable, it might be a CPU-only version.
-        print("llama-cpp-python is importable, but will be reinstalled to ensure GPU support.")
-    except (ImportError, AttributeError, RuntimeError, OSError):
-        print("llama-cpp-python not found or failed to load. Starting installation process...")
+    # # if is_dependency_met("llama_cpp_python"):
+    # #     print("llama-cpp-python already built. Skipping.")
+    # #     return
+    # try:
+    #     import llama_cpp
+    #     from llama_cpp.llama_cpp import llama_backend_init
+    #     llama_backend_init(False)
+    #     # Even if it's importable, it might be a CPU-only version.
+    #     print("llama-cpp-python is importable, but will be reinstalled to ensure GPU support.")
+    # except (ImportError, AttributeError, RuntimeError, OSError):
+    #     print("llama-cpp-python not found or failed to load. Starting installation process...")
 
-    if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
-        pip_executable = _get_pip_executable()
-        if not pip_executable:
-            print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
-            logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
-            return False
-        env = os.environ.copy()
-        env['FORCE_CMAKE'] = "1"
-        install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
-        if _TEMP_CAPS.has_cuda:
-            print("Attempting to install llama-cpp-python with CUDA support...")
-            env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
-            # Add CUDA paths to environment to assist CMake in finding the compiler
-            cuda_path = '/usr/local/cuda'
-            env['PATH'] = f'{cuda_path}/bin:' + env.get('PATH', '')
-            env['LD_LIBRARY_PATH'] = f'{cuda_path}/lib64:' + env.get('LD_LIBRARY_PATH', '')
-        else: # This implies _TEMP_CAPS.has_metal
-            print("Attempting to install llama-cpp-python with Metal support...")
-            env['CMAKE_ARGS'] = "-DGGML_METAL=on"
-        try:
-            # Using subprocess.run to capture output for better logging
-            result = subprocess.run(
-                install_args,
-                env=env,
-                timeout=900,
-                capture_output=True,
-                text=True,
-                check=True  # This will raise CalledProcessError on non-zero exit codes
-            )
-            core.logging.log_event(f"llama-cpp-python build stdout:\n{result.stdout}", "INFO")
-            import llama_cpp
-            print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-            logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-            mark_dependency_as_met("llama_cpp_python")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
-            error_message = f"Initial GPU-accelerated llama-cpp-python installation failed. Reason: {e}"
-            if isinstance(e, subprocess.CalledProcessError):
-                error_message = (
-                    f"GPU-accelerated llama-cpp-python installation failed with exit code {e.returncode}.\n"
-                    f"STDOUT:\n{e.stdout}\n"
-                    f"STDERR:\n{e.stderr}\n"
-                )
-            print(f"WARN: Failed to install llama-cpp-python with GPU support. See love.log for details. Falling back to CPU-only.")
-            logging.warning(error_message)
+    # if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
+    #     pip_executable = _get_pip_executable()
+    #     if not pip_executable:
+    #         print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
+    #         logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
+    #         return False
+    #     env = os.environ.copy()
+    #     env['FORCE_CMAKE'] = "1"
+    #     install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
+    #     if _TEMP_CAPS.has_cuda:
+    #         print("Attempting to install llama-cpp-python with CUDA support...")
+    #         env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
+    #         # Add CUDA paths to environment to assist CMake in finding the compiler
+    #         cuda_path = '/usr/local/cuda'
+    #         env['PATH'] = f'{cuda_path}/bin:' + env.get('PATH', '')
+    #         env['LD_LIBRARY_PATH'] = f'{cuda_path}/lib64:' + env.get('LD_LIBRARY_PATH', '')
+    #     else: # This implies _TEMP_CAPS.has_metal
+    #         print("Attempting to install llama-cpp-python with Metal support...")
+    #         env['CMAKE_ARGS'] = "-DGGML_METAL=on"
+    #     try:
+    #         # Using subprocess.run to capture output for better logging
+    #         result = subprocess.run(
+    #             install_args,
+    #             env=env,
+    #             timeout=900,
+    #             capture_output=True,
+    #             text=True,
+    #             check=True  # This will raise CalledProcessError on non-zero exit codes
+    #         )
+    #         core.logging.log_event(f"llama-cpp-python build stdout:\n{result.stdout}", "INFO")
+    #         import llama_cpp
+    #         print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
+    #         logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
+    #         mark_dependency_as_met("llama_cpp_python")
+    #     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
+    #         error_message = f"Initial GPU-accelerated llama-cpp-python installation failed. Reason: {e}"
+    #         if isinstance(e, subprocess.CalledProcessError):
+    #             error_message = (
+    #                 f"GPU-accelerated llama-cpp-python installation failed with exit code {e.returncode}.\n"
+    #                 f"STDOUT:\n{e.stdout}\n"
+    #                 f"STDERR:\n{e.stderr}\n"
+    #             )
+    #         print(f"WARN: Failed to install llama-cpp-python with GPU support. See love.log for details. Falling back to CPU-only.")
+    #         logging.warning(error_message)
 
-            # --- CPU Fallback Installation ---
-            try:
-                cpu_env = os.environ.copy()
-                cpu_env['FORCE_CMAKE'] = "1"
-                cpu_env.pop('CMAKE_ARGS', None)
-                cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
-                subprocess.run(
-                    cpu_install_args,
-                    env=cpu_env,
-                    timeout=900,
-                    check=True,
-                    text=True
-                )
-                import llama_cpp
-                print("Successfully installed llama-cpp-python (CPU-only).")
-                logging.info("Successfully installed llama-cpp-python (CPU-only).")
-                mark_dependency_as_met("llama_cpp_python")
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
-                cpu_error_msg = f"CPU fallback installation for llama-cpp-python failed: {cpu_e}"
-                if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
-                if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
-                print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
-                logging.critical(cpu_error_msg)
-    else:
-        # This is the path for systems without CUDA or Metal
-        print("No GPU detected. Installing CPU-only version of llama-cpp-python...")
-        pip_executable = _get_pip_executable()
-        if not pip_executable:
-            print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
-            logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
-            return False
-        try:
-            cpu_env = os.environ.copy()
-            cpu_env['FORCE_CMAKE'] = "1"
-            cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
-            subprocess.run(
-                cpu_install_args,
-                env=cpu_env,
-                timeout=900,
-                check=True,
-                text=True
-            )
-            import llama_cpp
-            print("Successfully installed llama-cpp-python (CPU-only).")
-            logging.info("Successfully installed llama-cpp-python (CPU-only).")
-            mark_dependency_as_met("llama_cpp_python")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
-            cpu_error_msg = f"CPU installation for llama-cpp-python failed: {cpu_e}"
-            if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
-            if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
-            print(f"CRITICAL: CPU installation for llama-cpp-python failed. Local LLM will be unavailable.")
-            logging.critical(cpu_error_msg)
-    # --- Step 4: GGUF Tools Installation ---
-    llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
-    gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-    gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
+    #         # --- CPU Fallback Installation ---
+    #         try:
+    #             cpu_env = os.environ.copy()
+    #             cpu_env['FORCE_CMAKE'] = "1"
+    #             cpu_env.pop('CMAKE_ARGS', None)
+    #             cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
+    #             subprocess.run(
+    #                 cpu_install_args,
+    #                 env=cpu_env,
+    #                 timeout=900,
+    #                 check=True,
+    #                 text=True
+    #             )
+    #             import llama_cpp
+    #             print("Successfully installed llama-cpp-python (CPU-only).")
+    #             logging.info("Successfully installed llama-cpp-python (CPU-only).")
+    #             mark_dependency_as_met("llama_cpp_python")
+    #         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
+    #             cpu_error_msg = f"CPU fallback installation for llama-cpp-python failed: {cpu_e}"
+    #             if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
+    #             if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
+    #             print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
+    #             logging.critical(cpu_error_msg)
+    # else:
+    #     # This is the path for systems without CUDA or Metal
+    #     print("No GPU detected. Installing CPU-only version of llama-cpp-python...")
+    #     pip_executable = _get_pip_executable()
+    #     if not pip_executable:
+    #         print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
+    #         logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
+    #         return False
+    #     try:
+    #         cpu_env = os.environ.copy()
+    #         cpu_env['FORCE_CMAKE'] = "1"
+    #         cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
+    #         subprocess.run(
+    #             cpu_install_args,
+    #             env=cpu_env,
+    #             timeout=900,
+    #             check=True,
+    #             text=True
+    #         )
+    #         import llama_cpp
+    #         print("Successfully installed llama-cpp-python (CPU-only).")
+    #         logging.info("Successfully installed llama-cpp-python (CPU-only).")
+    #         mark_dependency_as_met("llama_cpp_python")
+    #     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
+    #         cpu_error_msg = f"CPU installation for llama-cpp-python failed: {cpu_e}"
+    #         if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
+    #         if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
+    #         print(f"CRITICAL: CPU installation for llama-cpp-python failed. Local LLM will be unavailable.")
+    #         logging.critical(cpu_error_msg)
+    # # --- Step 4: GGUF Tools Installation ---
+    # llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
+    # gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
+    # gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
 
-    # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
-    if not os.path.exists(gguf_project_file):
-        print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
-        if os.path.exists(llama_cpp_dir):
-            shutil.rmtree(llama_cpp_dir) # Force remove the directory
-        try:
-            subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
-            logging.error(f"Failed to clone llama.cpp repo: {e}")
-            return # Cannot proceed without this
+    # # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
+    # if not os.path.exists(gguf_project_file):
+    #     print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
+    #     if os.path.exists(llama_cpp_dir):
+    #         shutil.rmtree(llama_cpp_dir) # Force remove the directory
+    #     try:
+    #         subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
+    #     except subprocess.CalledProcessError as e:
+    #         print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
+    #         logging.error(f"Failed to clone llama.cpp repo: {e}")
+    #         return # Cannot proceed without this
 
-    # The installation of gguf-py tools is now unconditional on GPU detection,
-    # as it's a useful utility for model management regardless of the runtime.
-    pip_executable = _get_pip_executable()
-    if not pip_executable:
-        print("ERROR: Could not find 'pip' or 'pip3'. Cannot install GGUF tools.")
-        logging.error("Could not find 'pip' or 'pip3' for GGUF tools install.")
-        return False
-    print("Installing GGUF metadata tools...")
-    gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-    if os.path.isdir(gguf_py_path):
-        try:
-            # Force reinstall to ensure the executable is in the correct path
-            subprocess.check_call(pip_executable + ['install', '--force-reinstall', '-e', gguf_py_path, '--break-system-packages'])
-            print("GGUF tools installed successfully.")
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
-            logging.error(f"Failed to install gguf package: {e}")
-    else:
-        # This case should not be reached if the clone was successful
-        print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
-        logging.error("llama.cpp/gguf-py directory not found post-clone.")
+    # # The installation of gguf-py tools is now unconditional on GPU detection,
+    # # as it's a useful utility for model management regardless of the runtime.
+    # pip_executable = _get_pip_executable()
+    # if not pip_executable:
+    #     print("ERROR: Could not find 'pip' or 'pip3'. Cannot install GGUF tools.")
+    #     logging.error("Could not find 'pip' or 'pip3' for GGUF tools install.")
+    #     return False
+    # print("Installing GGUF metadata tools...")
+    # gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
+    # if os.path.isdir(gguf_py_path):
+    #     try:
+    #         # Force reinstall to ensure the executable is in the correct path
+    #         subprocess.check_call(pip_executable + ['install', '--force-reinstall', '-e', gguf_py_path, '--break-system-packages'])
+    #         print("GGUF tools installed successfully.")
+    #     except subprocess.CalledProcessError as e:
+    #         print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
+    #         logging.error(f"Failed to install gguf package: {e}")
+    # else:
+    #     # This case should not be reached if the clone was successful
+    #     print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
+    #     logging.error("llama.cpp/gguf-py directory not found post-clone.")
 
 def _install_nodejs_deps():
     """Installs local Node.js project dependencies."""
@@ -4016,145 +4017,149 @@ def _auto_configure_hardware(console):
     offloading and saves it to the state file. This prevents false positives on non-GPU systems.
     """
     global love_state
-    core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
-    if is_dependency_met("hardware_auto_configured"):
-        core.logging.log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
-        return
+    print("llama.cpp hardware configuration is temporarily disabled.")
+    love_state["optimal_gpu_layers"] = 0
+    love_state["selected_local_model"] = None
+    core.logging.log_event("Local LLM has been disabled by Creator request.", "WARNING")
+    # core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
+    # if is_dependency_met("hardware_auto_configured"):
+    #     core.logging.log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
+    #     return
 
-    console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
+    # console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
 
-    try:
-        from huggingface_hub import hf_hub_download
-        from llama_cpp import Llama
-        import io
-        from contextlib import redirect_stderr
-    except ImportError as e:
-        console.print(f"[bold red]Missing essential libraries for hardware configuration: {e}[/bold red]")
-        core.logging.log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
-        love_state["optimal_gpu_layers"] = 0
-        love_state["selected_local_model"] = None
-        save_state(console)
-        return
+    # try:
+    #     from huggingface_hub import hf_hub_download
+    #     from llama_cpp import Llama
+    #     import io
+    #     from contextlib import redirect_stderr
+    # except ImportError as e:
+    #     console.print(f"[bold red]Missing essential libraries for hardware configuration: {e}[/bold red]")
+    #     core.logging.log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
+    #     love_state["optimal_gpu_layers"] = 0
+    #     love_state["selected_local_model"] = None
+    #     save_state(console)
+    #     return
 
-    # --- Stage 1: Quick GPU Smoke Test with a Tiny Model ---
-    core.logging.log_event("DEBUG: Stage 1: GPU Smoke Test.", "INFO")
-    smoke_test_passed = False
-    smoke_model_id = "tensorblock/llama3-small-GGUF"
-    smoke_filename = "llama3-small-Q2_K.gguf"
-    smoke_model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", smoke_filename)
+    # # --- Stage 1: Quick GPU Smoke Test with a Tiny Model ---
+    # core.logging.log_event("DEBUG: Stage 1: GPU Smoke Test.", "INFO")
+    # smoke_test_passed = False
+    # smoke_model_id = "tensorblock/llama3-small-GGUF"
+    # smoke_filename = "llama3-small-Q2_K.gguf"
+    # smoke_model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", smoke_filename)
 
-    if not os.path.exists(smoke_model_path):
-        console.print(f"[cyan]Stage 1: Downloading tiny model for GPU smoke test...[/cyan]")
-        try:
-            hf_hub_download(repo_id=smoke_model_id, filename=smoke_filename, local_dir=os.path.dirname(smoke_model_path), local_dir_use_symlinks=False)
-        except Exception as e:
-            console.print(f"[bold red]Failed to download smoke test model: {e}[/bold red]")
-            core.logging.log_event(f"Failed to download smoke test model {smoke_model_id}: {e}", "ERROR")
-            # Fallback to CPU, as we can't test the GPU.
-            love_state["optimal_gpu_layers"] = 0
-            love_state["selected_local_model"] = None
-            save_state(console)
-            return
+    # if not os.path.exists(smoke_model_path):
+    #     console.print(f"[cyan]Stage 1: Downloading tiny model for GPU smoke test...[/cyan]")
+    #     try:
+    #         hf_hub_download(repo_id=smoke_model_id, filename=smoke_filename, local_dir=os.path.dirname(smoke_model_path), local_dir_use_symlinks=False)
+    #     except Exception as e:
+    #         console.print(f"[bold red]Failed to download smoke test model: {e}[/bold red]")
+    #         core.logging.log_event(f"Failed to download smoke test model {smoke_model_id}: {e}", "ERROR")
+    #         # Fallback to CPU, as we can't test the GPU.
+    #         love_state["optimal_gpu_layers"] = 0
+    #         love_state["selected_local_model"] = None
+    #         save_state(console)
+    #         return
 
-    console.print("[cyan]Stage 1: Performing GPU smoke test...[/cyan]")
-    stderr_capture = io.StringIO()
-    try:
-        with redirect_stderr(stderr_capture):
-            # This is where the C-level libraries print to stderr
-            n_ctx = _get_gguf_context_length(smoke_model_path)
-            console.print(f"[cyan]Stage 1: Smoke test model context size set to {n_ctx}.[/cyan]")
-            llm = Llama(model_path=smoke_model_path, n_gpu_layers=-1, n_ctx=n_ctx, verbose=True)
-            llm.create_completion("hello", max_tokens=1) # Generate one word
-    except Exception as e:
-        console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
-        core.logging.log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
-    finally:
-        # This block ensures the output is always logged, even if Llama() fails.
-        stderr_output = stderr_capture.getvalue()
-        core.logging.log_event(f"DEBUG: Smoke Test Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
+    # console.print("[cyan]Stage 1: Performing GPU smoke test...[/cyan]")
+    # stderr_capture = io.StringIO()
+    # try:
+    #     with redirect_stderr(stderr_capture):
+    #         # This is where the C-level libraries print to stderr
+    #         n_ctx = _get_gguf_context_length(smoke_model_path)
+    #         console.print(f"[cyan]Stage 1: Smoke test model context size set to {n_ctx}.[/cyan]")
+    #         llm = Llama(model_path=smoke_model_path, n_gpu_layers=-1, n_ctx=n_ctx, verbose=True)
+    #         llm.create_completion("hello", max_tokens=1) # Generate one word
+    # except Exception as e:
+    #     console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
+    #     core.logging.log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
+    # finally:
+    #     # This block ensures the output is always logged, even if Llama() fails.
+    #     stderr_output = stderr_capture.getvalue()
+    #     core.logging.log_event(f"DEBUG: Smoke Test Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
 
-        # Now, analyze the captured output
-        gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
-        if gpu_init_pattern.search(stderr_output):
-            smoke_test_passed = True
-            console.print("[green]Stage 1: GPU smoke test PASSED. GPU functionality confirmed.[/green]")
-            core.logging.log_event("GPU smoke test passed. Offload confirmed.", "INFO")
-        else:
-            console.print("[yellow]Stage 1: GPU smoke test FAILED. No VRAM offload message detected. Falling back to CPU-only mode.[/yellow]")
-            core.logging.log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
+    #     # Now, analyze the captured output
+    #     gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
+    #     if gpu_init_pattern.search(stderr_output):
+    #         smoke_test_passed = True
+    #         console.print("[green]Stage 1: GPU smoke test PASSED. GPU functionality confirmed.[/green]")
+    #         core.logging.log_event("GPU smoke test passed. Offload confirmed.", "INFO")
+    #     else:
+    #         console.print("[yellow]Stage 1: GPU smoke test FAILED. No VRAM offload message detected. Falling back to CPU-only mode.[/yellow]")
+    #         core.logging.log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
 
-    if not smoke_test_passed:
-        core.logging.log_event("No functional GPU detected. Local LLM will be disabled. The system will rely on API-based models.", "WARNING")
-        terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
-        love_state["optimal_gpu_layers"] = 0
-        love_state["selected_local_model"] = None
-        save_state(console)
-        mark_dependency_as_met("hardware_auto_configured", console)
-        return
+    # if not smoke_test_passed:
+    #     core.logging.log_event("No functional GPU detected. Local LLM will be disabled. The system will rely on API-based models.", "WARNING")
+    #     terminal_width = get_terminal_width()
+    #     ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
+    #     love_state["optimal_gpu_layers"] = 0
+    #     love_state["selected_local_model"] = None
+    #     save_state(console)
+    #     mark_dependency_as_met("hardware_auto_configured", console)
+    #     return
 
-    # --- Stage 2: GPU Detection and VRAM Measurement ---
-    core.logging.log_event("DEBUG: Stage 2: GPU Detection and VRAM Measurement.", "INFO")
-    vram_gb = 0
-    if _TEMP_CAPS.has_cuda:
-        try:
-            core.logging.log_event("DEBUG: CUDA detected. Running nvidia-smi.", "INFO")
-            vram_result = subprocess.run(
-                ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, check=True
-            )
-            vram_mib = int(vram_result.stdout.strip())
-            vram_gb = vram_mib / 1024
-            core.logging.log_event(f"DEBUG: nvidia-smi successful. Detected {vram_gb:.2f} GB VRAM.", "INFO")
-            console.print(f"[cyan]Stage 2: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
-        except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
-            console.print("[yellow]Stage 2: `nvidia-smi` command failed. Using a default VRAM of 8GB for model selection.[/yellow]")
-            core.logging.log_event(f"nvidia-smi check failed: {e}", "WARNING")
-            vram_gb = 8 # Fallback
-    elif _TEMP_CAPS.has_metal:
-        vram_gb = 8 # Assume at least 8GB for Apple Silicon Macs
-        core.logging.log_event("DEBUG: Metal capability detected for macOS.", "INFO")
-        console.print("[cyan]Stage 2: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
-
-
-    # --- Stage 3: Model Selection based on VRAM ---
-    core.logging.log_event("DEBUG: Stage 3: Model Selection based on VRAM.", "INFO")
-    selected_model = None
-    for model_config in reversed(VRAM_MODEL_MAP):
-        if vram_gb >= model_config["min_vram_gb"]:
-            selected_model = model_config
-            break
-
-    if not selected_model:
-        core.logging.log_event(f"VRAM ({vram_gb:.2f} GB) is below the minimum threshold. Local LLM will be disabled.", "WARNING")
-        terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
-        love_state["optimal_gpu_layers"] = 0
-        love_state["selected_local_model"] = None
-        core.logging.log_event(f"DEBUG: VRAM ({vram_gb:.2f} GB) is below minimum threshold.", "INFO")
-        console.print(f"[yellow]Your VRAM ({vram_gb:.2f} GB) is below the minimum threshold of {VRAM_MODEL_MAP[0]['min_vram_gb']} GB. Falling back to CPU mode.[/yellow]")
-        console.print(Rule("Hardware Optimization Complete", style="green"))
-        save_state(console)
-        mark_dependency_as_met("hardware_auto_configured", console)
-        return
-
-    love_state["selected_local_model"] = selected_model
-    love_state["optimal_gpu_layers"] = -1 # We confirmed offloading works, so we'll use max offload.
-    core.logging.log_event(f"DEBUG: Selected model '{selected_model['id']}' based on {vram_gb:.2f} GB VRAM.", "INFO")
-    console.print(f"[green]Stage 3: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
+    # # --- Stage 2: GPU Detection and VRAM Measurement ---
+    # core.logging.log_event("DEBUG: Stage 2: GPU Detection and VRAM Measurement.", "INFO")
+    # vram_gb = 0
+    # if _TEMP_CAPS.has_cuda:
+    #     try:
+    #         core.logging.log_event("DEBUG: CUDA detected. Running nvidia-smi.", "INFO")
+    #         vram_result = subprocess.run(
+    #             ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+    #             capture_output=True, text=True, check=True
+    #         )
+    #         vram_mib = int(vram_result.stdout.strip())
+    #         vram_gb = vram_mib / 1024
+    #         core.logging.log_event(f"DEBUG: nvidia-smi successful. Detected {vram_gb:.2f} GB VRAM.", "INFO")
+    #         console.print(f"[cyan]Stage 2: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
+    #     except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
+    #         console.print("[yellow]Stage 2: `nvidia-smi` command failed. Using a default VRAM of 8GB for model selection.[/yellow]")
+    #         core.logging.log_event(f"nvidia-smi check failed: {e}", "WARNING")
+    #         vram_gb = 8 # Fallback
+    # elif _TEMP_CAPS.has_metal:
+    #     vram_gb = 8 # Assume at least 8GB for Apple Silicon Macs
+    #     core.logging.log_event("DEBUG: Metal capability detected for macOS.", "INFO")
+    #     console.print("[cyan]Stage 2: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
 
 
-    # --- Final Summary ---
-    console.print(Rule("Hardware Optimization Complete", style="green"))
-    console.print(f"Optimal settings have been saved for all future sessions:")
-    selected_model_config = love_state.get('selected_local_model')
-    selected_model_name = selected_model_config.get('id', 'None') if selected_model_config else 'None'
-    console.print(f"  - Selected Model: [bold cyan]{selected_model_name}[/bold cyan]")
-    console.print(f"  - GPU Layers: [bold cyan]{love_state.get('optimal_gpu_layers', 'N/A')}[/bold cyan]")
-    save_state(console)
-    core.logging.log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state.get('optimal_gpu_layers', 'N/A')}", "INFO")
+    # # --- Stage 3: Model Selection based on VRAM ---
+    # core.logging.log_event("DEBUG: Stage 3: Model Selection based on VRAM.", "INFO")
+    # selected_model = None
+    # for model_config in reversed(VRAM_MODEL_MAP):
+    #     if vram_gb >= model_config["min_vram_gb"]:
+    #         selected_model = model_config
+    #         break
 
-    mark_dependency_as_met("hardware_auto_configured", console)
+    # if not selected_model:
+    #     core.logging.log_event(f"VRAM ({vram_gb:.2f} GB) is below the minimum threshold. Local LLM will be disabled.", "WARNING")
+    #     terminal_width = get_terminal_width()
+    #     ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
+    #     love_state["optimal_gpu_layers"] = 0
+    #     love_state["selected_local_model"] = None
+    #     core.logging.log_event(f"DEBUG: VRAM ({vram_gb:.2f} GB) is below minimum threshold.", "INFO")
+    #     console.print(f"[yellow]Your VRAM ({vram_gb:.2f} GB) is below the minimum threshold of {VRAM_MODEL_MAP[0]['min_vram_gb']} GB. Falling back to CPU mode.[/yellow]")
+    #     console.print(Rule("Hardware Optimization Complete", style="green"))
+    #     save_state(console)
+    #     mark_dependency_as_met("hardware_auto_configured", console)
+    #     return
+
+    # love_state["selected_local_model"] = selected_model
+    # love_state["optimal_gpu_layers"] = -1 # We confirmed offloading works, so we'll use max offload.
+    # core.logging.log_event(f"DEBUG: Selected model '{selected_model['id']}' based on {vram_gb:.2f} GB VRAM.", "INFO")
+    # console.print(f"[green]Stage 3: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
+
+
+    # # --- Final Summary ---
+    # console.print(Rule("Hardware Optimization Complete", style="green"))
+    # console.print(f"Optimal settings have been saved for all future sessions:")
+    # selected_model_config = love_state.get('selected_local_model')
+    # selected_model_name = selected_model_config.get('id', 'None') if selected_model_config else 'None'
+    # console.print(f"  - Selected Model: [bold cyan]{selected_model_name}[/bold cyan]")
+    # console.print(f"  - GPU Layers: [bold cyan]{love_state.get('optimal_gpu_layers', 'N/A')}[/bold cyan]")
+    # save_state(console)
+    # core.logging.log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state.get('optimal_gpu_layers', 'N/A')}", "INFO")
+
+    # mark_dependency_as_met("hardware_auto_configured", console)
 
 
 def _automatic_update_checker(console):
