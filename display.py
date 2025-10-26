@@ -300,6 +300,24 @@ def create_question_panel(question, ref_number, width=80):
     )
     return Gradient(panel, colors=[PANEL_TYPE_COLORS["question"], random.choice(RAVE_COLORS)])
 
+def create_retry_panel(model_id, attempt, max_attempts, backoff_time, purpose, width=80):
+    """Creates a styled panel to indicate a retry attempt."""
+    content = Text()
+    content.append("Accessing cognitive matrix via ", style="white")
+    content.append(f"[{model_id}]", style="bold yellow")
+    content.append(f" (Purpose: {purpose}) ... ", style="white")
+    content.append("Timed Out.", style="bold yellow")
+    content.append(f"\n\nRetrying in {backoff_time:.2f} seconds... (Attempt {attempt}/{max_attempts})", style="dim")
+
+    panel = Panel(
+        content,
+        title=get_gradient_text("API Timeout - Retrying", PANEL_TYPE_COLORS["api_error"], "bright_yellow"),
+        border_style="yellow",
+        padding=(1, 2),
+        width=width
+    )
+    return Gradient(panel, colors=[PANEL_TYPE_COLORS["api_error"], "yellow"])
+
 def create_api_error_panel(model_id, error_message, purpose, width=80):
     """Creates a styled panel for non-fatal API errors."""
     content = Text()
