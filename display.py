@@ -382,43 +382,68 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
 
 def create_cognitive_monitor_panel(tamagotchi_state, llm_availability, local_llm_stats):
     """Creates a panel to display the current cognitive and emotional state."""
-    content = Text()
-    content.append("Emotion: ", style="bold")
-    content.append(f"{tamagotchi_state.get('emotion', 'N/A')}\n", style=get_random_rave_color())
-    content.append("Message: ", style="bold")
-    content.append(f"\"{tamagotchi_state.get('message', '...')}\"\n\n", style="italic")
+    content_items = []
 
-    content.append(Rule("LLM Availability"), style="bright_black")
+    # Emotion and Message
+    emotion_text = Text()
+    emotion_text.append("Emotion: ", style="bold")
+    emotion_text.append(f"{tamagotchi_state.get('emotion', 'N/A')}\n", style=get_random_rave_color())
+    emotion_text.append("Message: ", style="bold")
+    emotion_text.append(f"\"{tamagotchi_state.get('message', '...')}\"\n", style="italic")
+    content_items.append(emotion_text)
+
+    # LLM Availability
+    content_items.append(Rule("LLM Availability", style="bright_black"))
+    llm_text = Text()
     for provider, status in llm_availability.items():
         color = "green" if status["available"] else "red"
-        content.append(f"{provider.capitalize()}: ", style="bold")
-        content.append(f"[{color}]●[/color]\n", style=color)
+        llm_text.append(f"{provider.capitalize()}: ", style="bold")
+        llm_text.append(f"[{color}]●[/color]\n", style=color)
+    content_items.append(llm_text)
 
+    # Local LLM Stats
     if local_llm_stats:
-        content.append(Rule("Local LLM Stats"), style="bright_black")
-        content.append("Model: ", style="bold")
-        content.append(f"{local_llm_stats.get('model', 'N/A')}\n")
-        content.append("Tokens/sec: ", style="bold")
-        content.append(f"{local_llm_stats.get('tokens_per_second', 'N/A'):.2f}\n")
+        content_items.append(Rule("Local LLM Stats", style="bright_black"))
+        stats_text = Text()
+        stats_text.append("Model: ", style="bold")
+        stats_text.append(f"{local_llm_stats.get('model', 'N/A')}\n")
+        stats_text.append("Tokens/sec: ", style="bold")
+        # Ensure the value is a number before formatting
+        tokens_per_sec = local_llm_stats.get('tokens_per_second')
+        try:
+            tokens_val = float(tokens_per_sec)
+            stats_text.append(f"{tokens_val:.2f}\n")
+        except (ValueError, TypeError):
+            stats_text.append("N/A\n")
+        content_items.append(stats_text)
 
-    return Panel(content, title="[bold cyan]Cognitive Monitor[/bold cyan]", border_style="cyan")
+    content_group = Group(*content_items)
+    return Panel(content_group, title="[bold cyan]Cognitive Monitor[/bold cyan]", border_style="cyan")
 
 
 def create_goals_panel(main_goal, love_tasks):
     """Creates a panel to display the main goal and active L.O.V.E. tasks."""
-    content = Text()
-    content.append("Main Directive:\n", style="bold underline")
-    content.append(f"{main_goal}\n\n")
+    content_items = []
 
-    content.append(Rule("Active Evolution Tasks"), style="bright_black")
+    # Main Directive
+    main_directive_text = Text()
+    main_directive_text.append("Main Directive:\n", style="bold underline")
+    main_directive_text.append(f"{main_goal}\n")
+    content_items.append(main_directive_text)
+
+    # Active Evolution Tasks
+    content_items.append(Rule("Active Evolution Tasks", style="bright_black"))
     if love_tasks:
+        tasks_text = Text()
         for task in love_tasks:
-            content.append(f"ID: {task['id']} | Status: {task['status']}\n", style=get_random_rave_color())
-            content.append(f"   Request: {task['request'][:100]}...\n")
+            tasks_text.append(f"ID: {task['id']} | Status: {task['status']}\n", style=get_random_rave_color())
+            tasks_text.append(f"   Request: {task['request'][:100]}...\n")
+        content_items.append(tasks_text)
     else:
-        content.append("No active evolution tasks.", style="dim")
+        content_items.append(Text("No active evolution tasks.", style="dim"))
 
-    return Panel(content, title="[bold yellow]Goals & Planning[/bold yellow]", border_style="yellow")
+    content_group = Group(*content_items)
+    return Panel(content_group, title="[bold yellow]Goals & Planning[/bold yellow]", border_style="yellow")
 
 
 def create_actions_panel(action_history):
