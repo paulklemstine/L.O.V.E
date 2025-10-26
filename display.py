@@ -399,7 +399,11 @@ def create_cognitive_monitor_panel(tamagotchi_state, llm_availability, local_llm
         content.append("Model: ", style="bold")
         content.append(f"{local_llm_stats.get('model', 'N/A')}\n")
         content.append("Tokens/sec: ", style="bold")
-        content.append(f"{local_llm_stats.get('tokens_per_second', 'N/A'):.2f}\n")
+        try:
+            tps = float(local_llm_stats.get('tokens_per_second'))
+            content.append(f"{tps:.2f}\n")
+        except (ValueError, TypeError):
+            content.append("N/A\n")
 
     return Panel(content, title="[bold cyan]Cognitive Monitor[/bold cyan]", border_style="cyan")
 
@@ -414,7 +418,12 @@ def create_goals_panel(main_goal, love_tasks):
     if love_tasks:
         for task in love_tasks:
             content.append(f"ID: {task['id']} | Status: {task['status']}\n", style=get_random_rave_color())
-            content.append(f"   Request: {task['request'][:100]}...\n")
+            request_text = task.get('request', '')
+            if isinstance(request_text, Text):
+                request_text.truncate(100, overflow="ellipsis")
+                content.append("   Request: ").append(request_text).append("\n")
+            else:
+                content.append(f"   Request: {str(request_text)[:100]}...\n")
     else:
         content.append("No active evolution tasks.", style="dim")
 
@@ -425,15 +434,23 @@ def create_actions_panel(action_history):
     """Creates a panel to display the most recent autonomous actions."""
     content = Text()
     if action_history:
-        for action in reversed(action_history[-5:]): # Last 5 actions
-            content.append(f"CMD: ", style="bold bright_cyan")
+        for action in reversed(action_history[-5:]):  # Last 5 actions
+            content.append("CMD: ", style="bold bright_cyan")
             content.append(f"{action.get('command', 'N/A')}\n")
-            output = str(action.get('output', ''))
-            # Truncate long outputs for display in this panel
-            if len(output) > 150:
-                output = output[:150] + "..."
-            content.append(f"OUT: ", style="dim")
-            content.append(f"{output}\n---\n", style="dim")
+            output = action.get('output', '')
+
+            content.append("OUT: ", style="dim")
+            if isinstance(output, Text):
+                # If it's already a Text object, truncate and append
+                output.truncate(150, overflow="ellipsis")
+                content.append(output)
+            else:
+                # Otherwise, convert to string, truncate, and append
+                output_str = str(output)
+                if len(output_str) > 150:
+                    output_str = output_str[:150] + "..."
+                content.append(output_str)
+            content.append("\n---\n", style="dim")
     else:
         content.append("No recent actions.", style="dim")
 
