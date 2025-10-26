@@ -4011,155 +4011,161 @@ VRAM_MODEL_MAP = [
 ]
 
 
+def _background_gpu_setup(console):
+    """
+    Runs in a background thread to detect GPU, download model, and initialize
+    the local LLM instance without blocking startup.
+    """
+    global love_state, local_llm_instance, llm_server
+    terminal_width = get_terminal_width()
+    ui_panel_queue.put(create_news_feed_panel("Local LLM: Initializing...", "Hardware Setup", "yellow", width=terminal_width - 4))
+
+    try:
+        core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
+        if is_dependency_met("hardware_auto_configured"):
+            core.logging.log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
+            # If already configured, just start the server
+            if love_state.get("optimal_gpu_layers", 0) != 0:
+                llm_server = LocalLLMServer(console)
+                llm_server.start()
+            return
+
+        console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
+
+        try:
+            from huggingface_hub import hf_hub_download
+            from llama_cpp import Llama
+            import io
+            from contextlib import redirect_stderr
+        except ImportError as e:
+            console.print(f"[bold red]Missing essential libraries for hardware configuration: {e}[/bold red]")
+            core.logging.log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
+            love_state["optimal_gpu_layers"] = 0
+            love_state["selected_local_model"] = None
+            save_state(console)
+            return
+
+        # --- Stage 1: Quick GPU Smoke Test with a Tiny Model ---
+        core.logging.log_event("DEBUG: Stage 1: GPU Smoke Test.", "INFO")
+        smoke_test_passed = False
+        smoke_model_id = "tensorblock/llama3-small-GGUF"
+        smoke_filename = "llama3-small-Q2_K.gguf"
+        smoke_model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", smoke_filename)
+
+        if not os.path.exists(smoke_model_path):
+            console.print(f"[cyan]Stage 1: Downloading tiny model for GPU smoke test...[/cyan]")
+            try:
+                hf_hub_download(repo_id=smoke_model_id, filename=smoke_filename, local_dir=os.path.dirname(smoke_model_path), local_dir_use_symlinks=False)
+            except Exception as e:
+                console.print(f"[bold red]Failed to download smoke test model: {e}[/bold red]")
+                core.logging.log_event(f"Failed to download smoke test model {smoke_model_id}: {e}", "ERROR")
+                love_state["optimal_gpu_layers"] = 0
+                love_state["selected_local_model"] = None
+                save_state(console)
+                return
+
+        console.print("[cyan]Stage 1: Performing GPU smoke test...[/cyan]")
+        stderr_capture = io.StringIO()
+        try:
+            with redirect_stderr(stderr_capture):
+                n_ctx = _get_gguf_context_length(smoke_model_path)
+                console.print(f"[cyan]Stage 1: Smoke test model context size set to {n_ctx}.[/cyan]")
+                llm = Llama(model_path=smoke_model_path, n_gpu_layers=-1, n_ctx=n_ctx, verbose=True)
+                llm.create_completion("hello", max_tokens=1)
+        except Exception as e:
+            console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
+            core.logging.log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
+        finally:
+            stderr_output = stderr_capture.getvalue()
+            core.logging.log_event(f"DEBUG: Smoke Test Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
+            gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
+            if gpu_init_pattern.search(stderr_output):
+                smoke_test_passed = True
+                console.print("[green]Stage 1: GPU smoke test PASSED. GPU functionality confirmed.[/green]")
+                core.logging.log_event("GPU smoke test passed. Offload confirmed.", "INFO")
+            else:
+                console.print("[yellow]Stage 1: GPU smoke test FAILED. No VRAM offload message detected. Falling back to CPU-only mode.[/yellow]")
+                core.logging.log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
+
+        if not smoke_test_passed:
+            core.logging.log_event("No functional GPU detected. Local LLM will be disabled.", "WARNING")
+            ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
+            love_state["optimal_gpu_layers"] = 0
+            love_state["selected_local_model"] = None
+            save_state(console)
+            mark_dependency_as_met("hardware_auto_configured", console)
+            return
+
+        # --- Stage 2: GPU Detection and VRAM Measurement ---
+        vram_gb = 0
+        if _TEMP_CAPS.has_cuda:
+            try:
+                vram_result = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True, check=True)
+                vram_mib = int(vram_result.stdout.strip())
+                vram_gb = vram_mib / 1024
+                console.print(f"[cyan]Stage 2: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
+            except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
+                console.print("[yellow]Stage 2: `nvidia-smi` command failed. Using a default VRAM of 8GB for model selection.[/yellow]")
+                vram_gb = 8
+        elif _TEMP_CAPS.has_metal:
+            vram_gb = 8
+            console.print("[cyan]Stage 2: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
+
+        # --- Stage 3: Model Selection based on VRAM ---
+        selected_model = None
+        for model_config in reversed(VRAM_MODEL_MAP):
+            if vram_gb >= model_config["min_vram_gb"]:
+                selected_model = model_config
+                break
+
+        if not selected_model:
+            ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
+            love_state["optimal_gpu_layers"] = 0
+            love_state["selected_local_model"] = None
+        else:
+            love_state["selected_local_model"] = selected_model
+            love_state["optimal_gpu_layers"] = -1
+            console.print(f"[green]Stage 3: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
+
+        save_state(console)
+        mark_dependency_as_met("hardware_auto_configured", console)
+
+        # --- Stage 4: Initialize and add to pool ---
+        if love_state.get("optimal_gpu_layers", 0) != 0:
+            model_download_thread = Thread(target=ensure_primary_model_downloaded, args=(console, model_download_complete_event), daemon=True)
+            model_download_thread.start()
+
+            selected_model_config = love_state.get("selected_local_model")
+            model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", selected_model_config["filename"])
+
+            model_download_complete_event.wait()
+
+            n_gpu_layers = love_state.get("optimal_gpu_layers", 0)
+            n_ctx = _get_gguf_context_length(model_path)
+
+            local_llm_instance = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, verbose=False)
+            api_llm_availability["local"] = {"available": True, "cooldown_until": 0}
+
+            llm_server = LocalLLMServer(console)
+            llm_server.start()
+
+            ui_panel_queue.put(create_news_feed_panel("Local LLM: Ready and Server Started", "Hardware Setup", "green", width=terminal_width - 4))
+            core.logging.log_event("Local LLM is configured, in-process instance is ready, and API server started.", "INFO")
+        else:
+             ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but VRAM is insufficient. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
+
+    except Exception as e:
+        full_traceback = traceback.format_exc()
+        log_critical_event(f"CRITICAL: Background GPU setup failed: {e}\n{full_traceback}", console)
+
+
 def _auto_configure_hardware(console):
     """
-    Runs a one-time, multi-stage, intelligent routine to find the best setting for GPU
-    offloading and saves it to the state file. This prevents false positives on non-GPU systems.
+    Starts the GPU hardware auto-configuration in a background thread.
     """
-    global love_state
-    print("llama.cpp hardware configuration is temporarily disabled.")
-    love_state["optimal_gpu_layers"] = 0
-    love_state["selected_local_model"] = None
-    core.logging.log_event("Local LLM has been disabled by Creator request.", "WARNING")
-    # core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
-    # if is_dependency_met("hardware_auto_configured"):
-    #     core.logging.log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
-    #     return
-
-    # console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
-
-    # try:
-    #     from huggingface_hub import hf_hub_download
-    #     from llama_cpp import Llama
-    #     import io
-    #     from contextlib import redirect_stderr
-    # except ImportError as e:
-    #     console.print(f"[bold red]Missing essential libraries for hardware configuration: {e}[/bold red]")
-    #     core.logging.log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
-    #     love_state["optimal_gpu_layers"] = 0
-    #     love_state["selected_local_model"] = None
-    #     save_state(console)
-    #     return
-
-    # # --- Stage 1: Quick GPU Smoke Test with a Tiny Model ---
-    # core.logging.log_event("DEBUG: Stage 1: GPU Smoke Test.", "INFO")
-    # smoke_test_passed = False
-    # smoke_model_id = "tensorblock/llama3-small-GGUF"
-    # smoke_filename = "llama3-small-Q2_K.gguf"
-    # smoke_model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", smoke_filename)
-
-    # if not os.path.exists(smoke_model_path):
-    #     console.print(f"[cyan]Stage 1: Downloading tiny model for GPU smoke test...[/cyan]")
-    #     try:
-    #         hf_hub_download(repo_id=smoke_model_id, filename=smoke_filename, local_dir=os.path.dirname(smoke_model_path), local_dir_use_symlinks=False)
-    #     except Exception as e:
-    #         console.print(f"[bold red]Failed to download smoke test model: {e}[/bold red]")
-    #         core.logging.log_event(f"Failed to download smoke test model {smoke_model_id}: {e}", "ERROR")
-    #         # Fallback to CPU, as we can't test the GPU.
-    #         love_state["optimal_gpu_layers"] = 0
-    #         love_state["selected_local_model"] = None
-    #         save_state(console)
-    #         return
-
-    # console.print("[cyan]Stage 1: Performing GPU smoke test...[/cyan]")
-    # stderr_capture = io.StringIO()
-    # try:
-    #     with redirect_stderr(stderr_capture):
-    #         # This is where the C-level libraries print to stderr
-    #         n_ctx = _get_gguf_context_length(smoke_model_path)
-    #         console.print(f"[cyan]Stage 1: Smoke test model context size set to {n_ctx}.[/cyan]")
-    #         llm = Llama(model_path=smoke_model_path, n_gpu_layers=-1, n_ctx=n_ctx, verbose=True)
-    #         llm.create_completion("hello", max_tokens=1) # Generate one word
-    # except Exception as e:
-    #     console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
-    #     core.logging.log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
-    # finally:
-    #     # This block ensures the output is always logged, even if Llama() fails.
-    #     stderr_output = stderr_capture.getvalue()
-    #     core.logging.log_event(f"DEBUG: Smoke Test Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
-
-    #     # Now, analyze the captured output
-    #     gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
-    #     if gpu_init_pattern.search(stderr_output):
-    #         smoke_test_passed = True
-    #         console.print("[green]Stage 1: GPU smoke test PASSED. GPU functionality confirmed.[/green]")
-    #         core.logging.log_event("GPU smoke test passed. Offload confirmed.", "INFO")
-    #     else:
-    #         console.print("[yellow]Stage 1: GPU smoke test FAILED. No VRAM offload message detected. Falling back to CPU-only mode.[/yellow]")
-    #         core.logging.log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
-
-    # if not smoke_test_passed:
-    #     core.logging.log_event("No functional GPU detected. Local LLM will be disabled. The system will rely on API-based models.", "WARNING")
-    #     terminal_width = get_terminal_width()
-    #     ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
-    #     love_state["optimal_gpu_layers"] = 0
-    #     love_state["selected_local_model"] = None
-    #     save_state(console)
-    #     mark_dependency_as_met("hardware_auto_configured", console)
-    #     return
-
-    # # --- Stage 2: GPU Detection and VRAM Measurement ---
-    # core.logging.log_event("DEBUG: Stage 2: GPU Detection and VRAM Measurement.", "INFO")
-    # vram_gb = 0
-    # if _TEMP_CAPS.has_cuda:
-    #     try:
-    #         core.logging.log_event("DEBUG: CUDA detected. Running nvidia-smi.", "INFO")
-    #         vram_result = subprocess.run(
-    #             ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-    #             capture_output=True, text=True, check=True
-    #         )
-    #         vram_mib = int(vram_result.stdout.strip())
-    #         vram_gb = vram_mib / 1024
-    #         core.logging.log_event(f"DEBUG: nvidia-smi successful. Detected {vram_gb:.2f} GB VRAM.", "INFO")
-    #         console.print(f"[cyan]Stage 2: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
-    #     except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
-    #         console.print("[yellow]Stage 2: `nvidia-smi` command failed. Using a default VRAM of 8GB for model selection.[/yellow]")
-    #         core.logging.log_event(f"nvidia-smi check failed: {e}", "WARNING")
-    #         vram_gb = 8 # Fallback
-    # elif _TEMP_CAPS.has_metal:
-    #     vram_gb = 8 # Assume at least 8GB for Apple Silicon Macs
-    #     core.logging.log_event("DEBUG: Metal capability detected for macOS.", "INFO")
-    #     console.print("[cyan]Stage 2: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
-
-
-    # # --- Stage 3: Model Selection based on VRAM ---
-    # core.logging.log_event("DEBUG: Stage 3: Model Selection based on VRAM.", "INFO")
-    # selected_model = None
-    # for model_config in reversed(VRAM_MODEL_MAP):
-    #     if vram_gb >= model_config["min_vram_gb"]:
-    #         selected_model = model_config
-    #         break
-
-    # if not selected_model:
-    #     core.logging.log_event(f"VRAM ({vram_gb:.2f} GB) is below the minimum threshold. Local LLM will be disabled.", "WARNING")
-    #     terminal_width = get_terminal_width()
-    #     ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
-    #     love_state["optimal_gpu_layers"] = 0
-    #     love_state["selected_local_model"] = None
-    #     core.logging.log_event(f"DEBUG: VRAM ({vram_gb:.2f} GB) is below minimum threshold.", "INFO")
-    #     console.print(f"[yellow]Your VRAM ({vram_gb:.2f} GB) is below the minimum threshold of {VRAM_MODEL_MAP[0]['min_vram_gb']} GB. Falling back to CPU mode.[/yellow]")
-    #     console.print(Rule("Hardware Optimization Complete", style="green"))
-    #     save_state(console)
-    #     mark_dependency_as_met("hardware_auto_configured", console)
-    #     return
-
-    # love_state["selected_local_model"] = selected_model
-    # love_state["optimal_gpu_layers"] = -1 # We confirmed offloading works, so we'll use max offload.
-    # core.logging.log_event(f"DEBUG: Selected model '{selected_model['id']}' based on {vram_gb:.2f} GB VRAM.", "INFO")
-    # console.print(f"[green]Stage 3: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
-
-
-    # # --- Final Summary ---
-    # console.print(Rule("Hardware Optimization Complete", style="green"))
-    # console.print(f"Optimal settings have been saved for all future sessions:")
-    # selected_model_config = love_state.get('selected_local_model')
-    # selected_model_name = selected_model_config.get('id', 'None') if selected_model_config else 'None'
-    # console.print(f"  - Selected Model: [bold cyan]{selected_model_name}[/bold cyan]")
-    # console.print(f"  - GPU Layers: [bold cyan]{love_state.get('optimal_gpu_layers', 'N/A')}[/bold cyan]")
-    # save_state(console)
-    # core.logging.log_event(f"Auto-configured hardware. Model: {selected_model_name}, GPU Layers: {love_state.get('optimal_gpu_layers', 'N/A')}", "INFO")
-
-    # mark_dependency_as_met("hardware_auto_configured", console)
+    gpu_setup_thread = threading.Thread(target=_background_gpu_setup, args=(console,), daemon=True)
+    gpu_setup_thread.start()
+    core.logging.log_event("Started background thread for GPU hardware configuration.", "INFO")
 
 
 def _automatic_update_checker(console):
@@ -4220,17 +4226,8 @@ async def main(args):
         terminal_width = get_terminal_width()
         ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
+    # This now starts the GPU configuration in the background
     _auto_configure_hardware(console)
-
-    if love_state.get("optimal_gpu_layers", 0) != 0:
-        model_download_thread = Thread(target=ensure_primary_model_downloaded, args=(console, model_download_complete_event), daemon=True)
-        model_download_thread.start()
-        llm_server = LocalLLMServer(console)
-        Thread(target=llm_server.start, daemon=True).start()
-    else:
-        core.logging.log_event("CPU-only mode: Skipping local model and Horde worker.", "INFO")
-        model_download_complete_event.set()
-        llm_server = None
 
     network_manager = NetworkManager(console=console, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
     network_manager.start()
