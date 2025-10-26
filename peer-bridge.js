@@ -174,14 +174,13 @@ function initializePeer() {
         if (err.type === 'id-taken' && peerId === LOBBY_HOST_ID) {
             log('warn', `Lobby ID '${LOBBY_HOST_ID}' is taken. Switching to client mode.`);
             isClient = true;
-            peerId = `love-${uuidv4()}`; // Generate a unique ID
+            peerId = `love-lobby-client-${uuidv4()}`; // Generate a unique ID
             log('info', `Generated new client ID: ${peerId}`);
 
             // Notify Python that we are now a client and will reconnect with a new ID
             process.stdout.write(JSON.stringify({ type: 'status', status: 'client-initializing', peerId: peerId, message: "Lobby is hosted, becoming a client." }) + '\n');
 
             // Reconnect with the new client ID
-            isReconnecting = true;
             reconnect();
 
         } else {
