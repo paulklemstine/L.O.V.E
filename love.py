@@ -658,6 +658,7 @@ from rich.console import Console
 # --- GLOBAL CONSOLE INSTANCE ---
 # Use a single console object throughout the application to ensure consistent output.
 console = Console()
+from rich.live import Live
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.syntax import Syntax
