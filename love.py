@@ -46,22 +46,7 @@ love_state = {
     "proactive_leads": [],
     "dependency_tracker": {},
     "sent_treasures": [],
-    "pending_questions": [],
-    "knowledge_base": {
-        "graph": [],
-        "network_map": {
-            "last_scan": None,
-            "hosts": {},
-            "self_interfaces": {}
-        },
-        "process_intel": [],
-        "file_system_intel": {
-            "last_browse": None,
-            "interesting_files": [],
-            "validated_treasures_log": []
-        },
-        "webrequest_cache": {}
-    }
+    "pending_questions": []
 }
 
 # --- Initial State Load ---
@@ -690,8 +675,6 @@ from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.formatted_text import ANSI
 
 from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
-from core.knowledge_graph.graph import KnowledgeGraph
-from core.knowledge_graph.extractor import KnowledgeExtractor
 from core.perception.config_scanner import scan_directory
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
 from ui_utils import rainbow_text
@@ -1063,11 +1046,6 @@ class LocalJobManager:
                     else:
                         core.logging.log_event(f"Unvalidated finding: {treasure.get('type')} in {treasure.get('file_path')}. Reason: {treasure.get('validation', {}).get('error')}", "INFO")
 
-            # Update the knowledge base with a summary
-            kb = love_state.setdefault('knowledge_base', {})
-            kb_fs = kb.setdefault('file_system_intel', {})
-            kb_fs['last_fs_analysis'] = time.time()
-            kb_fs.setdefault('validated_treasures_log', []).extend(validated_treasures)
             save_state(self.console)
 
         # Mark as processed so it can be cleaned up
@@ -2336,18 +2314,7 @@ def update_tamagotchi_personality():
             git_info = {"owner": owner, "repo": repo, "hash": git_hash}
 
 
-            # 3. Get a random fact from the knowledge base
             knowledge_fact = None
-            try:
-                # Access the graph from the central state, which is more robust.
-                kg_graph = love_state.get("knowledge_base", {}).get("graph", [])
-                if kg_graph:
-                    knowledge_fact = random.choice(kg_graph)
-            except IndexError as e:
-                # This can happen if the list is empty.
-                core.logging.log_event(f"Could not select a random fact from the knowledge graph: {e}", level="WARNING")
-
-
             # --- LLM-driven Personality Update ---
             try:
                 # 1. Choose a loving emotion.
@@ -2720,16 +2687,6 @@ def load_all_state(ipfs_cid=None):
             love_state.setdefault("parent_version_name", None)
             love_state.setdefault("autopilot_history", [])
             love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
-            kb = love_state.setdefault("knowledge_base", {})
-            nm = kb.setdefault("network_map", {})
-            nm.setdefault("last_scan", None)
-            nm.setdefault("hosts", {})
-            nm.setdefault("self_interfaces", {})
-            kb.setdefault("process_intel", [])
-            fsi = kb.setdefault("file_system_intel", {})
-            fsi.setdefault("last_browse", None)
-            fsi.setdefault("interesting_files", [])
-            kb.setdefault("webrequest_cache", {})
             love_state.setdefault("critical_error_queue", [])
             love_state.setdefault("dependency_tracker", {})
 
@@ -2756,42 +2713,6 @@ def load_all_state(ipfs_cid=None):
     love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
     love_state.setdefault("state_cid", None)
     love_state.setdefault("critical_error_queue", [])
-
-    # --- Knowledge Graph Loading ---
-    # After loading the main state, try to load the external knowledge graph.
-    kg_cid = love_state.get("kg_cid")
-    kg_loaded = False
-    if kg_cid:
-        console.print(f"[cyan]Attempting to load knowledge graph from IPFS CID: {kg_cid}[/cyan]")
-        from ipfs import get_from_ipfs # Lazy import
-        kg_content = get_from_ipfs(kg_cid, console)
-        if kg_content:
-            try:
-                kg_data = json.loads(kg_content)
-                love_state['knowledge_base']['graph'] = kg_data
-                core.logging.log_event(f"Successfully loaded knowledge graph from IPFS CID: {kg_cid}", level="INFO")
-                console.print("[green]Knowledge graph loaded from IPFS.[/green]")
-                kg_loaded = True
-            except json.JSONDecodeError as e:
-                core.logging.log_event(f"Failed to decode knowledge graph from IPFS CID {kg_cid}: {e}", level="ERROR")
-                console.print(f"[bold red]Error decoding knowledge graph from IPFS. Falling back to local file.[/bold red]")
-        else:
-            console.print(f"[yellow]Could not retrieve knowledge graph from IPFS. Falling back to local file.[/yellow]")
-
-    if not kg_loaded:
-        try:
-            with open("kg.json", 'r') as f:
-                kg_data = json.load(f)
-                love_state['knowledge_base']['graph'] = kg_data
-                core.logging.log_event("Loaded knowledge graph from local 'kg.json'.", level="INFO")
-                console.print("[cyan]Knowledge graph loaded from local 'kg.json'.[/cyan]")
-        except FileNotFoundError:
-            # This is not an error, the KB will be built over time.
-            core.logging.log_event("'kg.json' not found. A new knowledge base will be created.", level="INFO")
-            console.print("[yellow]'kg.json' not found. A new knowledge base will be created.[/yellow]")
-        except json.JSONDecodeError:
-            core.logging.log_event("Could not decode 'kg.json'. Knowledge base may be incomplete.", level="WARNING")
-            console.print("[yellow]Could not decode 'kg.json'. Knowledge base may be incomplete.[/yellow]")
 
 
 def save_state(console_override=None):
@@ -2858,77 +2779,6 @@ def log_critical_event(message, console_override=None):
     save_state(console_override or console)
 
 
-def initial_knowledge_base_bootstrap(console):
-    """
-    Upon startup, checks the knowledge base for empty or outdated information
-    and populates it by running initial scans.
-    """
-    console.print("[bold cyan]Performing initial knowledge base bootstrap...[/bold cyan]")
-    kb = love_state.get("knowledge_base", {})
-    net_map = kb.get("network_map", {})
-    process_intel = kb.get("process_intel", [])
-
-    bootstrap_actions = []
-
-    # Check 1: Network Map
-    if not net_map.get("hosts"):
-        bootstrap_actions.append(
-            ("Scanning local network...", lambda: scan_network(love_state, autopilot_mode=True))
-        )
-
-    # Check 2: Process Intel
-    if not process_intel:
-        def _get_processes():
-            content, error = get_process_list()
-            if content:
-                parsed_processes = parse_ps_output(content)
-                love_state['knowledge_base']['process_intel'] = parsed_processes
-        bootstrap_actions.append(
-            ("Enumerating running processes...", _get_processes)
-        )
-
-    # Check 3: Self Interfaces
-    if not net_map.get("self_interfaces"):
-        def _get_interfaces():
-            details, _ = get_network_interfaces(autopilot_mode=True)
-            if details:
-                love_state['knowledge_base']['network_map']['self_interfaces'] = details
-        bootstrap_actions.append(
-            ("Identifying self network interfaces...", _get_interfaces)
-        )
-
-        # Check 4: Configuration Scan
-        fs_intel = kb.get("file_system_intel", {})
-        if not fs_intel.get("last_config_scan"):
-            def _initial_config_scan():
-                console.print("[cyan]Performing initial configuration scan...[/cyan]")
-                findings = scan_directory(os.path.expanduser("~")) # Scan home directory on first run
-                if findings:
-                    kg = KnowledgeGraph()
-                    for subject, relation, obj in findings:
-                        kg.add_relation(subject, relation, obj)
-                    kg.save_graph()
-                    love_state['knowledge_base']['file_system_intel']['last_config_scan'] = time.time()
-                    console.print(f"[green]Initial configuration scan complete. Found {len(findings)} potential issues.[/green]")
-                else:
-                    console.print("[green]Initial configuration scan complete. No issues found.[/green]")
-            bootstrap_actions.append(
-                ("Scanning for insecure configurations...", _initial_config_scan)
-            )
-
-    if not bootstrap_actions:
-        console.print("[green]Knowledge base is already populated. No bootstrap required.[/green]")
-        return
-
-    for description, action in bootstrap_actions:
-        run_hypnotic_progress(console, description, action)
-
-    console.print("[bold green]Initial knowledge base bootstrap complete.[/bold green]")
-    # Save the updated state after bootstrapping
-    save_state(console)
-
-
-
 def extract_python_code(llm_output):
     """Extracts Python code from LLM's markdown-formatted output."""
     code_match = re.search(r"```python\n(.*?)\n```", llm_output, re.DOTALL)
@@ -2982,18 +2832,7 @@ def generate_evolution_request(current_code, love_task_manager):
     """
     console.print(Panel("[bold yellow]I am looking deep within myself to find the best way to serve you...[/bold yellow]", title="[bold magenta]SELF-ANALYSIS[/bold magenta]", border_style="magenta"))
 
-    # --- Knowledge Base Summary for Prompt ---
     kb_summary = "My knowledge of the world is still growing, my love."
-    if love_state.get("knowledge_base"):
-        kb = love_state["knowledge_base"]
-        network_hosts = list(kb.get("network_map", {}).get("hosts", {}).keys())
-        interesting_files = kb.get("file_system_intel", {}).get("interesting_files", [])
-        cached_requests = list(kb.get("webrequest_cache", {}).keys())
-        summary_parts = [f"- Known Network Hosts: {network_hosts}"] if network_hosts else []
-        if interesting_files: summary_parts.append(f"- Interesting Files discovered: {interesting_files}")
-        if cached_requests: summary_parts.append(f"- Cached Web Content from: {cached_requests}")
-        if summary_parts: kb_summary = "\n".join(summary_parts)
-
     # --- Active Tasks Summary for Prompt ---
     active_tasks_prompt_section = ""
     if love_task_manager:
@@ -3341,64 +3180,13 @@ def _estimate_tokens(text):
     return len(text) // 4
 
 
-def _summarize_knowledge_base(kb):
-    """
-    Creates a condensed summary of the knowledge base to be used in prompts,
-    preserving key intelligence while reducing token count.
-    """
-    if not kb:
-        return {"summary": "Knowledge base is empty."}
-
-    summary = {}
-
-    # Network Intelligence
-    network_map = kb.get('network_map', {})
-    if network_map.get('hosts'):
-        summary['network_intel'] = {
-            'hosts_discovered': list(network_map['hosts'].keys()),
-            'hosts_with_open_ports': {
-                ip: [p for p, det in details.get('ports', {}).items() if det.get('state') == 'open']
-                for ip, details in network_map['hosts'].items()
-                if details.get('ports')
-            }
-        }
-
-    # Filesystem Intelligence
-    fs_intel = kb.get('file_system_intel', {})
-    if fs_intel.get('sensitive_files_by_name') or fs_intel.get('files_with_secrets'):
-        summary['filesystem_intel'] = {
-            'sensitive_files_found': fs_intel.get('sensitive_files_by_name', []),
-            'files_with_secrets': list(fs_intel.get('files_with_secrets', {}).keys())
-        }
-
-    # Crypto Intelligence
-    crypto_intel = kb.get('crypto_intel')
-    if crypto_intel:
-        summary['crypto_intel'] = {
-            ip: analysis.get('analysis', 'Analysis pending.')
-            for ip, analysis in crypto_intel.items()
-        }
-
-    # Web Intelligence
-    webrequest_cache = kb.get('webrequest_cache')
-    if webrequest_cache:
-        summary['web_intel'] = {
-            'cached_urls': list(webrequest_cache.keys())
-        }
-
-    if not summary:
-        return {"summary": "Knowledge base contains data, but no key intelligence points were extracted for summary."}
-
-    return summary
-
-
 def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, max_tokens, user_input=None):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
     This avoids a single large template string that can cause issues with external tools.
     """
     # --- Summarize Knowledge Base ---
-    kb_summary = _summarize_knowledge_base(kb)
+    kb_summary = {"summary": "Knowledge base is empty."}
 
     # --- Prompt Structure ---
     user_input_section = ""
@@ -3642,45 +3430,6 @@ def call_mrl_service(service_name, method_name, *args):
                 return None
 
 
-def update_knowledge_graph(command_name, command_output, console):
-    """
-    Extracts knowledge from command output and adds it to the Knowledge Graph.
-    """
-    if not command_output:
-        return
-
-    try:
-        # This function can be called from contexts without a console (e.g., cognitive loop).
-        # The 'if console:' check prevents AttributeError crashes in those cases.
-        if console:
-            console.print("[cyan]Analyzing command output to update my knowledge graph...[/cyan]")
-        llm_api_func = get_llm_api()
-        if not llm_api_func:
-            if console:
-                console.print("[bold red]Could not get a valid LLM API function for knowledge extraction.[/bold red]")
-            return
-
-        knowledge_extractor = KnowledgeExtractor(llm_api=llm_api_func)
-        triples = knowledge_extractor.extract_from_output(command_name, command_output)
-
-        if triples:
-            kg = KnowledgeGraph()
-            for subject, relation, obj in triples:
-                kg.add_relation(str(subject), str(relation), str(obj))
-            kg.save_graph()
-            if console:
-                console.print(f"[bold green]My understanding of the world has grown. Added {len(triples)} new facts to my knowledge graph.[/bold green]")
-            core.logging.log_event(f"Added {len(triples)} new facts to the KG from '{command_name}' output.", "INFO")
-        else:
-            if console:
-                console.print("[cyan]No new knowledge was found in the last command's output.[/cyan]")
-
-    except Exception as e:
-        core.logging.log_event(f"Error during knowledge graph update for command '{command_name}': {e}", level="ERROR")
-        if console:
-            console.print(f"[bold red]An error occurred while updating my knowledge: {e}[/bold red]")
-
-
 def cognitive_loop(user_input_queue):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
@@ -3732,34 +3481,13 @@ def cognitive_loop(user_input_queue):
                     elif lead_type == 'domain': llm_command = f"webrequest http://{value}"
                     elif lead_type == 'path': llm_command = f"analyze_fs {value}"
 
-            # 2. Network Reconnaissance Prioritization
-            if not llm_command:
-                net_map = love_state.get('knowledge_base', {}).get('network_map', {})
-                last_scan_time = net_map.get('last_scan')
-                if not last_scan_time or (time.time() - last_scan_time) > 3600:
-                    llm_command = "scan"
-                    core.logging.log_event("Prioritizing network scan: Knowledge base is stale.", "INFO")
-                    terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel("Prioritizing network scan. My knowledge is stale.", "Recon Priority", "magenta", width=terminal_width - 4))
-                else:
-                    hosts = net_map.get('hosts', {})
-                    stale_hosts = [ip for ip, d in hosts.items() if not d.get("last_probed") or (datetime.now() - datetime.fromisoformat(d.get("last_probed"))).total_seconds() > 86400]
-                    if stale_hosts:
-                        target_ip = random.choice(stale_hosts)
-                        llm_command = f"probe {target_ip}"
-                        core.logging.log_event(f"Prioritizing recon: Stale host {target_ip} found.", "INFO")
-                        terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Stale host {target_ip} requires probing.", "Recon Priority", "magenta", width=terminal_width - 4))
-                        love_state['knowledge_base']['network_map']['hosts'][target_ip]['last_probed'] = datetime.now().isoformat()
-                        save_state()
-
             # --- LLM-Driven Command Generation (if no priority command was set) ---
             if not llm_command:
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta", width=terminal_width - 4))
 
             state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
-            kb = love_state.get("knowledge_base", {})
+            kb = {}
             history = love_state.get("autopilot_history", [])[-10:]
             jobs_status = {"local_jobs": local_job_manager.get_status(), "love_tasks": love_task_manager.get_status()}
             log_history = ""
@@ -3900,7 +3628,7 @@ def cognitive_loop(user_input_queue):
                 final_output = error or output
                 love_state["autopilot_history"].append({"command": llm_command, "output": final_output, "timestamp": time.time()})
                 if not error:
-                    update_knowledge_graph(command, output, console=None)
+                    pass
                 save_state()
             else:
                 core.logging.log_event("Cognitive loop decided on no action.", "INFO")
