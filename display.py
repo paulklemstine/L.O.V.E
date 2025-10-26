@@ -2,6 +2,7 @@ import os
 import random
 import re
 import time
+import logging
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
@@ -496,6 +497,11 @@ class BtopLayoutManager:
 
     def update_panel(self, panel_name: str, content):
         """Updates a specific panel in the layout."""
+        if not isinstance(panel_name, str):
+            # This is a defensive check to prevent a crash if a non-string is passed.
+            # The traceback indicates this was happening with the value 0.
+            logging.warning(f"update_panel received a non-string panel_name: {panel_name} (type: {type(panel_name)})")
+            return
         if panel_name in self.layout:
             # Ensure panels have expand=True to fill the layout space
             if isinstance(content, Panel):
