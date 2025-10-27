@@ -28,4 +28,7 @@ customtkinter
 atproto
 Pillow
 networkx
+python-box
+httpx
+parsel
 
