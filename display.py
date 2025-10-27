@@ -402,7 +402,8 @@ def create_cognitive_monitor_panel(tamagotchi_state, llm_availability, local_llm
         is_available = (isinstance(status, dict) and status.get("available")) or (isinstance(status, (int, float)) and time.time() >= status)
         color = "green" if is_available else "red"
         llm_status_text.append(f"{provider.capitalize()}: ", style="bold")
-        llm_status_text.append(f"[{color}]●[/color]\n", style=color)
+        # Use Text.from_markup to correctly parse the color tag
+        llm_status_text.append(Text.from_markup(f"[{color}]●[/color]\n"))
     renderables.append(llm_status_text)
 
     # Local LLM Stats section
@@ -526,11 +527,12 @@ class BtopLayoutManager:
 
     def update_panel(self, panel_name: str, content):
         """Updates a specific panel in the layout."""
-        if not isinstance(panel_name, str):
-            # This is a defensive check to prevent a crash if a non-string is passed.
-            # The traceback indicates this was happening with the value 0.
-            logging.warning(f"update_panel received a non-string panel_name: {panel_name} (type: {type(panel_name)})")
+        # This is a defensive check to prevent a crash if a non-string is passed.
+        # The traceback indicates this was happening with the value 0.
+        if not isinstance(panel_name, str) or panel_name not in self.panel_visibility:
+            logging.warning(f"update_panel received an invalid panel_name: {panel_name} (type: {type(panel_name)})")
             return
+
         if panel_name in self.layout:
             # Ensure panels have expand=True to fill the layout space
             if isinstance(content, Panel):
