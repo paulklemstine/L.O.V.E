@@ -267,10 +267,10 @@ def get_local_subnets():
     return list(subnets)
 
 @retry(exceptions=(subprocess.TimeoutExpired, subprocess.CalledProcessError), tries=2, delay=2)
-def scan_network(knowledge_base, autopilot_mode=False):
+def scan_network(state, autopilot_mode=False):
     """
     Scans the local network for active hosts using nmap.
-    Updates the knowledge_base with discovered hosts.
+    Updates the network map in the application state.
     """
     from core.logging import log_event # Local import
     subnets = get_local_subnets()
@@ -294,18 +294,25 @@ def scan_network(knowledge_base, autopilot_mode=False):
             output_log += error_msg + "\n"
             continue
 
-    # Update knowledge_base
+    # Update state
+    net_map = state['knowledge_base'].setdefault('network_map', {})
+    net_map['last_scan'] = time.time()
+    hosts = net_map.setdefault('hosts', {})
     for ip in all_found_ips:
-        knowledge_base.add_node(ip, 'host', attributes={"status": "up", "last_seen": time.time()})
+        if ip not in hosts:
+            hosts[ip] = {"status": "up", "last_seen": time.time()}
+        else:
+            hosts[ip]["status"] = "up"
+            hosts[ip]["last_seen"] = time.time()
 
     log_event(f"Network scan complete. Found {len(all_found_ips)} hosts.", level="INFO")
     return all_found_ips, output_log
 
 @retry(exceptions=(subprocess.TimeoutExpired, subprocess.CalledProcessError), tries=2, delay=5)
-def probe_target(ip_address, knowledge_base, autopilot_mode=False):
+def probe_target(ip_address, state, autopilot_mode=False):
     """
     Performs a deep probe on a single IP address for open ports, services, and OS.
-    Updates the knowledge_base for that specific host.
+    Updates the network map for that specific host.
     """
     from core.logging import log_event # Local import
     log_event(f"Probing target: {ip_address}")
@@ -356,20 +363,22 @@ def probe_target(ip_address, knowledge_base, autopilot_mode=False):
             log_event(f"Failed to parse nmap XML output for {ip_address}: {e}", level="ERROR")
             return None, f"Failed to parse nmap XML output for {ip_address}"
 
-        # Update knowledge_base
-        knowledge_base.add_node(ip_address, 'host', attributes={
+        # Update state
+        hosts = state['knowledge_base']['network_map'].setdefault('hosts', {})
+        host_entry = hosts.setdefault(ip_address, {})
+        host_entry.update({
             "status": "up",
             "last_probed": datetime.now().isoformat(),
-            "ports": json.dumps(ports),
+            "ports": ports,
             "os": os_details
         })
-
         log_event(f"Probe of {ip_address} complete. OS: {os_details}, Open Ports: {list(ports.keys())}", level="INFO")
         return ports, output
     except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
         error_msg = f"Nmap probe failed for {ip_address}: {e}"
         log_event(error_msg, level="ERROR")
-        knowledge_base.add_node(ip_address, 'host', attributes={"status": "down"})
+        hosts = state['knowledge_base']['network_map'].setdefault('hosts', {})
+        hosts.setdefault(ip_address, {})['status'] = 'down'
         return None, error_msg
 
 def assess_vulnerabilities(cpes, log_event):
@@ -394,7 +403,7 @@ def assess_vulnerabilities(cpes, log_event):
     return vulnerabilities
 
 @retry(exceptions=requests.exceptions.RequestException, tries=3, delay=5, backoff=2)
-def perform_webrequest(url, knowledge_base, autopilot_mode=False):
+def perform_webrequest(url, state, autopilot_mode=False):
     """
     Fetches the content of a URL and stores it in the knowledge base.
     """
@@ -405,8 +414,9 @@ def perform_webrequest(url, knowledge_base, autopilot_mode=False):
         response.raise_for_status()
         content = response.text
 
-        # Update knowledge_base
-        knowledge_base.add_node(url, 'webrequest', attributes={"timestamp": time.time(), "content_length": len(content), "content": content})
+        # Update state
+        cache = state['knowledge_base'].setdefault('webrequest_cache', {})
+        cache[url] = {"timestamp": time.time(), "content_length": len(content)}
         log_event(f"Web request to {url} successful. Stored {len(content)} bytes.", level="INFO")
         # Return a summary to the loop, not the full content, and None for the error.
         summary = f"Successfully fetched {len(content)} bytes from {url}."
@@ -454,7 +464,7 @@ def track_ethereum_price():
         log_event(f"Could not fetch Ethereum price: {e}", level="WARNING")
         return None
 
-def crypto_scan(ip_address, knowledge_base, run_llm_func, console):
+def crypto_scan(ip_address, state, run_llm_func, console):
     """
     Probes a target and analyzes the results for crypto-related software using an LLM.
     This function is designed to be called from other modules.
@@ -464,7 +474,7 @@ def crypto_scan(ip_address, knowledge_base, run_llm_func, console):
 
     # Step 1: Run the standard probe to get data
     console.print(f"[cyan]Initiating crypto_scan on {ip_address}. Step 1: Probing target...[/cyan]")
-    _, probe_results = probe_target(ip_address, knowledge_base, autopilot_mode=True)
+    _, probe_results = probe_target(ip_address, state, autopilot_mode=True)
     if not probe_results or "failed" in probe_results:
         return f"Crypto scan failed for {ip_address} because the initial probe failed."
 
@@ -486,17 +496,19 @@ Nmap Scan Results:
 {probe_results}
 ---
 """
-    analysis_result_dict = run_llm_func(analysis_prompt, purpose="analyze_source")
-    analysis_result = analysis_result_dict.get("result", "LLM analysis failed.")
+    analysis_result = run_llm_func(analysis_prompt, purpose="analyze_source")
 
-    # Step 3: Store the intelligence in the knowledge graph
-    analysis_node_id = f"crypto-analysis-{ip_address}"
-    knowledge_base.add_node(analysis_node_id, 'crypto_analysis', attributes={
+    if not analysis_result:
+        return f"Crypto scan for {ip_address} failed during LLM analysis phase."
+
+    # Step 3: Store the intelligence
+    kb = state['knowledge_base']
+    crypto_intel = kb.setdefault('crypto_intel', {})
+    crypto_intel[ip_address] = {
         "timestamp": time.time(),
-        "analysis": analysis_result.strip() if isinstance(analysis_result, str) else json.dumps(analysis_result)
-    })
-    knowledge_base.add_edge(ip_address, analysis_node_id, 'has_analysis')
-
+        "analysis": analysis_result.strip()
+    }
+    # Note: The state is not saved here; the calling function is responsible for saving state.
     log_event(f"Crypto scan for {ip_address} complete. Analysis stored in knowledge base.", "INFO")
 
     return f"Crypto scan complete for {ip_address}. Analysis stored in knowledge base.\n\nAnalysis:\n{analysis_result.strip()}"

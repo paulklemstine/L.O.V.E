@@ -27,5 +27,4 @@ prompt-toolkit
 customtkinter
 atproto
 Pillow
-networkx
 

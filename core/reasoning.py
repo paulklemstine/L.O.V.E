@@ -7,16 +7,18 @@ class ReasoningEngine:
     identify critical vulnerabilities, propose multi-stage exploitation paths,
     and prioritize targets for wealth generation and treasure acquisition.
     """
-    def __init__(self, knowledge_base, console=None):
+    def __init__(self, love_state, console=None):
         """
         Initializes the ReasoningEngine.
 
         Args:
-            knowledge_base (GraphDataManager): The global knowledge graph.
+            love_state (dict): The global state of the L.O.V.E. application.
             console (Console, optional): The rich console for output. Defaults to None.
         """
-        self.knowledge_base = knowledge_base
+        self.love_state = love_state
         self.console = console if console else Console()
+        self.knowledge_graph = self.love_state.get("knowledge_base", {}).get("graph", [])
+        self.network_map = self.love_state.get("knowledge_base", {}).get("network_map", {})
 
     def analyze_and_prioritize(self):
         """
@@ -110,24 +112,18 @@ class ReasoningEngine:
             list: A list of identified opportunities, each represented as a string.
         """
         opportunities = []
-        host_nodes = self.knowledge_base.query_nodes('node_type', 'host')
+        hosts = self.network_map.get("hosts", {})
 
-        for ip in host_nodes:
-            host_data = self.knowledge_base.get_node(ip)
-            if not host_data: continue
-
+        for ip, host_data in hosts.items():
             # FTP Vulnerabilities
             if self._is_ftp_vulnerable(host_data):
                 opportunities.append(f"Target {ip}: Anonymous FTP login is available. This could be used to access sensitive files.")
 
-            # Filesystem-based Opportunities from related nodes
-            neighbors = self.knowledge_base.get_neighbors(ip)
-            for neighbor_id in neighbors:
-                neighbor_node = self.knowledge_base.get_node(neighbor_id)
-                if not neighbor_node: continue
-
-                if neighbor_node.get('node_type') == 'file':
-                    file_path = neighbor_node.get('path')
+            # Filesystem-based Opportunities
+            files_intel = self.love_state.get("knowledge_base", {}).get("file_system_intel", {})
+            if files_intel:
+                sensitive_files = files_intel.get("sensitive_files_by_name", [])
+                for file_path in sensitive_files:
                     if ".pem" in file_path or "id_rsa" in file_path:
                         opportunities.append(f"Target {ip}: Found potential private key file '{file_path}'. Accessing this could grant significant privileges.")
                     if "wallet.dat" in file_path:
