@@ -25,6 +25,8 @@ import time
 import asyncio
 
 import core.logging
+from core.graph_manager import GraphDataManager
+
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
 ui_panel_queue = queue.Queue()
@@ -33,6 +35,11 @@ LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
 CHECKPOINT_DIR = "checkpoints"
+
+# --- KNOWLEDGE BASE ---
+knowledge_base = GraphDataManager()
+KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
+
 love_state = {
     "version_name": "initial-condition-alpha",
     "parent_version_name": None,
@@ -2727,7 +2734,15 @@ def load_all_state(ipfs_cid=None):
     falls back to the local JSON file, and creates a new state if neither exists.
     This function handles both the main state file and the knowledge graph.
     """
-    global love_state
+    global love_state, knowledge_base
+
+    # Load the knowledge base graph first, it's independent of the main state
+    try:
+        knowledge_base.load_graph(KNOWLEDGE_BASE_FILE)
+        core.logging.log_event(f"Loaded knowledge base from '{KNOWLEDGE_BASE_FILE}'. Contains {len(knowledge_base.get_all_nodes())} nodes.", level="INFO")
+    except Exception as e:
+        core.logging.log_event(f"Could not load knowledge base file: {e}. Starting with an empty graph.", level="WARNING")
+
 
     # Priority 1: Load from a given IPFS CID
     if ipfs_cid:
@@ -2803,10 +2818,14 @@ def save_state(console_override=None):
     from the core storage module. This ensures all critical data is saved
     and pinned consistently.
     """
-    global love_state
+    global love_state, knowledge_base
     target_console = console_override or console
 
     try:
+        # Save the knowledge base graph to its file
+        knowledge_base.save_graph(KNOWLEDGE_BASE_FILE)
+        core.logging.log_event(f"Knowledge base saved to '{KNOWLEDGE_BASE_FILE}'.", level="INFO")
+
         core.logging.log_event("Initiating comprehensive state save.", level="INFO")
         # Delegate the entire save process to the new storage module
         updated_state = save_all_state(love_state, target_console)
@@ -3622,13 +3641,13 @@ def cognitive_loop(user_input_queue):
                     terminal_width = get_terminal_width()
                     ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode, width=terminal_width - 4))
                 elif command == "scan":
-                    _, output = scan_network(love_state, autopilot_mode=True)
+                    _, output = scan_network(knowledge_base, autopilot_mode=True)
                 elif command == "probe":
-                    output, error = probe_target(args[0], love_state)
+                    output, error = probe_target(args[0], knowledge_base)
                 elif command == "webrequest":
-                    output, error = perform_webrequest(args[0], love_state)
+                    output, error = perform_webrequest(args[0], knowledge_base)
                 elif command == "exploit":
-                    output = exploitation_manager.run_exploits(args[0])
+                    output = exploitation_manager.find_and_run_exploits(args[0] if args else None)
                 elif command == "ls":
                     output, error = list_directory(" ".join(args) or ".")
                 elif command == "read_file":
@@ -3653,7 +3672,7 @@ def cognitive_loop(user_input_queue):
                 elif command == "ifconfig":
                     output, error = get_network_interfaces()
                 elif command == "reason":
-                    output = ReasoningEngine(love_state, console=None).analyze_and_prioritize()
+                    output = ReasoningEngine(knowledge_base, console=None).analyze_and_prioritize()
                 elif command == "generate_image":
                     output = generate_image(" ".join(args))
                 elif command == "talent_scout":
@@ -4030,8 +4049,9 @@ async def main(args):
     love_task_manager.start()
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
-    proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager)
+    proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
+    exploitation_manager = ExploitationManager(knowledge_base, console)
 
     # --- Start Core Logic Threads ---
     user_input_queue = queue.Queue()

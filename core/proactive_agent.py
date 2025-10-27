@@ -18,10 +18,11 @@ class ProactiveIntelligenceAgent:
     Operates in the background to autonomously identify and queue new,
     previously uninvestigated targets for reconnaissance and treasure hunting.
     """
-    def __init__(self, love_state, console, job_manager):
+    def __init__(self, love_state, console, job_manager, knowledge_base):
         self.love_state = love_state
         self.console = console
         self.job_manager = job_manager
+        self.knowledge_base = knowledge_base
         self.active = False
         self.thread = threading.Thread(target=self._hunt_loop, daemon=True)
         self.lock = threading.RLock()
@@ -112,13 +113,12 @@ class ProactiveIntelligenceAgent:
 
         self.console.print("[cyan]Proactive Agent: Hunting in Knowledge Graph for unprobed hosts...[/cyan]")
         with self.lock:
-            network_map = self.love_state.get('knowledge_base', {}).get('network_map', {})
-            hosts = network_map.get('hosts', {})
-
-            for ip, details in hosts.items():
-                # If a host has been discovered but never probed, it's a lead.
-                if not details.get('last_probed'):
-                    self._add_lead('ip', ip, 'Discovered in network scan, but not yet probed.')
+            # Query for all nodes of type 'host'
+            host_nodes = self.knowledge_base.query_nodes('node_type', 'host')
+            for host_id in host_nodes:
+                host_attributes = self.knowledge_base.get_node(host_id)
+                if host_attributes and not host_attributes.get('last_probed'):
+                    self._add_lead('ip', host_id, 'Discovered in network scan, but not yet probed.')
 
         self._track_source(source_key)
 
@@ -132,14 +132,15 @@ class ProactiveIntelligenceAgent:
 
         self.console.print("[cyan]Proactive Agent: Hunting in webrequest cache for new domains/IPs...[/cyan]")
         with self.lock:
-            cache = self.love_state.get('knowledge_base', {}).get('webrequest_cache', {})
-            for url, data in cache.items():
+            # Query for all nodes of type 'webrequest'
+            webrequest_nodes = self.knowledge_base.query_nodes('node_type', 'webrequest')
+            for url in webrequest_nodes:
+                data = self.knowledge_base.get_node(url)
                 content = data.get('content', '')
                 if not content:
                     continue
 
                 # Regex to find potential domains and IPs
-                # This is a simple regex; more complex ones could be used.
                 ip_pattern = r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
                 domain_pattern = r'\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}\b'
 
