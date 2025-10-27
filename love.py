@@ -4187,7 +4187,15 @@ async def btop_ui_renderer(user_input_queue):
                             # This is structured data for a specific panel
                             layout_manager.update_panel(panel_name, item['content'])
                         else:
-                            # This is a general log item for the main feed
+                            # This is a general log item for the main feed.
+                            # Final defensive check: ensure the item is renderable by Rich.
+                            from rich.console import Renderable
+                            if not isinstance(item, Renderable):
+                                # If not renderable, convert to a safe string representation
+                                item_str = str(item)
+                                logging.warning(f"Non-renderable item found in UI queue, converting to string: {item_str[:100]}")
+                                item = Text(item_str)
+
                             temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
                             temp_console.print(item)
                             main_log_content.append(temp_console.file.getvalue())
