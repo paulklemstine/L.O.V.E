@@ -4176,11 +4176,24 @@ async def btop_ui_renderer(user_input_queue):
                 # Process the queue
                 while not ui_panel_queue.empty():
                     item = ui_panel_queue.get_nowait()
-                    if isinstance(item, dict) and 'panel_name' in item:
-                        # This is structured data for a specific panel
-                        layout_manager.update_panel(item['panel_name'], item['content'])
-                    else:
-                        # This is a general log item for the main feed
+                    try:
+                        if isinstance(item, dict) and 'panel_name' in item:
+                            panel_name = item.get('panel_name')
+                            # --- Defensive Check ---
+                            # Ensure the panel name is a string and not something else that
+                            # could cause a KeyError, like an integer.
+                            if isinstance(panel_name, str):
+                                layout_manager.update_panel(panel_name, item['content'])
+                            else:
+                                # If panel_name is not a string, it's malformed data.
+                                # Log it and treat the whole item as a general log entry.
+                                core.logging.log_event(f"Malformed UI data: panel_name is not a string ('{panel_name}'). Routing to main log.", "WARNING")
+                                raise TypeError("Malformed panel data") # Jump to the except block
+                        else:
+                            # This is a general log item for the main feed
+                            raise TypeError("Unstructured log item") # Jump to the except block
+                    except (TypeError, KeyError) as e:
+                         # This block now handles malformed dicts, non-dicts, and any other errors.
                         temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
                         temp_console.print(item)
                         main_log_content.append(temp_console.file.getvalue())
@@ -4191,6 +4204,7 @@ async def btop_ui_renderer(user_input_queue):
                             title="[bold green]Main Log[/bold green]",
                             border_style="green"
                         ))
+
                 live.update(layout_manager.get_layout())
                 time.sleep(0.1)
 
