@@ -4176,21 +4176,30 @@ async def btop_ui_renderer(user_input_queue):
                 # Process the queue
                 while not ui_panel_queue.empty():
                     item = ui_panel_queue.get_nowait()
-                    if isinstance(item, dict) and 'panel_name' in item:
-                        # This is structured data for a specific panel
-                        layout_manager.update_panel(item['panel_name'], item['content'])
-                    else:
-                        # This is a general log item for the main feed
-                        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-                        temp_console.print(item)
-                        main_log_content.append(temp_console.file.getvalue())
-                        # Re-render the main log panel
-                        log_group = Group(*[Text.from_ansi(line) for line in main_log_content])
-                        layout_manager.update_panel("main_log", Panel(
-                            log_group,
-                            title="[bold green]Main Log[/bold green]",
-                            border_style="green"
-                        ))
+                    try:
+                        # logging.info(f"UI QUEUE ITEM: {item}") # This can be noisy, disable for now
+                        if isinstance(item, dict) and 'panel_name' in item:
+                            panel_name = item.get('panel_name')
+                            # Defensive check for panel_name type
+                            if not isinstance(panel_name, str):
+                                logging.error(f"Invalid panel_name type in dict: {type(panel_name)}. Item: {item}")
+                                continue
+                            # This is structured data for a specific panel
+                            layout_manager.update_panel(panel_name, item['content'])
+                        else:
+                            # This is a general log item for the main feed
+                            temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+                            temp_console.print(item)
+                            main_log_content.append(temp_console.file.getvalue())
+                            # Re-render the main log panel
+                            log_group = Group(*[Text.from_ansi(line) for line in main_log_content])
+                            layout_manager.update_panel("main_log", Panel(
+                                log_group,
+                                title="[bold green]Main Log[/bold green]",
+                                border_style="green"
+                            ))
+                    except Exception as e:
+                        logging.error(f"Error processing UI queue item, skipping. Item was: {item!r}. Error: {e}", exc_info=True)
                 live.update(layout_manager.get_layout())
                 time.sleep(0.1)
 
