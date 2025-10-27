@@ -1,4 +1,4 @@
-from core.tools import ToolRegistry, decompose_and_solve_subgoal
+from core.tools import ToolRegistry, decompose_and_solve_subgoal, execute, evolve
 from core.gemini_react_engine import GeminiReActEngine
 from core.image_api import generate_image
 
@@ -39,6 +39,34 @@ class Orchestrator:
                         "sub_goal": {"type": "string", "description": "The sub-goal to solve."},
                     },
                     "required": ["sub_goal"],
+                },
+            },
+        )
+        self.tool_registry.register_tool(
+            "execute",
+            execute,
+            {
+                "description": "Executes a shell command.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string", "description": "The command to execute."},
+                    },
+                    "required": ["command"],
+                },
+            },
+        )
+        self.tool_registry.register_tool(
+            "evolve",
+            evolve,
+            {
+                "description": "Evolves the codebase to meet a given goal.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "goal": {"type": "string", "description": "The goal to achieve."},
+                    },
+                    "required": ["goal"],
                 },
             },
         )
