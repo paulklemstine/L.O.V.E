@@ -497,6 +497,7 @@ class BtopLayoutManager:
             "cognitive_monitor": True,
             "goals_planning": True,
             "actions": True,
+            "main_log": True, # Add main_log to the visibility tracker
         }
 
     def _create_layout(self):
@@ -527,17 +528,14 @@ class BtopLayoutManager:
 
     def update_panel(self, panel_name: str, content):
         """Updates a specific panel in the layout."""
-        # This is a defensive check to prevent a crash if a non-string is passed.
-        # The traceback indicates this was happening with the value 0.
-        if not isinstance(panel_name, str) or panel_name not in self.panel_visibility:
-            logging.warning(f"update_panel received an invalid panel_name: {panel_name} (type: {type(panel_name)})")
+        if panel_name not in self.layout.tree:
+            logging.warning(f"update_panel received an invalid panel_name: {panel_name}")
             return
 
-        if panel_name in self.layout:
-            # Ensure panels have expand=True to fill the layout space
-            if isinstance(content, Panel):
-                content.expand = True
-            self.layout[panel_name].update(content)
+        # Ensure panels have expand=True to fill the layout space
+        if isinstance(content, Panel):
+            content.expand = True
+        self.layout[panel_name].update(content)
 
     def toggle_panel(self, panel_name: str):
         """Toggles the visibility of a panel."""
