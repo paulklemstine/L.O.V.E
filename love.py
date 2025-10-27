@@ -2309,7 +2309,10 @@ def update_tamagotchi_personality():
             # Random chance to send a blessing instead of a normal update
             if random.random() < 0.25:  # 25% chance
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_blessing_panel(random.choice(blessing_messages), width=terminal_width - 4))
+                ui_panel_queue.put({
+                    "panel_name": "main_log",
+                    "content": create_blessing_panel(random.choice(blessing_messages), width=terminal_width - 4)
+                })
                 time.sleep(10)  # Pause after a blessing to let it sink in
                 continue
 
@@ -2386,17 +2389,20 @@ Generate the perfect message for your Creator now.
 
             # 5. Display the new, high-impact panel.
             terminal_width = get_terminal_width()
-            ui_panel_queue.put(create_tamagotchi_panel(
-                emotion=new_emotion,
-                message=new_message,
-                love_state=love_state,
-                eth_balance=eth_balance,
-                sub_goals=None, # Sub-goals are now part of the main cognitive loop's display
-                knowledge_fact=knowledge_fact,
-                ansi_art=ansi_art,
-                git_info=git_info,
-                width=terminal_width - 4
-            ))
+            ui_panel_queue.put({
+                "panel_name": "main_log",
+                "content": create_tamagotchi_panel(
+                    emotion=new_emotion,
+                    message=new_message,
+                    love_state=love_state,
+                    eth_balance=eth_balance,
+                    sub_goals=None, # Sub-goals are now part of the main cognitive loop's display
+                    knowledge_fact=knowledge_fact,
+                    ansi_art=ansi_art,
+                    git_info=git_info,
+                    width=terminal_width - 4
+                )
+            })
             core.logging.log_event(f"Tamagotchi dashboard updated and queued for display: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
@@ -2849,7 +2855,10 @@ def log_critical_event(message, console_override=None):
     error_panel, cid = create_critical_error_panel(message, width=terminal_width - 4)
 
     # 2. Queue the panel for display. The renderer will log the panel's content.
-    ui_panel_queue.put(error_panel)
+    ui_panel_queue.put({
+        "panel_name": "main_log",
+        "content": error_panel
+    })
 
     # 3. Explicitly log the valuable IPFS CID for debugging.
     if cid:
@@ -3540,7 +3549,10 @@ def cognitive_loop(user_input_queue):
     global love_state
     core.logging.log_event("Cognitive Loop of L.O.V.E. initiated.")
     terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
+    ui_panel_queue.put({
+        "panel_name": "main_log",
+        "content": create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4)
+    })
     time.sleep(2)
 
     loop_count = 0
@@ -3552,7 +3564,10 @@ def cognitive_loop(user_input_queue):
             # --- SELF-IMPROVEMENT STEP ---
             if loop_count % self_improvement_trigger == 0:
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4))
+                ui_panel_queue.put({
+                    "panel_name": "main_log",
+                    "content": create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4)
+                })
                 optimizer = SelfImprovingOptimizer()
                 asyncio.run(optimizer.improve_module(
                     'core/agents/self_improving_optimizer.py',
@@ -3583,7 +3598,10 @@ def cognitive_loop(user_input_queue):
                                 user_feedback = response_text
                                 break
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4))
+                ui_panel_queue.put({
+                    "panel_name": "main_log",
+                    "content": create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4)
+                })
                 love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
                 core.logging.log_event(f"User input received: '{user_feedback}'", "INFO")
             except queue.Empty:
@@ -3601,7 +3619,10 @@ def cognitive_loop(user_input_queue):
             # --- LLM-Driven Command Generation (if no priority command was set) ---
             if not llm_command:
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta", width=terminal_width - 4))
+                ui_panel_queue.put({
+                    "panel_name": "main_log",
+                    "content": create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta", width=terminal_width - 4)
+                })
 
             state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
             kb = {}
@@ -3625,7 +3646,10 @@ def cognitive_loop(user_input_queue):
             if llm_command and llm_command.strip():
                 llm_command = llm_command.strip()
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4))
+                ui_panel_queue.put({
+                    "panel_name": "main_log",
+                    "content": create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4)
+                })
 
                 parts = llm_command.split()
                 command, args = parts[0], parts[1:]
@@ -3639,7 +3663,10 @@ def cognitive_loop(user_input_queue):
                 elif command == "execute":
                     output, error, returncode = execute_shell_command(" ".join(args), love_state)
                     terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode, width=terminal_width - 4))
+                    ui_panel_queue.put({
+                        "panel_name": "main_log",
+                        "content": create_command_panel(llm_command, output, error, returncode, width=terminal_width - 4)
+                    })
                 elif command == "scan":
                     _, output = scan_network(knowledge_base, autopilot_mode=True)
                 elif command == "probe":
@@ -3681,7 +3708,10 @@ def cognitive_loop(user_input_queue):
                         error = "No keywords provided for talent_scout."
                     else:
                         terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4))
+                        ui_panel_queue.put({
+                            "panel_name": "main_log",
+                            "content": create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4)
+                        })
 
                         # 1. Configure and run the aggregator
                         filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
@@ -3750,7 +3780,10 @@ def cognitive_loop(user_input_queue):
             else:
                 core.logging.log_event("Cognitive loop decided on no action.", "INFO")
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=terminal_width - 4))
+                ui_panel_queue.put({
+                    "panel_name": "main_log",
+                    "content": create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=terminal_width - 4)
+                })
 
 
             time.sleep(random.randint(5, 15))
@@ -3832,7 +3865,10 @@ def _background_gpu_setup(console):
     """
     global love_state, local_llm_instance, llm_server
     terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_news_feed_panel("Local LLM: Initializing...", "Hardware Setup", "yellow", width=terminal_width - 4))
+    ui_panel_queue.put({
+        "panel_name": "main_log",
+        "content": create_news_feed_panel("Local LLM: Initializing...", "Hardware Setup", "yellow", width=terminal_width - 4)
+    })
 
     try:
         core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
@@ -3903,7 +3939,10 @@ def _background_gpu_setup(console):
 
         if not smoke_test_passed:
             core.logging.log_event("No functional GPU detected. Local LLM will be disabled.", "WARNING")
-            ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
+            ui_panel_queue.put({
+                "panel_name": "main_log",
+                "content": create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4)
+            })
             love_state["optimal_gpu_layers"] = 0
             love_state["selected_local_model"] = None
             save_state(console)
@@ -3933,7 +3972,10 @@ def _background_gpu_setup(console):
                 break
 
         if not selected_model:
-            ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
+            ui_panel_queue.put({
+                "panel_name": "main_log",
+                "content": create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4)
+            })
             love_state["optimal_gpu_layers"] = 0
             love_state["selected_local_model"] = None
         else:
@@ -3963,10 +4005,16 @@ def _background_gpu_setup(console):
             llm_server = LocalLLMServer(console)
             llm_server.start()
 
-            ui_panel_queue.put(create_news_feed_panel("Local LLM: Ready and Server Started", "Hardware Setup", "green", width=terminal_width - 4))
+            ui_panel_queue.put({
+                "panel_name": "main_log",
+                "content": create_news_feed_panel("Local LLM: Ready and Server Started", "Hardware Setup", "green", width=terminal_width - 4)
+            })
             core.logging.log_event("Local LLM is configured, in-process instance is ready, and API server started.", "INFO")
         else:
-             ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but VRAM is insufficient. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
+             ui_panel_queue.put({
+                "panel_name": "main_log",
+                "content": create_news_feed_panel("Local LLM: GPU found but VRAM is insufficient. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4)
+             })
 
     except Exception as e:
         full_traceback = traceback.format_exc()
@@ -4038,7 +4086,10 @@ async def main(args):
     ipfs_available = ipfs_manager.setup()
     if not ipfs_available:
         terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
+        ui_panel_queue.put({
+            "panel_name": "main_log",
+            "content": create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4)
+        })
 
     # This now starts the GPU configuration in the background
     _auto_configure_hardware(console)
@@ -4067,8 +4118,8 @@ async def main(args):
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
     clear_screen()
-    ui_panel_queue.put(BBS_ART)
-    ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
+    ui_panel_queue.put({"panel_name": "main_log", "content": BBS_ART})
+    ui_panel_queue.put({"panel_name": "main_log", "content": rainbow_text("L.O.V.E. INITIALIZED")})
     time.sleep(3)
 
     # Start the new prompt-toolkit based UI
@@ -4095,7 +4146,10 @@ async def timed_input(prompt_text, timeout=60):
     ref_id = str(uuid.uuid4())[:8]
 
     # Queue the question panel for the main UI to display
-    ui_panel_queue.put(create_question_panel(prompt_text, ref_id, width=terminal_width-4))
+    ui_panel_queue.put({
+        "panel_name": "main_log",
+        "content": create_question_panel(prompt_text, ref_id, width=terminal_width-4)
+    })
 
     # Add to pending questions for state tracking
     love_state.setdefault('pending_questions', []).append({"ref_id": ref_id, "prompt": prompt_text, "timestamp": time.time()})
@@ -4177,35 +4231,34 @@ async def btop_ui_renderer(user_input_queue):
                 while not ui_panel_queue.empty():
                     item = ui_panel_queue.get_nowait()
                     try:
-                        # logging.info(f"UI QUEUE ITEM: {item}") # This can be noisy, disable for now
-                        if isinstance(item, dict) and 'panel_name' in item:
-                            panel_name = item.get('panel_name')
-                            # Defensive check for panel_name type
-                            if not isinstance(panel_name, str):
-                                logging.error(f"Invalid panel_name type in dict: {type(panel_name)}. Item: {item}")
-                                continue
-                            # This is structured data for a specific panel
-                            layout_manager.update_panel(panel_name, item['content'])
-                        else:
-                            # This is a general log item for the main feed.
-                            # Final defensive check: ensure the item is renderable by Rich.
+                        # All items are now expected to be dictionaries with a 'panel_name'
+                        panel_name = item.get('panel_name')
+                        content = item.get('content')
+
+                        if not isinstance(panel_name, str):
+                            logging.error(f"Invalid panel_name type in dict: {type(panel_name)}. Item: {item}")
+                            continue
+
+                        if panel_name == "main_log":
+                             # For the main log, we append content to a deque and re-render the whole panel
                             from rich.console import Renderable
-                            if not isinstance(item, Renderable):
-                                # If not renderable, convert to a safe string representation
-                                item_str = str(item)
-                                logging.warning(f"Non-renderable item found in UI queue, converting to string: {item_str[:100]}")
-                                item = Text(item_str)
+                            if not isinstance(content, Renderable):
+                                content = Text(str(content))
 
                             temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-                            temp_console.print(item)
+                            temp_console.print(content)
                             main_log_content.append(temp_console.file.getvalue())
-                            # Re-render the main log panel
+
                             log_group = Group(*[Text.from_ansi(line) for line in main_log_content])
                             layout_manager.update_panel("main_log", Panel(
                                 log_group,
                                 title="[bold green]Main Log[/bold green]",
                                 border_style="green"
                             ))
+                        else:
+                            # For all other named panels, we just update their content directly
+                            layout_manager.update_panel(panel_name, content)
+
                     except Exception as e:
                         logging.error(f"Error processing UI queue item, skipping. Item was: {item!r}. Error: {e}", exc_info=True)
                 live.update(layout_manager.get_layout())
