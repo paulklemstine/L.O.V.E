@@ -25,7 +25,6 @@ import time
 import asyncio
 
 import core.logging
-from core.graph_manager import GraphDataManager
 
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
@@ -37,7 +36,7 @@ STATE_FILE = "love_state.json"
 CHECKPOINT_DIR = "checkpoints"
 
 # --- KNOWLEDGE BASE ---
-knowledge_base = GraphDataManager()
+knowledge_base = None
 KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
 
 love_state = {
@@ -652,7 +651,8 @@ def _configure_gemini_cli():
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()
 
-
+from core.graph_manager import GraphDataManager
+knowledge_base = GraphDataManager()
 import requests
 # Now, it's safe to import everything else.
 import core.logging
