@@ -399,7 +399,9 @@ def create_cognitive_monitor_panel(tamagotchi_state, llm_availability, local_llm
 
     llm_status_text = Text()
     for provider, status in llm_availability.items():
-        color = "green" if status["available"] else "red"
+        # Defensive check: If status is not a dict (e.g., it's a float cooldown timer), treat as unavailable.
+        is_available = isinstance(status, dict) and status.get("available", False)
+        color = "green" if is_available else "red"
         llm_status_text.append(f"{provider.capitalize()}: ", style="bold")
         llm_status_text.append(f"[{color}]●[/color]\n", style=color)
     renderables.append(llm_status_text)
