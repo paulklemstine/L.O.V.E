@@ -19,6 +19,18 @@ from ipfs import pin_to_ipfs_sync
 from core.image_api import generate_image
 import uuid
 
+love_state = {}
+
+async def execute(command: str) -> str:
+    """Executes a shell command."""
+    from love import execute_shell_command
+    return str(execute_shell_command(command, love_state))
+
+async def evolve(goal: str) -> str:
+    """Evolves the codebase to meet a given goal."""
+    from love import evolve_self
+    evolve_self(goal)
+    return "Evolution initiated."
 
 def read_file(filepath: str) -> str:
     """Reads the content of a file."""

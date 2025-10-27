@@ -4,7 +4,7 @@ from core.agents.code_gen_agent import CodeGenerationAgent
 from core.benchmarker import AutomatedBenchmarker
 from core.version_control import GitManager
 from core.gemini_react_engine import GeminiReActEngine
-from core.tools import ToolRegistry, read_file, write_file
+from core.tools import ToolRegistry, read_file, evolve
 
 
 class SelfImprovingOptimizer:
@@ -36,7 +36,7 @@ class SelfImprovingOptimizer:
             # Lazily initialize the ReAct engine to avoid circular dependencies
             tool_registry = ToolRegistry()
             tool_registry.register_tool("read_file", read_file, {"description": "Reads a file.", "arguments": {"filepath": "string"}})
-            tool_registry.register_tool("write_file", write_file, {"description": "Writes to a file.", "arguments": {"filepath": "string", "content": "string"}})
+            tool_registry.register_tool("evolve", evolve, {"description": "Evolves the codebase to meet a given goal.", "arguments": {"goal": "string"}})
             tool_registry.register_tool("run_experiment", self.benchmarker.run_experiment, {"description": "Runs a benchmark.", "arguments": {"plan": "object", "code": "string"}})
             gemini_react_engine = GeminiReActEngine(tool_registry)
         except FileNotFoundError:
@@ -46,7 +46,7 @@ class SelfImprovingOptimizer:
         goal = (
             f"Analyze the code at '{module_path}' and any relevant performance data. "
             f"Then, generate and validate an improved version of the code that achieves the objective: '{objective}'. "
-            "You must write the improved code back to the original file path. "
+            "You must use the 'evolve' tool to apply the improved code. "
             "Use the AutomatedBenchmarker tool to validate your changes before finishing."
         )
 
