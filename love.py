@@ -686,6 +686,7 @@ from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, Professio
 from core.talent_utils.manager import ContactManager
 from core.talent_utils.matcher import OpportunityMatcher, encrypt_params
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
+from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
@@ -4205,6 +4206,7 @@ def main(args):
     Thread(target=update_tamagotchi_personality, daemon=True).start()
     Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
+    Thread(target=monitor_bluesky_comments, daemon=True).start()
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue

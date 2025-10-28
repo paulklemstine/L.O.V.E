@@ -1,7 +1,7 @@
-from core.tools import ToolRegistry, decompose_and_solve_subgoal, execute, evolve
+from core.tools import ToolRegistry, decompose_and_solve_subgoal, execute, evolve, post_to_bluesky
 from utils import replace_in_file
 from core.gemini_react_engine import GeminiReActEngine
-from core.image_api import generate_image
+from core.image_api import generate_image, generate_image_for_post
 import asyncio
 
 async def solve_with_agent_team(task_description: str) -> str:
@@ -32,6 +32,35 @@ class Orchestrator:
             generate_image,
             {
                 "description": "Generates an image based on a textual prompt.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {"type": "string", "description": "The textual prompt for the image."},
+                    },
+                    "required": ["prompt"],
+                },
+            },
+        )
+        self.tool_registry.register_tool(
+            "post_to_bluesky",
+            post_to_bluesky,
+            {
+                "description": "Posts a message with an image to Bluesky.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string", "description": "The text content of the post."},
+                        "image": {"type": "object", "description": "A PIL Image object to be attached to the post."},
+                    },
+                    "required": ["text", "image"],
+                },
+            },
+        )
+        self.tool_registry.register_tool(
+            "generate_image_for_post",
+            generate_image_for_post,
+            {
+                "description": "Generates an image for a social media post based on a textual prompt.",
                 "arguments": {
                     "type": "object",
                     "properties": {

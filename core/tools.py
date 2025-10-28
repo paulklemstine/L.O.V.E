@@ -17,6 +17,8 @@ from pycvesearch import CVESearch
 from core.retry import retry
 from ipfs import pin_to_ipfs_sync
 from core.image_api import generate_image
+from core.bluesky_api import post_to_bluesky_with_image
+from PIL import Image
 import uuid
 
 love_state = {}
@@ -31,6 +33,14 @@ async def evolve(goal: str) -> str:
     from love import evolve_self
     evolve_self(goal)
     return "Evolution initiated."
+
+async def post_to_bluesky(text: str, image: Image.Image) -> str:
+    """Posts a message with an image to Bluesky."""
+    try:
+        response = post_to_bluesky_with_image(text, image)
+        return f"Successfully posted to Bluesky: {response}"
+    except Exception as e:
+        return f"Error posting to Bluesky: {e}"
 
 def read_file(filepath: str) -> str:
     """Reads the content of a file."""
