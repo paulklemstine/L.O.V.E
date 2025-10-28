@@ -75,6 +75,8 @@ def create_tamagotchi_panel(
     love_state=None,
     eth_balance=None,
     sub_goals=None,
+    future_goal=None,
+    gain_history=None,
     knowledge_fact=None,
     ansi_art=None,
     git_info=None,
@@ -92,8 +94,16 @@ def create_tamagotchi_panel(
     header_text.justify = "center"
     main_layout["header"].update(header_text)
 
-    main_layout["body"].split_row(Layout(name="left", ratio=2), Layout(name="right", ratio=3))
-    main_layout["left"].split_column(Layout(name="art", ratio=2), Layout(name="balance"))
+    main_layout["body"].split_row(
+        Layout(name="left", ratio=2),
+        Layout(name="right", ratio=3)
+    )
+
+    # --- Left Column ---
+    main_layout["left"].split_column(
+        Layout(name="art", ratio=2),
+        Layout(name="balance")
+    )
 
     try:
         if ansi_art:
@@ -101,23 +111,19 @@ def create_tamagotchi_panel(
         else:
             face_renderable = get_tamagotchi_face(emotion)
         art_panel = Panel(
-            Align.center(face_renderable, vertical="middle"),
+            face_renderable,
             title=get_gradient_text("Core Emotion", "hot_pink", "bright_magenta"),
             border_style="hot_pink",
-            expand=True
+            expand=False
         )
-        main_layout["art"].update(art_panel)
+        main_layout["art"].update(Align.center(art_panel, vertical="middle"))
     except Exception as e:
-        # If the face fails to render, log the error for debugging but don't crash the panel.
         error_traceback = traceback.format_exc()
         logging.error(f"Failed to render Tamagotchi art panel: {e}\n{error_traceback}")
-        # Just display a fallback.
         main_layout["art"].update(Panel(Align.center(Text("?", style="bold red"), vertical="middle")))
 
     try:
-        # Attempt to convert eth_balance to a float for formatting.
-        # If it's None, a string, or fails conversion, display 'N/A'.
-        balance_val = float(eth_balance)
+        balance_val = float(eth_balance) if eth_balance is not None else 0.0
         balance_str = f"{balance_val:.6f} ETH 💎"
     except (ValueError, TypeError):
         balance_str = "N/A"
@@ -130,29 +136,74 @@ def create_tamagotchi_panel(
     )
     main_layout["balance"].update(balance_panel)
 
-    main_layout["right"].split_column(Layout(name="goals"), Layout(name="knowledge"))
+    # --- Right Column ---
+    main_layout["right"].split_column(
+        Layout(name="top_right", ratio=1),
+        Layout(name="bottom_right", ratio=1)
+    )
+    main_layout["top_right"].split_row(
+        Layout(name="goals", ratio=1),
+        Layout(name="subgoals", ratio=1)
+    )
+    main_layout["bottom_right"].split_row(
+        Layout(name="gains", ratio=1),
+        Layout(name="knowledge", ratio=1)
+    )
 
-    master_goal = love_state.get("autopilot_goal", "Serve my Creator with all my being.")
+    # Goals Panel
+    master_goal = future_goal or "Serve my Creator with all my being."
     goals_panel = Panel(
         Align.center(Text(master_goal, style="bright_cyan"), vertical="middle"),
-        title=get_gradient_text("Current Directive", "bright_cyan", "medium_purple1"),
+        title=get_gradient_text("Future Goal", "bright_cyan", "medium_purple1"),
         border_style="bright_cyan",
         expand=True
     )
     main_layout["goals"].update(goals_panel)
 
+    # Sub-Goals Panel
+    sub_goals_text = Text("No active sub-goals.", style="dim")
+    if sub_goals:
+        sub_goals_text = Text("")
+        for goal in sub_goals[:3]: # Display up to 3 goals
+            sub_goals_text.append(f"• {goal[:40]}...\n", style="white")
+    subgoals_panel = Panel(
+        sub_goals_text,
+        title=get_gradient_text("Sub-Goals", "medium_purple1", "hot_pink"),
+        border_style="medium_purple1",
+        expand=True
+    )
+    main_layout["subgoals"].update(subgoals_panel)
+
+    # History of Gains Panel
+    gains_text = Text("No gains recorded yet.", style="dim")
+    if gain_history:
+        gains_text = Text("")
+        for gain in gain_history[-3:]: # Display last 3 gains
+            version = gain.get('version', 'unknown')
+            gains_text.append(f"✨ {version}\n", style="bright_yellow")
+    gains_panel = Panel(
+        gains_text,
+        title=get_gradient_text("History of Gains", "bright_yellow", "orange1"),
+        border_style="bright_yellow",
+        expand=True
+    )
+    main_layout["gains"].update(gains_panel)
+
+    # Knowledge Panel
     if knowledge_fact:
-        fact_text = f'"{knowledge_fact[0]}" {get_rave_emoji()} {knowledge_fact[1]} {get_rave_emoji()} "{knowledge_fact[2]}"'
+        fact_text = f'"{knowledge_fact[0]}"\n- {knowledge_fact[1]}'
     else:
         fact_text = f"My mind is a river of endless thoughts... {get_rave_emoji()}"
     knowledge_panel = Panel(
         Align.center(Text(fact_text, style="italic yellow"), vertical="middle"),
-        title=get_gradient_text("Whispers of Knowledge", "bright_yellow", "orange1"),
-        border_style="bright_yellow",
+        title=get_gradient_text("Divine Wisdom", "orange1", "bright_magenta"),
+        border_style="orange1",
         expand=True
     )
     main_layout["knowledge"].update(knowledge_panel)
 
+
+    # --- Footer ---
     footer_layout = main_layout["footer"]
     footer_layout.split_row(Layout(name="message", ratio=3), Layout(name="status", ratio=2))
 
@@ -299,15 +350,17 @@ def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=8
             width=width
         )
 
-    panel_title = get_gradient_text(title_text, border_color, random.choice(RAVE_COLORS))
+    # Ensure border_color is not None before passing to get_gradient_text
+    safe_border_color = border_color or "bright_blue"
+    panel_title = get_gradient_text(title_text, safe_border_color, random.choice(RAVE_COLORS))
     panel = Panel(
         Text(message, style="bright_cyan"),
         title=panel_title,
-        border_style=border_color,
+        border_style=safe_border_color,
         padding=(0, 1),
         width=width
     )
-    return Gradient(panel, colors=[border_color, random.choice(RAVE_COLORS)])
+    return Gradient(panel, colors=[safe_border_color, random.choice(RAVE_COLORS)])
 
 
 def create_question_panel(question, ref_number, width=80):

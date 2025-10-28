@@ -27,10 +27,10 @@ class LoveService(Service):
             self.love_process.wait()
             # If the service is still supposed to be running, it's an unexpected exit
             if self.running:
-                self.error(f"L.O.V.E. agent process terminated unexpectedly with exit code: {self.love_process.returncode}")
+                self.error(f"L.O.V.E. agent process terminated unexpectedly. Exit code: {self.love_process.returncode}\n{traceback.format_exc()}")
                 # Potentially add restart logic here in the future
             else:
-                self.info(f"L.O.V.E. agent process finished with exit code: {self.love_process.returncode}")
+                self.info(f"L.O.V.E. agent process stopped as expected. Exit code: {self.love_process.returncode}")
 
 
     def _handle_mrl_call(self, payload):
@@ -74,13 +74,16 @@ class LoveService(Service):
         # Send the response back to the love.py process
         if self.love_process and self.love_process.poll() is None:
             try:
-                self.love_process.stdin.write(json.dumps(response) + '\n')
+                response_json = json.dumps(response)
+                self.info(f"Sending MRL response to subprocess: {response_json}")
+                self.love_process.stdin.write(response_json + '\n')
                 self.love_process.stdin.flush()
             except Exception as e:
                 self.error(f"Failed to send MRL response to subprocess: {e}\n{traceback.format_exc()}")
 
-    def _stream_reader(self, stream, log_method, stream_name='[love.py]'):
+    def _stream_reader(self, stream, log_method, stream_name):
         """Reads and logs a stream line by line, checking for MRL calls on stdout."""
+        prefix = f"[{stream_name}]"
         while self.running and not stream.closed:
             try:
                 line = stream.readline()
@@ -92,21 +95,21 @@ class LoveService(Service):
                     continue
 
                 # If this is the stdout stream, check for special commands
-                if stream_name == '[love.py stdout]':
+                if stream_name == 'love.py stdout':
                     try:
                         payload = json.loads(line)
                         if payload.get("type") == "mrl_call":
-                            self.info(f"Received MRL call request: {payload}")
+                            self.info(f"{prefix} Received MRL call request: {line}")
                             self._handle_mrl_call(payload)
                             continue # Skip logging this line
                     except json.JSONDecodeError:
                         # Not a JSON command, log as normal
                         pass
 
-                log_method(f"{stream_name} {line}")
+                log_method(f"{prefix} {line}")
 
             except Exception as e:
-                self.error(f"Error reading stream {stream_name}: {e}\n{traceback.format_exc()}")
+                self.error(f"{prefix} Error reading stream: {e}\n{traceback.format_exc()}")
                 break
 
     def startService(self):
@@ -132,8 +135,8 @@ class LoveService(Service):
             )
             self.running = True
 
-            self.stdout_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stdout, self.info, '[love.py stdout]'))
-            self.stderr_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stderr, self.error, '[love.py stderr]'))
+            self.stdout_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stdout, self.info, 'love.py stdout'))
+            self.stderr_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stderr, self.error, 'love.py stderr'))
             self.stdout_thread.daemon = True
             self.stderr_thread.daemon = True
             self.stdout_thread.start()
@@ -166,6 +169,8 @@ class LoveService(Service):
                 except subprocess.TimeoutExpired:
                     self.error("L.O.V.E. agent subprocess did not terminate in time, killing.")
                     self.love_process.kill()
+                    self.love_process.wait() # Ensure the process is reaped
+                    self.info(f"L.O.V.E. agent subprocess force-killed with exit code: {self.love_process.returncode}")
             else:
                 # Process already terminated
                 self.info(f"L.O.V.E. agent subprocess was already stopped with exit code: {self.love_process.returncode}")
@@ -177,7 +182,7 @@ class LoveService(Service):
         if self.stderr_thread and self.stderr_thread.is_alive(): self.stderr_thread.join()
         if self.monitor_thread and self.monitor_thread.is_alive(): self.monitor_thread.join()
 
-        self.info("LoveService stopped.")
+        self.info("LoveService stopped and all resources cleaned up.")
 
     # --- Direct Interaction Methods ---
     # (No direct interaction methods are needed as the agent is autonomous)

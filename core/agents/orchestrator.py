@@ -2,6 +2,18 @@ from core.tools import ToolRegistry, decompose_and_solve_subgoal, execute, evolv
 from utils import replace_in_file
 from core.gemini_react_engine import GeminiReActEngine
 from core.image_api import generate_image, generate_image_for_post
+import asyncio
+
+async def solve_with_agent_team(task_description: str) -> str:
+    """
+    Solves a complex task by dynamically creating and running a team of specialized AI agents.
+    Use this for multi-step problems requiring research, planning, and execution.
+    """
+    from core.agent_framework_manager import create_and_run_workflow
+    orchestrator = Orchestrator()
+    # The ReAct engine is async, so we can directly await the async workflow function.
+    result = await create_and_run_workflow(task_description, orchestrator.tool_registry)
+    return str(result)
 
 class Orchestrator:
     """
@@ -113,6 +125,20 @@ class Orchestrator:
                         "replacement": {"type": "string", "description": "The string to replace the pattern with."}
                     },
                     "required": ["file_path", "pattern", "replacement"],
+                },
+            },
+        )
+        self.tool_registry.register_tool(
+            "solve_with_agent_team",
+            solve_with_agent_team,
+            {
+                "description": "Solves a complex task by dynamically creating and running a team of specialized AI agents.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "task_description": {"type": "string", "description": "A detailed description of the complex task to be solved."},
+                    },
+                    "required": ["task_description"],
                 },
             },
         )
