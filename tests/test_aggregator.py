@@ -14,9 +14,20 @@ class TestPublicProfileAggregator(unittest.TestCase):
     @patch('requests.get')
     def test_search_instagram_success(self, mock_get):
         # Arrange
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_json = {
+        # Mock the initial search request
+        mock_search_response = MagicMock()
+        mock_search_response.status_code = 200
+        mock_search_json = {
+            "users": [
+                {"user": {"username": "testuser"}}
+            ]
+        }
+        mock_search_response.json.return_value = mock_search_json
+
+        # Mock the profile fetch request
+        mock_profile_response = MagicMock()
+        mock_profile_response.status_code = 200
+        mock_profile_json = {
             "data": {
                 "user": {
                     "id": "12345",
@@ -30,10 +41,12 @@ class TestPublicProfileAggregator(unittest.TestCase):
                 }
             }
         }
-        mock_response.json.return_value = mock_json
-        mock_get.return_value = mock_response
+        mock_profile_response.json.return_value = mock_profile_json
 
-        aggregator = PublicProfileAggregator(keywords=["testuser"], platform_names=["instagram"], ethical_filters=self.ethical_filters)
+        # Set up the side_effect to handle both calls
+        mock_get.side_effect = [mock_search_response, mock_profile_response]
+
+        aggregator = PublicProfileAggregator(keywords=["test"], platform_names=["instagram"], ethical_filters=self.ethical_filters)
 
         # Act
         profiles = aggregator.search_and_collect()
@@ -44,6 +57,11 @@ class TestPublicProfileAggregator(unittest.TestCase):
         self.assertEqual(profile['platform'], 'instagram')
         self.assertEqual(profile['handle'], 'testuser')
         self.assertEqual(profile['followers_count'], 100)
+        # Check that both calls were made with the correct URLs
+        self.assertEqual(mock_get.call_count, 2)
+        mock_get.assert_any_call('https://www.instagram.com/web/search/topsearch/?query=test', headers=unittest.mock.ANY)
+        mock_get.assert_any_call('https://i.instagram.com/api/v1/users/web_profile_info/?username=testuser', headers=unittest.mock.ANY)
+
 
     @patch('requests.get')
     def test_search_instagram_failure(self, mock_get):
