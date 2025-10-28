@@ -73,8 +73,8 @@ class PublicProfileAggregator:
             print(f"Error searching Bluesky for keyword '{keyword}': {e}")
         return profiles
 
-    def _search_instagram(self, username):
-        """Scrapes a public profile from Instagram."""
+    def _get_instagram_profile(self, username):
+        """Scrapes a single public profile from Instagram by username."""
         headers = {
             "x-ig-app-id": "936619743392459",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -84,7 +84,8 @@ class PublicProfileAggregator:
             response.raise_for_status()
             response_json = Box(response.json())
             user = response_json.data.user
-            profile_data = {
+            # Return a dictionary with the profile data
+            return {
                 'anonymized_id': self._anonymize_id(user.id),
                 'platform': 'instagram',
                 'handle': user.username,
@@ -96,13 +97,42 @@ class PublicProfileAggregator:
                 'posts_count': user.edge_owner_to_timeline_media.count,
                 'source_id': user.id
             }
-            return [profile_data]
         except requests.exceptions.HTTPError as e:
             print(f"Error scraping Instagram user '{username}': {e}")
-            return []
+            return None
         except Exception as e:
             print(f"An unexpected error occurred while scraping Instagram user '{username}': {e}")
+            return None
+
+    def _search_instagram(self, keyword):
+        """Searches for users on Instagram by keyword and scrapes their profiles."""
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+        }
+        profiles = []
+        try:
+            # Use the web search endpoint
+            response = requests.get(f'https://www.instagram.com/web/search/topsearch/?query={keyword}', headers=headers)
+            response.raise_for_status()
+            search_results = response.json()
+
+            # Limit to the top 10 users to avoid being rate-limited
+            for item in search_results.get('users', [])[:10]:
+                user = item.get('user')
+                if user and user.get('username'):
+                    # Fetch the full profile details for each user found
+                    profile_data = self._get_instagram_profile(user['username'])
+                    if profile_data:
+                        profiles.append(profile_data)
+            return profiles
+
+        except requests.exceptions.HTTPError as e:
+            print(f"Error searching Instagram for keyword '{keyword}': {e}")
             return []
+        except Exception as e:
+            print(f"An unexpected error occurred while searching Instagram for '{keyword}': {e}")
+            return []
+
 
     def _search_tiktok(self, username):
         """Scrapes a public profile from TikTok."""
