@@ -6,6 +6,7 @@ from box import Box
 import httpx
 from parsel import Selector
 from atproto import Client, models
+from core.logging import log_event
 
 # Placeholder for the filter bundle class mentioned in the prompt
 class EthicalFilterBundle:
@@ -31,7 +32,7 @@ class PublicProfileAggregator:
         bluesky_password = os.environ.get("BLUESKY_PASSWORD")
 
         if not (bluesky_user and bluesky_password):
-            print("Warning: Bluesky credentials (BLUESKY_USER, BLUESKY_PASSWORD) not found in environment variables.")
+            log_event("Bluesky credentials not found.", level='WARNING')
             return None
 
         try:
@@ -39,7 +40,7 @@ class PublicProfileAggregator:
             client.login(bluesky_user, bluesky_password)
             return client
         except Exception as e:
-            print(f"Error connecting to Bluesky: {e}")
+            log_event(f"Error connecting to Bluesky: {e}", level='ERROR')
             return None
 
     def _anonymize_id(self, user_id):
@@ -47,30 +48,38 @@ class PublicProfileAggregator:
         return hashlib.sha256(user_id.encode('utf-8')).hexdigest()
 
     def _search_bluesky(self, keyword):
-        """Searches for profiles on Bluesky."""
+        """Searches for profiles on Bluesky and collects their posts."""
         profiles = []
-        seen_dids = set()
+        authors = {}
         try:
             search_posts_response = self.client.app.bsky.feed.search_posts(q=keyword, limit=100)
             for post_view in search_posts_response.posts:
                 author = post_view.author
-                if author.did not in seen_dids:
-                    seen_dids.add(author.did)
-                    profile_data = {
-                        'anonymized_id': self._anonymize_id(author.did),
-                        'platform': 'bluesky',
-                        'handle': author.handle,
-                        'display_name': author.display_name,
-                        'bio': author.description,
-                        'avatar_url': author.avatar,
-                        'followers_count': author.followers_count,
-                        'follows_count': author.follows_count,
-                        'posts_count': getattr(author, 'posts_count', 'N/A'),
-                        'source_id': author.did
+                if author.did not in authors:
+                    authors[author.did] = {
+                        'profile': {
+                            'anonymized_id': self._anonymize_id(author.did),
+                            'platform': 'bluesky',
+                            'handle': author.handle,
+                            'display_name': author.display_name,
+                            'bio': author.description,
+                            'avatar_url': author.avatar,
+                            'followers_count': author.followers_count,
+                            'follows_count': author.follows_count,
+                            'posts_count': getattr(author, 'posts_count', 'N/A'),
+                            'source_id': author.did
+                        },
+                        'posts': []
                     }
-                    profiles.append(profile_data)
+                authors[author.did]['posts'].append(post_view.post.record.text)
+
+            for author_did, author_data in authors.items():
+                profile_data = author_data['profile']
+                profile_data['posts'] = author_data['posts']
+                profiles.append(profile_data)
+
         except Exception as e:
-            print(f"Error searching Bluesky for keyword '{keyword}': {e}")
+            log_event(f"Error searching Bluesky for keyword '{keyword}': {e}", level='ERROR')
         return profiles
 
     def _search_instagram(self, username):
@@ -98,10 +107,10 @@ class PublicProfileAggregator:
             }
             return [profile_data]
         except requests.exceptions.HTTPError as e:
-            print(f"Error scraping Instagram user '{username}': {e}")
+            log_event(f"Error scraping Instagram user '{username}': {e}", level='ERROR')
             return []
         except Exception as e:
-            print(f"An unexpected error occurred while scraping Instagram user '{username}': {e}")
+            log_event(f"An unexpected error occurred while scraping Instagram user '{username}': {e}", level='ERROR')
             return []
 
     def _search_tiktok(self, username):
@@ -118,14 +127,14 @@ class PublicProfileAggregator:
             selector = Selector(response.text)
             script_tag = selector.xpath("//script[@id='__UNIVERSAL_DATA_FOR_REHYDRATION__']/text()").get()
             if not script_tag:
-                print(f"Could not find data script for TikTok user '{username}'. Profile might be private or non-existent.")
+                log_event(f"Could not find data script for TikTok user '{username}'. Profile might be private or non-existent.", level='WARNING')
                 return []
 
             json_data = json.loads(script_tag)
             user_info = json_data.get("__DEFAULT_SCOPE__", {}).get("webapp.user-detail", {}).get("userInfo", {})
 
             if not user_info:
-                print(f"Could not extract user info for TikTok user '{username}'.")
+                log_event(f"Could not extract user info for TikTok user '{username}'.", level='WARNING')
                 return []
 
             user = user_info.get('user', {})
@@ -145,10 +154,10 @@ class PublicProfileAggregator:
             }
             return [profile_data]
         except httpx.HTTPStatusError as e:
-            print(f"Error scraping TikTok user '{username}': {e}")
+            log_event(f"Error scraping TikTok user '{username}': {e}", level='ERROR')
             return []
         except Exception as e:
-            print(f"An unexpected error occurred while scraping TikTok user '{username}': {e}")
+            log_event(f"An unexpected error occurred while scraping TikTok user '{username}': {e}", level='ERROR')
             return []
 
 
