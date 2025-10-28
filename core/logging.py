@@ -2,6 +2,7 @@ import logging
 import sys
 import re
 import threading
+import time
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "love.log"
@@ -21,7 +22,7 @@ def initialize_logging_with_ui_queue(queue):
 def log_event(*args, level="INFO", from_ui=False, **kwargs):
     """
     A custom print function that writes to the log file, the standard
-    logging module, and optionally to the UI queue. It now supports log levels.
+    logging module, and sends a structured log object to the UI queue.
     """
     global log_file_stream
     message = " ".join(map(str, args))
@@ -40,12 +41,16 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
         logging.info(message)  # Default to INFO
 
     # If the UI queue is configured and this log didn't come from the UI,
-    # create a simple string and send it to the display.
+    # create a structured log object and send it to the display.
     if ui_panel_queue is not None and not from_ui:
         try:
-            # Create a simple formatted string instead of a panel
-            log_line = f"[{level.upper()}] {message}"
-            ui_panel_queue.put(log_line)
+            log_object = {
+                "type": "log_message",
+                "timestamp": time.time(),
+                "level": level.upper(),
+                "message": message,
+            }
+            ui_panel_queue.put(log_object)
         except Exception as e:
             # If this fails, we can't display it, but we should log the failure.
             logging.error(f"Failed to queue log event for UI display: {e}")
