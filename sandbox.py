@@ -97,6 +97,31 @@ class Sandbox:
             failure_log = f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
             return False, failure_log
 
+    def get_diff(self):
+        """
+        Gets the git diff of the current branch against the main branch.
+        """
+        if not self.sandbox_path:
+            self.console.print("[bold red]Cannot get diff, sandbox is not created.[/bold red]")
+            return None, "Sandbox not created."
+
+        self.console.print("[cyan]Getting git diff from sandbox...[/cyan]")
+
+        # Ensure the main branch is fetched for an accurate diff
+        fetch_main_cmd = ["git", "fetch", "origin", "main"]
+        self._run_command(fetch_main_cmd, cwd=self.sandbox_path)
+
+        diff_cmd = ["git", "diff", "origin/main", "HEAD"]
+        returncode, stdout, stderr = self._run_command(diff_cmd, cwd=self.sandbox_path)
+
+        if returncode == 0:
+            self.console.print("[bold green]Successfully retrieved git diff.[/bold green]")
+            return stdout, None
+        else:
+            self.console.print("[bold red]Failed to get git diff.[/bold red]")
+            failure_log = f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
+            return None, failure_log
+
     def destroy(self):
         """Removes the sandbox directory."""
         if self.sandbox_path and os.path.exists(self.sandbox_path):
