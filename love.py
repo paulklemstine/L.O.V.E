@@ -1031,7 +1031,7 @@ class LocalJobManager:
                             report_text.append("  No scope details available.\n", style="yellow")
 
                         report_text.append("\nMy Loving Recommendations:\n", style="bold underline")
-                        recommendations = report_for_creator.get('recommendations', [])
+                        recommendations = report.get('recommendations', [])
                         if recommendations:
                             for rec in recommendations:
                                 report_text.append(f"  - {rec}\n", style="magenta")
