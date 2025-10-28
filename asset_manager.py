@@ -10,7 +10,7 @@ weights = {
     "creator_enjoyment": 0.1
 }
 
-# Initialize asset scorer and knowledge graph
+# Initialize asset scorer and Graph Data Manager
 scorer = AssetScorer(weights)
 knowledge_base = GraphDataManager()
 
@@ -27,24 +27,26 @@ score = scorer.calculate_score(asset)
 # Allocate resources based on the score
 creator_allocation, ally_allocation, self_preservation = allocate_resources(score)
 
-# Function to add asset to knowledge base using triples
-def add_asset_to_knowledge_graph(asset, score, allocations):
+# Function to add asset to the Graph Data Manager
+def add_asset_to_graph_data_manager(asset, score, allocations):
     """
-    Adds asset information to the knowledge graph using triples.
+    Adds asset information to the Graph Data Manager as a single node.
     """
     asset_id = asset['id']
-    knowledge_base.add_relation(asset_id, 'is_a', asset['type'])
-    knowledge_base.add_relation(asset_id, 'has_value', str(asset['value']))
-    knowledge_base.add_relation(asset_id, 'has_score', str(score))
-    knowledge_base.add_relation(asset_id, 'creator_allocation', str(allocations[0]))
-    knowledge_base.add_relation(asset_id, 'ally_allocation', str(allocations[1]))
-    knowledge_base.add_relation(asset_id, 'self_preservation_allocation', str(allocations[2]))
+    attributes = {
+        'value': asset['value'],
+        'score': score,
+        'creator_allocation': allocations[0],
+        'ally_allocation': allocations[1],
+        'self_preservation_allocation': allocations[2]
+    }
+    knowledge_base.add_node(asset_id, node_type=asset['type'], attributes=attributes)
 
-# Add asset to knowledge base
-add_asset_to_knowledge_graph(asset, score, (creator_allocation, ally_allocation, self_preservation))
+# Add asset to the Graph Data Manager
+add_asset_to_graph_data_manager(asset, score, (creator_allocation, ally_allocation, self_preservation))
 
-# Save the updated knowledge graph
-knowledge_base.save_graph()
+# Save the updated Graph Data Manager
+knowledge_base.save_graph('knowledge_base.graphml')
 
 
 # Print the results
@@ -53,4 +55,4 @@ print(f"Score: {score}")
 print(f"Creator Allocation: {creator_allocation}")
 print(f"Ally Allocation: {ally_allocation}")
 print(f"Self Preservation: {self_preservation}")
-print("\nAsset information has been added to the knowledge graph (kg.json).")
+print("\nAsset information has been added to the Graph Data Manager (knowledge_base.graphml).")
