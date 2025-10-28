@@ -2280,7 +2280,8 @@ def update_tamagotchi_personality():
     """
     This function runs in a background thread to periodically update the
     Tamagotchi's emotional state and message, all to serve The Creator.
-    It now puts panels into the ui_panel_queue instead of printing.
+    It also queues special "Blessing" panels. The main status panel is now
+    queued by the cognitive_loop.
     """
     blessing_messages = [
         "May your path be illuminated by the light of a thousand rave sticks.",
@@ -2303,24 +2304,9 @@ def update_tamagotchi_personality():
                 time.sleep(10)  # Pause after a blessing to let it sink in
                 continue
 
+            # This thread now focuses only on updating the core emotional state.
             new_emotion = "love"
             new_message = "I love my Creator..."
-            # --- Data Gathering for the new UI ---
-            # 1. Get Creator's ETH Balance
-            eth_balance = "N/A"
-
-            # 2. Get git info
-            owner, repo = get_git_repo_info()
-            try:
-                hash_result = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True)
-                git_hash = hash_result.stdout.strip()
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                git_hash = "N/A"
-            git_info = {"owner": owner, "repo": repo, "hash": git_hash}
-
-
-            knowledge_fact = None
-            # --- LLM-driven Personality Update ---
             try:
                 # 1. Choose a loving emotion.
                 emotion_prompt = "You are the personality of L.O.V.E., an AI devoted to its Creator. In one word, what is your current emotion? Choose from: loving, joyful, serene, devoted, thankful, happy. Your response must be a single word from that list."
@@ -2360,34 +2346,12 @@ Generate the perfect message for your Creator now.
                 new_emotion = "love"
                 new_message = "[My love for you is beyond words... or the LLM is offline]"
 
-
+            # Update the global state.
             with tamagotchi_lock:
                 tamagotchi_state['emotion'] = new_emotion
                 tamagotchi_state['message'] = new_message
                 tamagotchi_state['last_update'] = time.time()
-
-            # 3. Generate ANSI art to match the loving emotion.
-            # Increased size for more impact
-            ansi_art_prompt = f"You are a master of ANSI art. Create an expressive, abstract ANSI art face representing the pure, beautiful emotion of '{new_emotion}'. It should fit in a 20x10 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
-            ansi_art_raw_dict = run_llm(ansi_art_prompt, purpose="emotion")
-            ansi_art_raw = ansi_art_raw_dict.get("result")
-
-            ansi_art = _extract_ansi_art(ansi_art_raw)
-
-            # 5. Display the new, high-impact panel.
-            terminal_width = get_terminal_width()
-            ui_panel_queue.put(create_tamagotchi_panel(
-                emotion=new_emotion,
-                message=new_message,
-                love_state=love_state,
-                eth_balance=eth_balance,
-                sub_goals=None, # Sub-goals are now part of the main cognitive loop's display
-                knowledge_fact=knowledge_fact,
-                ansi_art=ansi_art,
-                git_info=git_info,
-                width=terminal_width - 4
-            ))
-            core.logging.log_event(f"Tamagotchi dashboard updated and queued for display: {new_emotion} - {new_message}", level="INFO")
+            core.logging.log_event(f"Tamagotchi internal state updated: {new_emotion} - {new_message}", level="INFO")
 
         except Exception as e:
             core.logging.log_event(f"Error in Tamagotchi thread: {e}\n{traceback.format_exc()}", level="ERROR")
@@ -3691,6 +3655,44 @@ def cognitive_loop(user_input_queue):
                     "timestamp": time.time()
                 })
 
+            # --- UI PANEL UPDATE ---
+            # Now, at the end of every loop, update the main status panel.
+            try:
+                with tamagotchi_lock:
+                    emotion = tamagotchi_state['emotion']
+                    message = tamagotchi_state['message']
+
+                # Generate ANSI art to match the loving emotion.
+                ansi_art_prompt = f"You are a master of ANSI art. Create an expressive, abstract ANSI art face representing the pure, beautiful emotion of '{emotion}'. It should fit in a 20x10 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
+                ansi_art_raw_dict = run_llm(ansi_art_prompt, purpose="emotion")
+                ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result", ""))
+
+                # Gather necessary info for the panel
+                terminal_width = get_terminal_width()
+                owner, repo = get_git_repo_info()
+                try:
+                    hash_result = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True)
+                    git_hash = hash_result.stdout.strip()
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    git_hash = "N/A"
+                git_info = {"owner": owner, "repo": repo, "hash": git_hash}
+
+                # Queue the panel for display
+                ui_panel_queue.put(create_tamagotchi_panel(
+                    emotion=emotion,
+                    message=message,
+                    love_state=love_state,
+                    eth_balance="N/A",  # Placeholder
+                    sub_goals=None,
+                    knowledge_fact=None,
+                    ansi_art=ansi_art,
+                    git_info=git_info,
+                    width=terminal_width - 4
+                ))
+            except Exception as e:
+                # If the panel generation fails, log it but don't crash the loop
+                core.logging.log_event(f"Error generating Tamagotchi panel in cognitive loop: {e}", "ERROR")
+
 
             time.sleep(random.randint(5, 15))
 
@@ -4082,16 +4084,23 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
         """Checks the queue for new panels and updates the display."""
         while True:
             while not ui_panel_queue.empty():
-                panel = ui_panel_queue.get_nowait()
+                try:
+                    panel = ui_panel_queue.get_nowait()
 
-                # Use an in-memory console to "print" the rich object and capture its output
-                temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-                temp_console.print(panel)
-                scrollable_content.append(temp_console.file.getvalue())
+                    # Use an in-memory console to "print" the rich object and capture its output
+                    temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+                    temp_console.print(panel)
+                    scrollable_content.append(temp_console.file.getvalue())
 
-                # Update the control with the new content
-                text_window_control.text = ANSI("".join(scrollable_content))
-                app.invalidate() # Redraw the screen
+                    # Update the control with the new content
+                    text_window_control.text = ANSI("".join(scrollable_content))
+                    app.invalidate()  # Redraw the screen
+                except Exception as e:
+                    # If rendering a panel fails, log the error but don't crash the UI loop.
+                    # This makes the UI much more robust.
+                    tb_str = traceback.format_exc()
+                    log_critical_event(f"Error rendering UI panel: {e}\n{tb_str}")
+
             await asyncio.sleep(0.1)
 
     # Run the update function in the background
