@@ -52,3 +52,11 @@ def generate_image(prompt: str):
             return Image.open(io.BytesIO(img_response.content))
 
     raise Exception("AI Horde image generation job timed out.")
+
+
+def generate_image_for_post(prompt: str):
+    """
+    Generates an image for a social media post using a textual prompt.
+    This is a wrapper around the more generic generate_image function.
+    """
+    return generate_image(prompt)
