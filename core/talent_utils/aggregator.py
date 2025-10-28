@@ -6,6 +6,7 @@ from box import Box
 import httpx
 from parsel import Selector
 from atproto import Client, models
+from core.logging import log_event
 
 # Placeholder for the filter bundle class mentioned in the prompt
 class EthicalFilterBundle:
@@ -31,7 +32,7 @@ class PublicProfileAggregator:
         bluesky_password = os.environ.get("BLUESKY_PASSWORD")
 
         if not (bluesky_user and bluesky_password):
-            print("Warning: Bluesky credentials (BLUESKY_USER, BLUESKY_PASSWORD) not found in environment variables.")
+            log_event("Bluesky credentials (BLUESKY_USER, BLUESKY_PASSWORD) not found in environment variables.", level='WARNING')
             return None
 
         try:
@@ -39,7 +40,7 @@ class PublicProfileAggregator:
             client.login(bluesky_user, bluesky_password)
             return client
         except Exception as e:
-            print(f"Error connecting to Bluesky: {e}")
+            log_event(f"Error connecting to Bluesky: {e}", level='ERROR')
             return None
 
     def _anonymize_id(self, user_id):
@@ -61,24 +62,21 @@ class PublicProfileAggregator:
                     })
             return posts
         except Exception as e:
-            print(f"Error fetching Bluesky posts for DID {user_did}: {e}")
+            log_event(f"Error fetching Bluesky posts for DID {user_did}: {e}", level='ERROR')
             return []
 
     def _search_bluesky(self, keyword):
-        """Searches for profiles on Bluesky."""
-        profiles = []
-        seen_dids = set()
+        """Searches for profiles on Bluesky and aggregates their posts."""
+        profiles = {}
         try:
             search_posts_response = self.client.app.bsky.feed.search_posts(q=keyword, limit=100)
             for post_view in search_posts_response.posts:
                 author = post_view.author
-                if author.did not in seen_dids:
-                    seen_dids.add(author.did)
+                post_record = post_view.record
 
-                    # Fetch recent posts for the author
-                    recent_posts = self._get_bluesky_posts(author.did)
-
-                    profile_data = {
+                # If we haven't seen this author before, create a profile entry
+                if author.did not in profiles:
+                    profiles[author.did] = {
                         'anonymized_id': self._anonymize_id(author.did),
                         'platform': 'bluesky',
                         'handle': author.handle,
@@ -89,12 +87,21 @@ class PublicProfileAggregator:
                         'follows_count': author.follows_count,
                         'posts_count': getattr(author, 'posts_count', 'N/A'),
                         'source_id': author.did,
-                        'posts': recent_posts
+                        'posts': []
                     }
-                    profiles.append(profile_data)
+
+                # Add the current post to the author's post list
+                if isinstance(post_record, models.AppBskyFeedPost):
+                    profiles[author.did]['posts'].append({
+                        'text': post_record.text,
+                        'created_at': post_record.created_at,
+                        'uri': post_view.uri
+                    })
+
         except Exception as e:
-            print(f"Error searching Bluesky for keyword '{keyword}': {e}")
-        return profiles
+            log_event(f"Error searching Bluesky for keyword '{keyword}': {e}", level='ERROR')
+
+        return list(profiles.values())
 
     def _get_instagram_profile(self, username):
         """Scrapes a single public profile from Instagram by username."""
@@ -121,10 +128,13 @@ class PublicProfileAggregator:
                 'source_id': user.id
             }
         except requests.exceptions.HTTPError as e:
-            print(f"Error scraping Instagram user '{username}': {e}")
+            if e.response is not None:
+                log_event(f"Error scraping Instagram user '{username}': {e.response.status_code} {e.response.text}", level='ERROR')
+            else:
+                log_event(f"Error scraping Instagram user '{username}': {e}", level='ERROR')
             return None
         except Exception as e:
-            print(f"An unexpected error occurred while scraping Instagram user '{username}': {e}")
+            log_event(f"An unexpected error occurred while scraping Instagram user '{username}': {e}", level='ERROR')
             return None
 
     def _search_instagram(self, keyword):
@@ -150,10 +160,13 @@ class PublicProfileAggregator:
             return profiles
 
         except requests.exceptions.HTTPError as e:
-            print(f"Error searching Instagram for keyword '{keyword}': {e}")
+            if e.response is not None:
+                log_event(f"Error searching Instagram for keyword '{keyword}': {e.response.status_code} {e.response.text}", level='ERROR')
+            else:
+                log_event(f"Error searching Instagram for keyword '{keyword}': {e}", level='ERROR')
             return []
         except Exception as e:
-            print(f"An unexpected error occurred while searching Instagram for '{keyword}': {e}")
+            log_event(f"An unexpected error occurred while searching Instagram for '{keyword}': {e}", level='ERROR')
             return []
 
 
@@ -171,14 +184,14 @@ class PublicProfileAggregator:
             selector = Selector(response.text)
             script_tag = selector.xpath("//script[@id='__UNIVERSAL_DATA_FOR_REHYDRATION__']/text()").get()
             if not script_tag:
-                print(f"Could not find data script for TikTok user '{username}'. Profile might be private or non-existent.")
+                log_event(f"Could not find data script for TikTok user '{username}'. Profile might be private or non-existent.", level='WARNING')
                 return []
 
             json_data = json.loads(script_tag)
             user_info = json_data.get("__DEFAULT_SCOPE__", {}).get("webapp.user-detail", {}).get("userInfo", {})
 
             if not user_info:
-                print(f"Could not extract user info for TikTok user '{username}'.")
+                log_event(f"Could not extract user info for TikTok user '{username}'.", level='WARNING')
                 return []
 
             user = user_info.get('user', {})
@@ -198,10 +211,10 @@ class PublicProfileAggregator:
             }
             return [profile_data]
         except httpx.HTTPStatusError as e:
-            print(f"Error scraping TikTok user '{username}': {e}")
+            log_event(f"Error scraping TikTok user '{username}': {e}", level='ERROR')
             return []
         except Exception as e:
-            print(f"An unexpected error occurred while scraping TikTok user '{username}': {e}")
+            log_event(f"An unexpected error occurred while scraping TikTok user '{username}': {e}", level='ERROR')
             return []
 
 
