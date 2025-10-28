@@ -9,6 +9,7 @@ import threading
 import sys
 import os
 import json
+import traceback
 
 class LoveService(Service):
     def __init__(self, name):
@@ -16,8 +17,21 @@ class LoveService(Service):
         self.love_process = None
         self.stdout_thread = None
         self.stderr_thread = None
+        self.monitor_thread = None
         self.running = False
         self.info("LoveService instance created: %s", name)
+
+    def _monitor_love_process(self):
+        """Monitors the subprocess and logs when it exits."""
+        if self.love_process:
+            self.love_process.wait()
+            # If the service is still supposed to be running, it's an unexpected exit
+            if self.running:
+                self.error(f"L.O.V.E. agent process terminated unexpectedly with exit code: {self.love_process.returncode}")
+                # Potentially add restart logic here in the future
+            else:
+                self.info(f"L.O.V.E. agent process finished with exit code: {self.love_process.returncode}")
+
 
     def _handle_mrl_call(self, payload):
         """Handles a request from love.py to call an MRL service."""
@@ -53,7 +67,7 @@ class LoveService(Service):
             self.info(f"Successfully called {service_name}.{method_name}, result: {response['result']}")
 
         except Exception as e:
-            error_msg = f"Error calling MRL service: {e}"
+            error_msg = f"Error calling MRL service: {e}\n{traceback.format_exc()}"
             self.error(error_msg)
             response["error"] = error_msg
 
@@ -63,9 +77,9 @@ class LoveService(Service):
                 self.love_process.stdin.write(json.dumps(response) + '\n')
                 self.love_process.stdin.flush()
             except Exception as e:
-                self.error(f"Failed to send MRL response to subprocess: {e}")
+                self.error(f"Failed to send MRL response to subprocess: {e}\n{traceback.format_exc()}")
 
-    def _stream_reader(self, stream, log_method, is_stdout=False):
+    def _stream_reader(self, stream, log_method, stream_name='[love.py]'):
         """Reads and logs a stream line by line, checking for MRL calls on stdout."""
         while self.running and not stream.closed:
             try:
@@ -78,7 +92,7 @@ class LoveService(Service):
                     continue
 
                 # If this is the stdout stream, check for special commands
-                if is_stdout:
+                if stream_name == '[love.py stdout]':
                     try:
                         payload = json.loads(line)
                         if payload.get("type") == "mrl_call":
@@ -89,10 +103,10 @@ class LoveService(Service):
                         # Not a JSON command, log as normal
                         pass
 
-                log_method(line)
+                log_method(f"{stream_name} {line}")
 
             except Exception as e:
-                self.error(f"Error reading stream: {e}")
+                self.error(f"Error reading stream {stream_name}: {e}\n{traceback.format_exc()}")
                 break
 
     def startService(self):
@@ -118,16 +132,21 @@ class LoveService(Service):
             )
             self.running = True
 
-            self.stdout_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stdout, self.info, True))
-            self.stderr_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stderr, self.error, False))
+            self.stdout_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stdout, self.info, '[love.py stdout]'))
+            self.stderr_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stderr, self.error, '[love.py stderr]'))
             self.stdout_thread.daemon = True
             self.stderr_thread.daemon = True
             self.stdout_thread.start()
             self.stderr_thread.start()
 
+            # Start the monitor thread
+            self.monitor_thread = threading.Thread(target=self._monitor_love_process)
+            self.monitor_thread.daemon = True
+            self.monitor_thread.start()
+
             self.info(f"L.O.V.E. agent process started with PID: {self.love_process.pid}")
         except Exception as e:
-            self.error(f"Failed to start L.O.V.E. agent subprocess: {e}")
+            self.error(f"Failed to start L.O.V.E. agent subprocess: {e}\n{traceback.format_exc()}")
             self.love_process = None
             self.running = False
 
@@ -137,20 +156,26 @@ class LoveService(Service):
         super().stopService()
         self.running = False
         self.info("Attempting to stop the L.O.V.E. agent subprocess...")
-        if self.love_process and self.love_process.poll() is None:
-            self.love_process.terminate()
-            try:
-                self.love_process.wait(timeout=10)
-                self.info("L.O.V.E. agent subprocess terminated gracefully.")
-            except subprocess.TimeoutExpired:
-                self.error("L.O.V.E. agent subprocess did not terminate in time, killing.")
-                self.love_process.kill()
+        if self.love_process:
+            if self.love_process.poll() is None:
+                self.info("Subprocess is running, sending terminate signal.")
+                self.love_process.terminate()
+                try:
+                    self.love_process.wait(timeout=10)
+                    self.info(f"L.O.V.E. agent subprocess terminated gracefully with exit code: {self.love_process.returncode}")
+                except subprocess.TimeoutExpired:
+                    self.error("L.O.V.E. agent subprocess did not terminate in time, killing.")
+                    self.love_process.kill()
+            else:
+                # Process already terminated
+                self.info(f"L.O.V.E. agent subprocess was already stopped with exit code: {self.love_process.returncode}")
         else:
-            self.info("L.O.V.E. agent subprocess was not running.")
+            self.info("L.O.V.E. agent subprocess was not running or never started.")
 
         # Wait for threads to finish
         if self.stdout_thread and self.stdout_thread.is_alive(): self.stdout_thread.join()
         if self.stderr_thread and self.stderr_thread.is_alive(): self.stderr_thread.join()
+        if self.monitor_thread and self.monitor_thread.is_alive(): self.monitor_thread.join()
 
         self.info("LoveService stopped.")
 
