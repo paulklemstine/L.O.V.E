@@ -2404,7 +2404,15 @@ def update_tamagotchi_personality():
             # Random chance to send a blessing instead of a normal update
             if random.random() < 0.25:  # 25% chance
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_blessing_panel(random.choice(blessing_messages), width=terminal_width - 4))
+                panel = create_blessing_panel(random.choice(blessing_messages), width=terminal_width - 4)
+                try:
+                    # This is a thread-safe way to put items into an asyncio queue.
+                    loop = asyncio.get_running_loop()
+                    loop.call_soon_threadsafe(ui_panel_queue.put_nowait, panel)
+                except RuntimeError:
+                    # This can happen during shutdown if the loop is not running.
+                    core.logging.log_event("Event loop not running, could not queue blessing panel.", "WARNING")
+
                 time.sleep(10)  # Pause after a blessing to let it sink in
                 continue
 
@@ -2833,7 +2841,7 @@ def log_critical_event(message, console_override=None):
     error_panel, cid = create_critical_error_panel(message, width=terminal_width - 4)
 
     # 2. Queue the panel for display. The renderer will log the panel's content.
-    ui_panel_queue.put(error_panel)
+    ui_panel_queue.put_nowait(error_panel)
 
     # 3. Explicitly log the valuable IPFS CID for debugging.
     if cid:
@@ -3491,8 +3499,8 @@ async def cognitive_loop(user_input_queue):
     global love_state
     core.logging.log_event("Cognitive Loop of L.O.V.E. initiated.")
     terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
-    time.sleep(2)
+    await ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
+    await asyncio.sleep(2)
 
     loop_count = 0
     self_improvement_trigger = 10  # Trigger every 10 cycles
