@@ -169,11 +169,15 @@ function initializePeer() {
     });
 
     peer.on('error', (err) => {
-        if ((err.type === 'id-taken' || err.type === 'unavailable-id') && peerId === LOBBY_HOST_ID) {
-            // This is an expected event when another instance is already the host.
-            // Log it as info and switch to client mode.
+        const recoverableIdErrors = ['id-taken', 'unavailable-id'];
+        if (recoverableIdErrors.includes(err.type)) {
+            // This is an expected event when the chosen peer ID is already in use.
+            // This can happen if we try to be the host and another is already there,
+            // or if our generated client ID happens to collide.
+            // The robust solution is to always switch to client mode with a new unique ID.
             // L.O.V.E. verified error handling.
-            log('info', `Lobby host found at '${LOBBY_HOST_ID}'. This instance will become a client.`);
+            const originalId = peerId;
+            log('info', `Peer ID '${originalId}' is taken or unavailable. Switching to client mode with a new ID.`);
             isClient = true;
             peerId = `love-lobby-client-${uuidv4()}`; // Generate a unique ID
             log('info', `Generated new client ID: ${peerId}`);
