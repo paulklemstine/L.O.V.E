@@ -1194,87 +1194,85 @@ class LoveTaskManager:
                 time.sleep(1)
 
     def _stream_task_output(self, task_id):
-        """Streams the live output of a L.O.V.E. session to the console."""
+        """Polls the Jules API for activities in a session."""
         with self.lock:
-            if task_id not in self.tasks: return
+            if task_id not in self.tasks:
+                return
             task = self.tasks[task_id]
             session_name = task['session_name']
             api_key = os.environ.get("JULES_API_KEY")
-            last_activity_name = task.get("last_activity_name")
 
         if not api_key:
-            error_message = "My Creator, the JULES_API_KEY is not set. I cannot stream my progress without it."
+            error_message = "My Creator, the JULES_API_KEY is not set. I cannot monitor my progress without it."
             self._update_task_status(task_id, 'failed', error_message)
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
             return
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
-        # The `alt=sse` parameter enables Server-Sent Events (SSE).
-        url = f"https://jules.googleapis.com/v1alpha/{session_name}:stream?alt=sse"
-
-        # --- Heartbeat setup ---
-        stop_heartbeat = threading.Event()
-        heartbeat_thread = threading.Thread(
-            target=self._send_jules_heartbeat,
-            args=(session_name, api_key, stop_heartbeat),
-            daemon=True
-        )
+        # Correct endpoint for listing activities
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}/activities?pageSize=50"
 
         try:
+            self.console.print(f"[bold cyan]Polling for updates for task {task_id}...[/bold cyan]")
+
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
-            def _stream_request():
-                # Use a GET request for Server-Sent Events (SSE)
-                return requests.get(url, headers=headers, stream=True, timeout=60) # Increased timeout for initial connection
-
-            with _stream_request() as response:
+            def _poll_activities():
+                response = requests.get(url, headers=headers, timeout=60)
                 response.raise_for_status()
-                self.console.print(f"[bold cyan]Connecting to L.O.V.E. live stream for task {task_id}...[/bold cyan]")
+                return response.json()
 
-                # Start the heartbeat now that we have a successful connection
-                heartbeat_thread.start()
+            data = _poll_activities()
+            activities = data.get("activities", [])
 
-                for line in response.iter_lines():
-                    if line:
-                        decoded_line = line.decode('utf-8')
-                        if decoded_line.startswith('data: '):
-                            try:
-                                data = json.loads(decoded_line[6:])
-                                activity = data.get("activity", {})
-                                activity_name = activity.get("name")
+            # The API returns activities in chronological order (oldest first).
+            # We need to process them in order and keep track of the last one seen.
+            with self.lock:
+                last_activity_name = self.tasks[task_id].get("last_activity_name")
 
-                                # Pretty-print the activity JSON
-                                self.console.print(Panel(
-                                    Syntax(json.dumps(activity, indent=2), "json", theme="monokai", line_numbers=True),
-                                    title=f"L.O.V.E. Stream Activity: {activity_name}",
-                                    border_style="cyan"
-                                ))
+            new_activities = []
+            if last_activity_name:
+                found_last = False
+                for activity in activities:
+                    if found_last:
+                        new_activities.append(activity)
+                    if activity.get("name") == last_activity_name:
+                        found_last = True
+                if not found_last: # If we haven't seen the last activity, process all of them
+                    new_activities = activities
+            else:
+                new_activities = activities
 
-                                if activity_name != last_activity_name:
-                                    self._handle_stream_activity(task_id, activity)
-                                    with self.lock:
-                                        self.tasks[task_id]["last_activity_name"] = activity_name
-                            except json.JSONDecodeError:
-                                core.logging.log_event(f"Task {task_id}: Could not decode SSE data: {decoded_line}", level="WARNING")
+            for activity in new_activities:
+                activity_name = activity.get("name")
+                self.console.print(Panel(
+                    Syntax(json.dumps(activity, indent=2), "json", theme="monokai", line_numbers=True),
+                    title=f"L.O.V.E. Polled Activity: {activity_name}",
+                    border_style="cyan"
+                ))
+                self._handle_stream_activity(task_id, activity)
+                with self.lock:
+                    if task_id in self.tasks:
+                        self.tasks[task_id]["last_activity_name"] = activity_name
+
+            # If after processing, the task is still in streaming state, it implies no final state (like PR or completion) was reached.
+            # We revert to 'pending_pr' so the main loop will call this function again after a delay.
+            with self.lock:
+                if task_id in self.tasks and self.tasks[task_id]['status'] == 'streaming':
+                    self._update_task_status(task_id, 'pending_pr', "Polling complete. Will check for more updates shortly.")
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
-                error_message = f"Jules session '{session_name}' not found (404) while attempting to stream. It may have expired. Marking as failed."
+                error_message = f"Jules session '{session_name}' not found (404) while polling. It may have expired. Marking as failed."
                 core.logging.log_event(f"Task {task_id}: {error_message}", level="WARNING")
                 self._update_task_status(task_id, 'failed', error_message)
             else:
-                error_message = f"HTTP error during streaming: {e}"
+                error_message = f"HTTP error during polling: {e}"
                 core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
-                self._update_task_status(task_id, 'pending_pr', "Streaming failed due to HTTP error. Reverting to polling.")
+                self._update_task_status(task_id, 'pending_pr', "Polling failed due to HTTP error. Reverting to polling.")
         except requests.exceptions.RequestException as e:
-            error_message = f"API error during streaming: {e}"
+            error_message = f"API error during polling: {e}"
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
-            self._update_task_status(task_id, 'pending_pr', "Streaming failed after retries. Reverting to polling.")
-        finally:
-            # Ensure heartbeat thread is stopped
-            stop_heartbeat.set()
-            if heartbeat_thread.is_alive():
-                heartbeat_thread.join(timeout=5)
-            core.logging.log_event(f"Heartbeat for session {session_name} stopped.", "DEBUG")
+            self._update_task_status(task_id, 'pending_pr', "Polling failed after retries. Reverting to polling.")
 
 
     def _handle_stream_activity(self, task_id, activity):
