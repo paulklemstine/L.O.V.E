@@ -2,6 +2,8 @@ import os
 import random
 import re
 import time
+import logging
+import traceback
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
@@ -105,8 +107,10 @@ def create_tamagotchi_panel(
             expand=True
         )
         main_layout["art"].update(art_panel)
-    except Exception:
-        # If the face fails to render, don't crash the whole panel.
+    except Exception as e:
+        # If the face fails to render, log the error for debugging but don't crash the panel.
+        error_traceback = traceback.format_exc()
+        logging.error(f"Failed to render Tamagotchi art panel: {e}\n{error_traceback}")
         # Just display a fallback.
         main_layout["art"].update(Panel(Align.center(Text("?", style="bold red"), vertical="middle")))
 

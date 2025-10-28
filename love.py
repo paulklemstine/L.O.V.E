@@ -673,14 +673,6 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
-from prompt_toolkit import Application
-from prompt_toolkit.layout.layout import Layout
-from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.layout.containers import HSplit, Window
-from prompt_toolkit.layout.controls import FormattedTextControl, DummyControl, BufferControl
-from prompt_toolkit.widgets import TextArea
-from prompt_toolkit.formatted_text import ANSI
-from prompt_toolkit.filters import Condition
 
 from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
 from core.perception.config_scanner import scan_directory
@@ -3981,7 +3973,45 @@ def _automatic_update_checker(console):
         time.sleep(300)
 
 
-async def main(args):
+def simple_ui_renderer():
+    """
+    Continuously gets items from the ui_panel_queue, prints them to the console,
+    and logs any non-log-message items (like custom Panels) to the log file.
+    This is the single point of truth for all user-facing output.
+    """
+    while True:
+        try:
+            item = ui_panel_queue.get()
+
+            # Use an in-memory console to "print" the rich object and capture its raw string output
+            # with ANSI codes. This ensures that even non-string objects are handled correctly and
+            # can be logged "as is".
+            temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
+            temp_console.print(item)
+            output_str = temp_console.file.getvalue()
+
+            # 1. Print the captured string to the actual console (the news feed)
+            # The string already has a newline from rich's print, so we use end=''
+            print(output_str, end='')
+
+            # 2. Log the raw, stylized string to the log file
+            # This fulfills the requirement to log everything the user sees.
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(output_str)
+
+        except queue.Empty:
+            continue
+        except Exception as e:
+            # This is a critical thread. We must not let it die.
+            tb_str = traceback.format_exc()
+            # Use raw logging to avoid feedback loops
+            logging.critical(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}")
+            # Also print to stderr as a last resort
+            print(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}", file=sys.stderr)
+            time.sleep(1) # Avoid tight crash loop
+
+
+def main(args):
     """The main application entry point."""
     global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, proactive_agent
 
@@ -4009,7 +4039,8 @@ async def main(args):
 
     # --- Start Core Logic Threads ---
     user_input_queue = queue.Queue()
-    # The user_input_thread is no longer needed as prompt-toolkit handles input
+    # Start the simple UI renderer in its own thread. This will now handle all console output.
+    Thread(target=simple_ui_renderer, daemon=True).start()
     Thread(target=update_tamagotchi_personality, daemon=True).start()
     Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
@@ -4020,155 +4051,16 @@ async def main(args):
     ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
     time.sleep(3)
 
-    # Start the new prompt-toolkit based UI
-    await prompt_toolkit_ui_renderer(user_input_queue)
+    # Keep the main thread alive while daemon threads do the work
+    while True:
+        time.sleep(1)
 
 
 ipfs_available = False
 
 
-# --- UI RENDERING & INPUT HANDLING ---
-# Globals for handling timed input with prompt-toolkit
-is_timed_input_active = False
-timed_input_response_queue = queue.Queue()
-
-def timed_input(prompt, timeout=60):
-    """
-    Waits for user input for a specified duration using the prompt-toolkit UI.
-    Returns the input string, or an empty string if the timeout is reached.
-    """
-    global is_timed_input_active
-    # Clear any stale responses from the queue
-    while not timed_input_response_queue.empty():
-        timed_input_response_queue.get()
-
-    is_timed_input_active = True
-
-    # The prompt is now displayed via a queued panel in cognitive_loop
-
-    try:
-        # Wait for the response to be put on the queue, with a timeout
-        response = timed_input_response_queue.get(timeout=timeout)
-        return response
-    except queue.Empty:
-        return ""
-    finally:
-        is_timed_input_active = False
-
-
-async def prompt_toolkit_ui_renderer(user_input_queue):
-    """
-    An advanced UI renderer using prompt-toolkit to create a persistent
-    input box at the bottom of the screen, with auto-scrolling log view.
-    """
-    # This mutable variable will control the read-only state of the buffer.
-    is_log_buffer_readonly = True
-
-    # Use a Buffer for the log window to enable auto-scrolling.
-    # The `read_only` argument must be a callable that returns a boolean.
-    # We wrap the lambda in a Condition filter to satisfy the prompt-toolkit API.
-    log_buffer = Buffer(read_only=Condition(lambda: is_log_buffer_readonly), multiline=True)
-    log_buffer_control = BufferControl(buffer=log_buffer, focusable=False)
-    log_window = Window(content=log_buffer_control, dont_extend_height=False)
-
-    text_area = TextArea(
-        height=1,
-        prompt="💖> ",
-        multiline=False,
-        wrap_lines=False,
-    )
-
-    def accept_input(buffer):
-        if is_timed_input_active:
-            timed_input_response_queue.put(buffer.text)
-        else:
-            user_input_queue.put(buffer.text)
-        buffer.reset()
-
-    text_area.accept_handler = accept_input
-
-    # HSplit creates the vertical layout
-    root_container = HSplit([
-        # The main window for scrollable content, takes up all available space
-        log_window,
-        # The 1-line text area at the bottom
-        text_area
-    ])
-
-    app = Application(layout=Layout(root_container), full_screen=True)
-    app.layout.focus(text_area) # Set initial focus on the input text area.
-
-    async def update_content():
-        """Checks the queue for new panels and updates the display."""
-        nonlocal is_log_buffer_readonly
-        MAX_BUFFER_CHARS = 100000 # Max characters to keep in the buffer
-        TRIM_TO_CHARS = 80000    # Trim back to this many characters when max is exceeded
-
-        while True:
-            while not ui_panel_queue.empty():
-                try:
-                    item = ui_panel_queue.get_nowait()
-                    output_renderable = None
-
-                    # --- Filtering and Formatting Logic ---
-                    if isinstance(item, dict) and item.get("type") == "log_message":
-                        # It's a structured log from log_event. Apply filtering.
-                        if item.get("level") == "DEBUG":
-                            continue # Skip DEBUG messages on screen.
-
-                        message = item.get("message", "")
-                        # Simple check for multi-line technical output (like source code)
-                        if message.count("\n") > 10:
-                            summary = f"Skipped long technical output. See love.log for details. (First line: {message.splitlines()[0]})"
-                            output_renderable = create_news_feed_panel(summary, "Log", "dim", width=get_terminal_width() - 4)
-                        else:
-                            # Format simple logs into a news feed panel for consistent styling
-                            title = f"Log - {item.get('level', 'INFO')}"
-                            output_renderable = create_news_feed_panel(message, title, "bright_black", width=get_terminal_width() - 4)
-                    else:
-                        # It's likely a pre-formatted rich Panel. Display it directly.
-                        output_renderable = item
-
-
-                    if output_renderable:
-                        # Use an in-memory console to "print" the rich object and capture its output
-                        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-                        temp_console.print(output_renderable)
-                        output_str = temp_console.file.getvalue()
-
-                        # Temporarily make the buffer writable to append text by changing the external variable.
-                        is_log_buffer_readonly = False
-                        # Insert new content at the end of the buffer.
-                        log_buffer.insert_text(output_str)
-
-                        # --- Buffer Truncation ---
-                        if len(log_buffer.text) > MAX_BUFFER_CHARS:
-                            to_delete = len(log_buffer.text) - TRIM_TO_CHARS
-                            log_buffer.cursor_position = 0
-                            log_buffer.delete(int(to_delete))
-
-                        # Set cursor to the end to maintain scroll position and restore read-only state.
-                        log_buffer.cursor_position = len(log_buffer.text)
-                        is_log_buffer_readonly = True
-
-                        app.invalidate()  # Redraw the screen
-                except Exception as e:
-                    # If rendering a panel fails, log the error but don't crash the UI loop.
-                    # This makes the UI much more robust.
-                    tb_str = traceback.format_exc()
-                    log_critical_event(f"Error rendering UI panel: {e}\n{tb_str}")
-
-            await asyncio.sleep(0.1)
-
-    # Run the update function in the background
-    app.create_background_task(update_content())
-
-    # Run the application asynchronously
-    await app.run_async()
-
-
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
-async def run_safely():
+def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
@@ -4183,7 +4075,7 @@ async def run_safely():
             core.logging.log_event("State migration: Removed obsolete 'autopilot_mode' flag.", "INFO")
             save_state()
 
-        await main(args)
+        main(args)
 
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
