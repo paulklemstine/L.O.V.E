@@ -1,5 +1,5 @@
 from asset_scorer import AssetScorer, allocate_resources
-from core.knowledge_graph.graph import KnowledgeGraph
+from core.graph_manager import GraphDataManager
 
 # Define weights for scoring
 weights = {
@@ -12,7 +12,7 @@ weights = {
 
 # Initialize asset scorer and knowledge graph
 scorer = AssetScorer(weights)
-knowledge_base = KnowledgeGraph()
+knowledge_base = GraphDataManager()
 
 # Example asset data
 asset = {

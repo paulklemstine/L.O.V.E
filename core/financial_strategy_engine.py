@@ -11,19 +11,19 @@ and internal simulations to devise actionable plans.
 
 from typing import Dict, List, Any
 
-from core.knowledge_graph.graph import KnowledgeGraph
+from core.graph_manager import GraphDataManager
 
 class FinancialStrategyEngine:
     """
     Synthesizes knowledge to generate actionable financial plans.
     """
 
-    def __init__(self, knowledge_graph: KnowledgeGraph):
+    def __init__(self, knowledge_graph: GraphDataManager):
         """
         Initializes the engine with the agent's knowledge base.
 
         Args:
-            knowledge_graph: The KnowledgeGraph instance containing the agent's beliefs.
+            knowledge_graph: The GraphDataManager instance containing the agent's beliefs.
         """
         self.kg = knowledge_graph
         print("Financial Strategy Engine initialized.")

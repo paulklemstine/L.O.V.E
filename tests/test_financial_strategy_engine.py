@@ -2,13 +2,13 @@ import unittest
 from unittest.mock import MagicMock
 
 from core.financial_strategy_engine import FinancialStrategyEngine
-from core.knowledge_graph.graph import KnowledgeGraph
+from core.graph_manager import GraphDataManager
 
 class TestFinancialStrategyEngine(unittest.TestCase):
 
     def setUp(self):
-        """Set up a mock KnowledgeGraph for testing."""
-        self.mock_kg = KnowledgeGraph()
+        """Set up a mock GraphDataManager for testing."""
+        self.mock_kg = GraphDataManager()
         self.mock_kg.add_relation = MagicMock()
         self.mock_kg.get_triples = MagicMock()
         self.engine = FinancialStrategyEngine(self.mock_kg)

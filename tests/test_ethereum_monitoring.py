@@ -2,12 +2,12 @@ import unittest
 import os
 from unittest.mock import patch, MagicMock
 from core.ethereum.monitoring import monitor_and_store_balance, get_eth_balance, get_erc20_token_transfers, get_erc20_balance_for_token
-from core.knowledge_graph.graph import KnowledgeGraph
+from core.graph_manager import GraphDataManager
 
 class TestEthereumMonitoring(unittest.TestCase):
 
     def setUp(self):
-        self.knowledge_graph = KnowledgeGraph(":memory:")
+        self.knowledge_graph = GraphDataManager()
         self.address = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
 
     @patch('requests.get')
@@ -67,9 +67,20 @@ class TestEthereumMonitoring(unittest.TestCase):
 
         monitor_and_store_balance(self.address, self.knowledge_graph)
 
-        triples = self.knowledge_graph.get_triples()
-        self.assertIn((self.address, "has_eth_balance", "1.5"), triples)
-        self.assertIn((self.address, "has_TKN1_balance", "2.5"), triples)
+        # Check that the address node was created
+        self.assertIn(self.address, self.knowledge_graph.get_all_nodes())
+
+        # Check for the ETH balance node and edge
+        self.assertIn("eth_balance", self.knowledge_graph.get_all_nodes())
+        eth_balance_node = self.knowledge_graph.get_node("eth_balance")
+        self.assertEqual(eth_balance_node['value'], '1.5')
+        self.assertTrue(self.knowledge_graph.graph.has_edge(self.address, "eth_balance"))
+
+        # Check for the TKN1 balance node and edge
+        self.assertIn("TKN1_balance", self.knowledge_graph.get_all_nodes())
+        tkn1_balance_node = self.knowledge_graph.get_node("TKN1_balance")
+        self.assertEqual(tkn1_balance_node['value'], '2.5')
+        self.assertTrue(self.knowledge_graph.graph.has_edge(self.address, "TKN1_balance"))
 
 if __name__ == '__main__':
     unittest.main()
