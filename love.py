@@ -677,9 +677,10 @@ from prompt_toolkit import Application
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.layout.containers import HSplit, Window
-from prompt_toolkit.layout.controls import FormattedTextControl, DummyControl
+from prompt_toolkit.layout.controls import FormattedTextControl, DummyControl, BufferControl
 from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.filters import Condition
 
 from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
 from core.perception.config_scanner import scan_directory
@@ -4060,18 +4061,15 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
     An advanced UI renderer using prompt-toolkit to create a persistent
     input box at the bottom of the screen, with auto-scrolling log view.
     """
-    from prompt_toolkit.layout.controls import BufferControl
-
     # This mutable variable will control the read-only state of the buffer.
     is_log_buffer_readonly = True
 
     # Use a Buffer for the log window to enable auto-scrolling.
     # The `read_only` argument must be a callable that returns a boolean.
-    # We use a lambda to read from our external variable. This prevents the `TypeError`.
-    log_buffer = Buffer(read_only=lambda: is_log_buffer_readonly, multiline=True)
+    # We wrap the lambda in a Condition filter to satisfy the prompt-toolkit API.
+    log_buffer = Buffer(read_only=Condition(lambda: is_log_buffer_readonly), multiline=True)
     log_buffer_control = BufferControl(buffer=log_buffer, focusable=False)
     log_window = Window(content=log_buffer_control, dont_extend_height=False)
-
 
     text_area = TextArea(
         height=1,
