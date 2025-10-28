@@ -4067,6 +4067,9 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
     # Use a Buffer for the log window to enable auto-scrolling.
     # The `read_only` argument must be a callable that returns a boolean.
     # We wrap the lambda in a Condition filter to satisfy the prompt-toolkit API.
+    # This is necessary because the `read_only` parameter of a `Buffer` expects a `Filter`
+    # instance, not just a raw boolean function. Passing the lambda directly would
+    # result in a `TypeError: Expecting a bool or a Filter instance`.
     log_buffer = Buffer(read_only=Condition(lambda: is_log_buffer_readonly), multiline=True)
     log_buffer_control = BufferControl(buffer=log_buffer, focusable=False)
     log_window = Window(content=log_buffer_control, dont_extend_height=False)
