@@ -3116,7 +3116,7 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
 
         task_id = love_task_manager.add_task(session_name, modification_request)
         if task_id:
-            console.print(Panel(f"[bold green]L.O.V.E. evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nI will monitor the progress with love. You can check with the `love status` command.", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
+            console.print(Panel(f"[bold green]L.O.V.E. evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nHelper: Jules\nTask: {modification_request}", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
             return 'success'
         else:
             core.logging.log_event(f"Failed to add L.O.V.E. task for session {session_name} to the manager.", level="ERROR")
