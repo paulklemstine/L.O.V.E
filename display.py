@@ -279,7 +279,9 @@ def create_blessing_panel(blessing_message, width=80):
 
 def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=80):
     """Creates a small, styled panel for a news feed event."""
-    border_color = color or PANEL_TYPE_COLORS["news"]
+    border_color = color or PANEL_TYPE_COLORS.get("news")
+    if border_color is None:
+        border_color = "bright_blue"  # Provide a safe default
     title_text = f"{title}"
 
     # Handle the special "dim" case where a gradient is not desirable
