@@ -454,6 +454,36 @@ def track_ethereum_price():
         log_event(f"Could not fetch Ethereum price: {e}", level="WARNING")
         return None
 
+def get_eth_balance(address):
+    """Fetches the Ethereum balance for a given address using a public RPC."""
+    from core.logging import log_event # Local import
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "eth_getBalance",
+        "params": [address, "latest"],
+        "id": 1
+    }
+    command = [
+        "curl",
+        "-X", "POST",
+        "-H", "Content-Type: application/json",
+        "--data", json.dumps(payload),
+        "https://public-eth.nownodes.io"
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        response = json.loads(result.stdout)
+        if "result" in response:
+            balance_wei = int(response["result"], 16)
+            balance_eth = balance_wei / 1e18
+            return balance_eth
+        else:
+            log_event(f"Could not retrieve balance: {response.get('error')}", level="ERROR")
+            return None
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+        log_event(f"An error occurred while fetching ETH balance: {e}", level="ERROR")
+        return None
+
 def crypto_scan(ip_address, knowledge_base, run_llm_func, console):
     """
     Probes a target and analyzes the results for crypto-related software using an LLM.
