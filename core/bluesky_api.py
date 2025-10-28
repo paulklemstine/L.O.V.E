@@ -4,6 +4,7 @@ This module handles all interactions with the Bluesky API.
 import os
 import time
 from atproto import Client, models
+from atproto_client.models.com.atproto.repo import list_records
 from atproto_client.exceptions import ModelError
 from PIL import Image
 import io
@@ -44,11 +45,15 @@ def post_to_bluesky_with_image(text: str, image: Image.Image):
 def get_own_posts(limit=20):
     """Fetches the most recent posts for the authenticated user."""
     client = get_bluesky_client()
-    response = client.com.atproto.repo.list_records(
+
+    params = list_records.Params(
         repo=client.me.did,
         collection=models.ids.AppBskyFeedPost,
-        limit=limit
+        limit=limit,
     )
+
+    response = client.com.atproto.repo.list_records(params)
+
     return response.records
 
 def get_comments_for_post(post_uri):
