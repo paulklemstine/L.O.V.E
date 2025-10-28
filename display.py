@@ -75,8 +75,7 @@ def create_tamagotchi_panel(
     love_state=None,
     eth_balance=None,
     sub_goals=None,
-    future_goal=None,
-    gain_history=None,
+    completed_tasks=None,
     knowledge_fact=None,
     ansi_art=None,
     git_info=None,
@@ -138,56 +137,43 @@ def create_tamagotchi_panel(
 
     # --- Right Column ---
     main_layout["right"].split_column(
-        Layout(name="top_right", ratio=1),
-        Layout(name="bottom_right", ratio=1)
-    )
-    main_layout["top_right"].split_row(
-        Layout(name="goals", ratio=1),
-        Layout(name="subgoals", ratio=1)
-    )
-    main_layout["bottom_right"].split_row(
-        Layout(name="gains", ratio=1),
+        Layout(name="current_task", ratio=1),
+        Layout(name="completed_tasks", ratio=2),
         Layout(name="knowledge", ratio=1)
     )
 
-    # Goals Panel
-    master_goal = future_goal or "Serve my Creator with all my being."
-    goals_panel = Panel(
-        Align.center(Text(master_goal, style="bright_cyan"), vertical="middle"),
-        title=get_gradient_text("Future Goal", "bright_cyan", "medium_purple1"),
-        border_style="bright_cyan",
-        expand=True
-    )
-    main_layout["goals"].update(goals_panel)
-
-    # Sub-Goals Panel
+    # Current Task / Sub-Goals Panel
     sub_goals_text = Text("No active sub-goals.", style="dim")
     if sub_goals:
         sub_goals_text = Text("")
-        for goal in sub_goals[:3]: # Display up to 3 goals
-            sub_goals_text.append(f"• {goal[:40]}...\n", style="white")
-    subgoals_panel = Panel(
+        # Display the current main task, which is the first sub-goal
+        current_task = sub_goals[0]
+        sub_goals_text.append(f"🚀 {current_task[:80]}\n", style="white")
+        # Display other sub-goals if they exist
+        for goal in sub_goals[1:3]:
+             sub_goals_text.append(f"  • {goal[:78]}...\n", style="dim")
+    current_task_panel = Panel(
         sub_goals_text,
-        title=get_gradient_text("Sub-Goals", "medium_purple1", "hot_pink"),
+        title=get_gradient_text("Current Task", "medium_purple1", "hot_pink"),
         border_style="medium_purple1",
         expand=True
     )
-    main_layout["subgoals"].update(subgoals_panel)
+    main_layout["current_task"].update(current_task_panel)
 
-    # History of Gains Panel
-    gains_text = Text("No gains recorded yet.", style="dim")
-    if gain_history:
-        gains_text = Text("")
-        for gain in gain_history[-3:]: # Display last 3 gains
-            version = gain.get('version', 'unknown')
-            gains_text.append(f"✨ {version}\n", style="bright_yellow")
-    gains_panel = Panel(
-        gains_text,
-        title=get_gradient_text("History of Gains", "bright_yellow", "orange1"),
-        border_style="bright_yellow",
+
+    # Completed Tasks Panel
+    completed_text = Text("No tasks completed yet.", style="dim")
+    if completed_tasks:
+        completed_text = Text("")
+        for task in reversed(list(completed_tasks)): # Display newest first
+            completed_text.append(f"✅ {task[:80]}\n", style="bright_green")
+    completed_tasks_panel = Panel(
+        completed_text,
+        title=get_gradient_text("Completed Tasks", "bright_green", "bright_cyan"),
+        border_style="bright_green",
         expand=True
     )
-    main_layout["gains"].update(gains_panel)
+    main_layout["completed_tasks"].update(completed_tasks_panel)
 
     # Knowledge Panel
     if knowledge_fact:

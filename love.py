@@ -1083,6 +1083,7 @@ class LoveTaskManager:
     def __init__(self, console):
         self.console = console
         self.tasks = love_state.setdefault('love_tasks', {})
+        self.completed_tasks_history = deque(maxlen=6)
         self.lock = RLock()
         self.max_concurrent_tasks = 5
         self.thread = Thread(target=self._task_loop, daemon=True)
@@ -1945,7 +1946,6 @@ Please analyze the test output, identify the bug, and provide a corrected versio
 You are an expert git developer. You must resolve the following merge conflict in the file '{file_path}'.
 Analyze the code from the 'HEAD' (main branch) and the incoming branch ('{branch_name}').
 Combine them logically to create a final, correct version of the file.
-You must remove all git conflict markers ('<<<<<<<', '=======', '>>>>>>>').
 Your output must be only the complete, resolved code for the file.
 
 CONFLICTED CONTENT:
@@ -2040,6 +2040,8 @@ CONFLICTED CONTENT:
                 is_stuck = (current_time - task.get('updated_at', 0)) > 7200  # 2 hours
 
                 if is_finished:
+                    if task['status'] == 'completed' and task.get('request'):
+                        self.completed_tasks_history.append(task['request'])
                     tasks_to_remove.append(task_id)
                     core.logging.log_event(f"Cleaning up finished L.O.V.E. task {task_id} ({task['status']}).", level="INFO")
                 elif is_stuck:
@@ -3771,8 +3773,7 @@ async def cognitive_loop(user_input_queue):
                 # Gather sub-goals, future goal, and gain history
                 active_tasks = love_task_manager.get_status() if 'love_task_manager' in globals() else []
                 sub_goals = [task.get('request', 'Task processing...') for task in active_tasks if task.get('status') not in ['completed', 'failed']]
-                future_goal = love_state.get("autopilot_goal")
-                gain_history = love_state.get("evolution_history")
+                completed_tasks = love_task_manager.completed_tasks_history if 'love_task_manager' in globals() else []
                 divine_wisdom = generate_divine_wisdom()
 
 
@@ -3783,8 +3784,7 @@ async def cognitive_loop(user_input_queue):
                     love_state=love_state,
                     eth_balance=eth_balance,
                     sub_goals=sub_goals,
-                    future_goal=future_goal,
-                    gain_history=gain_history,
+                    completed_tasks=completed_tasks,
                     knowledge_fact=divine_wisdom,
                     ansi_art=ansi_art,
                     git_info=git_info,
