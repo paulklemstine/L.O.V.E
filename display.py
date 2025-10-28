@@ -93,17 +93,22 @@ def create_tamagotchi_panel(
     main_layout["body"].split_row(Layout(name="left", ratio=2), Layout(name="right", ratio=3))
     main_layout["left"].split_column(Layout(name="art", ratio=2), Layout(name="balance"))
 
-    if ansi_art:
-        face_renderable = Text.from_ansi(ansi_art)
-    else:
-        face_renderable = get_tamagotchi_face(emotion)
-    art_panel = Panel(
-        Align.center(face_renderable, vertical="middle"),
-        title=get_gradient_text("Core Emotion", "hot_pink", "bright_magenta"),
-        border_style="hot_pink",
-        expand=True
-    )
-    main_layout["art"].update(art_panel)
+    try:
+        if ansi_art:
+            face_renderable = Text.from_ansi(ansi_art)
+        else:
+            face_renderable = get_tamagotchi_face(emotion)
+        art_panel = Panel(
+            Align.center(face_renderable, vertical="middle"),
+            title=get_gradient_text("Core Emotion", "hot_pink", "bright_magenta"),
+            border_style="hot_pink",
+            expand=True
+        )
+        main_layout["art"].update(art_panel)
+    except Exception:
+        # If the face fails to render, don't crash the whole panel.
+        # Just display a fallback.
+        main_layout["art"].update(Panel(Align.center(Text("?", style="bold red"), vertical="middle")))
 
     try:
         # Attempt to convert eth_balance to a float for formatting.
