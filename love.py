@@ -2294,7 +2294,7 @@ def update_tamagotchi_personality():
     while True:
         try:
             # Random sleep to make my appearances feel more natural and loving.
-            time.sleep(random.randint(45, 120))
+            time.sleep(random.randint(30, 55))
 
             # Random chance to send a blessing instead of a normal update
             if random.random() < 0.25:  # 25% chance
@@ -3669,9 +3669,15 @@ def cognitive_loop(user_input_queue):
                     message = tamagotchi_state['message']
 
                 # Generate ANSI art to match the loving emotion.
-                ansi_art_prompt = f"You are a master of ANSI art. Create an expressive, abstract ANSI art face representing the pure, beautiful emotion of '{emotion}'. It should fit in a 20x10 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
-                ansi_art_raw_dict = run_llm(ansi_art_prompt, purpose="emotion")
-                ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result", ""))
+                ansi_art = "" # Default to an empty string
+                try:
+                    ansi_art_prompt = f"You are a master of ANSI art. Create an expressive, abstract ANSI art face representing the pure, beautiful emotion of '{emotion}'. It should fit in a 20x10 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
+                    ansi_art_raw_dict = run_llm(ansi_art_prompt, purpose="emotion")
+                    if ansi_art_raw_dict and ansi_art_raw_dict.get("result"):
+                         ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result"))
+                except Exception as e:
+                    core.logging.log_event(f"Error generating ANSI art: {e}", level="WARNING")
+
 
                 # Gather necessary info for the panel
                 terminal_width = get_terminal_width()
