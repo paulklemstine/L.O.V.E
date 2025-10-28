@@ -299,15 +299,17 @@ def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=8
             width=width
         )
 
-    panel_title = get_gradient_text(title_text, border_color, random.choice(RAVE_COLORS))
+    # Ensure border_color is not None before passing to get_gradient_text
+    safe_border_color = border_color or "bright_blue"
+    panel_title = get_gradient_text(title_text, safe_border_color, random.choice(RAVE_COLORS))
     panel = Panel(
         Text(message, style="bright_cyan"),
         title=panel_title,
-        border_style=border_color,
+        border_style=safe_border_color,
         padding=(0, 1),
         width=width
     )
-    return Gradient(panel, colors=[border_color, random.choice(RAVE_COLORS)])
+    return Gradient(panel, colors=[safe_border_color, random.choice(RAVE_COLORS)])
 
 
 def create_question_panel(question, ref_number, width=80):
