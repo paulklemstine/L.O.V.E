@@ -277,9 +277,21 @@ def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=8
     border_color = color or PANEL_TYPE_COLORS["news"]
     title_text = f"{title}"
 
+    # Handle the special "dim" case where a gradient is not desirable
+    if border_color == "dim":
+        panel_title = Text(title_text, style="dim")
+        return Panel(
+            Text(message, style="dim"),
+            title=panel_title,
+            border_style=border_color,
+            padding=(0, 1),
+            width=width
+        )
+
+    panel_title = get_gradient_text(title_text, border_color, random.choice(RAVE_COLORS))
     panel = Panel(
         Text(message, style="bright_cyan"),
-        title=get_gradient_text(title_text, border_color, random.choice(RAVE_COLORS)),
+        title=panel_title,
         border_style=border_color,
         padding=(0, 1),
         width=width
