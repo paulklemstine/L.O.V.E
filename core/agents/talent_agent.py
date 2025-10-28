@@ -70,9 +70,8 @@ class TalentAgent:
         print("Analyzing profiles...")
         selected_candidates = []
         for profile in profiles:
-            # In a real scenario, we would fetch the user's posts.
-            # For now, we'll pass an empty list.
-            posts = []
+            # Extract the posts from the profile data, defaulting to an empty list.
+            posts = profile.get('posts', [])
             scores = self.analyzer.analyze(profile, posts)
             profile['scores'] = scores
 

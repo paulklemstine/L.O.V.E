@@ -46,6 +46,24 @@ class PublicProfileAggregator:
         """Hashes the user's ID to create a non-reversible, anonymized ID."""
         return hashlib.sha256(user_id.encode('utf-8')).hexdigest()
 
+    def _get_bluesky_posts(self, user_did, limit=25):
+        """Fetches recent posts for a given Bluesky user DID."""
+        try:
+            author_feed = self.client.app.bsky.feed.get_author_feed(actor=user_did, limit=limit)
+            posts = []
+            for feed_view in author_feed.feed:
+                post_record = feed_view.post.record
+                if isinstance(post_record, models.AppBskyFeedPost):
+                    posts.append({
+                        'text': post_record.text,
+                        'created_at': post_record.created_at,
+                        'uri': feed_view.post.uri
+                    })
+            return posts
+        except Exception as e:
+            print(f"Error fetching Bluesky posts for DID {user_did}: {e}")
+            return []
+
     def _search_bluesky(self, keyword):
         """Searches for profiles on Bluesky."""
         profiles = []
@@ -56,6 +74,10 @@ class PublicProfileAggregator:
                 author = post_view.author
                 if author.did not in seen_dids:
                     seen_dids.add(author.did)
+
+                    # Fetch recent posts for the author
+                    recent_posts = self._get_bluesky_posts(author.did)
+
                     profile_data = {
                         'anonymized_id': self._anonymize_id(author.did),
                         'platform': 'bluesky',
@@ -66,7 +88,8 @@ class PublicProfileAggregator:
                         'followers_count': author.followers_count,
                         'follows_count': author.follows_count,
                         'posts_count': getattr(author, 'posts_count', 'N/A'),
-                        'source_id': author.did
+                        'source_id': author.did,
+                        'posts': recent_posts
                     }
                     profiles.append(profile_data)
         except Exception as e:
