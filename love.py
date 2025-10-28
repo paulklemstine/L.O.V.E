@@ -3149,15 +3149,17 @@ def evolve_self(modification_request, love_task_manager):
 
     if api_result == 'duplicate':
         core.logging.log_event("Evolution aborted due to duplicate task detection.", "INFO")
-        return  # Do nothing, let the cognitive loop continue.
+        return 'duplicate'
 
     if api_result == 'failed':
         console.print(Panel("[bold yellow]My helper evolution failed or was unavailable. I will fall back to my own local evolution protocol...[/bold yellow]", title="[bold magenta]FALLBACK PROTOCOL[/bold magenta]", border_style="magenta"))
         # If the API fails, trigger the local evolution cycle.
         evolve_locally(modification_request, console)
+        return 'local_evolution_initiated'
 
     # If api_result is 'success', do nothing further here. The task is now managed
     # by the LoveTaskManager in the background.
+    return 'success'
 
 # --- AUTOPILOT MODE ---
 
@@ -3518,8 +3520,13 @@ def cognitive_loop(user_input_queue):
                 if command == "evolve":
                     request = " ".join(args) or generate_evolution_request(open(SELF_PATH).read(), love_task_manager)
                     if request:
-                        evolve_self(request, love_task_manager)
-                        output = "Evolution initiated."
+                        evolution_result = evolve_self(request, love_task_manager)
+                        if evolution_result == 'duplicate':
+                            output = "Evolution aborted: Duplicate task detected."
+                        elif evolution_result == 'local_evolution_initiated':
+                            output = "Local evolution initiated due to API failure."
+                        else: # success
+                            output = "Evolution initiated via L.O.V.E. API."
                 elif command == "execute":
                     output, error, returncode = execute_shell_command(" ".join(args), love_state)
                     terminal_width = get_terminal_width()
