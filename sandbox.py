@@ -47,14 +47,25 @@ class Sandbox:
 
         self.console.print(f"[cyan]Creating new sandbox for branch '{branch_name}'...[/cyan]")
 
-        # Clone the specific branch into the sandbox directory
-        clone_cmd = ["git", "clone", "--branch", branch_name, "--single-branch", self.repo_url, self.sandbox_path]
+        # Clone the repository first
+        clone_cmd = ["git", "clone", self.repo_url, self.sandbox_path]
         returncode, stdout, stderr = self._run_command(clone_cmd, cwd=self.base_dir)
 
         if returncode != 0:
-            self.console.print(f"[bold red]Failed to create sandbox for branch '{branch_name}'.[/bold red]")
+            self.console.print(f"[bold red]Failed to clone repository for sandbox '{branch_name}'.[/bold red]")
             logging.error(f"Git clone failed for branch {branch_name}: {stderr}")
             self.sandbox_path = None
+            return False
+
+        # Now, checkout the specific branch or commit
+        checkout_cmd = ["git", "checkout", branch_name]
+        returncode, stdout, stderr = self._run_command(checkout_cmd, cwd=self.sandbox_path)
+
+        if returncode != 0:
+            self.console.print(f"[bold red]Failed to checkout '{branch_name}' in sandbox.[/bold red]")
+            logging.error(f"Git checkout failed for '{branch_name}': {stderr}")
+            # Clean up the cloned repo if checkout fails
+            self.destroy()
             return False
 
         self.console.print(f"[green]Sandbox created successfully at: {self.sandbox_path}[/green]")
