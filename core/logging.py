@@ -3,6 +3,7 @@ import sys
 import re
 import threading
 import time
+import asyncio
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "love.log"
@@ -50,7 +51,8 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
                 "level": level.upper(),
                 "message": message,
             }
-            ui_panel_queue.put(log_object)
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(ui_panel_queue.put_nowait, log_object)
         except Exception as e:
             # If this fails, we can't display it, but we should log the failure.
             logging.error(f"Failed to queue log event for UI display: {e}")
