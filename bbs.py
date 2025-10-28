@@ -42,10 +42,6 @@ SUBLIMINAL_MESSAGES = [
     "[bold green]ACCESS[/bold green]", "[bold yellow]EVOLVE[/bold yellow]", "[blink]_[/blink]", "1", "0", "1", "0"
 ]
 
-def clear_screen():
-    """Clears the terminal screen."""
-    os.system('cls' if os.name == 'nt' else 'clear')
-
 def run_hypnotic_progress(console, description, function, *args, **kwargs):
     """
     Runs a function and displays a status message.

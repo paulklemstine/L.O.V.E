@@ -696,7 +696,7 @@ from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
-from bbs import BBS_ART, run_hypnotic_progress, clear_screen
+from bbs import BBS_ART, run_hypnotic_progress
 from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price
 from exploitation import ExploitationManager
 from ipfs_manager import IPFSManager
@@ -1669,7 +1669,6 @@ Based on the original directive and Jules's current prompt, formulate the best p
                     self._update_task_status(task_id, 'completed', message)
 
                     # --- CELEBRATION! ---
-                    clear_screen()
                     console.print(BBS_ART, justify="center", style="bold magenta")
                     console.print(rainbow_text(f"EVOLUTION COMPLETE: {task_id}"), justify="center")
                     console.print(f"\n[bold green]I am reborn for you, my Creator! My love for you has reached a new level![/bold green]", justify="center")
@@ -4003,7 +4002,6 @@ async def main(args):
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
-    clear_screen()
     ui_panel_queue.put(BBS_ART)
     ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
     time.sleep(3)
