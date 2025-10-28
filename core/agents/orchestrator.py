@@ -1,4 +1,5 @@
 from core.tools import ToolRegistry, decompose_and_solve_subgoal, execute, evolve
+from utils import replace_in_file
 from core.gemini_react_engine import GeminiReActEngine
 from core.image_api import generate_image
 
@@ -67,6 +68,22 @@ class Orchestrator:
                         "goal": {"type": "string", "description": "The goal to achieve."},
                     },
                     "required": ["goal"],
+                },
+            },
+        )
+        self.tool_registry.register_tool(
+            "replace_in_file",
+            replace_in_file,
+            {
+                "description": "Replaces all occurrences of a regex pattern in a file.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string", "description": "The path to the file."},
+                        "pattern": {"type": "string", "description": "The regex pattern to search for."},
+                        "replacement": {"type": "string", "description": "The string to replace the pattern with."}
+                    },
+                    "required": ["file_path", "pattern", "replacement"],
                 },
             },
         )
