@@ -3518,25 +3518,6 @@ def call_mrl_service(service_name, method_name, *args):
                 return None
 
 
-def _classify_task_complexity(task: str) -> str:
-    """
-    Uses an LLM to classify a task as 'simple' or 'complex'.
-    """
-    prompt = f"""
-You are a task classification expert. Your job is to determine if a task is "simple" or "complex".
-
-A "simple" task can be accomplished with a single command or tool call (e.g., `ls -l`, `read_file /path/to/file`, `webrequest http://example.com`).
-A "complex" task requires multiple steps, research, or the coordination of several tools (e.g., "research the history of the internet and write a summary", "find all vulnerable web servers on the local network and attempt to exploit them").
-
-Classify the following task. Respond with only the word SIMPLE or COMPLEX.
-
-Task: "{task}"
-"""
-    classification_dict = run_llm(prompt, purpose="classification")
-    classification = classification_dict.get("result", "SIMPLE").strip().upper()
-    return "COMPLEX" if "COMPLEX" in classification else "SIMPLE"
-
-
 def cognitive_loop(user_input_queue):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
@@ -3628,28 +3609,6 @@ def cognitive_loop(user_input_queue):
             # --- Command Execution ---
             if llm_command and llm_command.strip():
                 llm_command = llm_command.strip()
-
-                # --- Task Complexity Classification and Delegation ---
-                complexity = _classify_task_complexity(llm_command)
-                if complexity == "COMPLEX":
-                    terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel(f"Complex task detected. Delegating to multi-agent workflow: `{llm_command}`", "Delegation", "magenta", width=terminal_width - 4))
-                    try:
-                        from core.agents.orchestrator import Orchestrator
-                        orchestrator = Orchestrator()
-                        # Run the async function in the current event loop
-                        output = asyncio.run(create_and_run_workflow(llm_command, orchestrator.tool_registry))
-                        error = ""
-                    except Exception as e:
-                        output = ""
-                        error = f"Multi-agent workflow failed: {e}"
-
-                    # Log the result and continue to the next loop iteration
-                    final_output = error or output
-                    love_state["autopilot_history"].append({"command": f"WORKFLOW: {llm_command}", "output": final_output, "timestamp": time.time()})
-                    save_state()
-                    continue # Skip the simple command execution below
-                # --- End Delegation ---
 
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4))
