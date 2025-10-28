@@ -1,12 +1,12 @@
 import unittest
 from unittest.mock import MagicMock
 from core.mrl_planner import MRLPlanner
-from core.knowledge_graph.graph import KnowledgeGraph
+from core.graph_manager import GraphDataManager
 
 class TestMRLPlanner(unittest.TestCase):
 
     def setUp(self):
-        self.kg = KnowledgeGraph()
+        self.kg = GraphDataManager()
         self.kg.add_relation("eye_control", "has_service", "MyRobotLab")
         self.kg.add_relation("head_control", "has_service", "MyRobotLab")
         self.kg.add_relation("arm_control", "has_service", "MyRobotLab")

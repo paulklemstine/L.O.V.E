@@ -1,6 +1,6 @@
 import json
 from typing import List, Dict, Any
-from core.knowledge_graph.graph import KnowledgeGraph
+from core.graph_manager import GraphDataManager
 from core.planning import mock_llm_call
 
 class MRLPlanner:
@@ -10,7 +10,7 @@ class MRLPlanner:
     objectives.
     """
 
-    def __init__(self, knowledge_graph: KnowledgeGraph):
+    def __init__(self, knowledge_graph: GraphDataManager):
         self.kg = knowledge_graph
 
     def mrl_plan(self, goal: str) -> List[Dict[str, Any]]:

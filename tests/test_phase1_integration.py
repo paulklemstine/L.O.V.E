@@ -3,13 +3,13 @@ import asyncio
 from unittest.mock import patch, MagicMock
 
 from core.agents.orchestrator import Orchestrator
-from core.knowledge_graph.graph import KnowledgeGraph
+from core.graph_manager import GraphDataManager
 
 class TestPhase1Integration(unittest.TestCase):
 
     def setUp(self):
         """Set up the test environment before each test."""
-        self.mock_kg = KnowledgeGraph()
+        self.mock_kg = GraphDataManager()
         self.orchestrator = Orchestrator(knowledge_graph=self.mock_kg)
 
     def test_orchestrator_initialization(self):

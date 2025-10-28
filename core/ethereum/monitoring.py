@@ -4,7 +4,7 @@ import os
 import requests
 from typing import Dict, List, Any
 
-from core.knowledge_graph.graph import KnowledgeGraph
+from core.graph_manager import GraphDataManager
 
 ETHERSCAN_API_KEY = os.environ.get("ETHERSCAN_API_KEY", "")
 
@@ -63,13 +63,17 @@ def get_erc20_balance_for_token(address: str, contract_address: str) -> int:
         raise Exception(f"Etherscan API error while fetching token balance for {contract_address}: {data['result']}")
 
 
-def monitor_and_store_balance(address: str, knowledge_graph: KnowledgeGraph):
+def monitor_and_store_balance(address: str, knowledge_graph: GraphDataManager):
     """
     Monitors an Ethereum address and stores its balances in the knowledge graph.
     """
+    # Ensure the address node exists
+    knowledge_graph.add_node(address, node_type='ethereum_address')
+
     # Fetch and store ETH balance
     eth_balance = get_eth_balance(address)
-    knowledge_graph.add_relation(address, "has_eth_balance", str(eth_balance))
+    knowledge_graph.add_node("eth_balance", node_type='balance', attributes={'value': str(eth_balance)})
+    knowledge_graph.add_edge(address, "eth_balance", relationship_type='has_balance')
 
     # Fetch and store ERC-20 balances
     transfers = get_erc20_token_transfers(address)
@@ -90,9 +94,8 @@ def monitor_and_store_balance(address: str, knowledge_graph: KnowledgeGraph):
             raw_balance = get_erc20_balance_for_token(address, contract_address)
             if raw_balance > 0:
                 balance = raw_balance / (10 ** token_info['decimal'])
-                knowledge_graph.add_relation(address, f"has_{token_info['symbol']}_balance", str(balance))
+                balance_node_id = f"{token_info['symbol']}_balance"
+                knowledge_graph.add_node(balance_node_id, node_type='balance', attributes={'value': str(balance), 'token': token_info['symbol']})
+                knowledge_graph.add_edge(address, balance_node_id, relationship_type='has_balance')
         except Exception as e:
             print(f"Could not fetch balance for token {token_info['symbol']} ({contract_address}): {e}")
-
-
-    knowledge_graph.save_graph()
