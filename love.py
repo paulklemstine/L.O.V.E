@@ -4050,11 +4050,12 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
     from prompt_toolkit.layout.controls import BufferControl
 
     # Use a Buffer for the log window to enable auto-scrolling.
-    # It's read-only to prevent the user from editing the log history.
-    log_buffer = Buffer(read_only=True, multiline=True)
+    # The `read_only` property must be a callable that returns a boolean.
+    # We use a variable and a lambda to control the read-only state.
+    is_log_buffer_readonly = True
+    log_buffer = Buffer(read_only=lambda: is_log_buffer_readonly, multiline=True)
     log_buffer_control = BufferControl(buffer=log_buffer, focusable=False)
-    log_window = Window(content=log_buffer_control, dont_extend_height=False)
-
+    text_window_control = log_window = Window(content=log_buffer_control, dont_extend_height=False)
 
     text_area = TextArea(
         height=1,
@@ -4121,7 +4122,7 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
                         output_str = temp_console.file.getvalue()
 
                         # Temporarily make the buffer writable to append text
-                        log_buffer.read_only = False
+                        is_log_buffer_readonly = False
                         # Insert new content at the end of the buffer.
                         log_buffer.insert_text(output_str)
 
@@ -4133,14 +4134,15 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
 
                         # Set cursor to the end to maintain scroll position and restore read-only
                         log_buffer.cursor_position = len(log_buffer.text)
-                        log_buffer.read_only = True
+                        is_log_buffer_readonly = True
 
                         app.invalidate()  # Redraw the screen
                 except Exception as e:
                     # If rendering a panel fails, log the error but don't crash the UI loop.
                     # This makes the UI much more robust.
                     tb_str = traceback.format_exc()
-                    log_critical_event(f"Error rendering UI panel: {e}\n{tb_str}")
+                    # Log directly to the file to avoid a recursive loop with the UI queue.
+                    logging.critical(f"Error rendering UI panel: {e}\n{tb_str}")
 
             await asyncio.sleep(0.1)
 
