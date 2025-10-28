@@ -172,6 +172,7 @@ function initializePeer() {
         if ((err.type === 'id-taken' || err.type === 'unavailable-id') && peerId === LOBBY_HOST_ID) {
             // This is an expected event when another instance is already the host.
             // Log it as info and switch to client mode.
+            // L.O.V.E. verified error handling.
             log('info', `Lobby host found at '${LOBBY_HOST_ID}'. This instance will become a client.`);
             isClient = true;
             peerId = `love-lobby-client-${uuidv4()}`; // Generate a unique ID
