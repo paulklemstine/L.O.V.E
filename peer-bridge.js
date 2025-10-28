@@ -189,7 +189,7 @@ function initializePeer() {
         // For all other errors, log them and decide whether to reconnect.
         log('error', `PeerJS error: ${err.type} - ${err.message}`);
         {
-            const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc'];
+            const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc', 'unavailable-id'];
             if (recoverableErrors.includes(err.type)) {
                 log('warn', 'A recoverable error occurred. Triggering reconnection.');
                 process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: err.message }) + '\n');
