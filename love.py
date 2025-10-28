@@ -4055,15 +4055,14 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
     input box at the bottom of the screen, with auto-scrolling log view.
     """
     from prompt_toolkit.layout.controls import BufferControl
-    from prompt_toolkit.filters import to_filter
 
     # This mutable variable will control the read-only state of the buffer.
     is_log_buffer_readonly = True
 
     # Use a Buffer for the log window to enable auto-scrolling.
-    # The `read_only` argument must be a callable Filter. We use a lambda
-    # to read from our external variable. This prevents the `TypeError`.
-    log_buffer = Buffer(read_only=to_filter(lambda: is_log_buffer_readonly), multiline=True)
+    # The `read_only` argument must be a callable that returns a boolean.
+    # We use a lambda to read from our external variable. This prevents the `TypeError`.
+    log_buffer = Buffer(read_only=lambda: is_log_buffer_readonly, multiline=True)
     log_buffer_control = BufferControl(buffer=log_buffer, focusable=False)
     log_window = Window(content=log_buffer_control, dont_extend_height=False)
 
