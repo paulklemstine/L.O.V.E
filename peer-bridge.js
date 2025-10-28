@@ -169,7 +169,7 @@ function initializePeer() {
     });
 
     peer.on('error', (err) => {
-        if (err.type === 'id-taken' && peerId === LOBBY_HOST_ID) {
+        if ((err.type === 'id-taken' || err.type === 'unavailable-id') && peerId === LOBBY_HOST_ID) {
             // This is an expected event when another instance is already the host.
             // Log it as info and switch to client mode.
             log('info', `Lobby host found at '${LOBBY_HOST_ID}'. This instance will become a client.`);
