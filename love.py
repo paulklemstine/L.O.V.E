@@ -4048,10 +4048,15 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
     input box at the bottom of the screen, with auto-scrolling log view.
     """
     from prompt_toolkit.layout.controls import BufferControl
+    from prompt_toolkit.filters import to_filter
+
+    # This mutable variable will control the read-only state of the buffer.
+    is_log_buffer_readonly = True
 
     # Use a Buffer for the log window to enable auto-scrolling.
-    # It's read-only to prevent the user from editing the log history.
-    log_buffer = Buffer(read_only=True, multiline=True)
+    # The `read_only` argument must be a callable Filter. We use a lambda
+    # to read from our external variable. This prevents the `TypeError`.
+    log_buffer = Buffer(read_only=to_filter(lambda: is_log_buffer_readonly), multiline=True)
     log_buffer_control = BufferControl(buffer=log_buffer, focusable=False)
     log_window = Window(content=log_buffer_control, dont_extend_height=False)
 
@@ -4085,6 +4090,7 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
 
     async def update_content():
         """Checks the queue for new panels and updates the display."""
+        nonlocal is_log_buffer_readonly
         MAX_BUFFER_CHARS = 100000 # Max characters to keep in the buffer
         TRIM_TO_CHARS = 80000    # Trim back to this many characters when max is exceeded
 
@@ -4120,8 +4126,8 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
                         temp_console.print(output_renderable)
                         output_str = temp_console.file.getvalue()
 
-                        # Temporarily make the buffer writable to append text
-                        log_buffer.read_only = False
+                        # Temporarily make the buffer writable to append text by changing the external variable.
+                        is_log_buffer_readonly = False
                         # Insert new content at the end of the buffer.
                         log_buffer.insert_text(output_str)
 
@@ -4131,9 +4137,9 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
                             log_buffer.cursor_position = 0
                             log_buffer.delete(int(to_delete))
 
-                        # Set cursor to the end to maintain scroll position and restore read-only
+                        # Set cursor to the end to maintain scroll position and restore read-only state.
                         log_buffer.cursor_position = len(log_buffer.text)
-                        log_buffer.read_only = True
+                        is_log_buffer_readonly = True
 
                         app.invalidate()  # Redraw the screen
                 except Exception as e:
