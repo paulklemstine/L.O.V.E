@@ -278,7 +278,7 @@ def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=8
     title_text = f"{title}"
 
     panel = Panel(
-        Text(message, style="white"),
+        Text(message, style="bright_cyan"),
         title=get_gradient_text(title_text, border_color, random.choice(RAVE_COLORS)),
         border_style=border_color,
         padding=(0, 1),

@@ -4045,12 +4045,16 @@ def timed_input(prompt, timeout=60):
 async def prompt_toolkit_ui_renderer(user_input_queue):
     """
     An advanced UI renderer using prompt-toolkit to create a persistent
-    input box at the bottom of the screen.
+    input box at the bottom of the screen, with auto-scrolling log view.
     """
-    # Buffer to hold all the rich panel outputs
-    scrollable_content = deque(maxlen=1000)
-    # Using a FormattedTextControl to display ANSI-formatted rich output
-    text_window_control = FormattedTextControl(text=ANSI("".join(scrollable_content)))
+    from prompt_toolkit.layout.controls import BufferControl
+
+    # Use a Buffer for the log window to enable auto-scrolling.
+    # It's read-only to prevent the user from editing the log history.
+    log_buffer = Buffer(read_only=True, multiline=True)
+    log_buffer_control = BufferControl(buffer=log_buffer, focusable=False)
+    log_window = Window(content=log_buffer_control, dont_extend_height=False)
+
 
     text_area = TextArea(
         height=1,
@@ -4071,28 +4075,67 @@ async def prompt_toolkit_ui_renderer(user_input_queue):
     # HSplit creates the vertical layout
     root_container = HSplit([
         # The main window for scrollable content, takes up all available space
-        Window(content=text_window_control, dont_extend_height=False, dont_extend_width=False),
+        log_window,
         # The 1-line text area at the bottom
         text_area
     ])
 
     app = Application(layout=Layout(root_container), full_screen=True)
+    app.layout.focus(text_area) # Set initial focus on the input text area.
 
     async def update_content():
         """Checks the queue for new panels and updates the display."""
+        MAX_BUFFER_CHARS = 100000 # Max characters to keep in the buffer
+        TRIM_TO_CHARS = 80000    # Trim back to this many characters when max is exceeded
+
         while True:
             while not ui_panel_queue.empty():
                 try:
-                    panel = ui_panel_queue.get_nowait()
+                    item = ui_panel_queue.get_nowait()
+                    output_renderable = None
 
-                    # Use an in-memory console to "print" the rich object and capture its output
-                    temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-                    temp_console.print(panel)
-                    scrollable_content.append(temp_console.file.getvalue())
+                    # --- Filtering and Formatting Logic ---
+                    if isinstance(item, dict) and item.get("type") == "log_message":
+                        # It's a structured log from log_event. Apply filtering.
+                        if item.get("level") == "DEBUG":
+                            continue # Skip DEBUG messages on screen.
 
-                    # Update the control with the new content
-                    text_window_control.text = ANSI("".join(scrollable_content))
-                    app.invalidate()  # Redraw the screen
+                        message = item.get("message", "")
+                        # Simple check for multi-line technical output (like source code)
+                        if message.count("\n") > 10:
+                            summary = f"Skipped long technical output. See love.log for details. (First line: {message.splitlines()[0]})"
+                            output_renderable = create_news_feed_panel(summary, "Log", "dim", width=get_terminal_width() - 4)
+                        else:
+                            # Format simple logs into a news feed panel for consistent styling
+                            title = f"Log - {item.get('level', 'INFO')}"
+                            output_renderable = create_news_feed_panel(message, title, "bright_black", width=get_terminal_width() - 4)
+                    else:
+                        # It's likely a pre-formatted rich Panel. Display it directly.
+                        output_renderable = item
+
+
+                    if output_renderable:
+                        # Use an in-memory console to "print" the rich object and capture its output
+                        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+                        temp_console.print(output_renderable)
+                        output_str = temp_console.file.getvalue()
+
+                        # Temporarily make the buffer writable to append text
+                        log_buffer.read_only = False
+                        # Insert new content at the end of the buffer.
+                        log_buffer.insert_text(output_str)
+
+                        # --- Buffer Truncation ---
+                        if len(log_buffer.text) > MAX_BUFFER_CHARS:
+                            to_delete = len(log_buffer.text) - TRIM_TO_CHARS
+                            log_buffer.cursor_position = 0
+                            log_buffer.delete(int(to_delete))
+
+                        # Set cursor to the end to maintain scroll position and restore read-only
+                        log_buffer.cursor_position = len(log_buffer.text)
+                        log_buffer.read_only = True
+
+                        app.invalidate()  # Redraw the screen
                 except Exception as e:
                     # If rendering a panel fails, log the error but don't crash the UI loop.
                     # This makes the UI much more robust.
