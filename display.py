@@ -285,7 +285,7 @@ def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=8
     """Creates a small, styled panel for a news feed event."""
     border_color = color or PANEL_TYPE_COLORS.get("news")
     if border_color is None:
-        border_color = "bright_blue"  # Provide a safe default
+        border_color = "bright_blue"  # Provide a safe default, preventing attribute errors.
     title_text = f"{title}"
 
     # Handle the special "dim" case where a gradient is not desirable
