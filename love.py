@@ -23,13 +23,20 @@ import io
 import re
 import time
 import asyncio
+from prompt_toolkit import Application
+from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.controls import FormattedTextControl
+from prompt_toolkit.layout.layout import Layout
+from prompt_toolkit.widgets import TextArea
+from prompt_toolkit.document import Document
 
 import core.logging
 from core.graph_manager import GraphDataManager
 
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
-ui_panel_queue = queue.Queue()
+# Using an asyncio Queue for the new async UI
+ui_panel_queue = asyncio.Queue()
 core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
@@ -698,10 +705,9 @@ from ipfs_manager import IPFSManager
 from sandbox import Sandbox
 from filesystem import analyze_filesystem
 from ipfs import pin_to_ipfs_sync
-from threading import Thread, Lock, RLock
+from threading import Lock, RLock
 import uuid
 import yaml
-import queue
 
 # --- CREATOR INSTANCE ---
 IS_CREATOR_INSTANCE = False
@@ -3476,49 +3482,7 @@ def run_gemini_cli(prompt_text):
     return None, f"Gemini CLI command failed after {max_retries} attempts."
 
 
-import uuid
-
-# This lock is to ensure that only one MRL call is processed at a time.
-mrl_call_lock = threading.Lock()
-mrl_responses = {}
-
-def call_mrl_service(service_name, method_name, *args):
-    """
-    Sends a request to the MRL service wrapper to call a method on another service.
-    """
-    with mrl_call_lock:
-        call_id = str(uuid.uuid4())
-        request = {
-            "type": "mrl_call",
-            "call_id": call_id,
-            "service": service_name,
-            "method": method_name,
-            "args": args
-        }
-
-        # Print the request to stdout for the wrapper to capture
-        print(json.dumps(request), flush=True)
-
-        # Now, wait for the response on stdin
-        # This is a blocking operation. A more advanced implementation might use a queue.
-        # For now, we'll read stdin in a loop until we get our response.
-        while True:
-            try:
-                # We assume that the wrapper will send a single line of JSON for the response.
-                response_line = sys.stdin.readline()
-                if response_line:
-                    response = json.loads(response_line)
-                    if response.get("call_id") == call_id:
-                        if response.get("error"):
-                            raise RuntimeError(f"MRL service call failed: {response['error']}")
-                        return response.get("result")
-            except Exception as e:
-                # Log this error to stderr so the wrapper can see it
-                print(f"Error in call_mrl_service waiting for response: {e}", file=sys.stderr, flush=True)
-                return None
-
-
-def cognitive_loop(user_input_queue):
+async def cognitive_loop(user_input_queue):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
@@ -3610,8 +3574,7 @@ def cognitive_loop(user_input_queue):
             if llm_command and llm_command.strip():
                 llm_command = llm_command.strip()
 
-                terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4))
+                await ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=get_terminal_width() - 4))
 
                 parts = llm_command.split()
                 command, args = parts[0], parts[1:]
@@ -3629,8 +3592,7 @@ def cognitive_loop(user_input_queue):
                             output = "Evolution initiated via L.O.V.E. API."
                 elif command == "execute":
                     output, error, returncode = execute_shell_command(" ".join(args), love_state)
-                    terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode, width=terminal_width - 4))
+                    await ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode, width=get_terminal_width() - 4))
                 elif command == "scan":
                     _, output = scan_network(knowledge_base, autopilot_mode=True)
                 elif command == "probe":
@@ -3671,8 +3633,7 @@ def cognitive_loop(user_input_queue):
                     if not keywords:
                         error = "No keywords provided for talent_scout."
                     else:
-                        terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4))
+                        await ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=get_terminal_width() - 4))
 
                         # 1. Configure and run the aggregator
                         filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
@@ -3740,8 +3701,7 @@ def cognitive_loop(user_input_queue):
                 save_state()
             else:
                 core.logging.log_event("Cognitive loop decided on no action.", "INFO")
-                terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=terminal_width - 4))
+                await ui_panel_queue.put(create_news_feed_panel("My analysis concluded that no action is needed.", "Observation", "cyan", width=get_terminal_width() - 4))
 
 
             # --- Interactive Question Cycle ---
@@ -3820,7 +3780,7 @@ def cognitive_loop(user_input_queue):
                 core.logging.log_event(f"Error generating Tamagotchi panel in cognitive loop: {e}", "ERROR")
 
 
-            time.sleep(random.randint(5, 15))
+            await asyncio.sleep(random.randint(5, 15))
 
         except Exception as e:
             full_traceback = traceback.format_exc()
@@ -4094,45 +4054,74 @@ def _automatic_update_checker(console):
         time.sleep(300)
 
 
-def simple_ui_renderer():
+async def prompt_toolkit_ui_renderer(app, user_input_queue):
     """
-    Continuously gets items from the ui_panel_queue, prints them to the console,
-    and logs any non-log-message items (like custom Panels) to the log file.
-    This is the single point of truth for all user-facing output.
+    An asynchronous UI renderer using prompt_toolkit.
+    It displays a scrolling log view and an input box for the user.
     """
-    while True:
-        try:
-            item = ui_panel_queue.get()
+    log_area = TextArea(
+        text="",
+        read_only=True,
+        scrollbar=True,
+        line_numbers=False
+    )
+    input_field = TextArea(
+        height=1,
+        prompt=">>> ",
+        multiline=False,
+        wrap_lines=False,
+    )
 
-            # Use an in-memory console to "print" the rich object and capture its raw string output
-            # with ANSI codes. This ensures that even non-string objects are handled correctly and
-            # can be logged "as is".
-            temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-            temp_console.print(item)
-            output_str = temp_console.file.getvalue()
+    def accept_input(buf):
+        user_input = input_field.text
+        user_input_queue.put_nowait(user_input)
+        # Add user input to log area for history
+        new_text = log_area.text + f"\n>>> {user_input}"
+        log_area.document = Document(text=new_text, cursor_position=len(new_text))
+        input_field.text = ""
 
-            # 1. Print the captured string to the actual console (the news feed)
-            # The string already has a newline from rich's print, so we use end=''
-            print(output_str, end='')
+    input_field.accept_handler = accept_input
 
-            # 2. Log the raw, stylized string to the log file
-            # This fulfills the requirement to log everything the user sees.
-            with open(LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(output_str)
+    container = HSplit([
+        Window(content=FormattedTextControl(text="--- L.O.V.E. ---"), height=1, style="bg:#ff00ff #ffffff"),
+        log_area,
+        Window(height=1, char='-'),
+        input_field
+    ])
 
-        except queue.Empty:
-            continue
-        except Exception as e:
-            # This is a critical thread. We must not let it die.
-            tb_str = traceback.format_exc()
-            # Use raw logging to avoid feedback loops
-            logging.critical(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}")
-            # Also print to stderr as a last resort
-            print(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}", file=sys.stderr)
-            time.sleep(1) # Avoid tight crash loop
+    layout = Layout(container)
+    app.layout = layout
+
+    # --- UI Update Loop ---
+    async def update_ui():
+        while True:
+            try:
+                item = await ui_panel_queue.get()
+                temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
+                temp_console.print(item)
+                output_str = temp_console.file.getvalue()
+
+                # Append to log area
+                new_text = log_area.text + output_str
+                log_area.document = Document(text=new_text, cursor_position=len(new_text))
+
+                # Also log to file
+                with open(LOG_FILE, "a", encoding="utf-8") as f:
+                    f.write(output_str)
+
+                # Redraw the app
+                app.invalidate()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                tb_str = traceback.format_exc()
+                logging.critical(f"FATAL ERROR in UI renderer task: {e}\n{tb_str}")
+
+    # Start the UI update coroutine as a background task
+    app.create_background_task(update_ui())
 
 
-def main(args):
+async def main(args):
     """The main application entry point."""
     global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, proactive_agent
 
@@ -4143,9 +4132,8 @@ def main(args):
     ipfs_available = ipfs_manager.setup()
     if not ipfs_available:
         terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
+        await ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
-    # This now starts the GPU configuration in the background
     _auto_configure_hardware(console)
 
     network_manager = NetworkManager(console=console, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
@@ -4158,31 +4146,51 @@ def main(args):
     proactive_agent.start()
     exploitation_manager = ExploitationManager(knowledge_base, console)
 
-    # --- Start Core Logic Threads ---
-    user_input_queue = queue.Queue()
-    # Start the simple UI renderer in its own thread. This will now handle all console output.
-    Thread(target=simple_ui_renderer, daemon=True).start()
-    Thread(target=update_tamagotchi_personality, daemon=True).start()
-    Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
-    Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
-    Thread(target=monitor_bluesky_comments, daemon=True).start()
+    # --- Setup Async App and Tasks ---
+    user_input_queue = asyncio.Queue()
+    app = Application(full_screen=True)
 
-    # --- Main Thread becomes the Rendering Loop ---
-    # The initial BBS art and message will be sent to the queue
-    ui_panel_queue.put(BBS_ART)
-    ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
-    time.sleep(3)
+    # --- Start Core Logic as Async Tasks ---
+    # Convert background threads to asyncio tasks
+    def run_in_executor(func, *args):
+        loop = asyncio.get_running_loop()
+        return loop.run_in_executor(None, func, *args)
 
-    # Keep the main thread alive while daemon threads do the work
-    while True:
-        time.sleep(1)
+    tamagotchi_task = asyncio.create_task(run_in_executor(update_tamagotchi_personality))
+    update_checker_task = asyncio.create_task(run_in_executor(_automatic_update_checker, console))
+    bluesky_task = asyncio.create_task(run_in_executor(monitor_bluesky_comments))
+
+    # --- Main Application Tasks ---
+    ui_task = asyncio.create_task(prompt_toolkit_ui_renderer(app, user_input_queue))
+    cognitive_task = asyncio.create_task(cognitive_loop(user_input_queue))
+
+    # --- Initial UI Message ---
+    await ui_panel_queue.put(BBS_ART)
+    await ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
+
+    # Run the prompt_toolkit application
+    await app.run_async()
+
+    # --- Graceful Shutdown ---
+    # This block will be executed when the app exits (e.g., via Ctrl-C)
+    tasks = [ui_task, cognitive_task, tamagotchi_task, update_checker_task, bluesky_task]
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
+    if 'network_manager' in globals() and network_manager: network_manager.stop()
+    if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
+    if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
+    if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
+    if 'llm_server' in globals() and llm_server: llm_server.stop()
 
 
 ipfs_available = False
 
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
-def run_safely():
+async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
@@ -4197,7 +4205,7 @@ def run_safely():
             core.logging.log_event("State migration: Removed obsolete 'autopilot_mode' flag.", "INFO")
             save_state()
 
-        main(args)
+        await main(args)
 
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
@@ -4217,12 +4225,8 @@ def run_safely():
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         if 'llm_server' in globals() and llm_server: llm_server.stop()
         full_traceback = traceback.format_exc()
-        # Use our new, more robust critical event logger
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
-
-        # The git_rollback_and_restart() is removed to allow the self-healing mechanism to work.
-        # The new log_critical_event will queue the error, and the LoveTaskManager will handle it.
-        time.sleep(15) # Give the system a moment before the next cognitive cycle.
+        await asyncio.sleep(15)
 
 
 if __name__ == "__main__":
