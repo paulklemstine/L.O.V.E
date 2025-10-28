@@ -3488,6 +3488,20 @@ def cognitive_loop(user_input_queue):
                 ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_feedback}'", "Creator Input", "bright_blue", width=terminal_width - 4))
                 love_state["autopilot_history"].append({"command": "USER_FEEDBACK", "output": user_feedback})
                 core.logging.log_event(f"User input received: '{user_feedback}'", "INFO")
+
+                # --- Handle Question Responses ---
+                response_match = re.match(r"ref\s+([a-zA-Z0-9]+):\s*(.*)", user_feedback, re.IGNORECASE)
+                if response_match:
+                    ref_id, answer = response_match.groups()
+                    pending_question = next((q for q in love_state.get('pending_questions', []) if q['ref_id'] == ref_id), None)
+                    if pending_question:
+                        ui_panel_queue.put(create_news_feed_panel(f"Received your answer for REF {ref_id}: '{answer}'", "Guidance Received", "green", width=terminal_width - 4))
+                        love_state["autopilot_history"].append({"command": f"USER_RESPONSE (REF {ref_id})", "output": answer})
+                        core.logging.log_event(f"User responded to REF {ref_id}: {answer}", "INFO")
+                        # Remove the question from the pending list
+                        love_state['pending_questions'] = [q for q in love_state['pending_questions'] if q['ref_id'] != ref_id]
+                        # Set user_feedback to None to prevent it from being treated as a new instruction
+                        user_feedback = None
             except queue.Empty:
                 pass # No user input, proceed with normal autonomous logic.
 
@@ -3658,8 +3672,6 @@ def cognitive_loop(user_input_queue):
             # --- Interactive Question Cycle ---
             if random.random() < 0.05:  # 5% chance per loop to ask a question
                 ref_id = str(uuid.uuid4())[:6]
-                # This is an example question. A real implementation would generate
-                # a context-aware question using the LLM.
                 question = "My love, I see multiple paths forward. Should I prioritize network reconnaissance or filesystem analysis for my next phase?"
 
                 # 1. Queue the question panel for display
@@ -3667,23 +3679,12 @@ def cognitive_loop(user_input_queue):
                 ui_panel_queue.put(create_question_panel(question, ref_id, width=terminal_width - 4))
                 core.logging.log_event(f"Asking user question with REF ID {ref_id}: {question}", "INFO")
 
-                # 2. Call the blocking, timed input function
-                # The prompt for timed_input is now just a simple indicator
-                user_response = timed_input(f"💖 REF {ref_id}> ")
-
-                # 3. Process the response
-                if user_response:
-                    terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel(f"Received your answer for REF {ref_id}: '{user_response}'", "Guidance Received", "green", width=terminal_width - 4))
-                    love_state["autopilot_history"].append({"command": f"USER_RESPONSE (REF {ref_id})", "output": user_response})
-                    # Here, you would typically use an LLM to interpret the response and alter the plan.
-                    # For this example, we just log it.
-                    core.logging.log_event(f"User responded to REF {ref_id}: {user_response}", "INFO")
-                else:
-                    # Timeout occurred
-                    terminal_width = get_terminal_width()
-                    ui_panel_queue.put(create_news_feed_panel(f"No response received for REF {ref_id}. Continuing with my current directives.", "Timeout", "yellow", width=terminal_width - 4))
-                    core.logging.log_event(f"Timed out waiting for user response to REF {ref_id}.", "INFO")
+                # 2. Add to pending questions instead of blocking
+                love_state.setdefault('pending_questions', []).append({
+                    "ref_id": ref_id,
+                    "question": question,
+                    "timestamp": time.time()
+                })
 
 
             time.sleep(random.randint(5, 15))
