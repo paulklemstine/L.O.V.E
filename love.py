@@ -37,7 +37,7 @@ from core.graph_manager import GraphDataManager
 # This queue will hold UI panels to be displayed by the main rendering thread.
 # Using an asyncio Queue for the new async UI
 ui_panel_queue = asyncio.Queue()
-core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
+# core.logging.initialize_logging_with_ui_queue(ui_panel_queue) # MOVED to main() to prevent pre-loop logging errors
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
@@ -3866,22 +3866,26 @@ VRAM_MODEL_MAP = [
 ]
 
 
-def _background_gpu_setup(console):
+def _background_gpu_setup(console, main_loop):
     """
     Runs in a background thread to detect GPU, download model, and initialize
     the local LLM instance without blocking startup.
     """
+    def _queue_panel(panel):
+        """Helper to safely queue a panel from this background thread."""
+        if main_loop and main_loop.is_running():
+            main_loop.call_soon_threadsafe(ui_panel_queue.put_nowait, panel)
+        else:
+            # Fallback for when the loop isn't running (e.g., during shutdown)
+            core.logging.log_event(f"Event loop not available to queue panel: {panel.title}", "WARNING")
+
     if _TEMP_CAPS.gpu_type == "none":
         core.logging.log_event("No GPU detected by initial capability scan. Skipping background GPU setup.", "INFO")
         return
     global love_state, local_llm_instance, llm_server
     terminal_width = get_terminal_width()
     panel = create_news_feed_panel("Local LLM: Initializing...", "Hardware Setup", "yellow", width=terminal_width - 4)
-    try:
-        loop = asyncio.get_running_loop()
-        loop.call_soon_threadsafe(ui_panel_queue.put_nowait, panel)
-    except RuntimeError:
-        core.logging.log_event("Event loop not running, could not queue GPU setup panel.", "WARNING")
+    _queue_panel(panel)
 
     try:
         core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
@@ -4025,12 +4029,12 @@ def _background_gpu_setup(console):
 async def _auto_configure_hardware(console):
     """
     Runs the GPU hardware auto-configuration in a thread pool executor to avoid
-    blocking the main asyncio event loop.
+    blocking the main asyncio event loop. It passes the main loop to the thread.
     """
     core.logging.log_event("Starting GPU hardware configuration in thread pool executor.", "INFO")
     loop = asyncio.get_running_loop()
     # Use run_in_executor to run the blocking function in a separate thread
-    await loop.run_in_executor(None, _background_gpu_setup, console)
+    await loop.run_in_executor(None, _background_gpu_setup, console, loop)
     core.logging.log_event("Completed GPU hardware configuration.", "INFO")
 
 
@@ -4149,6 +4153,9 @@ async def prompt_toolkit_ui_renderer(app, user_input_queue):
 async def main(args):
     """The main application entry point."""
     global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, proactive_agent
+    # --- Initialize Logging with UI Queue ---
+    # This MUST be done after the event loop has started.
+    core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
 
     # --- Initialize Managers and Services ---
     _verify_creator_instance(console)

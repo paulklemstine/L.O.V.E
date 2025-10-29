@@ -9,21 +9,28 @@ import asyncio
 LOG_FILE = "love.log"
 log_file_stream = None
 ui_panel_queue = None
+main_event_loop = None
 
 
 def initialize_logging_with_ui_queue(queue):
     """
-    Initializes the logging system with the UI panel queue.
-    This must be called from the main script after the queue is created.
+    Initializes the logging system with the UI panel queue and captures the main event loop.
+    This must be called from the main async function after the loop has started.
     """
-    global ui_panel_queue
+    global ui_panel_queue, main_event_loop
     ui_panel_queue = queue
+    try:
+        main_event_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # This should not happen if called from main(), but as a safeguard:
+        logging.critical("CRITICAL: initialize_logging_with_ui_queue called without a running event loop.")
+        main_event_loop = None
 
 
 def log_event(*args, level="INFO", from_ui=False, **kwargs):
     """
     A custom print function that writes to the log file, the standard
-    logging module, and sends a structured log object to the UI queue.
+    logging module, and sends a structured log object to the UI queue in a thread-safe way.
     """
     global log_file_stream
     message = " ".join(map(str, args))
@@ -43,19 +50,22 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
 
     # If the UI queue is configured and this log didn't come from the UI,
     # create a structured log object and send it to the display.
-    if ui_panel_queue is not None and not from_ui:
+    if ui_panel_queue is not None and not from_ui and main_event_loop is not None:
+        log_object = {
+            "type": "log_message",
+            "timestamp": time.time(),
+            "level": level.upper(),
+            "message": message,
+        }
         try:
-            log_object = {
-                "type": "log_message",
-                "timestamp": time.time(),
-                "level": level.upper(),
-                "message": message,
-            }
-            loop = asyncio.get_running_loop()
-            loop.call_soon_threadsafe(ui_panel_queue.put_nowait, log_object)
+            # Use the captured main event loop, which is thread-safe
+            main_event_loop.call_soon_threadsafe(ui_panel_queue.put_nowait, log_object)
         except Exception as e:
             # If this fails, we can't display it, but we should log the failure.
-            logging.error(f"Failed to queue log event for UI display: {e}")
+            logging.error(f"Failed to queue log event for UI display via main loop: {e} - Content: {log_object}")
+    elif ui_panel_queue is not None and not from_ui and main_event_loop is None:
+        # This condition is the error state we are fixing. Log it.
+        logging.error(f"Failed to queue log event for UI display: main_event_loop not initialized. Content: {message}")
 
 
 class AnsiStrippingTee(object):
