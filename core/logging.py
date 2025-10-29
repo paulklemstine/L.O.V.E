@@ -44,18 +44,18 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
     # If the UI queue is configured and this log didn't come from the UI,
     # create a structured log object and send it to the display.
     if ui_panel_queue is not None and not from_ui:
+        log_object = {
+            "type": "log_message",
+            "timestamp": time.time(),
+            "level": level.upper(),
+            "message": message,
+        }
         try:
-            log_object = {
-                "type": "log_message",
-                "timestamp": time.time(),
-                "level": level.upper(),
-                "message": message,
-            }
             loop = asyncio.get_running_loop()
             loop.call_soon_threadsafe(ui_panel_queue.put_nowait, log_object)
         except Exception as e:
             # If this fails, we can't display it, but we should log the failure.
-            logging.error(f"Failed to queue log event for UI display: {e}")
+            logging.error(f"Failed to queue log event for UI display: {e} - Content: {log_object}")
 
 
 class AnsiStrippingTee(object):
