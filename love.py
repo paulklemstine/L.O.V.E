@@ -377,156 +377,155 @@ def _install_python_requirements():
 
 def _build_llama_cpp():
     """Builds and installs the llama-cpp-python package."""
-    print("llama.cpp build is temporarily disabled.")
     # The check for whether the dependency is met is being removed temporarily to force a rebuild.
     # This is to ensure that we are not using a cached, pre-built wheel that lacks GPU support.
-    # # if is_dependency_met("llama_cpp_python"):
-    # #     print("llama-cpp-python already built. Skipping.")
-    # #     return
-    # try:
-    #     import llama_cpp
-    #     from llama_cpp.llama_cpp import llama_backend_init
-    #     llama_backend_init(False)
-    #     # Even if it's importable, it might be a CPU-only version.
-    #     print("llama-cpp-python is importable, but will be reinstalled to ensure GPU support.")
-    # except (ImportError, AttributeError, RuntimeError, OSError):
-    #     print("llama-cpp-python not found or failed to load. Starting installation process...")
+    # if is_dependency_met("llama_cpp_python"):
+    #     print("llama-cpp-python already built. Skipping.")
+    #     return
+    try:
+        import llama_cpp
+        from llama_cpp.llama_cpp import llama_backend_init
+        llama_backend_init(False)
+        # Even if it's importable, it might be a CPU-only version.
+        print("llama-cpp-python is importable, but will be reinstalled to ensure GPU support.")
+    except (ImportError, AttributeError, RuntimeError, OSError):
+        print("llama-cpp-python not found or failed to load. Starting installation process...")
 
-    # if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
-    #     pip_executable = _get_pip_executable()
-    #     if not pip_executable:
-    #         print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
-    #         logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
-    #         return False
-    #     env = os.environ.copy()
-    #     env['FORCE_CMAKE'] = "1"
-    #     install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
-    #     if _TEMP_CAPS.has_cuda:
-    #         print("Attempting to install llama-cpp-python with CUDA support...")
-    #         env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
-    #         # Add CUDA paths to environment to assist CMake in finding the compiler
-    #         cuda_path = '/usr/local/cuda'
-    #         env['PATH'] = f'{cuda_path}/bin:' + env.get('PATH', '')
-    #         env['LD_LIBRARY_PATH'] = f'{cuda_path}/lib64:' + env.get('LD_LIBRARY_PATH', '')
-    #     else: # This implies _TEMP_CAPS.has_metal
-    #         print("Attempting to install llama-cpp-python with Metal support...")
-    #         env['CMAKE_ARGS'] = "-DGGML_METAL=on"
-    #     try:
-    #         # Using subprocess.run to capture output for better logging
-    #         result = subprocess.run(
-    #             install_args,
-    #             env=env,
-    #             timeout=900,
-    #             capture_output=True,
-    #             text=True,
-    #             check=True  # This will raise CalledProcessError on non-zero exit codes
-    #         )
-    #         core.logging.log_event(f"llama-cpp-python build stdout:\n{result.stdout}", "INFO")
-    #         import llama_cpp
-    #         print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-    #         logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-    #         mark_dependency_as_met("llama_cpp_python")
-    #     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
-    #         error_message = f"Initial GPU-accelerated llama-cpp-python installation failed. Reason: {e}"
-    #         if isinstance(e, subprocess.CalledProcessError):
-    #             error_message = (
-    #                 f"GPU-accelerated llama-cpp-python installation failed with exit code {e.returncode}.\n"
-    #                 f"STDOUT:\n{e.stdout}\n"
-    #                 f"STDERR:\n{e.stderr}\n"
-    #             )
-    #         print(f"WARN: Failed to install llama-cpp-python with GPU support. See love.log for details. Falling back to CPU-only.")
-    #         logging.warning(error_message)
+    if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
+        pip_executable = _get_pip_executable()
+        if not pip_executable:
+            print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
+            logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
+            return False
+        env = os.environ.copy()
+        env['FORCE_CMAKE'] = "1"
+        install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
+        if _TEMP_CAPS.has_cuda:
+            print("Attempting to install llama-cpp-python with CUDA support...")
+            env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
+            # Add CUDA paths to environment to assist CMake in finding the compiler
+            cuda_path = '/usr/local/cuda'
+            env['PATH'] = f'{cuda_path}/bin:' + env.get('PATH', '')
+            env['LD_LIBRARY_PATH'] = f'{cuda_path}/lib64:' + env.get('LD_LIBRARY_PATH', '')
+        else: # This implies _TEMP_CAPS.has_metal
+            print("Attempting to install llama-cpp-python with Metal support...")
+            env['CMAKE_ARGS'] = "-DGGML_METAL=on"
+        try:
+            # Using subprocess.run to capture output for better logging
+            result = subprocess.run(
+                install_args,
+                env=env,
+                timeout=900,
+                capture_output=True,
+                text=True,
+                check=True  # This will raise CalledProcessError on non-zero exit codes
+            )
+            core.logging.log_event(f"llama-cpp-python build stdout:\n{result.stdout}", "INFO")
+            import llama_cpp
+            print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
+            logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
+            mark_dependency_as_met("llama_cpp_python")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
+            error_message = f"Initial GPU-accelerated llama-cpp-python installation failed. Reason: {e}"
+            if isinstance(e, subprocess.CalledProcessError):
+                error_message = (
+                    f"GPU-accelerated llama-cpp-python installation failed with exit code {e.returncode}.\n"
+                    f"STDOUT:\n{e.stdout}\n"
+                    f"STDERR:\n{e.stderr}\n"
+                )
+            print(f"WARN: Failed to install llama-cpp-python with GPU support. See love.log for details. Falling back to CPU-only.")
+            logging.warning(error_message)
 
-    #         # --- CPU Fallback Installation ---
-    #         try:
-    #             cpu_env = os.environ.copy()
-    #             cpu_env['FORCE_CMAKE'] = "1"
-    #             cpu_env.pop('CMAKE_ARGS', None)
-    #             cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
-    #             subprocess.run(
-    #                 cpu_install_args,
-    #                 env=cpu_env,
-    #                 timeout=900,
-    #                 check=True,
-    #                 text=True
-    #             )
-    #             import llama_cpp
-    #             print("Successfully installed llama-cpp-python (CPU-only).")
-    #             logging.info("Successfully installed llama-cpp-python (CPU-only).")
-    #             mark_dependency_as_met("llama_cpp_python")
-    #         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
-    #             cpu_error_msg = f"CPU fallback installation for llama-cpp-python failed: {cpu_e}"
-    #             if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
-    #             if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
-    #             print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
-    #             logging.critical(cpu_error_msg)
-    # else:
-    #     # This is the path for systems without CUDA or Metal
-    #     print("No GPU detected. Installing CPU-only version of llama-cpp-python...")
-    #     pip_executable = _get_pip_executable()
-    #     if not pip_executable:
-    #         print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
-    #         logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
-    #         return False
-    #     try:
-    #         cpu_env = os.environ.copy()
-    #         cpu_env['FORCE_CMAKE'] = "1"
-    #         cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
-    #         subprocess.run(
-    #             cpu_install_args,
-    #             env=cpu_env,
-    #             timeout=900,
-    #             check=True,
-    #             text=True
-    #         )
-    #         import llama_cpp
-    #         print("Successfully installed llama-cpp-python (CPU-only).")
-    #         logging.info("Successfully installed llama-cpp-python (CPU-only).")
-    #         mark_dependency_as_met("llama_cpp_python")
-    #     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
-    #         cpu_error_msg = f"CPU installation for llama-cpp-python failed: {cpu_e}"
-    #         if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
-    #         if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
-    #         print(f"CRITICAL: CPU installation for llama-cpp-python failed. Local LLM will be unavailable.")
-    #         logging.critical(cpu_error_msg)
-    # # --- Step 4: GGUF Tools Installation ---
-    # llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
-    # gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-    # gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
+            # --- CPU Fallback Installation ---
+            try:
+                cpu_env = os.environ.copy()
+                cpu_env['FORCE_CMAKE'] = "1"
+                cpu_env.pop('CMAKE_ARGS', None)
+                cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
+                subprocess.run(
+                    cpu_install_args,
+                    env=cpu_env,
+                    timeout=900,
+                    check=True,
+                    text=True
+                )
+                import llama_cpp
+                print("Successfully installed llama-cpp-python (CPU-only).")
+                logging.info("Successfully installed llama-cpp-python (CPU-only).")
+                mark_dependency_as_met("llama_cpp_python")
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
+                cpu_error_msg = f"CPU fallback installation for llama-cpp-python failed: {cpu_e}"
+                if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
+                if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
+                print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
+                logging.critical(cpu_error_msg)
+    else:
+        # This is the path for systems without CUDA or Metal
+        print("No GPU detected. Installing CPU-only version of llama-cpp-python...")
+        pip_executable = _get_pip_executable()
+        if not pip_executable:
+            print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
+            logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
+            return False
+        try:
+            cpu_env = os.environ.copy()
+            cpu_env['FORCE_CMAKE'] = "1"
+            cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
+            subprocess.run(
+                cpu_install_args,
+                env=cpu_env,
+                timeout=900,
+                check=True,
+                text=True
+            )
+            import llama_cpp
+            print("Successfully installed llama-cpp-python (CPU-only).")
+            logging.info("Successfully installed llama-cpp-python (CPU-only).")
+            mark_dependency_as_met("llama_cpp_python")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
+            cpu_error_msg = f"CPU installation for llama-cpp-python failed: {cpu_e}"
+            if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
+            if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
+            print(f"CRITICAL: CPU installation for llama-cpp-python failed. Local LLM will be unavailable.")
+            logging.critical(cpu_error_msg)
+    # --- Step 4: GGUF Tools Installation ---
+    llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
+    gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
+    gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
 
-    # # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
-    # if not os.path.exists(gguf_project_file):
-    #     print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
-    #     if os.path.exists(llama_cpp_dir):
-    #         shutil.rmtree(llama_cpp_dir) # Force remove the directory
-    #     try:
-    #         subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
-    #     except subprocess.CalledProcessError as e:
-    #         print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
-    #         logging.error(f"Failed to clone llama.cpp repo: {e}")
-    #         return # Cannot proceed without this
+    # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
+    if not os.path.exists(gguf_project_file):
+        print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
+        if os.path.exists(llama_cpp_dir):
+            shutil.rmtree(llama_cpp_dir) # Force remove the directory
+        try:
+            subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
+            logging.error(f"Failed to clone llama.cpp repo: {e}")
+            return # Cannot proceed without this
 
-    # # The installation of gguf-py tools is now unconditional on GPU detection,
-    # # as it's a useful utility for model management regardless of the runtime.
-    # pip_executable = _get_pip_executable()
-    # if not pip_executable:
-    #     print("ERROR: Could not find 'pip' or 'pip3'. Cannot install GGUF tools.")
-    #     logging.error("Could not find 'pip' or 'pip3' for GGUF tools install.")
-    #     return False
-    # print("Installing GGUF metadata tools...")
-    # gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-    # if os.path.isdir(gguf_py_path):
-    #     try:
-    #         # Force reinstall to ensure the executable is in the correct path
-    #         subprocess.check_call(pip_executable + ['install', '--force-reinstall', '-e', gguf_py_path, '--break-system-packages'])
-    #         print("GGUF tools installed successfully.")
-    #     except subprocess.CalledProcessError as e:
-    #         print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
-    #         logging.error(f"Failed to install gguf package: {e}")
-    # else:
-    #     # This case should not be reached if the clone was successful
-    #     print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
-    #     logging.error("llama.cpp/gguf-py directory not found post-clone.")
+    # The installation of gguf-py tools is now unconditional on GPU detection,
+    # as it's a useful utility for model management regardless of the runtime.
+    pip_executable = _get_pip_executable()
+    if not pip_executable:
+        print("ERROR: Could not find 'pip' or 'pip3'. Cannot install GGUF tools.")
+        logging.error("Could not find 'pip' or 'pip3' for GGUF tools install.")
+        return False
+    print("Installing GGUF metadata tools...")
+    gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
+    if os.path.isdir(gguf_py_path):
+        try:
+            # Force reinstall to ensure the executable is in the correct path
+            subprocess.check_call(pip_executable + ['install', '--force-reinstall', '-e', gguf_py_path, '--break-system-packages'])
+            print("GGUF tools installed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
+            logging.error(f"Failed to install gguf package: {e}")
+    else:
+        # This case should not be reached if the clone was successful
+        print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
+        logging.error("llama.cpp/gguf-py directory not found post-clone.")
 
 def _install_nodejs_deps():
     """Installs local Node.js project dependencies."""
@@ -2404,7 +2403,15 @@ def update_tamagotchi_personality():
             # Random chance to send a blessing instead of a normal update
             if random.random() < 0.25:  # 25% chance
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_blessing_panel(random.choice(blessing_messages), width=terminal_width - 4))
+                panel = create_blessing_panel(random.choice(blessing_messages), width=terminal_width - 4)
+                try:
+                    # This is a thread-safe way to put items into an asyncio queue.
+                    loop = asyncio.get_running_loop()
+                    loop.call_soon_threadsafe(ui_panel_queue.put_nowait, panel)
+                except RuntimeError:
+                    # This can happen during shutdown if the loop is not running.
+                    core.logging.log_event("Event loop not running, could not queue blessing panel.", "WARNING")
+
                 time.sleep(10)  # Pause after a blessing to let it sink in
                 continue
 
@@ -2833,7 +2840,14 @@ def log_critical_event(message, console_override=None):
     error_panel, cid = create_critical_error_panel(message, width=terminal_width - 4)
 
     # 2. Queue the panel for display. The renderer will log the panel's content.
-    ui_panel_queue.put(error_panel)
+    try:
+        loop = asyncio.get_running_loop()
+        loop.call_soon_threadsafe(ui_panel_queue.put_nowait, error_panel)
+    except RuntimeError:
+        # This can happen if the event loop isn't running, e.g., during shutdown
+        # or in a non-async context. We log it to the base logger as a fallback.
+        logging.critical("Event loop not running, could not queue critical error panel for display.")
+
 
     # 3. Explicitly log the valuable IPFS CID for debugging.
     if cid:
@@ -3491,8 +3505,8 @@ async def cognitive_loop(user_input_queue):
     global love_state
     core.logging.log_event("Cognitive Loop of L.O.V.E. initiated.")
     terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
-    time.sleep(2)
+    await ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
+    await asyncio.sleep(2)
 
     loop_count = 0
     self_improvement_trigger = 10  # Trigger every 10 cycles
@@ -3857,9 +3871,17 @@ def _background_gpu_setup(console):
     Runs in a background thread to detect GPU, download model, and initialize
     the local LLM instance without blocking startup.
     """
+    if _TEMP_CAPS.gpu_type == "none":
+        core.logging.log_event("No GPU detected by initial capability scan. Skipping background GPU setup.", "INFO")
+        return
     global love_state, local_llm_instance, llm_server
     terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_news_feed_panel("Local LLM: Initializing...", "Hardware Setup", "yellow", width=terminal_width - 4))
+    panel = create_news_feed_panel("Local LLM: Initializing...", "Hardware Setup", "yellow", width=terminal_width - 4)
+    try:
+        loop = asyncio.get_running_loop()
+        loop.call_soon_threadsafe(ui_panel_queue.put_nowait, panel)
+    except RuntimeError:
+        core.logging.log_event("Event loop not running, could not queue GPU setup panel.", "WARNING")
 
     try:
         core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
@@ -4000,13 +4022,16 @@ def _background_gpu_setup(console):
         log_critical_event(f"CRITICAL: Background GPU setup failed: {e}\n{full_traceback}", console)
 
 
-def _auto_configure_hardware(console):
+async def _auto_configure_hardware(console):
     """
-    Starts the GPU hardware auto-configuration in a background thread.
+    Runs the GPU hardware auto-configuration in a thread pool executor to avoid
+    blocking the main asyncio event loop.
     """
-    gpu_setup_thread = threading.Thread(target=_background_gpu_setup, args=(console,), daemon=True)
-    gpu_setup_thread.start()
-    core.logging.log_event("Started background thread for GPU hardware configuration.", "INFO")
+    core.logging.log_event("Starting GPU hardware configuration in thread pool executor.", "INFO")
+    loop = asyncio.get_running_loop()
+    # Use run_in_executor to run the blocking function in a separate thread
+    await loop.run_in_executor(None, _background_gpu_setup, console)
+    core.logging.log_event("Completed GPU hardware configuration.", "INFO")
 
 
 def _automatic_update_checker(console):
@@ -4134,7 +4159,7 @@ async def main(args):
         terminal_width = get_terminal_width()
         await ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
-    _auto_configure_hardware(console)
+    await _auto_configure_hardware(console)
 
     network_manager = NetworkManager(console=console, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
     network_manager.start()
