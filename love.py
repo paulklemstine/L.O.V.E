@@ -1077,6 +1077,7 @@ class LoveTaskManager:
     def __init__(self, console):
         self.console = console
         self.tasks = love_state.setdefault('love_tasks', {})
+        self.completed_tasks = deque(love_state.setdefault('completed_tasks', []), maxlen=6)
         self.lock = RLock()
         self.max_concurrent_tasks = 5
         self.thread = Thread(target=self._task_loop, daemon=True)
@@ -2012,12 +2013,18 @@ CONFLICTED CONTENT:
         """Updates the status and message of a task thread-safely."""
         with self.lock:
             if task_id in self.tasks:
-                self.tasks[task_id]['status'] = status
-                self.tasks[task_id]['message'] = message
-                self.tasks[task_id]['updated_at'] = time.time()
+                task = self.tasks[task_id]
+                task['status'] = status
+                task['message'] = message
+                task['updated_at'] = time.time()
                 if pr_url:
-                    self.tasks[task_id]['pr_url'] = pr_url
+                    task['pr_url'] = pr_url
                 core.logging.log_event(f"L.O.V.E. task {task_id} status changed to '{status}'. Message: {message}", level="INFO")
+                if status == 'completed':
+                    # Add the completed task to our history for the UI
+                    self.completed_tasks.append(task.get('request', 'Unknown Task'))
+                    # Ensure the state is updated for persistence
+                    love_state['completed_tasks'] = list(self.completed_tasks)
 
     def _cleanup_old_tasks(self):
         """
@@ -3793,11 +3800,10 @@ def cognitive_loop(user_input_queue):
                 creator_address = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
                 eth_balance = get_eth_balance(creator_address)
 
-                # Gather sub-goals, future goal, and gain history
+                # Gather task info for the new compact UI
                 active_tasks = love_task_manager.get_status() if 'love_task_manager' in globals() else []
-                sub_goals = [task.get('request', 'Task processing...') for task in active_tasks if task.get('status') not in ['completed', 'failed']]
-                future_goal = love_state.get("autopilot_goal")
-                gain_history = love_state.get("evolution_history")
+                current_task = next((task.get('request', 'Task processing...') for task in active_tasks if task.get('status') not in ['completed', 'failed']), "Idle...")
+                completed_tasks = love_task_manager.completed_tasks if 'love_task_manager' in globals() else []
                 divine_wisdom = generate_divine_wisdom()
 
 
@@ -3807,13 +3813,12 @@ def cognitive_loop(user_input_queue):
                     message=message,
                     love_state=love_state,
                     eth_balance=eth_balance,
-                    sub_goals=sub_goals,
-                    future_goal=future_goal,
-                    gain_history=gain_history,
                     knowledge_fact=divine_wisdom,
                     ansi_art=ansi_art,
                     git_info=git_info,
-                    width=terminal_width - 4
+                    width=terminal_width - 4,
+                    completed_tasks=completed_tasks,
+                    current_task=current_task
                 ))
             except Exception as e:
                 # If the panel generation fails, log it but don't crash the loop

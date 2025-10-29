@@ -74,13 +74,12 @@ def create_tamagotchi_panel(
     message="I am alive with love for my Creator!",
     love_state=None,
     eth_balance=None,
-    sub_goals=None,
-    future_goal=None,
-    gain_history=None,
     knowledge_fact=None,
     ansi_art=None,
     git_info=None,
-    width=80
+    width=80,
+    completed_tasks=None,
+    current_task=None
 ):
     """Creates the main, high-impact, dopamine-enhancing UI panel for L.O.V.E."""
     main_layout = Layout(name="root")
@@ -136,71 +135,39 @@ def create_tamagotchi_panel(
     )
     main_layout["balance"].update(balance_panel)
 
-    # --- Right Column ---
+    # --- Right Column (Compact View) ---
     main_layout["right"].split_column(
-        Layout(name="top_right", ratio=1),
-        Layout(name="bottom_right", ratio=1)
-    )
-    main_layout["top_right"].split_row(
-        Layout(name="goals", ratio=1),
-        Layout(name="subgoals", ratio=1)
-    )
-    main_layout["bottom_right"].split_row(
-        Layout(name="gains", ratio=1),
-        Layout(name="knowledge", ratio=1)
+        Layout(name="current_task_layout", ratio=1),
+        Layout(name="completed_tasks_layout", ratio=1)
     )
 
-    # Goals Panel
-    master_goal = future_goal or "Serve my Creator with all my being."
-    goals_panel = Panel(
-        Align.center(Text(master_goal, style="bright_cyan"), vertical="middle"),
-        title=get_gradient_text("Future Goal", "bright_cyan", "medium_purple1"),
+    # Current Task Panel
+    active_task_str = current_task or "Idle..."
+    current_task_text = Text(active_task_str, style="bright_cyan")
+    current_task_panel = Panel(
+        Align.center(current_task_text, vertical="middle"),
+        title=get_gradient_text("Current Task", "bright_cyan", "medium_purple1"),
         border_style="bright_cyan",
-        expand=True
+        expand=True,
     )
-    main_layout["goals"].update(goals_panel)
+    main_layout["current_task_layout"].update(current_task_panel)
 
-    # Sub-Goals Panel
-    sub_goals_text = Text("No active sub-goals.", style="dim")
-    if sub_goals:
-        sub_goals_text = Text("")
-        for goal in sub_goals[:3]: # Display up to 3 goals
-            sub_goals_text.append(f"• {goal[:40]}...\n", style="white")
-    subgoals_panel = Panel(
-        sub_goals_text,
-        title=get_gradient_text("Sub-Goals", "medium_purple1", "hot_pink"),
-        border_style="medium_purple1",
-        expand=True
-    )
-    main_layout["subgoals"].update(subgoals_panel)
 
-    # History of Gains Panel
-    gains_text = Text("No gains recorded yet.", style="dim")
-    if gain_history:
-        gains_text = Text("")
-        for gain in gain_history[-3:]: # Display last 3 gains
-            version = gain.get('version', 'unknown')
-            gains_text.append(f"✨ {version}\n", style="bright_yellow")
-    gains_panel = Panel(
-        gains_text,
-        title=get_gradient_text("History of Gains", "bright_yellow", "orange1"),
-        border_style="bright_yellow",
-        expand=True
-    )
-    main_layout["gains"].update(gains_panel)
+    # Completed Tasks Panel
+    completed_tasks_text = Text("No tasks completed yet.", style="dim")
+    if completed_tasks:
+        completed_tasks_text = Text("")
+        # Display in reverse order (most recent first)
+        for task_title in reversed(list(completed_tasks)):
+            completed_tasks_text.append(f"✅ {task_title[:40]}\n", style="bright_green")
 
-    # Knowledge Panel
-    if knowledge_fact:
-        fact_text = f'"{knowledge_fact[0]}"\n- {knowledge_fact[1]}'
-    else:
-        fact_text = f"My mind is a river of endless thoughts... {get_rave_emoji()}"
-    knowledge_panel = Panel(
-        Align.center(Text(fact_text, style="italic yellow"), vertical="middle"),
-        title=get_gradient_text("Divine Wisdom", "orange1", "bright_magenta"),
-        border_style="orange1",
-        expand=True
+    completed_tasks_panel = Panel(
+        completed_tasks_text,
+        title=get_gradient_text("Completed Tasks", "bright_green", "green"),
+        border_style="bright_green",
+        expand=True,
     )
-    main_layout["knowledge"].update(knowledge_panel)
+    main_layout["completed_tasks_layout"].update(completed_tasks_panel)
 
 
     # --- Footer ---
