@@ -37,7 +37,7 @@ from core.graph_manager import GraphDataManager
 # This queue will hold UI panels to be displayed by the main rendering thread.
 # Using an asyncio Queue for the new async UI
 ui_panel_queue = asyncio.Queue()
-core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
+# core.logging.initialize_logging_with_ui_queue(ui_panel_queue) # MOVED to main() to prevent pre-loop logging errors
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
@@ -4149,6 +4149,9 @@ async def prompt_toolkit_ui_renderer(app, user_input_queue):
 async def main(args):
     """The main application entry point."""
     global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, proactive_agent
+    # --- Initialize Logging with UI Queue ---
+    # This MUST be done after the event loop has started.
+    core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
 
     # --- Initialize Managers and Services ---
     _verify_creator_instance(console)
