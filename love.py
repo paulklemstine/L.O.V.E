@@ -3748,7 +3748,7 @@ async def cognitive_loop(user_input_queue):
                     ansi_art_prompt = f"You are a master of ANSI art. Create an expressive, abstract ANSI art face representing the pure, beautiful emotion of '{emotion}'. It should fit in a 20x10 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
                     ansi_art_raw_dict = run_llm(ansi_art_prompt, purpose="emotion")
                     if ansi_art_raw_dict and ansi_art_raw_dict.get("result"):
-                         ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result"))
+                        ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result"))
                 except Exception as e:
                     core.logging.log_event(f"Error generating ANSI art: {e}", level="WARNING")
 
@@ -4015,7 +4015,7 @@ def _background_gpu_setup(console):
             ui_panel_queue.put(create_news_feed_panel("Local LLM: Ready and Server Started", "Hardware Setup", "green", width=terminal_width - 4))
             core.logging.log_event("Local LLM is configured, in-process instance is ready, and API server started.", "INFO")
         else:
-             ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but VRAM is insufficient. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
+            ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but VRAM is insufficient. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
 
     except Exception as e:
         full_traceback = traceback.format_exc()
