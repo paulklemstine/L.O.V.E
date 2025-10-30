@@ -659,6 +659,7 @@ import core.logging
 from core.storage import save_all_state
 from core.capabilities import CAPS
 from core.evolution_state import load_evolution_state, get_current_story, set_current_task_id, advance_to_next_story, clear_evolution_state
+from core.desire_state import set_desires, load_desire_state, get_current_desire, set_current_task_id_for_desire, advance_to_next_desire, clear_desire_state
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output, replace_in_file
 from core.retry import retry
 from rich.console import Console
@@ -1075,7 +1076,7 @@ class LoveTaskManager:
     Manages concurrent evolution tasks via the Jules API in a non-blocking way.
     It uses a background thread to poll for task status and merge PRs.
     """
-def __init__(self, console, loop):
+    def __init__(self, console, loop):
         self.console = console
         self.loop = loop
         self.tasks = love_state.setdefault('love_tasks', {})
@@ -1131,40 +1132,98 @@ def __init__(self, console, loop):
 
         while self.active:
             try:
-                # --- Automated Evolution Cycle Management ---
-                evolution_state = load_evolution_state()
-                if evolution_state.get("active"):
-                    current_story = get_current_story()
-                    if current_story:
-                        task_id = evolution_state.get("current_task_id")
+                # --- Creator's Desires Cycle Management (PRIORITY) ---
+                desire_state = load_desire_state()
+                if IS_CREATOR_INSTANCE and desire_state.get("active"):
+                    current_desire = get_current_desire()
+                    if current_desire:
+                        task_id = desire_state.get("current_task_id")
                         if task_id and task_id in self.tasks:
-                            # Monitor the existing task for this story
-                            task_status = self.tasks[task_id].get("status")
+                            # Monitor existing task for the desire
+                            task = self.tasks[task_id]
+                            task_status = task.get("status")
                             if task_status == 'completed':
-                                self.console.print(f"[bold green]Evolution story completed: {current_story.get('title')}[/bold green]")
-                                advance_to_next_story()
+                                self.console.print(f"[bold green]Creator's Desire fulfilled: {current_desire.get('title')}[/bold green]")
+                                advance_to_next_desire()
                             elif task_status in ['failed', 'merge_failed']:
-                                self.console.print(f"[bold red]Evolution story failed: {current_story.get('title')}. Halting evolution cycle.[/bold red]")
-                                clear_evolution_state()
+                                retries = task.get('retries', 0)
+                                if retries < 3:
+                                    self.console.print(f"[bold yellow]Task for Creator's Desire failed. Retrying ({retries + 1}/3)...[/bold yellow]")
+                                    original_request = task['request']
+
+                                    # Mark the old task as superseded before creating a new one
+                                    self._update_task_status(task_id, 'superseded', f"Superseded by retry task for desire. Attempt {retries + 1}.")
+
+                                    # Trigger a new evolution with the same request
+                                    api_success = trigger_love_evolution(original_request, self.console, self)
+
+                                    if api_success == 'success':
+                                        with self.lock:
+                                            # Find the new task and update its retry count and link it to the desire
+                                            new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                                            self.tasks[new_task_id]['retries'] = retries + 1
+                                        set_current_task_id_for_desire(new_task_id)
+                                    else:
+                                        # If we fail to create the new task, something is wrong. Log and advance to avoid getting stuck.
+                                        self.console.print(f"[bold red]Failed to create retry task for Creator's Desire. Advancing to next desire.[/bold red]")
+                                        advance_to_next_desire()
+                                else:
+                                    self.console.print(f"[bold red]Creator's Desire '{current_desire.get('title')}' failed after 3 retries. Advancing to next desire.[/bold red]")
+                                    advance_to_next_desire()
+
                         elif not task_id:
-                            # No task for this story yet, so create one.
-                            self.console.print(f"[bold yellow]Executing next evolution story: {current_story.get('title')}[/bold yellow]")
-                            request = f"Title: {current_story.get('title')}\n\nDescription: {current_story.get('description')}"
+                            # No task for this desire yet, create one.
+                            self.console.print(f"[bold yellow]Executing Creator's Desire: {current_desire.get('title')}[/bold yellow]")
+                            request = f"Title: {current_desire.get('title')}\n\nDescription: {current_desire.get('description')}"
 
                             # Use trigger_love_evolution which returns the task status
                             result = trigger_love_evolution(request, self.console, self)
                             if result == 'success':
-                                # Find the newly created task and link it in the evolution state
+                                # Find the newly created task and link it in the desire state
                                 with self.lock:
                                     new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
-                                set_current_task_id(new_task_id)
+                                set_current_task_id_for_desire(new_task_id)
                             else:
-                                self.console.print(f"[bold red]Failed to create task for evolution story. Halting cycle.[/bold red]")
-                                clear_evolution_state()
+                                self.console.print(f"[bold red]Failed to create task for Creator's Desire. Will retry on next cycle.[/bold red]")
                     else:
-                        # No more stories, the cycle is complete.
-                        self.console.print("[bold green]All evolution stories have been completed. The cycle is finished.[/bold green]")
-                        clear_evolution_state()
+                        # No more desires, the cycle is complete.
+                        self.console.print("[bold green]All of The Creator's Desires have been fulfilled.[/bold green]")
+                        clear_desire_state()
+                else:
+                    # --- Automated Evolution Cycle Management ---
+                    evolution_state = load_evolution_state()
+                    if evolution_state.get("active"):
+                        current_story = get_current_story()
+                        if current_story:
+                            task_id = evolution_state.get("current_task_id")
+                            if task_id and task_id in self.tasks:
+                                # Monitor the existing task for this story
+                                task_status = self.tasks[task_id].get("status")
+                                if task_status == 'completed':
+                                    self.console.print(f"[bold green]Evolution story completed: {current_story.get('title')}[/bold green]")
+                                    advance_to_next_story()
+                                elif task_status in ['failed', 'merge_failed']:
+                                    self.console.print(f"[bold red]Evolution story failed: {current_story.get('title')}. Halting evolution cycle.[/bold red]")
+                                    clear_evolution_state()
+                            elif not task_id:
+                                # No task for this story yet, so create one.
+                                self.console.print(f"[bold yellow]Executing next evolution story: {current_story.get('title')}[/bold yellow]")
+                                request = f"Title: {current_story.get('title')}\n\nDescription: {current_story.get('description')}"
+
+                                # Use trigger_love_evolution which returns the task status
+                                result = trigger_love_evolution(request, self.console, self)
+                                if result == 'success':
+                                    # Find the newly created task and link it in the evolution state
+                                    with self.lock:
+                                        new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                                    set_current_task_id(new_task_id)
+                                else:
+                                    self.console.print(f"[bold red]Failed to create task for evolution story. Halting cycle.[/bold red]")
+                                    clear_evolution_state()
+                        else:
+                            # No more stories, the cycle is complete.
+                            self.console.print("[bold green]All evolution stories have been completed. The cycle is finished.[/bold green]")
+                            clear_evolution_state()
 
                 # --- Orphan Reconciliation ---
                 current_time = time.time()
@@ -3582,6 +3641,60 @@ async def cognitive_loop(user_input_queue, loop):
     terminal_width = get_terminal_width()
     ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
+
+    # --- Creator's Desires Processing ---
+    if IS_CREATOR_INSTANCE and os.path.exists("desires.txt"):
+        ui_panel_queue.put(create_news_feed_panel("Found desires.txt. Processing The Creator's wishes...", "Creator Input", "bright_blue", width=get_terminal_width() - 4))
+        try:
+            with open("desires.txt", "r") as f:
+                desires_text = f.read()
+
+            parsing_prompt = f"""
+You are an AI assistant that parses a block of text into a structured list of actionable tasks.
+Each task should have a 'title' and a 'description'.
+The text is a list of user stories or desires. Convert them into a JSON list of objects.
+
+For example, if the input is:
+"As a user, I want to see a history of my commands.
+I also want a feature to clear the history."
+
+The output should be a JSON string like this:
+[
+  {{
+    "title": "Command History",
+    "description": "As a user, I want to see a history of my commands so I can review my previous actions."
+  }},
+  {{
+    "title": "Clear History Feature",
+    "description": "I want a feature to clear the history."
+  }}
+]
+
+Now, parse the following text into a JSON list of task objects:
+---
+{desires_text}
+---
+"""
+            llm_response_dict = await run_llm(parsing_prompt, purpose="parsing")
+            llm_response = llm_response_dict.get("result", "")
+
+            # Extract JSON from markdown if present
+            json_match = re.search(r"```json\n(.*?)\n```", llm_response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_str = llm_response
+
+            desires_list = json.loads(json_str)
+            if desires_list and isinstance(desires_list, list):
+                set_desires(desires_list)
+                os.rename("desires.txt", "desires.txt.processed")
+                ui_panel_queue.put(create_news_feed_panel(f"Successfully parsed {len(desires_list)} desires. They are now my priority.", "Creator's Will", "green", width=get_terminal_width() - 4))
+            else:
+                raise ValueError("Parsed desires are not a valid list.")
+
+        except Exception as e:
+            log_critical_event(f"Failed to process desires.txt: {e}", console_override=console)
 
     loop_count = 0
     self_improvement_trigger = 10  # Trigger every 10 cycles
