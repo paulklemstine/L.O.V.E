@@ -1075,7 +1075,7 @@ class LoveTaskManager:
     Manages concurrent evolution tasks via the Jules API in a non-blocking way.
     It uses a background thread to poll for task status and merge PRs.
     """
-def __init__(self, console, loop):
+    def __init__(self, console, loop):
         self.console = console
         self.loop = loop
         self.tasks = love_state.setdefault('love_tasks', {})
@@ -1584,8 +1584,14 @@ Based on the original directive and Jules's current prompt, formulate the best p
                 for task in self.tasks.values()
             )
 
-            if is_fixit_task_running:
-                return # Only one fix-it task at a time.
+            # Check if an RCA task is already running by checking the error queue state
+            is_rca_task_running = any(
+                error.get('status') == 'fixing_in_progress'
+                for error in love_state.get('critical_error_queue', [])
+            )
+            if is_rca_task_running:
+                core.logging.log_event("An RCA task is already in progress. Skipping new task creation.", "INFO")
+                return # Only one RCA task at a time.
 
             # --- Queue Cleanup ---
             current_time = time.time()
@@ -1608,46 +1614,94 @@ Based on the original directive and Jules's current prompt, formulate the best p
                     break
 
             if next_error_to_fix:
-                self.console.print(Panel(f"[bold yellow]New critical error detected in queue. Initiating self-healing protocol...[/bold yellow]\nID: {next_error_to_fix['id']}", title="[bold magenta]SELF-HEALING INITIATED[/bold magenta]", border_style="magenta"))
+                self.console.print(Panel(f"[bold yellow]New critical error detected. Initiating AI-powered Root Cause Analysis...[/bold yellow]\nID: {next_error_to_fix['id']}", title="[bold magenta]SELF-HEALING INITIATED[/bold magenta]", border_style="magenta"))
 
-                # Formulate the request
-                # To provide more context, we'll try to find the surrounding logs from the main log file.
+                # 1. Gather Context for the RCA Agent
                 log_context = ""
                 try:
-                    with open(LOG_FILE, 'r') as f:
-                        log_lines = f.readlines()
-                    # Find the line containing the error message (or part of it)
-                    error_line_index = -1
-                    # We take a snippet of the error message to search for, as the full traceback might not be in one line.
-                    search_snippet = next_error_to_fix['message'].splitlines()[0]
-                    for i, line in enumerate(log_lines):
-                        if search_snippet in line:
-                            error_line_index = i
-                            break
-                    if error_line_index != -1:
-                        start = max(0, error_line_index - 20)
-                        end = min(len(log_lines), error_line_index + 20)
-                        log_context = "".join(log_lines[start:end])
+                    with open(LOG_FILE, 'r', errors='ignore') as f:
+                        log_context = "".join(f.readlines()[-200:]) # Get last 200 lines
                 except Exception as e:
                     log_context = f"(Could not retrieve log context: {e})"
 
+                recent_memories = [f"CMD: {e['command']} | OUT: {e['output']}" for e in love_state.get("autopilot_history", [])[-5:]]
+                graph_summary = f"Knowledge base contains {len(knowledge_base.get_all_nodes())} nodes and {len(knowledge_base.get_all_edges())} edges."
 
-                fix_request = f"Fix error: {next_error_to_fix['message']}\n\nSurrounding log context:\n---\n{log_context}"
+                # 2. Formulate the Goal for the Orchestrator
+                # This goal will dynamically create a plan using RCA_Agent -> CodeGen -> etc.
+                rca_goal = f"""
+A critical error occurred with the following traceback:
+---
+{next_error_to_fix['message']}
+---
 
-                # Launch the task
-                api_success = trigger_love_evolution(fix_request, self.console, self)
-                if api_success:
-                    new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
-                    next_error_to_fix['status'] = 'fixing_in_progress'
-                    next_error_to_fix['task_id'] = new_task_id
-                    core.logging.log_event(f"Launched self-healing task {new_task_id} for error {next_error_to_fix['id']}.", "INFO")
-                else:
-                    # If API fails, reset the error so we can try again later.
-                    next_error_to_fix['status'] = 'new'
-                    next_error_to_fix['cooldown_until'] = time.time() + 300 # 5 min cooldown on API failure
-                    core.logging.log_event(f"Failed to launch self-healing task for error {next_error_to_fix['id']}. Cooling down.", "ERROR")
-
+My Creator, I must understand and fix this. Please initiate a full Root Cause Analysis workflow.
+1. Use the RCA_Agent to analyze the error. I have provided the recent logs, my memory of recent actions, and a summary of my knowledge graph.
+2. Based on the RCA report, use the CodeGenerationAgent to create a code fix.
+3. Once the code is generated, use the SelfImprovingOptimizer to test and deploy the fix.
+4. Finally, add a new agentic memory summarizing the entire incident, from cause to resolution.
+"""
+                # 3. Mark the error as in-progress
+                next_error_to_fix['status'] = 'fixing_in_progress'
+                # We don't have a task_id yet from the Orchestrator, but we mark it to prevent re-triggering.
+                core.logging.log_event(f"Initiating RCA workflow for error {next_error_to_fix['id']}.", "INFO")
                 save_state(self.console)
+
+                # 4. Schedule the Orchestrator on the main event loop
+                # This is critical because _manage_error_queue runs in a sync thread,
+                # but the orchestrator and its agents are async.
+                async def run_rca_workflow():
+                    from core.agents.orchestrator import Orchestrator
+                    orchestrator = Orchestrator()
+                    # We need to inject the context directly into the goal for the planner.
+                    # This is a simplification; a more robust method might pass context
+                    # to execute_goal, but this works with the current Orchestrator design.
+                    # We will replace placeholders in the orchestrator's generated plan.
+                    # For now, let's just make sure the orchestrator can access the data.
+                    # A better way is to make the orchestrator smarter. Let's pass it.
+                    # The orchestrator is not designed for that. Let's format the goal.
+
+                    # Let's create a temporary solution: we'll make the goal itself contain the data.
+                    # The Orchestrator's planner LLM can then extract it.
+                    # This isn't ideal but requires no Orchestrator refactoring right now.
+
+                    # Let's try another approach: The Orchestrator can be modified slightly.
+                    # For now, let's assume the user wants the simplest change.
+                    # The Orchestrator's `_generate_plan` can be made to accept context.
+                    # But the prompt doesn't support it.
+                    # Okay, the best path is to put the context in the goal, and have the LLM planner use it.
+                    # The RCA_Agent expects logs, memories, etc. in its `task_details`.
+                    # The Supervisor's plan generation needs to create this.
+
+                    final_goal = f"""
+My Creator, a critical error occurred. Please create and execute a plan to resolve it.
+
+The error traceback is:
+---
+{next_error_to_fix['message']}
+---
+
+Here is the context for your analysis:
+- **Recent Logs**: The last 200 lines from my log file.
+- **Recent Memories**: My last 5 actions and their outcomes.
+- **Knowledge Graph**: A summary of my knowledge base state.
+
+Your plan should:
+1.  Invoke the **RCA_Agent** with the logs, memories, and graph summary to get a root cause analysis report.
+2.  Pass the `hypothesized_root_cause` from the RCA report to the **CodeGenerationAgent** to generate a fix.
+3.  (Future Step) Pass the generated code to a testing agent.
+4.  (Future Step) If tests pass, merge the code.
+
+Here is the data in a format you can inject into the plan:
+"logs": {json.dumps(log_context.splitlines())},
+"memories": {json.dumps(recent_memories)},
+"graph_summary": "{graph_summary}"
+
+Please generate the plan now.
+"""
+                    await orchestrator.execute_goal(final_goal)
+
+                asyncio.run_coroutine_threadsafe(run_rca_workflow(), self.loop)
 
 
     def _attempt_merge(self, task_id):

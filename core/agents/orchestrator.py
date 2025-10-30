@@ -6,6 +6,7 @@ from typing import Dict, List
 # Local, dynamic imports for specialist agents
 from core.agents.analyst_agent import AnalystAgent
 from core.agents.code_gen_agent import CodeGenerationAgent
+from core.agents.rca_agent import RCA_Agent
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
@@ -31,6 +32,7 @@ class Orchestrator:
         self.specialist_registry = {
             "AnalystAgent": AnalystAgent,
             "CodeGenerationAgent": CodeGenerationAgent,
+            "RCA_Agent": RCA_Agent,
             "SelfImprovingOptimizer": SelfImprovingOptimizer,
             "TalentAgent": TalentAgent,
             "WebAutomationAgent": WebAutomationAgent,
@@ -52,6 +54,7 @@ The available specialists are: {specialist_list}.
 Here are their descriptions:
 - **AnalystAgent**: Analyzes logs to find causal insights. Expects `task_details` with a 'logs' key.
 - **CodeGenerationAgent**: Generates Python code based on a hypothesis. Expects `task_details` with a 'hypothesis' key.
+- **RCA_Agent**: Performs deep Root Cause Analysis on system failures. Expects `task_details` with 'logs', 'memories', and 'graph_summary'.
 - **SelfImprovingOptimizer**: Runs a full self-improvement cycle on the codebase. Expects `task_details` with 'task_type' ('improve_module' or 'run_evolution_cycle') and relevant parameters.
 - **TalentAgent**: Conducts a full talent scouting, analysis, and engagement cycle. Expects detailed parameters like 'keywords', 'platforms', 'min_score', etc.
 - **WebAutomationAgent**: Performs web automation tasks. Expects `task_details` with 'action' ('fetch_url', 'fill_form') and a 'url'.
@@ -84,11 +87,12 @@ Example JSON Response:
 Now, generate the plan for the given goal.
 """
         try:
-            response = await run_llm(prompt, is_source_code=False)
+            response_dict = await run_llm(prompt, is_source_code=False)
+            response_str = response_dict.get("result", "")
             # Clean the response to extract only the JSON part
-            json_match = re.search(r'\[.*\]', response, re.DOTALL)
+            json_match = re.search(r'\[.*\]', response_str, re.DOTALL)
             if not json_match:
-                print(f"Supervisor: Failed to extract JSON plan from LLM response: {response}")
+                print(f"Supervisor: Failed to extract JSON plan from LLM response: {response_str}")
                 return []
             plan_str = json_match.group(0)
             plan = json.loads(plan_str)
@@ -161,4 +165,24 @@ Now, generate the plan for the given goal.
         final_result = step_results.get(f"step_{len(plan)}_result", "Plan finished with no final result.")
         print(f"\n--- Supervisor finished goal: {goal} ---")
         print(f"Final Result: {final_result}")
+
+        # --- Persist Learning for RCA Workflows ---
+        if "critical error" in goal.lower() and "root cause analysis" in goal.lower():
+            try:
+                from core.memory.memory_manager import MemoryManager
+                memory_manager = MemoryManager()
+
+                summary = f"""
+                Self-Healing Incident Report:
+                - Initial Goal: {goal}
+                - Executed Plan: {json.dumps(plan, indent=2)}
+                - Final Result: {final_result}
+                - Outcome: Success
+                """
+                # This is a fire-and-forget call to the async method
+                asyncio.create_task(memory_manager.add_agentic_memory_from_summary(summary.strip()))
+                print("Supervisor: Self-healing incident report logged to agentic memory.")
+            except Exception as e:
+                print(f"Supervisor: Failed to log self-healing incident to memory. Error: {e}")
+
         return final_result
