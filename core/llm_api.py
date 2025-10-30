@@ -145,32 +145,45 @@ def get_top_horde_models(count=10):
 
         # Filter for online models that have the necessary data points
         online_models = [
-            m for m in models if m.get('count', 0) > 0 and
-            m.get('performance') is not None
+            m for m in models if m.get('count', 0) > 0
         ]
 
         if not online_models:
             log_event("No online AI Horde text models found with complete data.", "WARNING")
             return ["Mythalion-13B"] # Fallback
 
-        # --- Normalization ---
-        # Find max values for normalization to a 0-1 scale
-        max_workers = max(m['count'] for m in online_models)
-        max_performance = max(m['performance'] for m in online_models)
+        # --- New Scoring Algorithm ---
+        def get_model_size(name):
+            """Extracts the parameter size (e.g., 7B, 70B) from a model name."""
+            match = re.search(r'(\d+(\.\d+)?)(b|B)', name)
+            if match:
+                return float(match.group(1))
+            return 0  # Return 0 if no size is found
 
-        # Avoid division by zero if a max value is 0
-        max_workers = max_workers if max_workers > 0 else 1
-        max_performance = max_performance if max_performance > 0 else 1
+        # --- Pre-computation for normalization and defaults ---
+        # Calculate average performance for models that have it, to use as a fallback
+        valid_performances = [m['performance'] for m in online_models if m.get('performance') is not None]
+        avg_performance = sum(valid_performances) / len(valid_performances) if valid_performances else 0
 
-        # --- Scoring ---
+        # Get max values for normalization
+        max_size = max(get_model_size(m['name']) for m in online_models) or 1
+        max_workers = max(m['count'] for m in online_models) or 1
+        max_performance = max(valid_performances) if valid_performances else 1
+
+
         scored_models = []
         for model in online_models:
-            # Normalize each metric
-            norm_workers = model['count'] / max_workers
-            norm_performance = model['performance'] / max_performance
+            size = get_model_size(model['name'])
+            workers = model.get('count', 0)
+            performance = model.get('performance', avg_performance)
 
-            # Apply the weighted formula (60% workers, 40% performance)
-            score = (0.6 * norm_workers) + (0.4 * norm_performance)
+            # Normalize each metric to a 0-1 scale
+            norm_size = size / max_size
+            norm_workers = workers / max_workers
+            norm_performance = performance / max_performance
+
+            # Apply the new weighted formula: 50% size, 40% workers, 10% performance
+            score = (0.5 * norm_size) + (0.4 * norm_workers) + (0.1 * norm_performance)
 
             scored_models.append({'name': model['name'], 'score': score})
 
