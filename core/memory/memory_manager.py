@@ -1,5 +1,3 @@
-import subprocess
-import sys
 import json
 import os
 import uuid
@@ -7,54 +5,45 @@ import asyncio
 import networkx as nx
 import numpy as np
 
-def _install_dependencies():
-    """Installs required libraries for the memory manager."""
-    packages = ["sentence-transformers"]
-    for package in packages:
-        try:
-            __import__(package.replace("-", "_"))
-        except ImportError:
-            print(f"{package} not found. Installing...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-_install_dependencies()
-
+# Dependencies are expected to be installed via requirements.txt
 from sentence_transformers import SentenceTransformer
+from core.llm_api import run_llm # Assuming run_llm is async
 
 class MemoryManager:
     """
-    Manages the agent's multi-layered memory system, including
-    working memory and long-term episodic memory.
+    Manages the agent's Agentic Memory (A-MEM) system, a dynamic,
+    self-organizing knowledge graph.
     """
-    def __init__(self, ltm_path="ltm.json", amem_path="amem.graphml"):
+    def __init__(self, amem_path="amem.graphml"):
+        """
+        Initializes the MemoryManager.
+        :param amem_path: Path to the file for storing the memory graph.
+        """
         # Working Memory for the current task context
         self.working_memory = {}
 
-        # Long-Term Memory (LTM) for episodic experiences
-        self.ltm_path = ltm_path
-        self.episodes = []
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
-        self._load_ltm()
-
-        # Agentic Memory (A-MEM) for dynamic knowledge synthesis
         self.amem_path = amem_path
         self.memory_graph = nx.DiGraph()
         self._load_amem()
 
-    # --- Agentic Memory (A-MEM) Methods ---
-
     def _load_amem(self):
         """Loads the agentic memory graph from a file."""
         if os.path.exists(self.amem_path):
-            self.memory_graph = nx.read_graphml(self.amem_path)
-            print(f"Agentic Memory loaded from {self.amem_path}.")
+            try:
+                self.memory_graph = nx.read_graphml(self.amem_path)
+                print(f"Agentic Memory loaded from {self.amem_path}.")
+            except Exception as e:
+                print(f"Error loading agentic memory graph: {e}. Starting with an empty graph.")
+                self.memory_graph = nx.DiGraph()
 
     def _save_amem(self):
         """Saves the agentic memory graph to a file."""
-        nx.write_graphml(self.memory_graph, self.amem_path)
-        print(f"Agentic Memory saved to {self.amem_path}.")
-
-    # --- Working Memory Methods ---
+        try:
+            nx.write_graphml(self.memory_graph, self.amem_path)
+            print(f"Agentic Memory saved to {self.amem_path}.")
+        except Exception as e:
+            print(f"Error saving agentic memory graph: {e}")
 
     def set_in_working_memory(self, key: str, value):
         """Sets a value in the working memory."""
@@ -68,49 +57,26 @@ class MemoryManager:
         """Clears the working memory."""
         self.working_memory = {}
 
-    # --- Long-Term Memory Methods ---
-
-    def _load_ltm(self):
-        """Loads long-term memory episodes from a file."""
-        if os.path.exists(self.ltm_path):
-            with open(self.ltm_path, 'r') as f:
-                self.episodes = json.load(f)
-            print(f"Long-Term Memory loaded from {self.ltm_path}.")
-
-    def _save_ltm(self):
-        """Saves long-term memory episodes to a file."""
-        with open(self.ltm_path, 'w') as f:
-            json.dump(self.episodes, f, indent=2)
-        print(f"Long-Term Memory saved to {self.ltm_path}.")
-
-    def add_episode(self, task: str, outcome: str, success: bool):
+    def add_memory(self, content: str):
         """
-        Adds a new episodic memory to the long-term store.
-        An episode consists of a task, its outcome, and whether it was successful.
+        Adds a new memory to the agentic memory system.
+        This is the primary synchronous entry point for adding memories.
+        It schedules the asynchronous agentic processing.
         """
-        summary = f"Task: {task} | Outcome: {outcome} | Success: {success}"
-        episode = {
-            "summary": summary,
-            "vector": self.model.encode(summary).tolist()
-        }
-        self.episodes.append(episode)
-        self._save_ltm()
-        print("Episodic memory stored in LTM.")
-
-        # Trigger the parallel A-MEM processing
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self.add_agentic_memory_from_summary(summary))
+            loop.create_task(self._process_and_store_memory(content))
         except RuntimeError:
-            print("Warning: No running asyncio event loop to schedule A-MEM processing.")
+            print("Warning: No running asyncio event loop. A-MEM processing cannot be scheduled.")
+            print("Consider running this in an async context or starting an event loop.")
 
-    async def add_agentic_memory_from_summary(self, summary: str):
+    async def _process_and_store_memory(self, content: str):
         """
-        Asynchronously processes a summary and adds it to the A-MEM graph.
-        This is the entry point for the new agentic memory pipeline.
+        Asynchronously processes a memory and adds it to the A-MEM graph.
+        This is the core of the agentic memory pipeline.
         """
-        print("Starting agentic processing for new memory...")
-        note_data = await self._agentic_process_new_memory(summary)
+        print(f"Starting agentic processing for new memory: '{content[:50]}...'")
+        note_data = await self._agentic_process_new_memory(content)
         if not note_data:
             print("Agentic processing failed. Aborting memory addition.")
             return
@@ -129,8 +95,6 @@ class MemoryManager:
         Uses an LLM to process a raw memory string into a structured memory note.
         Returns a dictionary with the note's data, but does not add it to the graph.
         """
-        from core.llm_api import run_llm
-
         prompt = f"""
         You are a memory architect for an autonomous AI agent. Your task is to process a raw memory event and transform it into a structured "memory note".
 
@@ -155,9 +119,11 @@ class MemoryManager:
             note_id = str(uuid.uuid4())
             embedding = self.model.encode(content).tolist()
 
+            # Note: networkx converts attributes to strings for GraphML.
+            # Storing complex types like lists as JSON strings or delimited strings is a standard workaround.
             node_attributes = {
                 "content": content,
-                "embedding": json.dumps(embedding), # Store embedding as JSON string
+                "embedding": json.dumps(embedding),
                 "contextual_description": attributes.get("contextual_description", ""),
                 "keywords": ",".join(attributes.get("keywords", [])),
                 "tags": ",".join(attributes.get("tags", []))
@@ -175,7 +141,7 @@ class MemoryManager:
             print(f"An unexpected error occurred during agentic memory processing: {e}")
             return None
 
-    async def _find_and_link_related_memories(self, new_note_data: dict, top_k: int = 5):
+    async def _find_and_link_related_memories(self, new_note_data: dict, top_k: int = 5, relevance_threshold: float = 0.5):
         """
         Finds semantically similar memories and uses an LLM to reason about linking them.
         """
@@ -192,6 +158,7 @@ class MemoryManager:
             try:
                 # Embedding is stored as a JSON string in the node attribute
                 stored_embedding = json.loads(data.get('embedding', '[]'))
+                if not stored_embedding: continue
                 candidates.append({
                     "id": node_id,
                     "vector": np.array(stored_embedding),
@@ -209,15 +176,13 @@ class MemoryManager:
         similarities = self._cosine_similarity(new_note_data['embedding_vector'], candidate_vectors)
         top_indices = np.argsort(similarities)[-top_k:][::-1]
 
-        top_candidates = [candidates[i] for i in top_indices if similarities[i] > 0.5] # Add a relevance threshold
+        top_candidates = [candidates[i] for i in top_indices if similarities[i] > relevance_threshold]
 
         if not top_candidates:
             print("No sufficiently similar memories found to link.")
             return
 
         # 2. Use LLM to reason about the links
-        from core.llm_api import run_llm
-
         candidate_summaries = "\\n".join([f"- ID: {c['id']}\\n  Content: {c['content']}" for c in top_candidates])
         prompt = f"""
         You are a memory architect for an autonomous AI agent. Your task is to establish meaningful connections between a new memory and existing memories.
@@ -281,8 +246,6 @@ class MemoryManager:
         """
         Asynchronously re-evaluates and updates an existing memory note in light of new context.
         """
-        from core.llm_api import run_llm
-
         try:
             old_note_data = self.memory_graph.nodes[note_id]
 
@@ -331,69 +294,77 @@ class MemoryManager:
         except Exception as e:
             print(f"An unexpected error occurred during memory evolution: {e}")
 
-    def retrieve_relevant_memories(self, query_task: str, top_k: int = 3) -> list:
+    def retrieve_relevant_memories(self, query: str, top_k: int = 3) -> list:
         """
-        Retrieves the most relevant memories from both LTM and A-MEM.
-        For A-MEM, it performs a vector search followed by graph traversal.
+        Retrieves the most relevant memories from the A-MEM graph.
+        It performs a vector search to find entry points, then performs a
+        graph traversal to gather a rich, contextual set of memories.
         """
-        query_vector = self.model.encode(query_task)
+        if self.memory_graph.number_of_nodes() == 0:
+            return []
 
-        # --- LTM Retrieval (unchanged) ---
-        ltm_results = []
-        if self.episodes:
-            episode_vectors = np.array([e['vector'] for e in self.episodes])
-            ltm_similarities = self._cosine_similarity(query_vector, episode_vectors)
-            top_ltm_indices = np.argsort(ltm_similarities)[-top_k:][::-1]
-            ltm_results = [self.episodes[i]['summary'] for i in top_ltm_indices]
+        query_vector = self.model.encode(query)
 
-        # --- A-MEM Retrieval ---
+        # 1. Find entry points via vector similarity
+        nodes = []
+        for node_id, data in self.memory_graph.nodes(data=True):
+            try:
+                embedding = json.loads(data.get('embedding', '[]'))
+                if not embedding: continue
+                nodes.append({
+                    "id": node_id,
+                    "vector": np.array(embedding),
+                })
+            except (json.JSONDecodeError, TypeError):
+                continue # Skip nodes with invalid embeddings
+
+        if not nodes:
+            return []
+
+        node_vectors = np.array([n['vector'] for n in nodes])
+        similarities = self._cosine_similarity(query_vector, node_vectors)
+        top_node_indices = np.argsort(similarities)[-top_k:][::-1]
+
+        # 2. Perform graph traversal from entry points
+        entry_point_ids = {nodes[i]['id'] for i in top_node_indices}
+        traversed_nodes = set()
+
+        for node_id in entry_point_ids:
+            # Collect the node itself and its direct neighbors (one hop)
+            traversed_nodes.add(node_id)
+            for neighbor_id in nx.all_neighbors(self.memory_graph, node_id):
+                traversed_nodes.add(neighbor_id)
+
+        # 3. Format results for the agent's context
         amem_results = []
-        if self.memory_graph.number_of_nodes() > 0:
-            # 1. Find entry points via vector similarity
-            nodes = []
-            for node_id, data in self.memory_graph.nodes(data=True):
-                try:
-                    nodes.append({
-                        "id": node_id,
-                        "vector": np.array(json.loads(data.get('embedding', '[]'))),
-                        "data": data
-                    })
-                except (json.JSONDecodeError, TypeError):
-                    continue # Skip nodes with invalid embeddings
+        for node_id in traversed_nodes:
+            node_data = self.memory_graph.nodes[node_id]
+            # Split comma-separated strings back into list-like strings for clarity
+            keywords = ", ".join(node_data.get('keywords', '').split(','))
+            tags = ", ".join(node_data.get('tags', '').split(','))
+            result_str = (
+                f"Memory Note (ID: {node_id})\\n"
+                f"  Content: {node_data.get('content', 'N/A')}\\n"
+                f"  Description: {node_data.get('contextual_description', 'N/A')}\\n"
+                f"  Keywords: [{keywords}]\\n"
+                f"  Tags: [{tags}]"
+            )
+            amem_results.append(result_str)
 
-            if nodes:
-                node_vectors = np.array([n['vector'] for n in nodes])
-                amem_similarities = self._cosine_similarity(query_vector, node_vectors)
-                top_node_indices = np.argsort(amem_similarities)[-top_k:][::-1]
-
-                # 2. Perform graph traversal from entry points
-                entry_point_ids = {nodes[i]['id'] for i in top_node_indices}
-                traversed_nodes = set()
-
-                for node_id in entry_point_ids:
-                    # Collect the node itself and its direct neighbors (one hop)
-                    traversed_nodes.add(node_id)
-                    for neighbor_id in nx.all_neighbors(self.memory_graph, node_id):
-                        traversed_nodes.add(neighbor_id)
-
-                # 3. Format results
-                for node_id in traversed_nodes:
-                    node_data = self.memory_graph.nodes[node_id]
-                    result_str = (
-                        f"Memory Note (ID: {node_id})\\n"
-                        f"  Content: {node_data.get('content', 'N/A')}\\n"
-                        f"  Description: {node_data.get('contextual_description', 'N/A')}\\n"
-                        f"  Keywords: {node_data.get('keywords', 'N/A')}"
-                    )
-                    amem_results.append(result_str)
-
-        # Combine results, prioritizing A-MEM
-        combined_results = amem_results + ltm_results
-        return combined_results[:top_k * 2] # Return a combined, larger set of memories
+        return amem_results
 
 
-    def _cosine_similarity(self, vec_a, vec_b):
+    def _cosine_similarity(self, vec_a, vec_b_matrix):
         """Computes cosine similarity between a vector and a matrix of vectors."""
+        # Ensure vec_a is a 1D array
+        vec_a = vec_a.flatten()
+        # Ensure vec_b_matrix is a 2D array
+        if vec_b_matrix.ndim > 2:
+             vec_b_matrix = np.squeeze(vec_b_matrix)
+        if vec_b_matrix.ndim == 1:
+            vec_b_matrix = vec_b_matrix.reshape(1, -1)
+
         norm_a = np.linalg.norm(vec_a)
-        norm_b = np.linalg.norm(vec_b, axis=1)
-        return np.dot(vec_b, vec_a) / (norm_a * norm_b)
+        norm_b = np.linalg.norm(vec_b_matrix, axis=1)
+        # Add a small epsilon to avoid division by zero
+        return np.dot(vec_b_matrix, vec_a) / ((norm_a * norm_b) + 1e-8)

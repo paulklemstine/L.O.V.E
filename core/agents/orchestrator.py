@@ -1,24 +1,35 @@
 import json
 import asyncio
 import re
-from typing import Dict, List
+from typing import Dict, List, Any
 
-# Local, dynamic imports for specialist agents
+# Local, dynamic imports for specialist agents are kept for modularity
 from core.agents.analyst_agent import AnalystAgent
 from core.agents.code_gen_agent import CodeGenerationAgent
 from core.agents.rca_agent import RCA_Agent
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
-from core.llm_api import run_llm # Using a direct LLM call for planning
+from core.llm_api import run_llm
 
-# Keep the old function for fallback compatibility as requested
-async def solve_with_agent_team(task_description: str) -> str:
-    from core.agent_framework_manager import create_and_run_workflow
-    orchestrator = Orchestrator()
-    result = await create_and_run_workflow(task_description, orchestrator.tool_registry)
-    return str(result)
 
+def _recursive_substitute(template: Any, context: Dict[str, Any]) -> Any:
+    """
+    Recursively substitutes placeholders in a nested data structure.
+    Placeholders are in the format `{{step_X_result}}`.
+    """
+    if isinstance(template, str):
+        # Corrected regex to properly escape the curly braces for matching
+        match = re.fullmatch(r'\{\{(step_\d+_result)\}\}', template)
+        if match and match.group(1) in context:
+            return context[match.group(1)]
+        return template
+    elif isinstance(template, dict):
+        return {k: _recursive_substitute(v, context) for k, v in template.items()}
+    elif isinstance(template, list):
+        return [_recursive_substitute(item, context) for item in template]
+    else:
+        return template
 
 class Orchestrator:
     """
@@ -61,7 +72,7 @@ Here are their descriptions:
 
 The high-level goal is: "{goal}"
 
-You must respond with ONLY a JSON array of steps. Each step must be an object with two keys:
+You must respond with ONLY a JSON array of steps inside a ```json ... ``` block. Each step must be an object with two keys:
 1. "specialist_agent": The name of the specialist agent class to use for this step.
 2. "task_details": An object containing the parameters for that specialist's `execute_task` method.
 
@@ -69,6 +80,7 @@ You can pass the result of a previous step to a subsequent step using a placehol
 
 Example Goal: "Analyze the system logs, and if there's an inefficiency, generate code to fix it."
 Example JSON Response:
+```json
 [
   {{
     "specialist_agent": "AnalystAgent",
@@ -83,22 +95,28 @@ Example JSON Response:
     }}
   }}
 ]
+```
 
 Now, generate the plan for the given goal.
 """
         try:
-            response_dict = await run_llm(prompt, is_source_code=False)
-            response_str = response_dict.get("result", "")
-            # Clean the response to extract only the JSON part
-            json_match = re.search(r'\[.*\]', response_str, re.DOTALL)
+            # run_llm returns a string, not a dictionary
+            response_str = await run_llm(prompt, is_source_code=False)
+
+            # More robustly find the JSON block
+            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response_str)
             if not json_match:
-                print(f"Supervisor: Failed to extract JSON plan from LLM response: {response_str}")
+                print(f"Supervisor: Failed to find a JSON code block in the LLM response: {response_str}")
                 return []
-            plan_str = json_match.group(0)
+
+            plan_str = json_match.group(1)
             plan = json.loads(plan_str)
             return plan
+        except json.JSONDecodeError as e:
+            print(f"Supervisor: Error decoding JSON plan from LLM response: {e}\\nReceived: {plan_str}")
+            return []
         except Exception as e:
-            print(f"Supervisor: Error during plan generation: {e}")
+            print(f"Supervisor: An unexpected error occurred during plan generation: {e}")
             return []
 
     async def execute_goal(self, goal: str):
@@ -125,17 +143,9 @@ Now, generate the plan for the given goal.
 
             print(f"\n--- Executing Step {step_number}/{len(plan)}: Using {specialist_name} ---")
 
-            # Substitute context variables from previous steps
-            try:
-                task_details_str = json.dumps(task_details_template)
-                for key, value in step_results.items():
-                    task_details_str = task_details_str.replace(f'"{{{{{key}}}}}', json.dumps(value))
-                task_details = json.loads(task_details_str)
-                print(f"Task Details: {json.dumps(task_details, indent=2)}")
-            except Exception as e:
-                error_msg = f"Plan execution failed at step {step_number}: Failed to substitute context variables. Error: {e}"
-                print(error_msg)
-                return error_msg
+            # Substitute context variables from previous steps using the robust recursive function
+            task_details = _recursive_substitute(task_details_template, step_results)
+            print(f"Task Details: {json.dumps(task_details, indent=2)}")
 
             if specialist_name not in self.specialist_registry:
                 error_msg = f"Plan execution failed at step {step_number}: Specialist agent '{specialist_name}' is not registered."
@@ -167,7 +177,8 @@ Now, generate the plan for the given goal.
         print(f"Final Result: {final_result}")
 
         # --- Persist Learning for RCA Workflows ---
-        if "critical error" in goal.lower() and "root cause analysis" in goal.lower():
+        # This logic is sound and can be kept as is.
+        if "critical error" in goal.lower() or "root cause analysis" in goal.lower():
             try:
                 from core.memory.memory_manager import MemoryManager
                 memory_manager = MemoryManager()
@@ -179,8 +190,8 @@ Now, generate the plan for the given goal.
                 - Final Result: {final_result}
                 - Outcome: Success
                 """
-                # This is a fire-and-forget call to the async method
-                asyncio.create_task(memory_manager.add_agentic_memory_from_summary(summary.strip()))
+                # Fire-and-forget call to the async memory addition
+                memory_manager.add_memory(summary.strip())
                 print("Supervisor: Self-healing incident report logged to agentic memory.")
             except Exception as e:
                 print(f"Supervisor: Failed to log self-healing incident to memory. Error: {e}")
