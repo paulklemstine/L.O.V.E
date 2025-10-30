@@ -11,6 +11,9 @@ import logging
 import asyncio
 import random
 import aiohttp
+import csv
+import io
+from datasets import load_dataset
 
 from rich.console import Console
 from rich.panel import Panel
@@ -104,6 +107,58 @@ OLLAMA_MODELS = [] # This will be populated by love.py during hardware setup
 # --- OpenRouter Configuration ---
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
+def _fetch_open_llm_leaderboard():
+    """
+    Fetches the Open LLM Leaderboard data using the datasets library and returns a
+    dictionary mapping model names to their average scores.
+    """
+    leaderboard = {}
+    try:
+        # Load the dataset directly from Hugging Face Hub
+        dataset = load_dataset("open-llm-leaderboard/results", split="main")
+
+        # The dataset is a list of dictionaries, where each dictionary is a model's results
+        for item in dataset:
+            model_name = item.get("model_name_for_query")
+            average_score = item.get("average_score")
+
+            if model_name and average_score is not None:
+                # The model name might be in a format like "org/model", we'll store it as is
+                leaderboard[model_name] = float(average_score)
+
+    except Exception as e:
+        log_event(f"Failed to fetch or process Open LLM Leaderboard dataset: {e}", "ERROR")
+        # Fallback to the old method in case the new one fails for any reason
+        log_event("Falling back to fetching the static CSV leaderboard.", "WARNING")
+        return _fetch_static_leaderboard_csv()
+
+    return leaderboard
+
+def _fetch_static_leaderboard_csv():
+    """
+    Fetches an older, static version of the Open LLM Leaderboard data from a CSV file.
+    This serves as a fallback.
+    """
+    url = "https://raw.githubusercontent.com/dsdanielpark/Open-LLM-Leaderboard-Report/main/assets/20231031/20231031.csv"
+    leaderboard = {}
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        csv_file = io.StringIO(response.text)
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            model_name = row.get("Model")
+            average_score = row.get("Average")
+            if model_name and average_score:
+                try:
+                    leaderboard[model_name] = float(average_score)
+                except (ValueError, TypeError):
+                    continue
+    except Exception as e:
+        log_event(f"Fallback CSV fetch for leaderboard failed: {e}", "ERROR")
+    return leaderboard
+
+
 def get_openrouter_models():
     """Fetches the list of free models from the OpenRouter API."""
     try:
@@ -130,51 +185,48 @@ OPENROUTER_MODELS = get_openrouter_models()
 def get_top_horde_models(count=10, get_all=False):
     """
     Fetches active text models from the AI Horde and returns the top `count`
-    models based on a weighted score of rating, worker count, and performance.
+    models based on their Open LLM Leaderboard score.
     If get_all is True, returns all sorted models.
     """
     try:
+        # Fetch the leaderboard scores first.
+        leaderboard = _fetch_open_llm_leaderboard()
+        if not leaderboard:
+            log_event("Open LLM Leaderboard data is unavailable. Falling back to default model.", "ERROR")
+            return ["Mythalion-13B"]
+
+        # Fetch models from the AI Horde.
         response = requests.get("https://aihorde.net/api/v2/status/models?type=text")
         response.raise_for_status()
         models = response.json()
 
-        online_models = [
-            m for m in models if m.get('count', 0) > 0 and
-            m.get('performance') is not None and
-            m.get('rating') is not None
-        ]
+        # Filter for online models only.
+        online_models = [m for m in models if m.get('count', 0) > 0]
 
         if not online_models:
-            log_event("No online AI Horde text models found with complete data.", "WARNING")
+            log_event("No online AI Horde text models found.", "WARNING")
             return ["Mythalion-13B"]
 
-        max_rating = max(m['rating'] for m in online_models)
-        max_workers = max(m['count'] for m in online_models)
-        max_performance = max(m['performance'] for m in online_models)
-
-        max_rating = max_rating if max_rating > 0 else 1
-        max_workers = max_workers if max_workers > 0 else 1
-        max_performance = max_performance if max_performance > 0 else 1
-
+        # Score models based on the leaderboard.
         scored_models = []
         for model in online_models:
-            norm_rating = model['rating'] / max_rating
-            norm_workers = model['count'] / max_workers
-            norm_performance = model['performance'] / max_performance
-            score = (0.5 * norm_rating) + (0.3 * norm_workers) + (0.2 * norm_performance)
-            scored_models.append({'name': model['name'], 'score': score})
+            model_name = model.get('name')
+            # Use a default low score of 0 if not on the leaderboard.
+            score = leaderboard.get(model_name, 0)
+            scored_models.append({'name': model_name, 'score': score})
 
+        # Sort models by their score in descending order.
         sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
         model_names = [model['name'] for model in sorted_models]
 
         if get_all:
             return model_names
 
-        log_event(f"Top 3 AI Horde models: {model_names[:3]}", "INFO")
+        log_event(f"Top 3 AI Horde models based on Leaderboard: {model_names[:3]}", "INFO")
         return model_names[:count]
 
     except Exception as e:
-        log_event(f"Failed to fetch or score AI Horde models: {e}", "ERROR")
+        log_event(f"Failed to fetch or rank AI Horde models using leaderboard: {e}", "ERROR")
         return ["Mythalion-13B"]
 
 HORDE_MODELS = get_top_horde_models()
