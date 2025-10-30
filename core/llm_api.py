@@ -523,7 +523,7 @@ def run_llm(prompt_text, purpose="general", is_source_code=False):
     - 'goal_generation': Prioritizes local, uncensored models.
     - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
     """
-    global LLM_AVAILABILITY, local_llm_instance
+    global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT
     console = Console()
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
