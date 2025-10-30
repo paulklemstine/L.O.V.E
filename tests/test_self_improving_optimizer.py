@@ -26,7 +26,11 @@ async def test_improve_module_runs(mock_reasoning_task):
     }
 
     optimizer = SelfImprovingOptimizer()
-    result = await optimizer.improve_module("core/tools.py", "Improve the read_file function.")
+    task_details = {
+        "module_path": "core/tools.py",
+        "objective": "Improve the read_file function."
+    }
+    result = await optimizer._improve_module(task_details)
 
     assert "Goal accomplished" in result
     mock_reasoning_task.assert_called_once()

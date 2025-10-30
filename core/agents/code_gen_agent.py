@@ -1,12 +1,27 @@
 import sys
+from typing import Dict
+from core.agents.specialist_agent import SpecialistAgent
 
-class CodeGenerationAgent:
-    def generate_code(self, hypothesis: str) -> str:
+class CodeGenerationAgent(SpecialistAgent):
+    """
+    A specialist agent that generates Python code based on a hypothesis.
+    """
+
+    async def execute_task(self, task_details: Dict) -> Dict:
         """
-        Generates new python code to test a hypothesis.
-        This version returns a more realistic, runnable script for the benchmarker,
-        ensuring stdout is clean for parsing.
+        Generates code based on a hypothesis provided in the task_details.
+
+        Args:
+            task_details: A dictionary expected to contain a 'hypothesis' key
+                          with a string describing the improvement.
+
+        Returns:
+            A dictionary with the generated code or a failure message.
         """
+        hypothesis = task_details.get("hypothesis")
+        if not hypothesis:
+            return {"status": "failure", "result": "No hypothesis provided for code generation."}
+
         print("CodeGenerationAgent: Generating code for hypothesis...")
         if "CSS selectors" in hypothesis:
             new_code = """
@@ -45,5 +60,6 @@ def run_benchmark():
 
 """
             print("CodeGenerationAgent: New code generated.")
-            return new_code
-        return None
+            return {"status": "success", "result": new_code}
+
+        return {"status": "failure", "result": "Could not generate code for the given hypothesis."}

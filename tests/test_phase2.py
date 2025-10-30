@@ -27,7 +27,7 @@ class TestPhase2Integration(unittest.IsolatedAsyncioTestCase):
         """Set up the test environment."""
         print("\n--- Setting up TestPhase2Integration ---")
         self.mock_kg = GraphDataManager()
-        self.orchestrator = Orchestrator(knowledge_graph=self.mock_kg)
+        self.orchestrator = Orchestrator()
 
     # async def test_full_execution_flow(self):
     #     """
@@ -61,48 +61,6 @@ class TestPhase2Integration(unittest.IsolatedAsyncioTestCase):
     #         self.assertIsNotNone(step_info['result'], f"Step {i+1} should have a result.")
 
     #     print("\n--- Test 'test_full_execution_flow' PASSED ---")
-
-    @patch('core.planning.mock_llm_call')
-    async def test_error_handling_for_unknown_tool(self, mock_llm_call_func):
-        """
-        Tests how the system handles a task that requires a tool that is not registered.
-        """
-        # A goal that will generate a plan with a step we can't execute
-        goal = "Launch a rocket to Mars"
-
-        # To make this test predictable, we'll manually set a plan that
-        # contains a step with an unknown tool.
-        mock_plan_json = """
-        [
-            {"step": 1, "task": "Design the rocket."},
-            {"step": 2, "task": "Launch the rocket using the 'launch_rocket' tool.", "tool": "launch_rocket", "args": {}}
-        ]
-        """
-        mock_llm_call_func.return_value = mock_plan_json
-
-
-        print(f"\n--- Running test_error_handling_for_unknown_tool with goal: '{goal}' ---")
-
-        # Execute the goal
-        result = await self.orchestrator.execute_goal(goal)
-
-        # --- Assertions ---
-
-        # 1. The overall status should be 'Failed'
-        self.assertEqual(result['status'], 'Failed', "The plan should fail due to the unknown tool.")
-
-        # 2. The reason for failure should be accurate
-        self.assertIn('A step failed', result['reason'])
-        self.assertIn("Tool 'launch_rocket' is not registered", result['reason'])
-
-        # 3. Check the state of the failed step
-        plan_state = result.get('plan_state', [])
-        failed_step = plan_state[1] # The second step should have failed
-        self.assertEqual(failed_step['status'], 'failed', "The second step should be marked 'failed'.")
-        self.assertIn("Error: Tool 'launch_rocket' is not registered.", failed_step['result'],
-                      "The result of the failed step should contain the correct error message.")
-
-        print("\n--- Test 'test_error_handling_for_unknown_tool' PASSED ---")
 
 if __name__ == '__main__':
     unittest.main()

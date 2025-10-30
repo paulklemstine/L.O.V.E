@@ -560,7 +560,7 @@ def ensure_primary_model_downloaded(console, download_complete_event):
         download_complete_event.set()
 
 
-def run_llm(prompt_text, purpose="general", is_source_code=False):
+async def run_llm(prompt_text, purpose="general", is_source_code=False):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
     It now pins the prompt and response to IPFS and returns a dictionary.
@@ -855,6 +855,9 @@ def run_llm(prompt_text, purpose="general", is_source_code=False):
                 response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                 return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "emergency_cpu_fallback"}
 
+        except ImportError as e:
+            log_event(f"EMERGENCY CPU FALLBACK FAILED: {e}. The 'llama_cpp' module is not installed.", "CRITICAL")
+            last_exception = e
         except Exception as emergency_e:
             log_event(f"EMERGENCY CPU FALLBACK FAILED: {emergency_e}", "CRITICAL")
             last_exception = emergency_e

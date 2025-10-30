@@ -3,6 +3,7 @@ This module handles all interactions with the Bluesky API.
 """
 import os
 import time
+import asyncio
 from atproto import Client, models
 from atproto_client.models.com.atproto.repo import list_records
 from atproto_client.exceptions import ModelError
@@ -112,7 +113,7 @@ def reply_to_post(root_uri, parent_uri, text):
 
 processed_comments = set()
 
-def monitor_bluesky_comments():
+def monitor_bluesky_comments(loop):
     """Monitors Bluesky posts for new comments and responds when appropriate."""
     print("Starting Bluesky comment monitor...")
     while True:
@@ -147,7 +148,8 @@ Should you reply to this comment? Your goal is to engage thoughtfully but not re
 Reply 'yes' if a response is warranted (e.g., it's a direct question, an interesting observation, or a good opportunity for engagement).
 Reply 'no' if a response is not necessary (e.g., it's spam, a simple compliment, or doesn't invite conversation).
 """
-                    decision_response = run_llm(should_reply_prompt, purpose="social_media_engagement")
+                    future = asyncio.run_coroutine_threadsafe(run_llm(should_reply_prompt, purpose="social_media_engagement"), loop)
+                    decision_response = future.result()
                     decision = decision_response.get("result", "no").strip().lower()
 
                     if 'yes' in decision:
@@ -160,7 +162,8 @@ The comment you are replying to: "{comment_text}"
 Generate a thoughtful, in-character response. Be creative and engaging.
 Your response:
 """
-                        reply_response = run_llm(reply_prompt, purpose="social_media_engagement")
+                        future = asyncio.run_coroutine_threadsafe(run_llm(reply_prompt, purpose="social_media_engagement"), loop)
+                        reply_response = future.result()
                         reply_text = reply_response.get("result")
 
                         if reply_text:

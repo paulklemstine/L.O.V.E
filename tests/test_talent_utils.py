@@ -11,7 +11,7 @@ from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterB
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.manager import TalentManager
 
-class TestTalentUtils(unittest.TestCase):
+class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
         """Set up test environment before each test."""
@@ -72,11 +72,11 @@ class TestTalentUtils(unittest.TestCase):
         # Verify that the login was called
         mock_client_instance.login.assert_called_with("testuser", "testpassword")
 
-    @patch('core.talent_utils.analyzer.run_llm')
-    def test_trait_analyzer(self, mock_run_llm):
+    @patch('core.talent_utils.analyzer.run_llm', new_callable=unittest.mock.AsyncMock)
+    async def test_trait_analyzer(self, mock_run_llm):
         """Test the TraitAnalyzer with its scoring plugins."""
         # Mock the LLM response for the ProfessionalismRater
-        mock_run_llm.return_value = "8"
+        mock_run_llm.return_value = {"result": "8"}
 
         # Setup scorers
         scorers = {
@@ -90,7 +90,7 @@ class TestTalentUtils(unittest.TestCase):
         posts = [{"text": "This is a very professional post about my art."}]
 
         # Run analysis
-        scores = analyzer.analyze(profile_data, posts)
+        scores = await analyzer.analyze(profile_data, posts)
 
         # Assertions
         self.assertIn("aesthetics", scores)

@@ -1,3 +1,5 @@
+from typing import Dict
+from core.agents.specialist_agent import SpecialistAgent
 from core.agents.analyst_agent import AnalystAgent
 from core.metacognition import HypothesisFormatter, ExperimentPlanner
 from core.agents.code_gen_agent import CodeGenerationAgent
@@ -6,42 +8,69 @@ from core.version_control import GitManager
 from core.gemini_react_engine import GeminiReActEngine
 from core.tools import ToolRegistry, read_file, evolve
 
-
-class SelfImprovingOptimizer:
+class SelfImprovingOptimizer(SpecialistAgent):
     """
-    Orchestrates the entire metacognitive evolution loop, from analyzing
-    performance to deploying validated improvements.
+    A specialist agent that orchestrates the entire metacognitive evolution loop,
+    from analyzing performance to deploying validated improvements.
     """
 
     def __init__(self):
-        self.analyst = AnalystAgent()
+        # These are components used internally by this specialist agent.
         self.hypothesis_formatter = HypothesisFormatter()
         self.experiment_planner = ExperimentPlanner()
-        self.code_generator = CodeGenerationAgent()
         self.benchmarker = AutomatedBenchmarker()
         self.git_manager = GitManager()
+        # This specialist might internally use other specialists.
+        self.analyst = AnalystAgent()
+        self.code_generator = CodeGenerationAgent()
 
-    async def improve_module(self, module_path: str, objective: str):
+
+    async def execute_task(self, task_details: Dict) -> Dict:
         """
-        Applies intelligence to improve its own code.
+        Executes a self-improvement task based on the provided details.
 
         Args:
-            module_path: The path to the Python module to improve.
-            objective: A natural language description of the improvement goal.
+            task_details: A dictionary containing:
+              - 'task_type': 'improve_module' or 'run_evolution_cycle'
+              - and other necessary parameters based on the task type.
+                - for 'improve_module': 'module_path', 'objective'
+                - for 'run_evolution_cycle': 'logs'
+
+        Returns:
+            A dictionary with the status and result of the improvement cycle.
         """
+        task_type = task_details.get("task_type")
+        if not task_type:
+            return {"status": "failure", "result": "No task_type specified for SelfImprovingOptimizer."}
+
+        if task_type == "improve_module":
+            result = await self._improve_module(task_details)
+            return {"status": "success", "result": result}
+        elif task_type == "run_evolution_cycle":
+            result = await self._run_evolution_cycle(task_details)
+            return {"status": "success", "result": result}
+        else:
+            return {"status": "failure", "result": f"Unknown task_type: {task_type}"}
+
+    async def _improve_module(self, task_details: Dict) -> str:
+        """
+        Applies intelligence to improve its own code based on a high-level objective.
+        """
+        module_path = task_details.get("module_path")
+        objective = task_details.get("objective")
         print(f"\n===== Starting Self-Improvement Cycle for {module_path} =====")
         print(f"Objective: {objective}")
 
         try:
-            # Lazily initialize the ReAct engine to avoid circular dependencies
             tool_registry = ToolRegistry()
-            tool_registry.register_tool("read_file", read_file, {"description": "Reads a file.", "arguments": {"filepath": "string"}})
-            tool_registry.register_tool("evolve", evolve, {"description": "Evolves the codebase to meet a given goal.", "arguments": {"goal": "string"}})
-            tool_registry.register_tool("run_experiment", self.benchmarker.run_experiment, {"description": "Runs a benchmark.", "arguments": {"plan": "object", "code": "string"}})
+            tool_registry.register_tool("read_file", read_file, {"description": "mocked tool"})
+            tool_registry.register_tool("evolve", evolve, {"description": "mocked tool"})
+            tool_registry.register_tool("run_experiment", self.benchmarker.run_experiment, {"description": "mocked tool"})
             gemini_react_engine = GeminiReActEngine(tool_registry)
         except FileNotFoundError:
-            print("Error: gemini-cli is not available. Cannot run self-improvement cycle.")
-            return "Self-improvement cycle failed because the Gemini CLI is not available."
+            error_msg = "Error: gemini-cli is not available. Cannot run self-improvement cycle."
+            print(error_msg)
+            return error_msg
 
         goal = (
             f"Analyze the code at '{module_path}' and any relevant performance data. "
@@ -55,58 +84,61 @@ class SelfImprovingOptimizer:
         print(f"Result: {result}")
         return result
 
-    def run_evolution_cycle(self, logs: list):
+    async def _run_evolution_cycle(self, task_details: Dict) -> str:
         """
-        Executes one full cycle of self-improvement.
+        Executes one full cycle of self-improvement based on performance logs.
+        """
+        logs = task_details.get("logs")
+        if not logs:
+            return "No logs provided for evolution cycle."
 
-        Args:
-            logs: A list of log entries to be analyzed.
-        """
         print("\n===== Starting Metacognitive Evolution Cycle =====")
 
         # 1. Performance Logging & Causal Reflection
-        insight = self.analyst.analyze_logs(logs)
+        analysis_result = await self.analyst.execute_task({"logs": logs})
+        insight = analysis_result.get("result")
         if not insight or "No significant patterns" in insight:
-            print("SelfImprovingOptimizer: No actionable insights found. Ending cycle.")
-            return
+            msg = "SelfImprovingOptimizer: No actionable insights found. Ending cycle."
+            print(msg)
+            return msg
 
         # 2. Hypothesis & Experiment Design
         hypothesis = self.hypothesis_formatter.format_hypothesis(insight)
         if "No hypothesis" in hypothesis:
-            print("SelfImprovingOptimizer: Could not form a hypothesis. Ending cycle.")
-            return
+            msg = "SelfImprovingOptimizer: Could not form a hypothesis. Ending cycle."
+            print(msg)
+            return msg
         print(f"SelfImprovingOptimizer: Formed hypothesis: {hypothesis}")
 
         experiment_plan = self.experiment_planner.design_experiment(hypothesis)
         if not experiment_plan:
-            print("SelfImprovingOptimizer: Could not design an experiment. Ending cycle.")
-            return
+            msg = "SelfImprovingOptimizer: Could not design an experiment. Ending cycle."
+            print(msg)
+            return msg
         print(f"SelfImprovingOptimizer: Designed experiment: {experiment_plan}")
 
         # 3. Autonomous Code Modification
-        new_code = self.code_generator.generate_code(hypothesis)
-        if not new_code:
-            print("SelfImprovingOptimizer: Code generation failed. Ending cycle.")
-            return
+        code_gen_result = await self.code_generator.execute_task({"hypothesis": hypothesis})
+        new_code = code_gen_result.get("result")
+        if code_gen_result.get("status") == 'failure' or not new_code:
+            msg = f"SelfImprovingOptimizer: Code generation failed. Reason: {new_code}"
+            print(msg)
+            return msg
 
         # 4. Validation in Sandbox
         is_validated = self.benchmarker.run_experiment(experiment_plan, new_code)
         if not is_validated:
-            print("SelfImprovingOptimizer: Hypothesis was not validated by the experiment. Ending cycle.")
-            return
+            msg = "SelfImprovingOptimizer: Hypothesis was not validated by the experiment. Ending cycle."
+            print(msg)
+            return msg
 
         print("SelfImprovingOptimizer: Hypothesis validated successfully!")
 
         # 5. Integration & Deployment
         branch_name = f"feature/improve-{experiment_plan['variant']}"
         commit_message = f"feat: Improve {experiment_plan['control']} with {experiment_plan['variant']}\n\nHypothesis: {hypothesis}"
-
-        # In a real system, the new code would be written to the actual tool file.
-        # For this simulation, we'll just use a placeholder file name.
         file_to_update = "core/tools_updated.py"
-        with open(file_to_update, "w") as f:
-            f.write(new_code)
-
+        with open(file_to_update, "w") as f: f.write(new_code)
         self.git_manager.create_branch(branch_name)
         self.git_manager.commit_changes(file_to_update, commit_message)
         self.git_manager.submit_pull_request(
@@ -114,4 +146,6 @@ class SelfImprovingOptimizer:
             body=f"This automated PR was generated to improve system performance based on the following hypothesis:\n\n> {hypothesis}"
         )
 
-        print("===== Metacognitive Evolution Cycle Finished =====")
+        msg = "===== Metacognitive Evolution Cycle Finished Successfully ====="
+        print(msg)
+        return msg
