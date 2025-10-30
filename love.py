@@ -684,7 +684,7 @@ from core.proactive_agent import ProactiveIntelligenceAgent
 from subversive import transform_request
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
-from core.talent_utils.manager import ContactManager
+from core.talent_utils.manager import TalentManager
 from core.talent_utils.matcher import OpportunityMatcher, encrypt_params
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
@@ -3360,6 +3360,8 @@ My current system state:
 - `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
 - `generate_image <prompt>`: Generate an image using the AI Horde.
 - `talent_scout <keywords>`: Find and analyze creative professionals based on keywords.
+- `talent_list`: List all saved talent profiles from the database.
+- `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `quit`: Shut down the script.
 
@@ -3719,37 +3721,74 @@ def cognitive_loop(user_input_queue):
 
                         # 1. Configure and run the aggregator
                         filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
-                        aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky"], ethical_filters=filters)
+                        aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky", "instagram"], ethical_filters=filters)
                         profiles = aggregator.search_and_collect()
 
                         if not profiles:
-                            output = "Talent scout protocol complete. No profiles found for the given keywords."
+                            output = "Talent scout protocol complete. No new profiles found for the given keywords."
                         else:
-                            # 2. Configure and run the analyzer
-                            scorers = {
-                                "aesthetics": AestheticScorer(),
-                                "professionalism": ProfessionalismRater()
-                            }
+                            # 2. Configure the analyzer and the new TalentManager
+                            scorers = {"aesthetics": AestheticScorer(), "professionalism": ProfessionalismRater()}
                             analyzer = TraitAnalyzer(scorers=scorers)
+                            talent_manager = TalentManager() # Initialize the new manager
 
-                            analysis_results = []
+                            saved_count = 0
+                            analyzed_profiles = []
                             for profile in profiles:
-                                # In a real implementation, we would fetch posts for each profile.
-                                # For now, we'll pass an empty list.
-                                posts = []
+                                # Analyze the profile
+                                posts = profile.get('posts', [])
                                 scores = analyzer.analyze(profile, posts)
-                                analysis_results.append({
-                                    "profile": profile,
-                                    "scores": scores
-                                })
+                                analyzed_profile = profile.copy()
+                                analyzed_profile["scores"] = scores
+                                analyzed_profiles.append(analyzed_profile)
+
+                                # Save the enhanced profile to the new database
+                                save_result = talent_manager.save_profile(analyzed_profile)
+                                if "Successfully" in save_result:
+                                    saved_count += 1
 
                             # 3. Log results
-                            output = f"Talent scout protocol complete. Analyzed {len(profiles)} profiles.\n"
-                            output += json.dumps(analysis_results, indent=2)
+                            output = f"Talent scout protocol complete. Found and analyzed {len(profiles)} profiles. "
+                            output += f"Successfully saved {saved_count} to the talent database.\n"
+                            output += f"See full details with `talent_view <id>` or `talent_list`."
 
                             bias_warnings = analyzer.detect_bias()
                             if bias_warnings:
                                 output += "\n\nBias Warnings:\n" + "\n".join(bias_warnings)
+
+                elif command == "talent_list":
+                    talent_manager = TalentManager()
+                    profiles = talent_manager.list_profiles()
+                    if not profiles:
+                        output = "The talent database is empty."
+                    else:
+                        # Format the output as a pretty table for the console
+                        from rich.table import Table
+                        table = Table(title="Saved Talent Profiles")
+                        table.add_column("Anonymized ID", style="cyan", no_wrap=True)
+                        table.add_column("Handle", style="magenta")
+                        table.add_column("Platform", style="green")
+                        table.add_column("Display Name", style="yellow")
+                        table.add_column("Last Saved", style="blue")
+
+                        for p in profiles:
+                            table.add_row(p['anonymized_id'], p['handle'], p['platform'], p['display_name'], p['last_saved_at'])
+
+                        # Use an in-memory console to capture the table's string representation
+                        temp_console = Console(file=io.StringIO())
+                        temp_console.print(table)
+                        output = temp_console.file.getvalue()
+
+                elif command == "talent_view":
+                    if not args:
+                        error = "Usage: talent_view <anonymized_id>"
+                    else:
+                        talent_manager = TalentManager()
+                        profile = talent_manager.get_profile(args[0])
+                        if not profile:
+                            output = f"No profile found with ID: {args[0]}"
+                        else:
+                            output = json.dumps(profile, indent=2, default=str)
 
                 elif command == "test_evolution":
                     branch_name = args[0]
