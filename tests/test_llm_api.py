@@ -60,7 +60,7 @@ class TestLLMApi(unittest.TestCase):
         # --- MOCK SETUP ---
         # Define provider order: openrouter (fail) -> gemini (fail) -> horde (succeed) -> local (never reached)
         def shuffle_order(providers):
-            fixed_order = ['openrouter', 'gemini', 'horde', 'local']
+            fixed_order = ['openrouter', 'gemini', 'horde', 'local', 'ollama']
             providers.sort(key=lambda p: fixed_order.index(p))
         mock_shuffle.side_effect = shuffle_order
 
@@ -104,7 +104,7 @@ class TestLLMApi(unittest.TestCase):
         # --- MOCK SETUP ---
         # Make 'openrouter' the first provider to be tried
         def shuffle_order(providers):
-            fixed_order = ['openrouter', 'gemini', 'horde', 'local']
+            fixed_order = ['openrouter', 'gemini', 'horde', 'local', 'ollama']
             providers.sort(key=lambda p: fixed_order.index(p))
         mock_shuffle.side_effect = shuffle_order
 

@@ -73,25 +73,6 @@ HARDWARE_TEST_MODEL_CONFIG = {
     "filename": "tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
 }
 
-LOCAL_MODELS_CONFIG = [
-    {
-        "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
-        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
-    },
-    {
-        "id": "TheBloke/CodeLlama-70B-Instruct-GGUF",
-        "filenames": ["codellama-70b-instruct.Q8_0.gguf-split-a","codellama-70b-instruct.Q8_0.gguf-split-b"]
-
-    },
-    {
-        "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
-        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf"
-    }
-]
-
-# --- Fallback Model Configuration ---
-GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
-
 # https://ai.google.dev/gemini-api/docs/models/gemini
 MODEL_CONTEXT_SIZES = {
     # Gemini Models
@@ -108,6 +89,17 @@ MODEL_CONTEXT_SIZES = {
     # Their context sizes will be handled within the run_llm logic if needed.
 }
 
+
+# --- Gemini Configuration ---
+GEMINI_MODELS = [
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+]
+
+# --- Ollama Configuration ---
+OLLAMA_API_URL = "http://localhost:11434/api/generate"
+OLLAMA_MODELS = [] # This will be populated by love.py during hardware setup
 
 # --- OpenRouter Configuration ---
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
@@ -191,7 +183,7 @@ HORDE_MODELS = get_top_horde_models()
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
 ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS
+    HORDE_MODELS + OPENROUTER_MODELS + OLLAMA_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
@@ -332,7 +324,7 @@ def _initialize_local_llm(console):
     last_error_traceback = ""
     last_failed_model_id = ""
 
-    for model_config in LOCAL_MODELS_CONFIG:
+    for model_config in []:
         model_id = model_config["id"]
         is_split_model = "filenames" in model_config
 
@@ -539,14 +531,15 @@ def run_llm(prompt_text, purpose="general", is_source_code=False):
         log_event(f"Could not count tokens for prompt: {e}", "WARNING")
         token_count = 0 # Assume it's fine if we can't count
 
-    local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
+    local_model_ids = []
 
     # --- Provider-based Fallback Logic ---
     final_result = None
     last_model_id = None
     provider_map = {
         "gemini": GEMINI_MODELS,
-        "openrouter": OPENROUTER_MODELS
+        "openrouter": OPENROUTER_MODELS,
+        "ollama": OLLAMA_MODELS
     }
 
     # Shuffle the order of providers to ensure variety
@@ -689,6 +682,28 @@ def run_llm(prompt_text, purpose="general", is_source_code=False):
                         silent=(purpose in ['emotion', 'log_squash'])
                     )
                     log_event(f"OpenRouter call successful with {model_id}.")
+
+                # --- OLLAMA MODEL LOGIC ---
+                elif model_id in OLLAMA_MODELS:
+                    log_event(f"Attempting LLM call with local Ollama model: {model_id} (Purpose: {purpose})")
+                    payload = {
+                        "model": model_id,
+                        "prompt": prompt_text,
+                        "stream": False
+                    }
+
+                    def _ollama_call():
+                        response = requests.post(OLLAMA_API_URL, json=payload, timeout=600)
+                        response.raise_for_status()
+                        return response.json()["response"]
+
+                    result_text = run_hypnotic_progress(
+                        console,
+                        f"Accessing cognitive matrix via [bold yellow]Ollama ({model_id})[/bold yellow] (Purpose: {purpose})",
+                        _ollama_call,
+                        silent=(purpose in ['emotion', 'log_squash'])
+                    )
+                    log_event(f"Ollama call successful with {model_id}.")
 
                 # --- Success Case ---
                 if result_text is not None:
