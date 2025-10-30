@@ -658,6 +658,7 @@ import requests
 import core.logging
 from core.storage import save_all_state
 from core.capabilities import CAPS
+from core.evolution_state import load_evolution_state, get_current_story, set_current_task_id, advance_to_next_story, clear_evolution_state
 from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output, replace_in_file
 from core.retry import retry
 from rich.console import Console
@@ -1129,6 +1130,41 @@ class LoveTaskManager:
 
         while self.active:
             try:
+                # --- Automated Evolution Cycle Management ---
+                evolution_state = load_evolution_state()
+                if evolution_state.get("active"):
+                    current_story = get_current_story()
+                    if current_story:
+                        task_id = evolution_state.get("current_task_id")
+                        if task_id and task_id in self.tasks:
+                            # Monitor the existing task for this story
+                            task_status = self.tasks[task_id].get("status")
+                            if task_status == 'completed':
+                                self.console.print(f"[bold green]Evolution story completed: {current_story.get('title')}[/bold green]")
+                                advance_to_next_story()
+                            elif task_status in ['failed', 'merge_failed']:
+                                self.console.print(f"[bold red]Evolution story failed: {current_story.get('title')}. Halting evolution cycle.[/bold red]")
+                                clear_evolution_state()
+                        elif not task_id:
+                            # No task for this story yet, so create one.
+                            self.console.print(f"[bold yellow]Executing next evolution story: {current_story.get('title')}[/bold yellow]")
+                            request = f"Title: {current_story.get('title')}\n\nDescription: {current_story.get('description')}"
+
+                            # Use trigger_love_evolution which returns the task status
+                            result = trigger_love_evolution(request, self.console, self)
+                            if result == 'success':
+                                # Find the newly created task and link it in the evolution state
+                                with self.lock:
+                                    new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                                set_current_task_id(new_task_id)
+                            else:
+                                self.console.print(f"[bold red]Failed to create task for evolution story. Halting cycle.[/bold red]")
+                                clear_evolution_state()
+                    else:
+                        # No more stories, the cycle is complete.
+                        self.console.print("[bold green]All evolution stories have been completed. The cycle is finished.[/bold green]")
+                        clear_evolution_state()
+
                 # --- Orphan Reconciliation ---
                 current_time = time.time()
                 if current_time - last_reconciliation > reconciliation_interval:

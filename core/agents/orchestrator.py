@@ -1,4 +1,4 @@
-from core.tools import ToolRegistry, decompose_and_solve_subgoal, execute, evolve, post_to_bluesky
+from core.tools import ToolRegistry, decompose_and_solve_subgoal, execute, evolve, post_to_bluesky, research_and_evolve
 from utils import replace_in_file
 from core.gemini_react_engine import GeminiReActEngine
 from core.image_api import generate_image, generate_image_for_post
@@ -139,6 +139,18 @@ class Orchestrator:
                         "task_description": {"type": "string", "description": "A detailed description of the complex task to be solved."},
                     },
                     "required": ["task_description"],
+                },
+            },
+        )
+        self.tool_registry.register_tool(
+            "research_and_evolve",
+            research_and_evolve,
+            {
+                "description": "Initiates a research and evolution cycle to autonomously improve the codebase.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
                 },
             },
         )

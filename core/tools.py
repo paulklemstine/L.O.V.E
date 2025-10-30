@@ -20,6 +20,9 @@ from core.image_api import generate_image
 from core.bluesky_api import post_to_bluesky_with_image
 from PIL import Image
 import uuid
+from core.researcher import generate_evolution_book
+from core.evolution_state import set_user_stories, clear_evolution_state
+
 
 love_state = {}
 
@@ -436,3 +439,30 @@ Provide your analysis.
         return f"Error: Could not decode JSON from '{filepath}'. The file may be corrupted or not in valid JSON format."
     except Exception as e:
         return f"An unexpected error occurred during JSON file analysis: {e}"
+
+async def research_and_evolve() -> str:
+    """
+    Initiates a research and evolution cycle.
+    It analyzes the current codebase, researches cutting-edge AI,
+    generates a book of user stories, and kicks off the evolution process.
+    """
+    print("🤖 Initiating research and evolution cycle...")
+
+    # In case a previous run was interrupted
+    clear_evolution_state()
+
+    user_stories = await generate_evolution_book()
+
+    if not user_stories:
+        message = "Research phase did not yield any user stories. Evolution cycle will not start."
+        print(f"🛑 {message}")
+        return message
+
+    set_user_stories(user_stories)
+
+    message = f"✅ Research complete. Generated {len(user_stories)} user stories. The evolution process will now begin."
+    print(message)
+    for i, story in enumerate(user_stories):
+        print(f"  - Story {i+1}: {story.get('title')}")
+
+    return message
