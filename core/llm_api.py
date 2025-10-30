@@ -195,6 +195,7 @@ ALL_LLM_MODELS = list(dict.fromkeys(
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
+PROVIDER_FAILURE_COUNT = {}
 HORDE_MODEL_FAILURE_COUNT = {model: 0 for model in HORDE_MODELS}
 HORDE_MODEL_AVAILABILITY = {model: time.time() for model in HORDE_MODELS}
 local_llm_instance = None
