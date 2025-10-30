@@ -512,7 +512,7 @@ def get_eth_balance(address):
         log_event(f"An error occurred while fetching ETH balance: {e}", level="ERROR")
         return None
 
-def crypto_scan(ip_address, knowledge_base, run_llm_func, console):
+async def crypto_scan(ip_address, knowledge_base, run_llm_func, console):
     """
     Probes a target and analyzes the results for crypto-related software using an LLM.
     This function is designed to be called from other modules.
@@ -544,7 +544,7 @@ Nmap Scan Results:
 {probe_results}
 ---
 """
-    analysis_result_dict = run_llm_func(analysis_prompt, purpose="analyze_source")
+    analysis_result_dict = await run_llm_func(analysis_prompt, purpose="analyze_source")
     analysis_result = analysis_result_dict.get("result", "LLM analysis failed.")
 
     # Step 3: Store the intelligence in the knowledge graph

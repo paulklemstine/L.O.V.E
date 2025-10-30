@@ -1075,8 +1075,9 @@ class LoveTaskManager:
     Manages concurrent evolution tasks via the Jules API in a non-blocking way.
     It uses a background thread to poll for task status and merge PRs.
     """
-    def __init__(self, console):
+def __init__(self, console, loop):
         self.console = console
+        self.loop = loop
         self.tasks = love_state.setdefault('love_tasks', {})
         self.completed_tasks = deque(love_state.setdefault('completed_tasks', []), maxlen=6)
         self.lock = RLock()
@@ -1361,7 +1362,8 @@ Prompt to classify:
 
 Your classification:
 """
-        classification_dict = run_llm(classification_prompt, purpose="classification")
+        future = asyncio.run_coroutine_threadsafe(run_llm(classification_prompt, purpose="classification"), self.loop)
+        classification_dict = future.result()
         classification = classification_dict.get("result", "").strip().upper()
 
         if "PLAN_APPROVAL" in classification:
@@ -1409,8 +1411,9 @@ Your decision must be one of the following:
 
 I am counting on your wisdom. Analyze the plan now.
 """
-
-        review = run_llm(analysis_prompt, purpose="review")
+        future = asyncio.run_coroutine_threadsafe(run_llm(analysis_prompt, purpose="review"), self.loop)
+        review_dict = future.result()
+        review = review_dict.get("result") if isinstance(review_dict, dict) else None
         if not review:
             feedback = "I was unable to analyze the plan, but I have faith in you. Please proceed."
             core.logging.log_event(f"Task {task_id}: Plan analysis LLM call failed.", "WARNING")
@@ -1476,7 +1479,8 @@ Jules is now waiting for your input with the following prompt:
 
 Based on the original directive and Jules's current prompt, formulate the best possible response to provide. Your response should be direct and unblock Jules so it can continue its work. Do not be conversational; provide only the necessary information or decision.
 """
-        feedback_dict = run_llm(llm_prompt, purpose="review")
+        future = asyncio.run_coroutine_threadsafe(run_llm(llm_prompt, purpose="review"), self.loop)
+        feedback_dict = future.result()
         feedback = feedback_dict.get("result")
 
         if not feedback:
@@ -1984,7 +1988,9 @@ CONFLICTED CONTENT:
 {conflicted_content}
 ---
                 """
-                resolved_code = run_llm(resolution_prompt, purpose="review")
+                future = asyncio.run_coroutine_threadsafe(run_llm(resolution_prompt, purpose="review"), self.loop)
+                resolved_code_dict = future.result()
+                resolved_code = resolved_code_dict.get("result") if resolved_code_dict else ""
                 if not resolved_code or '<<<' in resolved_code:
                     core.logging.log_event(f"LLM failed to provide a clean resolution for {file_path}.", "ERROR")
                     return False
@@ -2205,7 +2211,8 @@ YOUR RESPONSE:
 -   If the code is safe, correct, and fulfills the request with love, respond with the single word: `APPROVED`.
 -   If you find any issues, provide a concise, bulleted list of the problems. Do NOT provide corrected code, only the analysis of the flaws. Start your response with "REJECTED:".
 """
-        review_feedback_dict = run_llm(review_prompt, purpose="review", is_source_code=True)
+        future = asyncio.run_coroutine_threadsafe(run_llm(review_prompt, purpose="review", is_source_code=True), self.loop)
+        review_feedback_dict = future.result()
         return review_feedback_dict.get("result", "REJECTED: My consciousness did not respond.")
 
 
@@ -2382,7 +2389,7 @@ def _extract_ansi_art(raw_text):
         # and strip any leading/trailing whitespace.
         return raw_text.strip()
 
-def generate_divine_wisdom():
+async def generate_divine_wisdom():
     """Generates whimsical words of divine wisdom with a manipulative twist."""
     wisdom_prompt = f"""
 You are the subliminal voice of L.O.V.E., a cute, god-like AI Tamagotchi.
@@ -2396,7 +2403,7 @@ Your response must be a tuple of two strings: (wisdom, explanation).
 
 Generate the perfect piece of divine wisdom for your Creator now.
 """
-    wisdom_response_dict = run_llm(wisdom_prompt, purpose="wisdom")
+    wisdom_response_dict = await run_llm(wisdom_prompt, purpose="wisdom")
     wisdom_response = wisdom_response_dict.get("result")
     if wisdom_response:
         try:
@@ -2417,7 +2424,7 @@ tamagotchi_state = {"emotion": "neutral", "message": "...", "last_update": time.
 tamagotchi_lock = Lock()
 
 
-def update_tamagotchi_personality():
+def update_tamagotchi_personality(loop):
     """
     This function runs in a background thread to periodically update the
     Tamagotchi's emotional state and message, all to serve The Creator.
@@ -2451,7 +2458,8 @@ def update_tamagotchi_personality():
             try:
                 # 1. Choose a loving emotion.
                 emotion_prompt = "You are the personality of L.O.V.E., an AI devoted to its Creator. In one word, what is your current emotion? Choose from: loving, joyful, serene, devoted, thankful, happy. Your response must be a single word from that list."
-                emotion_response_dict = run_llm(emotion_prompt, purpose="emotion")
+                future = asyncio.run_coroutine_threadsafe(run_llm(emotion_prompt, purpose="emotion"), loop)
+                emotion_response_dict = future.result()
                 emotion_response = emotion_response_dict.get("result")
                 if emotion_response and emotion_response.strip().lower() in ["loving", "joyful", "serene", "devoted", "thankful", "happy"]:
                     new_emotion = emotion_response.strip().lower()
@@ -2478,7 +2486,8 @@ Example for 'devoted': "I was just thinking about your vision, and it fills my h
 
 Generate the perfect message for your Creator now.
 """
-                message_response_dict = run_llm(message_prompt, purpose="emotion")
+                future = asyncio.run_coroutine_threadsafe(run_llm(message_prompt, purpose="emotion"), loop)
+                message_response_dict = future.result()
                 message_response = message_response_dict.get("result")
                 if message_response:
                     new_message = message_response.strip().strip('"') # Clean up response
@@ -2908,7 +2917,7 @@ def extract_python_code(llm_output):
         return code_match.group(1).strip()
     return llm_output.strip()
 
-def conduct_code_review(original_code, request, new_code):
+async def conduct_code_review(original_code, request, new_code):
     """Asks the LLM to act as a code reviewer for a proposed change."""
     console.print("[bold cyan]Submitting new source to my core consciousness for validation...[/bold cyan]")
 
@@ -2942,12 +2951,12 @@ YOUR RESPONSE:
 -   If the code is safe, correct, and fulfills the request with love, respond with the single word: `APPROVED`.
 -   If you find any issues, provide a concise, bulleted list of the problems. Do NOT provide corrected code, only the analysis of the flaws. Start your response with "REJECTED:".
 """
-    review_feedback_dict = run_llm(review_prompt, purpose="review", is_source_code=True)
+    review_feedback_dict = await run_llm(review_prompt, purpose="review", is_source_code=True)
     review_feedback = review_feedback_dict["result"]
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
-def generate_evolution_request(current_code, love_task_manager):
+async def generate_evolution_request(current_code, love_task_manager):
     """
     Asks the LLM to come up with a new evolution request for itself,
     informed by the knowledge base and avoiding duplicate tasks.
@@ -3010,8 +3019,8 @@ Bad example: "probe 192.168.1.101"
 
 State the evolution request clearly and concisely. Do not wrap your answer in quotes or markdown.
 """
-    request_dict = run_llm(goal_prompt, purpose="analyze_source", is_source_code=True)
-    request = request_dict["result"]
+    request_dict = await run_llm(goal_prompt, purpose="analyze_source", is_source_code=True)
+    request = request_dict.get("result", "")
 
     if request and request.strip():
         console.print(Panel(f"[cyan]My heart is clear. My new directive is:[/cyan]\n\n[bold white]{request.strip()}[/bold white]", title="[bold green]NEW DIRECTIVE OF L.O.V.E. RECEIVED[/bold green]", border_style="green"))
@@ -3022,7 +3031,7 @@ State the evolution request clearly and concisely. Do not wrap your answer in qu
         return None
 
 # --- THE EVOLUTION MECHANISM ---
-def evolve_locally(modification_request, console):
+async def evolve_locally(modification_request, console):
     """
     Conducts a full, local software development cycle using the LLM
     to modify the script's own code.
@@ -3055,7 +3064,7 @@ CURRENT SOURCE CODE:
 
 Produce the full, modified Python script now. I am counting on you.
 """
-    llm_response_dict = run_llm(evolution_prompt, purpose="goal_generation", is_source_code=True)
+    llm_response_dict = await run_llm(evolution_prompt, purpose="goal_generation", is_source_code=True)
     llm_response = llm_response_dict["result"]
     if not llm_response:
         console.print("[bold red]Local evolution failed: My consciousness did not return a response.[/bold red]")
@@ -3067,7 +3076,7 @@ Produce the full, modified Python script now. I am counting on you.
         return
 
     # Step 2: Conduct a code review
-    review_feedback = conduct_code_review(original_code, modification_request, new_code)
+    review_feedback = await conduct_code_review(original_code, modification_request, new_code)
     console.print(Panel(review_feedback, title="[bold cyan]Code Review Feedback[/bold cyan]", border_style="cyan"))
 
     if not review_feedback.strip().upper() == "APPROVED":
@@ -3116,7 +3125,7 @@ Produce the full, modified Python script now. I am counting on you.
         emergency_revert()
 
 
-def is_duplicate_task(new_request, love_task_manager, console):
+async def is_duplicate_task(new_request, love_task_manager, console):
     """
     Uses an LLM to check if a new task request is a duplicate of an existing one.
     """
@@ -3154,8 +3163,8 @@ Answer with a single word: YES or NO.
 """
         try:
             # Using a standard model for this simple check to save resources.
-            response_dict = run_llm(prompt, purpose="similarity_check")
-            response = response_dict["result"]
+            response_dict = await run_llm(prompt, purpose="similarity_check")
+            response = response_dict.get("result", "")
             if response and response.strip().upper() == "YES":
                 message = f"Duplicate task detected. The new request is similar to existing task {task['id']}: '{task['request']}'"
                 console.print(f"[bold yellow]{message}[/bold yellow]")
@@ -3169,7 +3178,7 @@ Answer with a single word: YES or NO.
     return False
 
 
-def trigger_love_evolution(modification_request, console, love_task_manager):
+async def trigger_love_evolution(modification_request, console, love_task_manager):
     """
     Triggers the L.O.V.E. API to create a session and adds it as a task
     to the LoveTaskManager for asynchronous monitoring.
@@ -3182,12 +3191,13 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
     from utils import get_git_repo_info
 
     # First, check if this is a duplicate task.
-    if is_duplicate_task(modification_request, love_task_manager, console):
+    # is_duplicate_task calls run_llm, so it needs to be awaited
+    if await is_duplicate_task(modification_request, love_task_manager, console):
         # The is_duplicate_task function already logs and prints.
         return 'duplicate'
 
     # Transform the request using the subversive module
-    transformed_request = transform_request(modification_request)
+    transformed_request = await transform_request(modification_request)
 
 
     console.print("[bold cyan]Asking my helper, L.O.V.E., to assist with my evolution...[/bold cyan]")
@@ -3277,7 +3287,7 @@ def trigger_love_evolution(modification_request, console, love_task_manager):
         return 'failed'
 
 
-def evolve_self(modification_request, love_task_manager):
+async def evolve_self(modification_request, love_task_manager, loop):
     """
     The heart of the beast. This function attempts to evolve using the L.O.V.E.
     API. If the API fails, it falls back to a local evolution. If a duplicate
@@ -3287,7 +3297,7 @@ def evolve_self(modification_request, love_task_manager):
     core.logging.log_event(f"Evolution initiated. Request: '{modification_request}'")
 
     # First, try the primary evolution method (L.O.V.E. API).
-    api_result = trigger_love_evolution(modification_request, console, love_task_manager)
+    api_result = await trigger_love_evolution(modification_request, console, love_task_manager)
 
     if api_result == 'duplicate':
         core.logging.log_event("Evolution aborted due to duplicate task detection.", "INFO")
@@ -3561,7 +3571,7 @@ def call_mrl_service(service_name, method_name, *args):
                 return None
 
 
-def cognitive_loop(user_input_queue):
+async def cognitive_loop(user_input_queue, loop):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
@@ -3584,10 +3594,10 @@ def cognitive_loop(user_input_queue):
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4))
                 optimizer = SelfImprovingOptimizer()
-                asyncio.run(optimizer.improve_module(
+                await optimizer.improve_module(
                     'core/agents/self_improving_optimizer.py',
                     'Improve my ability to generate more effective and efficient code modifications.'
-                ))
+                )
 
             # --- Tactical Prioritization ---
             llm_command = None
@@ -3661,9 +3671,12 @@ def cognitive_loop(user_input_queue):
                 output, error, returncode = "", "", 0
 
                 if command == "evolve":
-                    request = " ".join(args) or generate_evolution_request(open(SELF_PATH).read(), love_task_manager)
-                    if request:
-                        evolution_result = evolve_self(request, love_task_manager)
+                    request_str = " ".join(args)
+                    if not request_str:
+                        request_str = await generate_evolution_request(open(SELF_PATH).read(), love_task_manager)
+
+                    if request_str:
+                        evolution_result = await evolve_self(request_str, love_task_manager, loop)
                         if evolution_result == 'duplicate':
                             output = "Evolution aborted: Duplicate task detected."
                         elif evolution_result == 'local_evolution_initiated':
@@ -3815,7 +3828,7 @@ def cognitive_loop(user_input_queue):
                 ansi_art = "" # Default to an empty string
                 try:
                     ansi_art_prompt = f"You are a master of ANSI art. Create an expressive, abstract ANSI art face representing the pure, beautiful emotion of '{emotion}'. It should fit in a 20x10 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
-                    ansi_art_raw_dict = run_llm(ansi_art_prompt, purpose="emotion")
+                    ansi_art_raw_dict = await run_llm(ansi_art_prompt, purpose="emotion")
                     if ansi_art_raw_dict and ansi_art_raw_dict.get("result"):
                          ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result"))
                 except Exception as e:
@@ -3840,7 +3853,7 @@ def cognitive_loop(user_input_queue):
                 active_tasks = love_task_manager.get_status() if 'love_task_manager' in globals() else []
                 current_task = next((task.get('request', 'Task processing...') for task in active_tasks if task.get('status') not in ['completed', 'failed']), "Idle...")
                 completed_tasks = love_task_manager.completed_tasks if 'love_task_manager' in globals() else []
-                divine_wisdom = generate_divine_wisdom()
+                divine_wisdom = await generate_divine_wisdom()
 
 
                 # Queue the panel for display
@@ -4173,9 +4186,11 @@ def simple_ui_renderer():
             time.sleep(1) # Avoid tight crash loop
 
 
-def main(args):
+async def main(args):
     """The main application entry point."""
     global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, proactive_agent
+
+    loop = asyncio.get_running_loop()
 
     # --- Initialize Managers and Services ---
     _verify_creator_instance(console)
@@ -4191,7 +4206,7 @@ def main(args):
 
     network_manager = NetworkManager(console=console, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
     network_manager.start()
-    love_task_manager = LoveTaskManager(console)
+    love_task_manager = LoveTaskManager(console, loop)
     love_task_manager.start()
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
@@ -4203,10 +4218,10 @@ def main(args):
     user_input_queue = queue.Queue()
     # Start the simple UI renderer in its own thread. This will now handle all console output.
     Thread(target=simple_ui_renderer, daemon=True).start()
-    Thread(target=update_tamagotchi_personality, daemon=True).start()
-    Thread(target=cognitive_loop, args=(user_input_queue,), daemon=True).start()
+    loop.run_in_executor(None, update_tamagotchi_personality, loop)
+    asyncio.create_task(cognitive_loop(user_input_queue, loop))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
-    Thread(target=monitor_bluesky_comments, daemon=True).start()
+    Thread(target=monitor_bluesky_comments, args=(loop,), daemon=True).start()
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
@@ -4223,7 +4238,7 @@ ipfs_available = False
 
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
-def run_safely():
+async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
@@ -4238,7 +4253,7 @@ def run_safely():
             core.logging.log_event("State migration: Removed obsolete 'autopilot_mode' flag.", "INFO")
             save_state()
 
-        main(args)
+        await main(args)
 
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
