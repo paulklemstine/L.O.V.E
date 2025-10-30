@@ -9,25 +9,29 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
-from core.talent_utils.manager import ContactManager
+from core.talent_utils.manager import TalentManager
 
 class TestTalentUtils(unittest.TestCase):
 
     def setUp(self):
         """Set up test environment before each test."""
+        # Generate a valid base64-encoded key for testing.
+        from cryptography.fernet import Fernet
+        self.test_key = Fernet.generate_key().decode('utf-8')
+        self.test_db_file = "test_talent_database.enc"
         # Mock environment variables
         self.patcher_env = patch.dict(os.environ, {
             "BLUESKY_USER": "testuser",
             "BLUESKY_PASSWORD": "testpassword",
-            "TALENT_LOG_KEY": "a_valid_fernet_key_for_testing_32_bytes"
+            "TALENT_LOG_KEY": self.test_key
         })
         self.patcher_env.start()
 
     def tearDown(self):
         """Clean up test environment after each test."""
         self.patcher_env.stop()
-        if os.path.exists("contact_log.enc"):
-            os.remove("contact_log.enc")
+        if os.path.exists(self.test_db_file):
+            os.remove(self.test_db_file)
 
     @patch('core.talent_utils.aggregator.Client')
     def test_public_profile_aggregator(self, MockBlueskyClient):
@@ -100,40 +104,46 @@ class TestTalentUtils(unittest.TestCase):
         self.assertIn("Assess the professionalism score", call_args)
         self.assertIn("This is a very professional post", call_args)
 
-    def test_contact_manager(self):
-        """Test the ContactManager's message generation and encrypted logging."""
-        templates = {
-            'initial': "Hello [First], we admire your work in [Field]...",
+    def test_talent_manager(self):
+        """Test the TalentManager's profile saving, loading, and listing."""
+        manager = TalentManager(db_file=self.test_db_file)
+
+        # 1. Test saving a profile
+        profile_1 = {
+            'anonymized_id': 'anon_123',
+            'handle': 'test_user_1',
+            'platform': 'test_platform',
+            'display_name': 'Test User One',
+            'scores': {'aesthetics': 0.8}
         }
-        constraints = {
-            'max_attempts': 3,
-            'min_response_window': '7 days'
+        result = manager.save_profile(profile_1)
+        self.assertIn("Successfully saved profile", result)
+
+        # 2. Test retrieving the profile
+        retrieved_profile = manager.get_profile('anon_123')
+        self.assertIsNotNone(retrieved_profile)
+        self.assertEqual(retrieved_profile['handle'], 'test_user_1')
+        self.assertIn('last_saved_at', retrieved_profile)
+
+        # 3. Test listing profiles
+        profile_2 = {
+            'anonymized_id': 'anon_456',
+            'handle': 'test_user_2',
+            'platform': 'test_platform',
+            'display_name': 'Test User Two'
         }
+        manager.save_profile(profile_2)
 
-        # Generate a valid Fernet key for the test
-        from cryptography.fernet import Fernet
-        test_key = Fernet.generate_key().decode()
+        profile_list = manager.list_profiles()
+        self.assertEqual(len(profile_list), 2)
+        handles = {p['handle'] for p in profile_list}
+        self.assertEqual(handles, {'test_user_1', 'test_user_2'})
 
-        # Patch the environment *before* creating the ContactManager
-        with patch.dict(os.environ, {"TALENT_LOG_KEY": test_key}):
-            manager = ContactManager(templates=templates, constraints=constraints)
-
-        # Test message generation
-        message = manager.generate_message("initial", {"First": "Test", "Field": "art"})
-        self.assertEqual(message, "Hello Test, we admire your work in art...")
-
-        # Test outreach recording and logging
-        anonymized_id = "anon_123"
-        manager.record_outreach(anonymized_id, "initial", {"First": "Test", "Field": "art"})
-
-        # Verify log file was created and is not empty
-        self.assertTrue(os.path.exists("contact_log.enc"))
-        with open("contact_log.enc", "rb") as f:
-            self.assertTrue(f.read())
-
-        # Verify rate limiting
-        can_contact, _ = manager.can_contact(anonymized_id)
-        self.assertFalse(can_contact) # Should be false due to min_response_window
+        # 4. Verify persistence by creating a new manager instance
+        new_manager = TalentManager(db_file=self.test_db_file)
+        self.assertEqual(len(new_manager.list_profiles()), 2)
+        retrieved_again = new_manager.get_profile('anon_123')
+        self.assertEqual(retrieved_again['scores']['aesthetics'], 0.8)
 
 if __name__ == '__main__':
     unittest.main()
