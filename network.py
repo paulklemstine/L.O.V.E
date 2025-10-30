@@ -465,22 +465,50 @@ def get_eth_balance(address):
     }
     command = [
         "curl",
-        "-X", "POST",
+        "--max-time", "15", # Add a timeout to the curl command
+        "-X",
+        "POST",
         "-H", "Content-Type: application/json",
         "--data", json.dumps(payload),
-        "https://public-eth.nownodes.io"
+        "https://cloudflare-eth.com" # Use a more reliable public endpoint
     ]
+    result = None
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=20 # Add a timeout to the subprocess call
+        )
+        if not result.stdout:
+            log_event("ETH balance fetch returned empty response.", level="WARNING")
+            return None
         response = json.loads(result.stdout)
         if "result" in response:
             balance_wei = int(response["result"], 16)
             balance_eth = balance_wei / 1e18
             return balance_eth
         else:
-            log_event(f"Could not retrieve balance: {response.get('error')}", level="ERROR")
+            error_details = response.get('error', 'No error details provided.')
+            log_event(f"ETH balance API returned an error: {error_details}", level="ERROR")
             return None
-    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+    except subprocess.CalledProcessError as e:
+        # This catches non-zero exit codes from curl
+        log_event(f"curl command failed when fetching ETH balance. Return code: {e.returncode}", level="ERROR")
+        if e.stdout:
+            log_event(f" --> curl stdout: {e.stdout.strip()}", level="ERROR")
+        if e.stderr:
+            log_event(f" --> curl stderr: {e.stderr.strip()}", level="ERROR")
+        return None
+    except json.JSONDecodeError:
+        # This catches errors if the response is not valid JSON
+        log_event("Failed to decode JSON response when fetching ETH balance.", level="ERROR")
+        if result and result.stdout:
+            log_event(f" --> Raw non-JSON response: {result.stdout.strip()}", level="ERROR")
+        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        # Catches timeout or if curl is not installed
         log_event(f"An error occurred while fetching ETH balance: {e}", level="ERROR")
         return None
 
