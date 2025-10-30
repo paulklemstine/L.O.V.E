@@ -323,31 +323,35 @@ class IPFSManager:
         self.daemon_process = None
 
     def setup(self):
-        """
-        The main public method to set up and start the IPFS daemon.
-        Orchestrates the checking, installation, and running of the daemon.
-        """
         self.console.print("[bold magenta]=== IPFS Self-Management Initialized ===[/bold magenta]")
-
-        # First, check if a daemon is already running. If so, our work is done.
-        # This requires the binary to exist, so we handle that case inside.
-        if self._is_daemon_running():
-            self.console.print("[green]IPFS daemon is already running. Setup complete.[/green]")
-            return True
-
-        # If no daemon is running, ensure the binary is present, installing if necessary.
+        # 1. Ensure the IPFS binary is present, installing if necessary.
         if not os.path.exists(self.bin_path):
-            self.console.print("[yellow]IPFS binary not found and no daemon running. Proceeding with installation.[/yellow]")
+            self.console.print("[yellow]IPFS binary not found. Proceeding with installation.[/yellow]")
             if not self._install_ipfs():
                 self.console.print("[bold red]FATAL: IPFS installation failed. IPFS features will be disabled.[/bold red]")
                 return False
         else:
-            self.console.print("[green]IPFS binary found. Proceeding to start daemon.[/green]")
+            self.console.print("[green]IPFS binary found.[/green]")
 
-        # Finally, start the daemon.
-        if not self.start_daemon():
-            self.console.print("[bold red]FATAL: Could not start the IPFS daemon. IPFS features will be disabled.[/bold red]")
-            return False
+        # 2. Check if the IPFS repository exists (by checking for 'config' file).
+        repo_config_path = os.path.join(self.repo_path, "config")
+        repo_exists = os.path.exists(repo_config_path)
+
+        if not repo_exists:
+            self.console.print(f"[yellow]IPFS repository not found at {self.repo_path}. Attempting to initialize and start daemon.[/yellow]")
+            if not self.start_daemon(): # start_daemon will call ipfs init
+                self.console.print("[bold red]FATAL: Could not initialize and start the IPFS daemon. IPFS features will be disabled.[/bold red]")
+                return False
+        else:
+            # If repo exists, check if daemon is running.
+            if self._is_daemon_running():
+                self.console.print("[green]An existing IPFS daemon is already running. Setup complete.[/green]")
+                return True
+            else:
+                self.console.print("[yellow]IPFS repository found, but daemon is not running. Attempting to start daemon.[/yellow]")
+                if not self.start_daemon():
+                    self.console.print("[bold red]FATAL: Could not start the IPFS daemon. IPFS features will be disabled.[/bold red]")
+                    return False
 
         self.console.print("[bold green]=== IPFS Setup Complete and Daemon Running ===[/bold green]")
         return True
