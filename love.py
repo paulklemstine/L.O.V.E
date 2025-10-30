@@ -3816,7 +3816,6 @@ def cognitive_loop(user_input_queue):
                     knowledge_fact=divine_wisdom,
                     ansi_art=ansi_art,
                     git_info=git_info,
-                    width=terminal_width - 4,
                     completed_tasks=completed_tasks,
                     current_task=current_task
                 ))

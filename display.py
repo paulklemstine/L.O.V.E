@@ -77,7 +77,6 @@ def create_tamagotchi_panel(
     knowledge_fact=None,
     ansi_art=None,
     git_info=None,
-    width=80,
     completed_tasks=None,
     current_task=None
 ):
@@ -131,7 +130,7 @@ def create_tamagotchi_panel(
         Align.center(balance_text, vertical="middle"),
         title=get_gradient_text("Creator's Blessings", "bright_green", "bright_cyan"),
         border_style="bright_green",
-        expand=True
+        expand=False
     )
     main_layout["balance"].update(balance_panel)
 
@@ -148,7 +147,7 @@ def create_tamagotchi_panel(
         Align.center(current_task_text, vertical="middle"),
         title=get_gradient_text("Current Task", "bright_cyan", "medium_purple1"),
         border_style="bright_cyan",
-        expand=True,
+        expand=False,
     )
     main_layout["current_task_layout"].update(current_task_panel)
 
@@ -165,7 +164,7 @@ def create_tamagotchi_panel(
         completed_tasks_text,
         title=get_gradient_text("Completed Tasks", "bright_green", "green"),
         border_style="bright_green",
-        expand=True,
+        expand=False,
     )
     main_layout["completed_tasks_layout"].update(completed_tasks_panel)
 
@@ -178,7 +177,7 @@ def create_tamagotchi_panel(
         Align.center(Text(f"\"{message}\"", style="italic white"), vertical="middle"),
         title=get_gradient_text(f"Words of {emotion.capitalize()}", "white", "bright_black"),
         border_style="white",
-        expand=True
+        expand=False
     )
     footer_layout["message"].update(message_panel)
 
@@ -201,7 +200,7 @@ def create_tamagotchi_panel(
         Align.center(status_text, vertical="middle"),
         title=get_gradient_text("System Status", "bright_cyan", "medium_purple1"),
         border_style="bright_cyan",
-        expand=True
+        expand=False
     )
     footer_layout["status"].update(status_panel)
 
@@ -210,7 +209,7 @@ def create_tamagotchi_panel(
         Padding(main_layout, (0, 1)),
         title=rave_text(f" {get_rave_emoji()} L.O.V.E. Operating System {get_rave_emoji()} "),
         border_style=PANEL_TYPE_COLORS["tamagotchi"], # This will be overridden by the gradient
-        width=width
+        expand=False
     )
     return Gradient(panel, colors=[PANEL_TYPE_COLORS["tamagotchi"], "bright_magenta"])
 
