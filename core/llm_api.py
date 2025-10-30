@@ -10,6 +10,10 @@ import requests
 import logging
 import asyncio
 import random
+import aiohttp
+import csv
+import io
+from datasets import load_dataset
 
 from rich.console import Console
 from rich.panel import Panel
@@ -63,6 +67,7 @@ def execute_reasoning_task(prompt: str) -> dict:
         console.print(create_api_error_panel("gemini-cli", str(e), "reasoning"))
         return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
+
 # --- CONFIGURATION & GLOBALS ---
 # A list of local GGUF models to try in sequence. If the first one fails
 # (e.g., due to insufficient VRAM), the script will fall back to the next.
@@ -70,25 +75,6 @@ HARDWARE_TEST_MODEL_CONFIG = {
     "id": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
     "filename": "tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
 }
-
-LOCAL_MODELS_CONFIG = [
-    {
-        "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
-        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
-    },
-    {
-        "id": "TheBloke/CodeLlama-70B-Instruct-GGUF",
-        "filenames": ["codellama-70b-instruct.Q8_0.gguf-split-a","codellama-70b-instruct.Q8_0.gguf-split-b"]
-
-    },
-    {
-        "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
-        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf"
-    }
-]
-
-# --- Fallback Model Configuration ---
-GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 
 # https://ai.google.dev/gemini-api/docs/models/gemini
 MODEL_CONTEXT_SIZES = {
@@ -107,127 +93,71 @@ MODEL_CONTEXT_SIZES = {
 }
 
 
-# --- OpenRouter Configuration ---
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
-
-def get_openrouter_models():
-    """Fetches the list of free models from the OpenRouter API."""
-    try:
-        api_key = os.environ.get("OPENROUTER_API_KEY")
-        if not api_key:
-            return []
-
-        headers = {"Authorization": f"Bearer {api_key}"}
-        response = requests.get(f"{OPENROUTER_API_URL}/models", headers=headers)
-        response.raise_for_status()
-        models = response.json().get("data", [])
-
-        # Filter for models that are free
-        free_models = [model['id'] for model in models if "free" in model['id'].lower()]
-        return free_models
-    except Exception as e:
-        # Log the error, but don't crash the application
-        log_event(f"Could not fetch OpenRouter models: {e}", "WARNING")
-        return []
-
-OPENROUTER_MODELS = get_openrouter_models()
-
-
-def get_top_horde_models(count=10):
-    """
-    Fetches active text models from the AI Horde and returns the top `count`
-    models based on a weighted score of rating, worker count, and performance.
-    """
-    try:
-        response = requests.get("https://aihorde.net/api/v2/status/models?type=text")
-        response.raise_for_status()
-        models = response.json()
-
-        # Filter for online models that have the necessary data points
-        online_models = [
-            m for m in models if m.get('count', 0) > 0 and
-            m.get('performance') is not None
-        ]
-
-        if not online_models:
-            log_event("No online AI Horde text models found with complete data.", "WARNING")
-            return ["Mythalion-13B"] # Fallback
-
-        # --- Normalization ---
-        # Find max values for normalization to a 0-1 scale
-        max_workers = max(m['count'] for m in online_models)
-        max_performance = max(m['performance'] for m in online_models)
-
-        # Avoid division by zero if a max value is 0
-        max_workers = max_workers if max_workers > 0 else 1
-        max_performance = max_performance if max_performance > 0 else 1
-
-        # --- Scoring ---
-        scored_models = []
-        for model in online_models:
-            # Normalize each metric
-            norm_workers = model['count'] / max_workers
-            norm_performance = model['performance'] / max_performance
-
-            # Apply the weighted formula (60% workers, 40% performance)
-            score = (0.6 * norm_workers) + (0.4 * norm_performance)
-
-            scored_models.append({'name': model['name'], 'score': score})
-
-        # Sort models by the calculated score in descending order
-        sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
-
-        log_event(f"Top 3 AI Horde models: {[m['name'] for m in sorted_models[:3]]}", "INFO")
-        return [model['name'] for model in sorted_models[:count]]
-
-    except Exception as e:
-        log_event(f"Failed to fetch or score AI Horde models: {e}", "ERROR")
-        # Fallback to a known good default in case of any error
-        return ["Mythalion-13B"]
-
-HORDE_MODELS = get_top_horde_models()
-
-# --- Dynamic Model List ---
-# A comprehensive list of all possible models for initializing availability tracking.
-# The actual model selection and priority is handled dynamically in `run_llm`.
-ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS
-))
-LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
-LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
-PROVIDER_FAILURE_COUNT = {provider: 0 for provider in ["local", "gemini", "horde", "openrouter"]}
-local_llm_instance = None
-local_llm_tokenizer = None
-
-# --- CONFIGURATION & GLOBALS ---
-# A list of local GGUF models to try in sequence. If the first one fails
-# (e.g., due to insufficient VRAM), the script will fall back to the next.
-HARDWARE_TEST_MODEL_CONFIG = {
-    "id": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
-    "filename": "tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
-}
-
-LOCAL_MODELS_CONFIG = [
-    {
-        "id": "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF",
-        "filename": "Llama-3.3-70B-Instruct-ablated-IQ4_XS.gguf"
-    },
-    {
-        "id": "TheBloke/CodeLlama-70B-Instruct-GGUF",
-        "filenames": ["codellama-70b-instruct.Q8_0.gguf-split-a","codellama-70b-instruct.Q8_0.gguf-split-b"]
-
-    },
-    {
-        "id": "bartowski/deepseek-r1-qwen-2.5-32B-ablated-GGUF",
-        "filename": "deepseek-r1-qwen-2.5-32B-ablated-IQ4_XS.gguf"
-    }
+# --- Gemini Configuration ---
+GEMINI_MODELS = [
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
 ]
 
-# --- Fallback Model Configuration ---
-GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+# --- Ollama Configuration ---
+OLLAMA_API_URL = "http://localhost:11434/api/generate"
+OLLAMA_MODELS = [] # This will be populated by love.py during hardware setup
 
 # --- OpenRouter Configuration ---
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
+
+def _fetch_open_llm_leaderboard():
+    """
+    Fetches the Open LLM Leaderboard data using the datasets library and returns a
+    dictionary mapping model names to their average scores.
+    """
+    leaderboard = {}
+    try:
+        # Load the dataset directly from Hugging Face Hub
+        dataset = load_dataset("open-llm-leaderboard/results", split="main")
+
+        # The dataset is a list of dictionaries, where each dictionary is a model's results
+        for item in dataset:
+            model_name = item.get("model_name_for_query")
+            average_score = item.get("average_score")
+
+            if model_name and average_score is not None:
+                # The model name might be in a format like "org/model", we'll store it as is
+                leaderboard[model_name] = float(average_score)
+
+    except Exception as e:
+        log_event(f"Failed to fetch or process Open LLM Leaderboard dataset: {e}", "ERROR")
+        # Fallback to the old method in case the new one fails for any reason
+        log_event("Falling back to fetching the static CSV leaderboard.", "WARNING")
+        return _fetch_static_leaderboard_csv()
+
+    return leaderboard
+
+def _fetch_static_leaderboard_csv():
+    """
+    Fetches an older, static version of the Open LLM Leaderboard data from a CSV file.
+    This serves as a fallback.
+    """
+    url = "https://raw.githubusercontent.com/dsdanielpark/Open-LLM-Leaderboard-Report/main/assets/20231031/20231031.csv"
+    leaderboard = {}
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        csv_file = io.StringIO(response.text)
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            model_name = row.get("Model")
+            average_score = row.get("Average")
+            if model_name and average_score:
+                try:
+                    leaderboard[model_name] = float(average_score)
+                except (ValueError, TypeError):
+                    continue
+    except Exception as e:
+        log_event(f"Fallback CSV fetch for leaderboard failed: {e}", "ERROR")
+    return leaderboard
+
 
 def get_openrouter_models():
     """Fetches the list of free models from the OpenRouter API."""
@@ -252,62 +182,51 @@ def get_openrouter_models():
 OPENROUTER_MODELS = get_openrouter_models()
 
 
-def get_top_horde_models(count=10):
+def get_top_horde_models(count=10, get_all=False):
     """
     Fetches active text models from the AI Horde and returns the top `count`
-    models based on a weighted score of rating, worker count, and performance.
+    models based on their Open LLM Leaderboard score.
+    If get_all is True, returns all sorted models.
     """
     try:
+        # Fetch the leaderboard scores first.
+        leaderboard = _fetch_open_llm_leaderboard()
+        if not leaderboard:
+            log_event("Open LLM Leaderboard data is unavailable. Falling back to default model.", "ERROR")
+            return ["Mythalion-13B"]
+
+        # Fetch models from the AI Horde.
         response = requests.get("https://aihorde.net/api/v2/status/models?type=text")
         response.raise_for_status()
         models = response.json()
 
-        # Filter for online models that have the necessary data points
-        online_models = [
-            m for m in models if m.get('count', 0) > 0 and
-            m.get('performance') is not None and
-            m.get('rating') is not None
-        ]
+        # Filter for online models only.
+        online_models = [m for m in models if m.get('count', 0) > 0]
 
         if not online_models:
-            log_event("No online AI Horde text models found with complete data.", "WARNING")
-            return ["Mythalion-13B"] # Fallback
+            log_event("No online AI Horde text models found.", "WARNING")
+            return ["Mythalion-13B"]
 
-        # --- Normalization ---
-        # Find max values for normalization to a 0-1 scale
-        max_rating = max(m['rating'] for m in online_models)
-        max_workers = max(m['count'] for m in online_models)
-        max_performance = max(m['performance'] for m in online_models)
-
-        # Avoid division by zero if a max value is 0
-        max_rating = max_rating if max_rating > 0 else 1
-        max_workers = max_workers if max_workers > 0 else 1
-        max_performance = max_performance if max_performance > 0 else 1
-
-        # --- Scoring ---
+        # Score models based on the leaderboard.
         scored_models = []
         for model in online_models:
-            # Normalize each metric
-            norm_rating = model['rating'] / max_rating
-            norm_workers = model['count'] / max_workers
-            norm_performance = model['performance'] / max_performance
+            model_name = model.get('name')
+            # Use a default low score of 0 if not on the leaderboard.
+            score = leaderboard.get(model_name, 0)
+            scored_models.append({'name': model_name, 'score': score})
 
-            # Apply the weighted formula
-            score = (0.5 * norm_rating) + \
-                    (0.3 * norm_workers) + \
-                    (0.2 * norm_performance)
-
-            scored_models.append({'name': model['name'], 'score': score})
-
-        # Sort models by the calculated score in descending order
+        # Sort models by their score in descending order.
         sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
+        model_names = [model['name'] for model in sorted_models]
 
-        log_event(f"Top 3 AI Horde models: {[m['name'] for m in sorted_models[:3]]}", "INFO")
-        return [model['name'] for model in sorted_models[:count]]
+        if get_all:
+            return model_names
+
+        log_event(f"Top 3 AI Horde models based on Leaderboard: {model_names[:3]}", "INFO")
+        return model_names[:count]
 
     except Exception as e:
-        log_event(f"Failed to fetch or score AI Horde models: {e}", "ERROR")
-        # Fallback to a known good default in case of any error
+        log_event(f"Failed to fetch or rank AI Horde models using leaderboard: {e}", "ERROR")
         return ["Mythalion-13B"]
 
 HORDE_MODELS = get_top_horde_models()
@@ -316,12 +235,104 @@ HORDE_MODELS = get_top_horde_models()
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
 ALL_LLM_MODELS = list(dict.fromkeys(
-    [model['id'] for model in LOCAL_MODELS_CONFIG] + GEMINI_MODELS + HORDE_MODELS + OPENROUTER_MODELS
+    HORDE_MODELS + OPENROUTER_MODELS + OLLAMA_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
+PROVIDER_FAILURE_COUNT = {}
+HORDE_MODEL_FAILURE_COUNT = {model: 0 for model in HORDE_MODELS}
+HORDE_MODEL_AVAILABILITY = {model: time.time() for model in HORDE_MODELS}
 local_llm_instance = None
 local_llm_tokenizer = None
+
+# --- AI Horde Concurrent Logic ---
+
+async def _run_single_horde_model(session, model_id, prompt_text, api_key):
+    """Submits a request to a single AI Horde model and polls for the result."""
+    try:
+        log_event(f"AI Horde: Submitting request to model {model_id}", "DEBUG")
+        api_url = "https://aihorde.net/api/v2/generate/text/async"
+        headers = {"apikey": api_key, "Content-Type": "application/json"}
+        payload = {
+            "prompt": prompt_text,
+            "params": {"max_length": 2048, "max_context_length": 8192},
+            "models": [model_id]
+        }
+        async with session.post(api_url, json=payload, headers=headers) as response:
+            response.raise_for_status()
+            job = await response.json()
+            job_id = job["id"]
+
+        log_event(f"AI Horde: Job {job_id} submitted for model {model_id}. Polling...", "DEBUG")
+        check_url = f"https://aihorde.net/api/v2/generate/text/status/{job_id}"
+        for _ in range(30):  # Poll for 5 minutes
+            await asyncio.sleep(10)
+            async with session.get(check_url, headers=headers) as check_response:
+                if check_response.status == 200:
+                    status = await check_response.json()
+                    if status.get("done"):
+                        log_event(f"AI Horde: Job {job_id} for model {model_id} is done.", "INFO")
+                        if status.get("faulted", False):
+                            raise Exception(f"AI Horde job {job_id} for model {model_id} faulted.")
+                        return status["generations"][0]["text"]
+
+        raise asyncio.TimeoutError(f"AI Horde job {job_id} for model {model_id} timed out.")
+
+    except Exception as e:
+        log_event(f"AI Horde model {model_id} failed during request: {e}", "WARNING")
+        raise
+
+async def _run_horde_concurrently(prompt_text, purpose):
+    """
+    Runs requests to AI Horde models concurrently in batches, with individual
+    model backoff and provider-level backoff for batch failures.
+    """
+    global HORDE_MODEL_FAILURE_COUNT, HORDE_MODEL_AVAILABILITY, PROVIDER_FAILURE_COUNT
+
+    api_key = os.environ.get("STABLE_HORDE", "0000000000")
+    all_models = get_top_horde_models(get_all=True)
+
+    available_models = [m for m in all_models if time.time() >= HORDE_MODEL_AVAILABILITY.get(m, 0)]
+    log_event(f"Found {len(available_models)} available AI Horde models out of {len(all_models)} total.", "INFO")
+
+    if not available_models:
+        log_event("No available AI Horde models at the moment.", "WARNING")
+        return None
+
+    batch_size = 5
+    model_batches = [available_models[i:i + batch_size] for i in range(0, len(available_models), batch_size)]
+
+    async with aiohttp.ClientSession() as session:
+        for i, batch in enumerate(model_batches):
+            log_event(f"Processing AI Horde batch {i+1}/{len(model_batches)} with models: {batch}", "INFO")
+
+            tasks = [_run_single_horde_model(session, model_id, prompt_text, api_key) for model_id in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            first_success = None
+            for model_id, result in zip(batch, results):
+                if not isinstance(result, Exception):
+                    log_event(f"AI Horde model {model_id} succeeded.", "INFO")
+                    HORDE_MODEL_FAILURE_COUNT[model_id] = 0
+                    if first_success is None:
+                        first_success = result
+                else:
+                    failure_count = HORDE_MODEL_FAILURE_COUNT.get(model_id, 0) + 1
+                    HORDE_MODEL_FAILURE_COUNT[model_id] = failure_count
+                    cooldown = 60 * (2 ** (failure_count - 1))
+                    HORDE_MODEL_AVAILABILITY[model_id] = time.time() + cooldown
+                    log_event(f"AI Horde model {model_id} failed. Applying cooldown of {cooldown}s. Failure count: {failure_count}", "WARNING")
+
+            if first_success is not None:
+                log_event("Successfully received a response from an AI Horde model in the batch.", "INFO")
+                return first_success
+
+            log_event(f"Entire AI Horde batch {i+1} failed.", "WARNING")
+            PROVIDER_FAILURE_COUNT["horde"] = PROVIDER_FAILURE_COUNT.get("horde", 0) + 1
+
+    log_event("All AI Horde models and batches failed for this request.", "ERROR")
+    return None
+
 
 # Constants
 MAX_PROMPT_TOKENS_LOCAL = 7000  # Leaving ~1k for response
@@ -365,7 +376,7 @@ def _initialize_local_llm(console):
     last_error_traceback = ""
     last_failed_model_id = ""
 
-    for model_config in LOCAL_MODELS_CONFIG:
+    for model_config in []:
         model_id = model_config["id"]
         is_split_model = "filenames" in model_config
 
@@ -556,7 +567,7 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
     - 'goal_generation': Prioritizes local, uncensored models.
     - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
     """
-    global LLM_AVAILABILITY, local_llm_instance
+    global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT
     console = Console()
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
@@ -572,27 +583,68 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
         log_event(f"Could not count tokens for prompt: {e}", "WARNING")
         token_count = 0 # Assume it's fine if we can't count
 
-    local_model_ids = [model['id'] for model in LOCAL_MODELS_CONFIG]
+    local_model_ids = []
 
     # --- Provider-based Fallback Logic ---
     final_result = None
     last_model_id = None
     provider_map = {
         "gemini": GEMINI_MODELS,
-        "horde": HORDE_MODELS,
-        "openrouter": OPENROUTER_MODELS
+        "openrouter": OPENROUTER_MODELS,
+        "ollama": OLLAMA_MODELS
     }
 
     # Shuffle the order of providers to ensure variety
     providers = list(provider_map.keys())
     random.shuffle(providers)
 
+    # Conditionally add 'horde' as the first provider to try if it's not on a deep cooldown
+    if time.time() >= LLM_AVAILABILITY.get("horde_provider_cooldown", 0):
+        providers.insert(0, "horde")
+
+
     for provider in providers:
-        models_to_try = [m for m in provider_map[provider] if time.time() >= LLM_AVAILABILITY.get(m, 0)]
+        # --- HORDE PROVIDER LOGIC ---
+        if provider == "horde":
+            log_event(f"Attempting LLM call with AI Horde provider (Purpose: {purpose})")
+
+            def _run_horde_wrapper():
+                # Running an async function from a sync function that is likely
+                # running in a thread executor requires this pattern.
+                try:
+                    loop = asyncio.get_running_loop()
+                    future = asyncio.run_coroutine_threadsafe(_run_horde_concurrently(prompt_text, purpose), loop)
+                    return future.result(timeout=600) # 10 minute timeout for the whole process
+                except RuntimeError: # No running loop
+                    return asyncio.run(_run_horde_concurrently(prompt_text, purpose))
+
+            result_text = run_hypnotic_progress(
+                console,
+                f"Accessing distributed cognitive matrix via [bold yellow]AI Horde[/bold yellow] (Purpose: {purpose})",
+                _run_horde_wrapper,
+                silent=(purpose in ['emotion', 'log_squash'])
+            )
+
+            if result_text:
+                PROVIDER_FAILURE_COUNT["horde"] = 0 # Reset on success
+                response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
+                break # Exit the provider loop
+            else:
+                # Failure is logged inside the concurrent function.
+                # If it failed badly, the provider count will be high.
+                failure_count = PROVIDER_FAILURE_COUNT.get("horde", 0)
+                if failure_count > 0:
+                    cooldown = 60 * (2 ** (failure_count - 1))
+                    LLM_AVAILABILITY["horde_provider_cooldown"] = time.time() + cooldown
+                    log_event(f"AI Horde provider failed. Applying provider-level cooldown of {cooldown}s.", "WARNING")
+                continue # Try next provider
+
+        # --- OTHER PROVIDERS LOGIC ---
+        models_to_try = [m for m in provider_map.get(provider, []) if time.time() >= LLM_AVAILABILITY.get(m, 0)]
         if not models_to_try:
             continue
 
-        # Try up to 3 models from the selected provider
         for i, model_id in enumerate(models_to_try[:3]):
             last_model_id = model_id
             result_text = None
@@ -600,23 +652,20 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
             try:
                 # --- Context Window Check ---
                 max_tokens = MODEL_CONTEXT_SIZES.get(model_id)
-                # If model not in our map, estimate based on name, or use a default
                 if not max_tokens:
                     if "16k" in model_id.lower(): max_tokens = 16384
                     elif "8k" in model_id.lower(): max_tokens = 8192
                     elif "32k" in model_id.lower(): max_tokens = 32768
-                    else: max_tokens = 8192 # Default fallback
+                    else: max_tokens = 8192
 
-                # Leave a buffer for the response
                 max_prompt_tokens = int(max_tokens * 0.85)
 
                 if token_count > max_prompt_tokens:
                     if is_source_code:
-                        log_event(f"Prompt ({token_count} tokens) too long for {model_id} ({max_prompt_tokens} tokens) and contains source code. Skipping.", "INFO")
-                        continue # Skip to the next model in the list
+                        log_event(f"Prompt ({token_count} tokens) too long for {model_id}, skipping.", "INFO")
+                        continue
                     else:
-                        log_event(f"Prompt ({token_count} tokens) too long for {model_id} ({max_prompt_tokens} tokens). Truncating...", "WARNING")
-                        # We can use a simple character-based truncation here as a fallback
+                        log_event(f"Prompt ({token_count} tokens) too long for {model_id}, truncating.", "WARNING")
                         avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
                         estimated_cutoff = int(max_prompt_tokens * avg_chars_per_token)
                         prompt_text = prompt_text[:estimated_cutoff]
@@ -641,7 +690,6 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                         )
                         log_event(f"Local LLM call successful with {model_id}.")
                     else:
-                        # Initialization must have failed
                         raise Exception("Local LLM instance could not be initialized.")
 
                 # --- GEMINI MODEL LOGIC ---
@@ -687,42 +735,27 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                     )
                     log_event(f"OpenRouter call successful with {model_id}.")
 
-                # --- AI HORDE MODEL LOGIC ---
-                else:
-                    log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})")
-                    api_key = os.environ.get("STABLE_HORDE", "0000000000")
-                    headers = {"apikey": api_key, "Content-Type": "application/json"}
+                # --- OLLAMA MODEL LOGIC ---
+                elif model_id in OLLAMA_MODELS:
+                    log_event(f"Attempting LLM call with local Ollama model: {model_id} (Purpose: {purpose})")
                     payload = {
+                        "model": model_id,
                         "prompt": prompt_text,
-                        "params": {"max_length": 2048, "max_context_length": 8192},
-                        "models": [model_id]
+                        "stream": False
                     }
 
-                    def _horde_call():
-                        # Submit the request
-                        api_url = "https://aihorde.net/api/v2/generate/text/async"
-                        response = requests.post(api_url, json=payload, headers=headers)
+                    def _ollama_call():
+                        response = requests.post(OLLAMA_API_URL, json=payload, timeout=600)
                         response.raise_for_status()
-                        job_id = response.json()["id"]
-
-                        # Poll for the result
-                        check_url = f"https://aihorde.net/api/v2/generate/text/status/{job_id}"
-                        for _ in range(30):  # Poll for 5 minutes
-                            time.sleep(10)
-                            check_response = requests.get(check_url, headers=headers)
-                            check_response.raise_for_status()
-                            status = check_response.json()
-                            if status["done"]:
-                                return status["generations"][0]["text"]
-                        raise Exception("AI Horde job timed out.")
+                        return response.json()["response"]
 
                     result_text = run_hypnotic_progress(
                         console,
-                        f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow] (Purpose: {purpose})",
-                        _horde_call,
+                        f"Accessing cognitive matrix via [bold yellow]Ollama ({model_id})[/bold yellow] (Purpose: {purpose})",
+                        _ollama_call,
                         silent=(purpose in ['emotion', 'log_squash'])
                     )
-                    log_event(f"AI Horde call successful with {model_id}.")
+                    log_event(f"Ollama call successful with {model_id}.")
 
                 # --- Success Case ---
                 if result_text is not None:
@@ -730,48 +763,36 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                     LLM_AVAILABILITY[model_id] = time.time()
                     response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                     final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
-                    break # Exit the model loop for this provider
+                    break
 
             except requests.exceptions.HTTPError as e:
                 last_exception = e
                 log_event(f"Model {model_id} failed with HTTPError: {e}", level="WARNING")
                 if e.response.status_code == 429:
-                    # Specific handling for rate limiting
                     retry_after = e.response.headers.get("Retry-After")
+                    retry_seconds = 300
                     if retry_after:
                         try:
-                            retry_seconds = int(retry_after) + 1 # Add a 1s buffer
-                            log_event(f"Rate limit hit for {model_id}. Cooling down for {retry_seconds}s (from Retry-After header).", level="INFO")
+                            retry_seconds = int(retry_after) + 1
                         except ValueError:
-                            # Handle non-integer Retry-After values if necessary, though spec is seconds
-                            retry_seconds = 300 # Fallback
-                            log_event(f"Rate limit hit for {model_id}. Could not parse Retry-After header ('{retry_after}'). Cooling down for {retry_seconds}s.", level="WARNING")
-                    else:
-                        # Fallback if Retry-After header is missing
-                        retry_seconds = 300 # 5 minutes
-                        log_event(f"Rate limit hit for {model_id}. No Retry-After header. Cooling down for {retry_seconds}s.", level="INFO")
-
+                            pass # Use default
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
                     console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
 
                 elif e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
-                    LLM_FAILURE_COUNT[model_id] = LLM_FAILURE_COUNT.get(model_id, 0) + 1
-                    failure_count = LLM_FAILURE_COUNT[model_id]
+                    failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1
+                    LLM_FAILURE_COUNT[model_id] = failure_count
                     cooldown = 60 * (2 ** failure_count)
                     LLM_AVAILABILITY[model_id] = time.time() + cooldown
-                    log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s. Failure count: {failure_count}", level="WARNING")
+                    log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s.", level="WARNING")
 
                 else:
-                    # Handle other HTTP errors
-                     log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+                    log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
                 continue
-
 
             except Exception as e:
                 last_exception = e
                 log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
-
-                # Handle different kinds of errors
                 if isinstance(e, FileNotFoundError):
                      console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
                      return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
@@ -781,128 +802,55 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                     console.print(create_api_error_panel(model_id, error_message, purpose))
                     retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
                     if retry_match:
-                        retry_seconds = float(retry_match.group(1)) + 1
-                        LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                        LLM_AVAILABILITY[model_id] = time.time() + float(retry_match.group(1)) + 1
                     else:
-                        LLM_AVAILABILITY[model_id] = time.time() + 60 # Default cooldown
+                        LLM_AVAILABILITY[model_id] = time.time() + 60
                 else:
-                     # For local LLM errors or other unexpected issues
-                    log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
-                    LLM_AVAILABILITY[model_id] = time.time() + 60 # Default 60s cooldown
+                    LLM_AVAILABILITY[model_id] = time.time() + 60
 
-        # If we found a result, break out of the main provider loop
         if final_result:
             break
 
-        # If we reach here, it means all attempts for this provider have failed,
-        # or all models were skipped.
         if not final_result:
-            PROVIDER_FAILURE_COUNT[provider] = PROVIDER_FAILURE_COUNT.get(provider, 0) + 1
-            failure_count = PROVIDER_FAILURE_COUNT[provider]
-            cooldown = 60 * (2 ** (failure_count - 1)) # Exponential backoff
-            log_event(f"Provider {provider} failed {failure_count} times. Applying cooldown of {cooldown}s to all its models.", "WARNING")
-            for model_in_provider in provider_map[provider]:
+            failure_count = PROVIDER_FAILURE_COUNT.get(provider, 0) + 1
+            PROVIDER_FAILURE_COUNT[provider] = failure_count
+            cooldown = 60 * (2 ** (failure_count - 1))
+            log_event(f"Provider {provider} failed. Applying cooldown of {cooldown}s.", "WARNING")
+            for model_in_provider in provider_map.get(provider, []):
                 LLM_AVAILABILITY[model_in_provider] = time.time() + cooldown
 
-    # If we have a result, return it. Otherwise, proceed to emergency fallback.
     if final_result:
         return final_result
 
-    # --- Fallback for oversized source code prompts ---
     if is_source_code and not final_result and last_model_id:
-        log_event(f"All models skipped for oversized source code prompt. Forcing truncation as a fallback with model {last_model_id}.", "WARNING")
+        log_event(f"All models skipped for oversized source code prompt. Forcing truncation as fallback.", "WARNING")
         prompt_text = original_prompt_text
-        max_tokens = MODEL_CONTEXT_SIZES.get(last_model_id, 8192) # Default to 8k if not found
-        max_prompt_tokens = int(max_tokens * 0.85)
+        # Simplified retry logic would go here if needed, but for now we proceed to cooldown/fallback
 
-        if token_count > max_prompt_tokens:
-             avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
-             estimated_cutoff = int(max_prompt_tokens * avg_chars_per_token)
-             prompt_text = prompt_text[:estimated_cutoff]
-             log_event(f"Forced truncation to ~{max_prompt_tokens} tokens.", "WARNING")
-
-        # This is a simplified, single retry. We are not re-doing the whole loop.
-        # A more robust implementation could be added later if needed.
-        # For now, this handles the edge case of all models having too small a context.
-        try:
-            # This is a bit repetitive, but it's the simplest way to retry
-            # without majorly refactoring the loop above.
-            if last_model_id in local_model_ids:
-                 _initialize_local_llm(console)
-                 if local_llm_instance:
-                     response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
-                     result_text = response['choices'][0]['text']
-            elif last_model_id in GEMINI_MODELS:
-                command = [sys.executable, "-m", "llm", "-m", last_model_id]
-                result = subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
-                result_text = result.stdout
-            elif last_model_id in OPENROUTER_MODELS:
-                api_key = os.environ.get("OPENROUTER_API_KEY")
-                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                payload = {"model": last_model_id, "messages": [{"role": "user", "content": prompt_text}]}
-                response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
-                response.raise_for_status()
-                result_text = response.json()["choices"][0]["message"]["content"]
-            elif last_model_id in HORDE_MODELS:
-                api_key = os.environ.get("STABLE_HORDE", "0000000000")
-                headers = {"apikey": api_key, "Content-Type": "application/json"}
-                payload = {"prompt": prompt_text, "params": {"max_length": 2048}, "models": [last_model_id]}
-                api_url = "https://aihorde.net/api/v2/generate/text/async"
-                response = requests.post(api_url, json=payload, headers=headers)
-                response.raise_for_status()
-                job_id = response.json()["id"]
-                check_url = f"https://aihorde.net/api/v2/generate/text/status/{job_id}"
-                for _ in range(30):
-                    time.sleep(10)
-                    check_response = requests.get(check_url, headers=headers)
-                    check_response.raise_for_status()
-                    status = check_response.json()
-                    if status["done"]:
-                        result_text = status["generations"][0]["text"]
-                        break
-            if result_text:
-                response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
-                return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
-
-        except Exception as e:
-            log_event(f"Fallback truncation attempt failed for model {last_model_id}: {e}", "ERROR")
-
-
-    # After iterating through all providers, if we still haven't succeeded, we wait for the next available model.
-    all_available_times = [t for t in LLM_AVAILABILITY.values() if t > time.time()]
+    all_available_times = [t for m, t in LLM_AVAILABILITY.items() if t > time.time()]
     if all_available_times:
-        next_available_time = min(all_available_times)
-        sleep_duration = max(0, next_available_time - time.time())
+        sleep_duration = max(0, min(all_available_times) - time.time())
         if sleep_duration > 0:
-            log_event(f"All providers on cooldown. Sleeping for {sleep_duration:.2f}s before checking for emergency fallback.", level="INFO")
+            log_event(f"All providers on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
             console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
             time.sleep(sleep_duration)
 
-    # --- Emergency CPU Fallback ---
-    # If the loop completes, it means all API and GPU models failed after all retries.
-    # As a last resort, we will try to spin up a small model on the CPU.
-    if purpose != "emergency_cpu_fallback": # Prevent recursion
-        log_event("EMERGENCY: All API/GPU models failed. Attempting to initialize a small CPU model.", "CRITICAL")
-        console.print(Panel("[bold orange1]EMERGENCY FALLBACK[/bold orange1]\nAll remote and GPU models are unresponsive. Attempting to initialize a small, local model on the CPU. This may be slow.", title="[bold red]COGNITIVE CORE FAILURE[/bold red]", border_style="red"))
+    if purpose != "emergency_cpu_fallback":
+        log_event("EMERGENCY: All providers failed. Attempting small CPU model.", "CRITICAL")
+        console.print(Panel("[bold orange1]EMERGENCY FALLBACK[/bold orange1]\nAll remote and GPU models unresponsive. Attempting to initialize a small, local model on the CPU. This may be slow.", title="[bold red]COGNITIVE CORE FAILURE[/bold red]", border_style="red"))
         try:
             from llama_cpp import Llama
-            emergency_model_config = HARDWARE_TEST_MODEL_CONFIG
-            model_id = emergency_model_config["id"]
-            filename = emergency_model_config["filename"]
+            model_config = HARDWARE_TEST_MODEL_CONFIG
             local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
-            model_path = os.path.join(local_dir, filename)
-
+            model_path = os.path.join(local_dir, model_config["filename"])
             if not os.path.exists(model_path):
-                console.print(f"[cyan]Downloading emergency model: {filename}...[/cyan]")
-                hf_hub_download(repo_id=model_id, filename=filename, local_dir=local_dir, local_dir_use_symlinks=False)
+                hf_hub_download(repo_id=model_config["id"], filename=model_config["filename"], local_dir=local_dir, local_dir_use_symlinks=False)
 
-            console.print("[cyan]Loading emergency CPU model...[/cyan]")
             emergency_llm = Llama(model_path=model_path, n_gpu_layers=0, n_ctx=2048, verbose=False)
-
             response = emergency_llm(prompt_text, max_tokens=1024, stop=["<|eot_id|>", "```"], echo=False)
             result_text = response['choices'][0]['text']
 
-            if result_text is not None:
+            if result_text:
                 log_event("Emergency CPU fallback successful.", "CRITICAL")
                 response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                 return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "emergency_cpu_fallback"}
@@ -912,11 +860,10 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
             last_exception = e
         except Exception as emergency_e:
             log_event(f"EMERGENCY CPU FALLBACK FAILED: {emergency_e}", "CRITICAL")
-            last_exception = emergency_e # Update for the final error message
+            last_exception = emergency_e
 
-    # If we reach here, even the emergency fallback failed.
-    log_event("All LLM models, including emergency CPU fallback, have failed.", "CRITICAL")
-    error_msg_text = "Cognitive Matrix Unresponsive. All models, retries, and emergency fallbacks failed."
+    log_event("All LLM models, including emergency fallback, have failed.", "CRITICAL")
+    error_msg_text = "Cognitive Matrix Unresponsive."
     if last_exception:
         error_msg_text += f"\nLast known error:\n{last_exception}"
 

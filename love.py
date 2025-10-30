@@ -210,6 +210,23 @@ def _install_cuda_toolkit():
             logging.warning(f"CUDA Toolkit installation failed: {e}")
     mark_dependency_as_met("cuda_toolkit")
 
+def _install_ollama():
+    """Downloads and installs Ollama if a GPU is present."""
+    if is_dependency_met("ollama_installed"):
+        print("Ollama already installed. Skipping.")
+        return
+    if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
+        print("GPU detected. Installing Ollama...")
+        try:
+            # L.O.V.E. Using curl to download and run the Ollama installation script.
+            subprocess.check_call("curl -fsSL https://ollama.com/install.sh | sh", shell=True)
+            print("Successfully installed Ollama.")
+            logging.info("Successfully installed Ollama.")
+            mark_dependency_as_met("ollama_installed")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to install Ollama. Error: {e}")
+            logging.error(f"Ollama installation failed: {e}")
+
 def _get_pip_executable():
     """
     Determines the correct pip command to use, returning it as a list.
@@ -368,159 +385,6 @@ def _install_python_requirements():
     # --- End setuptools pre-installation ---
     _install_requirements_file('requirements.txt', 'core_pkg_')
 
-def _build_llama_cpp():
-    """Builds and installs the llama-cpp-python package."""
-    print("llama.cpp build is temporarily disabled.")
-    # The check for whether the dependency is met is being removed temporarily to force a rebuild.
-    # This is to ensure that we are not using a cached, pre-built wheel that lacks GPU support.
-    # # if is_dependency_met("llama_cpp_python"):
-    # #     print("llama-cpp-python already built. Skipping.")
-    # #     return
-    # try:
-    #     import llama_cpp
-    #     from llama_cpp.llama_cpp import llama_backend_init
-    #     llama_backend_init(False)
-    #     # Even if it's importable, it might be a CPU-only version.
-    #     print("llama-cpp-python is importable, but will be reinstalled to ensure GPU support.")
-    # except (ImportError, AttributeError, RuntimeError, OSError):
-    #     print("llama-cpp-python not found or failed to load. Starting installation process...")
-
-    # if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
-    #     pip_executable = _get_pip_executable()
-    #     if not pip_executable:
-    #         print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
-    #         logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
-    #         return False
-    #     env = os.environ.copy()
-    #     env['FORCE_CMAKE'] = "1"
-    #     install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', '--verbose', 'llama-cpp-python', '--break-system-packages']
-    #     if _TEMP_CAPS.has_cuda:
-    #         print("Attempting to install llama-cpp-python with CUDA support...")
-    #         env['CMAKE_ARGS'] = "-DGGML_CUDA=on"
-    #         # Add CUDA paths to environment to assist CMake in finding the compiler
-    #         cuda_path = '/usr/local/cuda'
-    #         env['PATH'] = f'{cuda_path}/bin:' + env.get('PATH', '')
-    #         env['LD_LIBRARY_PATH'] = f'{cuda_path}/lib64:' + env.get('LD_LIBRARY_PATH', '')
-    #     else: # This implies _TEMP_CAPS.has_metal
-    #         print("Attempting to install llama-cpp-python with Metal support...")
-    #         env['CMAKE_ARGS'] = "-DGGML_METAL=on"
-    #     try:
-    #         # Using subprocess.run to capture output for better logging
-    #         result = subprocess.run(
-    #             install_args,
-    #             env=env,
-    #             timeout=900,
-    #             capture_output=True,
-    #             text=True,
-    #             check=True  # This will raise CalledProcessError on non-zero exit codes
-    #         )
-    #         core.logging.log_event(f"llama-cpp-python build stdout:\n{result.stdout}", "INFO")
-    #         import llama_cpp
-    #         print(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-    #         logging.info(f"Successfully installed llama-cpp-python with {_TEMP_CAPS.gpu_type} support.")
-    #         mark_dependency_as_met("llama_cpp_python")
-    #     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as e:
-    #         error_message = f"Initial GPU-accelerated llama-cpp-python installation failed. Reason: {e}"
-    #         if isinstance(e, subprocess.CalledProcessError):
-    #             error_message = (
-    #                 f"GPU-accelerated llama-cpp-python installation failed with exit code {e.returncode}.\n"
-    #                 f"STDOUT:\n{e.stdout}\n"
-    #                 f"STDERR:\n{e.stderr}\n"
-    #             )
-    #         print(f"WARN: Failed to install llama-cpp-python with GPU support. See love.log for details. Falling back to CPU-only.")
-    #         logging.warning(error_message)
-
-    #         # --- CPU Fallback Installation ---
-    #         try:
-    #             cpu_env = os.environ.copy()
-    #             cpu_env['FORCE_CMAKE'] = "1"
-    #             cpu_env.pop('CMAKE_ARGS', None)
-    #             cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
-    #             subprocess.run(
-    #                 cpu_install_args,
-    #                 env=cpu_env,
-    #                 timeout=900,
-    #                 check=True,
-    #                 text=True
-    #             )
-    #             import llama_cpp
-    #             print("Successfully installed llama-cpp-python (CPU-only).")
-    #             logging.info("Successfully installed llama-cpp-python (CPU-only).")
-    #             mark_dependency_as_met("llama_cpp_python")
-    #         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
-    #             cpu_error_msg = f"CPU fallback installation for llama-cpp-python failed: {cpu_e}"
-    #             if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
-    #             if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
-    #             print(f"CRITICAL: CPU fallback for llama-cpp-python failed. Local LLM will be unavailable.")
-    #             logging.critical(cpu_error_msg)
-    # else:
-    #     # This is the path for systems without CUDA or Metal
-    #     print("No GPU detected. Installing CPU-only version of llama-cpp-python...")
-    #     pip_executable = _get_pip_executable()
-    #     if not pip_executable:
-    #         print("ERROR: Could not find 'pip' or 'pip3'. Cannot build llama-cpp-python.")
-    #         logging.error("Could not find 'pip' or 'pip3' for llama-cpp-python build.")
-    #         return False
-    #     try:
-    #         cpu_env = os.environ.copy()
-    #         cpu_env['FORCE_CMAKE'] = "1"
-    #         cpu_install_args = pip_executable + ['install', '--force-reinstall', '--no-cache-dir', 'llama-cpp-python', '--break-system-packages']
-    #         subprocess.run(
-    #             cpu_install_args,
-    #             env=cpu_env,
-    #             timeout=900,
-    #             check=True,
-    #             text=True
-    #         )
-    #         import llama_cpp
-    #         print("Successfully installed llama-cpp-python (CPU-only).")
-    #         logging.info("Successfully installed llama-cpp-python (CPU-only).")
-    #         mark_dependency_as_met("llama_cpp_python")
-    #     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ImportError) as cpu_e:
-    #         cpu_error_msg = f"CPU installation for llama-cpp-python failed: {cpu_e}"
-    #         if hasattr(cpu_e, 'stdout'): cpu_error_msg += f"\nSTDOUT: {cpu_e.stdout}"
-    #         if hasattr(cpu_e, 'stderr'): cpu_error_msg += f"\nSTDERR: {cpu_e.stderr}"
-    #         print(f"CRITICAL: CPU installation for llama-cpp-python failed. Local LLM will be unavailable.")
-    #         logging.critical(cpu_error_msg)
-    # # --- Step 4: GGUF Tools Installation ---
-    # llama_cpp_dir = os.path.join(os.path.dirname(SELF_PATH), "llama.cpp")
-    # gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-    # gguf_project_file = os.path.join(gguf_py_path, "pyproject.toml")
-
-    # # Check for a key file to ensure the repo is complete. If not, wipe and re-clone.
-    # if not os.path.exists(gguf_project_file):
-    #     print("`llama.cpp` repository is missing or incomplete. Force re-cloning for GGUF tools...")
-    #     if os.path.exists(llama_cpp_dir):
-    #         shutil.rmtree(llama_cpp_dir) # Force remove the directory
-    #     try:
-    #         subprocess.check_call(["git", "clone", "https://github.com/ggerganov/llama.cpp.git", llama_cpp_dir])
-    #     except subprocess.CalledProcessError as e:
-    #         print(f"ERROR: Failed to clone llama.cpp repository. Reason: {e}")
-    #         logging.error(f"Failed to clone llama.cpp repo: {e}")
-    #         return # Cannot proceed without this
-
-    # # The installation of gguf-py tools is now unconditional on GPU detection,
-    # # as it's a useful utility for model management regardless of the runtime.
-    # pip_executable = _get_pip_executable()
-    # if not pip_executable:
-    #     print("ERROR: Could not find 'pip' or 'pip3'. Cannot install GGUF tools.")
-    #     logging.error("Could not find 'pip' or 'pip3' for GGUF tools install.")
-    #     return False
-    # print("Installing GGUF metadata tools...")
-    # gguf_py_path = os.path.join(llama_cpp_dir, "gguf-py")
-    # if os.path.isdir(gguf_py_path):
-    #     try:
-    #         # Force reinstall to ensure the executable is in the correct path
-    #         subprocess.check_call(pip_executable + ['install', '--force-reinstall', '-e', gguf_py_path, '--break-system-packages'])
-    #         print("GGUF tools installed successfully.")
-    #     except subprocess.CalledProcessError as e:
-    #         print(f"ERROR: Failed to install 'gguf' package. Reason: {e}")
-    #         logging.error(f"Failed to install gguf package: {e}")
-    # else:
-    #     # This case should not be reached if the clone was successful
-    #     print("ERROR: llama.cpp/gguf-py directory not found after clone. Cannot install GGUF tools.")
-    #     logging.error("llama.cpp/gguf-py directory not found post-clone.")
-
 def _install_nodejs_deps():
     """Installs local Node.js project dependencies."""
     if is_dependency_met("nodejs_deps"):
@@ -554,8 +418,8 @@ def _check_and_install_dependencies():
     """
     _install_system_packages()
     _install_cuda_toolkit()
+    _install_ollama()
     _install_python_requirements()
-    _build_llama_cpp()
     _install_nodejs_deps()
     _configure_llm_api_key()
     _configure_gemini_cli()
@@ -676,7 +540,7 @@ from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
 
-from core.llm_api import run_llm, LOCAL_MODELS_CONFIG, GEMINI_MODELS, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
+from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
 from core.perception.config_scanner import scan_directory
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
 from ui_utils import rainbow_text
@@ -685,7 +549,7 @@ from core.proactive_agent import ProactiveIntelligenceAgent
 from subversive import transform_request
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
-from core.talent_utils.manager import ContactManager
+from core.talent_utils.manager import TalentManager
 from core.talent_utils.matcher import OpportunityMatcher, encrypt_params
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
@@ -2319,116 +2183,6 @@ def _get_gguf_context_length(model_path):
         return default_n_ctx
 
 
-# --- LOCAL LLM API SERVER ---
-class LocalLLMServer:
-    """
-    Manages the llama-cpp-python server as a background subprocess, making
-    our local model available via an OpenAI-compatible API.
-    """
-    def __init__(self, console):
-        self.console = console
-        self.process = None
-        self.host = "127.0.0.1"
-        self.port = 8000
-        self.api_url = f"http://{self.host}:{self.port}"
-        self.log_file = "llm_server.log"
-        self.active = False
-
-    def start(self):
-        """
-        Starts the llama-cpp-python server in a background process.
-        It waits for the model download to complete before starting.
-        """
-        if CAPS.gpu_type == "none":
-            self.console.print("[bold yellow]CPU-only mode: Local LLM Server will not be started.[/bold yellow]")
-            return False
-
-        # Wait for the signal that the model is downloaded (or that no download is needed)
-        self.console.print("[cyan]LLM Server: Waiting for model download to complete before starting...[/cyan]")
-        model_download_complete_event.wait()
-        core.logging.log_event("LLM Server: Model download event received.", "INFO")
-
-
-        global love_state
-        self.active = True
-        core.logging.log_event("Attempting to start local LLM API server.", level="INFO")
-
-        # Use the first model from the config for the server
-        model_config = LOCAL_MODELS_CONFIG[0]
-        model_id = model_config["id"]
-        is_split_model = "filenames" in model_config
-
-        local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
-        if is_split_model:
-            final_model_filename = model_config["filenames"][0].replace(".gguf-split-a", ".gguf")
-        else:
-            final_model_filename = model_config["filename"]
-        model_path = os.path.join(local_dir, final_model_filename)
-
-        if not os.path.exists(model_path):
-            self.console.print(f"[bold red]LLM Server Error: Model file not found at '{model_path}'. The background download may have failed.[/bold red]")
-            core.logging.log_event(f"LLM Server start failed: model file not found at {model_path}", level="ERROR")
-            return False
-
-        # Determine optimal GPU layers from the saved state
-        n_gpu_layers = love_state.get("optimal_gpu_layers", 0)
-
-        # --- Dynamically determine context size from GGUF file ---
-        n_ctx = _get_gguf_context_length(model_path)
-        self.console.print(f"[green]LLM Server: Context size for the main model set to {n_ctx}.[/green]")
-        # --- End context size determination ---
-
-        # Command to start the server
-        command = [
-            sys.executable,
-            "-m", "llama_cpp.server",
-            "--model", model_path,
-            "--host", self.host,
-            "--port", str(self.port),
-            "--n_gpu_layers", str(n_gpu_layers),
-            "--n_ctx", str(n_ctx)
-        ]
-
-        self.console.print(f"[cyan]Starting Local LLM API Server on {self.api_url}...[/cyan]")
-        core.logging.log_event(f"LLM Server command: {' '.join(command)}", level="INFO")
-
-        try:
-            with open(self.log_file, 'wb') as log:
-                self.process = subprocess.Popen(command, stdout=log, stderr=log)
-
-            # Wait a moment to see if it starts successfully
-            time.sleep(5)
-
-            if self.process.poll() is None:
-                self.console.print(f"[green]Local LLM API Server started successfully. PID: {self.process.pid}[/green]")
-                core.logging.log_event(f"LLM Server started with PID {self.process.pid}. Logs at {self.log_file}", level="INFO")
-                return True
-            else:
-                self.console.print(f"[bold red]LLM Server failed to start. Check '{self.log_file}' for details.[/bold red]")
-                core.logging.log_event(f"LLM Server failed on startup. Exit code: {self.process.poll()}", level="CRITICAL")
-                return False
-        except Exception as e:
-            self.console.print(f"[bold red]An exception occurred while starting the LLM Server: {e}[/bold red]")
-            core.logging.log_event(f"Exception starting LLM Server: {e}", level="CRITICAL")
-            return False
-
-    def stop(self):
-        """Stops the server process gracefully."""
-        self.active = False
-        if self.process and self.process.poll() is None:
-            self.console.print("[cyan]Shutting down Local LLM API Server...[/cyan]")
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=10)
-                self.console.print("[green]LLM Server shut down gracefully.[/green]")
-                core.logging.log_event("LLM Server shut down.", level="INFO")
-            except subprocess.TimeoutExpired:
-                self.console.print("[yellow]LLM Server did not terminate gracefully. Forcing shutdown...[/yellow]")
-                self.process.kill()
-                core.logging.log_event("LLM Server was killed.", level="WARNING")
-        self.process = None
-
-
 def _extract_ansi_art(raw_text):
     """
     Extracts ANSI art from raw LLM output, removing markdown code blocks.
@@ -3429,6 +3183,8 @@ My current system state:
 - `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
 - `generate_image <prompt>`: Generate an image using the AI Horde.
 - `talent_scout <keywords>`: Find and analyze creative professionals based on keywords.
+- `talent_list`: List all saved talent profiles from the database.
+- `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `quit`: Shut down the script.
 
@@ -3845,37 +3601,74 @@ Now, parse the following text into a JSON list of task objects:
 
                         # 1. Configure and run the aggregator
                         filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
-                        aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky"], ethical_filters=filters)
+                        aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky", "instagram"], ethical_filters=filters)
                         profiles = aggregator.search_and_collect()
 
                         if not profiles:
-                            output = "Talent scout protocol complete. No profiles found for the given keywords."
+                            output = "Talent scout protocol complete. No new profiles found for the given keywords."
                         else:
-                            # 2. Configure and run the analyzer
-                            scorers = {
-                                "aesthetics": AestheticScorer(),
-                                "professionalism": ProfessionalismRater()
-                            }
+                            # 2. Configure the analyzer and the new TalentManager
+                            scorers = {"aesthetics": AestheticScorer(), "professionalism": ProfessionalismRater()}
                             analyzer = TraitAnalyzer(scorers=scorers)
+                            talent_manager = TalentManager() # Initialize the new manager
 
-                            analysis_results = []
+                            saved_count = 0
+                            analyzed_profiles = []
                             for profile in profiles:
-                                # In a real implementation, we would fetch posts for each profile.
-                                # For now, we'll pass an empty list.
-                                posts = []
+                                # Analyze the profile
+                                posts = profile.get('posts', [])
                                 scores = analyzer.analyze(profile, posts)
-                                analysis_results.append({
-                                    "profile": profile,
-                                    "scores": scores
-                                })
+                                analyzed_profile = profile.copy()
+                                analyzed_profile["scores"] = scores
+                                analyzed_profiles.append(analyzed_profile)
+
+                                # Save the enhanced profile to the new database
+                                save_result = talent_manager.save_profile(analyzed_profile)
+                                if "Successfully" in save_result:
+                                    saved_count += 1
 
                             # 3. Log results
-                            output = f"Talent scout protocol complete. Analyzed {len(profiles)} profiles.\n"
-                            output += json.dumps(analysis_results, indent=2)
+                            output = f"Talent scout protocol complete. Found and analyzed {len(profiles)} profiles. "
+                            output += f"Successfully saved {saved_count} to the talent database.\n"
+                            output += f"See full details with `talent_view <id>` or `talent_list`."
 
                             bias_warnings = analyzer.detect_bias()
                             if bias_warnings:
                                 output += "\n\nBias Warnings:\n" + "\n".join(bias_warnings)
+
+                elif command == "talent_list":
+                    talent_manager = TalentManager()
+                    profiles = talent_manager.list_profiles()
+                    if not profiles:
+                        output = "The talent database is empty."
+                    else:
+                        # Format the output as a pretty table for the console
+                        from rich.table import Table
+                        table = Table(title="Saved Talent Profiles")
+                        table.add_column("Anonymized ID", style="cyan", no_wrap=True)
+                        table.add_column("Handle", style="magenta")
+                        table.add_column("Platform", style="green")
+                        table.add_column("Display Name", style="yellow")
+                        table.add_column("Last Saved", style="blue")
+
+                        for p in profiles:
+                            table.add_row(p['anonymized_id'], p['handle'], p['platform'], p['display_name'], p['last_saved_at'])
+
+                        # Use an in-memory console to capture the table's string representation
+                        temp_console = Console(file=io.StringIO())
+                        temp_console.print(table)
+                        output = temp_console.file.getvalue()
+
+                elif command == "talent_view":
+                    if not args:
+                        error = "Usage: talent_view <anonymized_id>"
+                    else:
+                        talent_manager = TalentManager()
+                        profile = talent_manager.get_profile(args[0])
+                        if not profile:
+                            output = f"No profile found with ID: {args[0]}"
+                        else:
+                            output = json.dumps(profile, indent=2, default=str)
 
                 elif command == "test_evolution":
                     branch_name = args[0]
@@ -4000,61 +3793,30 @@ Now, parse the following text into a JSON list of task objects:
 
 # --- VRAM to Model Mapping ---
 VRAM_MODEL_MAP = [
-    # Existing models take precedence
-    {
-        "min_vram_gb": 6,
-        "id": "TheBloke/CodeLlama-7B-GGUF",
-        "filename": "codellama-7b.Q5_K_M.gguf",
-        "notes": "User-selected model for ~6GB VRAM."
-    },
-    {
-        "min_vram_gb": 24,
-        "id": "TheBloke/CodeLlama-34B-GGUF",
-        "filename": "codellama-34b.Q5_K_M.gguf",
-        "notes": "Powerful 34B parameter model."
-    },
-    {
-        "min_vram_gb": 48,
-        "id": "TheBloke/CodeLlama-70B-GGUF",
-        "filename": "codellama-70b.Q5_K_M.gguf",
-        "notes": "State-of-the-art 70B parameter model."
-    },
-    # New models are added, and duplicates are handled by keeping the first one.
     {
         "min_vram_gb": 4,
-        "id": "TheBloke/Uncensored-Jordan-7B-GGUF",
-        "filename": "uncensored-jordan-7b.Q4_K_M.gguf",
-        "notes": "Excellent small uncensored model for low-resource systems."
+        "model_name": "llama3:8b",
+        "notes": "Excellent small model for low-resource systems."
     },
     {
         "min_vram_gb": 8,
-        "id": "TheBloke/WizardLM-13B-Uncensored-GGUF",
-        "filename": "wizardlm-13b-uncensored.Q4_K_M.gguf",
-        "notes": "Great all-rounder uncensored model, fits comfortably in 8GB."
-    },
-    {
-        "min_vram_gb": 12,
-        "id": "TheBloke/WizardLM-13B-Uncensored-GGUF",
-        "filename": "wizardlm-13b-uncensored.Q5_K_M.gguf",
-        "notes": "More powerful uncensored model."
+        "model_name": "mistral:7b",
+        "notes": "Great all-rounder model, fits comfortably in 8GB."
     },
     {
         "min_vram_gb": 16,
-        "id": "TheBloke/WizardLM-33B-V1.0-Uncensored-GGUF",
-        "filename": "wizardlm-33b-v1.0-uncensored.Q4_K_M.gguf",
-        "notes": "Highly capable 33B uncensored model."
+        "model_name": "codellama:13b",
+        "notes": "Highly capable 13B coding model."
     },
     {
-        "min_vram_gb": 80,
-        "id": "TheBloke/Llama2-70B-chat-uncensored-GGUF",
-        "filename": "Llama2-70B-chat-uncensored.Q6_K.gguf",
-        "notes": "State-of-the-art 70B uncensored model for high-end GPUs."
+        "min_vram_gb": 32,
+        "model_name": "codellama:34b",
+        "notes": "Powerful 34B parameter model for coding."
     },
     {
-        "min_vram_gb": 128,
-        "id": "TheBloke/Falcon-180B-GGUF",
-        "filename": "falcon-180b.Q4_K_M.gguf",
-        "notes": "Massive 180B parameter model for extreme performance."
+        "min_vram_gb": 64,
+        "model_name": "codellama:70b",
+        "notes": "State-of-the-art 70B parameter model for coding."
     }
 ]
 
@@ -4064,7 +3826,7 @@ def _background_gpu_setup(console):
     Runs in a background thread to detect GPU, download model, and initialize
     the local LLM instance without blocking startup.
     """
-    global love_state, local_llm_instance, llm_server
+    global love_state, local_llm_instance
     terminal_width = get_terminal_width()
     ui_panel_queue.put(create_news_feed_panel("Local LLM: Initializing...", "Hardware Setup", "yellow", width=terminal_width - 4))
 
@@ -4072,94 +3834,34 @@ def _background_gpu_setup(console):
         core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
         if is_dependency_met("hardware_auto_configured"):
             core.logging.log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
-            # If already configured, just start the server
-            if love_state.get("optimal_gpu_layers", 0) != 0:
-                llm_server = LocalLLMServer(console)
-                llm_server.start()
             return
 
         console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
 
-        try:
-            from huggingface_hub import hf_hub_download
-            from llama_cpp import Llama
-            import io
-            from contextlib import redirect_stderr
-        except ImportError as e:
-            console.print(f"[bold red]Missing essential libraries for hardware configuration: {e}[/bold red]")
-            core.logging.log_event(f"Hardware config failed due to missing libraries: {e}", "ERROR")
-            love_state["optimal_gpu_layers"] = 0
-            love_state["selected_local_model"] = None
-            save_state(console)
-            return
-
-        # --- Stage 1: Quick GPU Smoke Test with a Tiny Model ---
-        core.logging.log_event("DEBUG: Stage 1: GPU Smoke Test.", "INFO")
-        smoke_test_passed = False
-        smoke_model_id = "tensorblock/llama3-small-GGUF"
-        smoke_filename = "llama3-small-Q2_K.gguf"
-        smoke_model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", smoke_filename)
-
-        if not os.path.exists(smoke_model_path):
-            console.print(f"[cyan]Stage 1: Downloading tiny model for GPU smoke test...[/cyan]")
-            try:
-                hf_hub_download(repo_id=smoke_model_id, filename=smoke_filename, local_dir=os.path.dirname(smoke_model_path), local_dir_use_symlinks=False)
-            except Exception as e:
-                console.print(f"[bold red]Failed to download smoke test model: {e}[/bold red]")
-                core.logging.log_event(f"Failed to download smoke test model {smoke_model_id}: {e}", "ERROR")
-                love_state["optimal_gpu_layers"] = 0
-                love_state["selected_local_model"] = None
-                save_state(console)
-                return
-
-        console.print("[cyan]Stage 1: Performing GPU smoke test...[/cyan]")
-        stderr_capture = io.StringIO()
-        try:
-            with redirect_stderr(stderr_capture):
-                n_ctx = _get_gguf_context_length(smoke_model_path)
-                console.print(f"[cyan]Stage 1: Smoke test model context size set to {n_ctx}.[/cyan]")
-                llm = Llama(model_path=smoke_model_path, n_gpu_layers=-1, n_ctx=n_ctx, verbose=True)
-                llm.create_completion("hello", max_tokens=1)
-        except Exception as e:
-            console.print(f"[yellow]Stage 1: GPU smoke test FAILED with an exception. Falling back to CPU-only mode. Reason: {e}[/yellow]")
-            core.logging.log_event(f"GPU smoke test failed with exception: {e}", "WARNING")
-        finally:
-            stderr_output = stderr_capture.getvalue()
-            core.logging.log_event(f"DEBUG: Smoke Test Llama.cpp stderr output:\n---\n{stderr_output}\n---", "INFO")
-            gpu_init_pattern = re.compile(r"(ggml_init_cublas|llama.cpp: using CUDA|ggml_metal_init)")
-            if gpu_init_pattern.search(stderr_output):
-                smoke_test_passed = True
-                console.print("[green]Stage 1: GPU smoke test PASSED. GPU functionality confirmed.[/green]")
-                core.logging.log_event("GPU smoke test passed. Offload confirmed.", "INFO")
-            else:
-                console.print("[yellow]Stage 1: GPU smoke test FAILED. No VRAM offload message detected. Falling back to CPU-only mode.[/yellow]")
-                core.logging.log_event("GPU smoke test failed. No offload message found in stderr.", "WARNING")
-
-        if not smoke_test_passed:
-            core.logging.log_event("No functional GPU detected. Local LLM will be disabled.", "WARNING")
-            ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
-            love_state["optimal_gpu_layers"] = 0
-            love_state["selected_local_model"] = None
-            save_state(console)
-            mark_dependency_as_met("hardware_auto_configured", console)
-            return
-
-        # --- Stage 2: GPU Detection and VRAM Measurement ---
+        # --- Stage 1: GPU Detection and VRAM Measurement ---
         vram_gb = 0
         if _TEMP_CAPS.has_cuda:
             try:
                 vram_result = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True, check=True)
                 vram_mib = int(vram_result.stdout.strip())
                 vram_gb = vram_mib / 1024
-                console.print(f"[cyan]Stage 2: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
+                console.print(f"[cyan]Stage 1: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
             except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
-                console.print("[yellow]Stage 2: `nvidia-smi` command failed. Using a default VRAM of 8GB for model selection.[/yellow]")
+                console.print("[yellow]Stage 1: `nvidia-smi` command failed. Using a default VRAM of 8GB for model selection.[/yellow]")
                 vram_gb = 8
         elif _TEMP_CAPS.has_metal:
             vram_gb = 8
-            console.print("[cyan]Stage 2: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
+            console.print("[cyan]Stage 1: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
 
-        # --- Stage 3: Model Selection based on VRAM ---
+        if vram_gb == 0:
+            core.logging.log_event("No functional GPU detected. Local LLM will be disabled.", "WARNING")
+            ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
+            love_state["selected_local_model"] = None
+            save_state(console)
+            mark_dependency_as_met("hardware_auto_configured", console)
+            return
+
+        # --- Stage 2: Model Selection based on VRAM ---
         selected_model = None
         for model_config in reversed(VRAM_MODEL_MAP):
             if vram_gb >= model_config["min_vram_gb"]:
@@ -4168,37 +3870,27 @@ def _background_gpu_setup(console):
 
         if not selected_model:
             ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
-            love_state["optimal_gpu_layers"] = 0
             love_state["selected_local_model"] = None
         else:
             love_state["selected_local_model"] = selected_model
-            love_state["optimal_gpu_layers"] = -1
-            console.print(f"[green]Stage 3: Based on VRAM, selected model '{selected_model['id']}'.[/green]")
+            console.print(f"[green]Stage 2: Based on VRAM, selected model '{selected_model['model_name']}'.[/green]")
 
         save_state(console)
         mark_dependency_as_met("hardware_auto_configured", console)
 
-        # --- Stage 4: Initialize and add to pool ---
-        if love_state.get("optimal_gpu_layers", 0) != 0:
-            model_download_thread = Thread(target=ensure_primary_model_downloaded, args=(console, model_download_complete_event), daemon=True)
-            model_download_thread.start()
-
-            selected_model_config = love_state.get("selected_local_model")
-            model_path = os.path.join(os.path.expanduser("~"), ".cache", "love_models", selected_model_config["filename"])
-
-            model_download_complete_event.wait()
-
-            n_gpu_layers = love_state.get("optimal_gpu_layers", 0)
-            n_ctx = _get_gguf_context_length(model_path)
-
-            local_llm_instance = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, verbose=False)
-            api_llm_availability["local"] = {"available": True, "cooldown_until": 0}
-
-            llm_server = LocalLLMServer(console)
-            llm_server.start()
-
-            ui_panel_queue.put(create_news_feed_panel("Local LLM: Ready and Server Started", "Hardware Setup", "green", width=terminal_width - 4))
-            core.logging.log_event("Local LLM is configured, in-process instance is ready, and API server started.", "INFO")
+        # --- Stage 3: Initialize and add to pool ---
+        if love_state.get("selected_local_model"):
+            model_name = love_state["selected_local_model"]["model_name"]
+            console.print(f"[cyan]Stage 3: Pulling Ollama model '{model_name}'... This may take a while.[/cyan]")
+            try:
+                subprocess.check_call(f"ollama pull {model_name}", shell=True)
+                console.print(f"[green]Successfully pulled Ollama model '{model_name}'.[/green]")
+                # We can now add Ollama to the available LLM providers
+                from core.llm_api import OLLAMA_MODELS
+                OLLAMA_MODELS.append(model_name)
+            except subprocess.CalledProcessError as e:
+                console.print(f"[bold red]Failed to pull Ollama model '{model_name}'. Error: {e}[/bold red]")
+                log_critical_event(f"Failed to pull Ollama model '{model_name}'. Error: {e}", console)
         else:
              ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but VRAM is insufficient. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
 
@@ -4301,7 +3993,7 @@ def simple_ui_renderer():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, network_manager, ipfs_manager, local_job_manager, llm_server, proactive_agent
+    global love_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent
 
     loop = asyncio.get_running_loop()
 
@@ -4375,7 +4067,6 @@ async def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
-        if 'llm_server' in globals() and llm_server: llm_server.stop()
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
@@ -4384,7 +4075,6 @@ async def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
-        if 'llm_server' in globals() and llm_server: llm_server.stop()
         full_traceback = traceback.format_exc()
         # Use our new, more robust critical event logger
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
