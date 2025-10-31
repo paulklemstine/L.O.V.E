@@ -50,6 +50,10 @@ def get_maf_tools(tool_registry: ToolRegistry) -> List[Callable]:
 
 async def create_and_run_workflow(task: str, tool_registry: ToolRegistry) -> str:
     """
+    DEPRECATED: This function uses a dynamic, flat multi-agent workflow and has
+    been superseded by the hierarchical Supervisor-Specialist model in
+    `core/agents/orchestrator.py`. It is preserved for historical reference only.
+
     Dynamically creates and runs a multi-agent workflow to accomplish a complex task.
     """
     maf_tools = get_maf_tools(tool_registry)

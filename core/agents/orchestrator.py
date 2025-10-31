@@ -11,20 +11,16 @@ from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
 
-# Keep the old function for fallback compatibility as requested
-async def solve_with_agent_team(task_description: str) -> str:
-    from core.agent_framework_manager import create_and_run_workflow
-    orchestrator = Orchestrator()
-    result = await create_and_run_workflow(task_description, orchestrator.tool_registry)
-    return str(result)
-
-
 class Orchestrator:
     """
-    The Supervisor agent responsible for receiving high-level goals,
-    decomposing them into a plan, and orchestrating a team of specialist
-    agents to execute the plan.
+    The Supervisor agent in the hierarchical multi-agent framework.
+
+    This agent is responsible for receiving high-level goals, decomposing them
+    into a structured, step-by-step plan, and orchestrating a team of
+    specialist agents to execute that plan. It manages the flow of information
+    between specialists and ensures the overall goal is achieved.
     """
+
     def __init__(self):
         """Initializes the Supervisor and its registry of specialist agents."""
         print("Initializing Supervisor Orchestrator...")
@@ -84,7 +80,8 @@ Example JSON Response:
 Now, generate the plan for the given goal.
 """
         try:
-            response = await run_llm(prompt, is_source_code=False)
+            response_dict = await run_llm(prompt, is_source_code=False)
+            response = response_dict.get("result", "")
             # Clean the response to extract only the JSON part
             json_match = re.search(r'\[.*\]', response, re.DOTALL)
             if not json_match:
@@ -100,7 +97,9 @@ Now, generate the plan for the given goal.
     async def execute_goal(self, goal: str):
         """
         Asynchronously takes a high-level goal, generates a plan, and
-        manages the execution of that plan by the specialist agents.
+        manages the execution of that plan by the specialist agents. This
+        method embodies the core logic of the Supervisor in the hierarchical
+        collaboration framework.
         """
         print(f"\n--- Supervisor received new goal: {goal} ---")
 
@@ -125,7 +124,10 @@ Now, generate the plan for the given goal.
             try:
                 task_details_str = json.dumps(task_details_template)
                 for key, value in step_results.items():
-                    task_details_str = task_details_str.replace(f'"{{{{{key}}}}}', json.dumps(value))
+                    placeholder = f'{{{{{key}}}}}'
+                    # Escape the value to be safely embedded in the JSON string
+                    value_escaped = json.dumps(str(value))[1:-1]
+                    task_details_str = task_details_str.replace(placeholder, value_escaped)
                 task_details = json.loads(task_details_str)
                 print(f"Task Details: {json.dumps(task_details, indent=2)}")
             except Exception as e:
