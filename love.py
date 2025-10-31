@@ -3909,7 +3909,7 @@ async def main(args):
 
     # Keep the main thread alive while daemon threads do the work
     while True:
-        time.sleep(1)
+        await asyncio.sleep(1)
 
 
 ipfs_available = False
