@@ -3822,27 +3822,33 @@ def _automatic_update_checker(console):
 
 def simple_ui_renderer():
     """
-    Continuously gets items from the ui_panel_queue, prints them to the console,
-    and logs any non-log-message items (like custom Panels) to the log file.
+    Continuously gets items from the ui_panel_queue and renders them.
+    - If the item is a simple log message, its text is printed to the console.
+    - If the item is a complex object (like a rich Panel), it's rendered
+      to the console and its raw, stylized output is also saved to the log file.
     This is the single point of truth for all user-facing output.
     """
     while True:
         try:
             item = ui_panel_queue.get()
 
-            # Use an in-memory console to "print" the rich object and capture its raw string output
-            # with ANSI codes. This ensures that even non-string objects are handled correctly and
-            # can be logged "as is".
+            # Check if this is a simple log message from our core logger
+            if isinstance(item, dict) and item.get('type') == 'log_message':
+                # For simple logs, just print the message directly to the console.
+                # Do NOT write to love.log here, as the logging module already did.
+                # This prevents the "double printing" issue.
+                print(item.get('message', ''))
+                continue
+
+            # For all other items (e.g., rich Panels), render them fully.
             temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
             temp_console.print(item)
             output_str = temp_console.file.getvalue()
 
-            # 1. Print the captured string to the actual console (the news feed)
-            # The string already has a newline from rich's print, so we use end=''
+            # 1. Print the captured string to the actual console.
             print(output_str, end='')
 
-            # 2. Log the raw, stylized string to the log file
-            # This fulfills the requirement to log everything the user sees.
+            # 2. Log the raw, stylized string to the log file to capture UI elements.
             with open(LOG_FILE, "a", encoding="utf-8") as f:
                 f.write(output_str)
 
