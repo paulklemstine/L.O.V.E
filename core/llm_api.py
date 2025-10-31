@@ -26,45 +26,31 @@ from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
 from core.logging import log_event
-from core.gemini_cli_wrapper import GeminiCLIWrapper
-
 # --- NEW REASONING FUNCTION ---
-def execute_reasoning_task(prompt: str) -> dict:
+async def execute_reasoning_task(prompt: str) -> dict:
     """
-    Exclusively uses the gemini-cli wrapper for a reasoning task.
+    Exclusively uses the run_llm function for a reasoning task.
     This is the new primary pathway for the GeminiReActEngine.
     """
     console = Console()
     prompt_cid = pin_to_ipfs_sync(prompt.encode('utf-8'), console)
     response_cid = None
     try:
-        log_event("Initiating reasoning task via GeminiCLIWrapper.", "INFO")
-        gemini_wrapper = GeminiCLIWrapper()
+        log_event("Initiating reasoning task via run_llm.", "INFO")
 
-        def _gemini_cli_call():
-            # Align timeout with the 600s used elsewhere in the system for LLM calls
-            response = gemini_wrapper.run(prompt, timeout=600)
-            if response.return_code != 0:
-                raise RuntimeError(f"gemini-cli failed with stderr: {response.stderr}")
-            return response.stdout
+        # Directly call run_llm, which is now the core reasoning provider
+        response_dict = await run_llm(prompt, purpose="reasoning")
 
-        result_text = run_hypnotic_progress(
-            console,
-            "Executing core reasoning task with Gemini...",
-            _gemini_cli_call
-        )
+        if response_dict and response_dict.get("result"):
+            log_event("Reasoning task successful.", "INFO")
+            # The CIDs are already in the response from run_llm
+            return response_dict
+        else:
+            raise Exception("run_llm did not return a valid result.")
 
-        log_event("Reasoning task successful.", "INFO")
-        response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
-        return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
-
-    except FileNotFoundError:
-        log_event("gemini-cli executable not found.", "CRITICAL")
-        console.print(Panel("[bold red]Error: 'gemini-cli' executable not found.[/bold red]", title="[bold red]REASONING CORE FAILED[/bold red]", border_style="red"))
-        return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
     except Exception as e:
         log_event(f"An error occurred during reasoning task: {e}", "CRITICAL")
-        console.print(create_api_error_panel("gemini-cli", str(e), "reasoning"))
+        console.print(create_api_error_panel("reasoning_core", str(e), "reasoning"))
         return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
 
