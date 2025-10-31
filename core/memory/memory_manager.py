@@ -52,18 +52,6 @@ class MemoryNote:
         )
 
 
-def _install_dependencies():
-    """Installs required libraries for the memory manager."""
-    packages = ["sentence-transformers"]
-    for package in packages:
-        try:
-            __import__(package.replace("-", "_"))
-        except ImportError:
-            print(f"{package} not found. Installing...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-_install_dependencies()
-
 from sentence_transformers import SentenceTransformer
 
 from core.graph_manager import GraphDataManager
