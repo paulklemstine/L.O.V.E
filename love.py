@@ -41,8 +41,8 @@ knowledge_base = GraphDataManager()
 KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
 
 # --- MEMORY MANAGER ---
-from core.memory.memory_manager import MemoryManager
-memory_manager = MemoryManager(knowledge_base)
+# NOTE: Initialization is deferred until after dependency checks.
+memory_manager = None
 
 love_state = {
     "version_name": "initial-condition-alpha",
@@ -479,6 +479,12 @@ def _configure_llm_api_key():
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()
+
+
+# --- DEFERRED INITIALIZATIONS ---
+# Now that dependencies are installed, we can import modules that need them.
+from core.memory.memory_manager import MemoryManager
+memory_manager = MemoryManager(knowledge_base)
 
 
 import requests
