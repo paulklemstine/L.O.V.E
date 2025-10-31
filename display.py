@@ -422,37 +422,70 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     )
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
-def create_network_panel(type, target, data, output_cid=None, width=80):
-    """Creates a panel for network operations."""
-    panel_title = f"Network Operation | {type.capitalize()}"
-    border_style = PANEL_TYPE_COLORS["network"]
 
-    header_text = Text()
-    header_text.append("Target: ", style="bold white")
-    header_text.append(f"{target}", style="hot_pink")
+import asyncio
 
-    results_text, _ = _format_and_link(data)
+class WaitingAnimation:
+    """A class to manage and display a waiting animation for long-running tasks."""
 
-    content_items = [
-        header_text,
-        Rule("Results", style="bright_black"),
-        results_text
-    ]
+    def __init__(self, ui_queue, width=80):
+        self.ui_queue = ui_queue
+        self.width = width
+        self.stopped = False
+        self._animation_task = None
+        self.animation_chars = ['✦', '✧', '★', '☆']
+        self.animation_pattern = "({c1} {c2} {c3})"
+        self.position = 0
 
-    more_info_link = _create_more_info_link(data)
-    if more_info_link:
-        content_items.extend([Rule(style="bright_black"), more_info_link])
+    def _get_animation_frame(self):
+        """Generates a single frame of the animation."""
+        chars = [' '] * 3
+        chars[self.position] = random.choice(self.animation_chars)
 
-    content_group = Group(*content_items)
+        frame_text = self.animation_pattern.format(c1=chars[0], c2=chars[1], c3=chars[2])
 
-    panel = Panel(
-        content_group,
-        title=get_gradient_text(panel_title, border_style, "bright_cyan"),
-        border_style=border_style,
-        padding=(1, 2),
-        width=width
-    )
-    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+        # Apply rainbow gradient to the text
+        num_colors = len(frame_text)
+        rainbow_frame = Text()
+        for i, char in enumerate(frame_text):
+            color = RAVE_COLORS[i % len(RAVE_COLORS)]
+            rainbow_frame.append(char, style=color)
+
+        self.position = (self.position + 1) % 3
+
+        panel = Panel(
+            Align.center(rainbow_frame, vertical="middle"),
+            title=get_gradient_text("Thinking...", "hot_pink", "bright_magenta"),
+            border_style="dim",
+            width=self.width
+        )
+        return {"type": "animation_frame", "content": panel}
+
+    async def _run_animation(self):
+        """The core animation loop."""
+        await asyncio.sleep(10)  # Initial 10-second delay
+
+        while not self.stopped:
+            frame = self._get_animation_frame()
+            await self.ui_queue.put(frame)
+            await asyncio.sleep(0.2) # Animation speed
+
+    def start(self):
+        """Starts the animation in a background task."""
+        self.stopped = False
+        self._animation_task = asyncio.create_task(self._run_animation())
+
+    async def stop(self):
+        """Stops the animation."""
+        if self._animation_task and not self.stopped:
+            self.stopped = True
+            self._animation_task.cancel()
+            try:
+                await self._animation_task
+            except asyncio.CancelledError:
+                pass # Expected
+            # Signal the UI to clear the animation line
+            await self.ui_queue.put({"type": "animation_end"})
 
 def create_file_op_panel(operation, path, content=None, diff=None, output_cid=None, width=80):
     """Creates a panel for file operations."""

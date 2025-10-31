@@ -6,6 +6,7 @@ from typing import Dict, List
 # Local, dynamic imports for specialist agents
 from core.agents.analyst_agent import AnalystAgent
 from core.agents.code_gen_agent import CodeGenerationAgent
+from core.agents.metacognition_agent import MetacognitionAgent
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
@@ -25,7 +26,7 @@ class Orchestrator:
     decomposing them into a plan, and orchestrating a team of specialist
     agents to execute the plan.
     """
-    def __init__(self):
+    def __init__(self, memory_manager):
         """Initializes the Supervisor and its registry of specialist agents."""
         print("Initializing Supervisor Orchestrator...")
         self.specialist_registry = {
@@ -35,6 +36,8 @@ class Orchestrator:
             "TalentAgent": TalentAgent,
             "WebAutomationAgent": WebAutomationAgent,
         }
+        self.memory_manager = memory_manager
+        self.metacognition_agent = MetacognitionAgent(self.memory_manager)
         print("Supervisor Orchestrator is ready.")
 
     async def _generate_plan(self, goal: str) -> List[Dict]:
@@ -92,6 +95,11 @@ Now, generate the plan for the given goal.
                 return []
             plan_str = json_match.group(0)
             plan = json.loads(plan_str)
+
+            # Emit plan generation event
+            event_payload = {'event_type': 'plan_generated', 'goal': goal, 'plan': plan}
+            asyncio.create_task(self.metacognition_agent.execute_task(event_payload))
+
             return plan
         except Exception as e:
             print(f"Supervisor: Error during plan generation: {e}")
@@ -139,10 +147,18 @@ Now, generate the plan for the given goal.
                 return error_msg
 
             try:
+                # Emit agent dispatch event
+                dispatch_payload = {'event_type': 'agent_dispatch', 'agent_name': specialist_name, 'task': task_details}
+                asyncio.create_task(self.metacognition_agent.execute_task(dispatch_payload))
+
                 specialist_class = self.specialist_registry[specialist_name]
                 specialist_instance = specialist_class()
 
                 result_dict = await specialist_instance.execute_task(task_details)
+
+                # Emit agent result event
+                result_payload = {'event_type': 'agent_result', 'agent_name': specialist_name, 'result': result_dict}
+                asyncio.create_task(self.metacognition_agent.execute_task(result_payload))
 
                 print(f"Step {step_number} result: {result_dict}")
 
