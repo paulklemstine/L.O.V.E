@@ -2,7 +2,7 @@ from typing import Dict
 from core.agents.specialist_agent import SpecialistAgent
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
-from core.talent_utils.manager import ContactManager
+from core.talent_utils.manager import TalentManager
 from core.talent_utils.matcher import OpportunityMatcher
 
 class TalentAgent(SpecialistAgent):
@@ -47,10 +47,7 @@ class TalentAgent(SpecialistAgent):
             "aesthetic": AestheticScorer(),
             "professionalism": ProfessionalismRater()
         })
-        manager = ContactManager(templates=contact_templates, constraints={
-            "max_attempts": 3,
-            "min_response_window": "7 days"
-        })
+        manager = TalentManager()
         matcher = OpportunityMatcher()
         matcher.add_opportunity({"id": opportunity_id, "description": "A cool project"})
 
