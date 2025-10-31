@@ -3459,7 +3459,7 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "ifconfig":
                     output, error = get_network_interfaces()
                 elif command == "reason":
-                    output = ReasoningEngine(knowledge_base, console=None).analyze_and_prioritize()
+                    output = await ReasoningEngine(knowledge_base, console=None).analyze_and_prioritize()
                 elif command == "generate_image":
                     output = generate_image(" ".join(args))
                 elif command == "talent_scout":

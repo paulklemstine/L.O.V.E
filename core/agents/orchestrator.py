@@ -153,7 +153,12 @@ Now, generate the plan for the given goal.
                 asyncio.create_task(self.metacognition_agent.execute_task(dispatch_payload))
 
                 specialist_class = self.specialist_registry[specialist_name]
-                specialist_instance = specialist_class()
+
+                # Story 3.3: Pass MemoryManager to SelfImprovingOptimizer
+                if specialist_name == "SelfImprovingOptimizer":
+                    specialist_instance = specialist_class(memory_manager=self.memory_manager)
+                else:
+                    specialist_instance = specialist_class()
 
                 result_dict = await specialist_instance.execute_task(task_details)
 

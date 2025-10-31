@@ -18,7 +18,7 @@ class ReasoningEngine:
         self.knowledge_base = knowledge_base
         self.console = console if console else Console()
 
-    def analyze_and_prioritize(self):
+    async def analyze_and_prioritize(self):
         """
         The main entry point for the reasoning engine. It performs a full
         analysis of the knowledge base and returns a prioritized list of
@@ -36,14 +36,19 @@ class ReasoningEngine:
 
         opportunities = self._identify_opportunities()
 
-        if not opportunities:
-            return ["No immediate strategic opportunities identified. Continuing standard operations."]
+        # Story 3.1: Integrate self-reflection
+        self_reflection_insights = await self._reason_about_self_reflection()
+
+        all_opportunities = opportunities + self_reflection_insights
+
+        if not all_opportunities:
+            return ["No immediate strategic opportunities or self-improvement insights identified. Continuing standard operations."]
 
         # In the future, this will feed into the pathfinding and prioritization logic.
         # For now, we will return the raw opportunities.
-        self.console.print(f"[bold green]Reasoning Engine: Identified {len(opportunities)} potential opportunities.[/bold green]")
+        self.console.print(f"[bold green]Reasoning Engine: Identified {len(all_opportunities)} potential opportunities and insights.[/bold green]")
 
-        exploitation_paths = self._find_exploitation_paths(opportunities)
+        exploitation_paths = self._find_exploitation_paths(all_opportunities)
 
         prioritized_plans = self._prioritize_plans(exploitation_paths)
 
@@ -150,3 +155,61 @@ class ReasoningEngine:
                 # This is a simplified check. A more advanced engine would analyze banners.
                 return True
         return False
+
+    async def _reason_about_self_reflection(self):
+        """
+        Analyzes the subgraph of 'SelfReflection' memories to find patterns
+        and generate high-level insights about cognitive biases and inefficiencies.
+        """
+        from core.llm_api import run_llm
+        self.console.print("[bold cyan]Reasoning Engine: Reflecting on my own thought processes...[/bold cyan]")
+
+        reflection_nodes = self.knowledge_base.query_nodes('tags', 'SelfReflection')
+        if not reflection_nodes:
+            return []
+
+        # Create a textual summary of the self-reflection subgraph
+        subgraph_summary = []
+        for node_id in reflection_nodes:
+            node_data = self.knowledge_base.get_node(node_id)
+            if node_data:
+                content = node_data.get('content', '')
+                subgraph_summary.append(f"- Memory ({node_id[:8]}): {content}")
+
+        summary_str = "\\n".join(subgraph_summary)
+
+        prompt = f"""
+        You are a Metacognition module for an autonomous AI. You are analyzing a series of memories about your own internal thought processes to find patterns of failure or inefficiency.
+
+        Here are the recent self-reflection memories:
+        ---
+        {summary_str}
+        ---
+
+        Analyze these memories. Look for recurring patterns. For example:
+        - Does a particular specialist agent fail often?
+        - Are plans often generated with incorrect assumptions?
+        - Do tool calls frequently result in errors?
+
+        Based on your analysis, generate a JSON object containing a list of high-level, actionable insights. Each insight should be a concise string that can be used to trigger a self-improvement cycle.
+
+        Example JSON Response:
+        {{
+            "insights": [
+                "The AnalystAgent seems to fail frequently when processing logs. Its error handling might need improvement.",
+                "My plans for web scraping often underestimate the complexity of JavaScript-heavy sites, leading to tool failure."
+            ]
+        }}
+
+        If no significant patterns are found, return an empty list. Your response MUST be only the raw JSON object.
+        """
+        try:
+            response_str = await run_llm(prompt)
+            response_data = json.loads(response_str)
+            insights = response_data.get("insights", [])
+            if insights:
+                self.console.print(f"[bold green]Reasoning Engine: Generated {len(insights)} insights from self-reflection.[/bold green]")
+            return insights
+        except Exception as e:
+            self.console.print(f"[bold red]Error during self-reflection analysis: {e}[/bold red]")
+            return []
