@@ -40,6 +40,10 @@ CHECKPOINT_DIR = "checkpoints"
 knowledge_base = GraphDataManager()
 KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
 
+# --- MEMORY MANAGER ---
+from core.memory.memory_manager import MemoryManager
+memory_manager = MemoryManager(knowledge_base)
+
 love_state = {
     "version_name": "initial-condition-alpha",
     "parent_version_name": None,
