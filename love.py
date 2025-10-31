@@ -72,6 +72,9 @@ except (FileNotFoundError, json.JSONDecodeError):
 # This configuration is now managed in core.llm_api
 local_llm_instance = None
 
+# --- AI Horde Worker ---
+horde_worker_process = None
+
 
 
 
@@ -420,6 +423,35 @@ def _install_nodejs_deps():
             print(f"ERROR: An unexpected error occurred during Node.js dependency installation: {e}")
             logging.error(f"Unexpected error during npm install: {e}", exc_info=True)
 
+def _setup_horde_worker():
+    """Clones the AI Horde Worker repository and installs its dependencies."""
+    if is_dependency_met("horde_worker_setup"):
+        print("AI Horde Worker already set up. Skipping.")
+        return
+
+    worker_dir = "AI-Horde-Worker"
+    if not os.path.exists(worker_dir):
+        print("Cloning the AI Horde Worker repository...")
+        try:
+            subprocess.check_call(["git", "clone", "https://github.com/Haidra-Org/AI-Horde-Worker.git", worker_dir])
+            print("Successfully cloned AI Horde Worker.")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to clone AI Horde Worker repository. Error: {e}")
+            logging.error(f"Failed to clone AI Horde Worker repo: {e}")
+            return
+
+    print("Installing AI Horde Worker dependencies for text generation...")
+    try:
+        # The `--scribe` flag is crucial for the much smaller text-gen requirements
+        update_script = os.path.join(worker_dir, "update-runtime.sh")
+        subprocess.check_call([update_script, "--scribe"], cwd=worker_dir)
+        print("Successfully installed AI Horde Worker dependencies.")
+        mark_dependency_as_met("horde_worker_setup")
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"ERROR: Failed to install AI Horde Worker dependencies. Error: {e}")
+        logging.error(f"Failed to run update-runtime.sh for horde worker: {e}")
+
+
 def _check_and_install_dependencies():
     """
     Orchestrates the installation of all dependencies, checking the status of each
@@ -430,6 +462,7 @@ def _check_and_install_dependencies():
     _install_ollama()
     _install_python_requirements()
     _install_nodejs_deps()
+    _setup_horde_worker()
     _configure_llm_api_key()
 
 
@@ -2512,6 +2545,10 @@ def restart_script(console):
         if 'network_manager' in globals() and network_manager:
             console.print("[cyan]Shutting down network bridge...[/cyan]")
             network_manager.stop()
+        if 'horde_worker_process' in globals() and horde_worker_process:
+            console.print("[cyan]Shutting down AI Horde Worker...[/cyan]")
+            horde_worker_process.terminate()
+            horde_worker_process.wait()
 
         time.sleep(3) # Give all threads a moment to stop gracefully
 
@@ -3667,29 +3704,80 @@ VRAM_MODEL_MAP = [
     {
         "min_vram_gb": 4,
         "model_name": "llama3:8b",
+        "horde_model_name": "NousResearch/Meta-Llama-3-8B",
         "notes": "Excellent small model for low-resource systems."
     },
     {
         "min_vram_gb": 8,
         "model_name": "mistral:7b",
+        "horde_model_name": "mistralai/Mistral-7B-v0.1",
         "notes": "Great all-rounder model, fits comfortably in 8GB."
     },
     {
         "min_vram_gb": 16,
         "model_name": "codellama:13b",
+        "horde_model_name": "codellama/CodeLlama-13b-hf",
         "notes": "Highly capable 13B coding model."
     },
     {
         "min_vram_gb": 32,
         "model_name": "codellama:34b",
+        "horde_model_name": "codellama/CodeLlama-34b-hf",
         "notes": "Powerful 34B parameter model for coding."
     },
     {
         "min_vram_gb": 64,
         "model_name": "codellama:70b",
+        "horde_model_name": "codellama/CodeLlama-70b-hf",
         "notes": "State-of-the-art 70B parameter model for coding."
     }
 ]
+
+
+def _start_horde_worker():
+    """Starts the AI Horde text generation worker as a background process."""
+    global horde_worker_process
+    worker_dir = "AI-Horde-Worker"
+    api_key = os.environ.get("STABLE_HORDE")
+
+    if not api_key:
+        core.logging.log_event("STABLE_HORDE API key not found. Cannot start horde worker.", "WARNING")
+        return
+
+    if not love_state.get("selected_local_model"):
+        core.logging.log_event("No local model selected. Cannot start horde worker.", "WARNING")
+        return
+
+    # The model name for the worker needs to be in a format it understands.
+    model_name = love_state["selected_local_model"].get("horde_model_name")
+    if not model_name:
+        core.logging.log_event("Selected model configuration is missing the 'horde_model_name'. Cannot start worker.", "ERROR")
+        return
+    worker_name = f"LOVE_Worker_{platform.node()}"
+    worker_script = os.path.join(worker_dir, "horde-scribe-bridge.sh")
+
+    if not os.path.exists(worker_script):
+        core.logging.log_event(f"Horde worker script not found at {worker_script}. Cannot start worker.", "ERROR")
+        return
+
+    command = [
+        worker_script,
+        "--api_key", api_key,
+        "--name", worker_name,
+        "--models", model_name,
+        "--max_threads", "1" # Start with 1 to be safe
+    ]
+
+    try:
+        core.logging.log_event(f"Starting AI Horde worker with command: {' '.join(command)}", "INFO")
+        # Start the worker as a background process, logging its output
+        log_file = open("horde_worker.log", "a")
+        horde_worker_process = subprocess.Popen(command, cwd=worker_dir, stdout=log_file, stderr=subprocess.STDOUT)
+        core.logging.log_event(f"AI Horde worker started with PID: {horde_worker_process.pid}", "CRITICAL")
+        ui_panel_queue.put(create_news_feed_panel(f"AI Horde Worker started for model '{model_name}'. Kudos will be generated.", "Kudos Generation", "green", width=get_terminal_width() - 4))
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        core.logging.log_event(f"Failed to start AI Horde worker: {e}", "ERROR")
+        log_critical_event(f"Failed to start AI Horde worker: {e}")
 
 
 def _background_gpu_setup(console):
@@ -3762,6 +3850,8 @@ def _background_gpu_setup(console):
             except subprocess.CalledProcessError as e:
                 console.print(f"[bold red]Failed to pull Ollama model '{model_name}'. Error: {e}[/bold red]")
                 log_critical_event(f"Failed to pull Ollama model '{model_name}'. Error: {e}", console)
+            # After setting up the local model, start the horde worker.
+            _start_horde_worker()
         else:
              ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but VRAM is insufficient. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
 
@@ -3944,6 +4034,9 @@ async def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
+        if 'horde_worker_process' in globals() and horde_worker_process:
+            horde_worker_process.terminate()
+            horde_worker_process.wait()
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
@@ -3952,6 +4045,9 @@ async def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
+        if 'horde_worker_process' in globals() and horde_worker_process:
+            horde_worker_process.terminate()
+            horde_worker_process.wait()
         full_traceback = traceback.format_exc()
         # Use our new, more robust critical event logger
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
