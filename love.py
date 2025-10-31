@@ -1489,6 +1489,10 @@ Based on the original directive and Jules's current prompt, formulate the best p
             if is_fixit_task_running:
                 return # Only one fix-it task at a time.
 
+            if not self.tasks:
+                core.logging.log_event("No active tasks, skipping error queue management.", "DEBUG")
+                return
+
             # --- Queue Cleanup ---
             current_time = time.time()
             errors_to_keep = []
