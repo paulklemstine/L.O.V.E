@@ -422,7 +422,6 @@ def _check_and_install_dependencies():
     _install_python_requirements()
     _install_nodejs_deps()
     _configure_llm_api_key()
-    _configure_gemini_cli()
 
 
 def _configure_llm_api_key():
@@ -473,45 +472,6 @@ def _configure_llm_api_key():
         core.logging.log_event(error_message)
 
 
-def _configure_gemini_cli():
-    """Checks for the Gemini CLI executable and verifies it can run."""
-    # This function relies on local imports to avoid circular dependencies.
-    import core.logging
-    if is_dependency_met("gemini_cli_configured"):
-        core.logging.log_event("SUCCESS: Gemini CLI is already configured.")
-        return
-
-    # The executable is expected in the local node_modules directory.
-    gemini_cli_path = os.path.join(os.path.dirname(SELF_PATH), "node_modules", ".bin", "gemini")
-    if not os.path.exists(gemini_cli_path):
-        core.logging.log_event("ERROR: Gemini CLI executable not found after npm install. It may be installed globally, but local installation is preferred.", level="WARNING")
-        return # Cannot proceed without the executable.
-
-    # The CLI relies on an environment variable for non-interactive auth.
-    if not os.environ.get("GEMINI_API_KEY"):
-        core.logging.log_event("INFO: GEMINI_API_KEY environment variable not found. Gemini CLI will be unavailable for autonomous use.", level="WARNING")
-        return # Not an error, but it's not configured for use.
-
-    try:
-        core.logging.log_event("INFO: Verifying Gemini CLI with a version check...")
-        result = subprocess.run(
-            [gemini_cli_path, "--version"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=60
-        )
-        core.logging.log_event(f"SUCCESS: Gemini CLI version check passed. Output: {result.stdout.strip()}")
-        mark_dependency_as_met("gemini_cli_configured")
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
-        error_message = f"ERROR: Failed to verify Gemini CLI. It might not be authenticated correctly with GEMINI_API_KEY.\n"
-        if hasattr(e, 'stdout'):
-            error_message += f"  Stdout: {e.stdout.strip()}\n"
-        if hasattr(e, 'stderr'):
-            error_message += f"  Stderr: {e.stderr.strip()}"
-        core.logging.log_event(error_message)
-
-
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()
@@ -540,7 +500,7 @@ from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
 
-from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api
+from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, execute_reasoning_task
 from core.perception.config_scanner import scan_directory
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
 from ui_utils import rainbow_text
@@ -3251,99 +3211,6 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     return prompt, "Truncated history, most logs, and entire Knowledge Base."
 
 
-def run_gemini_cli(prompt_text):
-    """
-    Executes the Gemini CLI with a given prompt in non-interactive mode and
-    returns the parsed text content. Includes retry logic for rate limiting.
-    """
-    from core.logging import log_event
-    max_retries = 3
-    for attempt in range(max_retries):
-        log_event(f"Executing Gemini CLI (Attempt {attempt + 1}/{max_retries}) with prompt: '{prompt_text[:100]}...'", "INFO")
-        gemini_cli_path = os.path.join(os.path.dirname(SELF_PATH), "node_modules", ".bin", "gemini")
-
-        if not os.path.exists(gemini_cli_path):
-            core.logging.log_event("ERROR: Gemini CLI executable not found at expected path.", "ERROR")
-            return None, "Gemini CLI not found."
-
-        command = [
-            gemini_cli_path,
-            "-p", prompt_text,
-            "--output-format", "json"
-        ]
-
-        try:
-            env = os.environ.copy()
-            gemini_api_key = os.environ.get("GEMINI_API_KEY")
-            if gemini_api_key:
-                env["GEMINI_API_KEY"] = gemini_api_key
-
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=180,
-                env=env
-            )
-            # --- Successful Execution: Parse and Return ---
-            core.logging.log_event("Gemini CLI execution successful.", "INFO")
-            core.logging.log_event(f"RAW Gemini CLI Output:\n{result.stdout}", "DEBUG")
-            try:
-                json_output = json.loads(result.stdout)
-                if isinstance(json_output, str):
-                    return json_output.strip(), None
-                if isinstance(json_output, list) and json_output and isinstance(json_output[0], str):
-                    return json_output[0].strip(), None
-                if not isinstance(json_output, dict):
-                    return None, "Unrecognized JSON structure from Gemini CLI."
-                if "response" in json_output:
-                    response_content = json_output.get("response")
-                    if isinstance(response_content, str):
-                        return response_content.strip(), None
-                if "error" in json_output:
-                    error_details = json_output["error"].get("message", "Unknown error from Gemini CLI")
-                    return None, f"Gemini CLI returned an error: {error_details}"
-                candidates = json_output.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        text_content = parts[0].get("text")
-                        if text_content is not None:
-                            return text_content.strip(), None
-                if "text" in json_output:
-                    return json_output["text"].strip(), None
-                return None, "Unknown response structure from Gemini CLI."
-            except (json.JSONDecodeError, IndexError, KeyError) as e:
-                return None, f"Failed to parse Gemini CLI JSON response: {e}"
-
-        except subprocess.TimeoutExpired:
-            core.logging.log_event("ERROR: Gemini CLI command timed out.", "ERROR")
-            return None, "Gemini CLI command timed out."
-        except subprocess.CalledProcessError as e:
-            stderr_output = e.stderr.strip()
-            # --- Rate Limit Handling ---
-            if "429" in stderr_output and "RESOURCE_EXHAUSTED" in stderr_output:
-                retry_match = re.search(r"Please retry in (\d+\.?\d*)s", stderr_output)
-                if retry_match:
-                    wait_time = float(retry_match.group(1)) + 1 # Add a 1-second buffer
-                    core.logging.log_event(f"Gemini API rate limit hit. Waiting for {wait_time:.2f} seconds before retrying.", "WARNING")
-                    time.sleep(wait_time)
-                    continue # Go to the next iteration of the loop
-            # --- Generic Error Handling ---
-            error_message = f"ERROR: Gemini CLI command failed with return code {e.returncode}.\n"
-            error_message += f"  Stdout: {e.stdout.strip()}\n"
-            error_message += f"  Stderr: {stderr_output}"
-            core.logging.log_event(error_message, "ERROR")
-            if attempt < max_retries - 1:
-                time.sleep(5 * (attempt + 1)) # Exponential backoff for generic errors
-                continue
-            return None, error_message
-
-    # If all retries fail
-    return None, f"Gemini CLI command failed after {max_retries} attempts."
-
-
 import uuid
 
 # This lock is to ensure that only one MRL call is processed at a time.
@@ -3522,10 +3389,10 @@ Now, parse the following text into a JSON list of task objects:
             cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000, user_input=user_feedback)
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
-            llm_command, gemini_error = run_gemini_cli(cognitive_prompt)
-            if gemini_error:
-                core.logging.log_event(f"Gemini CLI planner failed: {gemini_error}", "ERROR")
-                llm_command = None # Fallback to a safe state
+            reasoning_result = await execute_reasoning_task(cognitive_prompt)
+            llm_command = reasoning_result.get("result") if reasoning_result else None
+            if not llm_command:
+                core.logging.log_event(f"Reasoning engine failed to produce a command.", "ERROR")
 
 
             # --- Command Execution ---

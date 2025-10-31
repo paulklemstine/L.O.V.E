@@ -19,7 +19,7 @@ class GeminiReActEngine:
         tool_metadata = self.tool_registry.get_formatted_tool_metadata()
         while True:
             prompt = self._create_prompt(goal, tool_metadata)
-            response_dict = execute_reasoning_task(prompt)
+            response_dict = await execute_reasoning_task(prompt)
 
             if not response_dict or not response_dict.get("result"):
                 return "The reasoning engine failed to produce a response."
