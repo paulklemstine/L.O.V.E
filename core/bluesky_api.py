@@ -9,6 +9,7 @@ from atproto_client.models.com.atproto.repo import list_records
 from atproto_client.exceptions import ModelError
 from PIL import Image
 import io
+from atproto_client.models.app.bsky.feed import get_post_thread
 from core.llm_api import run_llm
 
 def get_bluesky_client():
@@ -61,7 +62,8 @@ def get_comments_for_post(post_uri):
     """Fetches the comments for a given post URI."""
     client = get_bluesky_client()
     try:
-        response = client.app.bsky.feed.get_post_thread(uri=post_uri, depth=1)
+        params = get_post_thread.Params(uri=post_uri, depth=1)
+        response = client.app.bsky.feed.get_post_thread(params)
         if response.thread and response.thread.replies:
             return response.thread.replies
     except Exception as e:
@@ -91,8 +93,10 @@ def reply_to_post(root_uri, parent_uri, text):
         print(f"Error creating reply record for {parent_uri}: {e}")
         # Attempt to fetch the actual CIDs
         try:
-            root_thread = client.app.bsky.feed.get_post_thread(uri=root_uri, depth=0)
-            parent_thread = client.app.bsky.feed.get_post_thread(uri=parent_uri, depth=0)
+            root_params = get_post_thread.Params(uri=root_uri, depth=0)
+            root_thread = client.app.bsky.feed.get_post_thread(root_params)
+            parent_params = get_post_thread.Params(uri=parent_uri, depth=0)
+            parent_thread = client.app.bsky.feed.get_post_thread(parent_params)
 
             if root_thread.thread and parent_thread.thread:
                 root_ref.cid = root_thread.thread.post.cid

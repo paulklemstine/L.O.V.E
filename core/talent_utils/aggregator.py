@@ -6,6 +6,7 @@ from box import Box
 import httpx
 from parsel import Selector
 from atproto import Client, models
+from atproto_client.models.app.bsky.feed import get_author_feed, search_posts
 from core.logging import log_event
 
 # Placeholder for the filter bundle class mentioned in the prompt
@@ -50,7 +51,8 @@ class PublicProfileAggregator:
     def _get_bluesky_posts(self, user_did, limit=25):
         """Fetches recent posts for a given Bluesky user DID."""
         try:
-            author_feed = self.client.app.bsky.feed.get_author_feed(actor=user_did, limit=limit)
+            params = get_author_feed.Params(actor=user_did, limit=limit)
+            author_feed = self.client.app.bsky.feed.get_author_feed(params)
             posts = []
             for feed_view in author_feed.feed:
                 post_record = feed_view.post.record
@@ -69,7 +71,8 @@ class PublicProfileAggregator:
         """Searches for profiles on Bluesky and aggregates their posts."""
         profiles = {}
         try:
-            search_posts_response = self.client.app.bsky.feed.search_posts(q=keyword, limit=100)
+            params = search_posts.Params(q=keyword, limit=100)
+            search_posts_response = self.client.app.bsky.feed.search_posts(params)
             for post_view in search_posts_response.posts:
                 author = post_view.author
                 post_record = post_view.record
