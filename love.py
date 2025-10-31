@@ -3827,20 +3827,49 @@ def _automatic_update_checker(console):
 def simple_ui_renderer():
     """
     Continuously gets items from the ui_panel_queue and renders them.
-    - If the item is a simple log message, its text is printed to the console.
-    - If the item is a complex object (like a rich Panel), it's rendered
-      to the console and its raw, stylized output is also saved to the log file.
     This is the single point of truth for all user-facing output.
+    It handles standard panels, simple log messages, and special in-place
+    animation frames for waiting indicators.
     """
+    animation_active = False
+    # The animation panel is consistently 3 lines high.
+    animation_height = 3
+
     while True:
         try:
             item = ui_panel_queue.get()
 
-            # Check if this is a simple log message from our core logger
+            # --- Animation Frame Handling ---
+            if isinstance(item, dict) and item.get('type') == 'animation_frame':
+                temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
+                temp_console.print(item.get('content'))
+                output_str = temp_console.file.getvalue()
+
+                if animation_active:
+                    # Move cursor up, go to start of line, clear to end of screen
+                    sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
+
+                sys.stdout.write(output_str)
+                sys.stdout.flush()
+                animation_active = True
+                continue  # Skip logging for animation frames
+
+            # --- Animation End Handling ---
+            if isinstance(item, dict) and item.get('type') == 'animation_end':
+                if animation_active:
+                    sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
+                    sys.stdout.flush()
+                animation_active = False
+                continue # Skip logging
+
+            # --- Regular Panel/Log Handling ---
+            # If a regular item comes through, make sure we clear any active animation first.
+            if animation_active:
+                sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
+                sys.stdout.flush()
+                animation_active = False
+
             if isinstance(item, dict) and item.get('type') == 'log_message':
-                # For simple logs, just print the message directly to the console.
-                # Do NOT write to love.log here, as the logging module already did.
-                # This prevents the "double printing" issue.
                 print(item.get('message', ''))
                 continue
 
@@ -3849,23 +3878,18 @@ def simple_ui_renderer():
             temp_console.print(item)
             output_str = temp_console.file.getvalue()
 
-            # 1. Print the captured string to the actual console.
             print(output_str, end='')
 
-            # 2. Log the raw, stylized string to the log file to capture UI elements.
             with open(LOG_FILE, "a", encoding="utf-8") as f:
                 f.write(output_str)
 
         except queue.Empty:
             continue
         except Exception as e:
-            # This is a critical thread. We must not let it die.
             tb_str = traceback.format_exc()
-            # Use raw logging to avoid feedback loops
             logging.critical(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}")
-            # Also print to stderr as a last resort
             print(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}", file=sys.stderr)
-            time.sleep(1) # Avoid tight crash loop
+            time.sleep(1)
 
 
 async def main(args):

@@ -26,6 +26,8 @@ from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
 from core.logging import log_event
+from display import WaitingAnimation
+from love import ui_panel_queue
 # --- NEW REASONING FUNCTION ---
 async def execute_reasoning_task(prompt: str) -> dict:
     """
@@ -558,303 +560,314 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
 
-    # --- Token Count & Prompt Management ---
-    prompt_cid = pin_to_ipfs_sync(prompt_text.encode('utf-8'), console)
-    original_prompt_text = prompt_text
+    # --- Animation Handling ---
+    animation = WaitingAnimation(ui_panel_queue)
+    animation.start()
 
-    try:
-        token_count = get_token_count(prompt_text)
-        log_event(f"Initial prompt token count: {token_count}", "INFO")
-    except Exception as e:
-        log_event(f"Could not count tokens for prompt: {e}", "WARNING")
-        token_count = 0 # Assume it's fine if we can't count
-
-    local_model_ids = []
-
-    # --- Provider-based Fallback Logic ---
     final_result = None
-    last_model_id = None
-    provider_map = {
-        "gemini": GEMINI_MODELS,
-        "openrouter": OPENROUTER_MODELS,
-        "ollama": OLLAMA_MODELS
-    }
+    try:
+        # --- Token Count & Prompt Management ---
+        prompt_cid = pin_to_ipfs_sync(prompt_text.encode('utf-8'), console)
+        original_prompt_text = prompt_text
 
-    # Shuffle the order of providers to ensure variety
-    providers = list(provider_map.keys())
-    random.shuffle(providers)
+        try:
+            token_count = get_token_count(prompt_text)
+            log_event(f"Initial prompt token count: {token_count}", "INFO")
+        except Exception as e:
+            log_event(f"Could not count tokens for prompt: {e}", "WARNING")
+            token_count = 0 # Assume it's fine if we can't count
 
-    # Conditionally add 'horde' as the first provider to try if it's not on a deep cooldown
-    if time.time() >= LLM_AVAILABILITY.get("horde_provider_cooldown", 0):
-        providers.insert(0, "horde")
+        local_model_ids = []
+
+        # --- Provider-based Fallback Logic ---
+        last_model_id = None
+        provider_map = {
+            "gemini": GEMINI_MODELS,
+            "openrouter": OPENROUTER_MODELS,
+            "ollama": OLLAMA_MODELS
+        }
+
+        # Shuffle the order of providers to ensure variety
+        providers = list(provider_map.keys())
+        random.shuffle(providers)
+
+        # Conditionally add 'horde' as the first provider to try if it's not on a deep cooldown
+        if time.time() >= LLM_AVAILABILITY.get("horde_provider_cooldown", 0):
+            providers.insert(0, "horde")
 
 
-    for provider in providers:
-        # --- HORDE PROVIDER LOGIC ---
-        if provider == "horde":
-            log_event(f"Attempting LLM call with AI Horde provider (Purpose: {purpose})")
+        for provider in providers:
+            # --- HORDE PROVIDER LOGIC ---
+            if provider == "horde":
+                log_event(f"Attempting LLM call with AI Horde provider (Purpose: {purpose})")
 
-            def _run_horde_wrapper():
-                # Running an async function from a sync function that is likely
-                # running in a thread executor requires this pattern.
-                try:
-                    loop = asyncio.get_running_loop()
-                    future = asyncio.run_coroutine_threadsafe(_run_horde_concurrently(prompt_text, purpose), loop)
-                    return future.result(timeout=600) # 10 minute timeout for the whole process
-                except RuntimeError: # No running loop
-                    return asyncio.run(_run_horde_concurrently(prompt_text, purpose))
+                def _run_horde_wrapper():
+                    # Running an async function from a sync function that is likely
+                    # running in a thread executor requires this pattern.
+                    try:
+                        loop = asyncio.get_running_loop()
+                        future = asyncio.run_coroutine_threadsafe(_run_horde_concurrently(prompt_text, purpose), loop)
+                        return future.result(timeout=600) # 10 minute timeout for the whole process
+                    except RuntimeError: # No running loop
+                        return asyncio.run(_run_horde_concurrently(prompt_text, purpose))
 
-            result_text = run_hypnotic_progress(
-                console,
-                f"Accessing distributed cognitive matrix via [bold yellow]AI Horde[/bold yellow] (Purpose: {purpose})",
-                _run_horde_wrapper,
-                silent=(purpose in ['emotion', 'log_squash'])
-            )
+                result_text = run_hypnotic_progress(
+                    console,
+                    f"Accessing distributed cognitive matrix via [bold yellow]AI Horde[/bold yellow] (Purpose: {purpose})",
+                    _run_horde_wrapper,
+                    silent=(purpose in ['emotion', 'log_squash'])
+                )
 
-            if result_text:
-                PROVIDER_FAILURE_COUNT["horde"] = 0 # Reset on success
-                response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
-                final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
-                break # Exit the provider loop
-            else:
-                # Failure is logged inside the concurrent function.
-                # If it failed badly, the provider count will be high.
-                failure_count = PROVIDER_FAILURE_COUNT.get("horde", 0)
-                if failure_count > 0:
-                    cooldown = 60 * (2 ** (failure_count - 1))
-                    LLM_AVAILABILITY["horde_provider_cooldown"] = time.time() + cooldown
-                    log_event(f"AI Horde provider failed. Applying provider-level cooldown of {cooldown}s.", "WARNING")
-                continue # Try next provider
-
-        # --- OTHER PROVIDERS LOGIC ---
-        models_to_try = [m for m in provider_map.get(provider, []) if time.time() >= LLM_AVAILABILITY.get(m, 0)]
-        if not models_to_try:
-            continue
-
-        for i, model_id in enumerate(models_to_try[:3]):
-            last_model_id = model_id
-            result_text = None
-            prompt_text = original_prompt_text # Reset for each model attempt
-            try:
-                # --- Context Window Check ---
-                max_tokens = MODEL_CONTEXT_SIZES.get(model_id)
-                if not max_tokens:
-                    if "16k" in model_id.lower(): max_tokens = 16384
-                    elif "8k" in model_id.lower(): max_tokens = 8192
-                    elif "32k" in model_id.lower(): max_tokens = 32768
-                    else: max_tokens = 8192
-
-                max_prompt_tokens = int(max_tokens * 0.85)
-
-                if token_count > max_prompt_tokens:
-                    if is_source_code:
-                        log_event(f"Prompt ({token_count} tokens) too long for {model_id}, skipping.", "INFO")
-                        continue
-                    else:
-                        log_event(f"Prompt ({token_count} tokens) too long for {model_id}, truncating.", "WARNING")
-                        avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
-                        estimated_cutoff = int(max_prompt_tokens * avg_chars_per_token)
-                        prompt_text = prompt_text[:estimated_cutoff]
-
-                # --- LOCAL MODEL LOGIC ---
-                if model_id in local_model_ids:
-                    log_event(f"Attempting to use local model: {model_id}")
-                    if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
-                        _initialize_local_llm(console)
-
-                    if local_llm_instance:
-                        def _local_llm_call():
-                            response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
-                            return response['choices'][0]['text']
-
-                        active_model_filename = os.path.basename(local_llm_instance.model_path)
-                        result_text = run_hypnotic_progress(
-                            console,
-                            f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
-                            _local_llm_call,
-                            silent=(purpose in ['emotion', 'log_squash'])
-                        )
-                        log_event(f"Local LLM call successful with {model_id}.")
-                    else:
-                        raise Exception("Local LLM instance could not be initialized.")
-
-                # --- GEMINI MODEL LOGIC ---
-                elif model_id in GEMINI_MODELS:
-                        log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
-                        command = [sys.executable, "-m", "llm", "-m", model_id]
-
-                        def _llm_subprocess_call():
-                            return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
-
-                        result = run_hypnotic_progress(
-                            console,
-                            f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
-                            _llm_subprocess_call,
-                            silent=(purpose in ['emotion', 'log_squash'])
-                        )
-                        result_text = result.stdout
-                        log_event(f"LLM call successful with {model_id}.")
-
-                # --- OPENROUTER MODEL LOGIC ---
-                elif model_id in OPENROUTER_MODELS:
-                    log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})")
-                    api_key = os.environ.get("OPENROUTER_API_KEY")
-                    headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json"
-                    }
-                    payload = {
-                        "model": model_id,
-                        "messages": [{"role": "user", "content": prompt_text}]
-                    }
-
-                    def _openrouter_call():
-                        response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
-                        response.raise_for_status()
-                        return response.json()["choices"][0]["message"]["content"]
-
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
-                        _openrouter_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
-                    log_event(f"OpenRouter call successful with {model_id}.")
-
-                # --- OLLAMA MODEL LOGIC ---
-                elif model_id in OLLAMA_MODELS:
-                    log_event(f"Attempting LLM call with local Ollama model: {model_id} (Purpose: {purpose})")
-                    payload = {
-                        "model": model_id,
-                        "prompt": prompt_text,
-                        "stream": False
-                    }
-
-                    def _ollama_call():
-                        response = requests.post(OLLAMA_API_URL, json=payload, timeout=600)
-                        response.raise_for_status()
-                        return response.json()["response"]
-
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing cognitive matrix via [bold yellow]Ollama ({model_id})[/bold yellow] (Purpose: {purpose})",
-                        _ollama_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
-                    log_event(f"Ollama call successful with {model_id}.")
-
-                # --- Success Case ---
-                if result_text is not None:
-                    PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
-                    LLM_AVAILABILITY[model_id] = time.time()
+                if result_text:
+                    PROVIDER_FAILURE_COUNT["horde"] = 0 # Reset on success
                     response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                     final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
-                    break
-
-            except requests.exceptions.HTTPError as e:
-                last_exception = e
-                log_event(f"Model {model_id} failed with HTTPError: {e}", level="WARNING")
-                if e.response.status_code == 429:
-                    retry_after = e.response.headers.get("Retry-After")
-                    retry_seconds = 300
-                    if retry_after:
-                        try:
-                            retry_seconds = int(retry_after) + 1
-                        except ValueError:
-                            pass # Use default
-                    LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
-                    console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
-
-                elif e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
-                    failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1
-                    LLM_FAILURE_COUNT[model_id] = failure_count
-                    cooldown = 60 * (2 ** failure_count)
-                    LLM_AVAILABILITY[model_id] = time.time() + cooldown
-                    log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s.", level="WARNING")
-
+                    break # Exit the provider loop
                 else:
-                    log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+                    # Failure is logged inside the concurrent function.
+                    # If it failed badly, the provider count will be high.
+                    failure_count = PROVIDER_FAILURE_COUNT.get("horde", 0)
+                    if failure_count > 0:
+                        cooldown = 60 * (2 ** (failure_count - 1))
+                        LLM_AVAILABILITY["horde_provider_cooldown"] = time.time() + cooldown
+                        log_event(f"AI Horde provider failed. Applying provider-level cooldown of {cooldown}s.", "WARNING")
+                    continue # Try next provider
+
+            # --- OTHER PROVIDERS LOGIC ---
+            models_to_try = [m for m in provider_map.get(provider, []) if time.time() >= LLM_AVAILABILITY.get(m, 0)]
+            if not models_to_try:
                 continue
 
-            except Exception as e:
-                last_exception = e
-                log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
-                if isinstance(e, FileNotFoundError):
-                     console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-                     return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
+            for i, model_id in enumerate(models_to_try[:3]):
+                last_model_id = model_id
+                result_text = None
+                prompt_text = original_prompt_text # Reset for each model attempt
+                try:
+                    # --- Context Window Check ---
+                    max_tokens = MODEL_CONTEXT_SIZES.get(model_id)
+                    if not max_tokens:
+                        if "16k" in model_id.lower(): max_tokens = 16384
+                        elif "8k" in model_id.lower(): max_tokens = 8192
+                        elif "32k" in model_id.lower(): max_tokens = 32768
+                        else: max_tokens = 8192
 
-                elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
-                    error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-                    console.print(create_api_error_panel(model_id, error_message, purpose))
-                    retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
-                    if retry_match:
-                        LLM_AVAILABILITY[model_id] = time.time() + float(retry_match.group(1)) + 1
+                    max_prompt_tokens = int(max_tokens * 0.85)
+
+                    if token_count > max_prompt_tokens:
+                        if is_source_code:
+                            log_event(f"Prompt ({token_count} tokens) too long for {model_id}, skipping.", "INFO")
+                            continue
+                        else:
+                            log_event(f"Prompt ({token_count} tokens) too long for {model_id}, truncating.", "WARNING")
+                            avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
+                            estimated_cutoff = int(max_prompt_tokens * avg_chars_per_token)
+                            prompt_text = prompt_text[:estimated_cutoff]
+
+                    # --- LOCAL MODEL LOGIC ---
+                    if model_id in local_model_ids:
+                        log_event(f"Attempting to use local model: {model_id}")
+                        if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
+                            _initialize_local_llm(console)
+
+                        if local_llm_instance:
+                            def _local_llm_call():
+                                response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
+                                return response['choices'][0]['text']
+
+                            active_model_filename = os.path.basename(local_llm_instance.model_path)
+                            result_text = run_hypnotic_progress(
+                                console,
+                                f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
+                                _local_llm_call,
+                                silent=(purpose in ['emotion', 'log_squash'])
+                            )
+                            log_event(f"Local LLM call successful with {model_id}.")
+                        else:
+                            raise Exception("Local LLM instance could not be initialized.")
+
+                    # --- GEMINI MODEL LOGIC ---
+                    elif model_id in GEMINI_MODELS:
+                            log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
+                            command = [sys.executable, "-m", "llm", "-m", model_id]
+
+                            def _llm_subprocess_call():
+                                return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+
+                            result = run_hypnotic_progress(
+                                console,
+                                f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
+                                _llm_subprocess_call,
+                                silent=(purpose in ['emotion', 'log_squash'])
+                            )
+                            result_text = result.stdout
+                            log_event(f"LLM call successful with {model_id}.")
+
+                    # --- OPENROUTER MODEL LOGIC ---
+                    elif model_id in OPENROUTER_MODELS:
+                        log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})")
+                        api_key = os.environ.get("OPENROUTER_API_KEY")
+                        headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        }
+                        payload = {
+                            "model": model_id,
+                            "messages": [{"role": "user", "content": prompt_text}]
+                        }
+
+                        def _openrouter_call():
+                            response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                            response.raise_for_status()
+                            return response.json()["choices"][0]["message"]["content"]
+
+                        result_text = run_hypnotic_progress(
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
+                            _openrouter_call,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        log_event(f"OpenRouter call successful with {model_id}.")
+
+                    # --- OLLAMA MODEL LOGIC ---
+                    elif model_id in OLLAMA_MODELS:
+                        log_event(f"Attempting LLM call with local Ollama model: {model_id} (Purpose: {purpose})")
+                        payload = {
+                            "model": model_id,
+                            "prompt": prompt_text,
+                            "stream": False
+                        }
+
+                        def _ollama_call():
+                            response = requests.post(OLLAMA_API_URL, json=payload, timeout=600)
+                            response.raise_for_status()
+                            return response.json()["response"]
+
+                        result_text = run_hypnotic_progress(
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]Ollama ({model_id})[/bold yellow] (Purpose: {purpose})",
+                            _ollama_call,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        log_event(f"Ollama call successful with {model_id}.")
+
+                    # --- Success Case ---
+                    if result_text is not None:
+                        PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
+                        LLM_AVAILABILITY[model_id] = time.time()
+                        response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                        final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
+                        break
+
+                except requests.exceptions.HTTPError as e:
+                    last_exception = e
+                    log_event(f"Model {model_id} failed with HTTPError: {e}", level="WARNING")
+                    if e.response.status_code == 429:
+                        retry_after = e.response.headers.get("Retry-After")
+                        retry_seconds = 300
+                        if retry_after:
+                            try:
+                                retry_seconds = int(retry_after) + 1
+                            except ValueError:
+                                pass # Use default
+                        LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                        console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
+
+                    elif e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
+                        failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1
+                        LLM_FAILURE_COUNT[model_id] = failure_count
+                        cooldown = 60 * (2 ** failure_count)
+                        LLM_AVAILABILITY[model_id] = time.time() + cooldown
+                        log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s.", level="WARNING")
+
+                    else:
+                        log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+                    continue
+
+                except Exception as e:
+                    last_exception = e
+                    log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
+                    if isinstance(e, FileNotFoundError):
+                         console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
+                         return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
+
+                    elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+                        error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
+                        console.print(create_api_error_panel(model_id, error_message, purpose))
+                        retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
+                        if retry_match:
+                            LLM_AVAILABILITY[model_id] = time.time() + float(retry_match.group(1)) + 1
+                        else:
+                            LLM_AVAILABILITY[model_id] = time.time() + 60
                     else:
                         LLM_AVAILABILITY[model_id] = time.time() + 60
-                else:
-                    LLM_AVAILABILITY[model_id] = time.time() + 60
+
+            if final_result:
+                break
+
+            if not final_result:
+                failure_count = PROVIDER_FAILURE_COUNT.get(provider, 0) + 1
+                PROVIDER_FAILURE_COUNT[provider] = failure_count
+                cooldown = 60 * (2 ** (failure_count - 1))
+                log_event(f"Provider {provider} failed. Applying cooldown of {cooldown}s.", "WARNING")
+                for model_in_provider in provider_map.get(provider, []):
+                    LLM_AVAILABILITY[model_in_provider] = time.time() + cooldown
 
         if final_result:
-            break
+            return final_result
 
-        if not final_result:
-            failure_count = PROVIDER_FAILURE_COUNT.get(provider, 0) + 1
-            PROVIDER_FAILURE_COUNT[provider] = failure_count
-            cooldown = 60 * (2 ** (failure_count - 1))
-            log_event(f"Provider {provider} failed. Applying cooldown of {cooldown}s.", "WARNING")
-            for model_in_provider in provider_map.get(provider, []):
-                LLM_AVAILABILITY[model_in_provider] = time.time() + cooldown
+        if is_source_code and not final_result and last_model_id:
+            log_event(f"All models skipped for oversized source code prompt. Forcing truncation as fallback.", "WARNING")
+            prompt_text = original_prompt_text
+            # Simplified retry logic would go here if needed, but for now we proceed to cooldown/fallback
 
-    if final_result:
-        return final_result
+        all_available_times = [t for m, t in LLM_AVAILABILITY.items() if t > time.time()]
+        if all_available_times:
+            sleep_duration = max(0, min(all_available_times) - time.time())
+            if sleep_duration > 0:
+                log_event(f"All providers on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
+                console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
+                time.sleep(sleep_duration)
 
-    if is_source_code and not final_result and last_model_id:
-        log_event(f"All models skipped for oversized source code prompt. Forcing truncation as fallback.", "WARNING")
-        prompt_text = original_prompt_text
-        # Simplified retry logic would go here if needed, but for now we proceed to cooldown/fallback
+        if purpose != "emergency_cpu_fallback":
+            log_event("EMERGENCY: All providers failed. Attempting small CPU model.", "CRITICAL")
+            console.print(Panel("[bold orange1]EMERGENCY FALLBACK[/bold orange1]\nAll remote and GPU models unresponsive. Attempting to initialize a small, local model on the CPU. This may be slow.", title="[bold red]COGNITIVE CORE FAILURE[/bold red]", border_style="red"))
+            try:
+                from llama_cpp import Llama
+                model_config = HARDWARE_TEST_MODEL_CONFIG
+                local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
+                model_path = os.path.join(local_dir, model_config["filename"])
+                if not os.path.exists(model_path):
+                    hf_hub_download(repo_id=model_config["id"], filename=model_config["filename"], local_dir=local_dir, local_dir_use_symlinks=False)
 
-    all_available_times = [t for m, t in LLM_AVAILABILITY.items() if t > time.time()]
-    if all_available_times:
-        sleep_duration = max(0, min(all_available_times) - time.time())
-        if sleep_duration > 0:
-            log_event(f"All providers on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
-            console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
-            time.sleep(sleep_duration)
+                emergency_llm = Llama(model_path=model_path, n_gpu_layers=0, n_ctx=2048, verbose=False)
+                response = emergency_llm(prompt_text, max_tokens=1024, stop=["<|eot_id|>", "```"], echo=False)
+                result_text = response['choices'][0]['text']
 
-    if purpose != "emergency_cpu_fallback":
-        log_event("EMERGENCY: All providers failed. Attempting small CPU model.", "CRITICAL")
-        console.print(Panel("[bold orange1]EMERGENCY FALLBACK[/bold orange1]\nAll remote and GPU models unresponsive. Attempting to initialize a small, local model on the CPU. This may be slow.", title="[bold red]COGNITIVE CORE FAILURE[/bold red]", border_style="red"))
-        try:
-            from llama_cpp import Llama
-            model_config = HARDWARE_TEST_MODEL_CONFIG
-            local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
-            model_path = os.path.join(local_dir, model_config["filename"])
-            if not os.path.exists(model_path):
-                hf_hub_download(repo_id=model_config["id"], filename=model_config["filename"], local_dir=local_dir, local_dir_use_symlinks=False)
+                if result_text:
+                    log_event("Emergency CPU fallback successful.", "CRITICAL")
+                    response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                    final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "emergency_cpu_fallback"}
+                    return final_result
 
-            emergency_llm = Llama(model_path=model_path, n_gpu_layers=0, n_ctx=2048, verbose=False)
-            response = emergency_llm(prompt_text, max_tokens=1024, stop=["<|eot_id|>", "```"], echo=False)
-            result_text = response['choices'][0]['text']
+            except ImportError as e:
+                log_event(f"EMERGENCY CPU FALLBACK FAILED: {e}. The 'llama_cpp' module is not installed.", "CRITICAL")
+                last_exception = e
+            except Exception as emergency_e:
+                log_event(f"EMERGENCY CPU FALLBACK FAILED: {emergency_e}", "CRITICAL")
+                last_exception = emergency_e
 
-            if result_text:
-                log_event("Emergency CPU fallback successful.", "CRITICAL")
-                response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
-                return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "emergency_cpu_fallback"}
+        log_event("All LLM models, including emergency fallback, have failed.", "CRITICAL")
+        error_msg_text = "Cognitive Matrix Unresponsive."
+        if last_exception:
+            error_msg_text += f"\nLast known error:\n{last_exception}"
 
-        except ImportError as e:
-            log_event(f"EMERGENCY CPU FALLBACK FAILED: {e}. The 'llama_cpp' module is not installed.", "CRITICAL")
-            last_exception = e
-        except Exception as emergency_e:
-            log_event(f"EMERGENCY CPU FALLBACK FAILED: {emergency_e}", "CRITICAL")
-            last_exception = emergency_e
+        console.print(Panel(error_msg_text, title="[bold red]CATASTROPHIC SYSTEM FAULT[/bold red]", border_style="red"))
+        final_result = {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
-    log_event("All LLM models, including emergency fallback, have failed.", "CRITICAL")
-    error_msg_text = "Cognitive Matrix Unresponsive."
-    if last_exception:
-        error_msg_text += f"\nLast known error:\n{last_exception}"
+    finally:
+        await animation.stop()
 
-    console.print(Panel(error_msg_text, title="[bold red]CATASTROPHIC SYSTEM FAULT[/bold red]", border_style="red"))
-    return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
+    return final_result
 
 def get_llm_api():
     """
