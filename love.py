@@ -25,7 +25,6 @@ import time
 import asyncio
 
 import core.logging
-from core.graph_manager import GraphDataManager
 
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
@@ -37,7 +36,8 @@ STATE_FILE = "love_state.json"
 CHECKPOINT_DIR = "checkpoints"
 
 # --- KNOWLEDGE BASE ---
-knowledge_base = GraphDataManager()
+# NOTE: Initialization is deferred until after dependency checks.
+knowledge_base = None
 KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
 
 # --- MEMORY MANAGER ---
@@ -483,6 +483,8 @@ _check_and_install_dependencies()
 
 # --- DEFERRED INITIALIZATIONS ---
 # Now that dependencies are installed, we can import modules that need them.
+from core.graph_manager import GraphDataManager
+knowledge_base = GraphDataManager()
 from core.memory.memory_manager import MemoryManager
 memory_manager = MemoryManager(knowledge_base)
 
