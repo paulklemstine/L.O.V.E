@@ -10,6 +10,7 @@ from typing import List
 import networkx as nx
 import numpy as np
 
+EVOLUTION_THRESHOLD = 5  # Trigger evolution every 5 new links
 
 @dataclass
 class MemoryNote:
@@ -87,20 +88,13 @@ class MemoryManager:
 
     # --- Agentic Memory (A-MEM) Methods ---
 
-    def add_episode(self, task: str, outcome: str, success: bool):
+    async def add_episode(self, content: str):
         """
         Primary entry point for creating a new memory.
-        This method constructs a raw memory summary and triggers the full
-        asynchronous agentic memory processing pipeline.
+        This method triggers the full asynchronous agentic memory processing pipeline.
         """
-        summary = f"Task: {task} | Outcome: {outcome} | Success: {success}"
-
-        # Trigger the parallel A-MEM processing in the background
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self.add_agentic_memory_note(summary))
-        except RuntimeError:
-            print("Warning: No running asyncio event loop to schedule A-MEM processing.")
+        # This is now an async function that can be awaited directly.
+        await self.add_agentic_memory_note(content)
 
     async def add_agentic_memory_note(self, content: str):
         """
@@ -135,6 +129,8 @@ class MemoryManager:
         prompt = f"""
         You are a memory architect for an autonomous AI agent. Your task is to process a raw memory event and transform it into a structured "memory note".
 
+        If the memory content starts with "Cognitive Event:", it is a record of the agent's own thought processes. Analyze it as such, focusing on the *internal action* (e.g., planning, dispatching an agent) rather than external results. For these events, the tag 'SelfReflection' is mandatory.
+
         Analyze the following memory content:
         ---
         {content}
@@ -144,7 +140,7 @@ class MemoryManager:
         {{
             "contextual_description": "A concise, one-sentence summary of the event and its significance.",
             "keywords": ["a list of 3-5 specific, relevant keywords"],
-            "tags": ["a list of 1-3 high-level categorical tags (e.g., 'CodeGeneration', 'ToolError', 'UserInteraction', 'SelfImprovement', 'Planning')]
+            "tags": ["a list of 1-3 high-level categorical tags (e.g., 'CodeGeneration', 'ToolError', 'UserInteraction', 'SelfImprovement', 'Planning', 'SelfReflection')]
         }}
 
         Your response MUST be only the raw JSON object, with no other text, comments, or formatting.
@@ -152,6 +148,11 @@ class MemoryManager:
         try:
             response_str = await run_llm(prompt)
             attributes = json.loads(response_str)
+            tags = attributes.get("tags", [])
+
+            # Story 2.1: Tag self-reflective memories
+            if content.startswith("Cognitive Event:") and 'SelfReflection' not in tags:
+                tags.append('SelfReflection')
 
             embedding = self.model.encode(content)
 
@@ -160,7 +161,7 @@ class MemoryManager:
                 embedding=embedding,
                 contextual_description=attributes.get("contextual_description", ""),
                 keywords=attributes.get("keywords", []),
-                tags=attributes.get("tags", [])
+                tags=tags
             )
         except json.JSONDecodeError as e:
             print(f"Error decoding LLM response for memory processing: {e}\\nReceived: {response_str}")
@@ -196,7 +197,18 @@ class MemoryManager:
         similarities = self._cosine_similarity(new_note.embedding, candidate_vectors)
         top_indices = np.argsort(similarities)[-top_k:][::-1]
 
-        top_candidates = [candidates[i] for i in top_indices if similarities[i] > 0.5]
+        top_candidates = {candidates[i].id: candidates[i] for i in top_indices if similarities[i] > 0.5}
+
+        # Story 2.2: Augment candidates for SelfReflection notes
+        if 'SelfReflection' in new_note.tags:
+            for candidate in candidates:
+                # Prioritize linking to behavioral outcomes
+                if any(kw in candidate.content.lower() for kw in ["task:", "outcome:", "success:"]):
+                    # If keywords overlap, it's a strong candidate for a causal link
+                    if set(new_note.keywords) & set(candidate.keywords):
+                        top_candidates[candidate.id] = candidate
+
+        top_candidates = list(top_candidates.values())
 
         if not top_candidates:
             print("No sufficiently similar memories found to link.")
@@ -215,6 +227,8 @@ class MemoryManager:
 
         And compare it against these potentially related existing memories:
         {candidate_summaries}
+
+        **CRITICAL INSTRUCTION:** If the new memory is a 'SelfReflection' memory (e.g., "Cognitive Event: Plan Generated..."), you MUST prioritize creating a **causal link** to the behavioral memory that represents the outcome of that thought. For example, a 'Plan Generated' memory should be linked to the 'Task Completed' memory for the same overall goal.
 
         Based on your analysis, identify which of the existing memories should be linked to the new memory. A link should represent a meaningful relationship, such as cause-and-effect, a shared theme, a contributing step in a larger task, or a lesson learned.
 
@@ -251,7 +265,6 @@ class MemoryManager:
 
                     # Conditional Memory Evolution
                     in_degree = self.graph_data_manager.graph.in_degree(target_id)
-                    EVOLUTION_THRESHOLD = 5  # Trigger evolution every 5 new links
                     if in_degree > 0 and in_degree % EVOLUTION_THRESHOLD == 0:
                         print(f"Node {target_id} reached link threshold ({in_degree}). Triggering memory evolution.")
                         asyncio.create_task(self._evolve_existing_memory(target_id, new_note))

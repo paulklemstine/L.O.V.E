@@ -8,14 +8,9 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.agents.orchestrator import Orchestrator
-
-class TestPhase2Integration(unittest.IsolatedAsyncioTestCase):
-    """
-    An integration test to ensure all components of Phase 2 (Planning, Tools,
-    and Execution) work together as a system.
-    """
-
 from core.graph_manager import GraphDataManager
+from core.memory.memory_manager import MemoryManager
+from unittest.mock import MagicMock
 
 class TestPhase2Integration(unittest.IsolatedAsyncioTestCase):
     """
@@ -26,8 +21,9 @@ class TestPhase2Integration(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         """Set up the test environment."""
         print("\n--- Setting up TestPhase2Integration ---")
-        self.mock_kg = GraphDataManager()
-        self.orchestrator = Orchestrator()
+        mock_graph_manager = MagicMock(spec=GraphDataManager)
+        mock_memory_manager = MemoryManager(mock_graph_manager)
+        self.orchestrator = Orchestrator(mock_memory_manager)
 
     # async def test_full_execution_flow(self):
     #     """

@@ -12,10 +12,11 @@ from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
 
+from love import memory_manager
 # Keep the old function for fallback compatibility as requested
 async def solve_with_agent_team(task_description: str) -> str:
     from core.agent_framework_manager import create_and_run_workflow
-    orchestrator = Orchestrator()
+    orchestrator = Orchestrator(memory_manager)
     result = await create_and_run_workflow(task_description, orchestrator.tool_registry)
     return str(result)
 
