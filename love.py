@@ -307,6 +307,11 @@ def _is_package_installed(req_str):
         return True
     except (pkg_resources.DistributionNotFound, pkg_resources.VersionConflict):
         return False
+    except FileNotFoundError:
+        # This can happen if a package's metadata is corrupted (e.g., METADATA file is missing).
+        # We'll log it and treat the package as not installed so the script can attempt to fix it.
+        _temp_log_event(f"Handled FileNotFoundError for '{req_str}', treating as not installed.", "WARNING")
+        return False
 
 def _install_requirements_file(requirements_path, tracker_prefix):
     """
