@@ -34,3 +34,4 @@ parsel
 agent-framework
 datasets
 
+openevolve

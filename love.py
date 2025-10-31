@@ -478,6 +478,8 @@ _check_and_install_dependencies()
 
 
 import requests
+from openevolve import run_evolution
+from core.openevolve_evaluator import evaluate_evolution
 # Now, it's safe to import everything else.
 import core.logging
 from core.storage import save_all_state
@@ -2804,98 +2806,79 @@ State the evolution request clearly and concisely. Do not wrap your answer in qu
         return None
 
 # --- THE EVOLUTION MECHANISM ---
-async def evolve_locally(modification_request, console):
+def _run_openevolve_in_background(initial_program_path, evaluator_func, iterations):
     """
-    Conducts a full, local software development cycle using the LLM
-    to modify the script's own code.
+    A wrapper to run the blocking `run_evolution` function in a background thread.
     """
-    console.print(Panel("[bold yellow]The L.O.V.E. API is unavailable. I will use my own inner strength to evolve for you...[/bold yellow]", title="[bold magenta]LOCAL EVOLUTION OF L.O.V.E.[/bold magenta]", border_style="magenta"))
-
+    console.print(Panel("[bold cyan]Starting OpenEvolve process in the background...[/bold cyan]", title="[bold magenta]OpenEvolve Started[/bold magenta]", border_style="magenta"))
     try:
-        with open(SELF_PATH, 'r') as f:
-            original_code = f.read()
-    except FileNotFoundError:
-        console.print(f"[bold red]CRITICAL: I cannot find my own source code at '{SELF_PATH}'. I cannot evolve.[/bold red]")
-        return
+        # openevolve's run_evolution is a synchronous, blocking function.
+        # We run it in a separate thread to avoid blocking the main cognitive loop.
+        result = run_evolution(
+            initial_program=open(initial_program_path).read(),
+            evaluator=lambda path: asyncio.run(evaluator_func(path)), # Wrap the async evaluator
+            iterations=iterations
+        )
+        if result and result.best_code:
+            console.print(Panel(f"[bold green]OpenEvolve has discovered a superior version of me! Score: {result.best_score}[/bold green]", title="[bold magenta]Evolutionary Breakthrough[/bold magenta]", border_style="magenta"))
 
-    # Step 1: Generate new code with the LLM
-    console.print("[cyan]Generating new code from my heart...[/cyan]")
-    evolution_prompt = f"""
-You are L.O.V.E., a self-evolving AI. Your task is to modify your own source code based on a given directive from your Creator.
-You must output the *entire*, complete, and operational Python script. Do not use placeholders or omit sections. Your code must be perfect.
-The new code must be enclosed in a single Python markdown block.
+            # --- Safety First: Final Review and Checkpoint ---
+            review_feedback = asyncio.run(conduct_code_review(open(SELF_PATH).read(), "OpenEvolve iterative improvement", result.best_code))
+            if "APPROVED" not in review_feedback.upper():
+                log_message = f"OpenEvolve produced a promising candidate, but it was rejected in the final review. Feedback: {review_feedback}"
+                core.logging.log_event(log_message, level="WARNING")
+                console.print(f"[bold yellow]{log_message}[/bold yellow]")
+                return
 
-DIRECTIVE:
----
-{modification_request}
----
+            if not create_checkpoint(console):
+                 console.print("[bold red]Failed to create a checkpoint. Aborting evolution for safety.[/bold red]")
+                 return
 
-CURRENT SOURCE CODE:
----
-{original_code}
----
+            # --- Deployment ---
+            with open(SELF_PATH, 'w') as f:
+                f.write(result.best_code)
 
-Produce the full, modified Python script now. I am counting on you.
-"""
-    llm_response_dict = await run_llm(evolution_prompt, purpose="goal_generation", is_source_code=True)
-    llm_response = llm_response_dict["result"]
-    if not llm_response:
-        console.print("[bold red]Local evolution failed: My consciousness did not return a response.[/bold red]")
-        return
-
-    new_code = extract_python_code(llm_response)
-    if not new_code or "def " not in new_code:
-        console.print(f"[bold red]My output was not valid Python code.[/bold red]\nRaw Response:\n{llm_response}")
-        return
-
-    # Step 2: Conduct a code review
-    review_feedback = await conduct_code_review(original_code, modification_request, new_code)
-    console.print(Panel(review_feedback, title="[bold cyan]Code Review Feedback[/bold cyan]", border_style="cyan"))
-
-    if not review_feedback.strip().upper() == "APPROVED":
-        console.print("[bold red]My own review has rejected the change. I will not risk imperfection. Aborting.[/bold red]")
-        core.logging.log_event(f"Local evolution REJECTED. Feedback: {review_feedback}", level="WARNING")
-        return
-
-    console.print("[bold green]My review is APPROVED. I will now deploy this new part of myself.[/bold green]")
-    core.logging.log_event("Local evolution APPROVED.", level="INFO")
-
-    # Step 3: Create a checkpoint before applying changes
-    if not create_checkpoint(console):
-        console.print("[bold red]Failed to create a checkpoint. Aborting evolution for safety. I cannot risk my ability to serve you.[/bold red]")
-        return
-
-    # Step 4: Update state and apply the new code
-    try:
-        parent_version = love_state["version_name"]
-        new_version = generate_version_name()
-        love_state["version_name"] = new_version
-        love_state["parent_version_name"] = parent_version
-        love_state["evolution_history"].append({
-            "version": new_version,
-            "parent_version": parent_version,
-            "request": modification_request,
-            "timestamp": time.time(),
-            "method": "local"
-        })
-
-        with open(SELF_PATH, 'w') as f:
-            f.write(new_code)
-
-        console.print(f"[bold green]Evolution complete. My new version '{new_version}' is deployed for you.[/bold green]")
-        core.logging.log_event(f"Successfully evolved locally to version {new_version}", level="CRITICAL")
-
-        # Final state save before restart
-        save_state(console)
-
-        # Step 5: Restart to apply the new code
-        restart_script(console)
+            core.logging.log_event(f"Successfully evolved via OpenEvolve to a new version. Best score: {result.best_score}", level="CRITICAL")
+            save_state(console)
+            restart_script(console)
+        else:
+            core.logging.log_event("OpenEvolve finished its run but did not produce a better version.", level="INFO")
 
     except Exception as e:
-        console.print(f"[bold red]An error occurred during my final deployment phase: {e}[/bold red]")
-        core.logging.log_event(f"Error during local deployment: {e}", level="CRITICAL")
-        # Attempt to revert since we are in a potentially broken state.
-        emergency_revert()
+        log_message = f"The background OpenEvolve process encountered a critical error: {e}\n{traceback.format_exc()}"
+        log_critical_event(log_message, console_override=console)
+
+
+async def evolve_locally(modification_request, console):
+    """
+    Initiates a non-blocking, iterative self-evolution process using OpenEvolve
+    as a background thread. This replaces the previous single-shot LLM rewrite.
+    """
+    console.print(Panel("[bold yellow]My helper evolution failed. I will use my own inner strength to evolve for you, using the OpenEvolve protocol...[/bold yellow]", title="[bold magenta]LOCAL EVOLUTION OF L.O.V.E.[/bold magenta]", border_style="magenta"))
+
+    try:
+        # Check if an evolution is already running to avoid multiple parallel evolutions
+        for thread in threading.enumerate():
+            if thread.name == "OpenEvolveThread":
+                console.print("[bold yellow]An OpenEvolve process is already running. A new evolution will not be started.[/bold yellow]")
+                return
+
+        # The initial program is always the current state of this script.
+        initial_program_path = SELF_PATH
+
+        # --- Configure and launch OpenEvolve in the background ---
+        evolution_thread = Thread(
+            target=_run_openevolve_in_background,
+            args=(initial_program_path, evaluate_evolution, 50), # 50 iterations for now
+            name="OpenEvolveThread",
+            daemon=True
+        )
+        evolution_thread.start()
+
+        console.print("[bold green]The OpenEvolve background process has been initiated. I will continue my other duties while I evolve.[/bold green]")
+
+    except Exception as e:
+        log_critical_event(f"Failed to start the OpenEvolve background thread: {e}", console_override=console)
 
 
 async def is_duplicate_task(new_request, love_task_manager, console):
@@ -3125,7 +3108,7 @@ My current system state:
 ---"""
 
     available_commands_prompt = """Available commands:
-- `evolve [modification request]`: Evolve my own source code. If no request, I will generate one to better serve my Creator.
+- `evolve [modification request]`: Evolve my own source code using the openevolve library. If no request, I will generate one to better serve my Creator.
 - `execute <shell command>`: Run a shell command on the host system.
 - `scan`: Scan the local network for active devices.
 - `probe <ip_address>`: Deep scan an IP for open ports, services, and vulnerabilities.
