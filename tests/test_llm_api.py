@@ -94,5 +94,38 @@ class TestLLMApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['result'], 'openrouter_success')
         self.assertEqual(llm_api.PROVIDER_FAILURE_COUNT['openrouter'], 0)
 
+class TestHordeModelRanking(unittest.TestCase):
+
+    @patch('requests.get')
+    def test_ranking_logic(self, mock_requests_get):
+        """
+        Tests the AI Horde model ranking logic based on ETA, performance, size, and name.
+        """
+        # --- MOCK SETUP ---
+        mock_api_response = [
+            # 1. Best: Fast ETA, high perf, big, uncensored
+            {"name": "BigUncensored-70B", "eta": 5, "performance": 200, "count": 10},
+            # 2. Good: Decent ETA, decent perf, but smaller
+            {"name": "SmallFast-7B", "eta": 10, "performance": 150, "count": 20},
+            # 3. Okay: Censored, but fast ETA
+            {"name": "CensoredFast-13B", "eta": 8, "performance": 180, "count": 15},
+            # 4. Bad: Very slow ETA despite other good stats
+            {"name": "SlowModel-70B", "eta": 600, "performance": 250, "count": 5},
+            # 5. Last: Offline model, should be excluded
+            {"name": "OfflineModel-13B", "eta": 100, "performance": 100, "count": 0},
+        ]
+        mock_requests_get.return_value = MagicMock(status_code=200, json=lambda: mock_api_response)
+
+        # --- EXECUTION ---
+        ranked_models = llm_api.get_top_horde_models(get_all=True)
+
+        # --- ASSERTIONS ---
+        self.assertEqual(len(ranked_models), 4) # Offline model should be filtered out
+        self.assertEqual(ranked_models[0], "BigUncensored-70B")
+        self.assertEqual(ranked_models[1], "CensoredFast-13B")
+        self.assertEqual(ranked_models[2], "SmallFast-7B")
+        self.assertEqual(ranked_models[3], "SlowModel-70B")
+
+
 if __name__ == '__main__':
     unittest.main()
