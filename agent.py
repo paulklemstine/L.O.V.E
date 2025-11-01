@@ -5,6 +5,7 @@ import os
 
 from core.agents.orchestrator import Orchestrator
 from core.tools import crypto_scan_tool
+from love import memory_manager
 
 async def main():
     """
@@ -16,7 +17,7 @@ async def main():
     console.print(Rule("[bold yellow]General Intelligence Agent: Online[/bold yellow]"))
 
     # The Orchestrator now encapsulates the entire cognitive architecture.
-    agent_orchestrator = Orchestrator()
+    agent_orchestrator = Orchestrator(memory_manager)
     agent_orchestrator.tool_registry.register_tool("crypto_scan", crypto_scan_tool)
 
     # Start the cognitive loop as a background task

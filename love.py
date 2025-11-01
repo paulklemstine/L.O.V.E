@@ -3370,7 +3370,7 @@ Now, parse the following text into a JSON list of task objects:
             if loop_count % self_improvement_trigger == 0:
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4))
-                optimizer = SelfImprovingOptimizer()
+                optimizer = SelfImprovingOptimizer(memory_manager=memory_manager)
                 await optimizer.improve_module(
                     'core/agents/self_improving_optimizer.py',
                     'Improve my ability to generate more effective and efficient code modifications.'
@@ -3496,7 +3496,7 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "ifconfig":
                     output, error = get_network_interfaces()
                 elif command == "reason":
-                    output = ReasoningEngine(knowledge_base, console=None).analyze_and_prioritize()
+                    output = await ReasoningEngine(knowledge_base, console=None).analyze_and_prioritize()
                 elif command == "generate_image":
                     output = generate_image(" ".join(args))
                 elif command == "talent_scout":

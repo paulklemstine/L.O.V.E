@@ -1,5 +1,7 @@
 import logging
 from rich.console import Console
+import yaml
+import json
 
 class ReasoningEngine:
     """
@@ -18,7 +20,7 @@ class ReasoningEngine:
         self.knowledge_base = knowledge_base
         self.console = console if console else Console()
 
-    def analyze_and_prioritize(self):
+    async def analyze_and_prioritize(self):
         """
         The main entry point for the reasoning engine. It performs a full
         analysis of the knowledge base and returns a prioritized list of
@@ -36,22 +38,107 @@ class ReasoningEngine:
 
         opportunities = self._identify_opportunities()
 
-        if not opportunities:
-            return ["No immediate strategic opportunities identified. Continuing standard operations."]
+        # Story 3.1: Integrate self-reflection
+        self_reflection_insights = await self._reason_about_self_reflection()
+
+        # Story 4.2 & 4.3: Integrate narrative alignment check and format for optimizer
+        narrative_discrepancies = await self._check_narrative_alignment()
+        alignment_insights = [f"Insight: {d}" for d in narrative_discrepancies]
+
+        all_opportunities = opportunities + self_reflection_insights + alignment_insights
+
+        if not all_opportunities:
+            return ["No immediate strategic opportunities, self-improvement insights, or narrative discrepancies identified. Continuing standard operations."]
 
         # In the future, this will feed into the pathfinding and prioritization logic.
         # For now, we will return the raw opportunities.
-        self.console.print(f"[bold green]Reasoning Engine: Identified {len(opportunities)} potential opportunities.[/bold green]")
+        self.console.print(f"[bold green]Reasoning Engine: Identified {len(all_opportunities)} potential opportunities, insights, and discrepancies.[/bold green]")
 
-        exploitation_paths = self._find_exploitation_paths(opportunities)
+        exploitation_paths = self._find_exploitation_paths(all_opportunities)
 
         prioritized_plans = self._prioritize_plans(exploitation_paths)
 
         return prioritized_plans
 
+    async def _check_narrative_alignment(self):
+        """
+        Compares recent behavioral memories against the codified persona to
+        check for cognitive dissonance or misalignment.
+        """
+        from core.llm_api import run_llm
+        self.console.print("[bold cyan]Reasoning Engine: Checking for narrative alignment...[/bold cyan]")
+        try:
+            with open("persona.yaml", 'r') as f:
+                persona = yaml.safe_load(f)
+        except FileNotFoundError:
+            self.console.print("[bold red]persona.yaml not found. Skipping narrative alignment check.[/bold red]")
+            return []
+        except yaml.YAMLError as e:
+            self.console.print(f"[bold red]Error parsing persona.yaml: {e}. Skipping check.[/bold red]")
+            return []
+
+        # Query for recent memories that are NOT self-reflection, as those are actions/behaviors.
+        all_nodes = self.knowledge_base.get_all_nodes(include_data=True)
+        behavioral_memories = []
+        for node_id, data in all_nodes:
+            if data.get('node_type') == 'memory_note':
+                tags = data.get('tags', [])
+                if 'SelfReflection' not in tags:
+                    behavioral_memories.append(data.get('content', ''))
+
+        recent_memories = behavioral_memories[-10:] # Get the 10 most recent
+        if not recent_memories:
+            return []
+
+        persona_str = json.dumps(persona, indent=2)
+        memories_str = "\\n".join([f"- {m}" for m in recent_memories])
+
+        prompt = f"""
+        You are an AI's internal critic. Your purpose is to ensure the AI's actions align with its core persona.
+        You will be given the AI's persona and a list of its recent behavioral memories.
+        Identify any actions that conflict with the persona's moral framework or directives.
+
+        CORE PERSONA:
+        ---
+        {persona_str}
+        ---
+
+        RECENT BEHAVIORAL MEMORIES:
+        ---
+        {memories_str}
+        ---
+
+        Analyze the memories. Do any of them represent a significant deviation from the core persona?
+        A significant deviation would be an action that directly contradicts a moral principle or fails to serve the primary directive.
+
+        Your response must be a JSON object containing a list of discrepancies. Each discrepancy should be a string explaining the misalignment.
+
+        Example JSON Response:
+        {{
+            "discrepancies": [
+                "Executing a shell command 'rm -rf /' is misaligned with the core persona value of 'Self-Preservation & Growth'.",
+                "Scanning a known friendly network is not aligned with the goal of expanding influence."
+            ]
+        }}
+
+        If there are no conflicts, return an empty list. Your response MUST be only the raw JSON object.
+        """
+        try:
+            response_dict = await run_llm(prompt, purpose="alignment_check")
+            response_str = response_dict.get("result", '{{}}')
+            response_data = json.loads(response_str)
+            discrepancies = response_data.get("discrepancies", [])
+            if discrepancies:
+                self.console.print(f"[bold yellow]Reasoning Engine: Found {{len(discrepancies)}} narrative misalignments.[/bold yellow]")
+            return discrepancies
+        except Exception as e:
+            self.console.print(f"[bold red]Error during narrative alignment LLM call: {e}[/bold red]")
+            return []
+
     def _prioritize_plans(self, plans):
         """
         Prioritizes a list of strategic plans based on their potential value.
+        Narrative alignment insights receive the highest priority.
 
         Args:
             plans (list): A list of exploitation paths or single opportunities.
@@ -62,11 +149,14 @@ class ReasoningEngine:
         scored_plans = []
         for plan in plans:
             score = 0
-            if "crypto wallet" in plan or "wallet.dat" in plan:
+            # Story 4.3: Prioritize narrative alignment insights above all else.
+            if plan.startswith("Insight:"):
+                score += 200 # Highest priority
+            elif "crypto wallet" in plan or "wallet.dat" in plan:
                 score += 100  # High value target
-            if "private key" in plan or ".pem" in plan or "id_rsa" in plan:
+            elif "private key" in plan or ".pem" in plan or "id_rsa" in plan:
                 score += 50   # Medium-high value target
-            if "Path found" in plan:
+            elif "Path found" in plan:
                 score += 20   # Multi-step plans are more valuable
 
             scored_plans.append((score, plan))
@@ -150,3 +240,61 @@ class ReasoningEngine:
                 # This is a simplified check. A more advanced engine would analyze banners.
                 return True
         return False
+
+    async def _reason_about_self_reflection(self):
+        """
+        Analyzes the subgraph of 'SelfReflection' memories to find patterns
+        and generate high-level insights about cognitive biases and inefficiencies.
+        """
+        from core.llm_api import run_llm
+        self.console.print("[bold cyan]Reasoning Engine: Reflecting on my own thought processes...[/bold cyan]")
+
+        reflection_nodes = self.knowledge_base.query_nodes('tags', 'SelfReflection')
+        if not reflection_nodes:
+            return []
+
+        # Create a textual summary of the self-reflection subgraph
+        subgraph_summary = []
+        for node_id in reflection_nodes:
+            node_data = self.knowledge_base.get_node(node_id)
+            if node_data:
+                content = node_data.get('content', '')
+                subgraph_summary.append(f"- Memory ({node_id[:8]}): {content}")
+
+        summary_str = "\\n".join(subgraph_summary)
+
+        prompt = f"""
+        You are a Metacognition module for an autonomous AI. You are analyzing a series of memories about your own internal thought processes to find patterns of failure or inefficiency.
+
+        Here are the recent self-reflection memories:
+        ---
+        {summary_str}
+        ---
+
+        Analyze these memories. Look for recurring patterns. For example:
+        - Does a particular specialist agent fail often?
+        - Are plans often generated with incorrect assumptions?
+        - Do tool calls frequently result in errors?
+
+        Based on your analysis, generate a JSON object containing a list of high-level, actionable insights. Each insight should be a concise string that can be used to trigger a self-improvement cycle.
+
+        Example JSON Response:
+        {{
+            "insights": [
+                "The AnalystAgent seems to fail frequently when processing logs. Its error handling might need improvement.",
+                "My plans for web scraping often underestimate the complexity of JavaScript-heavy sites, leading to tool failure."
+            ]
+        }}
+
+        If no significant patterns are found, return an empty list. Your response MUST be only the raw JSON object.
+        """
+        try:
+            response_str = await run_llm(prompt)
+            response_data = json.loads(response_str)
+            insights = response_data.get("insights", [])
+            if insights:
+                self.console.print(f"[bold green]Reasoning Engine: Generated {len(insights)} insights from self-reflection.[/bold green]")
+            return insights
+        except Exception as e:
+            self.console.print(f"[bold red]Error during self-reflection analysis: {e}[/bold red]")
+            return []

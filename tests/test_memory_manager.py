@@ -48,16 +48,19 @@ class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
         mock_graph_manager = MagicMock()
         # Use a real nx.DiGraph instance for the mock to allow real graph operations
         mock_graph_manager.graph = nx.DiGraph()
+
         # Correctly simulate the methods of GraphDataManager
-        mock_graph_manager.add_node.side_effect = lambda node_id, node_type, attributes: mock_graph_manager.graph.add_node(node_id, **attributes)
+        def add_node_side_effect(node_id, node_type, attributes):
+            # The real GraphDataManager stores node_type as an attribute.
+            attributes['node_type'] = node_type
+            mock_graph_manager.graph.add_node(node_id, **attributes)
+        mock_graph_manager.add_node.side_effect = add_node_side_effect
         mock_graph_manager.add_edge.side_effect = lambda source_id, target_id, relationship_type, attributes: mock_graph_manager.graph.add_edge(source_id, target_id, **attributes)
         mock_graph_manager.get_node.side_effect = lambda node_id: mock_graph_manager.graph.nodes.get(node_id)
 
         # Set up a side effect for query_nodes to reflect the state of the graph
         def query_nodes_side_effect(attribute_key, attribute_value):
-            if attribute_key == "node_type" and attribute_value == "MemoryNote":
-                return [n for n, d in mock_graph_manager.graph.nodes(data=True) if d.get('node_type') == 'MemoryNote']
-            return []
+            return [n for n, d in mock_graph_manager.graph.nodes(data=True) if d.get(attribute_key) == attribute_value]
         mock_graph_manager.query_nodes.side_effect = query_nodes_side_effect
 
 
@@ -97,14 +100,13 @@ class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
         }
         # Configure the side_effect on the mock from setUp
         self.mock_run_llm.side_effect = [
-            json.dumps(llm_response_create),
-            json.dumps(llm_response_link),
-            json.dumps(llm_response_evolve)
+            {"result": json.dumps(llm_response_create)},
+            {"result": json.dumps(llm_response_link)},
+            json.dumps(llm_response_evolve) # This call is inside a method that doesn't expect a dict
         ]
 
         # --- Pre-populate Graph ---
         mock_embedding = np.random.rand(384).tolist()
-        # Directly add to the mock graph manager's graph for the test setup
         self.memory.graph_data_manager.graph.add_node(
             "existing-node-0",
             content="An old memory about testing.",
@@ -115,17 +117,28 @@ class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
             node_type="MemoryNote"
         )
 
-        self.assertEqual(self.memory.graph_data_manager.graph.number_of_nodes(), 1)
+        # Pre-populate with enough incoming edges to trigger evolution
+        for i in range(4):
+            source_embedding = np.random.rand(384).tolist()
+            self.memory.graph_data_manager.graph.add_node(
+                f"source-node-{i}",
+                node_type="MemoryNote",
+                embedding=json.dumps(source_embedding),
+                content=f"Source memory {i}"
+            )
+            self.memory.graph_data_manager.graph.add_edge(f"source-node-{i}", "existing-node-0")
+
+        self.assertEqual(self.memory.graph_data_manager.graph.number_of_nodes(), 5)
 
         # --- Trigger Action ---
-        self.memory.add_episode("test task", "test outcome", True)
+        await self.memory.add_episode("A new memory about a test task.", tags=["TestTag"])
 
         # Allow the async tasks created in add_episode to complete
         await asyncio.sleep(0.01)
 
         # --- Assertions ---
-        self.assertEqual(self.memory.graph_data_manager.graph.number_of_nodes(), 2, "A new node should have been added")
-        self.assertEqual(self.memory.graph_data_manager.graph.number_of_edges(), 1, "A link should have been created")
+        self.assertEqual(self.memory.graph_data_manager.graph.number_of_nodes(), 6, "A new node should have been added")
+        self.assertEqual(self.memory.graph_data_manager.graph.number_of_edges(), 5, "A new link should have been created")
 
         self.assertEqual(self.mock_run_llm.call_count, 3, "Should call LLM for create, link, and evolve")
 
