@@ -4,7 +4,9 @@ import re
 import time
 import logging
 import traceback
+import json
 from rich.console import Console, Group
+from rich.syntax import Syntax
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.text import Text
@@ -421,6 +423,84 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
         width=width
     )
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
+def create_major_llm_query_panel(instruction, response, duration, width=80):
+    """Creates a detailed panel for a major LLM query."""
+    panel_title = "🍍 Cognitive Query 🍍"
+    border_style = PANEL_TYPE_COLORS.get("llm_query", "bright_cyan")
+
+    # --- Pretty-print JSON or highlight code ---
+    try:
+        # Try to load as JSON
+        parsed_json = json.loads(response)
+        response_renderable = Syntax(json.dumps(parsed_json, indent=2), "json", theme="monokai", line_numbers=True)
+    except (json.JSONDecodeError, TypeError):
+        # Fallback to python syntax highlighting for code, or plain text
+        if "def " in response or "import " in response or "class " in response:
+            response_renderable = Syntax(response, "python", theme="monokai", line_numbers=True)
+        else:
+            response_renderable = Text(response, style="white")
+
+    content_items = [
+        Text(f"Primary Instruction:", style="bold white"),
+        Panel(Text(instruction, style="bright_yellow"), border_style="dim", expand=True),
+        Rule("Full Response", style="bright_black"),
+        response_renderable,
+        Rule(style="bright_black"),
+        Text(f"Duration: {duration:.2f}s", style="dim", justify="right")
+    ]
+
+    panel = Panel(
+        Group(*content_items),
+        title=get_gradient_text(panel_title, border_style, random.choice(RAVE_COLORS)),
+        border_style=border_style,
+        padding=(1, 2),
+        width=width
+    )
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
+def create_minor_llm_query_text(instruction, response, duration):
+    """Creates a compact, single-line text output for a minor LLM query."""
+    text = Text("🧠 Minor LLM ", style="dim")
+    text.append(f"({duration:.2f}s): ", style="dim yellow")
+
+    # Truncate instruction
+    instruction_trunc = (instruction[:50] + '...') if len(instruction) > 50 else instruction
+    text.append(f"'{instruction_trunc}' -> ", style="bright_cyan")
+
+    # Clean up response for display
+    response_clean = response.replace('\n', ' ').strip()
+    response_trunc = (response_clean[:50] + '...') if len(response_clean) > 50 else response_clean
+    text.append(f"'{response_trunc}'", style="medium_purple1")
+
+    return text
+
+
+def create_llm_error_panel(instruction, error, duration, width=80):
+    """Creates a distinct panel for a failed LLM call."""
+    panel_title = "💀 Cognitive Query Failure 💀"
+    border_style = "bright_red"
+
+    content_items = [
+        Text("The cognitive core failed to process the instruction.", style="bold red"),
+        Rule("Attempted Instruction", style="bright_black"),
+        Text(instruction, style="bright_yellow"),
+        Rule("Error Details", style="bright_black"),
+        Text(str(error), style="red"),
+        Rule(style="bright_black"),
+        Text(f"Duration: {duration:.2f}s", style="dim", justify="right")
+    ]
+
+    panel = Panel(
+        Group(*content_items),
+        title=get_gradient_text(panel_title, border_style, "red"),
+        border_style=border_style,
+        padding=(1, 2),
+        width=width
+    )
+    return Gradient(panel, colors=[border_style, "dark_red"])
 
 def create_network_panel(type, target, data, output_cid=None, width=80):
     """Creates a panel for network operations."""
