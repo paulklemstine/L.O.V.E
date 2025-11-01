@@ -4,7 +4,6 @@
 #
 #    pip-compile requirements.in
 #
---extra-index-url https://www.piwheels.org/simple
 
 a2a-sdk==0.3.10
     # via agent-framework-a2a
