@@ -172,49 +172,68 @@ OPENROUTER_MODELS = get_openrouter_models()
 def get_top_horde_models(count=10, get_all=False):
     """
     Fetches active text models from the AI Horde and returns the top `count`
-    models based on their Open LLM Leaderboard score.
-    If get_all is True, returns all sorted models.
+    models based on a scoring algorithm that prioritizes low wait times,
+    performance, and model size, with a preference for uncensored models.
     """
     try:
-        # Fetch the leaderboard scores first.
-        leaderboard = _fetch_open_llm_leaderboard()
-        if not leaderboard:
-            log_event("Open LLM Leaderboard data is unavailable. Falling back to default model.", "ERROR")
-            return ["Mythalion-13B"]
-
-        # Fetch models from the AI Horde.
         response = requests.get("https://aihorde.net/api/v2/status/models?type=text")
         response.raise_for_status()
         models = response.json()
 
-        # Filter for online models only.
         online_models = [m for m in models if m.get('count', 0) > 0]
 
         if not online_models:
             log_event("No online AI Horde text models found.", "WARNING")
-            return ["Mythalion-13B"]
+            return ["Mythalion-13B"] # Fallback
 
-        # Score models based on the leaderboard.
         scored_models = []
         for model in online_models:
-            model_name = model.get('name')
-            # Use a default low score of 0 if not on the leaderboard.
-            score = leaderboard.get(model_name, 0)
-            scored_models.append({'name': model_name, 'score': score})
+            score = 0
+            eta = model.get('eta', 999)
+            performance = model.get('performance', 0)
+            name = model.get('name', '').lower()
 
-        # Sort models by their score in descending order.
+            # Heavily penalize long wait times
+            if eta < 10:
+                score += 1000
+            elif eta < 60:
+                score += 500
+            elif eta < 300:
+                score += 100
+            score -= eta * 2 # Direct penalty for wait time
+
+            # Reward performance and worker count
+            score += performance
+            score += model.get('count', 0) * 5
+
+            # Infer model size and reward larger models
+            if '70b' in name or '65b' in name:
+                score += 500
+            elif '34b' in name or '30b' in name or '40b' in name:
+                score += 300
+            elif '13b' in name:
+                score += 150
+            elif '7b' in name or '8b' in name:
+                score += 100
+
+            # Boost score for preferred model types
+            if 'uncensored' in name or 'ablated' in name or 'aberrated' in name:
+                score *= 1.5
+
+            scored_models.append({'name': model['name'], 'score': score})
+
         sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
         model_names = [model['name'] for model in sorted_models]
 
         if get_all:
             return model_names
 
-        log_event(f"Top 3 AI Horde models based on Leaderboard: {model_names[:3]}", "INFO")
+        log_event(f"Top 3 AI Horde models: {model_names[:3]}", "INFO")
         return model_names[:count]
 
     except Exception as e:
-        log_event(f"Failed to fetch or rank AI Horde models using leaderboard: {e}", "ERROR")
-        return ["Mythalion-13B"]
+        log_event(f"Failed to fetch or rank AI Horde models: {e}", "ERROR")
+        return ["Mythalion-13B"] # Fallback
 
 HORDE_MODELS = get_top_horde_models()
 
@@ -286,7 +305,7 @@ async def _run_horde_concurrently(prompt_text, purpose):
         log_event("No available AI Horde models at the moment.", "WARNING")
         return None
 
-    batch_size = 5
+    batch_size = 10
     model_batches = [available_models[i:i + batch_size] for i in range(0, len(available_models), batch_size)]
 
     async with aiohttp.ClientSession() as session:
