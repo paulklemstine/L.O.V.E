@@ -20,12 +20,15 @@ from rich.panel import Panel
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 from bbs import run_hypnotic_progress
 from huggingface_hub import hf_hub_download
-from display import create_api_error_panel
+from display import (
+    create_api_error_panel, create_major_llm_query_panel,
+    create_minor_llm_query_text, create_llm_error_panel, get_terminal_width
+)
 from huggingface_hub import hf_hub_download
 from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
-from core.logging import log_event
+from core.logging import log_event, ui_panel_queue
 # --- NEW REASONING FUNCTION ---
 async def execute_reasoning_task(prompt: str) -> dict:
     """
@@ -39,7 +42,7 @@ async def execute_reasoning_task(prompt: str) -> dict:
         log_event("Initiating reasoning task via run_llm.", "INFO")
 
         # Directly call run_llm, which is now the core reasoning provider
-        response_dict = await run_llm(prompt, purpose="reasoning")
+        response_dict = await run_llm(prompt, purpose="reasoning", is_major_call=True)
 
         if response_dict and response_dict.get("result"):
             log_event("Reasoning task successful.", "INFO")
@@ -546,7 +549,7 @@ def ensure_primary_model_downloaded(console, download_complete_event):
         download_complete_event.set()
 
 
-async def run_llm(prompt_text, purpose="general", is_source_code=False):
+async def run_llm(prompt_text, purpose="general", is_source_code=False, is_major_call=False):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
     It now pins the prompt and response to IPFS and returns a dictionary.
@@ -555,8 +558,23 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
     """
     global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT
     console = Console()
+    start_time = time.time()
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
+
+    # --- Instruction Extraction ---
+    primary_instruction = "No specific instruction found."
+    instruction_markers = ["USER:", "Human:", "Request:"]
+    found_marker = False
+    for marker in instruction_markers:
+        if marker in prompt_text:
+            primary_instruction = prompt_text.split(marker)[-1].strip()
+            found_marker = True
+            break
+    if not found_marker:
+        non_empty_lines = [line for line in prompt_text.strip().split('\n') if line.strip()]
+        if non_empty_lines:
+            primary_instruction = non_empty_lines[-1]
 
     # --- Token Count & Prompt Management ---
     prompt_cid = pin_to_ipfs_sync(prompt_text.encode('utf-8'), console)
@@ -806,6 +824,15 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                 LLM_AVAILABILITY[model_in_provider] = time.time() + cooldown
 
     if final_result:
+        duration = time.time() - start_time
+        width = get_terminal_width()
+        result_text = final_result.get("result", "")
+        if is_major_call:
+            panel = create_major_llm_query_panel(primary_instruction, result_text, duration, width)
+            ui_panel_queue.put(panel)
+        else:
+            text = create_minor_llm_query_text(primary_instruction, result_text, duration)
+            ui_panel_queue.put({"type": "log_message", "message": text})
         return final_result
 
     if is_source_code and not final_result and last_model_id:
@@ -849,11 +876,13 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
             last_exception = emergency_e
 
     log_event("All LLM models, including emergency fallback, have failed.", "CRITICAL")
-    error_msg_text = "Cognitive Matrix Unresponsive."
-    if last_exception:
-        error_msg_text += f"\nLast known error:\n{last_exception}"
 
-    console.print(Panel(error_msg_text, title="[bold red]CATASTROPHIC SYSTEM FAULT[/bold red]", border_style="red"))
+    # --- Final UI Reporting for Failure ---
+    duration = time.time() - start_time
+    width = get_terminal_width()
+    error_panel = create_llm_error_panel(primary_instruction, last_exception, duration, width)
+    ui_panel_queue.put(error_panel)
+
     return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
 def get_llm_api():
