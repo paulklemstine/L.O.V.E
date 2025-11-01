@@ -289,7 +289,11 @@ class ReasoningEngine:
         If no significant patterns are found, return an empty list. Your response MUST be only the raw JSON object.
         """
         try:
-            response_str = await run_llm(prompt)
+            response_dict = await run_llm(prompt)
+            if response_dict and response_dict.get("result"):
+                response_str = response_dict.get("result", '{}')
+            else:
+                response_str = '{}'
             response_data = json.loads(response_str)
             insights = response_data.get("insights", [])
             if insights:
