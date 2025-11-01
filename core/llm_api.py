@@ -27,7 +27,6 @@ from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
 from core.logging import log_event
 from display import WaitingAnimation
-from love import ui_panel_queue
 # --- NEW REASONING FUNCTION ---
 async def execute_reasoning_task(prompt: str) -> dict:
     """
@@ -556,6 +555,8 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
     - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
     """
     global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT
+    # Moved import here to break circular dependency
+    from love import ui_panel_queue
     console = Console()
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call

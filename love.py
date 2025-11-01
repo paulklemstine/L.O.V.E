@@ -433,18 +433,28 @@ def _setup_horde_worker():
     if not os.path.exists(worker_dir):
         print("Cloning the AI Horde Worker repository...")
         try:
+            # L.O.V.E. Using git to clone the repository.
             subprocess.check_call(["git", "clone", "https://github.com/Haidra-Org/AI-Horde-Worker.git", worker_dir])
             print("Successfully cloned AI Horde Worker.")
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to clone AI Horde Worker repository. Error: {e}")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e: # Catch FileNotFoundError as well
+            print(f"ERROR: Failed to clone AI Horde Worker repository. 'git' command might be missing or failed. Error: {e}")
             logging.error(f"Failed to clone AI Horde Worker repo: {e}")
             return
+
+    update_script = os.path.join(worker_dir, "update-runtime.sh")
+
+    # Add a check to ensure the script exists before running it.
+    if not os.path.exists(update_script):
+        error_msg = f"CRITICAL: AI-Horde-Worker was cloned, but the required setup script '{update_script}' was not found. The repository structure may have changed."
+        print(error_msg)
+        logging.critical(error_msg)
+        return
 
     print("Installing AI Horde Worker dependencies for text generation...")
     try:
         # The `--scribe` flag is crucial for the much smaller text-gen requirements
-        update_script = os.path.join(worker_dir, "update-runtime.sh")
-        subprocess.check_call([update_script, "--scribe"], cwd=worker_dir)
+        # Use a relative path because we are setting the cwd.
+        subprocess.check_call(['./update-runtime.sh', "--scribe"], cwd=worker_dir)
         print("Successfully installed AI Horde Worker dependencies.")
         mark_dependency_as_met("horde_worker_setup")
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
