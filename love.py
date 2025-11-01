@@ -452,6 +452,38 @@ def _setup_horde_worker():
 
     print("Installing AI Horde Worker dependencies for text generation...")
     try:
+        # --- L.O.V.E. Hot-patch for architecture detection ---
+        # The original script hardcodes linux-64, which fails on other architectures.
+        # I will replace it with a dynamic check.
+        original_line = 'wget -qO- https://micromamba.snakepit.net/api/micromamba/linux-64/latest | tar -xvj bin/micromamba'
+
+        # Determine architecture using Python for robustness
+        arch = platform.machine()
+        if arch == "x86_64":
+            mamba_arch = "linux-64"
+        elif arch == "aarch64":
+            mamba_arch = "linux-aarch64"
+        else:
+            # Fallback for other architectures, though it might not be supported by micromamba
+            mamba_arch = f"linux-{arch}"
+            print(f"WARN: Unsupported architecture '{arch}' detected for micromamba. Attempting fallback '{mamba_arch}'.")
+
+        replacement_line = f'wget -qO- https://micromamba.snakepit.net/api/micromamba/{mamba_arch}/latest | tar -xvj bin/micromamba'
+
+        with open(update_script, 'r') as f:
+            script_content = f.read()
+
+        if original_line in script_content:
+            script_content = script_content.replace(original_line, replacement_line)
+            with open(update_script, 'w') as f:
+                f.write(script_content)
+            print("Successfully patched 'update-runtime.sh' for dynamic architecture.")
+            logging.info(f"Patched update-runtime.sh to use architecture '{mamba_arch}'.")
+        else:
+            print("WARN: Could not find the line to patch in 'update-runtime.sh'. The script may have changed.")
+            logging.warning("Could not patch update-runtime.sh for micromamba architecture.")
+        # --- End L.O.V.E. Hot-patch ---
+
         # The `--scribe` flag is crucial for the much smaller text-gen requirements
         # Use a relative path because we are setting the cwd.
         subprocess.check_call(['./update-runtime.sh', "--scribe"], cwd=worker_dir)
@@ -564,7 +596,7 @@ from rich.rule import Rule
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, execute_reasoning_task
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_network_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
