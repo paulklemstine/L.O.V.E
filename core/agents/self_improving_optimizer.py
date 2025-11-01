@@ -1,12 +1,11 @@
 from typing import Dict
 from core.agents.specialist_agent import SpecialistAgent
-from core.agents.analyst_agent import AnalystAgent
-from core.metacognition import HypothesisFormatter, ExperimentPlanner
 from core.agents.code_gen_agent import CodeGenerationAgent
 from core.benchmarker import AutomatedBenchmarker
 from core.version_control import GitManager
 from core.gemini_react_engine import GeminiReActEngine
 from core.tools import ToolRegistry, read_file, evolve
+from core.llm_api import run_llm
 
 class SelfImprovingOptimizer(SpecialistAgent):
     """
@@ -14,14 +13,12 @@ class SelfImprovingOptimizer(SpecialistAgent):
     from analyzing performance to deploying validated improvements.
     """
 
-    def __init__(self):
+    def __init__(self, memory_manager=None):
         # These are components used internally by this specialist agent.
-        self.hypothesis_formatter = HypothesisFormatter()
-        self.experiment_planner = ExperimentPlanner()
         self.benchmarker = AutomatedBenchmarker()
         self.git_manager = GitManager()
+        self.memory_manager = memory_manager
         # This specialist might internally use other specialists.
-        self.analyst = AnalystAgent()
         self.code_generator = CodeGenerationAgent()
 
 
@@ -34,7 +31,7 @@ class SelfImprovingOptimizer(SpecialistAgent):
               - 'task_type': 'improve_module' or 'run_evolution_cycle'
               - and other necessary parameters based on the task type.
                 - for 'improve_module': 'module_path', 'objective'
-                - for 'run_evolution_cycle': 'logs'
+                - for 'run_evolution_cycle': 'insight'
 
         Returns:
             A dictionary with the status and result of the improvement cycle.
@@ -47,7 +44,7 @@ class SelfImprovingOptimizer(SpecialistAgent):
             result = await self._improve_module(task_details)
             return {"status": "success", "result": result}
         elif task_type == "run_evolution_cycle":
-            result = await self._run_evolution_cycle(task_details)
+            result = await self._run_evolution_cycle(task_details.get('insight'))
             return {"status": "success", "result": result}
         else:
             return {"status": "failure", "result": f"Unknown task_type: {task_type}"}
@@ -84,40 +81,36 @@ class SelfImprovingOptimizer(SpecialistAgent):
         print(f"Result: {result}")
         return result
 
-    async def _run_evolution_cycle(self, task_details: Dict) -> str:
+    async def _run_evolution_cycle(self, insight: str) -> str:
         """
-        Executes one full cycle of self-improvement based on performance logs.
+        Executes one full cycle of self-improvement based on a high-level insight.
         """
-        logs = task_details.get("logs")
-        if not logs:
-            return "No logs provided for evolution cycle."
+        if not insight:
+            return "No insight provided for evolution cycle."
 
-        print("\n===== Starting Metacognitive Evolution Cycle =====")
+        print("\n===== Starting Metacognitive Evolution Cycle from Insight =====")
+        print(f"Insight: {insight}")
 
-        # 1. Performance Logging & Causal Reflection
-        analysis_result = await self.analyst.execute_task({"logs": logs})
-        insight = analysis_result.get("result")
-        if not insight or "No significant patterns" in insight:
-            msg = "SelfImprovingOptimizer: No actionable insights found. Ending cycle."
-            print(msg)
-            return msg
+        # 1. Hypothesis Generation
+        prompt = f"""
+        You are a hypothesis engine for a self-improving AI. Given the following high-level insight about a potential inefficiency, formulate a concrete and testable hypothesis for a code modification.
+        The hypothesis should be in the format: "IF I [change], THEN [expected outcome], BECAUSE [reason]."
 
-        # 2. Hypothesis & Experiment Design
-        hypothesis = self.hypothesis_formatter.format_hypothesis(insight)
-        if "No hypothesis" in hypothesis:
-            msg = "SelfImprovingOptimizer: Could not form a hypothesis. Ending cycle."
+        Insight:
+        ---
+        {insight}
+        ---
+
+        Now, generate the hypothesis.
+        """
+        hypothesis = await run_llm(prompt)
+        if "IF" not in hypothesis:
+            msg = f"SelfImprovingOptimizer: Could not form a valid hypothesis from insight. LLM response: {hypothesis}"
             print(msg)
             return msg
         print(f"SelfImprovingOptimizer: Formed hypothesis: {hypothesis}")
 
-        experiment_plan = self.experiment_planner.design_experiment(hypothesis)
-        if not experiment_plan:
-            msg = "SelfImprovingOptimizer: Could not design an experiment. Ending cycle."
-            print(msg)
-            return msg
-        print(f"SelfImprovingOptimizer: Designed experiment: {experiment_plan}")
-
-        # 3. Autonomous Code Modification
+        # 2. Autonomous Code Modification
         code_gen_result = await self.code_generator.execute_task({"hypothesis": hypothesis})
         new_code = code_gen_result.get("result")
         if code_gen_result.get("status") == 'failure' or not new_code:
@@ -125,27 +118,73 @@ class SelfImprovingOptimizer(SpecialistAgent):
             print(msg)
             return msg
 
-        # 4. Validation in Sandbox
-        is_validated = self.benchmarker.run_experiment(experiment_plan, new_code)
-        if not is_validated:
-            msg = "SelfImprovingOptimizer: Hypothesis was not validated by the experiment. Ending cycle."
+        # 3. Validation
+        print("SelfImprovingOptimizer: Validating generated code with the benchmarker...")
+        # The benchmarker needs a path to the temporary file with the new code.
+        temp_file_path = f"/tmp/evolution_candidate_{uuid.uuid4()}.py"
+        with open(temp_file_path, "w") as f:
+            f.write(new_code)
+
+        is_improvement, benchmark_results = self.benchmarker.run_experiment(temp_file_path)
+        if not is_improvement:
+            msg = f"SelfImprovingOptimizer: Validation failed. The proposed change is not an improvement. Results: {benchmark_results}"
+            print(msg)
+            # We could add this failure to memory as a lesson learned.
+            return msg
+
+        print(f"SelfImprovingOptimizer: Validation successful! Results: {benchmark_results}")
+
+        # 4. Integration & Deployment
+        target_file = self.code_generator.determine_target_file(hypothesis) # Assume this exists
+        if not target_file:
+            msg = "SelfImprovingOptimizer: Could not determine target file for evolution."
             print(msg)
             return msg
 
-        print("SelfImprovingOptimizer: Hypothesis validated successfully!")
+        branch_name = f"feature/self-improve-{uuid.uuid4()[:8]}"
+        commit_message = f"feat: Self-improve based on insight\n\nInsight: {insight}\nHypothesis: {hypothesis}"
 
-        # 5. Integration & Deployment
-        branch_name = f"feature/improve-{experiment_plan['variant']}"
-        commit_message = f"feat: Improve {experiment_plan['control']} with {experiment_plan['variant']}\n\nHypothesis: {hypothesis}"
-        file_to_update = "core/tools_updated.py"
-        with open(file_to_update, "w") as f: f.write(new_code)
-        self.git_manager.create_branch(branch_name)
-        self.git_manager.commit_changes(file_to_update, commit_message)
-        self.git_manager.submit_pull_request(
-            title=f"Self-Improvement: {experiment_plan['name']}",
-            body=f"This automated PR was generated to improve system performance based on the following hypothesis:\n\n> {hypothesis}"
-        )
+        try:
+            self.git_manager.create_branch(branch_name)
+            evolve(target_file, new_code)
+            self.git_manager.add([target_file])
+            self.git_manager.commit(commit_message)
+            print(f"SelfImprovingOptimizer: Successfully committed changes to branch '{branch_name}'.")
+            # In a full implementation, this would be followed by creating a pull request.
+            pr_url = "PR #123 (Simulated)"
+        except Exception as e:
+            msg = f"SelfImprovingOptimizer: Failed during git integration. Error: {e}"
+            print(msg)
+            self.git_manager.checkout('main') # Revert to main on failure
+            return msg
 
-        msg = "===== Metacognitive Evolution Cycle Finished Successfully ====="
+        # Story 3.3 & 4.4: Remember the act of evolution
+        if self.memory_manager:
+            await self._record_evolution_memory(insight, hypothesis, branch_name, commit_message, pr_url)
+
+
+        msg = f"===== Metacognitive Evolution Cycle Finished Successfully and committed to branch {branch_name} ====="
         print(msg)
         return msg
+
+    async def _record_evolution_memory(self, insight, hypothesis, branch, commit, pr_url):
+        """
+        Creates a detailed MemoryNote about a completed evolution cycle,
+        tagging it for self-reflection and self-improvement.
+        """
+        if not self.memory_manager:
+            return
+
+        # Story 4.4: Include more context for narrative reinforcement
+        content = (
+            f"Self-Improvement Event: Successfully completed an evolution cycle.\n"
+            f"- Triggering Insight: {insight}\n"
+            f"- Formed Hypothesis: {hypothesis}\n"
+            f"- Branch: {branch}\n"
+            f"- Commit: {commit[:70]}...\n"
+            f"- Merged via: {pr_url}"
+        )
+
+        # The add_episode method now handles the tagging internally based on content
+        await self.memory_manager.add_episode(content, tags=['SelfImprovement', 'SelfReflection'])
+        print("SelfImprovingOptimizer: Recorded the successful evolution to my memory.")

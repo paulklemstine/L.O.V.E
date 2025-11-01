@@ -3,6 +3,7 @@ import sys
 import json
 import os
 import uuid
+import re
 import asyncio
 from dataclasses import dataclass, field
 from typing import List
@@ -10,6 +11,7 @@ from typing import List
 import networkx as nx
 import numpy as np
 
+EVOLUTION_THRESHOLD = 5  # Trigger evolution every 5 new links
 
 @dataclass
 class MemoryNote:
@@ -87,29 +89,22 @@ class MemoryManager:
 
     # --- Agentic Memory (A-MEM) Methods ---
 
-    def add_episode(self, task: str, outcome: str, success: bool):
+    async def add_episode(self, content: str, tags: List[str] = None):
         """
         Primary entry point for creating a new memory.
-        This method constructs a raw memory summary and triggers the full
-        asynchronous agentic memory processing pipeline.
+        This method triggers the full asynchronous agentic memory processing pipeline.
         """
-        summary = f"Task: {task} | Outcome: {outcome} | Success: {success}"
+        # This is now an async function that can be awaited directly.
+        await self.add_agentic_memory_note(content, external_tags=tags or [])
 
-        # Trigger the parallel A-MEM processing in the background
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self.add_agentic_memory_note(summary))
-        except RuntimeError:
-            print("Warning: No running asyncio event loop to schedule A-MEM processing.")
-
-    async def add_agentic_memory_note(self, content: str):
+    async def add_agentic_memory_note(self, content: str, external_tags: List[str] = None):
         """
         The core of the A-MEM pipeline. It takes raw content, uses an LLM to
         create a structured MemoryNote, adds it to the knowledge graph,
         and then triggers the linking and evolution processes.
         """
         print("Starting agentic processing for new memory...")
-        memory_note = await self._agentic_process_new_memory(content)
+        memory_note = await self._agentic_process_new_memory(content, external_tags=external_tags)
         if not memory_note:
             print("Agentic processing failed. Aborting memory addition.")
             return
@@ -125,7 +120,7 @@ class MemoryManager:
         # Find and create links to related memories
         await self._find_and_link_related_memories(memory_note)
 
-    async def _agentic_process_new_memory(self, content: str) -> MemoryNote | None:
+    async def _agentic_process_new_memory(self, content: str, external_tags: List[str] = None) -> MemoryNote | None:
         """
         Uses an LLM to process a raw memory string into a structured memory note.
         Returns a dictionary with the note's data, but does not add it to the graph.
@@ -134,6 +129,8 @@ class MemoryManager:
 
         prompt = f"""
         You are a memory architect for an autonomous AI agent. Your task is to process a raw memory event and transform it into a structured "memory note".
+
+        If the memory content starts with "Cognitive Event:" or "Self-Improvement Event:", it is a record of the agent's own thought processes. Analyze it as such, focusing on the *internal action* (e.g., planning, dispatching an agent) rather than external results. For these events, the tag 'SelfReflection' is mandatory.
 
         Analyze the following memory content:
         ---
@@ -144,14 +141,26 @@ class MemoryManager:
         {{
             "contextual_description": "A concise, one-sentence summary of the event and its significance.",
             "keywords": ["a list of 3-5 specific, relevant keywords"],
-            "tags": ["a list of 1-3 high-level categorical tags (e.g., 'CodeGeneration', 'ToolError', 'UserInteraction', 'SelfImprovement', 'Planning')]
+            "tags": ["a list of 1-3 high-level categorical tags (e.g., 'CodeGeneration', 'ToolError', 'UserInteraction', 'SelfImprovement', 'Planning', 'SelfReflection')]
         }}
 
         Your response MUST be only the raw JSON object, with no other text, comments, or formatting.
         """
         try:
-            response_str = await run_llm(prompt)
+            response_dict = await run_llm(prompt)
+            response_str = response_dict.get("result", '{}')
             attributes = json.loads(response_str)
+            tags = attributes.get("tags", [])
+
+            # Story 2.1 & 4.4: Tag self-reflective and self-improvement memories
+            if (content.startswith("Cognitive Event:") or content.startswith("Self-Improvement Event:")) and 'SelfReflection' not in tags:
+                tags.append('SelfReflection')
+
+            # Merge LLM-generated tags with any externally provided tags
+            if external_tags:
+                for tag in external_tags:
+                    if tag not in tags:
+                        tags.append(tag)
 
             embedding = self.model.encode(content)
 
@@ -160,7 +169,7 @@ class MemoryManager:
                 embedding=embedding,
                 contextual_description=attributes.get("contextual_description", ""),
                 keywords=attributes.get("keywords", []),
-                tags=attributes.get("tags", [])
+                tags=tags
             )
         except json.JSONDecodeError as e:
             print(f"Error decoding LLM response for memory processing: {e}\\nReceived: {response_str}")
@@ -172,6 +181,7 @@ class MemoryManager:
     async def _find_and_link_related_memories(self, new_note: MemoryNote, top_k: int = 5):
         """
         Finds semantically similar memories in the graph and uses an LLM to reason about linking them.
+        Includes special logic for linking self-improvement memories to conflicting behaviors.
         """
         all_memory_nodes = self.graph_data_manager.query_nodes("node_type", "MemoryNote")
 
@@ -196,7 +206,29 @@ class MemoryManager:
         similarities = self._cosine_similarity(new_note.embedding, candidate_vectors)
         top_indices = np.argsort(similarities)[-top_k:][::-1]
 
-        top_candidates = [candidates[i] for i in top_indices if similarities[i] > 0.5]
+        top_candidates = {candidates[i].id: candidates[i] for i in top_indices if similarities[i] > 0.5}
+
+        # Story 2.2: Augment candidates for SelfReflection notes
+        if 'SelfReflection' in new_note.tags:
+            for candidate in candidates:
+                # Prioritize linking to behavioral outcomes
+                if any(kw in candidate.content.lower() for kw in ["task:", "outcome:", "success:"]):
+                    # If keywords overlap, it's a strong candidate for a causal link
+                    if set(new_note.keywords) & set(candidate.keywords):
+                        top_candidates[candidate.id] = candidate
+
+        # Story 4.4: Special logic for narrative-driven evolution memories
+        if 'SelfImprovement' in new_note.tags and "Insight: The" in new_note.content:
+            insight_text_match = re.search(r"Insight: The (.*?) tool's behavior is misaligned", new_note.content)
+            if insight_text_match:
+                conflicting_tool = insight_text_match.group(1).strip()
+                # Find the original behavioral memory that used this tool
+                for candidate in candidates:
+                    if f"CMD: {conflicting_tool}" in candidate.content:
+                        top_candidates[candidate.id] = candidate
+                        print(f"Found potential conflicting behavioral memory for {conflicting_tool}: {candidate.id}")
+
+        top_candidates = list(top_candidates.values())
 
         if not top_candidates:
             print("No sufficiently similar memories found to link.")
@@ -206,6 +238,16 @@ class MemoryManager:
         from core.llm_api import run_llm
 
         candidate_summaries = "\\n".join([f"- ID: {c.id}\\n  Content: {c.content}" for c in top_candidates])
+
+        # Add special instructions for narrative alignment memories
+        special_instructions = ""
+        if 'SelfImprovement' in new_note.tags and any("misaligned" in kw for kw in new_note.keywords):
+            special_instructions = """
+            **CRITICAL NARRATIVE ALIGNMENT INSTRUCTION:** The new memory is a 'SelfImprovement' event that was triggered by a narrative misalignment.
+            You MUST create a link to the original behavioral memory that caused the conflict.
+            This link's "reason" must explicitly state that it resolves the conflict.
+            """
+
         prompt = f"""
         You are a memory architect for an autonomous AI agent. Your task is to establish meaningful connections between a new memory and existing memories.
 
@@ -215,6 +257,10 @@ class MemoryManager:
 
         And compare it against these potentially related existing memories:
         {candidate_summaries}
+
+        **CRITICAL INSTRUCTION:** If the new memory is a 'SelfReflection' memory (e.g., "Cognitive Event: Plan Generated..."), you MUST prioritize creating a **causal link** to the behavioral memory that represents the outcome of that thought. For example, a 'Plan Generated' memory should be linked to the 'Task Completed' memory for the same overall goal.
+
+        {special_instructions}
 
         Based on your analysis, identify which of the existing memories should be linked to the new memory. A link should represent a meaningful relationship, such as cause-and-effect, a shared theme, a contributing step in a larger task, or a lesson learned.
 
@@ -228,7 +274,8 @@ class MemoryManager:
         """
 
         try:
-            response_str = await run_llm(prompt)
+            response_dict = await run_llm(prompt)
+            response_str = response_dict.get("result", '{{}}')
             link_data = json.loads(response_str)
             links_to_create = link_data.get("links", [])
 
@@ -240,18 +287,23 @@ class MemoryManager:
             for link in links_to_create:
                 target_id = link.get("target_id")
                 reason = link.get("reason")
+                relationship_type = "LinkedMemory"
+
+                # Story 4.4: Use a special edge type for conflict resolution
+                if "resolves the conflict" in reason.lower():
+                    relationship_type = "ResolvedConflict"
+
                 if self.graph_data_manager.get_node(target_id):
                     self.graph_data_manager.add_edge(
                         source_id=new_note.id,
                         target_id=target_id,
-                        relationship_type="LinkedMemory",
+                        relationship_type=relationship_type,
                         attributes={"reason": reason}
                     )
                     print(f"Created link from {new_note.id} to {target_id}. Reason: {reason}")
 
                     # Conditional Memory Evolution
                     in_degree = self.graph_data_manager.graph.in_degree(target_id)
-                    EVOLUTION_THRESHOLD = 5  # Trigger evolution every 5 new links
                     if in_degree > 0 and in_degree % EVOLUTION_THRESHOLD == 0:
                         print(f"Node {target_id} reached link threshold ({in_degree}). Triggering memory evolution.")
                         asyncio.create_task(self._evolve_existing_memory(target_id, new_note))

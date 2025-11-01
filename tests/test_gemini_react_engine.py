@@ -4,7 +4,7 @@ import json
 from unittest.mock import MagicMock, patch, AsyncMock
 from core.agents.orchestrator import Orchestrator
 
-class TestGeminiReActEngine(unittest.IsolatedAsyncioTestCase):
+class TestOrchestratorEndToEnd(unittest.IsolatedAsyncioTestCase):
     @patch("core.agents.orchestrator.run_llm", new_callable=AsyncMock)
     async def test_end_to_end_integration(self, mock_run_llm):
         # Mock the planner LLM call to return a pre-defined plan
@@ -17,8 +17,12 @@ class TestGeminiReActEngine(unittest.IsolatedAsyncioTestCase):
             })
         }
 
+        # Mock the MemoryManager
+        mock_memory_manager = MagicMock()
+        mock_memory_manager.add_episode = AsyncMock()
+
         # Create an instance of the Orchestrator
-        orchestrator = Orchestrator()
+        orchestrator = Orchestrator(mock_memory_manager)
 
         # Mock the _create_specialist method to return mock specialists
         mock_web_automation_agent = MagicMock()
