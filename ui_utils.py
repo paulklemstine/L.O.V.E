@@ -232,4 +232,5 @@ PANEL_TYPE_COLORS = {
     "network": "medium_purple1",
     "file_op": "bright_cyan",
     "skyvern": "bright_blue",
+    "llm_query": "bright_cyan",
 }

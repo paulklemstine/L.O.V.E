@@ -20,12 +20,12 @@ from rich.panel import Panel
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 from bbs import run_hypnotic_progress
 from huggingface_hub import hf_hub_download
-from display import create_api_error_panel
+from display import create_api_error_panel, create_major_llm_query_panel, create_minor_llm_query_panel
 from huggingface_hub import hf_hub_download
 from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
-from core.logging import log_event
+from core.logging import log_event, ui_panel_queue
 # --- NEW REASONING FUNCTION ---
 async def execute_reasoning_task(prompt: str) -> dict:
     """
@@ -39,7 +39,7 @@ async def execute_reasoning_task(prompt: str) -> dict:
         log_event("Initiating reasoning task via run_llm.", "INFO")
 
         # Directly call run_llm, which is now the core reasoning provider
-        response_dict = await run_llm(prompt, purpose="reasoning")
+        response_dict = await run_llm(prompt, purpose="reasoning", is_major_call=True)
 
         if response_dict and response_dict.get("result"):
             log_event("Reasoning task successful.", "INFO")
@@ -546,7 +546,7 @@ def ensure_primary_model_downloaded(console, download_complete_event):
         download_complete_event.set()
 
 
-async def run_llm(prompt_text, purpose="general", is_source_code=False):
+async def run_llm(prompt_text, purpose="general", is_source_code=False, is_major_call=False):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
     It now pins the prompt and response to IPFS and returns a dictionary.
@@ -556,6 +556,7 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
     global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT
     console = Console()
     last_exception = None
+    start_time = time.time()
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
 
     # --- Token Count & Prompt Management ---
@@ -615,6 +616,18 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                 PROVIDER_FAILURE_COUNT["horde"] = 0 # Reset on success
                 response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                 final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
+                # --- UI PANEL LOGIC ---
+                duration = time.time() - start_time
+                # Simple heuristic for primary instruction: last non-empty line.
+                primary_instruction = original_prompt_text.strip().split('\n')[-1]
+                if ui_panel_queue:
+                    if is_major_call:
+                        panel = create_major_llm_query_panel(primary_instruction, result_text, duration)
+                        ui_panel_queue.put(panel)
+                    else:
+                        # For minor calls, create a log-like text object
+                        log_text = create_minor_llm_query_panel(primary_instruction, result_text, duration)
+                        ui_panel_queue.put({"type": "log_message", "level": "INFO", "message": log_text})
                 break # Exit the provider loop
             else:
                 # Failure is logged inside the concurrent function.
@@ -749,6 +762,18 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                     LLM_AVAILABILITY[model_id] = time.time()
                     response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                     final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid}
+                    # --- UI PANEL LOGIC ---
+                    duration = time.time() - start_time
+                    # Simple heuristic for primary instruction: last non-empty line.
+                    primary_instruction = original_prompt_text.strip().split('\n')[-1]
+                    if ui_panel_queue:
+                        if is_major_call:
+                            panel = create_major_llm_query_panel(primary_instruction, result_text, duration)
+                            ui_panel_queue.put(panel)
+                        else:
+                            # For minor calls, create a log-like text object
+                            log_text = create_minor_llm_query_panel(primary_instruction, result_text, duration)
+                            ui_panel_queue.put({"type": "log_message", "level": "INFO", "message": log_text})
                     break
 
             except requests.exceptions.HTTPError as e:
@@ -839,6 +864,13 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
             if result_text:
                 log_event("Emergency CPU fallback successful.", "CRITICAL")
                 response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                # --- UI PANEL LOGIC ---
+                duration = time.time() - start_time
+                primary_instruction = original_prompt_text.strip().split('\n')[-1]
+                if ui_panel_queue:
+                    # Emergency fallbacks are always major
+                    panel = create_major_llm_query_panel(primary_instruction, result_text, duration)
+                    ui_panel_queue.put(panel)
                 return {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "emergency_cpu_fallback"}
 
         except ImportError as e:

@@ -422,6 +422,75 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     )
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
+
+def create_major_llm_query_panel(instruction, response, duration, width=80):
+    """
+    Creates a detailed, styled panel for a major LLM query, showing the
+    primary instruction, the full response, and the time it took.
+    """
+    panel_title = "🍍 Cognitive Query 🍍"
+    border_style = PANEL_TYPE_COLORS.get("llm_query", "bright_cyan")
+
+    # Instruction Panel
+    instruction_text = Text(instruction.strip(), style="white")
+    instruction_panel = Panel(
+        instruction_text,
+        title="Primary Instruction",
+        border_style="bright_black",
+        expand=True
+    )
+
+    # Response Panel (with pretty-printing for JSON/Code)
+    response_text, _ = _format_and_link(response)
+    response_panel = Panel(
+        response_text,
+        title="Full Response",
+        border_style="bright_black",
+        expand=True
+    )
+
+    # Duration and Links Footer
+    footer_text = Text(justify="center")
+    footer_text.append(f"Duration: {duration:.2f}s ✨ ", style="dim")
+
+    content_group = Group(
+        instruction_panel,
+        response_panel,
+        Rule(style="bright_black"),
+        footer_text
+    )
+
+    panel = Panel(
+        content_group,
+        title=get_gradient_text(panel_title, border_style, random.choice(RAVE_COLORS)),
+        border_style=border_style,
+        padding=(1, 2),
+        width=width
+    )
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
+def create_minor_llm_query_panel(instruction, response, duration):
+    """
+    Creates a compact, single-line Text object for a minor LLM query.
+    """
+    text = Text("🧠 Minor LLM ", style="dim")
+    text.append(f"({duration:.2f}s): ", style="bold dim")
+
+    # Abbreviate instruction and response
+    instruction_abbr = instruction.strip().replace('\n', ' ')
+    if len(instruction_abbr) > 50:
+        instruction_abbr = instruction_abbr[:47] + "..."
+
+    response_abbr = response.strip().replace('\n', ' ')
+    if len(response_abbr) > 50:
+        response_abbr = response_abbr[:47] + "..."
+
+    text.append(f"'{instruction_abbr}' -> ", style="bright_blue")
+    text.append(f"'{response_abbr}'", style="bright_magenta")
+
+    return text
+
 def create_network_panel(type, target, data, output_cid=None, width=80):
     """Creates a panel for network operations."""
     panel_title = f"Network Operation | {type.capitalize()}"
