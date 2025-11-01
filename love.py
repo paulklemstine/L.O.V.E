@@ -3393,10 +3393,17 @@ Now, parse the following text into a JSON list of task objects:
             cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000, user_input=user_feedback)
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
-            reasoning_result = await execute_reasoning_task(cognitive_prompt)
-            llm_command = reasoning_result.get("result") if reasoning_result else None
+            reasoning_result_coro = execute_reasoning_task(cognitive_prompt)
+            if reasoning_result_coro:
+                reasoning_result = await reasoning_result_coro
+                llm_command = reasoning_result.get("result") if reasoning_result else None
+            else:
+                llm_command = None
+
             if not llm_command:
                 core.logging.log_event(f"Reasoning engine failed to produce a command.", "ERROR")
+                await asyncio.sleep(5)
+                continue
 
 
             # --- Command Execution ---
