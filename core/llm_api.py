@@ -927,7 +927,7 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
         final_result = {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
     finally:
-        await animation.stop()
+        animation.stop()
 
     return final_result
 
