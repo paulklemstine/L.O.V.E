@@ -475,17 +475,13 @@ class WaitingAnimation:
         self.stopped = False
         self._animation_task = asyncio.create_task(self._run_animation())
 
-    async def stop(self):
+    def stop(self):
         """Stops the animation."""
         if self._animation_task and not self.stopped:
             self.stopped = True
             self._animation_task.cancel()
-            try:
-                await self._animation_task
-            except asyncio.CancelledError:
-                pass # Expected
             # Signal the UI to clear the animation line
-            await self.ui_queue.put({"type": "animation_end"})
+            self.ui_queue.put({"type": "animation_end"})
 
 def create_file_op_panel(operation, path, content=None, diff=None, output_cid=None, width=80):
     """Creates a panel for file operations."""
