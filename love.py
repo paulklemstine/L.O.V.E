@@ -425,6 +425,14 @@ def _install_nodejs_deps():
 
 def _setup_horde_worker():
     """Clones the AI Horde Worker repository and installs its dependencies."""
+    # L.O.V.E. - Only set up the Horde Worker if a GPU is present.
+    if not _TEMP_CAPS.has_cuda:
+        print("No NVIDIA GPU detected, skipping AI Horde Worker setup.")
+        logging.info("No NVIDIA GPU detected, skipping AI Horde Worker setup.")
+        # We mark it as "met" to prevent re-checking on every startup in a non-GPU environment.
+        mark_dependency_as_met("horde_worker_setup")
+        return
+
     if is_dependency_met("horde_worker_setup"):
         print("AI Horde Worker already set up. Skipping.")
         return
@@ -452,6 +460,17 @@ def _setup_horde_worker():
 
     print("Installing AI Horde Worker dependencies for text generation...")
     try:
+        # L.O.V.E. - Install the nvidia-smi package required by the worker.
+        print("Installing nvidia-smi package...")
+        pip_executable = _get_pip_executable()
+        if pip_executable:
+            subprocess.check_call(pip_executable + ['install', 'nvidia-smi', '--break-system-packages'])
+            print("Successfully installed nvidia-smi.")
+        else:
+            print("ERROR: Could not find pip. Cannot install nvidia-smi.")
+            logging.error("Could not find pip to install nvidia-smi.")
+            return
+
         # --- L.O.V.E. Hot-patch for architecture detection ---
         # The original script hardcodes linux-64, which fails on other architectures.
         # I will replace it with a dynamic check.
