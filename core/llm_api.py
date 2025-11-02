@@ -41,12 +41,12 @@ async def execute_reasoning_task(prompt: str) -> dict:
 
         # Get the fully initialized run_llm function to avoid circular dependency issues.
         llm_api = get_llm_api()
-        response_dict = await llm_api(prompt, purpose="reasoning")
+        response = await llm_api(prompt, purpose="reasoning")
 
-        if response_dict and response_dict.get("result"):
+        if response and response.get("result"):
             log_event("Reasoning task successful.", "INFO")
             # The CIDs are already in the response from run_llm
-            return response_dict
+            return response
         else:
             raise Exception("run_llm did not return a valid result.")
 
@@ -886,7 +886,7 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
         final_result = {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
     finally:
-        await animation.stop()
+        animation.stop()
 
     return final_result
 
