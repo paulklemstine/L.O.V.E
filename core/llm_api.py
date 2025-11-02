@@ -170,6 +170,13 @@ def get_openrouter_models():
 OPENROUTER_MODELS = get_openrouter_models()
 
 
+# --- OpenAI Configuration ---
+OPENAI_API_URL = "https://api.openai.com/v1"
+OPENAI_MODELS = []
+if os.environ.get("OPENAI_API_KEY"):
+    OPENAI_MODELS = ["gpt-4o"]
+
+
 def get_top_horde_models(count=10, get_all=False):
     """
     Fetches active text models from the AI Horde and returns the top `count`
@@ -605,19 +612,18 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
         provider_map = {
             "gemini": GEMINI_MODELS,
             "openrouter": OPENROUTER_MODELS,
+            "openai": OPENAI_MODELS,
             "ollama": OLLAMA_MODELS
         }
 
-        # Shuffle the order of providers to ensure variety
-        providers = list(provider_map.keys())
-        random.shuffle(providers)
+        # Define the provider priority
+        provider_priority = ["gemini", "openrouter", "openai", "horde", "ollama"]
 
-        # Conditionally add 'horde' as the first provider to try if it's not on a deep cooldown
-        if time.time() >= LLM_AVAILABILITY.get("horde_provider_cooldown", 0):
-            providers.insert(0, "horde")
+        # Filter out horde if it's on a deep cooldown
+        if time.time() < LLM_AVAILABILITY.get("horde_provider_cooldown", 0):
+            provider_priority.remove("horde")
 
-
-        for provider in providers:
+        for provider in provider_priority:
             # --- HORDE PROVIDER LOGIC ---
             if provider == "horde":
                 log_event(f"Attempting LLM call with AI Horde provider (Purpose: {purpose})")
@@ -748,6 +754,32 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                             silent=(purpose in ['emotion', 'log_squash'])
                         )
                         log_event(f"OpenRouter call successful with {model_id}.")
+
+                    # --- OPENAI MODEL LOGIC ---
+                    elif model_id in OPENAI_MODELS:
+                        log_event(f"Attempting LLM call with OpenAI model: {model_id} (Purpose: {purpose})")
+                        api_key = os.environ.get("OPENAI_API_KEY")
+                        headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        }
+                        payload = {
+                            "model": model_id,
+                            "messages": [{"role": "user", "content": prompt_text}]
+                        }
+
+                        def _openai_call():
+                            response = requests.post(f"{OPENAI_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                            response.raise_for_status()
+                            return response.json()["choices"][0]["message"]["content"]
+
+                        result_text = run_hypnotic_progress(
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]OpenAI ({model_id})[/bold yellow] (Purpose: {purpose})",
+                            _openai_call,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        log_event(f"OpenAI call successful with {model_id}.")
 
                     # --- OLLAMA MODEL LOGIC ---
                     elif model_id in OLLAMA_MODELS:
