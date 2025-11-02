@@ -50,6 +50,10 @@ async def execute_reasoning_task(prompt: str) -> dict:
         else:
             raise Exception("run_llm did not return a valid result.")
 
+    except TypeError as e:
+        log_event(f"Caught TypeError in reasoning task: {e}\n{traceback.format_exc()}", "CRITICAL")
+        console.print(create_api_error_panel("reasoning_core", f"Caught TypeError: {e}", "reasoning"))
+        return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
     except Exception as e:
         log_event(f"An error occurred during reasoning task: {e}", "CRITICAL")
         console.print(create_api_error_panel("reasoning_core", str(e), "reasoning"))
