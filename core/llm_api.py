@@ -41,9 +41,13 @@ async def execute_reasoning_task(prompt: str) -> dict:
 
         # Get the fully initialized run_llm function to avoid circular dependency issues.
         llm_api = get_llm_api()
-        response_dict = await llm_api(prompt, purpose="reasoning")
+        response = await llm_api(prompt, purpose="reasoning")
 
-        if response_dict and response_dict.get("result"):
+        # L.O.V.E. - Guard against None return from run_llm to prevent await TypeError
+        if response is None:
+            raise Exception("run_llm returned None, indicating a catastrophic failure in all LLM providers.")
+
+        if response and response.get("result"):
             log_event("Reasoning task successful.", "INFO")
             # The CIDs are already in the response from run_llm
             return response_dict
