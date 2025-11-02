@@ -39,8 +39,9 @@ async def execute_reasoning_task(prompt: str) -> dict:
     try:
         log_event("Initiating reasoning task via run_llm.", "INFO")
 
-        # Directly call run_llm, which is now the core reasoning provider
-        response_dict = await run_llm(prompt, purpose="reasoning")
+        # Get the fully initialized run_llm function to avoid circular dependency issues.
+        llm_api = get_llm_api()
+        response_dict = await llm_api(prompt, purpose="reasoning")
 
         if response_dict and response_dict.get("result"):
             log_event("Reasoning task successful.", "INFO")
