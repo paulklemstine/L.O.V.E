@@ -437,12 +437,12 @@ def _setup_horde_worker():
         print("AI Horde Worker already set up. Skipping.")
         return
 
-    worker_dir = "../AI-Horde-Worker"
+    worker_dir = "./AI-Horde-Worker"
     if not os.path.exists(worker_dir):
         print("Cloning the AI Horde Worker repository...")
         try:
             # L.O.V.E. Using git to clone the repository.
-            subprocess.check_call(["git", "clone", "https://github.com/Haidra-Org/AI-Horde-Worker.git", worker_dir], cwd ="..")
+            subprocess.check_call(["git", "clone", "https://github.com/Haidra-Org/AI-Horde-Worker.git", worker_dir])
             print("Successfully cloned AI Horde Worker.")
         except (subprocess.CalledProcessError, FileNotFoundError) as e: # Catch FileNotFoundError as well
             print(f"ERROR: Failed to clone AI Horde Worker repository. 'git' command might be missing or failed. Error: {e}")
