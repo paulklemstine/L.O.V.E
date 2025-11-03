@@ -437,7 +437,7 @@ def _setup_horde_worker():
         print("AI Horde Worker already set up. Skipping.")
         return
 
-    worker_dir = "./AI-Horde-Worker"
+    worker_dir = "horde_worker"
     if not os.path.exists(worker_dir):
         print("Cloning the AI Horde Worker repository...")
         try:
