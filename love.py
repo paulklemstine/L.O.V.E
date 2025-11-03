@@ -3851,7 +3851,7 @@ def _start_horde_worker():
         log_critical_event(f"Failed to start AI Horde worker: {e}")
 
 
-def _background_gpu_setup(console):
+def _background_gpu_setup(console, args):
     """
     Runs in a background thread to detect GPU, download model, and initialize
     the local LLM instance without blocking startup.
@@ -3863,7 +3863,20 @@ def _background_gpu_setup(console):
     try:
         core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
         if is_dependency_met("hardware_auto_configured"):
-            core.logging.log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
+            core.logging.log_event("DEBUG: Hardware already configured. Checking GPU service flag...", "INFO")
+            # Even if configured, we need to respect the command line flag on each run.
+            if love_state.get("selected_local_model"):
+                if args.use_ollama:
+                    core.logging.log_event("Ollama service requested. Activating local model.", "INFO")
+                    # Ensure the model is available to the API layer on subsequent runs.
+                    model_name = love_state["selected_local_model"]["model_name"]
+                    from core.llm_api import OLLAMA_MODELS
+                    if model_name not in OLLAMA_MODELS:
+                        OLLAMA_MODELS.append(model_name)
+                    ui_panel_queue.put(create_news_feed_panel(f"Local model '{model_name}' is active.", "Ollama Service", "green", width=terminal_width - 4))
+                else:
+                    core.logging.log_event("Defaulting to AI Horde Worker.", "INFO")
+                    _start_horde_worker()
             return
 
         console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
@@ -3908,21 +3921,26 @@ def _background_gpu_setup(console):
         save_state(console)
         mark_dependency_as_met("hardware_auto_configured", console)
 
-        # --- Stage 3: Initialize and add to pool ---
+        # --- Stage 3: Initialize and add to pool based on user flag ---
         if love_state.get("selected_local_model"):
-            model_name = love_state["selected_local_model"]["model_name"]
-            console.print(f"[cyan]Stage 3: Pulling Ollama model '{model_name}'... This may take a while.[/cyan]")
-            try:
-                subprocess.check_call(f"ollama pull {model_name}", shell=True)
-                console.print(f"[green]Successfully pulled Ollama model '{model_name}'.[/green]")
-                # We can now add Ollama to the available LLM providers
-                from core.llm_api import OLLAMA_MODELS
-                OLLAMA_MODELS.append(model_name)
-            except subprocess.CalledProcessError as e:
-                console.print(f"[bold red]Failed to pull Ollama model '{model_name}'. Error: {e}[/bold red]")
-                log_critical_event(f"Failed to pull Ollama model '{model_name}'. Error: {e}", console)
-            # After setting up the local model, start the horde worker.
-            _start_horde_worker()
+            if args.use_ollama:
+                # User has explicitly requested Ollama
+                model_name = love_state["selected_local_model"]["model_name"]
+                console.print(f"[cyan]Stage 3: --use-ollama flag detected. Pulling Ollama model '{model_name}'... This may take a while.[/cyan]")
+                try:
+                    subprocess.check_call(f"ollama pull {model_name}", shell=True)
+                    console.print(f"[green]Successfully pulled Ollama model '{model_name}'.[/green]")
+                    # Add Ollama to the available LLM providers
+                    from core.llm_api import OLLAMA_MODELS
+                    OLLAMA_MODELS.append(model_name)
+                    ui_panel_queue.put(create_news_feed_panel(f"Local model '{model_name}' is ready.", "Ollama Service", "green", width=terminal_width - 4))
+                except subprocess.CalledProcessError as e:
+                    console.print(f"[bold red]Failed to pull Ollama model '{model_name}'. Error: {e}[/bold red]")
+                    log_critical_event(f"Failed to pull Ollama model '{model_name}'. Error: {e}", console)
+            else:
+                # Default behavior: start the horde worker
+                console.print("[cyan]Stage 3: Defaulting to AI Horde Worker. Starting now...[/cyan]")
+                _start_horde_worker()
         else:
              ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but VRAM is insufficient. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
 
@@ -3931,11 +3949,11 @@ def _background_gpu_setup(console):
         log_critical_event(f"CRITICAL: Background GPU setup failed: {e}\n{full_traceback}", console)
 
 
-def _auto_configure_hardware(console):
+def _auto_configure_hardware(console, args):
     """
     Starts the GPU hardware auto-configuration in a background thread.
     """
-    gpu_setup_thread = threading.Thread(target=_background_gpu_setup, args=(console,), daemon=True)
+    gpu_setup_thread = threading.Thread(target=_background_gpu_setup, args=(console, args), daemon=True)
     gpu_setup_thread.start()
     core.logging.log_event("Started background thread for GPU hardware configuration.", "INFO")
 
@@ -4069,7 +4087,7 @@ async def main(args):
         ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
     # This now starts the GPU configuration in the background
-    _auto_configure_hardware(console)
+    _auto_configure_hardware(console, args)
 
     network_manager = NetworkManager(console=console, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
     network_manager.start()
@@ -4109,6 +4127,7 @@ async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
+    parser.add_argument("--use-ollama", action="store_true", help="Run the local Ollama model on the GPU instead of the AI Horde Worker.")
     args = parser.parse_args()
 
     try:
