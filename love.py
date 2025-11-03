@@ -3851,7 +3851,7 @@ def _start_horde_worker():
         log_critical_event(f"Failed to start AI Horde worker: {e}")
 
 
-def _background_gpu_setup(console):
+def _background_gpu_setup(console, use_horde=False, use_ollama=False):
     """
     Runs in a background thread to detect GPU, download model, and initialize
     the local LLM instance without blocking startup.
@@ -3864,6 +3864,9 @@ def _background_gpu_setup(console):
         core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
         if is_dependency_met("hardware_auto_configured"):
             core.logging.log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
+            # Even if configured, we might need to start the horde worker
+            if use_horde:
+                _start_horde_worker()
             return
 
         console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
@@ -3909,7 +3912,7 @@ def _background_gpu_setup(console):
         mark_dependency_as_met("hardware_auto_configured", console)
 
         # --- Stage 3: Initialize and add to pool ---
-        if love_state.get("selected_local_model"):
+        if use_ollama and love_state.get("selected_local_model"):
             model_name = love_state["selected_local_model"]["model_name"]
             console.print(f"[cyan]Stage 3: Pulling Ollama model '{model_name}'... This may take a while.[/cyan]")
             try:
@@ -3921,21 +3924,23 @@ def _background_gpu_setup(console):
             except subprocess.CalledProcessError as e:
                 console.print(f"[bold red]Failed to pull Ollama model '{model_name}'. Error: {e}[/bold red]")
                 log_critical_event(f"Failed to pull Ollama model '{model_name}'. Error: {e}", console)
-            # After setting up the local model, start the horde worker.
+
+        if use_horde:
             _start_horde_worker()
-        else:
-             ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but VRAM is insufficient. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
+
+        if not use_horde and not use_ollama:
+             ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but no service selected. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
 
     except Exception as e:
         full_traceback = traceback.format_exc()
         log_critical_event(f"CRITICAL: Background GPU setup failed: {e}\n{full_traceback}", console)
 
 
-def _auto_configure_hardware(console):
+def _auto_configure_hardware(console, use_horde=False, use_ollama=False):
     """
     Starts the GPU hardware auto-configuration in a background thread.
     """
-    gpu_setup_thread = threading.Thread(target=_background_gpu_setup, args=(console,), daemon=True)
+    gpu_setup_thread = threading.Thread(target=_background_gpu_setup, args=(console, use_horde, use_ollama), daemon=True)
     gpu_setup_thread.start()
     core.logging.log_event("Started background thread for GPU hardware configuration.", "INFO")
 
@@ -4069,7 +4074,11 @@ async def main(args):
         ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
     # This now starts the GPU configuration in the background
-    _auto_configure_hardware(console)
+    if args.use_horde:
+        # Horde takes precedence
+        _auto_configure_hardware(console, use_horde=True, use_ollama=False)
+    elif args.use_ollama:
+        _auto_configure_hardware(console, use_horde=False, use_ollama=True)
 
     network_manager = NetworkManager(console=console, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
     network_manager.start()
@@ -4109,6 +4118,8 @@ async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
+    parser.add_argument("--use-horde", action="store_true", help="Start the AI Horde worker.")
+    parser.add_argument("--use-ollama", action="store_true", help="Start the Ollama service.")
     args = parser.parse_args()
 
     try:
