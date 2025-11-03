@@ -437,7 +437,7 @@ def _setup_horde_worker():
         print("AI Horde Worker already set up. Skipping.")
         return
 
-    worker_dir = "AI-Horde-Worker"
+    worker_dir = "../AI-Horde-Worker"
     if not os.path.exists(worker_dir):
         print("Cloning the AI Horde Worker repository...")
         try:
@@ -449,7 +449,7 @@ def _setup_horde_worker():
             logging.error(f"Failed to clone AI Horde Worker repo: {e}")
             return
 
-    update_script = os.path.join(worker_dir, "../AI-Horde-Worker/update-runtime.sh")
+    update_script = os.path.join(worker_dir, "update-runtime.sh")
 
     # Add a check to ensure the script exists before running it.
     if not os.path.exists(update_script):
