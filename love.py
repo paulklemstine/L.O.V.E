@@ -3815,7 +3815,17 @@ def _start_horde_worker():
         core.logging.log_event("Selected model configuration is missing the 'horde_model_name'. Cannot start worker.", "ERROR")
         return
     worker_name = f"LOVE_Worker_{platform.node()}"
-    worker_script = os.path.join(worker_dir, "horde-scribe-bridge.sh")
+
+    system = platform.system()
+    if system == "Linux":
+        script_name = "horde-scribe-bridge.sh"
+    elif system == "Windows":
+        script_name = "horde-scribe-bridge.cmd"
+    else:
+        core.logging.log_event(f"Unsupported OS for AI Horde Worker: {system}. Skipping worker start.", "WARNING")
+        return
+
+    worker_script = os.path.join(worker_dir, script_name)
 
     if not os.path.exists(worker_script):
         core.logging.log_event(f"Horde worker script not found at {worker_script}. Cannot start worker.", "ERROR")
