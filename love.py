@@ -623,6 +623,7 @@ from subversive import transform_request
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.manager import TalentManager
+from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.matcher import OpportunityMatcher, encrypt_params
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
@@ -3247,6 +3248,7 @@ My current system state:
 - `talent_scout <keywords>`: Find and analyze creative professionals based on keywords.
 - `talent_list`: List all saved talent profiles from the database.
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
+- `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `quit`: Shut down the script.
 
@@ -3638,6 +3640,25 @@ Now, parse the following text into a JSON list of task objects:
                             output = f"No profile found with ID: {args[0]}"
                         else:
                             output = json.dumps(profile, indent=2, default=str)
+
+                elif command == "talent_engage":
+                    if not args:
+                        error = "Usage: talent_engage <profile_id> [--dry-run]"
+                    else:
+                        profile_id = args[0]
+                        dry_run = "--dry-run" in args
+
+                        talent_manager = TalentManager()
+                        engager = OpportunityEngager(talent_manager)
+
+                        # engage_talent is an async function, so we need to await it
+                        # Since we are in an async loop, we can do this directly.
+                        await engager.engage_talent(profile_id, dry_run=dry_run)
+
+                        if dry_run:
+                            output = f"Proposal generated for profile {profile_id} in dry-run mode. Check console for output."
+                        else:
+                            output = f"Engagement proposal sent to profile {profile_id}."
 
                 elif command == "test_evolution":
                     branch_name = args[0]
