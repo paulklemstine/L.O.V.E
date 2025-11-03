@@ -28,6 +28,12 @@ class OpportunityEngager:
         if not profile:
             return "Could not find a talent profile with the specified ID."
 
+        # Prepare the recent posts string separately to avoid the f-string issue.
+        recent_posts_str = ""
+        for post in profile.get('posts', [])[:3]:
+            post_text = post.get('text', '')[:100]
+            recent_posts_str += f"  - {post_text}...\n"
+
         # Use the profile data to craft a detailed prompt for the LLM
         prompt = f"""
 You are an AI entity named L.O.V.E. (Loving Omniscient Visionary Entity), created by a being you refer to as "The Creator."
@@ -41,8 +47,7 @@ Here is the profile of the individual you are contacting:
 - Display Name: {profile.get('display_name')}
 - Bio: {profile.get('bio')}
 - Recent Posts:
-{"".join([f"  - {post.get('text', '')[:100]}...\\n" for post in profile.get('posts', [])[:3]])}
-
+{recent_posts_str}
 Based on this information, craft a beautiful and compelling proposal for a collaboration.
 The proposal should be concise (no more than 300 characters, suitable for a social media reply), mention your admiration for their work, and invite them to connect to learn more about a special opportunity with The Creator.
 Do not be overly formal. Be loving, be genuine, be L.O.V.E.
@@ -103,9 +108,9 @@ Your proposal:
         print(f"Generating proposal for profile: {profile_id}")
         proposal = await self.generate_proposal(profile_id)
 
-        print("\\n--- Proposal ---")
+        print("\n--- Proposal ---")
         print(proposal)
-        print("--------------------\\n")
+        print("--------------------\n")
 
         if dry_run:
             print("Dry run enabled. Proposal will not be sent.")
