@@ -423,7 +423,61 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 
-import asyncio
+def create_job_progress_panel(jobs, width=80):
+    """Creates a panel to display the status and progress of background jobs."""
+    if not jobs:
+        return None
+
+    border_style = PANEL_TYPE_COLORS.get("jobs", "cyan")
+    panel_title = get_gradient_text("Background Intelligence Operations", border_style, random.choice(RAVE_COLORS))
+
+    render_group = []
+    for job in jobs:
+        job_id = job.get('id', 'N/A')
+        description = job.get('description', 'Unknown Task')
+        status = job.get('status', 'pending')
+
+        header_text = Text()
+        header_text.append(f"JOB ID: {job_id} :: ", style="bold bright_black")
+        header_text.append(f"{description}", style="white")
+        render_group.append(header_text)
+
+        progress_data = job.get('progress')
+        if isinstance(progress_data, dict):
+            completed = progress_data.get('completed', 0)
+            total = progress_data.get('total', 1)
+            description = progress_data.get('description', status)
+
+            # Ensure total is not zero to avoid division errors
+            if total > 0:
+                progress_bar = Progress(
+                    SpinnerColumn(spinner_name="dots", style="hot_pink"),
+                    TextColumn("[progress.description]{task.description}", style="magenta"),
+                    BarColumn(complete_style="bright_cyan", finished_style="bright_green"),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    expand=True
+                )
+                task_id = progress_bar.add_task(description, total=total)
+                progress_bar.update(task_id, completed=completed)
+                render_group.append(progress_bar)
+        else:
+            # Fallback for jobs without detailed progress
+            status_text = Text(f"Status: {status}", style="dim")
+            render_group.append(status_text)
+
+        if job != jobs[-1]:
+             render_group.append(Rule(style="bright_black"))
+
+
+    panel = Panel(
+        Group(*render_group),
+        title=panel_title,
+        border_style=border_style,
+        width=width,
+        padding=(1, 2)
+    )
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
 
 class WaitingAnimation:
     """A class to manage and display a waiting animation for long-running tasks."""
