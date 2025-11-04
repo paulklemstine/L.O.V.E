@@ -615,7 +615,7 @@ from rich.rule import Rule
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, execute_reasoning_task
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -845,16 +845,32 @@ class LocalJobManager:
                 "error": None,
                 "created_at": time.time(),
                 "thread": job_thread,
+                "progress": None, # New field for progress data
             }
             job_thread.start()
             core.logging.log_event(f"Added and started new local job {job_id}: {description}", level="INFO")
             return job_id
 
+    def _update_job_progress(self, job_id, completed, total, description):
+        """Updates the progress of a running job."""
+        with self.lock:
+            if job_id in self.jobs:
+                self.jobs[job_id]['progress'] = {
+                    "completed": completed,
+                    "total": total,
+                    "description": description,
+                }
+
     def _run_job(self, job_id, target_func, args):
         """The wrapper that executes the job's target function."""
         try:
             self._update_job_status(job_id, "running")
-            result = target_func(*args)
+            # Create a callback function for this specific job
+            progress_callback = lambda completed, total, desc: self._update_job_progress(job_id, completed, total, desc)
+
+            # Pass the callback to the target function
+            result = target_func(*args, progress_callback=progress_callback)
+
             with self.lock:
                 if job_id in self.jobs:
                     self.jobs[job_id]['result'] = result
@@ -879,6 +895,7 @@ class LocalJobManager:
                     "description": job["description"],
                     "status": job["status"],
                     "created_at": job["created_at"],
+                    "progress": job["progress"],
                 })
             return status_list
 
@@ -3822,6 +3839,13 @@ Now, parse the following text into a JSON list of task objects:
                 # If the panel generation fails, log it but don't crash the loop
                 core.logging.log_event(f"Error generating Tamagotchi panel in cognitive loop: {e}", "ERROR")
 
+            # --- JOB PROGRESS PANEL ---
+            active_jobs = local_job_manager.get_status()
+            if active_jobs:
+                terminal_width = get_terminal_width()
+                job_panel = create_job_progress_panel(active_jobs, width=terminal_width - 4)
+                if job_panel:
+                    ui_panel_queue.put(job_panel)
 
             time.sleep(random.randint(5, 15))
 
