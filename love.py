@@ -615,7 +615,7 @@ from rich.rule import Rule
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, execute_reasoning_task
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -628,6 +628,7 @@ from core.talent_utils.matcher import OpportunityMatcher, encrypt_params
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
+from core.monitoring import MonitoringManager
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -2602,6 +2603,9 @@ def restart_script(console):
         if 'local_job_manager' in globals() and local_job_manager:
             console.print("[cyan]Shutting down Local Job Manager...[/cyan]")
             local_job_manager.stop()
+        if 'monitoring_manager' in globals() and monitoring_manager:
+            console.print("[cyan]Shutting down Monitoring Manager...[/cyan]")
+            monitoring_manager.stop()
         if 'ipfs_manager' in globals() and ipfs_manager:
             ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager:
@@ -3714,6 +3718,11 @@ Now, parse the following text into a JSON list of task objects:
                 })
 
             # --- UI PANEL UPDATE ---
+            # Display the monitoring panel every 3 cycles
+            if loop_count % 3 == 0:
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_monitoring_panel(love_state.get('monitoring'), width=terminal_width - 4))
+
             # Now, at the end of every loop, update the main status panel.
             try:
                 with tamagotchi_lock:
@@ -4081,7 +4090,7 @@ def simple_ui_renderer():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent
+    global love_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager
 
     loop = asyncio.get_running_loop()
 
@@ -4107,6 +4116,8 @@ async def main(args):
     love_task_manager.start()
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
+    monitoring_manager = MonitoringManager(love_state, console)
+    monitoring_manager.start()
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
     exploitation_manager = ExploitationManager(knowledge_base, console)
