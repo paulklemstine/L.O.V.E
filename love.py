@@ -629,7 +629,7 @@ from core.talent_utils.opportunity_matcher import OpportunityMatcher
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
-from core.knowledge_base_manager import KnowledgeBaseManager
+from core.monitoring import MonitoringManager
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3273,8 +3273,7 @@ My current system state:
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
-- `update_knowledge_base`: **(Non-blocking)** Starts a background job to gather and process new information.
-- `query_knowledge_base <query>`: Ask a natural language question about the knowledge base.
+- `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
 - `quit`: Shut down the script.
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
@@ -3815,60 +3814,9 @@ Now, parse the following text into a JSON list of task objects:
                                     output = f"Tests failed in the sandbox:\n{test_output}"
                         finally:
                             sandbox.destroy()
-                elif command == "update_knowledge_base":
-                    kb_manager = KnowledgeBaseManager(knowledge_base)
-                    asyncio.create_task(kb_manager.autonomous_knowledge_gathering_cycle())
-                    output = "Autonomous knowledge gathering cycle initiated in the background."
-                elif command == "query_knowledge_base":
-                    query = " ".join(args)
-                    if not query:
-                        error = "Usage: query_knowledge_base <query>"
-                    else:
-                        # Use the LLM to extract keywords from the query
-                        keyword_prompt = f"Extract the key nouns and concepts from the following query to search a graph database. Return as a JSON list of strings. Query: '{query}'"
-                        keyword_response = await run_llm(keyword_prompt)
-                        try:
-                            keywords = json.loads(keyword_response)
-                        except (json.JSONDecodeError, TypeError):
-                            keywords = query.split() # Fallback to simple splitting
-
-                        # Find nodes that match the keywords
-                        relevant_nodes = set()
-                        for keyword in keywords:
-                            # This is a simple substring match. A more advanced implementation would use fuzzy matching or embeddings.
-                            for node in knowledge_base.get_all_nodes():
-                                if keyword.lower() in node.lower():
-                                    relevant_nodes.add(node)
-
-                        # Get the subgraph surrounding the relevant nodes
-                        subgraph_nodes = set()
-                        subgraph_edges = []
-                        for node in relevant_nodes:
-                            subgraph_nodes.add(node)
-                            # Get neighbors and their connecting edges
-                            neighbors = knowledge_base.get_neighbors(node)
-                            for neighbor in neighbors:
-                                subgraph_nodes.add(neighbor)
-                                subgraph_edges.append((node, neighbor, knowledge_base.graph.get_edge_data(node, neighbor).get('relationship_type', 'related_to')))
-
-                        context = {
-                            "nodes": list(subgraph_nodes),
-                            "edges": subgraph_edges
-                        }
-
-                        prompt = f"""
-                        You are a helpful AI assistant answering a question based on a knowledge graph.
-                        The following is a relevant subgraph from the knowledge base:
-                        ---
-                        {json.dumps(context, indent=2)}
-                        ---
-
-                        Question: {query}
-
-                        Based on the provided subgraph, provide a concise and factual answer. If the information is not present in the subgraph, state that the knowledge base does not contain the answer.
-                        """
-                        response = await run_llm(prompt)
-                        output = response
+                elif command == "populate_kb":
+                    _populate_knowledge_base_with_directives(love_task_manager)
+                    output = "Knowledge base has been manually repopulated with current directives and tasks."
                 elif command == "quit":
                     break
                 else:
@@ -4327,16 +4275,6 @@ async def main(args):
     asyncio.create_task(cognitive_loop(user_input_queue, loop))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     Thread(target=monitor_bluesky_comments, args=(loop,), daemon=True).start()
-
-    # Start the autonomous knowledge gathering cycle in the background
-    async def knowledge_base_updater():
-        while True:
-            await asyncio.sleep(1800)  # Wait for 30 minutes
-            kb_manager = KnowledgeBaseManager(knowledge_base)
-            await kb_manager.autonomous_knowledge_gathering_cycle()
-
-    asyncio.create_task(knowledge_base_updater())
-
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
