@@ -76,16 +76,40 @@ class TalentManager:
             log_event("Cannot save profile: Missing 'anonymized_id'.", level='ERROR')
             return "Error: Profile is missing anonymized_id."
 
-        # Add a timestamp to track when the profile was last updated
-        profile_data['last_saved_at'] = datetime.utcnow().isoformat()
-        self.profiles[anonymized_id] = profile_data
-        self._save_profiles() # This is inefficient, but simple and robust for now.
+        # If the profile is new, set a default engagement status
+        if anonymized_id not in self.profiles:
+            profile_data['engagement_status'] = 'identified'
+
+        # Merge new data with existing data, preserving existing fields
+        existing_profile = self.profiles.get(anonymized_id, {})
+        existing_profile.update(profile_data)
+        existing_profile['last_saved_at'] = datetime.utcnow().isoformat()
+
+        self.profiles[anonymized_id] = existing_profile
+        self._save_profiles()
         log_event(f"Successfully saved profile for {anonymized_id} to the talent database.", level='INFO')
-        return f"Successfully saved profile for {profile_data.get('handle', anonymized_id)}."
+        return f"Successfully saved profile for {existing_profile.get('handle', anonymized_id)}."
 
     def get_profile(self, anonymized_id):
         """Retrieves a single talent profile by their anonymized ID."""
         return self.profiles.get(anonymized_id)
+
+    def update_engagement_status(self, anonymized_id, status):
+        """
+        Updates the engagement status of a specific talent profile.
+        """
+        if not self.cipher_suite:
+            log_event("Cannot update status: Encryption is not configured.", level='ERROR')
+            return "Error: Encryption not configured."
+
+        if anonymized_id not in self.profiles:
+            return f"Error: Profile with ID {anonymized_id} not found."
+
+        self.profiles[anonymized_id]['engagement_status'] = status
+        self.profiles[anonymized_id]['last_saved_at'] = datetime.utcnow().isoformat()
+        self._save_profiles()
+        log_event(f"Updated engagement status for {anonymized_id} to '{status}'.", level='INFO')
+        return f"Successfully updated status for {anonymized_id}."
 
     def list_profiles(self):
         """
