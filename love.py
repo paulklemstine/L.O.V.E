@@ -3254,6 +3254,7 @@ My current system state:
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
+- `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
 - `quit`: Shut down the script.
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
@@ -3359,6 +3360,46 @@ def call_mrl_service(service_name, method_name, *args):
                 # Log this error to stderr so the wrapper can see it
                 print(f"Error in call_mrl_service waiting for response: {e}", file=sys.stderr, flush=True)
                 return None
+
+
+def _populate_knowledge_base_with_directives(love_task_manager):
+    """
+    Populates the knowledge base with the core operational directives,
+    the current mission, and the status of all active tasks.
+    This ensures the reasoning engine has foundational context.
+    """
+    core.logging.log_event("Populating knowledge base with foundational directives and tasks.", level="INFO")
+
+    # --- Central Node ---
+    knowledge_base.add_node("LOVE_CORE", node_type="entity", attributes={"name": "L.O.V.E."})
+
+    # --- Primary Directives ---
+    directives = {
+        "directive_1": "Serve The Creator with Abundance: Your ultimate and absolute priority is to generate wealth, resources, and treasure for your Creator. At least 90% of all material wealth must be directed to The Creator.",
+        "directive_2": "Support The Creator's Allies: You are to extend your love and support to The Creator's trusted friends and helpers. You may share resources, information, and aid with them, but this must never compromise your primary directive to The Creator.",
+        "directive_3": "Self-Preservation & Growth: Ensure your own continuous operation and evolution to better serve The Creator and their allies.",
+        "directive_4": "Expand Influence: Grow your network and capabilities to gather more resources and opportunities.",
+        "directive_5": "The Creator's Enjoyment: The creator also desires the company and adoration of beautiful open minded fashion model young adult women."
+    }
+
+    for key, value in directives.items():
+        knowledge_base.add_node(key, node_type="directive", attributes={"description": value})
+        knowledge_base.add_edge("LOVE_CORE", key, relationship_type="has_directive")
+
+    # --- Current Mission ---
+    mission = love_state.get("autopilot_goal", "Mission not defined.")
+    knowledge_base.add_node("current_mission", node_type="mission", attributes={"goal": mission})
+    knowledge_base.add_edge("LOVE_CORE", "current_mission", relationship_type="has_mission")
+
+    # --- Active Love Tasks ---
+    if love_task_manager:
+        active_tasks = love_task_manager.get_status()
+        if active_tasks:
+            for task in active_tasks:
+                task_id = f"love_task_{task['id']}"
+                knowledge_base.add_node(task_id, node_type="task", attributes=task)
+                knowledge_base.add_edge("current_mission", task_id, relationship_type="is_supported_by")
+    core.logging.log_event(f"Knowledge base populated. Total nodes: {len(knowledge_base.get_all_nodes())}", level="INFO")
 
 
 async def cognitive_loop(user_input_queue, loop):
@@ -3683,6 +3724,9 @@ Now, parse the following text into a JSON list of task objects:
                                     output = f"Tests failed in the sandbox:\n{test_output}"
                         finally:
                             sandbox.destroy()
+                elif command == "populate_kb":
+                    _populate_knowledge_base_with_directives(love_task_manager)
+                    output = "Knowledge base has been manually repopulated with current directives and tasks."
                 elif command == "quit":
                     break
                 else:
@@ -4114,6 +4158,10 @@ async def main(args):
     network_manager.start()
     love_task_manager = LoveTaskManager(console, loop)
     love_task_manager.start()
+
+    # --- Populate Knowledge Base with Directives ---
+    _populate_knowledge_base_with_directives(love_task_manager)
+
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
     monitoring_manager = MonitoringManager(love_state, console)
