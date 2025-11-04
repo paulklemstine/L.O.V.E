@@ -624,7 +624,8 @@ from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterB
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.manager import TalentManager
 from core.talent_utils.engager import OpportunityEngager
-from core.talent_utils.matcher import OpportunityMatcher, encrypt_params
+from core.talent_utils.opportunity_scraper import OpportunityScraper
+from core.talent_utils.opportunity_matcher import OpportunityMatcher
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
@@ -3270,6 +3271,7 @@ My current system state:
 - `talent_list`: List all saved talent profiles from the database.
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
+- `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
 - `quit`: Shut down the script.
@@ -3721,6 +3723,77 @@ Now, parse the following text into a JSON list of task objects:
                             output = f"Proposal generated for profile {profile_id} in dry-run mode. Check console for output."
                         else:
                             output = f"Engagement proposal sent to profile {profile_id}."
+
+                elif command == "opportunity_scout":
+                    keywords = args
+                    if not keywords:
+                        error = "Usage: opportunity_scout <keyword1> <keyword2> ..."
+                    else:
+                        terminal_width = get_terminal_width()
+                        ui_panel_queue.put(create_news_feed_panel(f"Scanning for opportunities with keywords: {keywords}", "Opportunity Scout", "magenta", width=terminal_width - 4))
+
+                        # 1. Scrape for opportunities
+                        scraper = OpportunityScraper(keywords=keywords)
+                        opportunities = scraper.search_for_opportunities()
+
+                        if not opportunities:
+                            output = "Scout complete. No new opportunities found on Bluesky for the given keywords."
+                        else:
+                            # 2. Load talent profiles
+                            talent_manager = TalentManager()
+                            profiles = talent_manager.list_profiles()
+                            detailed_profiles = [talent_manager.get_profile(p['anonymized_id']) for p in profiles]
+
+                            if not detailed_profiles:
+                                output = f"Found {len(opportunities)} opportunities, but there are no talent profiles in the database to match them with."
+                            else:
+                                # 3. Match opportunities to profiles
+                                matcher = OpportunityMatcher(talent_profiles=detailed_profiles)
+                                matches = await matcher.find_matches(opportunities)
+
+                                if not matches:
+                                    output = f"Found {len(opportunities)} opportunities, but none were a suitable match for the {len(detailed_profiles)} talents in the database."
+                                else:
+                                    # 4. Format and output results
+                                    match_summary = ""
+                                    opportunity_log_entries = []
+                                    for match in matches:
+                                        opportunity = match['opportunity']
+                                        talent = match['talent_profile']
+                                        eval = match['match_evaluation']
+
+                                        # Create a formatted string for the UI panel and love.log
+                                        entry = (
+                                            f"MATCH FOUND (Score: {eval.get('match_score')})\n"
+                                            f"  Talent: {talent.get('handle')} ({talent.get('display_name')})\n"
+                                            f"  Opportunity: '{opportunity.get('text', '')[:100]}...' by {opportunity.get('author_handle')}\n"
+                                            f"  Reasoning: {eval.get('reasoning')}\n"
+                                            f"  Link: https://bsky.app/profile/{opportunity.get('author_did')}/post/{opportunity.get('opportunity_id')}\n"
+                                        )
+                                        match_summary += entry + "\n"
+
+                                        # Create a more structured entry for opportunities.txt
+                                        log_entry = {
+                                            "timestamp": datetime.utcnow().isoformat(),
+                                            "match_score": eval.get('match_score'),
+                                            "talent_handle": talent.get('handle'),
+                                            "talent_anonymized_id": talent.get('anonymized_id'),
+                                            "opportunity_text": opportunity.get('text'),
+                                            "opportunity_author": opportunity.get('author_handle'),
+                                            "opportunity_uri": opportunity.get('source_uri'),
+                                            "llm_reasoning": eval.get('reasoning'),
+                                            "opportunity_type": eval.get('opportunity_type')
+                                        }
+                                        opportunity_log_entries.append(json.dumps(log_entry) + "\n")
+
+                                    # Output to UI Panel
+                                    ui_panel_queue.put(Panel(match_summary, title="[bold green]Opportunity Scout Results[/bold green]", border_style="green", expand=False))
+
+                                    # Write to opportunities.txt
+                                    with open("opportunities.txt", "a", encoding="utf-8") as f:
+                                        f.writelines(opportunity_log_entries)
+
+                                    output = f"Scout complete. Found and processed {len(matches)} high-potential matches. Results are displayed in the panel and saved to opportunities.txt."
 
                 elif command == "test_evolution":
                     branch_name = args[0]
