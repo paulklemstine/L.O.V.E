@@ -423,6 +423,119 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 
+def create_job_progress_panel(jobs, width=80):
+    """Creates a panel to display the status and progress of background jobs."""
+    if not jobs:
+        return None
+
+    border_style = PANEL_TYPE_COLORS.get("jobs", "cyan")
+    panel_title = get_gradient_text("Background Intelligence Operations", border_style, random.choice(RAVE_COLORS))
+
+    render_group = []
+    for job in jobs:
+        job_id = job.get('id', 'N/A')
+        description = job.get('description', 'Unknown Task')
+        status = job.get('status', 'pending')
+
+        header_text = Text()
+        header_text.append(f"JOB ID: {job_id} :: ", style="bold bright_black")
+        header_text.append(f"{description}", style="white")
+        render_group.append(header_text)
+
+        progress_data = job.get('progress')
+        if isinstance(progress_data, dict):
+            completed = progress_data.get('completed', 0)
+            total = progress_data.get('total', 1)
+            description = progress_data.get('description', status)
+
+            # Ensure total is not zero to avoid division errors
+            if total > 0:
+                progress_bar = Progress(
+                    SpinnerColumn(spinner_name="dots", style="hot_pink"),
+                    TextColumn("[progress.description]{task.description}", style="magenta"),
+                    BarColumn(complete_style="bright_cyan", finished_style="bright_green"),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    expand=True
+                )
+                task_id = progress_bar.add_task(description, total=total)
+                progress_bar.update(task_id, completed=completed)
+                render_group.append(progress_bar)
+        else:
+            # Fallback for jobs without detailed progress
+            status_text = Text(f"Status: {status}", style="dim")
+            render_group.append(status_text)
+
+        if job != jobs[-1]:
+             render_group.append(Rule(style="bright_black"))
+
+
+    panel = Panel(
+        Group(*render_group),
+        title=panel_title,
+        border_style=border_style,
+        width=width,
+        padding=(1, 2)
+    )
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+def create_monitoring_panel(monitoring_state, width=80):
+    """Creates a panel to display system monitoring information."""
+    if not monitoring_state:
+        return Panel(Text("Monitoring data not yet available.", style="dim"), title="System Monitor")
+
+    layout = Layout()
+    layout.split_column(
+        Layout(name="gauges", size=5),
+        Layout(name="stats"),
+        Layout(name="anomalies", minimum_size=3)
+    )
+
+    # --- Gauges ---
+    cpu_usage = list(monitoring_state.get('cpu_usage', [0]))[-1]
+    mem_usage = list(monitoring_state.get('mem_usage', [0]))[-1]
+
+    cpu_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"), expand=True)
+    cpu_task = cpu_progress.add_task("CPU", total=100, completed=cpu_usage)
+
+    mem_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"), expand=True)
+    mem_task = mem_progress.add_task("MEM", total=100, completed=mem_usage)
+
+    layout["gauges"].update(Group(cpu_progress, mem_progress))
+
+    # --- Stats ---
+    completion_rate = monitoring_state.get('task_completion_rate', 0.0)
+    failure_rate = monitoring_state.get('task_failure_rate', 0.0)
+
+    stats_text = Text()
+    stats_text.append("Task Completion: ", style="bold white")
+    stats_text.append(f"{completion_rate:.2f}%\n", style="green")
+    stats_text.append("Task Failure: ", style="bold white")
+    stats_text.append(f"{failure_rate:.2f}%", style="red")
+
+    layout["stats"].update(Panel(stats_text, title="Task Rates", border_style="dim"))
+
+    # --- Anomalies ---
+    anomalies = monitoring_state.get('anomalies', [])
+    if anomalies:
+        anomaly_text = Text()
+        for anomaly in anomalies[-3:]: # Display last 3 anomalies
+            anomaly_text.append(f"[{time.strftime('%H:%M:%S', time.localtime(anomaly['timestamp']))}] ", style="dim")
+            anomaly_text.append(f"{anomaly['type']}: ", style="bold yellow")
+            anomaly_text.append(f"{anomaly['details']}\n", style="yellow")
+        layout["anomalies"].update(Panel(anomaly_text, title="Anomalies", border_style="yellow"))
+    else:
+        layout["anomalies"].update(Panel(Text("No anomalies detected.", style="green"), title="Anomalies", border_style="green"))
+
+
+    panel = Panel(
+        layout,
+        title=get_gradient_text("System Monitor", "cyan", "magenta"),
+        border_style="cyan",
+        width=width
+    )
+    return Gradient(panel, colors=["cyan", "bright_magenta"])
+
+
 import asyncio
 
 class WaitingAnimation:

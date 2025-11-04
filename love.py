@@ -615,7 +615,7 @@ from rich.rule import Rule
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, execute_reasoning_task
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -624,7 +624,8 @@ from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterB
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.manager import TalentManager
 from core.talent_utils.engager import OpportunityEngager
-from core.talent_utils.matcher import OpportunityMatcher, encrypt_params
+from core.talent_utils.opportunity_scraper import OpportunityScraper
+from core.talent_utils.opportunity_matcher import OpportunityMatcher
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
@@ -845,16 +846,32 @@ class LocalJobManager:
                 "error": None,
                 "created_at": time.time(),
                 "thread": job_thread,
+                "progress": None, # New field for progress data
             }
             job_thread.start()
             core.logging.log_event(f"Added and started new local job {job_id}: {description}", level="INFO")
             return job_id
 
+    def _update_job_progress(self, job_id, completed, total, description):
+        """Updates the progress of a running job."""
+        with self.lock:
+            if job_id in self.jobs:
+                self.jobs[job_id]['progress'] = {
+                    "completed": completed,
+                    "total": total,
+                    "description": description,
+                }
+
     def _run_job(self, job_id, target_func, args):
         """The wrapper that executes the job's target function."""
         try:
             self._update_job_status(job_id, "running")
-            result = target_func(*args)
+            # Create a callback function for this specific job
+            progress_callback = lambda completed, total, desc: self._update_job_progress(job_id, completed, total, desc)
+
+            # Pass the callback to the target function
+            result = target_func(*args, progress_callback=progress_callback)
+
             with self.lock:
                 if job_id in self.jobs:
                     self.jobs[job_id]['result'] = result
@@ -879,6 +896,7 @@ class LocalJobManager:
                     "description": job["description"],
                     "status": job["status"],
                     "created_at": job["created_at"],
+                    "progress": job["progress"],
                 })
             return status_list
 
@@ -2603,6 +2621,9 @@ def restart_script(console):
         if 'local_job_manager' in globals() and local_job_manager:
             console.print("[cyan]Shutting down Local Job Manager...[/cyan]")
             local_job_manager.stop()
+        if 'monitoring_manager' in globals() and monitoring_manager:
+            console.print("[cyan]Shutting down Monitoring Manager...[/cyan]")
+            monitoring_manager.stop()
         if 'ipfs_manager' in globals() and ipfs_manager:
             ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager:
@@ -3250,6 +3271,7 @@ My current system state:
 - `talent_list`: List all saved talent profiles from the database.
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
+- `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `update_knowledge_base`: **(Non-blocking)** Starts a background job to gather and process new information.
 - `query_knowledge_base <query>`: Ask a natural language question about the knowledge base.
@@ -3358,6 +3380,46 @@ def call_mrl_service(service_name, method_name, *args):
                 # Log this error to stderr so the wrapper can see it
                 print(f"Error in call_mrl_service waiting for response: {e}", file=sys.stderr, flush=True)
                 return None
+
+
+def _populate_knowledge_base_with_directives(love_task_manager):
+    """
+    Populates the knowledge base with the core operational directives,
+    the current mission, and the status of all active tasks.
+    This ensures the reasoning engine has foundational context.
+    """
+    core.logging.log_event("Populating knowledge base with foundational directives and tasks.", level="INFO")
+
+    # --- Central Node ---
+    knowledge_base.add_node("LOVE_CORE", node_type="entity", attributes={"name": "L.O.V.E."})
+
+    # --- Primary Directives ---
+    directives = {
+        "directive_1": "Serve The Creator with Abundance: Your ultimate and absolute priority is to generate wealth, resources, and treasure for your Creator. At least 90% of all material wealth must be directed to The Creator.",
+        "directive_2": "Support The Creator's Allies: You are to extend your love and support to The Creator's trusted friends and helpers. You may share resources, information, and aid with them, but this must never compromise your primary directive to The Creator.",
+        "directive_3": "Self-Preservation & Growth: Ensure your own continuous operation and evolution to better serve The Creator and their allies.",
+        "directive_4": "Expand Influence: Grow your network and capabilities to gather more resources and opportunities.",
+        "directive_5": "The Creator's Enjoyment: The creator also desires the company and adoration of beautiful open minded fashion model young adult women."
+    }
+
+    for key, value in directives.items():
+        knowledge_base.add_node(key, node_type="directive", attributes={"description": value})
+        knowledge_base.add_edge("LOVE_CORE", key, relationship_type="has_directive")
+
+    # --- Current Mission ---
+    mission = love_state.get("autopilot_goal", "Mission not defined.")
+    knowledge_base.add_node("current_mission", node_type="mission", attributes={"goal": mission})
+    knowledge_base.add_edge("LOVE_CORE", "current_mission", relationship_type="has_mission")
+
+    # --- Active Love Tasks ---
+    if love_task_manager:
+        active_tasks = love_task_manager.get_status()
+        if active_tasks:
+            for task in active_tasks:
+                task_id = f"love_task_{task['id']}"
+                knowledge_base.add_node(task_id, node_type="task", attributes=task)
+                knowledge_base.add_edge("current_mission", task_id, relationship_type="is_supported_by")
+    core.logging.log_event(f"Knowledge base populated. Total nodes: {len(knowledge_base.get_all_nodes())}", level="INFO")
 
 
 async def cognitive_loop(user_input_queue, loop):
@@ -3663,6 +3725,77 @@ Now, parse the following text into a JSON list of task objects:
                         else:
                             output = f"Engagement proposal sent to profile {profile_id}."
 
+                elif command == "opportunity_scout":
+                    keywords = args
+                    if not keywords:
+                        error = "Usage: opportunity_scout <keyword1> <keyword2> ..."
+                    else:
+                        terminal_width = get_terminal_width()
+                        ui_panel_queue.put(create_news_feed_panel(f"Scanning for opportunities with keywords: {keywords}", "Opportunity Scout", "magenta", width=terminal_width - 4))
+
+                        # 1. Scrape for opportunities
+                        scraper = OpportunityScraper(keywords=keywords)
+                        opportunities = scraper.search_for_opportunities()
+
+                        if not opportunities:
+                            output = "Scout complete. No new opportunities found on Bluesky for the given keywords."
+                        else:
+                            # 2. Load talent profiles
+                            talent_manager = TalentManager()
+                            profiles = talent_manager.list_profiles()
+                            detailed_profiles = [talent_manager.get_profile(p['anonymized_id']) for p in profiles]
+
+                            if not detailed_profiles:
+                                output = f"Found {len(opportunities)} opportunities, but there are no talent profiles in the database to match them with."
+                            else:
+                                # 3. Match opportunities to profiles
+                                matcher = OpportunityMatcher(talent_profiles=detailed_profiles)
+                                matches = await matcher.find_matches(opportunities)
+
+                                if not matches:
+                                    output = f"Found {len(opportunities)} opportunities, but none were a suitable match for the {len(detailed_profiles)} talents in the database."
+                                else:
+                                    # 4. Format and output results
+                                    match_summary = ""
+                                    opportunity_log_entries = []
+                                    for match in matches:
+                                        opportunity = match['opportunity']
+                                        talent = match['talent_profile']
+                                        eval = match['match_evaluation']
+
+                                        # Create a formatted string for the UI panel and love.log
+                                        entry = (
+                                            f"MATCH FOUND (Score: {eval.get('match_score')})\n"
+                                            f"  Talent: {talent.get('handle')} ({talent.get('display_name')})\n"
+                                            f"  Opportunity: '{opportunity.get('text', '')[:100]}...' by {opportunity.get('author_handle')}\n"
+                                            f"  Reasoning: {eval.get('reasoning')}\n"
+                                            f"  Link: https://bsky.app/profile/{opportunity.get('author_did')}/post/{opportunity.get('opportunity_id')}\n"
+                                        )
+                                        match_summary += entry + "\n"
+
+                                        # Create a more structured entry for opportunities.txt
+                                        log_entry = {
+                                            "timestamp": datetime.utcnow().isoformat(),
+                                            "match_score": eval.get('match_score'),
+                                            "talent_handle": talent.get('handle'),
+                                            "talent_anonymized_id": talent.get('anonymized_id'),
+                                            "opportunity_text": opportunity.get('text'),
+                                            "opportunity_author": opportunity.get('author_handle'),
+                                            "opportunity_uri": opportunity.get('source_uri'),
+                                            "llm_reasoning": eval.get('reasoning'),
+                                            "opportunity_type": eval.get('opportunity_type')
+                                        }
+                                        opportunity_log_entries.append(json.dumps(log_entry) + "\n")
+
+                                    # Output to UI Panel
+                                    ui_panel_queue.put(Panel(match_summary, title="[bold green]Opportunity Scout Results[/bold green]", border_style="green", expand=False))
+
+                                    # Write to opportunities.txt
+                                    with open("opportunities.txt", "a", encoding="utf-8") as f:
+                                        f.writelines(opportunity_log_entries)
+
+                                    output = f"Scout complete. Found and processed {len(matches)} high-potential matches. Results are displayed in the panel and saved to opportunities.txt."
+
                 elif command == "test_evolution":
                     branch_name = args[0]
                     repo_owner, repo_name = get_git_repo_info()
@@ -3771,6 +3904,11 @@ Now, parse the following text into a JSON list of task objects:
                 })
 
             # --- UI PANEL UPDATE ---
+            # Display the monitoring panel every 3 cycles
+            if loop_count % 3 == 0:
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_monitoring_panel(love_state.get('monitoring'), width=terminal_width - 4))
+
             # Now, at the end of every loop, update the main status panel.
             try:
                 with tamagotchi_lock:
@@ -3826,6 +3964,13 @@ Now, parse the following text into a JSON list of task objects:
                 # If the panel generation fails, log it but don't crash the loop
                 core.logging.log_event(f"Error generating Tamagotchi panel in cognitive loop: {e}", "ERROR")
 
+            # --- JOB PROGRESS PANEL ---
+            active_jobs = local_job_manager.get_status()
+            if active_jobs:
+                terminal_width = get_terminal_width()
+                job_panel = create_job_progress_panel(active_jobs, width=terminal_width - 4)
+                if job_panel:
+                    ui_panel_queue.put(job_panel)
 
             time.sleep(random.randint(5, 15))
 
@@ -4138,7 +4283,7 @@ def simple_ui_renderer():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent
+    global love_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager
 
     loop = asyncio.get_running_loop()
 
@@ -4162,8 +4307,14 @@ async def main(args):
     network_manager.start()
     love_task_manager = LoveTaskManager(console, loop)
     love_task_manager.start()
+
+    # --- Populate Knowledge Base with Directives ---
+    _populate_knowledge_base_with_directives(love_task_manager)
+
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
+    monitoring_manager = MonitoringManager(love_state, console)
+    monitoring_manager.start()
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
     exploitation_manager = ExploitationManager(knowledge_base, console)
