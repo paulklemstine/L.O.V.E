@@ -88,14 +88,35 @@ Example JSON Response:
 Now, generate the plan for the given goal.
 """
         try:
-            response = await run_llm(prompt, is_source_code=False)
-            # Clean the response to extract only the JSON part
-            json_match = re.search(r'\[.*\]', response, re.DOTALL)
-            if not json_match:
-                print(f"Supervisor: Failed to extract JSON plan from LLM response: {response}")
+            response_data = await run_llm(prompt, is_source_code=False)
+
+            # The response could be a dict with a 'result' key, or just the raw string.
+            if isinstance(response_data, dict):
+                response_content = response_data.get("result", "")
+            else:
+                response_content = response_data
+
+            # The content could be a JSON string or a Python object if it was already parsed.
+            if isinstance(response_content, (list, dict)):
+                plan_data = response_content
+            else:
+                 # Clean the response to extract only the JSON part
+                json_match = re.search(r'(\[.*\]|\{.*\})', response_content, re.DOTALL)
+                if not json_match:
+                    print(f"Supervisor: Failed to extract JSON plan from LLM response: {response_content}")
+                    return []
+                plan_str = json_match.group(0)
+                plan_data = json.loads(plan_str)
+
+            # The plan could be a list of steps, or a dict with a 'plan' key
+            if isinstance(plan_data, dict) and 'plan' in plan_data:
+                plan = plan_data['plan']
+            elif isinstance(plan_data, list):
+                plan = plan_data
+            else:
+                print(f"Supervisor: Parsed plan data is not in a recognized format: {plan_data}")
                 return []
-            plan_str = json_match.group(0)
-            plan = json.loads(plan_str)
+
 
             # Emit plan generation event
             event_payload = {'event_type': 'plan_generated', 'goal': goal, 'plan': plan}
@@ -125,7 +146,8 @@ Now, generate the plan for the given goal.
         step_results = {}
         for i, step in enumerate(plan):
             step_number = i + 1
-            specialist_name = step.get("specialist_agent")
+            # Be flexible with the key used for the agent name
+            specialist_name = step.get("specialist_agent") or step.get("agent")
             task_details_template = step.get("task_details", {})
 
             print(f"\n--- Executing Step {step_number}/{len(plan)}: Using {specialist_name} ---")
@@ -160,7 +182,7 @@ Now, generate the plan for the given goal.
                 else:
                     specialist_instance = specialist_class()
 
-                result_dict = await specialist_instance.execute_task(task_details)
+                result_dict = await specialist_instance.execute_task(task_details or {})
 
                 # Emit agent result event
                 result_payload = {'event_type': 'agent_result', 'agent_name': specialist_name, 'result': result_dict}
