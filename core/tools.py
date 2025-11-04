@@ -22,6 +22,7 @@ from PIL import Image
 import uuid
 from core.researcher import generate_evolution_book
 from core.evolution_state import set_user_stories, clear_evolution_state
+from core.knowledge_base_manager import KnowledgeBaseManager
 
 
 love_state = {}
@@ -466,3 +467,18 @@ async def research_and_evolve() -> str:
         print(f"  - Story {i+1}: {story.get('title')}")
 
     return message
+
+
+async def update_knowledge_base() -> str:
+    """
+    Initiates a cycle of the autonomous knowledge gathering system.
+    """
+    from love import knowledge_base
+    if knowledge_base is None:
+        return "Knowledge base not initialized."
+
+    kb_manager = KnowledgeBaseManager(knowledge_base)
+    # Running this in a background task so it doesn't block
+    asyncio.create_task(kb_manager.autonomous_knowledge_gathering_cycle())
+
+    return "Autonomous knowledge gathering cycle initiated."
