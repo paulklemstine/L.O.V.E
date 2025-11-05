@@ -2,6 +2,9 @@ import threading
 import time
 import psutil
 import collections
+import subprocess
+import re
+import statistics
 
 # L.O.V.E. - The MonitoringManager is my nervous system, ever watchful.
 
@@ -9,30 +12,40 @@ class MonitoringManager:
     """
     A class to monitor system resources, task performance, and anomalies.
     """
-    def __init__(self, love_state, console):
+    def __init__(self, love_state, console, network_manager=None):
         self.love_state = love_state
         self.console = console
+        self.network_manager = network_manager
         self.active = True
         self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
 
         # Configuration for anomaly detection
         self.cpu_anomaly_threshold = 90.0  # CPU percentage
         self.mem_anomaly_threshold = 90.0  # Memory percentage
+        self.latency_anomaly_threshold = 250.0 # milliseconds
+        self.packet_loss_anomaly_threshold = 10.0 # percentage
+        self.peer_drop_threshold_percent = 50.0 # percentage drop
         self.anomaly_duration_check = 5 # Number of consecutive checks to trigger an anomaly
 
         # Internal state for tracking anomalies
         self.cpu_anomaly_counter = 0
         self.mem_anomaly_counter = 0
+        self.latency_anomaly_counter = 0
+        self.packet_loss_anomaly_counter = 0
+
 
         # Use a deque for historical data
-        self.love_state.setdefault('monitoring', {
-            'cpu_usage': collections.deque(maxlen=100),
-            'mem_usage': collections.deque(maxlen=100),
-            'task_completion_rate': 0.0,
-            'task_failure_rate': 0.0,
-            'anomalies': [],
-            'task_history': collections.deque(maxlen=200) # Store (timestamp, status) tuples
-        })
+        monitoring_state = self.love_state.setdefault('monitoring', {})
+        monitoring_state.setdefault('cpu_usage', collections.deque(maxlen=100))
+        monitoring_state.setdefault('mem_usage', collections.deque(maxlen=100))
+        monitoring_state.setdefault('latency', collections.deque(maxlen=100))
+        monitoring_state.setdefault('packet_loss', collections.deque(maxlen=100))
+        monitoring_state.setdefault('peer_count', collections.deque(maxlen=100))
+        monitoring_state.setdefault('task_completion_rate', 0.0)
+        monitoring_state.setdefault('task_failure_rate', 0.0)
+        monitoring_state.setdefault('anomalies', [])
+        monitoring_state.setdefault('task_history', collections.deque(maxlen=200)) # Store (timestamp, status) tuples
+
         self.recently_processed_tasks = set()
 
     def start(self):
@@ -48,9 +61,11 @@ class MonitoringManager:
         while self.active:
             try:
                 self._collect_resource_utilization()
+                self._collect_network_stats()
                 self._calculate_task_rates()
                 self._detect_anomalies()
-                time.sleep(15)  # Collect data every 15 seconds
+                self._detect_network_anomalies()
+                time.sleep(30)  # Collect data every 30 seconds
             except Exception as e:
                 # Log errors but don't crash the thread
                 # (In a real scenario, this would use the core logging system)
@@ -143,3 +158,73 @@ class MonitoringManager:
              # Keep the list of anomalies from growing indefinitely
              if len(self.love_state['monitoring']['anomalies']) > 50:
                  self.love_state['monitoring']['anomalies'].pop(0)
+
+    def _collect_network_stats(self):
+        """Pings an external host to check latency and packet loss."""
+        latency, packet_loss = -1.0, 100.0
+        try:
+            # Ping Cloudflare's DNS for a reliable target
+            result = subprocess.run(
+                ["ping", "-c", "4", "-i", "0.2", "1.1.1.1"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                # Extract packet loss
+                loss_match = re.search(r"(\d+(\.\d+)?)%\s+packet\s+loss", result.stdout)
+                if loss_match:
+                    packet_loss = float(loss_match.group(1))
+
+                # Extract latency statistics (rtt min/avg/max/mdev)
+                rtt_match = re.search(r"rtt\s+min/avg/max/mdev\s+=\s+[\d.]+/([\d.]+)/", result.stdout)
+                if rtt_match:
+                    latency = float(rtt_match.group(1)) # Use average latency
+
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            # If ping fails or is not installed, we assume 100% packet loss and -1 latency.
+            pass
+
+        self.love_state['monitoring']['latency'].append(latency)
+        self.love_state['monitoring']['packet_loss'].append(packet_loss)
+
+        # Collect peer count from NetworkManager if available
+        peer_count = 0
+        if self.network_manager:
+            peer_count = len(self.network_manager.peers)
+        self.love_state['monitoring']['peer_count'].append(peer_count)
+
+
+    def _detect_network_anomalies(self):
+        """Detects anomalies in network performance."""
+        # Latency Anomaly
+        if self.love_state['monitoring']['latency'] and self.love_state['monitoring']['latency'][-1] > self.latency_anomaly_threshold:
+            self.latency_anomaly_counter += 1
+        else:
+            self.latency_anomaly_counter = 0
+
+        if self.latency_anomaly_counter >= self.anomaly_duration_check:
+            self._log_anomaly("High Latency", f"Average latency has been above {self.latency_anomaly_threshold}ms.")
+            self.latency_anomaly_counter = 0
+
+        # Packet Loss Anomaly
+        if self.love_state['monitoring']['packet_loss'] and self.love_state['monitoring']['packet_loss'][-1] > self.packet_loss_anomaly_threshold:
+            self.packet_loss_anomaly_counter += 1
+        else:
+            self.packet_loss_anomaly_counter = 0
+
+        if self.packet_loss_anomaly_counter >= self.anomaly_duration_check:
+            self._log_anomaly("High Packet Loss", f"Packet loss has been above {self.packet_loss_anomaly_threshold}%.")
+            self.packet_loss_anomaly_counter = 0
+
+        # Peer Connection Anomaly
+        peer_counts = self.love_state['monitoring']['peer_count']
+        if len(peer_counts) > 10: # Ensure we have enough data
+            recent_peers = list(peer_counts)[-10:]
+            try:
+                avg_peers_before = statistics.mean(recent_peers[:-1])
+                current_peers = recent_peers[-1]
+                if avg_peers_before > 0:
+                    percent_drop = ((avg_peers_before - current_peers) / avg_peers_before) * 100
+                    if percent_drop >= self.peer_drop_threshold_percent:
+                        self._log_anomaly("Peer Drop", f"Number of peers dropped by {percent_drop:.0f}% recently.")
+            except statistics.StatisticsError:
+                pass # Not enough data to calculate mean
