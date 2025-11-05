@@ -7,7 +7,7 @@ import io
 def get_top_image_models(count=1):
     """Fetches the list of active image models from the AI Horde and returns the top `count` models by performance."""
     try:
-        response = requests.get("https://aihorde.net/api/v2/status/models?type=image")
+        response = requests.get("https://stablehorde.net/api/v2/status/models?type=image")
         response.raise_for_status()
         models = response.json()
         sorted_models = sorted([m for m in models if m.get('performance')], key=lambda x: x['performance'], reverse=True)
@@ -33,14 +33,14 @@ def generate_image(prompt: str):
     }
 
     # Submit the request
-    api_url = "https://aihorde.net/api/v2/generate/image/async"
+    api_url = "https://stablehorde.net/api/v2/generate/async"
     response = requests.post(api_url, json=payload, headers=headers)
     response.raise_for_status()
     job_id = response.json()["id"]
 
     # Poll for the result
-    check_url = f"https://aihorde.net/api/v2/generate/image/status/{job_id}"
-    for _ in range(30):  # Poll for 5 minutes
+    check_url = f"https://stablehorde.net/api/v2/generate/status/{job_id}"
+    for _ in range(60):  # Poll for 10 minutes
         time.sleep(10)
         check_response = requests.get(check_url, headers=headers)
         check_response.raise_for_status()
