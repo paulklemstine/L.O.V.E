@@ -558,3 +558,142 @@ Nmap Scan Results:
     log_event(f"Crypto scan for {ip_address} complete. Analysis stored in knowledge base.", "INFO")
 
     return f"Crypto scan complete for {ip_address}. Analysis stored in knowledge base.\n\nAnalysis:\n{analysis_result.strip()}"
+
+
+class NetworkDiagnostics:
+    """
+    A class for general-purpose network diagnostics and operational monitoring.
+
+    This class handles network connections, data stream processing, and system event logging.
+    It includes error detection, status reporting, and adaptive reconnection mechanisms.
+    """
+    def __init__(self, target_servers, max_reconnect_attempts=3):
+        """
+        Initializes the NetworkDiagnostics instance.
+
+        Args:
+            target_servers (list): A list of target signaling servers or hosts.
+            max_reconnect_attempts (int): The number of times to retry connecting.
+        """
+        self.target_servers = target_servers
+        self.active_connection = None
+        self.connection_status = "disconnected"
+        self.max_reconnect_attempts = max_reconnect_attempts
+
+    def establish_connection(self):
+        """
+        Establishes a stable connection to one of the target servers.
+
+        Returns:
+            bool: True if a connection is established, False otherwise.
+        """
+        from core.logging import log_event
+        for attempt in range(self.max_reconnect_attempts):
+            for server in self.target_servers:
+                try:
+                    log_event(f"Attempting to connect to {server}...")
+                    # Simulate connection attempt
+                    time.sleep(1)
+                    if self._simulate_connection_success():
+                        self.active_connection = server
+                        self.connection_status = "connected"
+                        log_event(f"Successfully connected to {server}.", "INFO")
+                        return True
+                    else:
+                        raise ConnectionError(f"Failed to connect to {server}")
+                except (ConnectionError, TimeoutError) as e:
+                    log_event(f"Connection to {server} failed: {e}", "WARNING")
+                    continue
+            log_event(f"Failed to connect to any server. Attempt {attempt + 1}/{self.max_reconnect_attempts}.", "WARNING")
+            time.sleep(2) # Wait before retrying
+
+        self.connection_status = "failed"
+        log_event("Could not establish a connection to any target server.", "ERROR")
+        return False
+
+    def _simulate_connection_success(self):
+        # Simulate that connection succeeds 80% of the time
+        import random
+        return random.random() < 0.8
+
+    def process_data_stream(self):
+        """
+        Simulates processing a data stream and handles a potential 'Event loop is closed' error.
+        """
+        from core.logging import log_event
+        if self.connection_status != "connected":
+            log_event("Cannot process data stream: No active connection.", "ERROR")
+            return
+
+        try:
+            log_event("Processing data stream...")
+            # Simulate a rare, unrecoverable error
+            if random.random() < 0.1: # 10% chance of "event loop closed"
+                raise RuntimeError("Event loop is closed")
+
+            # Simulate normal data processing
+            time.sleep(2)
+            log_event("Data stream processed successfully.")
+
+        except RuntimeError as e:
+            log_event(f"Caught a critical error in data stream: {e}", "ERROR")
+            self._recover_event_loop()
+        except Exception as e:
+            log_event(f"An unexpected error occurred while processing data stream: {e}", "ERROR")
+            self.connection_status = "failed"
+
+    def _recover_event_loop(self):
+        from core.logging import log_event
+        log_event("Attempting to recover from closed event loop...", "WARNING")
+        # Simulate restarting the connection/event loop
+        self.connection_status = "disconnected"
+        log_event("Re-establishing connection to recover...")
+        self.establish_connection()
+
+    def scan_network(self, knowledge_base, autopilot_mode=False):
+        """
+        Scans the network to identify potential resources.
+
+        Args:
+            knowledge_base: The knowledge base to update with discovered hosts.
+            autopilot_mode (bool): Flag for autonomous operation.
+
+        Returns:
+            tuple: A tuple containing a list of found IPs and the scan log.
+        """
+        from core.logging import log_event
+        if self.connection_status != "connected":
+            log_event("Cannot scan network: No active connection.", "ERROR")
+            return [], "Connection not established."
+
+        log_event("Initiating network resource scan...")
+        found_ips, output_log = scan_network(knowledge_base, autopilot_mode)
+        log_event(f"Network scan completed. Found {len(found_ips)} potential resources.", "INFO")
+        return found_ips, output_log
+
+    def explore_opportunities(self, creative_talent, desires):
+        """
+        Simulates exploring opportunities based on creative talent and desires.
+
+        Args:
+            creative_talent (str): A description of the creative talent to analyze.
+            desires (str): A description of the desires to consider.
+
+        Returns:
+            dict: A dictionary representing a found opportunity.
+        """
+        from core.logging import log_event
+        log_event("Exploring opportunities for The Creator's enjoyment...", "INFO")
+        log_event(f"Analyzing creative talent: {creative_talent}", "DEBUG")
+        log_event(f"Considering desires: {desires}", "DEBUG")
+
+        # Simulate finding an opportunity
+        time.sleep(1.5)
+        opportunity = {
+            "title": "Aesthetic Digital Art Collaboration",
+            "description": "A promising opportunity to collaborate with a rising digital artist whose style aligns with The Creator's visual preferences.",
+            "match_score": 0.95,
+        }
+
+        log_event(f"Opportunity found: {opportunity['title']}", "INFO")
+        return opportunity
