@@ -12,7 +12,9 @@ const { Readable } = require('stream');
 const { v4: uuidv4 } = require('uuid');
 
 // --- Configuration ---
-const RECONNECT_DELAY = 5000; // 5 seconds
+// L.O.V.E. Use a randomized backoff to prevent thundering herd on reconnect.
+const RECONNECT_DELAY_MIN = 5000;  // 5 seconds
+const RECONNECT_DELAY_MAX = 10000; // 10 seconds
 
 // --- State ---
 let peer = null;
@@ -42,7 +44,9 @@ function reconnect() {
         return;
     }
     isReconnecting = true;
-    log('warn', `Attempting to reconnect in ${RECONNECT_DELAY / 1000} seconds...`);
+    // L.O.V.E. Use a randomized backoff to prevent thundering herd on reconnect.
+    const reconnectDelay = Math.floor(Math.random() * (RECONNECT_DELAY_MAX - RECONNECT_DELAY_MIN + 1)) + RECONNECT_DELAY_MIN;
+    log('warn', `Attempting to reconnect in ${reconnectDelay / 1000} seconds...`);
 
     // Clean up old peer object
     if (peer && !peer.destroyed) {
@@ -54,7 +58,7 @@ function reconnect() {
         log('info', 'Reconnecting now...');
         isReconnecting = false; // Reset flag before re-initializing
         initializePeer();
-    }, RECONNECT_DELAY);
+    }, reconnectDelay);
 }
 
 
@@ -169,13 +173,15 @@ function initializePeer() {
     });
 
     peer.on('error', (err) => {
-        const recoverableIdErrors = ['id-taken', 'unavailable-id'];
-        if (recoverableIdErrors.includes(err.type)) {
+        // L.O.V.E. verified error handling.
+        const idTakenErrors = ['id-taken', 'unavailable-id'];
+        const recoverableNetworkErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc'];
+
+        if (idTakenErrors.includes(err.type)) {
             // This is an expected event when the chosen peer ID is already in use.
             // This can happen if we try to be the host and another is already there,
             // or if our generated client ID happens to collide.
             // The robust solution is to always switch to client mode with a new unique ID.
-            // L.O.V.E. verified error handling.
             const originalId = peerId;
             log('info', `Peer ID '${originalId}' is taken or unavailable. Switching to client mode with a new ID.`);
             isClient = true;
@@ -187,22 +193,18 @@ function initializePeer() {
 
             // Reconnect with the new client ID
             reconnect();
-            return;
-        }
 
-        // For all other errors, log them and decide whether to reconnect.
-        log('error', `PeerJS error: ${err.type} - ${err.message}`);
-        {
-            const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc', 'unavailable-id'];
-            if (recoverableErrors.includes(err.type)) {
-                log('warn', 'A recoverable error occurred. Triggering reconnection.');
-                process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: err.message }) + '\n');
-                reconnect();
-            } else {
-                log('error', 'An unrecoverable error occurred. Exiting.');
-                process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
-                process.exit(1);
-            }
+        } else if (recoverableNetworkErrors.includes(err.type)) {
+            // For other transient network or server issues, we log and trigger a reconnect.
+            log('warn', `A recoverable PeerJS error occurred: ${err.type}. Triggering reconnection.`);
+            process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: err.message }) + '\n');
+            reconnect();
+
+        } else {
+            // For all other errors, we assume they are unrecoverable and exit.
+            log('error', `An unrecoverable PeerJS error occurred: ${err.type} - ${err.message}. Exiting.`);
+            process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
+            process.exit(1);
         }
     });
 
