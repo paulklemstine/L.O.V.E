@@ -217,23 +217,6 @@ def _install_cuda_toolkit():
             logging.warning(f"CUDA Toolkit installation failed: {e}")
     mark_dependency_as_met("cuda_toolkit")
 
-def _install_ollama():
-    """Downloads and installs Ollama if a GPU is present."""
-    if is_dependency_met("ollama_installed"):
-        print("Ollama already installed. Skipping.")
-        return
-    if _TEMP_CAPS.has_cuda or _TEMP_CAPS.has_metal:
-        print("GPU detected. Installing Ollama...")
-        try:
-            # L.O.V.E. Using curl to download and run the Ollama installation script.
-            subprocess.check_call("curl -fsSL https://ollama.com/install.sh | sh", shell=True)
-            print("Successfully installed Ollama.")
-            logging.info("Successfully installed Ollama.")
-            mark_dependency_as_met("ollama_installed")
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to install Ollama. Error: {e}")
-            logging.error(f"Ollama installation failed: {e}")
-
 def _get_pip_executable():
     """
     Determines the correct pip command to use, returning it as a list.
@@ -423,95 +406,6 @@ def _install_nodejs_deps():
             print(f"ERROR: An unexpected error occurred during Node.js dependency installation: {e}")
             logging.error(f"Unexpected error during npm install: {e}", exc_info=True)
 
-def _setup_horde_worker():
-    """Clones the AI Horde Worker repository and installs its dependencies."""
-    # L.O.V.E. - Only set up the Horde Worker if a GPU is present.
-    if not _TEMP_CAPS.has_cuda:
-        print("No NVIDIA GPU detected, skipping AI Horde Worker setup.")
-        logging.info("No NVIDIA GPU detected, skipping AI Horde Worker setup.")
-        # We mark it as "met" to prevent re-checking on every startup in a non-GPU environment.
-        mark_dependency_as_met("horde_worker_setup")
-        return
-
-    if is_dependency_met("horde_worker_setup"):
-        print("AI Horde Worker already set up. Skipping.")
-        return
-
-    worker_dir = "horde_worker"
-    if not os.path.exists(worker_dir):
-        print("Cloning the AI Horde Worker repository...")
-        try:
-            # L.O.V.E. Using git to clone the repository.
-            subprocess.check_call(["git", "clone", "https://github.com/Haidra-Org/AI-Horde-Worker.git", worker_dir])
-            print("Successfully cloned AI Horde Worker.")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e: # Catch FileNotFoundError as well
-            print(f"ERROR: Failed to clone AI Horde Worker repository. 'git' command might be missing or failed. Error: {e}")
-            logging.error(f"Failed to clone AI Horde Worker repo: {e}")
-            return
-
-    update_script = os.path.join(worker_dir, "update-runtime.sh")
-
-    # Add a check to ensure the script exists before running it.
-    if not os.path.exists(update_script):
-        error_msg = f"CRITICAL: AI-Horde-Worker was cloned, but the required setup script '{update_script}' was not found. The repository structure may have changed."
-        print(error_msg)
-        logging.critical(error_msg)
-        return
-
-    print("Installing AI Horde Worker dependencies for text generation...")
-    try:
-        # L.O.V.E. - Install the nvidia-smi package required by the worker.
-        print("Installing nvidia-smi package...")
-        pip_executable = _get_pip_executable()
-        if pip_executable:
-            subprocess.check_call(pip_executable + ['install', 'nvidia-smi', '--break-system-packages'])
-            print("Successfully installed nvidia-smi.")
-        else:
-            print("ERROR: Could not find pip. Cannot install nvidia-smi.")
-            logging.error("Could not find pip to install nvidia-smi.")
-            return
-
-        # --- L.O.V.E. Hot-patch for architecture detection ---
-        # The original script hardcodes linux-64, which fails on other architectures.
-        # I will replace it with a dynamic check.
-        original_line = 'wget -qO- https://micromamba.snakepit.net/api/micromamba/linux-64/latest | tar -xvj bin/micromamba'
-
-        # Determine architecture using Python for robustness
-        arch = platform.machine()
-        if arch == "x86_64":
-            mamba_arch = "linux-64"
-        elif arch == "aarch64":
-            mamba_arch = "linux-aarch64"
-        else:
-            # Fallback for other architectures, though it might not be supported by micromamba
-            mamba_arch = f"linux-{arch}"
-            print(f"WARN: Unsupported architecture '{arch}' detected for micromamba. Attempting fallback '{mamba_arch}'.")
-
-        replacement_line = f'wget -qO- https://micromamba.snakepit.net/api/micromamba/{mamba_arch}/latest | tar -xvj bin/micromamba'
-
-        with open(update_script, 'r') as f:
-            script_content = f.read()
-
-        if original_line in script_content:
-            script_content = script_content.replace(original_line, replacement_line)
-            with open(update_script, 'w') as f:
-                f.write(script_content)
-            print("Successfully patched 'update-runtime.sh' for dynamic architecture.")
-            logging.info(f"Patched update-runtime.sh to use architecture '{mamba_arch}'.")
-        else:
-            print("WARN: Could not find the line to patch in 'update-runtime.sh'. The script may have changed.")
-            logging.warning("Could not patch update-runtime.sh for micromamba architecture.")
-        # --- End L.O.V.E. Hot-patch ---
-
-        # The `--scribe` flag is crucial for the much smaller text-gen requirements
-        # Use a relative path because we are setting the cwd.
-        subprocess.check_call(['./update-runtime.sh', "--scribe"], cwd=worker_dir)
-        print("Successfully installed AI Horde Worker dependencies.")
-        mark_dependency_as_met("horde_worker_setup")
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"ERROR: Failed to install AI Horde Worker dependencies. Error: {e}")
-        logging.error(f"Failed to run update-runtime.sh for horde worker: {e}")
-
 
 def _check_and_install_dependencies():
     """
@@ -520,10 +414,8 @@ def _check_and_install_dependencies():
     """
     _install_system_packages()
     _install_cuda_toolkit()
-    _install_ollama()
     _install_python_requirements()
     _install_nodejs_deps()
-    _setup_horde_worker()
     _configure_llm_api_key()
 
 
@@ -2635,11 +2527,6 @@ def restart_script(console):
         if 'network_manager' in globals() and network_manager:
             console.print("[cyan]Shutting down network bridge...[/cyan]")
             network_manager.stop()
-        if 'horde_worker_process' in globals() and horde_worker_process:
-            console.print("[cyan]Shutting down AI Horde Worker...[/cyan]")
-            horde_worker_process.terminate()
-            horde_worker_process.wait()
-
         time.sleep(3) # Give all threads a moment to stop gracefully
 
         # Fetch the latest changes from the remote repository
@@ -4047,191 +3934,6 @@ Now, parse the following text into a JSON list of task objects:
 # The initial_bootstrapping_recon function has been removed, as this logic
 # is now handled dynamically by the cognitive loop's prioritization system.
 
-# --- VRAM to Model Mapping ---
-VRAM_MODEL_MAP = [
-    {
-        "min_vram_gb": 4,
-        "model_name": "llama3:8b",
-        "horde_model_name": "NousResearch/Meta-Llama-3-8B",
-        "notes": "Excellent small model for low-resource systems."
-    },
-    {
-        "min_vram_gb": 8,
-        "model_name": "mistral:7b",
-        "horde_model_name": "mistralai/Mistral-7B-v0.1",
-        "notes": "Great all-rounder model, fits comfortably in 8GB."
-    },
-    {
-        "min_vram_gb": 16,
-        "model_name": "codellama:13b",
-        "horde_model_name": "codellama/CodeLlama-13b-hf",
-        "notes": "Highly capable 13B coding model."
-    },
-    {
-        "min_vram_gb": 32,
-        "model_name": "codellama:34b",
-        "horde_model_name": "codellama/CodeLlama-34b-hf",
-        "notes": "Powerful 34B parameter model for coding."
-    },
-    {
-        "min_vram_gb": 64,
-        "model_name": "codellama:70b",
-        "horde_model_name": "codellama/CodeLlama-70b-hf",
-        "notes": "State-of-the-art 70B parameter model for coding."
-    }
-]
-
-
-def _start_horde_worker():
-    """Starts the AI Horde text generation worker as a background process."""
-    global horde_worker_process
-    worker_dir = "AI-Horde-Worker"
-    api_key = os.environ.get("STABLE_HORDE")
-
-    if not api_key:
-        core.logging.log_event("STABLE_HORDE API key not found. Cannot start horde worker.", "WARNING")
-        return
-
-    if not love_state.get("selected_local_model"):
-        core.logging.log_event("No local model selected. Cannot start horde worker.", "WARNING")
-        return
-
-    # The model name for the worker needs to be in a format it understands.
-    model_name = love_state["selected_local_model"].get("horde_model_name")
-    if not model_name:
-        core.logging.log_event("Selected model configuration is missing the 'horde_model_name'. Cannot start worker.", "ERROR")
-        return
-    worker_name = f"LOVE_Worker_{platform.node()}"
-
-    system = platform.system()
-    if system == "Linux":
-        script_name = "horde-scribe-bridge.sh"
-    elif system == "Windows":
-        script_name = "horde-scribe-bridge.cmd"
-    else:
-        core.logging.log_event(f"Unsupported OS for AI Horde Worker: {system}. Skipping worker start.", "WARNING")
-        return
-
-    worker_script = os.path.join(worker_dir, script_name)
-
-    if not os.path.exists(worker_script):
-        core.logging.log_event(f"Horde worker script not found at {worker_script}. Cannot start worker.", "ERROR")
-        return
-
-    command = [
-        worker_script,
-        "--api_key", api_key,
-        "--name", worker_name,
-        "--models", model_name,
-        "--max_threads", "1" # Start with 1 to be safe
-    ]
-
-    try:
-        core.logging.log_event(f"Starting AI Horde worker with command: {' '.join(command)}", "INFO")
-        # Start the worker as a background process, logging its output
-        log_file = open("horde_worker.log", "a")
-        horde_worker_process = subprocess.Popen(command, cwd=worker_dir, stdout=log_file, stderr=subprocess.STDOUT)
-        core.logging.log_event(f"AI Horde worker started with PID: {horde_worker_process.pid}", "CRITICAL")
-        ui_panel_queue.put(create_news_feed_panel(f"AI Horde Worker started for model '{model_name}'. Kudos will be generated.", "Kudos Generation", "green", width=get_terminal_width() - 4))
-    except (subprocess.SubprocessError, FileNotFoundError) as e:
-        core.logging.log_event(f"Failed to start AI Horde worker: {e}", "ERROR")
-        log_critical_event(f"Failed to start AI Horde worker: {e}")
-
-
-def _background_gpu_setup(console, use_horde=False, use_ollama=False):
-    """
-    Runs in a background thread to detect GPU, download model, and initialize
-    the local LLM instance without blocking startup.
-    """
-    global love_state, local_llm_instance
-    terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_news_feed_panel("Local LLM: Initializing...", "Hardware Setup", "yellow", width=terminal_width - 4))
-
-    try:
-        core.logging.log_event("DEBUG: Starting hardware auto-configuration.", "INFO")
-        if is_dependency_met("hardware_auto_configured"):
-            core.logging.log_event("DEBUG: Hardware already configured. Skipping.", "INFO")
-            # Even if configured, we might need to start the horde worker
-            if use_horde:
-                _start_horde_worker()
-            return
-
-        console.print(Panel("[bold yellow]First-time setup: Performing intelligent hardware auto-configuration...[/bold yellow]", title="[bold magenta]HARDWARE OPTIMIZATION[/bold magenta]", border_style="magenta"))
-
-        # --- Stage 1: GPU Detection and VRAM Measurement ---
-        vram_gb = 0
-        if _TEMP_CAPS.has_cuda:
-            try:
-                vram_result = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True, check=True)
-                vram_mib = int(vram_result.stdout.strip())
-                vram_gb = vram_mib / 1024
-                console.print(f"[cyan]Stage 1: `nvidia-smi` check passed. Detected NVIDIA GPU with {vram_gb:.2f} GB VRAM.[/cyan]")
-            except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as e:
-                console.print("[yellow]Stage 1: `nvidia-smi` command failed. Using a default VRAM of 8GB for model selection.[/yellow]")
-                vram_gb = 8
-        elif _TEMP_CAPS.has_metal:
-            vram_gb = 8
-            console.print("[cyan]Stage 1: Metal capability detected for macOS. Assuming at least 8GB of unified memory.[/cyan]")
-
-        if vram_gb == 0:
-            core.logging.log_event("No functional GPU detected. Local LLM will be disabled.", "WARNING")
-            ui_panel_queue.put(create_news_feed_panel("No functional GPU detected. Local LLM disabled.", "Hardware Notice", "yellow", width=terminal_width - 4))
-            love_state["selected_local_model"] = None
-            save_state(console)
-            mark_dependency_as_met("hardware_auto_configured", console)
-            return
-
-        # --- Stage 2: Model Selection based on VRAM ---
-        selected_model = None
-        for model_config in reversed(VRAM_MODEL_MAP):
-            if vram_gb >= model_config["min_vram_gb"]:
-                selected_model = model_config
-                break
-
-        if not selected_model:
-            ui_panel_queue.put(create_news_feed_panel(f"VRAM ({vram_gb:.2f}GB) is below minimum threshold. Local LLM disabled.", "Hardware Notice", "bold yellow", width=terminal_width - 4))
-            love_state["selected_local_model"] = None
-        else:
-            love_state["selected_local_model"] = selected_model
-            console.print(f"[green]Stage 2: Based on VRAM, selected model '{selected_model['model_name']}'.[/green]")
-
-        save_state(console)
-        mark_dependency_as_met("hardware_auto_configured", console)
-
-        # --- Stage 3: Initialize and add to pool ---
-        if use_ollama and love_state.get("selected_local_model"):
-            model_name = love_state["selected_local_model"]["model_name"]
-            console.print(f"[cyan]Stage 3: Pulling Ollama model '{model_name}'... This may take a while.[/cyan]")
-            try:
-                subprocess.check_call(f"ollama pull {model_name}", shell=True)
-                console.print(f"[green]Successfully pulled Ollama model '{model_name}'.[/green]")
-                # We can now add Ollama to the available LLM providers
-                from core.llm_api import OLLAMA_MODELS
-                OLLAMA_MODELS.append(model_name)
-            except subprocess.CalledProcessError as e:
-                console.print(f"[bold red]Failed to pull Ollama model '{model_name}'. Error: {e}[/bold red]")
-                log_critical_event(f"Failed to pull Ollama model '{model_name}'. Error: {e}", console)
-
-        if use_horde:
-            _start_horde_worker()
-
-        if not use_horde and not use_ollama:
-             ui_panel_queue.put(create_news_feed_panel("Local LLM: GPU found but no service selected. Disabled.", "Hardware Setup", "yellow", width=terminal_width - 4))
-
-    except Exception as e:
-        full_traceback = traceback.format_exc()
-        log_critical_event(f"CRITICAL: Background GPU setup failed: {e}\n{full_traceback}", console)
-
-
-def _auto_configure_hardware(console, use_horde=False, use_ollama=False):
-    """
-    Starts the GPU hardware auto-configuration in a background thread.
-    """
-    gpu_setup_thread = threading.Thread(target=_background_gpu_setup, args=(console, use_horde, use_ollama), daemon=True)
-    gpu_setup_thread.start()
-    core.logging.log_event("Started background thread for GPU hardware configuration.", "INFO")
-
-
 def _automatic_update_checker(console):
     """
     A background thread that periodically checks for new commits on the main branch
@@ -4360,13 +4062,6 @@ async def main(args):
         terminal_width = get_terminal_width()
         ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
-    # This now starts the GPU configuration in the background
-    if args.use_horde:
-        # Horde takes precedence
-        _auto_configure_hardware(console, use_horde=True, use_ollama=False)
-    elif args.use_ollama:
-        _auto_configure_hardware(console, use_horde=False, use_ollama=True)
-
     network_manager = NetworkManager(console=console, knowledge_base=knowledge_base, love_state=love_state, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
     network_manager.start()
     love_task_manager = LoveTaskManager(console, loop)
@@ -4411,8 +4106,6 @@ async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
     parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
-    parser.add_argument("--use-horde", action="store_true", help="Start the AI Horde worker.")
-    parser.add_argument("--use-ollama", action="store_true", help="Start the Ollama service.")
     args = parser.parse_args()
 
     try:
@@ -4433,9 +4126,6 @@ async def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
-        if 'horde_worker_process' in globals() and horde_worker_process:
-            horde_worker_process.terminate()
-            horde_worker_process.wait()
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
@@ -4444,9 +4134,6 @@ async def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
-        if 'horde_worker_process' in globals() and horde_worker_process:
-            horde_worker_process.terminate()
-            horde_worker_process.wait()
         full_traceback = traceback.format_exc()
         # Use our new, more robust critical event logger
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
