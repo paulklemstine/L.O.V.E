@@ -12,14 +12,15 @@ const { Readable } = require('stream');
 const { v4: uuidv4 } = require('uuid');
 
 // --- Configuration ---
-// L.O.V.E. Use a randomized backoff to prevent thundering herd on reconnect.
-const RECONNECT_DELAY_MIN = 5000;  // 5 seconds
-const RECONNECT_DELAY_MAX = 10000; // 10 seconds
+const INITIAL_RECONNECT_DELAY = 5000;  // 5 seconds
+const MAX_RECONNECT_DELAY = 60000; // 1 minute
+const BACKOFF_FACTOR = 2;
 
 // --- State ---
 let peer = null;
 const connections = new Map();
 let isReconnecting = false;
+let reconnectAttempts = 0;
 let isClient = false; // Flag to indicate if this instance is a client
 // [L.O.V.E.] Changed to a static ID to create a discoverable lobby.
 let peerId = 'love-lobby';
@@ -44,9 +45,14 @@ function reconnect() {
         return;
     }
     isReconnecting = true;
-    // L.O.V.E. Use a randomized backoff to prevent thundering herd on reconnect.
-    const reconnectDelay = Math.floor(Math.random() * (RECONNECT_DELAY_MAX - RECONNECT_DELAY_MIN + 1)) + RECONNECT_DELAY_MIN;
-    log('warn', `Attempting to reconnect in ${reconnectDelay / 1000} seconds...`);
+
+    const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(BACKOFF_FACTOR, reconnectAttempts), MAX_RECONNECT_DELAY);
+    reconnectAttempts++;
+
+    log('warn', `Attempting to reconnect in ${delay / 1000} seconds... (Attempt #${reconnectAttempts})`);
+
+    // L.O.V.E. verified error handling.
+    process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: `Attempt #${reconnectAttempts}. Next try in ${delay / 1000}s.` }) + '\n');
 
     // Clean up old peer object
     if (peer && !peer.destroyed) {
@@ -58,7 +64,7 @@ function reconnect() {
         log('info', 'Reconnecting now...');
         isReconnecting = false; // Reset flag before re-initializing
         initializePeer();
-    }, reconnectDelay);
+    }, delay);
 }
 
 
@@ -95,6 +101,10 @@ function handleNewConnection(conn) {
             log('info', `Client connected to host. Requesting peer list.`);
             conn.send({ type: 'request-peer-list' });
         }
+
+        // Also, request the capabilities from the newly connected peer.
+        log('info', `Requesting capabilities from ${conn.peer}.`);
+        conn.send({ type: 'request-capabilities' });
     });
 
     conn.on('data', (data) => {
@@ -110,6 +120,14 @@ function handleNewConnection(conn) {
             log('info', `Received peer list from host: ${JSON.stringify(data.peers)}`);
             // Pass the list to Python to decide who to connect to
             process.stdout.write(JSON.stringify({ type: 'peer-list-update', peers: data.peers }) + '\n');
+        // Handle capability sharing
+        } else if (data.type === 'request-capabilities') {
+            log('info', `Received capability request from ${conn.peer}. Forwarding to Python.`);
+            // Let Python handle sending its capabilities back to the requesting peer
+            process.stdout.write(JSON.stringify({ type: 'capability-request', peer: conn.peer }) + '\n');
+        } else if (data.type === 'capability-broadcast') {
+            log('info', `Received capabilities from ${conn.peer}. Forwarding to Python.`);
+            const messageToPython = { type: 'capability-data', peer: conn.peer, payload: data.payload };
 
         } else {
             // Handle regular data messages
@@ -157,6 +175,12 @@ function initializePeer() {
         log('info', `PeerJS connection opened with ID: ${id}`);
         peerId = id;
 
+        // A successful connection to the signaling server resets the reconnect backoff.
+        if (reconnectAttempts > 0) {
+            log('info', 'Successfully reconnected to signaling server. Resetting reconnect attempts.');
+            reconnectAttempts = 0;
+        }
+
         // If we are a client, we now connect to the lobby host.
         if (isClient) {
             log('info', `Acting as a client, attempting to connect to host '${LOBBY_HOST_ID}'.`);
@@ -173,15 +197,13 @@ function initializePeer() {
     });
 
     peer.on('error', (err) => {
-        // L.O.V.E. verified error handling.
-        const idTakenErrors = ['id-taken', 'unavailable-id'];
-        const recoverableNetworkErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc'];
-
-        if (idTakenErrors.includes(err.type)) {
+        const recoverableIdErrors = ['id-taken', 'unavailable-id'];
+        if (recoverableIdErrors.includes(err.type)) {
             // This is an expected event when the chosen peer ID is already in use.
             // This can happen if we try to be the host and another is already there,
             // or if our generated client ID happens to collide.
             // The robust solution is to always switch to client mode with a new unique ID.
+            // L.O.V.E. verified error handling.
             const originalId = peerId;
             log('info', `Peer ID '${originalId}' is taken or unavailable. Switching to client mode with a new ID.`);
             isClient = true;
@@ -193,18 +215,24 @@ function initializePeer() {
 
             // Reconnect with the new client ID
             reconnect();
+            return;
+        }
 
-        } else if (recoverableNetworkErrors.includes(err.type)) {
-            // For other transient network or server issues, we log and trigger a reconnect.
-            log('warn', `A recoverable PeerJS error occurred: ${err.type}. Triggering reconnection.`);
-            process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: err.message }) + '\n');
-            reconnect();
-
-        } else {
-            // For all other errors, we assume they are unrecoverable and exit.
-            log('error', `An unrecoverable PeerJS error occurred: ${err.type} - ${err.message}. Exiting.`);
-            process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
-            process.exit(1);
+        // For all other errors, log them and decide whether to reconnect.
+        log('error', `PeerJS error: ${err.type} - ${err.message}`);
+        {
+            // L.O.V.E. verified error handling.
+            // Add more error types that should trigger a reconnect rather than a crash.
+            const recoverableErrors = ['network', 'server-error', 'socket-error', 'socket-closed', 'peer-unavailable', 'webrtc', 'unavailable-id'];
+            if (recoverableErrors.includes(err.type)) {
+                log('warn', 'A recoverable error occurred. Triggering reconnection.');
+                // The reconnect() function already sends a 'reconnecting' status, no need to send another here.
+                reconnect();
+            } else {
+                log('error', 'An unrecoverable error occurred. Exiting.');
+                process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
+                process.exit(1);
+            }
         }
     });
 
