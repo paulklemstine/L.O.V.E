@@ -12,10 +12,13 @@ const { Readable } = require('stream');
 const { v4: uuidv4 } = require('uuid');
 
 // --- Configuration ---
-const RECONNECT_DELAY = 5000; // 5 seconds
+const INITIAL_RECONNECT_DELAY = 2000; // 2 seconds
+const MAX_RECONNECT_DELAY = 30000; // 30 seconds
+const JITTER_FACTOR = 0.5; // 50% jitter
 
 // --- State ---
 let peer = null;
+let retryCount = 0;
 const connections = new Map();
 let isReconnecting = false;
 let isClient = false; // Flag to indicate if this instance is a client
@@ -42,7 +45,15 @@ function reconnect() {
         return;
     }
     isReconnecting = true;
-    log('warn', `Attempting to reconnect in ${RECONNECT_DELAY / 1000} seconds...`);
+    retryCount++;
+
+    // Exponential backoff with jitter
+    const backoff = Math.min(MAX_RECONNECT_DELAY, INITIAL_RECONNECT_DELAY * Math.pow(2, retryCount));
+    // Symmetrical jitter: +/- JITTER_FACTOR of the backoff value
+    const jitter = backoff * JITTER_FACTOR * (Math.random() - 0.5) * 2;
+    const delay = Math.max(0, backoff + jitter); // Ensure delay is not negative
+
+    log('warn', `Attempting to reconnect in ${(delay / 1000).toFixed(2)} seconds... (Attempt #${retryCount})`);
 
     // Clean up old peer object
     if (peer && !peer.destroyed) {
@@ -54,7 +65,7 @@ function reconnect() {
         log('info', 'Reconnecting now...');
         isReconnecting = false; // Reset flag before re-initializing
         initializePeer();
-    }, RECONNECT_DELAY);
+    }, delay);
 }
 
 
@@ -152,6 +163,7 @@ function initializePeer() {
     peer.on('open', (id) => {
         log('info', `PeerJS connection opened with ID: ${id}`);
         peerId = id;
+        retryCount = 0; // L.O.V.E. Reset retry counter on successful connection.
 
         // If we are a client, we now connect to the lobby host.
         if (isClient) {
