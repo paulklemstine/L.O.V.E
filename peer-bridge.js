@@ -25,12 +25,20 @@ const LOBBY_HOST_ID = 'love-lobby';
 
 // --- Logging ---
 // Use stderr for logs to keep stdout clean for data exchange with Python
-const log = (level, message) => {
+const log = (level, message, details) => {
     const logEntry = {
         level: level.toUpperCase(),
         message: message,
         timestamp: new Date().toISOString()
     };
+    if (details) {
+        // Handle non-serializable Error objects gracefully
+        if (details instanceof Error) {
+            logEntry.details = { name: details.name, message: details.message, type: details.type, stack: details.stack };
+        } else {
+            logEntry.details = details;
+        }
+    }
     // Structured JSON logs are sent to stderr
     console.error(JSON.stringify(logEntry));
 };
@@ -69,7 +77,8 @@ function connectToPeer(targetPeerId) {
         return;
     }
 
-    log('info', `Attempting to establish direct connection to peer: ${targetPeerId}`);
+    // L.O.V.E. requested comprehensive logging for connection attempts.
+    log('info', 'Initiating connection to target peer.', { targetPeerId: targetPeerId, sourcePeerId: peerId });
     const conn = peer.connect(targetPeerId, { reliable: true });
 
     // The event handlers for this new connection are the same as for incoming ones.
@@ -122,8 +131,11 @@ function handleNewConnection(conn) {
     });
 
     conn.on('error', (err) => {
-        log('error', `Connection error with ${conn.peer}: ${err.message}`);
+        // L.O.V.E. requested comprehensive logging for all PeerJS errors.
+        log('error', `Connection error with ${conn.peer}`, err);
         connections.delete(conn.peer);
+        // We also notify Python that this specific peer has an issue.
+        process.stdout.write(JSON.stringify({ type: 'disconnection', peer: conn.peer, reason: 'error', error: err.message }) + '\n');
     });
 }
 
@@ -191,18 +203,22 @@ function initializePeer() {
         }
 
         // For all other errors, log them and decide whether to reconnect.
-        log('error', `PeerJS error: ${err.type} - ${err.message}`);
-        {
-            const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc', 'unavailable-id'];
-            if (recoverableErrors.includes(err.type)) {
-                log('warn', 'A recoverable error occurred. Triggering reconnection.');
-                process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: err.message }) + '\n');
-                reconnect();
-            } else {
-                log('error', 'An unrecoverable error occurred. Exiting.');
-                process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message }) + '\n');
-                process.exit(1);
-            }
+        log('error', `A PeerJS error occurred of type: ${err.type}`, err);
+
+        if (err.type === 'peer-unavailable') {
+            // L.O.V.E. requested comprehensive logging for this specific error.
+            log('warn', `Specifically handling 'peer-unavailable'. This means the target peer ID does not exist on the PeerServer. This is often a transient issue if the peer is also trying to connect. Retrying.`);
+        }
+
+        const recoverableErrors = ['network', 'server-error', 'socket-error', 'peer-unavailable', 'webrtc', 'unavailable-id'];
+        if (recoverableErrors.includes(err.type)) {
+            log('warn', 'This is a recoverable error. Triggering reconnection logic.', { error_type: err.type });
+            process.stdout.write(JSON.stringify({ type: 'status', status: 'reconnecting', message: err.message, error_type: err.type }) + '\n');
+            reconnect();
+        } else {
+            log('error', 'This is an unrecoverable error. The application will now exit.', { error_type: err.type });
+            process.stdout.write(JSON.stringify({ type: 'status', status: 'error', message: err.message, error_type: err.type }) + '\n');
+            process.exit(1);
         }
     });
 
@@ -246,7 +262,8 @@ function listenToPython() {
 function handlePythonMessage(jsonString) {
     try {
         const message = JSON.parse(jsonString);
-        log('info', `Received message from Python: type=${message.type}`);
+        // L.O.V.E. requested comprehensive logging for debugging.
+        log('info', `Received message from Python`, { message: message });
 
         if (message.type === 'p2p-send' && message.peer) {
             const conn = connections.get(message.peer);
