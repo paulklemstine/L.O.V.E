@@ -28,15 +28,19 @@ from datetime import datetime
 
 
 class NetworkManager:
-    def __init__(self, console, is_creator=False, treasure_callback=None, question_callback=None):
+    def __init__(self, console, knowledge_base, love_state, is_creator=False, treasure_callback=None, question_callback=None):
         """
         Initializes the NetworkManager.
         - console: A rich.console.Console object for printing.
+        - knowledge_base: An instance of GraphDataManager.
+        - love_state: The main love_state dictionary.
         - is_creator: A boolean indicating if this is the Creator's instance.
         - treasure_callback: A function to call when treasure is received.
         - question_callback: A function to call when a question is received.
         """
         self.console = console
+        self.knowledge_base = knowledge_base
+        self.love_state = love_state
         self.is_creator = is_creator
         self.treasure_callback = treasure_callback
         self.question_callback = question_callback
@@ -177,6 +181,15 @@ class NetworkManager:
             elif msg_type == "question":
                 if self.question_callback:
                     self.question_callback(message.get("question"))
+            elif msg_type == "capability-request":
+                peer = message.get('peer')
+                self.console.print(Panel(f"Received capability request from [cyan]{peer}[/cyan]. Sending capabilities...", title="[magenta]Network Discovery[/magenta]", border_style="magenta"))
+                self.send_capabilities_to_peer(peer)
+            elif msg_type == "capability-data":
+                peer = message.get('peer')
+                capabilities = message.get('payload', {})
+                self.console.print(Panel(f"Received capabilities from [cyan]{peer}[/cyan]: {capabilities}", title="[magenta]Network Discovery[/magenta]", border_style="magenta"))
+                self.knowledge_base.add_node(peer, 'peer', attributes=capabilities)
 
         except json.JSONDecodeError:
             self.console.print(f"[bright_black]Non-JSON message from bridge: {message_str}[/bright_black]")
@@ -456,6 +469,38 @@ class NetworkManager:
 
             message_str = json.dumps(message_dict)
             asyncio.run_coroutine_threadsafe(self._write_to_stdin(message_str), self.loop)
+
+    def _get_my_capabilities(self):
+        """Constructs a dictionary of this instance's capabilities."""
+        # This can be expanded to include more dynamic information
+        return {
+            "version": self.love_state.get("version_name", "unknown"),
+            "is_creator": self.is_creator,
+            "gpu_type": self.love_state.get("gpu_type", "none"),
+            "last_seen": time.time()
+        }
+
+    def broadcast_capabilities(self):
+        """Broadcasts this instance's capabilities to all connected peers."""
+        self.console.print(Panel("Broadcasting capabilities to all peers...", title="[magenta]Network Discovery[/magenta]", border_style="magenta"))
+        self._send_message({
+            "type": "broadcast",
+            "payload": {
+                "type": "capability-broadcast",
+                "payload": self._get_my_capabilities()
+            }
+        })
+
+    def send_capabilities_to_peer(self, target_peer_id):
+        """Sends this instance's capabilities to a specific peer."""
+        self._send_message({
+            "type": "p2p-send",
+            "peer": target_peer_id,
+            "payload": {
+                "type": "capability-broadcast",
+                "payload": self._get_my_capabilities()
+            }
+        })
 
     def stop(self):
         """Stops the peer bridge process and the handling thread."""
