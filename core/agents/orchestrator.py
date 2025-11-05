@@ -3,6 +3,11 @@ import asyncio
 import re
 from typing import Dict, List
 
+import json
+import asyncio
+import re
+from typing import Dict, List
+
 # Local, dynamic imports for specialist agents
 from core.agents.analyst_agent import AnalystAgent
 from core.agents.code_gen_agent import CodeGenerationAgent
@@ -10,6 +15,7 @@ from core.agents.metacognition_agent import MetacognitionAgent
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
+from core.agents.memory_folding_agent import MemoryFoldingAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
 
 from love import memory_manager
@@ -36,6 +42,7 @@ class Orchestrator:
             "SelfImprovingOptimizer": SelfImprovingOptimizer,
             "TalentAgent": TalentAgent,
             "WebAutomationAgent": WebAutomationAgent,
+            "MemoryFoldingAgent": MemoryFoldingAgent,
         }
         self.memory_manager = memory_manager
         self.metacognition_agent = MetacognitionAgent(self.memory_manager)
@@ -59,6 +66,7 @@ Here are their descriptions:
 - **SelfImprovingOptimizer**: Runs a full self-improvement cycle on the codebase. Expects `task_details` with 'task_type' ('improve_module' or 'run_evolution_cycle') and relevant parameters.
 - **TalentAgent**: Conducts a full talent scouting, analysis, and engagement cycle. Expects detailed parameters like 'keywords', 'platforms', 'min_score', etc.
 - **WebAutomationAgent**: Performs web automation tasks. Expects `task_details` with 'action' ('fetch_url', 'fill_form') and a 'url'.
+- **MemoryFoldingAgent**: Compresses long chains of memories into a structured summary to improve cognitive efficiency. Use this for maintenance tasks like "review and summarize recent activities". Expects `task_details` with an optional 'min_length' key.
 
 The high-level goal is: "{goal}"
 
@@ -68,19 +76,13 @@ You must respond with ONLY a JSON array of steps. Each step must be an object wi
 
 You can pass the result of a previous step to a subsequent step using a placeholder string like `{{{{step_X_result}}}}`, where X is the 1-based index of the step.
 
-Example Goal: "Analyze the system logs, and if there's an inefficiency, generate code to fix it."
+Example Goal: "Review and compress the agent's recent memory."
 Example JSON Response:
 [
   {{
-    "specialist_agent": "AnalystAgent",
+    "specialist_agent": "MemoryFoldingAgent",
     "task_details": {{
-      "logs": []
-    }}
-  }},
-  {{
-    "specialist_agent": "CodeGenerationAgent",
-    "task_details": {{
-      "hypothesis": "{{{{step_1_result}}}}"
+      "min_length": 5
     }}
   }}
 ]
@@ -154,8 +156,8 @@ Now, generate the plan for the given goal.
 
                 specialist_class = self.specialist_registry[specialist_name]
 
-                # Story 3.3: Pass MemoryManager to SelfImprovingOptimizer
-                if specialist_name == "SelfImprovingOptimizer":
+                # Pass MemoryManager to agents that require it
+                if specialist_name in ["SelfImprovingOptimizer", "MemoryFoldingAgent"]:
                     specialist_instance = specialist_class(memory_manager=self.memory_manager)
                 else:
                     specialist_instance = specialist_class()

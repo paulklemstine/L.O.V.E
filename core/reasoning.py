@@ -20,6 +20,25 @@ class ReasoningEngine:
         self.knowledge_base = knowledge_base
         self.console = console if console else Console()
 
+    def _check_for_memory_folding_opportunity(self, threshold: int = 5) -> List[str]:
+        """
+        Checks if there are enough long memory chains to warrant a folding operation.
+        """
+        from core.agents.memory_folding_agent import MemoryFoldingAgent
+        from love import memory_manager
+
+        # We need a temporary instance to use its query logic.
+        # This is a bit of a hack, but it avoids duplicating the query logic.
+        temp_folding_agent = MemoryFoldingAgent(memory_manager)
+
+        # Using min_length=3 as a standard for a "chain"
+        chains = temp_folding_agent._query_memory_chains(min_length=3)
+
+        if len(chains) >= threshold:
+            self.console.print(f"[bold yellow]Reasoning Engine: Found {len(chains)} memory chains. Proposing a memory folding task.[/bold yellow]")
+            return [f"Insight: The agent's memory contains {len(chains)} uncompressed chains, which may impact cognitive efficiency. It is recommended to run the MemoryFoldingAgent."]
+        return []
+
     async def analyze_and_prioritize(self):
         """
         The main entry point for the reasoning engine. It performs a full
@@ -31,33 +50,23 @@ class ReasoningEngine:
         """
         self.console.print("[bold cyan]Reasoning Engine: Analyzing knowledge base for strategic opportunities...[/bold cyan]")
 
-        # In future steps, this method will be expanded to include:
-        # 1. Vulnerability and opportunity identification
-        # 2. Multi-stage exploitation pathfinding
-        # 3. Target prioritization
-
         opportunities = self._identify_opportunities()
-
-        # Story 3.1: Integrate self-reflection
         self_reflection_insights = await self._reason_about_self_reflection()
-
-        # Story 4.2 & 4.3: Integrate narrative alignment check and format for optimizer
         narrative_discrepancies = await self._check_narrative_alignment()
         alignment_insights = [f"Insight: {d}" for d in narrative_discrepancies]
 
-        all_opportunities = opportunities + self_reflection_insights + alignment_insights
+        # Story 1.5: Check for memory folding opportunity
+        memory_folding_opportunity = self._check_for_memory_folding_opportunity()
+
+        all_opportunities = opportunities + self_reflection_insights + alignment_insights + memory_folding_opportunity
 
         if not all_opportunities:
             return ["No immediate strategic opportunities, self-improvement insights, or narrative discrepancies identified. Continuing standard operations."]
 
-        # In the future, this will feed into the pathfinding and prioritization logic.
-        # For now, we will return the raw opportunities.
         self.console.print(f"[bold green]Reasoning Engine: Identified {len(all_opportunities)} potential opportunities, insights, and discrepancies.[/bold green]")
 
         exploitation_paths = self._find_exploitation_paths(all_opportunities)
-
         prioritized_plans = self._prioritize_plans(exploitation_paths)
-
         return prioritized_plans
 
     async def _check_narrative_alignment(self):
