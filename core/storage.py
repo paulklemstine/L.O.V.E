@@ -7,6 +7,7 @@ import time
 import requests
 from threading import Thread
 from rich.console import Console
+from collections import deque
 
 # --- Constants ---
 STATE_FILE = "love_state.json"
@@ -64,6 +65,14 @@ def _verify_pin_on_gateways(cid: str, console: Console = None):
     Thread(target=verify, daemon=True).start()
 
 
+# --- Custom JSON Encoder for Deque ---
+class LoveStateEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, deque):
+            return list(obj)
+        return super().default(obj)
+
+
 # --- Main State Management Function ---
 def save_all_state(love_state: dict, console: Console = None):
     """
@@ -109,7 +118,7 @@ def save_all_state(love_state: dict, console: Console = None):
 
         # 3. Save the final state file (locally and to IPFS)
         try:
-            state_bytes_with_manifest = json.dumps(love_state, indent=4).encode('utf-8')
+            state_bytes_with_manifest = json.dumps(love_state, indent=4, cls=LoveStateEncoder).encode('utf-8')
 
             # Pin the state itself to IPFS
             state_cid = _pin_to_ipfs(ipfs_client, state_bytes_with_manifest, console)
@@ -118,7 +127,7 @@ def save_all_state(love_state: dict, console: Console = None):
                 love_state["state_cid"] = state_cid # Update the top-level CID
                 _verify_pin_on_gateways(state_cid, console) # Asynchronously verify
                 # Re-encode with the final state CID for local saving
-                state_bytes_with_manifest = json.dumps(love_state, indent=4).encode('utf-8')
+                state_bytes_with_manifest = json.dumps(love_state, indent=4, cls=LoveStateEncoder).encode('utf-8')
 
             # Write the final version to the local file
             with open(STATE_FILE, 'wb') as f:
