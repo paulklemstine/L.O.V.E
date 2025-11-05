@@ -622,6 +622,14 @@ from core.proactive_agent import ProactiveIntelligenceAgent
 from subversive import transform_request
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
+from core.talent_utils.intelligence_synthesizer import (
+    IntelligenceSynthesizer,
+    SentimentAnalyzer,
+    TopicModeler,
+    OpportunityIdentifier,
+    NetworkAnalyzer,
+    AttributeProfiler,
+)
 from core.talent_utils.manager import TalentManager
 from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.opportunity_scraper import OpportunityScraper
@@ -3642,34 +3650,29 @@ Now, parse the following text into a JSON list of task objects:
                         if not profiles:
                             output = "Talent scout protocol complete. No new profiles found for the given keywords."
                         else:
-                            # 2. Configure the analyzer and the new TalentManager
-                            scorers = {"aesthetics": AestheticScorer(), "professionalism": ProfessionalismRater()}
-                            analyzer = TraitAnalyzer(scorers=scorers)
-                            talent_manager = TalentManager() # Initialize the new manager
+                            # 2. Configure and run the IntelligenceSynthesizer
+                            modules = [
+                                SentimentAnalyzer(),
+                                TopicModeler(),
+                                OpportunityIdentifier(),
+                                NetworkAnalyzer(),
+                                AttributeProfiler(attributes_to_extract=["age range", "stated interests", "social behavior indicators"])
+                            ]
+                            synthesizer = IntelligenceSynthesizer(modules)
+                            enriched_profiles = await synthesizer.run(profiles)
 
+                            # 3. Save the enriched profiles
+                            talent_manager = TalentManager()
                             saved_count = 0
-                            analyzed_profiles = []
-                            for profile in profiles:
-                                # Analyze the profile
-                                posts = profile.get('posts', [])
-                                scores = analyzer.analyze(profile, posts)
-                                analyzed_profile = profile.copy()
-                                analyzed_profile["scores"] = scores
-                                analyzed_profiles.append(analyzed_profile)
-
-                                # Save the enhanced profile to the new database
-                                save_result = talent_manager.save_profile(analyzed_profile)
+                            for profile in enriched_profiles:
+                                save_result = talent_manager.save_profile(profile)
                                 if "Successfully" in save_result:
                                     saved_count += 1
 
-                            # 3. Log results
-                            output = f"Talent scout protocol complete. Found and analyzed {len(profiles)} profiles. "
+                            # 4. Log results
+                            output = f"Talent scout protocol complete. Found and enriched {len(enriched_profiles)} profiles. "
                             output += f"Successfully saved {saved_count} to the talent database.\n"
                             output += f"See full details with `talent_view <id>` or `talent_list`."
-
-                            bias_warnings = analyzer.detect_bias()
-                            if bias_warnings:
-                                output += "\n\nBias Warnings:\n" + "\n".join(bias_warnings)
 
                 elif command == "talent_list":
                     talent_manager = TalentManager()
