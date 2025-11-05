@@ -4,6 +4,68 @@ import asyncio
 import json
 import subprocess
 from core.logging import log_event
+import requests
+import json
+
+def fetch_and_analyze_address(address):
+    """
+    Fetches all transactions for a given Ethereum address, analyzes them,
+    and returns a summary of interesting findings.
+    """
+    rpc_url = "https://cloudflare-eth.com"
+    headers = {"Content-Type": "application/json"}
+
+    # Erc20 Transfer event signature
+    erc20_transfer_signature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "eth_getLogs",
+        "params": [{
+            "fromBlock": "0x0",
+            "toBlock": "latest",
+            "address": None, # Query all addresses for transfers
+            "topics": [
+                erc20_transfer_signature,
+                None, # from address - any
+                f"0x000000000000000000000000{address[2:]}" # to address - padded
+            ]
+        }],
+        "id": 1
+    }
+
+    try:
+        response = requests.post(rpc_url, headers=headers, data=json.dumps(payload), timeout=30)
+        response.raise_for_status()
+        logs = response.json().get("result", [])
+    except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
+        return {"error": f"Failed to fetch or decode blockchain data: {e}"}
+
+    if not logs:
+        return {"summary": "No ERC20 transfer events found for this address."}
+
+    # --- Basic Analysis ---
+    query = {
+        "mode": "AND",
+        "conditions": []
+    }
+    aggregations = {
+        "total_transfers": {"field": None, "type": "count"},
+        "unique_tokens": {"field": "address", "type": "unique_count"}
+    }
+
+    analysis_result = query_and_filter_data(logs, query, aggregations)
+
+    summary = {
+        "total_erc20_inbound_transfers": analysis_result["metadata"].get("total_transfers"),
+        "unique_tokens_received": analysis_result["metadata"].get("unique_tokens")
+    }
+
+    return {
+        "summary": summary,
+        "raw_data": analysis_result["filtered_data"][:10] # Return first 10 for brevity
+    }
+
 
 def query_and_filter_data(data_collection, query_params, aggregations=None, extract_attributes=None):
     """
