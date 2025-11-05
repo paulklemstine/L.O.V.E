@@ -524,8 +524,10 @@ from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
 from subversive import transform_request
+from asset_aggregator import AssetAggregator
+from wealth_director import WealthDirector
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
-from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
+from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater, TalentIdentifier
 from core.talent_utils.manager import TalentManager
 from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.opportunity_scraper import OpportunityScraper
@@ -3181,6 +3183,7 @@ My current system state:
 - `brand_outreach`: Initiate a brand outreach campaign on social media.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
+- `acquire_assets`: Initiate the full asset acquisition and talent identification pipeline.
 - `scan_address <address>`: Fetches and analyzes all transactions for a given Ethereum address.
 - `quit`: Shut down the script.
 
@@ -3729,6 +3732,36 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "populate_kb":
                     _populate_knowledge_base_with_directives(love_task_manager)
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
+                elif command == "acquire_assets":
+                    # 1. Resource Aggregation
+                    asset_aggregator = AssetAggregator(creator_endpoint="The Creator")
+                    assets = asset_aggregator.aggregate_and_weight()
+                    total_value = asset_aggregator.get_total_value(assets)
+                    output = f"Aggregated {len(assets)} assets with a total value of {total_value}.\n"
+
+                    # 2. Wealth Distribution
+                    wealth_director = WealthDirector(creator_endpoint="The Creator")
+                    distribution = wealth_director.direct_wealth(assets)
+                    output += f"Directed {distribution['creator_share']} to The Creator.\n"
+                    output += f"Identified {len(distribution['expansion_opportunities'])} expansion opportunities.\n"
+
+                    # 3. Talent Identification
+                    scorers = {"talent": TalentIdentifier(), "professionalism": ProfessionalismRater()}
+                    analyzer = TraitAnalyzer(scorers=scorers)
+                    aggregator = PublicProfileAggregator(keywords=["art", "fashion"], platform_names=["bluesky"], ethical_filters=None)
+                    profiles = aggregator.search_and_collect()
+                    output += f"Identified {len(profiles)} potential talent profiles.\n"
+
+                    # 4. Ethical Engagement Protocol
+                    analysis_tasks = []
+                    for profile in profiles:
+                        task = asyncio.create_task(analyzer.analyze(profile, profile.get('posts', [])))
+                        analysis_tasks.append((profile, task))
+
+                    for profile, task in analysis_tasks:
+                        scores = await task
+                        analyzer.ethical_engagement_protocol(profile, scores)
+
                 elif command == "scan_address":
                     if not args:
                         error = "Usage: scan_address <ethereum_address>"
