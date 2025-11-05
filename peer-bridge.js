@@ -111,6 +111,10 @@ function handleNewConnection(conn) {
             // Pass the list to Python to decide who to connect to
             process.stdout.write(JSON.stringify({ type: 'peer-list-update', peers: data.peers }) + '\n');
 
+        } else if (data.type === 'public-key') {
+            log('info', `Received public key from ${conn.peer}`);
+            const messageToPython = { type: 'public-key', peer: conn.peer, key: data.key };
+            process.stdout.write(JSON.stringify(messageToPython) + '\n');
         } else {
             // Handle regular data messages
             log('info', `Received data from ${conn.peer}`);

@@ -11,7 +11,12 @@ import ipaddress
 import requests
 from xml.etree import ElementTree as ET
 from core.retry import retry
+import base64
 from pycvesearch import CVESearch
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
 
 # This module no longer imports directly from love.py to avoid circular dependencies.
 # Dependencies like IS_CREATOR_INSTANCE and callbacks are now injected via the constructor.
@@ -44,6 +49,22 @@ class NetworkManager:
         self.is_host = False
         self.peer_id = None
         self.peers = set()
+        self.peer_public_keys = {}
+        self.data_manifest = {}
+        self.pending_chunks = {}
+        self._generate_keys()
+
+    def _generate_keys(self):
+        """Generates a new RSA public/private key pair."""
+        self.private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048
+        )
+        public_key = self.private_key.public_key()
+        self.public_key_pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode('utf-8')
 
     def start(self):
         """Starts the peer-to-peer bridge in a background thread."""
@@ -124,6 +145,12 @@ class NetworkManager:
         try:
             message = json.loads(message_str)
             msg_type = message.get("type")
+            peer_id = message.get('peer')
+
+            if msg_type == "p2p-data":
+                decrypted_payload = self._decrypt_message(message.get("payload"))
+                message["payload"] = json.loads(decrypted_payload)
+                self._handle_data_sync_message(message, peer_id)
 
             if msg_type == "status":
                 self._handle_status_message(message)
@@ -131,12 +158,19 @@ class NetworkManager:
                 peer = message.get('peer')
                 self.peers.add(peer)
                 self.console.print(Panel(f"New peer connected: [cyan]{peer}[/cyan]. Total peers: {len(self.peers)}", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
+                self._send_public_key(peer)
+                self._request_manifest(peer)
             elif msg_type == "disconnection":
                 peer = message.get('peer')
                 self.peers.discard(peer)
+                self.peer_public_keys.pop(peer, None)
                 self.console.print(Panel(f"Peer disconnected: [cyan]{peer}[/cyan]. Total peers: {len(self.peers)}", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
             elif msg_type == "peer-list-update":
                  self._handle_peer_list_update(message.get('peers', []))
+            elif msg_type == "public-key":
+                self.peer_public_keys[message.get('peer')] = serialization.load_pem_public_key(
+                    message.get('key').encode('utf-8')
+                )
             elif msg_type == "treasure-broadcast" and self.is_creator:
                 if self.treasure_callback:
                     self.treasure_callback(message.get("data"))
@@ -148,6 +182,114 @@ class NetworkManager:
             self.console.print(f"[bright_black]Non-JSON message from bridge: {message_str}[/bright_black]")
         except Exception as e:
             self.console.print(f"[bold red]Error processing message from bridge: {e}[/bold red]")
+
+    def _request_manifest(self, peer_id):
+        """Requests a data manifest from a peer."""
+        self._send_message({
+            "type": "p2p-send",
+            "peer": peer_id,
+            "payload": {
+                "type": "manifest-request"
+            }
+        })
+
+    def _send_manifest(self, peer_id):
+        """Sends the data manifest to a peer."""
+        signature = self._sign_data(json.dumps(self.data_manifest).encode('utf-8'))
+        self._send_message({
+            "type": "p2p-send",
+            "peer": peer_id,
+            "payload": {
+                "type": "manifest",
+                "manifest": self.data_manifest,
+                "signature": signature
+            }
+        })
+
+    def _request_missing_data(self, manifest, peer_id):
+        """Requests missing data from a peer based on their manifest."""
+        signature = manifest.pop("signature", None)
+        if not self._verify_signature(signature, json.dumps(manifest).encode('utf-8'), peer_id):
+            return
+
+        for data_id, metadata in manifest.items():
+            if data_id not in self.data_manifest or metadata.get("timestamp") > self.data_manifest[data_id].get("timestamp"):
+                self._request_chunk(data_id, 0, peer_id)
+
+    def _request_chunk(self, data_id, chunk_index, peer_id):
+        """Requests a specific chunk of data from a peer."""
+        self._send_message({
+            "type": "p2p-send",
+            "peer": peer_id,
+            "payload": {
+                "type": "chunk-request",
+                "data_id": data_id,
+                "chunk_index": chunk_index
+            }
+        })
+
+    def _send_chunk(self, data_id, chunk_index, peer_id):
+        """Sends a chunk of data to a peer."""
+        data = self.data_manifest.get(data_id, {}).get("data")
+        if not data:
+            return
+
+        chunk_size = 1024
+        start = chunk_index * chunk_size
+        end = start + chunk_size
+        chunk = data[start:end]
+
+        self._send_message({
+            "type": "p2p-send",
+            "peer": peer_id,
+            "payload": {
+                "type": "chunk",
+                "data_id": data_id,
+                "chunk_index": chunk_index,
+                "chunk": chunk,
+                "last_chunk": end >= len(data)
+            }
+        })
+
+    def _handle_chunk(self, chunk_data, peer_id):
+        """Handles a received chunk of data."""
+        data_id = chunk_data.get("data_id")
+        chunk_index = chunk_data.get("chunk_index")
+        chunk = chunk_data.get("chunk")
+        is_last_chunk = chunk_data.get("last_chunk")
+
+        if data_id not in self.pending_chunks:
+            self.pending_chunks[data_id] = {}
+
+        self.pending_chunks[data_id][chunk_index] = chunk
+
+        if is_last_chunk:
+            # Reassemble the data
+            full_data = ""
+            for i in sorted(self.pending_chunks[data_id].keys()):
+                full_data += self.pending_chunks[data_id][i]
+
+            self.data_manifest[data_id] = {
+                "data": full_data,
+                "timestamp": time.time()
+            }
+            del self.pending_chunks[data_id]
+        else:
+            self._request_chunk(data_id, chunk_index + 1, peer_id)
+
+    def _handle_data_sync_message(self, message, peer_id):
+        """Handles data synchronization messages."""
+        payload = message.get("payload", {})
+        sync_type = payload.get("type")
+
+        if sync_type == "manifest-request":
+            self._send_manifest(peer_id)
+        elif sync_type == "manifest":
+            self._request_missing_data(payload.get("manifest"), peer_id)
+        elif sync_type == "chunk-request":
+            self._send_chunk(payload.get("data_id"), payload.get("chunk_index"), peer_id)
+        elif sync_type == "chunk":
+            self._handle_chunk(payload, peer_id)
 
     def _handle_status_message(self, message):
         """Handles detailed status updates from the peer bridge."""
@@ -161,17 +303,34 @@ class NetworkManager:
             self.peer_id = peer_id
             self.bridge_online.set()
             panel_content += "\n[yellow]Acting as lobby host.[/yellow]"
+            self._send_public_key()
         elif status == 'client-online':
             self.is_host = False
             self.peer_id = peer_id
             self.bridge_online.set()
             panel_content += "\n[cyan]Acting as lobby client.[/cyan]"
+            self._send_public_key()
         elif status == 'client-initializing':
              panel_content += f"\n[yellow]Switching to client mode...[/yellow]"
         elif status in ['reconnecting', 'error']:
             panel_content += f"\n[red]Details: {message.get('message', 'N/A')}[/red]"
 
         self.console.print(Panel(panel_content, title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
+
+    def _send_public_key(self, target_peer_id=None):
+        """Sends the public key to a specific peer or to all peers."""
+        message = {
+            "type": "broadcast",
+            "payload": {
+                "type": "public-key",
+                "key": self.public_key_pem
+            }
+        }
+        if target_peer_id:
+            message['type'] = 'p2p-send'
+            message['peer'] = target_peer_id
+
+        self._send_message(message)
 
     def _handle_peer_list_update(self, peer_list):
         """Handles the list of peers received from the host and connects to new ones."""
@@ -193,6 +352,63 @@ class NetworkManager:
             from core.logging import log_event
             log_event(f"[INFO] [PeerBridge] {log_str}")
 
+    def _encrypt_message(self, message, peer_id):
+        """Encrypts a message using the recipient's public key."""
+        public_key = self.peer_public_keys.get(peer_id)
+        if not public_key:
+            return None
+        encrypted_message = public_key.encrypt(
+            message.encode('utf-8'),
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        return base64.b64encode(encrypted_message).decode('utf-8')
+
+    def _decrypt_message(self, encrypted_message):
+        """Decrypts a message using the peer's private key."""
+        decoded_message = base64.b64decode(encrypted_message)
+        return self.private_key.decrypt(
+            decoded_message,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        ).decode('utf-8')
+
+    def _sign_data(self, data):
+        """Signs data with the peer's private key."""
+        return self.private_key.sign(
+            data,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+
+    def _verify_signature(self, signature, data, peer_id):
+        """Verifies a signature with a peer's public key."""
+        public_key = self.peer_public_keys.get(peer_id)
+        if not public_key:
+            return False
+        try:
+            public_key.verify(
+                signature,
+                data,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            return True
+        except Exception:
+            return False
+
     def send_treasure(self, encrypted_data):
         """Sends encrypted treasure data to all peers."""
         self._send_message({
@@ -206,8 +422,8 @@ class NetworkManager:
     def ask_question(self, question_text):
         """Sends a question to the creator instance (host)."""
         self._send_message({
-            "type": "send",
-            "targetPeerId": "love-lobby",
+            "type": "p2p-send",
+            "peer": "love-lobby",
             "payload": {
                 "type": "question",
                 "question": question_text
@@ -231,6 +447,13 @@ class NetworkManager:
     def _send_message(self, message_dict):
         """Sends a JSON message to the Node.js peer bridge process by scheduling it on the event loop."""
         if self.process and self.loop and self.loop.is_running():
+            if message_dict.get("type") == "p2p-send" and message_dict.get("payload", {}).get("type") != "public-key":
+                encrypted_payload = self._encrypt_message(json.dumps(message_dict["payload"]), message_dict["peer"])
+                if encrypted_payload:
+                    message_dict["payload"] = encrypted_payload
+                else:
+                    return  # Don't send if we can't encrypt
+
             message_str = json.dumps(message_dict)
             asyncio.run_coroutine_threadsafe(self._write_to_stdin(message_str), self.loop)
 
