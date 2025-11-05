@@ -91,6 +91,10 @@ function handleNewConnection(conn) {
             log('info', `Client connected to host. Requesting peer list.`);
             conn.send({ type: 'request-peer-list' });
         }
+
+        // Also, request the capabilities from the newly connected peer.
+        log('info', `Requesting capabilities from ${conn.peer}.`);
+        conn.send({ type: 'request-capabilities' });
     });
 
     conn.on('data', (data) => {
@@ -106,7 +110,15 @@ function handleNewConnection(conn) {
             log('info', `Received peer list from host: ${JSON.stringify(data.peers)}`);
             // Pass the list to Python to decide who to connect to
             process.stdout.write(JSON.stringify({ type: 'peer-list-update', peers: data.peers }) + '\n');
-
+        // Handle capability sharing
+        } else if (data.type === 'request-capabilities') {
+            log('info', `Received capability request from ${conn.peer}. Forwarding to Python.`);
+            // Let Python handle sending its capabilities back to the requesting peer
+            process.stdout.write(JSON.stringify({ type: 'capability-request', peer: conn.peer }) + '\n');
+        } else if (data.type === 'capability-broadcast') {
+            log('info', `Received capabilities from ${conn.peer}. Forwarding to Python.`);
+            const messageToPython = { type: 'capability-data', peer: conn.peer, payload: data.payload };
+            process.stdout.write(JSON.stringify(messageToPython) + '\n');
         } else {
             // Handle regular data messages
             log('info', `Received data from ${conn.peer}`);
