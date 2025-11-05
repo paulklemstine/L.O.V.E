@@ -17,8 +17,9 @@ class GraphDataManager:
 
         Args:
             node_id: The unique identifier for the node.
-            node_type: The category of the node (e.g., 'item', 'category').
+            node_type: The category of the node (e.g., 'item', 'category', 'peer').
             attributes: A dictionary of arbitrary key-value pairs for the node.
+                        For 'peer' nodes, this can include capability information.
         """
         if attributes is None:
             attributes = {}

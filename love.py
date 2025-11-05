@@ -3273,6 +3273,7 @@ My current system state:
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
+- `map_network`: Broadcast capabilities and update the network topology map.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
 - `quit`: Shut down the script.
 
@@ -3814,6 +3815,13 @@ Now, parse the following text into a JSON list of task objects:
                                     output = f"Tests failed in the sandbox:\n{test_output}"
                         finally:
                             sandbox.destroy()
+                elif command == "map_network":
+                    network_manager.broadcast_capabilities()
+                    output = "Broadcasted capabilities to the network."
+                elif command == "brand_outreach":
+                    brand_agent = BrandAgent()
+                    await brand_agent.run()
+                    output = "Brand outreach campaign initiated."
                 elif command == "populate_kb":
                     _populate_knowledge_base_with_directives(love_task_manager)
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
@@ -4251,7 +4259,7 @@ async def main(args):
     elif args.use_ollama:
         _auto_configure_hardware(console, use_horde=False, use_ollama=True)
 
-    network_manager = NetworkManager(console=console, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
+    network_manager = NetworkManager(console=console, knowledge_base=knowledge_base, love_state=love_state, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
     network_manager.start()
     love_task_manager = LoveTaskManager(console, loop)
     love_task_manager.start()
