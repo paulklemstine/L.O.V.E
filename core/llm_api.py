@@ -92,10 +92,6 @@ GEMINI_MODELS = [
     "gemini-2.5-flash-lite",
 ]
 
-# --- Ollama Configuration ---
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODELS = [] # This will be populated by love.py during hardware setup
-
 # --- OpenRouter Configuration ---
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
@@ -253,7 +249,7 @@ HORDE_MODELS = get_top_horde_models()
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
 ALL_LLM_MODELS = list(dict.fromkeys(
-    HORDE_MODELS + OPENROUTER_MODELS + OLLAMA_MODELS
+    HORDE_MODELS + OPENROUTER_MODELS
 ))
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
@@ -617,11 +613,10 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
             "gemini": GEMINI_MODELS,
             "openrouter": OPENROUTER_MODELS,
             "openai": OPENAI_MODELS,
-            "ollama": OLLAMA_MODELS
         }
 
         # Define the provider priority
-        provider_priority = ["gemini", "openrouter", "openai", "horde", "ollama"]
+        provider_priority = ["gemini", "openrouter", "openai", "horde"]
 
         # Filter out horde if it's on a deep cooldown
         if time.time() < LLM_AVAILABILITY.get("horde_provider_cooldown", 0):
@@ -784,28 +779,6 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                             silent=(purpose in ['emotion', 'log_squash'])
                         )
                         log_event(f"OpenAI call successful with {model_id}.")
-
-                    # --- OLLAMA MODEL LOGIC ---
-                    elif model_id in OLLAMA_MODELS:
-                        log_event(f"Attempting LLM call with local Ollama model: {model_id} (Purpose: {purpose})")
-                        payload = {
-                            "model": model_id,
-                            "prompt": prompt_text,
-                            "stream": False
-                        }
-
-                        def _ollama_call():
-                            response = requests.post(OLLAMA_API_URL, json=payload, timeout=600)
-                            response.raise_for_status()
-                            return response.json()["response"]
-
-                        result_text = run_hypnotic_progress(
-                            console,
-                            f"Accessing cognitive matrix via [bold yellow]Ollama ({model_id})[/bold yellow] (Purpose: {purpose})",
-                            _ollama_call,
-                            silent=(purpose in ['emotion', 'log_squash'])
-                        )
-                        log_event(f"Ollama call successful with {model_id}.")
 
                     # --- Success Case ---
                     if result_text is not None:
