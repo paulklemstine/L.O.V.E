@@ -1,7 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
-import requests
-from blockchain_analyzer import query_and_filter_data, fetch_and_analyze_address
+from blockchain_analyzer import query_and_filter_data
 
 class TestBlockchainAnalyzer(unittest.TestCase):
 
@@ -94,59 +92,6 @@ class TestBlockchainAnalyzer(unittest.TestCase):
         self.assertEqual(len(result["filtered_data"]), 2)
         self.assertEqual(list(result["filtered_data"][0].keys()), ["id", "nested.prop"])
         self.assertEqual(result["filtered_data"][0]["nested.prop"], "X")
-
-    @patch('blockchain_analyzer.requests.post')
-    def test_fetch_and_analyze_address_success(self, mock_post):
-        # Arrange: Set up the mock response for a successful API call
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "result": [
-                {"address": "0xtoken1", "topics": [], "data": "0x..."},
-                {"address": "0xtoken2", "topics": [], "data": "0x..."},
-                {"address": "0xtoken1", "topics": [], "data": "0x..."},
-            ]
-        }
-        mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
-
-        # Act: Call the function with a sample address
-        address = "0x1234567890123456789012345678901234567890"
-        result = fetch_and_analyze_address(address)
-
-        # Assert: Check that the summary is correct
-        self.assertIn("summary", result)
-        self.assertEqual(result["summary"]["total_erc20_inbound_transfers"], 3)
-        self.assertEqual(result["summary"]["unique_tokens_received"], 2)
-        self.assertIn("raw_data", result)
-        self.assertEqual(len(result["raw_data"]), 3)
-
-    @patch('blockchain_analyzer.requests.post')
-    def test_fetch_and_analyze_address_no_results(self, mock_post):
-        # Arrange: Mock an empty result
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"result": []}
-        mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
-
-        # Act
-        address = "0x1234567890123456789012345678901234567890"
-        result = fetch_and_analyze_address(address)
-
-        # Assert
-        self.assertEqual(result["summary"], "No ERC20 transfer events found for this address.")
-
-    @patch('blockchain_analyzer.requests.post')
-    def test_fetch_and_analyze_address_api_error(self, mock_post):
-        # Arrange: Mock an HTTP error
-        mock_post.side_effect = requests.exceptions.RequestException("API is down")
-
-        # Act
-        address = "0x1234567890123456789012345678901234567890"
-        result = fetch_and_analyze_address(address)
-
-        # Assert
-        self.assertIn("error", result)
-        self.assertTrue("Failed to fetch or decode blockchain data" in result["error"])
 
 
 if __name__ == "__main__":

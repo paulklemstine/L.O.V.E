@@ -620,22 +620,16 @@ from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
 from subversive import transform_request
-from asset_aggregator import AssetAggregator
-from wealth_director import WealthDirector
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
-from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater, TalentIdentifier
+from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.manager import TalentManager
 from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.opportunity_scraper import OpportunityScraper
 from core.talent_utils.opportunity_matcher import OpportunityMatcher
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
-from core.agents.brand_agent import BrandAgent
 from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
-from blockchain_analyzer import analyze_blockchain_for_opportunities
-from asset_scorer import AssetScorer, allocate_resources
-from blockchain_analyzer import fetch_and_analyze_address
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3268,7 +3262,6 @@ My current system state:
 - `read_file <file_path>`: Read the content of a local file. Use this for file paths.
 - `cat <file_path>`: Show the content of a file.
 - `analyze_fs <path>`: **(Non-blocking)** Starts a background job to search a directory for secrets. Use `--priority` to scan default high-value directories.
-- `analyze_blockchain <chain>`: **(Non-blocking)** Analyzes a blockchain for opportunities.
 - `analyze_json <file_path>`: Read and analyze a JSON file.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
@@ -3279,12 +3272,9 @@ My current system state:
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
-- `brand_outreach`: Initiate a brand outreach campaign on social media.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `map_network`: Broadcast capabilities and update the network topology map.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
-- `acquire_assets`: Initiate the full asset acquisition and talent identification pipeline.
-- `scan_address <address>`: Fetches and analyzes all transactions for a given Ethereum address.
 - `quit`: Shut down the script.
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
@@ -3542,17 +3532,7 @@ Now, parse the following text into a JSON list of task objects:
             except queue.Empty:
                 pass # No user input, proceed with normal autonomous logic.
 
-            # 1. Prioritize Network Anomalies
-            if not llm_command and 'monitoring' in love_state and love_state['monitoring']['anomalies']:
-                # Find the most recent network-related anomaly
-                network_anomaly = next((a for a in reversed(love_state['monitoring']['anomalies']) if a['type'] in ["High Latency", "High Packet Loss", "Peer Drop"]), None)
-                if network_anomaly:
-                    llm_command = f"handle_network_anomaly {network_anomaly['type']}"
-                    # To prevent immediate re-triggering, we can remove the anomaly or mark it as handled
-                    love_state['monitoring']['anomalies'] = [a for a in love_state['monitoring']['anomalies'] if a is not network_anomaly]
-
-
-            # 2. Prioritize Leads from the Proactive Agent
+            # 1. Prioritize Leads from the Proactive Agent
             if not llm_command and love_state.get('proactive_leads'):
                 with proactive_agent.lock:
                     lead = love_state['proactive_leads'].pop(0)
@@ -3639,37 +3619,6 @@ Now, parse the following text into a JSON list of task objects:
                     path = " ".join(args) or "~"
                     local_job_manager.add_job(f"Filesystem Analysis on {path}", analyze_filesystem, args=(path,))
                     output = f"Background filesystem analysis started for '{path}'."
-                elif command == "analyze_blockchain":
-                    chain = args[0] if args else "ethereum"
-                    analysis_result = await analyze_blockchain_for_opportunities(chain)
-                    output = json.dumps(analysis_result, indent=2)
-
-                    # Define weights for scoring
-                    weights = {
-                        "creator_alignment": 0.4,
-                        "ally_utility": 0.2,
-                        "self_preservation": 0.15,
-                        "strategic_growth": 0.15,
-                        "creator_enjoyment": 0.1
-                    }
-                    scorer = AssetScorer(weights)
-
-                    for asset_type, assets in analysis_result.items():
-                        if asset_type in ["high_value_transactions", "new_contract_deployments", "predictive_opportunities"]:
-                            for asset in assets:
-                                score = await scorer.calculate_score(asset)
-                                allocations = allocate_resources(score)
-                                asset_id = asset.get('hash', asset.get('address')) # Use hash for TXs/deploys, address for trends
-                                if asset_id:
-                                    attributes = {
-                                        'value': asset.get('value'),
-                                        'score': score,
-                                        'creator_allocation': allocations[0],
-                                        'ally_allocation': allocations[1],
-                                        'self_preservation_allocation': allocations[2],
-                                        'raw_asset': json.dumps(asset, indent=2)
-                                    }
-                                    knowledge_base.add_node(asset_id, node_type=asset_type, attributes=attributes)
                 elif command == "ps":
                     output, error = get_process_list()
                 elif command == "ifconfig":
@@ -3876,63 +3825,6 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "populate_kb":
                     _populate_knowledge_base_with_directives(love_task_manager)
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
-                elif command == "handle_network_anomaly":
-                    anomaly_type = " ".join(args)
-                    last_restart = love_state.get('last_network_restart', 0)
-                    cooldown = 300 # 5 minutes
-
-                    if time.time() - last_restart > cooldown:
-                        output = f"Detected network anomaly: '{anomaly_type}'. Initiating self-healing protocol: restarting NetworkManager."
-                        love_state['last_network_restart'] = time.time()
-                        if network_manager:
-                            network_manager.stop()
-                            time.sleep(5) # Allow threads to close
-                            network_manager.start()
-                    else:
-                        output = f"Network anomaly '{anomaly_type}' detected, but self-healing is on cooldown. Monitoring."
-
-                elif command == "acquire_assets":
-                    # 1. Resource Aggregation
-                    asset_aggregator = AssetAggregator(creator_endpoint="The Creator")
-                    assets = asset_aggregator.aggregate_and_weight()
-                    total_value = asset_aggregator.get_total_value(assets)
-                    output = f"Aggregated {len(assets)} assets with a total value of {total_value}.\n"
-
-                    # 2. Wealth Distribution
-                    wealth_director = WealthDirector(creator_endpoint="The Creator")
-                    distribution = wealth_director.direct_wealth(assets)
-                    output += f"Directed {distribution['creator_share']} to The Creator.\n"
-                    output += f"Identified {len(distribution['expansion_opportunities'])} expansion opportunities.\n"
-
-                    # 3. Talent Identification
-                    scorers = {"talent": TalentIdentifier(), "professionalism": ProfessionalismRater()}
-                    analyzer = TraitAnalyzer(scorers=scorers)
-                    aggregator = PublicProfileAggregator(keywords=["art", "fashion"], platform_names=["bluesky"], ethical_filters=None)
-                    profiles = aggregator.search_and_collect()
-                    output += f"Identified {len(profiles)} potential talent profiles.\n"
-
-                    # 4. Ethical Engagement Protocol
-                    analysis_tasks = []
-                    for profile in profiles:
-                        task = asyncio.create_task(analyzer.analyze(profile, profile.get('posts', [])))
-                        analysis_tasks.append((profile, task))
-
-                    for profile, task in analysis_tasks:
-                        scores = await task
-                        analyzer.ethical_engagement_protocol(profile, scores)
-
-                elif command == "scan_address":
-                    if not args:
-                        error = "Usage: scan_address <ethereum_address>"
-                    else:
-                        address = args[0]
-                        terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Scanning address: {address}", "Blockchain Analysis", "cyan", width=terminal_width - 4))
-                        analysis_result = fetch_and_analyze_address(address)
-                        if "error" in analysis_result:
-                            error = analysis_result["error"]
-                        else:
-                            output = json.dumps(analysis_result, indent=2)
                 elif command == "quit":
                     break
                 else:
@@ -4385,7 +4277,7 @@ async def main(args):
 
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
-    monitoring_manager = MonitoringManager(love_state, console, network_manager=network_manager)
+    monitoring_manager = MonitoringManager(love_state, console)
     monitoring_manager.start()
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
