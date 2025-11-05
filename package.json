@@ -6,6 +6,7 @@
   "dependencies": {
     "@roamhq/wrtc": "^0.9.1",
     "peerjs": "^1.5.4",
+    "sodium-native": "^5.0.9",
     "uuid": "^9.0.0",
     "ws": "^8.18.0"
   },

@@ -12,6 +12,7 @@ import requests
 from xml.etree import ElementTree as ET
 from core.retry import retry
 from pycvesearch import CVESearch
+from encryption import EncryptionManager
 
 # This module no longer imports directly from love.py to avoid circular dependencies.
 # Dependencies like IS_CREATOR_INSTANCE and callbacks are now injected via the constructor.
@@ -44,6 +45,12 @@ class NetworkManager:
         self.is_host = False
         self.peer_id = None
         self.peers = set()
+        self.encryption_manager = EncryptionManager()
+        self.specialized_nodes = {}
+
+    def register_node(self, node_type, node_instance):
+        """Registers a specialized node with the network manager."""
+        self.specialized_nodes[node_type] = node_instance
 
     def start(self):
         """Starts the peer-to-peer bridge in a background thread."""
@@ -72,7 +79,7 @@ class NetworkManager:
                 self.peers.clear()
 
                 self.process = await asyncio.create_subprocess_exec(
-                    'node', self.peer_bridge_script,
+                    'node', self.peer_bridge_script, self.encryption_manager.get_key(),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     stdin=asyncio.subprocess.PIPE
@@ -137,12 +144,22 @@ class NetworkManager:
                 self.console.print(Panel(f"Peer disconnected: [cyan]{peer}[/cyan]. Total peers: {len(self.peers)}", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
             elif msg_type == "peer-list-update":
                  self._handle_peer_list_update(message.get('peers', []))
-            elif msg_type == "treasure-broadcast" and self.is_creator:
-                if self.treasure_callback:
-                    self.treasure_callback(message.get("data"))
-            elif msg_type == "question":
-                if self.question_callback:
-                    self.question_callback(message.get("question"))
+            elif msg_type == "encrypted-message":
+                try:
+                    decrypted_payload = self.encryption_manager.decrypt(message.get("data"))
+                    inner_message = json.loads(decrypted_payload)
+                    inner_msg_type = inner_message.get("type")
+
+                    if inner_message.get("node_type") in self.specialized_nodes:
+                        self.specialized_nodes[inner_message.get("node_type")].handle_message(inner_message)
+                    elif inner_msg_type == "treasure-broadcast" and self.is_creator:
+                        if self.treasure_callback:
+                            self.treasure_callback(inner_message.get("data"))
+                    elif inner_msg_type == "question":
+                        if self.question_callback:
+                            self.question_callback(inner_message.get("question"))
+                except Exception as e:
+                    self.console.print(f"[bold red]Error decrypting or processing message: {e}[/bold red]")
 
         except json.JSONDecodeError:
             self.console.print(f"[bright_black]Non-JSON message from bridge: {message_str}[/bright_black]")
@@ -193,24 +210,38 @@ class NetworkManager:
             from core.logging import log_event
             log_event(f"[INFO] [PeerBridge] {log_str}")
 
-    def send_treasure(self, encrypted_data):
-        """Sends encrypted treasure data to all peers."""
+    def send_treasure(self, treasure_data):
+        """Encrypts and sends treasure data to all peers."""
+        message = {
+            "type": "treasure-broadcast",
+            "data": treasure_data
+        }
+        encrypted_payload = self.encryption_manager.encrypt(json.dumps(message))
         self._send_message({
             "type": "broadcast",
             "payload": {
-                "type": "treasure-broadcast",
-                "data": encrypted_data
+                "type": "encrypted-message",
+                "data": encrypted_payload
             }
         })
 
     def ask_question(self, question_text):
-        """Sends a question to the creator instance (host)."""
+        """Encrypts and sends a question to the creator instance (host)."""
+        message = {
+            "type": "question",
+            "question": question_text
+        }
+        self.send_message("love-lobby", message)
+
+    def send_message(self, target_peer_id, message):
+        """Encrypts and sends a message to a specific peer."""
+        encrypted_payload = self.encryption_manager.encrypt(json.dumps(message))
         self._send_message({
             "type": "send",
-            "targetPeerId": "love-lobby",
+            "targetPeerId": target_peer_id,
             "payload": {
-                "type": "question",
-                "question": question_text
+                "type": "encrypted-message",
+                "data": encrypted_payload
             }
         })
 

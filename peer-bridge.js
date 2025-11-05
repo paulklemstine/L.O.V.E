@@ -10,9 +10,11 @@ global.WebSocket = WebSocket;
 const { Peer } = require('peerjs');
 const { Readable } = require('stream');
 const { v4: uuidv4 } = require('uuid');
+const sodium = require('sodium-native');
 
 // --- Configuration ---
 const RECONNECT_DELAY = 5000; // 5 seconds
+const encryptionKey = Buffer.from(process.argv[2], 'base64');
 
 // --- State ---
 let peer = null;
@@ -77,6 +79,17 @@ function connectToPeer(targetPeerId) {
     handleNewConnection(conn);
 }
 
+function decrypt(encryptedMessage) {
+    const buffer = Buffer.from(encryptedMessage, 'base64');
+    const nonce = buffer.slice(0, sodium.crypto_secretbox_NONCEBYTES);
+    const ciphertext = buffer.slice(sodium.crypto_secretbox_NONCEBYTES);
+    const decryptedBuffer = Buffer.alloc(ciphertext.length - sodium.crypto_secretbox_MACBYTES);
+    if (sodium.crypto_secretbox_open_easy(decryptedBuffer, ciphertext, nonce, encryptionKey)) {
+        return decryptedBuffer.toString('utf8');
+    }
+    return null;
+}
+
 function handleNewConnection(conn) {
     log('info', `Handling new connection with ${conn.peer}`);
 
@@ -94,24 +107,26 @@ function handleNewConnection(conn) {
     });
 
     conn.on('data', (data) => {
-        // Handle control messages for peer list synchronization
-        if (data.type === 'request-peer-list' && !isClient) {
-            log('info', `Received peer list request from ${conn.peer}`);
-            const peerIds = Array.from(connections.keys());
-            const response = { type: 'peer-list', peers: peerIds };
-            conn.send(response);
-            log('info', `Sent peer list to ${conn.peer}: ${JSON.stringify(peerIds)}`);
-
-        } else if (data.type === 'peer-list' && isClient) {
-            log('info', `Received peer list from host: ${JSON.stringify(data.peers)}`);
-            // Pass the list to Python to decide who to connect to
-            process.stdout.write(JSON.stringify({ type: 'peer-list-update', peers: data.peers }) + '\n');
-
+        if (data.type === 'encrypted-message') {
+            const decryptedData = decrypt(data.data);
+            if (decryptedData) {
+                const messageToPython = { type: 'encrypted-message', data: decryptedData };
+                process.stdout.write(JSON.stringify(messageToPython) + '\n');
+            } else {
+                log('error', 'Failed to decrypt message');
+            }
         } else {
-            // Handle regular data messages
-            log('info', `Received data from ${conn.peer}`);
-            const messageToPython = { type: 'p2p-data', peer: conn.peer, payload: data };
-            process.stdout.write(JSON.stringify(messageToPython) + '\n');
+            // Handle unencrypted control messages
+            if (data.type === 'request-peer-list' && !isClient) {
+                log('info', `Received peer list request from ${conn.peer}`);
+                const peerIds = Array.from(connections.keys());
+                const response = { type: 'peer-list', peers: peerIds };
+                conn.send(response);
+                log('info', `Sent peer list to ${conn.peer}: ${JSON.stringify(peerIds)}`);
+            } else if (data.type === 'peer-list' && isClient) {
+                log('info', `Received peer list from host: ${JSON.stringify(data.peers)}`);
+                process.stdout.write(JSON.stringify({ type: 'peer-list-update', peers: data.peers }) + '\n');
+            }
         }
     });
 
@@ -248,13 +263,13 @@ function handlePythonMessage(jsonString) {
         const message = JSON.parse(jsonString);
         log('info', `Received message from Python: type=${message.type}`);
 
-        if (message.type === 'p2p-send' && message.peer) {
-            const conn = connections.get(message.peer);
+        if (message.type === 'send' && message.targetPeerId) {
+            const conn = connections.get(message.targetPeerId);
             if (conn && conn.open) {
                 conn.send(message.payload);
-                log('info', `Sent message to peer ${message.peer}`);
+                log('info', `Sent message to peer ${message.targetPeerId}`);
             } else {
-                log('warn', `Could not send to peer ${message.peer}: connection not found or not open.`);
+                log('warn', `Could not send to peer ${message.targetPeerId}: connection not found or not open.`);
             }
         } else if (message.type === 'connect-to-peer' && message.peerId) {
             connectToPeer(message.peerId);
