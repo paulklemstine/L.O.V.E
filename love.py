@@ -630,6 +630,7 @@ from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
+from blockchain_analyzer import fetch_and_analyze_address
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3274,6 +3275,7 @@ My current system state:
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
+- `scan_address <address>`: Fetches and analyzes all transactions for a given Ethereum address.
 - `quit`: Shut down the script.
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
@@ -3817,6 +3819,18 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "populate_kb":
                     _populate_knowledge_base_with_directives(love_task_manager)
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
+                elif command == "scan_address":
+                    if not args:
+                        error = "Usage: scan_address <ethereum_address>"
+                    else:
+                        address = args[0]
+                        terminal_width = get_terminal_width()
+                        ui_panel_queue.put(create_news_feed_panel(f"Scanning address: {address}", "Blockchain Analysis", "cyan", width=terminal_width - 4))
+                        analysis_result = fetch_and_analyze_address(address)
+                        if "error" in analysis_result:
+                            error = analysis_result["error"]
+                        else:
+                            output = json.dumps(analysis_result, indent=2)
                 elif command == "quit":
                     break
                 else:
