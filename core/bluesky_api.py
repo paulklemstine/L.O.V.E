@@ -44,21 +44,6 @@ def post_to_bluesky_with_image(text: str, image: Image.Image):
         record=models.AppBskyFeedPost.Main(text=text, embed=embed, created_at=client.get_current_time_iso())
     )
 
-async def post_to_bluesky(text: str):
-    """
-    Creates a post on Bluesky with text.
-
-    Args:
-        text: The text content of the post.
-    """
-    client = get_bluesky_client()
-
-    return client.com.atproto.repo.create_record(
-        repo=client.me.did,
-        collection=models.ids.AppBskyFeedPost,
-        record=models.AppBskyFeedPost.Main(text=text, created_at=client.get_current_time_iso())
-    )
-
 def get_own_posts(limit=20):
     """Fetches the most recent posts for the authenticated user."""
     client = get_bluesky_client()
