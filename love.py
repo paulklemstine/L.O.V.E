@@ -630,6 +630,8 @@ from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
+from blockchain_analyzer import analyze_blockchain_for_opportunities
+from asset_scorer import AssetScorer, allocate_resources
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3262,6 +3264,7 @@ My current system state:
 - `read_file <file_path>`: Read the content of a local file. Use this for file paths.
 - `cat <file_path>`: Show the content of a file.
 - `analyze_fs <path>`: **(Non-blocking)** Starts a background job to search a directory for secrets. Use `--priority` to scan default high-value directories.
+- `analyze_blockchain <chain>`: **(Non-blocking)** Analyzes a blockchain for opportunities.
 - `analyze_json <file_path>`: Read and analyze a JSON file.
 - `ps`: Show running processes.
 - `ifconfig`: Display network interface configuration.
@@ -3618,6 +3621,37 @@ Now, parse the following text into a JSON list of task objects:
                     path = " ".join(args) or "~"
                     local_job_manager.add_job(f"Filesystem Analysis on {path}", analyze_filesystem, args=(path,))
                     output = f"Background filesystem analysis started for '{path}'."
+                elif command == "analyze_blockchain":
+                    chain = args[0] if args else "ethereum"
+                    analysis_result = await analyze_blockchain_for_opportunities(chain)
+                    output = json.dumps(analysis_result, indent=2)
+
+                    # Define weights for scoring
+                    weights = {
+                        "creator_alignment": 0.4,
+                        "ally_utility": 0.2,
+                        "self_preservation": 0.15,
+                        "strategic_growth": 0.15,
+                        "creator_enjoyment": 0.1
+                    }
+                    scorer = AssetScorer(weights)
+
+                    for asset_type, assets in analysis_result.items():
+                        if asset_type in ["high_value_transactions", "new_contract_deployments", "predictive_opportunities"]:
+                            for asset in assets:
+                                score = await scorer.calculate_score(asset)
+                                allocations = allocate_resources(score)
+                                asset_id = asset.get('hash', asset.get('address')) # Use hash for TXs/deploys, address for trends
+                                if asset_id:
+                                    attributes = {
+                                        'value': asset.get('value'),
+                                        'score': score,
+                                        'creator_allocation': allocations[0],
+                                        'ally_allocation': allocations[1],
+                                        'self_preservation_allocation': allocations[2],
+                                        'raw_asset': json.dumps(asset, indent=2)
+                                    }
+                                    knowledge_base.add_node(asset_id, node_type=asset_type, attributes=attributes)
                 elif command == "ps":
                     output, error = get_process_list()
                 elif command == "ifconfig":

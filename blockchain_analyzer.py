@@ -1,5 +1,9 @@
 import re
 from collections import defaultdict
+import asyncio
+import json
+import subprocess
+from core.logging import log_event
 
 def query_and_filter_data(data_collection, query_params, aggregations=None, extract_attributes=None):
     """
@@ -188,4 +192,128 @@ def query_and_filter_data(data_collection, query_params, aggregations=None, extr
     return {
         "filtered_data": final_data,
         "metadata": metadata
+    }
+
+import asyncio
+import json
+import subprocess
+from core.logging import log_event
+import requests
+
+async def _make_rpc_call(method, params):
+    """
+    Makes a generic JSON-RPC call to a public Ethereum endpoint using the requests library.
+    """
+    payload = {
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params,
+        "id": 1
+    }
+    try:
+        # Use asyncio.to_thread to run the blocking requests call in a separate thread
+        response = await asyncio.to_thread(
+            requests.post,
+            "https://cloudflare-eth.com",
+            json=payload,
+            timeout=20
+        )
+        response.raise_for_status()
+        json_response = response.json()
+        if "result" in json_response:
+            return json_response["result"]
+        else:
+            log_event(f"RPC call returned an error for method {method}: {json_response.get('error')}", level="ERROR")
+            return None
+    except requests.exceptions.RequestException as e:
+        log_event(f"An exception occurred during RPC call for method {method}: {e}", level="ERROR")
+        return None
+
+def predictive_trend_analysis(transactions):
+    """
+    Analyzes a list of transactions to identify wallets with high recent activity.
+    """
+    address_activity = defaultdict(lambda: {"count": 0, "total_value_wei": 0})
+
+    for tx in transactions:
+        addr = tx.get("from")
+        # Ensure value is treated as a hex string and safely converted
+        value_hex = tx.get("value", "0x0")
+        try:
+            value_wei = int(value_hex, 16)
+        except (ValueError, TypeError):
+            value_wei = 0 # Ignore transactions with invalid value formats
+
+        if addr:
+            address_activity[addr]["count"] += 1
+            address_activity[addr]["total_value_wei"] += value_wei
+
+    # Identify potential trendsetters or "whales"
+    # Thresholds: > 5 transactions OR > 100 ETH moved in the analyzed window
+    opportunities = []
+    for addr, data in address_activity.items():
+        if data["count"] > 5 or data["total_value_wei"] > (100 * 10**18):
+            opportunities.append({
+                "address": addr,
+                "transaction_count": data["count"],
+                "total_value_eth": data["total_value_wei"] / 10**18,
+                "trend_type": "High Volume"
+            })
+
+    return opportunities
+
+async def analyze_blockchain_for_opportunities(chain="ethereum"):
+    """
+    Orchestrator to analyze a blockchain for potential opportunities.
+    """
+    log_event(f"Starting blockchain analysis for {chain}...")
+    latest_block_hex = await _make_rpc_call("eth_blockNumber", [])
+    if not latest_block_hex:
+        return {"error": "Could not fetch the latest block number."}
+
+    latest_block_num = int(latest_block_hex, 16)
+    all_transactions = []
+
+    # Analyze the last 20 blocks for a better trend analysis dataset
+    blocks_to_scan = 20
+    for i in range(blocks_to_scan):
+        block_num_hex = hex(latest_block_num - i)
+        block = await _make_rpc_call("eth_getBlockByNumber", [block_num_hex, True])
+        if block and "transactions" in block:
+            all_transactions.extend(block["transactions"])
+
+    if not all_transactions:
+        return {"summary": "No recent transactions found to analyze."}
+
+    # --- Predictive Analysis ---
+    predictive_opportunities = predictive_trend_analysis(all_transactions)
+
+    # --- Define Queries ---
+    # 1. Find high-value transactions (value > 50 ETH)
+    high_value_tx_query = {
+        "mode": "AND",
+        "conditions": [
+            {"field": "value", "operator": "gte", "value": hex(50 * 10**18)}
+        ]
+    }
+
+    # 2. Find new smart contract deployments
+    deployment_query = {
+        "mode": "AND",
+        "conditions": [
+            {"field": "to", "operator": "eq", "value": None}
+        ]
+    }
+
+    # --- Run Queries ---
+    high_value_txs = query_and_filter_data(all_transactions, high_value_tx_query)
+    deployments = query_and_filter_data(all_transactions, deployment_query)
+
+    log_event(f"Blockchain analysis complete. Found {len(high_value_txs['filtered_data'])} high-value TXs, {len(deployments['filtered_data'])} new contracts, and {len(predictive_opportunities)} trend opportunities.")
+
+    return {
+        "summary": f"Analyzed blocks {latest_block_num - (blocks_to_scan - 1)} to {latest_block_num}. Found {len(all_transactions)} total transactions.",
+        "high_value_transactions": high_value_txs["filtered_data"],
+        "new_contract_deployments": deployments["filtered_data"],
+        "predictive_opportunities": predictive_opportunities
     }
