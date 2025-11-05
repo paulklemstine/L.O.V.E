@@ -621,7 +621,7 @@ from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
 from subversive import transform_request
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
-from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater,TalentIdentifier
+from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.intelligence_synthesizer import (
     IntelligenceSynthesizer,
     SentimentAnalyzer,
