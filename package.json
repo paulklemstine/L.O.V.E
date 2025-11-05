@@ -5,6 +5,7 @@
   "main": "peer_bridge.js",
   "dependencies": {
     "@roamhq/wrtc": "^0.9.1",
+    "bittorrent-dht": "^11.0.11",
     "peerjs": "^1.5.4",
     "uuid": "^9.0.0",
     "ws": "^8.18.0"

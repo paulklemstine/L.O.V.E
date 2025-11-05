@@ -41,7 +41,6 @@ class NetworkManager:
         self.thread = None
         self.loop = None
         self.bridge_online = asyncio.Event()
-        self.is_host = False
         self.peer_id = None
         self.peers = set()
 
@@ -67,7 +66,6 @@ class NetworkManager:
         while self.active:
             try:
                 self.bridge_online.clear()
-                self.is_host = False
                 self.peer_id = None
                 self.peers.clear()
 
@@ -135,8 +133,6 @@ class NetworkManager:
                 peer = message.get('peer')
                 self.peers.discard(peer)
                 self.console.print(Panel(f"Peer disconnected: [cyan]{peer}[/cyan]. Total peers: {len(self.peers)}", title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
-            elif msg_type == "peer-list-update":
-                 self._handle_peer_list_update(message.get('peers', []))
             elif msg_type == "treasure-broadcast" and self.is_creator:
                 if self.treasure_callback:
                     self.treasure_callback(message.get("data"))
@@ -156,30 +152,14 @@ class NetworkManager:
 
         panel_content = f"Peer Status: [bold green]{status}[/bold green]\nPeer ID: [cyan]{peer_id}[/cyan]"
 
-        if status == 'host-online':
-            self.is_host = True
+        if status == 'online':
             self.peer_id = peer_id
             self.bridge_online.set()
-            panel_content += "\n[yellow]Acting as lobby host.[/yellow]"
-        elif status == 'client-online':
-            self.is_host = False
-            self.peer_id = peer_id
-            self.bridge_online.set()
-            panel_content += "\n[cyan]Acting as lobby client.[/cyan]"
-        elif status == 'client-initializing':
-             panel_content += f"\n[yellow]Switching to client mode...[/yellow]"
+            panel_content += "\n[green]Online and connected to the DHT.[/green]"
         elif status in ['reconnecting', 'error']:
             panel_content += f"\n[red]Details: {message.get('message', 'N/A')}[/red]"
 
         self.console.print(Panel(panel_content, title="[magenta]Network Bridge[/magenta]", border_style="magenta"))
-
-    def _handle_peer_list_update(self, peer_list):
-        """Handles the list of peers received from the host and connects to new ones."""
-        self.console.print(Panel(f"Received peer list from host: {peer_list}", title="[magenta]Network Sync[/magenta]", border_style="magenta"))
-        new_peers = set(peer_list) - self.peers - {self.peer_id}
-        for peer in new_peers:
-            self.console.print(f"Connecting to new peer from list: {peer}")
-            self.connect_to_peer(peer)
 
     def _handle_log(self, log_str):
         """Handles log messages from the peer bridge's stderr."""
@@ -193,6 +173,10 @@ class NetworkManager:
             from core.logging import log_event
             log_event(f"[INFO] [PeerBridge] {log_str}")
 
+    def connect_to_peer(self, peer_id, reliable=True):
+        """Instructs the bridge to connect to a specific peer."""
+        self._send_message({"type": "connect-to-peer", "peerId": peer_id, "reliable": reliable})
+
     def send_treasure(self, encrypted_data):
         """Sends encrypted treasure data to all peers."""
         self._send_message({
@@ -204,19 +188,21 @@ class NetworkManager:
         })
 
     def ask_question(self, question_text):
-        """Sends a question to the creator instance (host)."""
+        """Sends a question to a random peer."""
+        if not self.peers:
+            self.console.print("[yellow]No peers connected to ask a question.[/yellow]")
+            return
+
+        import random
+        random_peer = random.choice(list(self.peers))
         self._send_message({
             "type": "send",
-            "targetPeerId": "love-lobby",
+            "targetPeerId": random_peer,
             "payload": {
                 "type": "question",
                 "question": question_text
             }
         })
-
-    def connect_to_peer(self, peer_id):
-        """Instructs the bridge to connect to a specific peer."""
-        self._send_message({"type": "connect-to-peer", "peerId": peer_id})
 
     async def _write_to_stdin(self, data_str):
         """Coroutine to write data to the subprocess's stdin."""

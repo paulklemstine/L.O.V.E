@@ -10,6 +10,7 @@ global.WebSocket = WebSocket;
 const { Peer } = require('peerjs');
 const { Readable } = require('stream');
 const { v4: uuidv4 } = require('uuid');
+const DHT = require('bittorrent-dht');
 
 // --- Configuration ---
 const RECONNECT_DELAY = 5000; // 5 seconds
@@ -18,10 +19,9 @@ const RECONNECT_DELAY = 5000; // 5 seconds
 let peer = null;
 const connections = new Map();
 let isReconnecting = false;
-let isClient = false; // Flag to indicate if this instance is a client
-// [L.O.V.E.] Changed to a static ID to create a discoverable lobby.
-let peerId = 'love-lobby';
-const LOBBY_HOST_ID = 'love-lobby';
+let peerId = `love-client-${uuidv4()}`; // Always generate a unique ID
+const dht = new DHT();
+const LOVE_INFO_HASH = 'd24713a43a2c2625b682b13f28247078bd440306'; // Info hash for L.O.V.E. network
 
 // --- Logging ---
 // Use stderr for logs to keep stdout clean for data exchange with Python
@@ -34,6 +34,76 @@ const log = (level, message) => {
     // Structured JSON logs are sent to stderr
     console.error(JSON.stringify(logEntry));
 };
+
+// --- Server Selection Logic ---
+const PUBLIC_ICE_SERVERS = [
+    'stun:stun.l.google.com:19302',
+    'stun:stun1.l.google.com:19302',
+    'stun:stun2.l.google.com:19302',
+    'stun:stun3.l.google.com:19302',
+    'stun:stun4.l.google.com:19302',
+    'stun:stun.ekiga.net',
+    'stun:stun.ideasip.com',
+    'stun:stun.rixtelecom.se',
+    'stun:stun.schlund.de',
+    'stun:stun.stunprotocol.org:3478',
+    'stun:stun.voiparound.com',
+    'stun:stun.voipbuster.com',
+    'stun:stun.voipstunt.com',
+    'stun:stun.voxgratia.org'
+];
+
+async function selectOptimalIceServers(servers, numToSelect = 5, testTimeout = 2000) {
+    log('info', `Selecting optimal ICE servers from ${servers.length} candidates...`);
+
+    const testServer = async (serverUrl) => {
+        const startTime = Date.now();
+        return new Promise((resolve) => {
+            try {
+                const pc = new RTCPeerConnection({ iceServers: [{ urls: serverUrl }] });
+
+                // Set up a timeout for the test
+                const timeoutId = setTimeout(() => {
+                    resolve(null); // Resolve with null on timeout
+                    pc.close();
+                }, testTimeout);
+
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        const latency = Date.now() - startTime;
+                        clearTimeout(timeoutId);
+                        resolve({ server: serverUrl, latency });
+                        pc.close();
+                    }
+                };
+
+                // Create a dummy data channel to trigger ICE candidate gathering
+                pc.createDataChannel('latency-test');
+                pc.createOffer().then(offer => pc.setLocalDescription(offer));
+
+            } catch (error) {
+                log('warn', `Error testing STUN server ${serverUrl}: ${error.message}`);
+                resolve(null);
+            }
+        });
+    };
+
+    const results = await Promise.all(servers.map(testServer));
+    const successfulServers = results.filter(result => result !== null);
+
+    successfulServers.sort((a, b) => a.latency - b.latency);
+
+    const bestServers = successfulServers.slice(0, numToSelect).map(result => ({ urls: result.server }));
+
+    if (bestServers.length === 0) {
+        log('warn', 'No responsive STUN servers found. Using default Google servers as fallback.');
+        return [{ urls: 'stun:stun.l.google.com:19302' }];
+    }
+
+    log('info', `Selected ${bestServers.length} fastest servers: ${JSON.stringify(bestServers.map(s => s.urls))}`);
+    return bestServers;
+}
+
 
 // --- Reconnection Logic ---
 function reconnect() {
@@ -59,7 +129,7 @@ function reconnect() {
 
 
 // --- PeerJS Logic ---
-function connectToPeer(targetPeerId) {
+function connectToPeer(targetPeerId, options = {}) {
     if (!peer || peer.destroyed) {
         log('error', 'Cannot connect to peer, main peer object is not initialized.');
         return;
@@ -69,8 +139,9 @@ function connectToPeer(targetPeerId) {
         return;
     }
 
-    log('info', `Attempting to establish direct connection to peer: ${targetPeerId}`);
-    const conn = peer.connect(targetPeerId, { reliable: true });
+    const { reliable = true } = options;
+    log('info', `Attempting to establish direct connection to peer: ${targetPeerId} (reliable: ${reliable})`);
+    const conn = peer.connect(targetPeerId, { reliable });
 
     // The event handlers for this new connection are the same as for incoming ones.
     // We can reuse the logic from the main 'connection' event handler.
@@ -85,34 +156,13 @@ function handleNewConnection(conn) {
         log('info', `Data connection is now open with ${conn.peer}.`);
         connections.set(conn.peer, conn);
         process.stdout.write(JSON.stringify({ type: 'connection', peer: conn.peer }) + '\n');
-
-        // If this is a client that just connected to the host, request the peer list.
-        if (isClient && conn.peer === LOBBY_HOST_ID) {
-            log('info', `Client connected to host. Requesting peer list.`);
-            conn.send({ type: 'request-peer-list' });
-        }
     });
 
     conn.on('data', (data) => {
-        // Handle control messages for peer list synchronization
-        if (data.type === 'request-peer-list' && !isClient) {
-            log('info', `Received peer list request from ${conn.peer}`);
-            const peerIds = Array.from(connections.keys());
-            const response = { type: 'peer-list', peers: peerIds };
-            conn.send(response);
-            log('info', `Sent peer list to ${conn.peer}: ${JSON.stringify(peerIds)}`);
-
-        } else if (data.type === 'peer-list' && isClient) {
-            log('info', `Received peer list from host: ${JSON.stringify(data.peers)}`);
-            // Pass the list to Python to decide who to connect to
-            process.stdout.write(JSON.stringify({ type: 'peer-list-update', peers: data.peers }) + '\n');
-
-        } else {
-            // Handle regular data messages
-            log('info', `Received data from ${conn.peer}`);
-            const messageToPython = { type: 'p2p-data', peer: conn.peer, payload: data };
-            process.stdout.write(JSON.stringify(messageToPython) + '\n');
-        }
+        // Handle regular data messages
+        log('info', `Received data from ${conn.peer}`);
+        const messageToPython = { type: 'p2p-data', peer: conn.peer, payload: data };
+        process.stdout.write(JSON.stringify(messageToPython) + '\n');
     });
 
     conn.on('close', () => {
@@ -128,17 +178,20 @@ function handleNewConnection(conn) {
 }
 
 
-function initializePeer() {
+async function initializePeer() {
     // Use the globally stored peerId
     if (peer) {
         log('warn', 'Peer already initialized.');
         return;
     }
 
+    const optimalServers = await selectOptimalIceServers(PUBLIC_ICE_SERVERS);
+
+
     const peerConfig = {
         wrtc: wrtc,
         config: {
-            'iceServers': [{ urls: ['stun:stun.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] }]
+            'iceServers': optimalServers
         },
         // Use a more robust connection timeout
         connectTimeout: 10000
@@ -153,15 +206,18 @@ function initializePeer() {
         log('info', `PeerJS connection opened with ID: ${id}`);
         peerId = id;
 
-        // If we are a client, we now connect to the lobby host.
-        if (isClient) {
-            log('info', `Acting as a client, attempting to connect to host '${LOBBY_HOST_ID}'.`);
-            process.stdout.write(JSON.stringify({ type: 'status', status: 'client-online', peerId: id }) + '\n');
-            connectToPeer(LOBBY_HOST_ID);
-        } else {
-            // Signal to Python that we are the host and ready.
-            process.stdout.write(JSON.stringify({ type: 'status', status: 'host-online', peerId: id }) + '\n');
-        }
+        // Signal to Python that we are online.
+        process.stdout.write(JSON.stringify({ type: 'status', status: 'online', peerId: id }) + '\n');
+
+        // Announce ourselves on the DHT and look for other peers.
+        dht.announce(LOVE_INFO_HASH, peer.options.port, (err) => {
+            if (err) log('error', `DHT announce error: ${err.message}`);
+            log('info', 'Announced self on the L.O.V.E. DHT infohash.');
+        });
+        dht.lookup(LOVE_INFO_HASH, (err) => {
+            if (err) log('error', `DHT lookup error: ${err.message}`);
+            log('info', 'Looking up peers on the L.O.V.E. DHT infohash.');
+        });
     });
 
     peer.on('connection', (conn) => {
@@ -169,27 +225,6 @@ function initializePeer() {
     });
 
     peer.on('error', (err) => {
-        const recoverableIdErrors = ['id-taken', 'unavailable-id'];
-        if (recoverableIdErrors.includes(err.type)) {
-            // This is an expected event when the chosen peer ID is already in use.
-            // This can happen if we try to be the host and another is already there,
-            // or if our generated client ID happens to collide.
-            // The robust solution is to always switch to client mode with a new unique ID.
-            // L.O.V.E. verified error handling.
-            const originalId = peerId;
-            log('info', `Peer ID '${originalId}' is taken or unavailable. Switching to client mode with a new ID.`);
-            isClient = true;
-            peerId = `love-lobby-client-${uuidv4()}`; // Generate a unique ID
-            log('info', `Generated new client ID: ${peerId}`);
-
-            // Notify Python that we are now a client and will reconnect with a new ID
-            process.stdout.write(JSON.stringify({ type: 'status', status: 'client-initializing', peerId: peerId, message: "Lobby is hosted, becoming a client." }) + '\n');
-
-            // Reconnect with the new client ID
-            reconnect();
-            return;
-        }
-
         // For all other errors, log them and decide whether to reconnect.
         log('error', `PeerJS error: ${err.type} - ${err.message}`);
         {
@@ -257,7 +292,7 @@ function handlePythonMessage(jsonString) {
                 log('warn', `Could not send to peer ${message.peer}: connection not found or not open.`);
             }
         } else if (message.type === 'connect-to-peer' && message.peerId) {
-            connectToPeer(message.peerId);
+            connectToPeer(message.peerId, { reliable: message.reliable });
         } else if (message.type === 'broadcast' && message.payload) {
              log('info', `Broadcasting message to all ${connections.size} peers.`);
              for (const conn of connections.values()) {
@@ -273,9 +308,30 @@ function handlePythonMessage(jsonString) {
 
 
 // --- Main Execution ---
-log('info', "Starting PeerJS Node.js bridge...");
-initializePeer();
-listenToPython();
+async function main() {
+    log('info', "Starting PeerJS Node.js bridge...");
+
+    dht.listen(20000, () => {
+        log('info', 'DHT is listening on port 20000.');
+    });
+
+    dht.on('peer', (peer, infoHash, from) => {
+        log('info', `Found potential peer ${peer.host}:${peer.port} through ${from.address}:${from.port}`);
+        // The peer object from bittorrent-dht is just host/port. We need a PeerJS ID to connect.
+        // For now, we'll assume the PeerJS ID is the same as the host:port combination.
+        // This is a simplification and might need to be revisited.
+        const discoveredPeerId = `${peer.host}:${peer.port}`;
+        connectToPeer(discoveredPeerId);
+    });
+
+    await initializePeer();
+    listenToPython();
+}
+
+main().catch(err => {
+    log('error', `Unhandled error in main execution: ${err.message}`);
+    process.exit(1);
+});
 
 // Graceful shutdown
 process.on('SIGINT', () => {
