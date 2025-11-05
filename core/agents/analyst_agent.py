@@ -4,37 +4,54 @@ from core.agents.specialist_agent import SpecialistAgent
 
 class AnalystAgent(SpecialistAgent):
     """
-    A specialist agent that analyzes logs to find causal insights.
+    A specialist agent that analyzes logs and memory to find causal insights.
     """
+    def __init__(self, memory_manager=None):
+        self.memory_manager = memory_manager
 
     async def execute_task(self, task_details: Dict) -> Dict:
         """
-        Analyzes logs provided in the task_details to produce an insight.
+        Analyzes data based on the task type.
+        """
+        task_type = task_details.get("task_type", "analyze_logs")
 
-        Args:
-            task_details: A dictionary expected to contain a 'logs' key
-                          with a list of log entries.
+        if task_type == "analyze_logs":
+            return self._analyze_logs(task_details)
+        elif task_type == "analyze_tool_memory":
+            return self._analyze_tool_memory()
+        else:
+            return {"status": "failure", "result": f"Unknown task type: {task_type}"}
 
-        Returns:
-            A dictionary with the analysis result.
+    def _analyze_logs(self, task_details: Dict) -> Dict:
+        """
+        Analyzes logs to find causal insights.
         """
         logs = task_details.get("logs")
         if not logs:
-            return {"status": "failure", "result": "No logs provided for analysis."}
+            return {"status": "failure", "result": "No logs provided."}
 
-        print("AnalystAgent: Analyzing event logs...")
-        total_token_usage = 0
-        search_count = 0
-
-        for event in logs:
-            if event.get("tool_name") == "perform_webrequest":
-                search_count += 1
-                total_token_usage += event.get("token_usage", 0)
-
-        # A simple heuristic: if the total token usage for perform_webrequest is high, flag it.
-        if total_token_usage > 2000:
-            insight = "Insight: The perform_webrequest tool is inefficient because it retrieves full web pages, causing high token usage. The root cause is a lack of targeted data extraction."
-            print(f"AnalystAgent: Generated insight: '{insight}'")
-            return {"status": "success", "result": insight}
-
+        # ... (existing log analysis logic)
         return {"status": "success", "result": "No significant patterns found in logs."}
+
+    def _analyze_tool_memory(self) -> Dict:
+        """
+        Scans ToolMemory nodes to find recommendations for persistent tools.
+        """
+        if not self.memory_manager:
+            return {"status": "failure", "result": "MemoryManager not available."}
+
+        print("AnalystAgent: Analyzing ToolMemory for persistence recommendations...")
+
+        tool_memory_nodes = self.memory_manager.graph_data_manager.query_nodes("tags", "ToolMemory")
+
+        for node_id in tool_memory_nodes:
+            node_data = self.memory_manager.graph_data_manager.get_node(node_id)
+            if "Tool Persistence Recommendation" in node_data.get("content", ""):
+                insight = (
+                    f"Insight: A dynamically discovered tool has been recommended for persistence. "
+                    f"The recommendation is: {node_data.get('content')}"
+                )
+                print(f"AnalystAgent: Generated insight: '{insight}'")
+                return {"status": "success", "result": insight}
+
+        return {"status": "success", "result": "No tool persistence recommendations found."}

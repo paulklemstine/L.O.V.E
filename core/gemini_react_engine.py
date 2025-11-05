@@ -7,17 +7,23 @@ import core.tools
 class GeminiReActEngine:
     """Manages the state of a Thought-Action-Observation loop."""
 
-    def __init__(self, tool_registry: core.tools.ToolRegistry):
+    def __init__(self, tool_registry: core.tools.ToolRegistry, memory_manager=None):
         self.tool_registry = tool_registry
+        self.session_tool_registry = core.tools.ToolRegistry()
         self.history: List[Tuple[str, str, str]] = []
+        self.memory_manager = memory_manager
 
     async def execute_goal(self, goal: str) -> str:
         """
         Main entry point for the ReAct engine.
         Continues the loop until the Action is a "Finish" action.
         """
-        tool_metadata = self.tool_registry.get_formatted_tool_metadata()
         while True:
+            # Combine static and dynamic tools for the prompt
+            main_metadata = self.tool_registry.get_formatted_tool_metadata()
+            session_metadata = self.session_tool_registry.get_formatted_tool_metadata()
+            tool_metadata = f"{main_metadata}\n{session_metadata}"
+
             prompt = self._create_prompt(goal, tool_metadata)
             response_dict = await execute_reasoning_task(prompt)
 
@@ -27,8 +33,6 @@ class GeminiReActEngine:
             try:
                 parsed_response = json.loads(response_dict["result"])
             except json.JSONDecodeError:
-                # If parsing fails, we can add the raw response to the observation
-                # to allow the agent to self-correct on the next loop.
                 observation = f"Error: The reasoning engine produced invalid JSON. Raw response: {response_dict['result']}"
                 self.history.append(("Error parsing LLM response", "N/A", observation))
                 continue
@@ -42,16 +46,37 @@ class GeminiReActEngine:
                 return f"Goal accomplished. Final thought: {thought}"
 
             try:
-                tool = self.tool_registry.get_tool(tool_name)
+                is_dynamic_tool = False
+                # Prioritize session-specific tools over global tools
+                if tool_name in self.session_tool_registry.get_tool_names():
+                    tool = self.session_tool_registry.get_tool(tool_name)
+                    is_dynamic_tool = True
+                else:
+                    tool = self.tool_registry.get_tool(tool_name)
 
-                # Special handling for hierarchical planning
-                if tool_name == "decompose_and_solve_subgoal":
+                # Dependency injection for tools that need the engine instance
+                tool_params = inspect.signature(tool).parameters
+                if 'engine' in tool_params:
+                    arguments['engine'] = self
+                if 'parent_engine' in tool_params: # For backwards compatibility
                     arguments['parent_engine'] = self
 
                 if inspect.iscoroutinefunction(tool):
                     observation = await tool(**arguments)
                 else:
                     observation = tool(**arguments)
+
+                # Story 2.5: Create a ToolMemory note for dynamically discovered tools
+                if is_dynamic_tool:
+                    from love import memory_manager
+                    tool_memory_content = (
+                        f"Dynamically Discovered Tool Usage:\n"
+                        f"- Tool Name: {tool_name}\n"
+                        f"- Arguments: {json.dumps(arguments, indent=2)}\n"
+                        f"- Outcome: {observation}"
+                    )
+                    await memory_manager.add_episode(tool_memory_content, tags=['ToolMemory'])
+
             except Exception as e:
                 observation = f"Error executing tool {tool_name}: {e}"
 
@@ -59,6 +84,17 @@ class GeminiReActEngine:
 
     def _create_prompt(self, goal: str, tool_metadata: str) -> str:
         """Creates the ReAct prompt template."""
+
+        # Story 3.3: Integrate Folded Memories
+        relevant_wisdom = ""
+        if self.memory_manager:
+            folded_memories = self.memory_manager.retrieve_relevant_folded_memories(goal)
+            if folded_memories:
+                relevant_wisdom = "You have the following high-level summaries from past experiences that may be relevant:\n"
+                for mem in folded_memories:
+                    relevant_wisdom += f"- {mem}\n"
+                relevant_wisdom += "\n"
+
         prompt = f"""
 You are a large language model tasked with achieving a goal.
 
@@ -66,7 +102,7 @@ Goal: {goal}
 
 {tool_metadata}
 
-To achieve the goal, you must output a JSON object with two keys: "thought" and "action".
+{relevant_wisdom}To achieve the goal, you must output a JSON object with two keys: "thought" and "action".
 The "thought" key should contain your reasoning about the current state and what to do next.
 The "action" key should contain a JSON object with two keys: "tool_name" and "arguments".
 The "tool_name" should be one of the available tools.

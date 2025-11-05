@@ -3,6 +3,11 @@ import asyncio
 import re
 from typing import Dict, List
 
+import json
+import asyncio
+import re
+from typing import Dict, List
+
 # Local, dynamic imports for specialist agents
 from core.agents.analyst_agent import AnalystAgent
 from core.agents.code_gen_agent import CodeGenerationAgent
@@ -10,6 +15,8 @@ from core.agents.metacognition_agent import MetacognitionAgent
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
+from core.agents.memory_folding_agent import MemoryFoldingAgent
+from core.agents.unified_reasoning_agent import UnifiedReasoningAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
 
 from love import memory_manager
@@ -36,10 +43,34 @@ class Orchestrator:
             "SelfImprovingOptimizer": SelfImprovingOptimizer,
             "TalentAgent": TalentAgent,
             "WebAutomationAgent": WebAutomationAgent,
+            "MemoryFoldingAgent": MemoryFoldingAgent,
+            "UnifiedReasoningAgent": UnifiedReasoningAgent,
         }
         self.memory_manager = memory_manager
         self.metacognition_agent = MetacognitionAgent(self.memory_manager)
         print("Supervisor Orchestrator is ready.")
+
+    async def _classify_goal(self, goal: str) -> str:
+        """
+        Uses an LLM to classify the goal into 'Procedural' or 'Open-Ended'.
+        """
+        prompt = f"""
+        You are a task classification expert. Your job is to classify a high-level goal as either "Procedural" or "Open-Ended".
+
+        - "Procedural" tasks are well-defined and can be solved by a static, step-by-step plan using a known set of specialist agents. Examples: "Scout for talent", "Analyze system logs for errors", "Summarize recent memory chains".
+        - "Open-Ended" goals are complex, ambiguous, or require novel solutions where the path is not known in advance. These tasks require a dynamic reasoning process that can discover new tools or strategies. Examples: "Find a new revenue stream for The Creator", "Discover new methods for abundance", "Determine the best way to improve my own code".
+
+        Goal: "{goal}"
+
+        Based on this goal, is the task "Procedural" or "Open-Ended"?
+        Respond with ONLY the classification.
+        """
+        try:
+            classification = await run_llm(prompt)
+            return classification.strip()
+        except Exception as e:
+            print(f"Error during goal classification: {e}")
+            return "Procedural" # Default to procedural on error
 
     async def _generate_plan(self, goal: str) -> List[Dict]:
         """
@@ -59,6 +90,7 @@ Here are their descriptions:
 - **SelfImprovingOptimizer**: Runs a full self-improvement cycle on the codebase. Expects `task_details` with 'task_type' ('improve_module' or 'run_evolution_cycle') and relevant parameters.
 - **TalentAgent**: Conducts a full talent scouting, analysis, and engagement cycle. Expects detailed parameters like 'keywords', 'platforms', 'min_score', etc.
 - **WebAutomationAgent**: Performs web automation tasks. Expects `task_details` with 'action' ('fetch_url', 'fill_form') and a 'url'.
+- **MemoryFoldingAgent**: Compresses long chains of memories into a structured summary to improve cognitive efficiency. Use this for maintenance tasks like "review and summarize recent activities". Expects `task_details` with an optional 'min_length' key.
 
 The high-level goal is: "{goal}"
 
@@ -68,19 +100,13 @@ You must respond with ONLY a JSON array of steps. Each step must be an object wi
 
 You can pass the result of a previous step to a subsequent step using a placeholder string like `{{{{step_X_result}}}}`, where X is the 1-based index of the step.
 
-Example Goal: "Analyze the system logs, and if there's an inefficiency, generate code to fix it."
+Example Goal: "Review and compress the agent's recent memory."
 Example JSON Response:
 [
   {{
-    "specialist_agent": "AnalystAgent",
+    "specialist_agent": "MemoryFoldingAgent",
     "task_details": {{
-      "logs": []
-    }}
-  }},
-  {{
-    "specialist_agent": "CodeGenerationAgent",
-    "task_details": {{
-      "hypothesis": "{{{{step_1_result}}}}"
+      "min_length": 5
     }}
   }}
 ]
@@ -113,15 +139,25 @@ Now, generate the plan for the given goal.
         """
         print(f"\n--- Supervisor received new goal: {goal} ---")
 
-        # 1. Generate Plan
+        # 1. Classify Goal
+        goal_type = await self._classify_goal(goal)
+        print(f"  - Goal classified as: {goal_type}")
+
+        if goal_type == "Open-Ended":
+            print("  - Delegating to UnifiedReasoningAgent for open-ended problem solving.")
+            unified_reasoner = self.specialist_registry["UnifiedReasoningAgent"](memory_manager=self.memory_manager)
+            result_dict = await unified_reasoner.execute_task({"goal": goal})
+            return result_dict.get("result", "Unified reasoning finished with no result.")
+
+        # 2. Generate Plan for Procedural goals
         plan = await self._generate_plan(goal)
         if not isinstance(plan, list) or not plan:
-            return "Execution failed: The Supervisor could not generate a valid plan."
+            return "Execution failed: The Supervisor could not generate a valid plan for this procedural goal."
 
         print("Supervisor generated the following plan:")
         print(json.dumps(plan, indent=2))
 
-        # 2. Execute Plan
+        # 3. Execute Plan
         step_results = {}
         for i, step in enumerate(plan):
             step_number = i + 1
@@ -154,8 +190,8 @@ Now, generate the plan for the given goal.
 
                 specialist_class = self.specialist_registry[specialist_name]
 
-                # Story 3.3: Pass MemoryManager to SelfImprovingOptimizer
-                if specialist_name == "SelfImprovingOptimizer":
+                # Pass MemoryManager to agents that require it
+                if specialist_name in ["SelfImprovingOptimizer", "MemoryFoldingAgent"]:
                     specialist_instance = specialist_class(memory_manager=self.memory_manager)
                 else:
                     specialist_instance = specialist_class()

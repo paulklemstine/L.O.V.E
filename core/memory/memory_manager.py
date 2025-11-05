@@ -429,3 +429,31 @@ class MemoryManager:
         norm_a = np.linalg.norm(vec_a)
         norm_b = np.linalg.norm(vec_b, axis=1)
         return np.dot(vec_b, vec_a) / (norm_a * norm_b)
+
+    def retrieve_relevant_folded_memories(self, query_task: str, top_k: int = 2) -> list:
+        """
+        Retrieves the most relevant "FoldedMemory" summaries based on a query.
+        """
+        query_vector = self.model.encode(query_task)
+
+        folded_memory_nodes = self.graph_data_manager.query_nodes("tags", "FoldedMemory")
+
+        if not folded_memory_nodes:
+            return []
+
+        nodes = [MemoryNote.from_node_attributes(node_id, self.graph_data_manager.get_node(node_id)) for node_id in folded_memory_nodes]
+
+        node_vectors = np.array([n.embedding for n in nodes if n.embedding.size > 0])
+        if node_vectors.size == 0:
+            return []
+
+        similarities = self._cosine_similarity(query_vector, node_vectors)
+        top_node_indices = np.argsort(similarities)[-top_k:][::-1]
+
+        # Format results
+        results = []
+        for i in top_node_indices:
+            note = nodes[i]
+            results.append(f"Summary of past experience '{note.contextual_description}': {note.content}")
+
+        return results

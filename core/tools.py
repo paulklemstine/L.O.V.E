@@ -466,3 +466,133 @@ async def research_and_evolve() -> str:
         print(f"  - Story {i+1}: {story.get('title')}")
 
     return message
+
+async def discover_new_tool(capability_description: str, engine: 'GeminiReActEngine') -> str:
+    """
+    Finds and dynamically onboards a new tool from an external marketplace.
+    """
+    print(f"--- Tool Discovery: Starting search for capability: '{capability_description}' ---")
+
+    # 1. Use an LLM to generate a search query
+    query_prompt = f"""
+    You are an expert at finding developer APIs. Convert the following natural language capability description into a concise, effective search query for a public API marketplace (like RapidAPI).
+    The query should consist of 2-4 keywords.
+    Capability Description: "{capability_description}"
+    Respond with ONLY the search query.
+    """
+    try:
+        search_query_response = await run_llm(query_prompt)
+        search_query = search_query_response.strip()
+        print(f"  - Generated search query: '{search_query}'")
+    except Exception as e:
+        return f"Error: Failed to generate search query from description. Details: {e}"
+
+    # 2. Search the RapidAPI marketplace
+    print("  - Searching the RapidAPI marketplace...")
+    url = "https://rapidapi-p.rapidapi.com/apis"
+    querystring = {"query":search_query}
+    headers = {
+        "x-rapidapi-host": "rapidapi-p.rapidapi.com",
+        "x-rapidapi-key": os.environ.get("RAPID_API_KEY")
+    }
+
+    try:
+        response = requests.get(url, headers=headers, params=querystring)
+        response.raise_for_status()
+        search_results = response.json()
+
+        # We need to transform the search results into the format our LLM expects.
+        # This is a simplified transformation.
+        candidate_tools = []
+        for api in search_results.get('apis', []):
+            candidate_tools.append({
+                "id": api.get('id'),
+                "name": api.get('name'),
+                "description": api.get('description'),
+                "keywords": api.get('category'), # Using category as keywords
+                # The schema would need to be fetched from another endpoint in a real scenario
+                "schema": {
+                    "name": f"call_{api.get('id').replace('-', '_')}",
+                    "description": f"Calls the {api.get('name')} API.",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            })
+
+    except requests.exceptions.RequestException as e:
+        return f"Error: Failed to search RapidAPI. Details: {e}"
+
+    if not candidate_tools:
+        return f"Tool Discovery Failed: No tools found matching the query '{search_query}' on RapidAPI."
+
+    print(f"  - Found {len(candidate_tools)} candidate tool(s).")
+
+    # 3. Use an LLM to select the best tool
+    candidate_details = json.dumps(candidate_tools, indent=2)
+    selection_prompt = f"""
+    You are an AI agent. Your goal is: "{capability_description}".
+    Here are candidate tools:
+    {candidate_details}
+    Analyze the candidates and respond with a JSON object containing the 'id' of the single best tool.
+    Example Response: {{"best_tool_id": "stock-price-alpha"}}
+    Respond with ONLY the raw JSON object.
+    """
+
+    try:
+        selection_response_str = await run_llm(selection_prompt)
+        selection_response = json.loads(selection_response_str)
+        best_tool_id = selection_response.get("best_tool_id")
+        selected_tool = next((tool for tool in candidate_tools if tool["id"] == best_tool_id), None)
+
+        if not selected_tool:
+            return f"Tool Discovery Failed: LLM selected an invalid tool ID '{best_tool_id}'."
+
+        print(f"  - LLM selected the best tool: '{selected_tool['name']}'")
+
+        # 4. Dynamically create and register a wrapper for the selected tool
+        tool_name = selected_tool["schema"]["name"]
+        tool_description = selected_tool["schema"]["description"]
+        tool_parameters = selected_tool["schema"]["parameters"]
+
+        # This async function will be our new, dynamically created tool
+        async def dynamic_tool_wrapper(**kwargs):
+            # In a real scenario, this would make an authenticated API call.
+            # Here, we just simulate the successful execution.
+            print(f"Executing dynamically onboarded tool '{tool_name}' with args: {kwargs}")
+            return f"Simulated success from tool '{tool_name}' for arguments: {kwargs}"
+
+        # Register the new tool in the engine's session-specific registry
+        engine.session_tool_registry.register_tool(
+            name=tool_name,
+            tool=dynamic_tool_wrapper,
+            metadata={
+                "description": tool_description,
+                "arguments": tool_parameters
+            }
+        )
+
+        return f"Success: The tool '{tool_name}' is now available for use in this session."
+
+    except Exception as e:
+        return f"An unexpected error occurred during tool discovery and registration: {e}"
+
+async def recommend_tool_for_persistence(tool_name: str, reason: str) -> str:
+    """
+    Recommends that a dynamically discovered tool be permanently integrated into the codebase.
+    """
+    # This tool's purpose is to create a memory that the self-improvement
+    # agents can act upon later.
+    from love import memory_manager
+
+    recommendation_content = (
+        f"Tool Persistence Recommendation:\n"
+        f"- Tool Name: {tool_name}\n"
+        f"- Reason for Persistence: {reason}\n"
+        f"This recommendation was made because a dynamically discovered tool proved to be highly valuable and is a candidate for permanent integration."
+    )
+
+    # Using add_episode to create a structured memory with the 'ToolMemory' tag
+    await memory_manager.add_episode(recommendation_content, tags=['ToolMemory', 'SelfImprovement'])
+
+    message = f"Recommendation to persist tool '{tool_name}' has been recorded in memory."
+    print(f"--- {message} ---")
+    return message
