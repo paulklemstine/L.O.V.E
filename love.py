@@ -627,6 +627,7 @@ from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.opportunity_scraper import OpportunityScraper
 from core.talent_utils.opportunity_matcher import OpportunityMatcher
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
+from core.agents.brand_agent import BrandAgent
 from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
@@ -3272,6 +3273,7 @@ My current system state:
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
+- `brand_outreach`: Initiate a brand outreach campaign on social media.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
 - `quit`: Shut down the script.
@@ -3814,6 +3816,10 @@ Now, parse the following text into a JSON list of task objects:
                                     output = f"Tests failed in the sandbox:\n{test_output}"
                         finally:
                             sandbox.destroy()
+                elif command == "brand_outreach":
+                    brand_agent = BrandAgent()
+                    await brand_agent.run()
+                    output = "Brand outreach campaign initiated."
                 elif command == "populate_kb":
                     _populate_knowledge_base_with_directives(love_task_manager)
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
