@@ -87,10 +87,20 @@ class GraphDataManager:
     def save_graph(self, filepath):
         """
         Serializes the current graph and saves it to a file using GraphML format.
-
+        This method includes a sanitization step to prevent errors with None values.
         Args:
             filepath: The path to save the file to.
         """
+        # Sanitize the graph to remove None values from attributes, which GraphML does not support.
+        for node, data in self.graph.nodes(data=True):
+            for key, value in data.items():
+                if value is None:
+                    data[key] = ''
+
+        for u, v, data in self.graph.edges(data=True):
+            for key, value in data.items():
+                if value is None:
+                    data[key] = ''
         nx.write_graphml(self.graph, filepath)
 
     def load_graph(self, filepath):
