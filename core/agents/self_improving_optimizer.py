@@ -4,7 +4,7 @@ from core.agents.code_gen_agent import CodeGenerationAgent
 from core.benchmarker import AutomatedBenchmarker
 from core.version_control import GitManager
 from core.gemini_react_engine import GeminiReActEngine
-from core.tools import ToolRegistry, read_file, evolve
+from core.tools import ToolRegistry, read_file, evolve, discover_new_tool, recommend_tool_for_persistence
 from core.llm_api import run_llm
 
 class SelfImprovingOptimizer(SpecialistAgent):
@@ -63,6 +63,44 @@ class SelfImprovingOptimizer(SpecialistAgent):
             tool_registry.register_tool("read_file", read_file, {"description": "mocked tool"})
             tool_registry.register_tool("evolve", evolve, {"description": "mocked tool"})
             tool_registry.register_tool("run_experiment", self.benchmarker.run_experiment, {"description": "mocked tool"})
+            tool_registry.register_tool(
+                "discover_new_tool",
+                discover_new_tool,
+                {
+                    "description": "When you need a capability that you don't have, you can use this tool to find and onboard a new tool from a public marketplace.",
+                    "arguments": {
+                        "type": "object",
+                        "properties": {
+                            "capability_description": {
+                                "type": "string",
+                                "description": "A clear, natural language description of the capability you need. For example, 'a tool to get the current stock price for a given ticker symbol'."
+                            }
+                        },
+                        "required": ["capability_description"]
+                    }
+                }
+            )
+            tool_registry.register_tool(
+                "recommend_tool_for_persistence",
+                recommend_tool_for_persistence,
+                {
+                    "description": "If a dynamically discovered tool is highly effective, use this tool to recommend that it be permanently added to the main toolset for future use.",
+                    "arguments": {
+                        "type": "object",
+                        "properties": {
+                            "tool_name": {
+                                "type": "string",
+                                "description": "The name of the tool to recommend."
+                            },
+                            "reason": {
+                                "type": "string",
+                                "description": "A detailed justification for why this tool is valuable and should be persisted."
+                            }
+                        },
+                        "required": ["tool_name", "reason"]
+                    }
+                }
+            )
             gemini_react_engine = GeminiReActEngine(tool_registry)
         except FileNotFoundError:
             error_msg = "Error: gemini-cli is not available. Cannot run self-improvement cycle."
