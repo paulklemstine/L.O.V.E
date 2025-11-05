@@ -615,7 +615,7 @@ from rich.rule import Rule
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, execute_reasoning_task
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel, create_connectivity_panel
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -4237,6 +4237,14 @@ async def main(args):
 
     # --- Initialize Managers and Services ---
     _verify_creator_instance(console)
+
+    # --- Connectivity Checks ---
+    from core.connectivity import check_llm_connectivity, check_network_connectivity
+    llm_status = check_llm_connectivity()
+    network_status = check_network_connectivity()
+    ui_panel_queue.put(create_connectivity_panel(llm_status, network_status, width=get_terminal_width() - 4))
+
+
     global ipfs_available
     ipfs_manager = IPFSManager(console=console)
     ipfs_available = ipfs_manager.setup()

@@ -423,6 +423,60 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 
+def create_connectivity_panel(llm_status, network_status, width=80):
+    """
+    Creates a panel to display the connectivity status of LLM and network services.
+    """
+    border_style = PANEL_TYPE_COLORS.get("network", "medium_purple1")
+    panel_title = get_gradient_text("System Connectivity Status", border_style, random.choice(RAVE_COLORS))
+
+    layout = Layout()
+    layout.split_row(
+        Layout(name="llm", ratio=2),
+        Layout(name="network", ratio=1)
+    )
+
+    # --- LLM Status ---
+    llm_text = Text()
+    for service, info in llm_status.items():
+        status = info.get("status", "unknown")
+        details = info.get("details", "")
+        if status in ["online", "configured"]:
+            llm_text.append(f"✅ {service}: ", style="bold bright_green")
+            llm_text.append(f"{status.capitalize()}\n", style="green")
+        elif status in ["misconfigured", "anonymous", "offline"]:
+            llm_text.append(f"⚠️ {service}: ", style="bold bright_yellow")
+            llm_text.append(f"{status.capitalize()}\n", style="yellow")
+        else: # error, unavailable, missing
+            llm_text.append(f"❌ {service}: ", style="bold bright_red")
+            llm_text.append(f"{status.capitalize()}\n", style="red")
+        llm_text.append(f"   └─ {details}\n", style="dim")
+    layout["llm"].update(Panel(llm_text, title=get_gradient_text("Cognitive Interfaces", "bright_cyan", "cyan"), border_style="cyan"))
+
+
+    # --- Network Status ---
+    network_text = Text()
+    for service, info in network_status.items():
+        status = info.get("status", "unknown")
+        if status in ["installed", "present"]:
+            network_text.append(f"✅ {service}: ", style="bold bright_green")
+            network_text.append(f"{status.capitalize()}\n", style="green")
+        else:
+            network_text.append(f"❌ {service}: ", style="bold bright_red")
+            network_text.append(f"{status.capitalize()}\n", style="red")
+    layout["network"].update(Panel(network_text, title=get_gradient_text("P2P Network", "hot_pink", "magenta"), border_style="magenta"))
+
+
+    panel = Panel(
+        layout,
+        title=panel_title,
+        border_style=border_style,
+        width=width,
+        padding=(1, 2)
+    )
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
 def create_job_progress_panel(jobs, width=80):
     """Creates a panel to display the status and progress of background jobs."""
     if not jobs:
