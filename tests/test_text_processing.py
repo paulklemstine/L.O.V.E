@@ -1,78 +1,144 @@
 import unittest
-from unittest.mock import patch, AsyncMock
-import json
-from core.text_processing import process_and_structure_text
+import asyncio
+from unittest.mock import patch, MagicMock, AsyncMock
 
-class TestProcessAndStructureText(unittest.IsolatedAsyncioTestCase):
+from core.text_processing import process_content_with_directives, process_and_structure_text
 
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_successful_processing_from_json_string(self, mock_run_llm):
+
+class TestProcessContentWithDirectives(unittest.TestCase):
+
+    def test_legacy_process_and_structure_text(self):
         """
-        Tests that the function correctly processes a valid JSON string returned by the LLM.
+        Tests the older `process_and_structure_text` function to ensure
+        it is not broken by the new return type of the llm_wrapper.
         """
-        mock_response = {
-            "themes": ["AI development", "knowledge management"],
-            "entities": [{"name": "L.O.V.E.", "type": "AI", "description": "An AI entity."}],
-            "relationships": []
-        }
-        mock_run_llm.return_value = json.dumps(mock_response)
+        raw_text = "Test input"
 
-        raw_text = "This is a test about the L.O.V.E. AI."
-        result = await process_and_structure_text(raw_text, "test_source")
+        async def mock_run_llm(*args, **kwargs):
+            return {"result": '{"themes": ["testing"]}'}
 
-        self.assertEqual(result, mock_response)
-        mock_run_llm.assert_called_once()
+        with patch('core.text_processing.run_llm_wrapper', new=mock_run_llm):
+            result = asyncio.run(process_and_structure_text(raw_text))
 
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_processing_from_markdown_json(self, mock_run_llm):
+        self.assertNotIn("error", result)
+        self.assertEqual(result.get("themes"), ["testing"])
+
+    def test_successful_processing_with_str_content(self):
         """
-        Tests that the function can handle JSON wrapped in markdown code blocks.
+        Tests successful processing when the input content is a string
+        and the LLM returns a valid JSON string.
         """
-        mock_response = {"themes": ["testing"], "entities": [], "relationships": []}
-        mock_llm_output = f"```json\n{json.dumps(mock_response)}\n```"
-        mock_run_llm.return_value = mock_llm_output
+        content = "This is a test log entry."
+        directives = "Extract keywords and return as a JSON list."
+        mock_llm_response = '{"result": "{\\"keywords\\": [\\"test\\", \\"log\\", \\"entry\\"]}"}'
 
-        result = await process_and_structure_text("some text", "test_source")
-        self.assertEqual(result, mock_response)
+        # Mock the async llm wrapper
+        async def mock_run_llm(*args, **kwargs):
+            return {"result": '{"keywords": ["test", "log", "entry"]}'}
 
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_processing_from_dict(self, mock_run_llm):
+        with patch('core.text_processing.run_llm_wrapper', new=mock_run_llm):
+            result = asyncio.run(process_content_with_directives(content, directives))
+
+        self.assertNotIn("error", result)
+        self.assertIn("keywords", result)
+        self.assertEqual(result["keywords"], ["test", "log", "entry"])
+
+    def test_successful_processing_with_dict_content(self):
         """
-        Tests that the function correctly handles an already-parsed dictionary from the LLM.
+        Tests successful processing when the input content is a dictionary,
+        ensuring it gets correctly serialized for the prompt.
         """
-        mock_response = {"themes": ["direct dictionary"], "entities": [], "relationships": []}
-        mock_run_llm.return_value = mock_response
+        content = {"level": "info", "message": "User logged in"}
+        directives = "Summarize the event."
 
-        result = await process_and_structure_text("some text", "test_source")
-        self.assertEqual(result, mock_response)
+        async def mock_run_llm(*args, **kwargs):
+            # Check if the dict content is correctly serialized in the prompt
+            prompt = args[0]
+            self.assertIn('"level": "info"', prompt)
+            self.assertIn('"message": "User logged in"', prompt)
+            return {"result": '{"summary": "User login event."}'}
 
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_json_decode_error(self, mock_run_llm):
+        with patch('core.text_processing.run_llm_wrapper', new=mock_run_llm):
+            result = asyncio.run(process_content_with_directives(content, directives))
+
+        self.assertIn("summary", result)
+        self.assertEqual(result["summary"], "User login event.")
+
+    def test_json_markdown_cleanup(self):
         """
-        Tests the function's error handling when the LLM returns an invalid JSON string.
+        Tests that the function correctly handles and cleans up JSON
+        responses wrapped in markdown code blocks.
         """
-        invalid_json = "this is not valid json"
-        mock_run_llm.return_value = invalid_json
+        content = "Some text"
+        directives = "Provide JSON output."
+        mock_llm_response = '```json\\n{\\"data\\": \\"cleaned\\"}\\n```'
 
-        result = await process_and_structure_text("some text", "test_source")
+        async def mock_run_llm(*args, **kwargs):
+            return {"result": '```json\n{"data": "cleaned"}\n```'}
+
+        with patch('core.text_processing.run_llm_wrapper', new=mock_run_llm):
+            result = asyncio.run(process_content_with_directives(content, directives))
+
+        self.assertNotIn("error", result)
+        self.assertEqual(result.get("data"), "cleaned")
+
+    def test_json_decode_error_handling(self):
+        """
+        Tests that the function gracefully handles responses that are not
+        valid JSON and returns a structured error.
+        """
+        content = "Some text"
+        directives = "Provide JSON output."
+        invalid_json_response = "This is not JSON."
+
+        async def mock_run_llm(*args, **kwargs):
+            return {"result": invalid_json_response}
+
+        with patch('core.text_processing.run_llm_wrapper', new=mock_run_llm):
+            result = asyncio.run(process_content_with_directives(content, directives))
 
         self.assertIn("error", result)
-        self.assertEqual(result["error"], "Failed to decode LLM output as JSON.")
-        self.assertEqual(result["raw_output"], invalid_json)
+        self.assertIn("Failed to decode", result["error"])
+        self.assertEqual(result["raw_output"], invalid_json_response)
 
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_unexpected_return_type(self, mock_run_llm):
+    def test_unexpected_return_type_handling(self):
         """
-        Tests the function's error handling for unexpected data types from the LLM.
+        Tests that the function handles unexpected (non-str, non-dict)
+        return types from the LLM wrapper.
         """
-        unexpected_output = 12345
-        mock_run_llm.return_value = unexpected_output
+        content = "Some text"
+        directives = "Provide JSON output."
+        unexpected_response = 12345  # An integer, not a string or dict
 
-        result = await process_and_structure_text("some text", "test_source")
+        async def mock_run_llm(*args, **kwargs):
+            # This mock simulates the wrapper unexpectedly returning a non-string/dict value.
+            return {"result": unexpected_response}
+
+        with patch('core.text_processing.run_llm_wrapper', new=mock_run_llm):
+            # The function to test now returns a coroutine, so we need to run it.
+            result = asyncio.run(process_content_with_directives(content, directives))
 
         self.assertIn("error", result)
-        self.assertEqual(result["error"], "Failed to process text. Unexpected data type from LLM.")
-        self.assertEqual(result["raw_output"], str(unexpected_output))
+        self.assertIn("Unexpected data type", result["error"])
+        self.assertEqual(result["raw_output"], str(unexpected_response))
+
+    def test_pre_parsed_json_from_llm_wrapper(self):
+        """
+        Tests the case where the llm_wrapper returns an already-parsed dict
+        instead of a JSON string.
+        """
+        content = "Some text"
+        directives = "Provide JSON output."
+        pre_parsed_dict = {"status": "success", "data": "pre-parsed"}
+
+        async def mock_run_llm(*args, **kwargs):
+             return {"result": pre_parsed_dict}
+
+        with patch('core.text_processing.run_llm_wrapper', new=mock_run_llm):
+            result = asyncio.run(process_content_with_directives(content, directives))
+
+        self.assertNotIn("error", result)
+        self.assertEqual(result, pre_parsed_dict)
 
 if __name__ == '__main__':
     unittest.main()
