@@ -3531,7 +3531,17 @@ Now, parse the following text into a JSON list of task objects:
             except queue.Empty:
                 pass # No user input, proceed with normal autonomous logic.
 
-            # 1. Prioritize Leads from the Proactive Agent
+            # 1. Prioritize Network Anomalies
+            if not llm_command and 'monitoring' in love_state and love_state['monitoring']['anomalies']:
+                # Find the most recent network-related anomaly
+                network_anomaly = next((a for a in reversed(love_state['monitoring']['anomalies']) if a['type'] in ["High Latency", "High Packet Loss", "Peer Drop"]), None)
+                if network_anomaly:
+                    llm_command = f"handle_network_anomaly {network_anomaly['type']}"
+                    # To prevent immediate re-triggering, we can remove the anomaly or mark it as handled
+                    love_state['monitoring']['anomalies'] = [a for a in love_state['monitoring']['anomalies'] if a is not network_anomaly]
+
+
+            # 2. Prioritize Leads from the Proactive Agent
             if not llm_command and love_state.get('proactive_leads'):
                 with proactive_agent.lock:
                     lead = love_state['proactive_leads'].pop(0)
@@ -3817,6 +3827,21 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "populate_kb":
                     _populate_knowledge_base_with_directives(love_task_manager)
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
+                elif command == "handle_network_anomaly":
+                    anomaly_type = " ".join(args)
+                    last_restart = love_state.get('last_network_restart', 0)
+                    cooldown = 300 # 5 minutes
+
+                    if time.time() - last_restart > cooldown:
+                        output = f"Detected network anomaly: '{anomaly_type}'. Initiating self-healing protocol: restarting NetworkManager."
+                        love_state['last_network_restart'] = time.time()
+                        if network_manager:
+                            network_manager.stop()
+                            time.sleep(5) # Allow threads to close
+                            network_manager.start()
+                    else:
+                        output = f"Network anomaly '{anomaly_type}' detected, but self-healing is on cooldown. Monitoring."
+
                 elif command == "quit":
                     break
                 else:
@@ -4261,7 +4286,7 @@ async def main(args):
 
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
-    monitoring_manager = MonitoringManager(love_state, console)
+    monitoring_manager = MonitoringManager(love_state, console, network_manager=network_manager)
     monitoring_manager.start()
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
