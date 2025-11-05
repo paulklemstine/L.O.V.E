@@ -46,8 +46,62 @@ class SelfImprovingOptimizer(SpecialistAgent):
         elif task_type == "run_evolution_cycle":
             result = await self._run_evolution_cycle(task_details.get('insight'))
             return {"status": "success", "result": result}
+        elif task_type == "assimilate_new_tool":
+            result = await self._assimilate_new_tool(task_details.get('insight'))
+            return {"status": "success", "result": result}
         else:
             return {"status": "failure", "result": f"Unknown task_type: {task_type}"}
+
+    async def _assimilate_new_tool(self, insight: str) -> str:
+        """
+        Parses a tool persistence recommendation, generates the tool's code,
+        and permanently adds it to the codebase.
+        """
+        if not insight:
+            return "No insight provided for tool assimilation."
+
+        print(f"\n===== Starting Tool Assimilation Cycle from Insight =====")
+        print(f"Insight: {insight}")
+
+        # 1. Generate the code for the new tool
+        prompt = f"""
+        You are a code generation expert. Based on the following recommendation, write the Python code for a new tool to be added to `core/tools.py`.
+        The tool should be a single async function. It should be a production-quality, permanent implementation.
+
+        Recommendation:
+        ---
+        {insight}
+        ---
+
+        Respond with ONLY the Python code for the new tool.
+        """
+        code_gen_result = await self.code_generator.execute_task({"hypothesis": prompt})
+        new_tool_code = code_gen_result.get("result")
+        if code_gen_result.get("status") == 'failure' or not new_tool_code:
+            return f"Tool assimilation failed: Code generation failed. Reason: {new_tool_code}"
+
+        print(f"  - Generated code for new tool:\n{new_tool_code}")
+
+        # 2. Append the new tool to the tools file
+        tools_file_path = "core/tools.py"
+        try:
+            with open(tools_file_path, "a") as f:
+                f.write(f"\n\n{new_tool_code}")
+            print(f"  - Successfully appended new tool to {tools_file_path}")
+        except Exception as e:
+            return f"Tool assimilation failed: Could not write to {tools_file_path}. Error: {e}"
+
+        # 3. Commit the change
+        branch_name = f"feature/assimilate-tool-{uuid.uuid4()[:8]}"
+        commit_message = f"feat: Assimilate new tool based on recommendation\n\n{insight}"
+        try:
+            self.git_manager.create_branch(branch_name)
+            self.git_manager.add([tools_file_path])
+            self.git_manager.commit(commit_message)
+            return f"Tool assimilation successful. New tool committed to branch '{branch_name}'."
+        except Exception as e:
+            self.git_manager.checkout('main') # Revert on failure
+            return f"Tool assimilation failed during git integration. Error: {e}"
 
     async def _improve_module(self, task_details: Dict) -> str:
         """

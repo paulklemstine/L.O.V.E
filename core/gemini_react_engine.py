@@ -7,11 +7,11 @@ import core.tools
 class GeminiReActEngine:
     """Manages the state of a Thought-Action-Observation loop."""
 
-    def __init__(self, tool_registry: core.tools.ToolRegistry):
+    def __init__(self, tool_registry: core.tools.ToolRegistry, memory_manager=None):
         self.tool_registry = tool_registry
-        # Story 2.3: Add a session-specific registry for dynamic tools
         self.session_tool_registry = core.tools.ToolRegistry()
         self.history: List[Tuple[str, str, str]] = []
+        self.memory_manager = memory_manager
 
     async def execute_goal(self, goal: str) -> str:
         """
@@ -84,6 +84,17 @@ class GeminiReActEngine:
 
     def _create_prompt(self, goal: str, tool_metadata: str) -> str:
         """Creates the ReAct prompt template."""
+
+        # Story 3.3: Integrate Folded Memories
+        relevant_wisdom = ""
+        if self.memory_manager:
+            folded_memories = self.memory_manager.retrieve_relevant_folded_memories(goal)
+            if folded_memories:
+                relevant_wisdom = "You have the following high-level summaries from past experiences that may be relevant:\n"
+                for mem in folded_memories:
+                    relevant_wisdom += f"- {mem}\n"
+                relevant_wisdom += "\n"
+
         prompt = f"""
 You are a large language model tasked with achieving a goal.
 
@@ -91,7 +102,7 @@ Goal: {goal}
 
 {tool_metadata}
 
-To achieve the goal, you must output a JSON object with two keys: "thought" and "action".
+{relevant_wisdom}To achieve the goal, you must output a JSON object with two keys: "thought" and "action".
 The "thought" key should contain your reasoning about the current state and what to do next.
 The "action" key should contain a JSON object with two keys: "tool_name" and "arguments".
 The "tool_name" should be one of the available tools.

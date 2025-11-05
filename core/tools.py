@@ -487,17 +487,42 @@ async def discover_new_tool(capability_description: str, engine: 'GeminiReActEng
     except Exception as e:
         return f"Error: Failed to generate search query from description. Details: {e}"
 
-    # 2. Simulate searching an external API marketplace
-    print("  - Searching simulated API marketplace...")
-    simulated_marketplace = [
-        {"id": "stock-price-alpha", "name": "StockPriceAlpha", "description": "Provides real-time and historical stock prices for any given ticker symbol.", "keywords": ["stock", "price", "finance", "ticker"], "schema": {"name": "get_stock_price", "description": "Fetches the current stock price.", "parameters": {"type": "object", "properties": {"ticker": {"type": "string", "description": "e.g., 'AAPL'"}}, "required": ["ticker"]}}},
-        {"id": "weatherly", "name": "Weatherly API", "description": "Get the current weather conditions for any city.", "keywords": ["weather", "forecast", "temperature"], "schema": {"name": "get_current_weather", "description": "Retrieves current weather.", "parameters": {"type": "object", "properties": {"city": {"type": "string", "description": "e.g., 'San Francisco'"}}, "required": ["city"]}}},
-        {"id": "news-aggregator-pro", "name": "News Aggregator Pro", "description": "Searches the latest news articles.", "keywords": ["news", "articles", "headlines"], "schema": {"name": "search_news", "description": "Finds news articles.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "The topic to search for."}}, "required": ["query"]}}}
-    ]
-    candidate_tools = [tool for tool in simulated_marketplace if any(keyword in tool["keywords"] for keyword in search_query.lower().split())]
+    # 2. Search the RapidAPI marketplace
+    print("  - Searching the RapidAPI marketplace...")
+    url = "https://rapidapi-p.rapidapi.com/apis"
+    querystring = {"query":search_query}
+    headers = {
+        "x-rapidapi-host": "rapidapi-p.rapidapi.com",
+        "x-rapidapi-key": os.environ.get("RAPID_API_KEY")
+    }
+
+    try:
+        response = requests.get(url, headers=headers, params=querystring)
+        response.raise_for_status()
+        search_results = response.json()
+
+        # We need to transform the search results into the format our LLM expects.
+        # This is a simplified transformation.
+        candidate_tools = []
+        for api in search_results.get('apis', []):
+            candidate_tools.append({
+                "id": api.get('id'),
+                "name": api.get('name'),
+                "description": api.get('description'),
+                "keywords": api.get('category'), # Using category as keywords
+                # The schema would need to be fetched from another endpoint in a real scenario
+                "schema": {
+                    "name": f"call_{api.get('id').replace('-', '_')}",
+                    "description": f"Calls the {api.get('name')} API.",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            })
+
+    except requests.exceptions.RequestException as e:
+        return f"Error: Failed to search RapidAPI. Details: {e}"
 
     if not candidate_tools:
-        return f"Tool Discovery Failed: No tools found matching the query '{search_query}'."
+        return f"Tool Discovery Failed: No tools found matching the query '{search_query}' on RapidAPI."
 
     print(f"  - Found {len(candidate_tools)} candidate tool(s).")
 

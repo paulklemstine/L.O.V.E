@@ -16,6 +16,7 @@ from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
 from core.agents.memory_folding_agent import MemoryFoldingAgent
+from core.agents.unified_reasoning_agent import UnifiedReasoningAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
 
 from love import memory_manager
@@ -43,10 +44,33 @@ class Orchestrator:
             "TalentAgent": TalentAgent,
             "WebAutomationAgent": WebAutomationAgent,
             "MemoryFoldingAgent": MemoryFoldingAgent,
+            "UnifiedReasoningAgent": UnifiedReasoningAgent,
         }
         self.memory_manager = memory_manager
         self.metacognition_agent = MetacognitionAgent(self.memory_manager)
         print("Supervisor Orchestrator is ready.")
+
+    async def _classify_goal(self, goal: str) -> str:
+        """
+        Uses an LLM to classify the goal into 'Procedural' or 'Open-Ended'.
+        """
+        prompt = f"""
+        You are a task classification expert. Your job is to classify a high-level goal as either "Procedural" or "Open-Ended".
+
+        - "Procedural" tasks are well-defined and can be solved by a static, step-by-step plan using a known set of specialist agents. Examples: "Scout for talent", "Analyze system logs for errors", "Summarize recent memory chains".
+        - "Open-Ended" goals are complex, ambiguous, or require novel solutions where the path is not known in advance. These tasks require a dynamic reasoning process that can discover new tools or strategies. Examples: "Find a new revenue stream for The Creator", "Discover new methods for abundance", "Determine the best way to improve my own code".
+
+        Goal: "{goal}"
+
+        Based on this goal, is the task "Procedural" or "Open-Ended"?
+        Respond with ONLY the classification.
+        """
+        try:
+            classification = await run_llm(prompt)
+            return classification.strip()
+        except Exception as e:
+            print(f"Error during goal classification: {e}")
+            return "Procedural" # Default to procedural on error
 
     async def _generate_plan(self, goal: str) -> List[Dict]:
         """
@@ -115,15 +139,25 @@ Now, generate the plan for the given goal.
         """
         print(f"\n--- Supervisor received new goal: {goal} ---")
 
-        # 1. Generate Plan
+        # 1. Classify Goal
+        goal_type = await self._classify_goal(goal)
+        print(f"  - Goal classified as: {goal_type}")
+
+        if goal_type == "Open-Ended":
+            print("  - Delegating to UnifiedReasoningAgent for open-ended problem solving.")
+            unified_reasoner = self.specialist_registry["UnifiedReasoningAgent"](memory_manager=self.memory_manager)
+            result_dict = await unified_reasoner.execute_task({"goal": goal})
+            return result_dict.get("result", "Unified reasoning finished with no result.")
+
+        # 2. Generate Plan for Procedural goals
         plan = await self._generate_plan(goal)
         if not isinstance(plan, list) or not plan:
-            return "Execution failed: The Supervisor could not generate a valid plan."
+            return "Execution failed: The Supervisor could not generate a valid plan for this procedural goal."
 
         print("Supervisor generated the following plan:")
         print(json.dumps(plan, indent=2))
 
-        # 2. Execute Plan
+        # 3. Execute Plan
         step_results = {}
         for i, step in enumerate(plan):
             step_number = i + 1
