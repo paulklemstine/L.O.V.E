@@ -2,6 +2,7 @@ import logging
 from rich.console import Console
 import yaml
 import json
+from typing import List
 
 class ReasoningEngine:
     """
