@@ -12,6 +12,7 @@ import requests
 from xml.etree import ElementTree as ET
 from core.retry import retry
 from pycvesearch import CVESearch
+from core.knowledge_extractor import KnowledgeExtractor
 
 # This module no longer imports directly from love.py to avoid circular dependencies.
 # Dependencies like IS_CREATOR_INSTANCE and callbacks are now injected via the constructor.
@@ -417,6 +418,10 @@ def probe_target(ip_address, knowledge_base, autopilot_mode=False):
             "os": os_details
         })
 
+        # Enrich knowledge base with parsed data
+        extractor = KnowledgeExtractor(knowledge_base)
+        extractor.parse_probe_data(ip_address, ports)
+
         log_event(f"Probe of {ip_address} complete. OS: {os_details}, Open Ports: {list(ports.keys())}", level="INFO")
         return ports, output
     except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
@@ -459,8 +464,13 @@ def perform_webrequest(url, knowledge_base, autopilot_mode=False):
         content = response.text
 
         # Update knowledge_base
-        knowledge_base.add_node(url, 'webrequest', attributes={"timestamp": time.time(), "content_length": len(content), "content": content})
+        knowledge_base.add_node(url, 'webrequest', attributes={"timestamp": time.time(), "content_length": len(content)})
         log_event(f"Web request to {url} successful. Stored {len(content)} bytes.", level="INFO")
+
+        # Enrich knowledge base with parsed data
+        extractor = KnowledgeExtractor(knowledge_base)
+        extractor.parse_web_content(url, content)
+
         # Return a summary to the loop, not the full content, and None for the error.
         summary = f"Successfully fetched {len(content)} bytes from {url}."
         return summary, None
