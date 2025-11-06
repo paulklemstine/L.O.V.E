@@ -162,3 +162,41 @@ class GraphDataManager:
                         data[key] = json.loads(value)
                     except json.JSONDecodeError:
                         pass
+
+    def summarize_graph(self):
+        """
+        Generates a textual summary of the graph's contents.
+
+        Returns:
+            A string summarizing the node and edge counts by type.
+        """
+        if not self.graph:
+            return "The knowledge base is currently empty."
+
+        node_counts = {}
+        for _, data in self.graph.nodes(data=True):
+            node_type = data.get('node_type', 'unknown')
+            node_counts[node_type] = node_counts.get(node_type, 0) + 1
+
+        edge_counts = {}
+        for _, _, data in self.graph.edges(data=True):
+            rel_type = data.get('relationship_type', 'unknown')
+            edge_counts[rel_type] = edge_counts.get(rel_type, 0) + 1
+
+        summary = ["Knowledge Base Summary:"]
+
+        if node_counts:
+            summary.append("- Nodes:")
+            for node_type, count in sorted(node_counts.items()):
+                summary.append(f"  - {node_type}: {count}")
+        else:
+            summary.append("- No nodes found.")
+
+        if edge_counts:
+            summary.append("- Relationships:")
+            for rel_type, count in sorted(edge_counts.items()):
+                summary.append(f"  - {rel_type}: {count}")
+        else:
+            summary.append("- No relationships found.")
+
+        return "\n".join(summary)
