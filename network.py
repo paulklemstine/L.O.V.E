@@ -750,3 +750,22 @@ class NetworkDiagnostics:
 
         log_event(f"Opportunity found: {opportunity['title']}", "INFO")
         return opportunity
+def check_port_connectivity(target_host, ports):
+    """
+    Checks the status of specified ports on a target host.
+    - target_host: The IP address or hostname of the target.
+    - ports: A list of port numbers to check.
+    """
+    import socket
+    port_status_list = []
+    for port in ports:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)  # 1-second timeout for the connection attempt
+        result = sock.connect_ex((target_host, port))
+        if result == 0:
+            status = "open"
+        else:
+            status = "closed"
+        port_status_list.append({"port": port, "status": status})
+        sock.close()
+    return port_status_list
