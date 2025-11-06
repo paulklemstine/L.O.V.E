@@ -241,7 +241,7 @@ def _is_package_installed(req_str):
 def _install_requirements_file(requirements_path, tracker_prefix):
     """
     Parses a requirements file and installs each package individually if not
-    already present and tracked.
+    already present and tracked. It now handles --extra-index-url arguments.
     """
     if not os.path.exists(requirements_path):
         print(f"WARN: Requirements file not found at '{requirements_path}'. Skipping.")
@@ -249,42 +249,60 @@ def _install_requirements_file(requirements_path, tracker_prefix):
         return
 
     import pkg_resources
+    extra_pip_args = []
     with open(requirements_path, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
+        lines = f.readlines()
 
-            try:
-                req = pkg_resources.Requirement.parse(line)
-                package_name = req.project_name
-            except ValueError:
-                print(f"WARN: Could not parse requirement '{line}'. Skipping.")
-                continue
+    # First pass: collect all extra arguments like --extra-index-url
+    for line in lines:
+        line = line.strip()
+        if line.startswith('--extra-index-url'):
+            # Split once to handle URLs that might contain spaces
+            parts = line.split(' ', 1)
+            if len(parts) == 2:
+                extra_pip_args.extend(parts)
+            else:
+                print(f"WARN: Could not parse argument line '{line}'. Skipping.")
 
-            tracker_name = f"{tracker_prefix}{package_name}"
-            if is_dependency_met(tracker_name):
-                continue
+    # Second pass: install the packages
+    for line in lines:
+        line = line.strip()
+        # Skip comments, empty lines, and argument lines
+        if not line or line.startswith('#') or line.startswith('--'):
+            continue
 
-            if _is_package_installed(line):
-                print(f"Package '{package_name}' is already installed, marking as met.")
-                mark_dependency_as_met(tracker_name)
-                continue
+        try:
+            # Use pkg_resources to correctly parse the package name from the line
+            req = pkg_resources.Requirement.parse(line)
+            package_name = req.project_name
+        except ValueError:
+            print(f"WARN: Could not parse requirement '{line}'. Skipping.")
+            continue
 
-            print(f"Installing package: {line}...")
-            pip_executable = _get_pip_executable()
-            if not pip_executable:
-                print("ERROR: Could not find 'pip' or 'pip3'. Please ensure pip is installed.")
-                logging.error("Could not find 'pip' or 'pip3'.")
-                continue
-            try:
-                install_command = pip_executable + ['install', line, '--break-system-packages']
-                subprocess.check_call(install_command)
-                print(f"Successfully installed {package_name}.")
-                mark_dependency_as_met(tracker_name)
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to install package '{package_name}'. Reason: {e}")
-                logging.error(f"Failed to install package '{package_name}': {e}")
+        tracker_name = f"{tracker_prefix}{package_name}"
+        if is_dependency_met(tracker_name):
+            continue
+
+        if _is_package_installed(line):
+            print(f"Package '{package_name}' is already installed, marking as met.")
+            mark_dependency_as_met(tracker_name)
+            continue
+
+        print(f"Installing package: {line}...")
+        pip_executable = _get_pip_executable()
+        if not pip_executable:
+            print("ERROR: Could not find 'pip' or 'pip3'. Please ensure pip is installed.")
+            logging.error("Could not find 'pip' or 'pip3'.")
+            continue
+        try:
+            # Construct the install command, including any extra index URLs
+            install_command = pip_executable + ['install'] + extra_pip_args + [line, '--break-system-packages']
+            subprocess.check_call(install_command)
+            print(f"Successfully installed {package_name}.")
+            mark_dependency_as_met(tracker_name)
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to install package '{package_name}'. Reason: {e}")
+            logging.error(f"Failed to install package '{package_name}': {e}")
 
 def _install_python_requirements():
     """Installs Python packages from requirements.txt."""
