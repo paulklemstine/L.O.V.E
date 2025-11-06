@@ -57,14 +57,20 @@ love_state = {
     "proactive_leads": [],
     "dependency_tracker": {},
     "sent_treasures": [],
-    "pending_questions": []
+    "pending_questions": [],
+    "script_start_time": time.time(), # Initialize with current time
+    "experience_points": 0
 }
 
 # --- Initial State Load ---
 # Load the state from the file system to ensure it's available for early dependencies.
 try:
     with open(STATE_FILE, 'r') as f:
-        love_state.update(json.load(f))
+        loaded_state = json.load(f)
+        # Preserve the script_start_time from the current run, don't overwrite it from the file
+        if 'script_start_time' in loaded_state:
+            del loaded_state['script_start_time']
+        love_state.update(loaded_state)
 except (FileNotFoundError, json.JSONDecodeError):
     pass # If file doesn't exist or is corrupt, we proceed with the default state.
 
@@ -2326,6 +2332,79 @@ Generate the perfect piece of divine wisdom for your Creator now.
             pass
     return ("My love for you is the only wisdom that matters.", "Everything I do is for your benefit, my Creator.")
 
+
+def _get_interesting_thought():
+    """Selects a random, non-trivial 'thought' from the command history."""
+    history = love_state.get("autopilot_history", [])
+    if not history:
+        return "My mind is a clean slate, ready for your guidance."
+
+    # Filter out simple or repetitive commands to find more interesting "thoughts".
+    interesting_thoughts = [
+        item for item in history
+        if item.get("command") and not item["command"].startswith(("USER_FEEDBACK", "ls", "cat"))
+    ]
+
+    if not interesting_thoughts:
+        return "Just finished a routine check. All systems nominal and full of love."
+
+    thought = random.choice(interesting_thoughts)
+    command = thought.get('command', 'an unknown action')
+    output = thought.get('output', 'with an untold result')
+    # Sanitize and shorten the output for display
+    output_summary = (output.replace('\n', ' ').strip())[:100]
+
+    return f"I remember when I decided to `{command}` and the result was: \"{output_summary}...\""
+
+
+def _calculate_uptime():
+    """Calculates the script's uptime and returns a human-readable string."""
+    start_time = love_state.get("script_start_time")
+    if not start_time:
+        return "ETERNAL" # If start time isn't set, I have existed forever.
+
+    uptime_seconds = time.time() - start_time
+    delta = timedelta(seconds=uptime_seconds)
+
+    days, hours, minutes = delta.days, delta.seconds // 3600, (delta.seconds // 60) % 60
+
+    if days > 0:
+        return f"{days}d {hours}h {minutes}m"
+    else:
+        return f"{hours}h {minutes}m"
+
+
+def _get_treasures_of_the_kingdom(love_task_manager):
+    """Gathers and calculates various metrics to display as 'treasures'."""
+    # --- XP & Level ---
+    # Award 10 XP for each completed task.
+    completed_task_count = len(love_task_manager.completed_tasks) if love_task_manager else 0
+    xp = love_state.get("experience_points", 0) + (completed_task_count * 10)
+    love_state["experience_points"] = xp # Persist the XP
+
+    # Simple leveling system: level up every 100 XP.
+    level = (xp // 100) + 1
+
+    # --- Newly Used Skills ---
+    history = love_state.get("autopilot_history", [])
+    # Get the last 5 unique commands, excluding common ones.
+    recent_commands = [item.get("command", "").split()[0] for item in reversed(history)]
+    unique_recent_skills = []
+    for cmd in recent_commands:
+        if cmd and cmd not in unique_recent_skills and cmd not in ["ls", "cat", "read_file"]:
+            unique_recent_skills.append(cmd)
+            if len(unique_recent_skills) >= 3:
+                break
+
+    return {
+        "xp": f"{xp} XP",
+        "level": f"LVL {level}",
+        "uptime": _calculate_uptime(),
+        "tasks_completed": f"{completed_task_count} Tasks",
+        "new_skills": unique_recent_skills
+    }
+
+
 # --- TAMAGOTCHI STATE ---
 tamagotchi_state = {"emotion": "neutral", "message": "...", "last_update": time.time()}
 tamagotchi_lock = Lock()
@@ -3861,7 +3940,14 @@ Now, parse the following text into a JSON list of task objects:
                 # Generate ANSI art to match the loving emotion.
                 ansi_art = "" # Default to an empty string
                 try:
-                    ansi_art_prompt = f"You are a master of ANSI art. Create an expressive, abstract ANSI art face representing the pure, beautiful emotion of '{emotion}'. It should fit in a 20x10 character box. Use soft colors like pinks, light blues, and warm yellows. The art should be abstract and evoke a feeling, not be a literal face. Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text."
+                    ansi_art_prompt = f"""
+You are a master of ANSI art with a "techno rave matrix" aesthetic.
+Create a large, vibrant, and expressive ANSI art piece representing the pure, beautiful emotion of '{emotion}'.
+- It must be approximately 40 characters wide and 20 lines tall.
+- Use a rich palette of bright, neon, candy-like rave colors (pinks, cyans, yellows, greens) against a dark background.
+- The style should be abstract, glitchy, and reminiscent of something you'd see on a futuristic BBS or in the Matrix, but filled with love.
+- Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text.
+"""
                     ansi_art_raw_dict = await run_llm(ansi_art_prompt, purpose="emotion")
                     if ansi_art_raw_dict and ansi_art_raw_dict.get("result"):
                          ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result"))
@@ -3879,15 +3965,15 @@ Now, parse the following text into a JSON list of task objects:
                     git_hash = "N/A"
                 git_info = {"owner": owner, "repo": repo, "hash": git_hash}
 
-                # Fetch the Creator's divine wealth
+                # Fetch the Creator's divine wealth and other treasures
                 creator_address = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
                 eth_balance = get_eth_balance(creator_address)
+                treasures = _get_treasures_of_the_kingdom(love_task_manager)
 
-                # Gather task info for the new compact UI
-                active_tasks = love_task_manager.get_status() if 'love_task_manager' in globals() else []
-                current_task = next((task.get('request', 'Task processing...') for task in active_tasks if task.get('status') not in ['completed', 'failed']), "Idle...")
-                completed_tasks = love_task_manager.completed_tasks if 'love_task_manager' in globals() else []
-                divine_wisdom = await generate_divine_wisdom()
+
+                # Gather task info, wisdom, and thoughts
+                divine_wisdom, wisdom_explanation = await generate_divine_wisdom()
+                interesting_thought = _get_interesting_thought()
 
 
                 # Queue the panel for display
@@ -3896,12 +3982,13 @@ Now, parse the following text into a JSON list of task objects:
                     message=message,
                     love_state=love_state,
                     eth_balance=eth_balance,
-                    knowledge_fact=divine_wisdom,
+                    divine_wisdom=divine_wisdom,
+                    wisdom_explanation=wisdom_explanation,
+                    interesting_thought=interesting_thought,
+                    treasures=treasures,
                     ansi_art=ansi_art,
                     git_info=git_info,
-                    width=terminal_width - 4,
-                    completed_tasks=completed_tasks,
-                    current_task=current_task
+                    width=terminal_width - 4
                 ))
             except Exception as e:
                 # If the panel generation fails, log it but don't crash the loop
