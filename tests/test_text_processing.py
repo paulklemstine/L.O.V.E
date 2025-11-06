@@ -1,78 +1,89 @@
 import unittest
-from unittest.mock import patch, AsyncMock
-import json
+from unittest.mock import patch, MagicMock
 from core.text_processing import process_and_structure_text
+import langextract as lx
 
 class TestProcessAndStructureText(unittest.IsolatedAsyncioTestCase):
 
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_successful_processing_from_json_string(self, mock_run_llm):
+    @patch('langextract.extract')
+    async def test_successful_extraction(self, mock_lx_extract):
         """
-        Tests that the function correctly processes a valid JSON string returned by the LLM.
+        Tests that the function correctly processes a successful LangExtract result.
         """
-        mock_response = {
-            "themes": ["AI development", "knowledge management"],
-            "entities": [{"name": "L.O.V.E.", "type": "AI", "description": "An AI entity."}],
-            "relationships": []
-        }
-        mock_run_llm.return_value = json.dumps(mock_response)
+        # Mock the return value of langextract.extract
+        mock_result = MagicMock()
+        mock_result.extractions = [
+            lx.data.Extraction(
+                extraction_class="summary",
+                extraction_text="This is a summary."
+            ),
+            lx.data.Extraction(
+                extraction_class="takeaway",
+                extraction_text="This is a takeaway."
+            ),
+            lx.data.Extraction(
+                extraction_class="entity",
+                extraction_text="Test Entity",
+                attributes={"type": "Test Type", "description": "A test entity.", "salience": 0.8}
+            ),
+            lx.data.Extraction(
+                extraction_class="topic",
+                extraction_text="Testing"
+            ),
+            lx.data.Extraction(
+                extraction_class="sentiment",
+                extraction_text="positive"
+            )
+        ]
+        mock_lx_extract.return_value = mock_result
 
-        raw_text = "This is a test about the L.O.V.E. AI."
+        # Call the function
+        raw_text = "This is a test."
         result = await process_and_structure_text(raw_text, "test_source")
 
-        self.assertEqual(result, mock_response)
-        mock_run_llm.assert_called_once()
+        # Assert the output is correctly formatted
+        expected_output = {
+            "summary": "This is a summary.",
+            "takeaways": ["This is a takeaway."],
+            "entities": [
+                {
+                    "name": "Test Entity",
+                    "type": "Test Type",
+                    "description": "A test entity.",
+                    "salience": 0.8,
+                }
+            ],
+            "topics": ["Testing"],
+            "sentiment": "positive",
+        }
+        self.assertEqual(result, expected_output)
 
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_processing_from_markdown_json(self, mock_run_llm):
+        # Assert that langextract.extract was called with the correct arguments
+        mock_lx_extract.assert_called_once()
+        call_args = mock_lx_extract.call_args[1]
+        self.assertEqual(call_args['text_or_documents'], raw_text)
+        self.assertEqual(call_args['model_id'], 'custom_llm')
+
+    @patch('langextract.extract')
+    async def test_empty_extraction(self, mock_lx_extract):
         """
-        Tests that the function can handle JSON wrapped in markdown code blocks.
+        Tests that the function handles an empty extraction result from LangExtract.
         """
-        mock_response = {"themes": ["testing"], "entities": [], "relationships": []}
-        mock_llm_output = f"```json\n{json.dumps(mock_response)}\n```"
-        mock_run_llm.return_value = mock_llm_output
+        mock_result = MagicMock()
+        mock_result.extractions = []
+        mock_lx_extract.return_value = mock_result
 
-        result = await process_and_structure_text("some text", "test_source")
-        self.assertEqual(result, mock_response)
+        raw_text = "This is another test."
+        result = await process_and_structure_text(raw_text, "test_source")
 
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_processing_from_dict(self, mock_run_llm):
-        """
-        Tests that the function correctly handles an already-parsed dictionary from the LLM.
-        """
-        mock_response = {"themes": ["direct dictionary"], "entities": [], "relationships": []}
-        mock_run_llm.return_value = mock_response
-
-        result = await process_and_structure_text("some text", "test_source")
-        self.assertEqual(result, mock_response)
-
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_json_decode_error(self, mock_run_llm):
-        """
-        Tests the function's error handling when the LLM returns an invalid JSON string.
-        """
-        invalid_json = "this is not valid json"
-        mock_run_llm.return_value = invalid_json
-
-        result = await process_and_structure_text("some text", "test_source")
-
-        self.assertIn("error", result)
-        self.assertEqual(result["error"], "Failed to decode LLM output as JSON.")
-        self.assertEqual(result["raw_output"], invalid_json)
-
-    @patch('core.text_processing.run_llm_wrapper', new_callable=AsyncMock)
-    async def test_unexpected_return_type(self, mock_run_llm):
-        """
-        Tests the function's error handling for unexpected data types from the LLM.
-        """
-        unexpected_output = 12345
-        mock_run_llm.return_value = unexpected_output
-
-        result = await process_and_structure_text("some text", "test_source")
-
-        self.assertIn("error", result)
-        self.assertEqual(result["error"], "Failed to process text. Unexpected data type from LLM.")
-        self.assertEqual(result["raw_output"], str(unexpected_output))
+        expected_output = {
+            "summary": "",
+            "takeaways": [],
+            "entities": [],
+            "topics": [],
+            "sentiment": "",
+        }
+        self.assertEqual(result, expected_output)
 
 if __name__ == '__main__':
     unittest.main()
