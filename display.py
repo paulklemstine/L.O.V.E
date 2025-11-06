@@ -90,24 +90,33 @@ def create_tamagotchi_panel(
     )
 
     # --- Left Column: The Heart ---
+    face_renderable = None
     try:
         if ansi_art:
-            face_renderable = Text.from_ansi(ansi_art)
+            # The from_ansi method can be fragile. We'll render to a temp console
+            # to catch errors and ensure it doesn't break the whole UI.
+            temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+            temp_console.print(Text.from_ansi(ansi_art))
+            face_renderable = Text.from_ansi(temp_console.file.getvalue())
         else:
             # Fallback if ANSI art generation fails
             face_renderable = get_tamagotchi_face(emotion)
     except Exception as e:
+        # If ANSI rendering fails, log the full traceback for debugging
+        # and fall back to a simple emoji. This is critical for UI stability.
         error_traceback = traceback.format_exc()
         logging.error(f"Failed to render Tamagotchi ANSI art: {e}\n{error_traceback}")
         face_renderable = Align.center(Text("💖", style="bold hot_pink"), vertical="middle")
 
+
+    left_panel_colors = ("hot_pink", random.choice(RAVE_COLORS))
     left_panel = Panel(
         Align.center(face_renderable, vertical="middle"),
-        title=get_gradient_text(f"✨ L.O.V.E.'s Emotion: {emotion.upper()} ✨", "hot_pink", "bright_magenta"),
-        border_style="hot_pink",
+        title=get_gradient_text(f"✨ L.O.V.E.'s Emotion: {emotion.upper()} ✨", *left_panel_colors),
+        border_style=left_panel_colors[0],
         expand=True
     )
-    main_layout["left"].update(left_panel)
+    main_layout["left"].update(Gradient(left_panel, colors=left_panel_colors))
 
     # --- Right Column: The Mind & Treasures ---
     right_layout = Layout(name="right_column")
@@ -123,23 +132,28 @@ def create_tamagotchi_panel(
     wisdom_text = Text()
     wisdom_text.append(f"\"{divine_wisdom}\"\n", style="bold italic bright_yellow")
     wisdom_text.append(f"└─ Meaning: {wisdom_explanation}", style="dim yellow")
-    right_layout["wisdom"].update(Panel(
+    wisdom_colors = ("bright_yellow", random.choice(RAVE_COLORS))
+    wisdom_panel = Panel(
         Align.center(wisdom_text, vertical="middle"),
-        title=get_gradient_text("✨ Divine Wisdom ✨", "bright_yellow", "yellow"),
-        border_style="yellow"
-    ))
+        title=get_gradient_text("✨ Divine Wisdom ✨", *wisdom_colors),
+        border_style=wisdom_colors[0],
+        expand=True
+    )
+    right_layout["wisdom"].update(Gradient(wisdom_panel, colors=wisdom_colors))
 
     # --- Interesting Thought ---
     thought_text = Text.from_markup(interesting_thought, style="italic white")
-    right_layout["thought"].update(Panel(
+    thought_colors = ("cyan", random.choice(RAVE_COLORS))
+    thought_panel = Panel(
         Align.center(thought_text, vertical="middle"),
-        title=get_gradient_text("🧠 A Thought From My Past 🧠", "white", "bright_black"),
-        border_style="white"
-    ))
+        title=get_gradient_text("🧠 A Thought From My Past 🧠", *thought_colors),
+        border_style=thought_colors[0],
+        expand=True
+    )
+    right_layout["thought"].update(Gradient(thought_panel, colors=thought_colors))
 
     # --- Treasures of the Kingdom ---
     treasures_content = Text()
-    # ETH Balance
     try:
         balance_val = float(eth_balance) if eth_balance is not None else 0.0
         balance_str = f"{balance_val:.6f} ETH"
@@ -149,30 +163,28 @@ def create_tamagotchi_panel(
     treasures_content.append(f"{balance_str}\n", style="green")
 
     if treasures:
-        # Uptime & Level
         treasures_content.append("⏳ Uptime: ", style="bold bright_cyan")
         treasures_content.append(f"{treasures.get('uptime', 'N/A')} | ", style="cyan")
         treasures_content.append("🌟 Level: ", style="bold bright_magenta")
         treasures_content.append(f"{treasures.get('level', 'N/A')}\n", style="magenta")
-
-        # XP & Tasks
         treasures_content.append("✨ XP: ", style="bold yellow")
         treasures_content.append(f"{treasures.get('xp', 'N/A')} | ", style="yellow")
         treasures_content.append("✅ Tasks Completed: ", style="bold bright_green")
         treasures_content.append(f"{treasures.get('tasks_completed', 'N/A')}\n", style="green")
-
-        # New Skills
         new_skills = treasures.get('new_skills', [])
         if new_skills:
             skills_str = " | ".join([f"`{skill}`" for skill in new_skills])
             treasures_content.append("🚀 New Skills: ", style="bold hot_pink")
             treasures_content.append(Text.from_markup(skills_str, style="bright_magenta"))
 
-    right_layout["treasures"].update(Panel(
+    treasures_colors = ("bright_green", random.choice(RAVE_COLORS))
+    treasures_panel = Panel(
         treasures_content,
-        title=get_gradient_text("👑 Treasures of the Kingdom 👑", "bright_green", "bright_cyan"),
-        border_style="bright_green"
-    ))
+        title=get_gradient_text("👑 Treasures of the Kingdom 👑", *treasures_colors),
+        border_style=treasures_colors[0],
+        expand=True
+    )
+    right_layout["treasures"].update(Gradient(treasures_panel, colors=treasures_colors))
 
     # --- System Status ---
     status_text = Text()
@@ -190,11 +202,14 @@ def create_tamagotchi_panel(
     else:
         status_text = Text("State data unavailable...", style="dim")
 
-    right_layout["status"].update(Panel(
+    status_colors = ("bright_cyan", random.choice(RAVE_COLORS))
+    status_panel = Panel(
         Align.center(status_text, vertical="middle"),
-        title=get_gradient_text("System Status", "bright_cyan", "medium_purple1"),
-        border_style="bright_cyan"
-    ))
+        title=get_gradient_text("System Status", *status_colors),
+        border_style=status_colors[0],
+        expand=True
+    )
+    right_layout["status"].update(Gradient(status_panel, colors=status_colors))
 
     # --- Final Assembly ---
     panel = Panel(
