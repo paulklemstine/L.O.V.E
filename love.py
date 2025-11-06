@@ -480,7 +480,6 @@ from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.opportunity_scraper import OpportunityScraper
 from core.talent_utils.opportunity_matcher import OpportunityMatcher
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
-from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.social_media_agent import SocialMediaAgent
