@@ -84,7 +84,7 @@ class PublicProfileAggregator:
                         'platform': 'bluesky',
                         'handle': author.handle,
                         'display_name': author.display_name,
-                        'bio': author.description,
+                        'bio': getattr(author, 'description', None),
                         'avatar_url': author.avatar,
                         'followers_count': author.followers_count,
                         'follows_count': author.follows_count,

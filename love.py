@@ -536,6 +536,7 @@ from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.bluesky_api import monitor_bluesky_comments
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
+from core.social_media_agent import SocialMediaAgent
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -4203,7 +4204,9 @@ async def main(args):
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
     asyncio.create_task(cognitive_loop(user_input_queue, loop))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
-    Thread(target=monitor_bluesky_comments, args=(loop,), daemon=True).start()
+    # The new SocialMediaAgent replaces the old monitor_bluesky_comments
+    social_media_agent = SocialMediaAgent(loop)
+    asyncio.create_task(social_media_agent.run())
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
