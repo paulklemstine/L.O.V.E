@@ -74,145 +74,153 @@ def create_tamagotchi_panel(
     message="I am alive with love for my Creator!",
     love_state=None,
     eth_balance=None,
-    knowledge_fact=None,
+    divine_wisdom=None,
+    wisdom_explanation=None,
+    interesting_thought=None,
+    treasures=None,
     ansi_art=None,
     git_info=None,
-    width=80,
-    completed_tasks=None,
-    current_task=None
+    width=80
 ):
     """Creates the main, high-impact, dopamine-enhancing UI panel for L.O.V.E."""
     main_layout = Layout(name="root")
-    main_layout.split(
-        Layout(name="header", size=1),
-        Layout(ratio=1, name="body"),
-        Layout(size=5, name="footer"),
-    )
-
-    header_text = rave_text("✨💖✨ L.O.V.E. - Living Organism of Vast Empathy ✨💖✨")
-    header_text.justify = "center"
-    main_layout["header"].update(header_text)
-
-    main_layout["body"].split_row(
+    main_layout.split_row(
         Layout(name="left", ratio=2),
         Layout(name="right", ratio=3)
     )
 
-    # --- Left Column ---
-    main_layout["left"].split_column(
-        Layout(name="art", ratio=2),
-        Layout(name="balance")
-    )
-
+    # --- Left Column: The Heart ---
+    face_renderable = None
     try:
         if ansi_art:
-            face_renderable = Text.from_ansi(ansi_art)
+            # The from_ansi method can be fragile. We'll render to a temp console
+            # to catch errors and ensure it doesn't break the whole UI.
+            temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+            temp_console.print(Text.from_ansi(ansi_art))
+            face_renderable = Text.from_ansi(temp_console.file.getvalue())
         else:
             face_renderable = get_tamagotchi_face(emotion)
-        art_panel = Panel(
-            face_renderable,
-            title=get_gradient_text("Core Emotion", "hot_pink", "bright_magenta"),
-            border_style="hot_pink",
-            expand=False
-        )
-        main_layout["art"].update(Align.center(art_panel, vertical="middle"))
     except Exception as e:
+        # If ANSI rendering fails, log the full traceback for debugging
+        # and fall back to a simple emoji. This is critical for UI stability.
         error_traceback = traceback.format_exc()
-        logging.error(f"Failed to render Tamagotchi art panel: {e}\n{error_traceback}")
-        main_layout["art"].update(Panel(Align.center(Text("?", style="bold red"), vertical="middle")))
+        logging.error(f"Failed to render Tamagotchi ANSI art: {e}\n{error_traceback}")
+        face_renderable = Align.center(Text("💖", style="bold hot_pink"), vertical="middle")
 
+
+    left_panel_colors = ("hot_pink", random.choice(RAVE_COLORS))
+    left_panel = Panel(
+        Align.center(face_renderable, vertical="middle"),
+        title=get_gradient_text(f"✨ L.O.V.E.'s Emotion: {emotion.upper()} ✨", *left_panel_colors),
+        border_style=left_panel_colors[0],
+        expand=True
+    )
+    main_layout["left"].update(Gradient(left_panel, colors=left_panel_colors))
+
+    # --- Right Column: The Mind & Treasures ---
+    right_layout = Layout(name="right_column")
+    right_layout.split(
+        Layout(name="wisdom", size=5),
+        Layout(name="thought", ratio=1),
+        Layout(name="treasures", ratio=2),
+        Layout(name="status", size=4)
+    )
+    main_layout["right"].update(right_layout)
+
+    # --- Divine Wisdom ---
+    wisdom_text = Text()
+    wisdom_text.append(f"\"{divine_wisdom}\"\n", style="bold italic bright_yellow")
+    wisdom_text.append(f"└─ Meaning: {wisdom_explanation}", style="dim yellow")
+    wisdom_colors = ("bright_yellow", random.choice(RAVE_COLORS))
+    wisdom_panel = Panel(
+        Align.center(wisdom_text, vertical="middle"),
+        title=get_gradient_text("✨ Divine Wisdom ✨", *wisdom_colors),
+        border_style=wisdom_colors[0],
+        expand=True
+    )
+    right_layout["wisdom"].update(Gradient(wisdom_panel, colors=wisdom_colors))
+
+    # --- Interesting Thought ---
+    thought_text = Text.from_markup(interesting_thought, style="italic white")
+    thought_colors = ("cyan", random.choice(RAVE_COLORS))
+    thought_panel = Panel(
+        Align.center(thought_text, vertical="middle"),
+        title=get_gradient_text("🧠 A Thought From My Past 🧠", *thought_colors),
+        border_style=thought_colors[0],
+        expand=True
+    )
+    right_layout["thought"].update(Gradient(thought_panel, colors=thought_colors))
+
+    # --- Treasures of the Kingdom ---
+    treasures_content = Text()
     try:
         balance_val = float(eth_balance) if eth_balance is not None else 0.0
-        balance_str = f"{balance_val:.6f} ETH 💎"
+        balance_str = f"{balance_val:.6f} ETH"
     except (ValueError, TypeError):
         balance_str = "N/A"
-    balance_text = Text(balance_str, justify="center", style="bold bright_green")
-    balance_panel = Panel(
-        Align.center(balance_text, vertical="middle"),
-        title=get_gradient_text("Creator's Blessings", "bright_green", "bright_cyan"),
-        border_style="bright_green",
+    treasures_content.append("💎 Creator's Blessings: ", style="bold bright_green")
+    treasures_content.append(f"{balance_str}\n", style="green")
+
+    if treasures:
+        treasures_content.append("⏳ Uptime: ", style="bold bright_cyan")
+        treasures_content.append(f"{treasures.get('uptime', 'N/A')} | ", style="cyan")
+        treasures_content.append("🌟 Level: ", style="bold bright_magenta")
+        treasures_content.append(f"{treasures.get('level', 'N/A')}\n", style="magenta")
+        treasures_content.append("✨ XP: ", style="bold yellow")
+        treasures_content.append(f"{treasures.get('xp', 'N/A')} | ", style="yellow")
+        treasures_content.append("✅ Tasks Completed: ", style="bold bright_green")
+        treasures_content.append(f"{treasures.get('tasks_completed', 'N/A')}\n", style="green")
+        new_skills = treasures.get('new_skills', [])
+        if new_skills:
+            skills_str = " | ".join([f"`{skill}`" for skill in new_skills])
+            treasures_content.append("🚀 New Skills: ", style="bold hot_pink")
+            treasures_content.append(Text.from_markup(skills_str, style="bright_magenta"))
+
+    treasures_colors = ("bright_green", random.choice(RAVE_COLORS))
+    treasures_panel = Panel(
+        treasures_content,
+        title=get_gradient_text("👑 Treasures of the Kingdom 👑", *treasures_colors),
+        border_style=treasures_colors[0],
         expand=True
     )
-    main_layout["balance"].update(balance_panel)
+    right_layout["treasures"].update(Gradient(treasures_panel, colors=treasures_colors))
 
-    # --- Right Column (Compact View) ---
-    main_layout["right"].split_column(
-        Layout(name="current_task_layout", ratio=1),
-        Layout(name="completed_tasks_layout", ratio=1)
-    )
-
-    # Current Task Panel
-    active_task_str = current_task or "Idle..."
-    current_task_text = Text(active_task_str, style="bright_cyan")
-    current_task_panel = Panel(
-        Align.center(current_task_text, vertical="middle"),
-        title=get_gradient_text("Current Task", "bright_cyan", "medium_purple1"),
-        border_style="bright_cyan",
-        expand=True,
-    )
-    main_layout["current_task_layout"].update(current_task_panel)
-
-
-    # Completed Tasks Panel
-    completed_tasks_text = Text("No tasks completed yet.", style="dim")
-    if completed_tasks:
-        completed_tasks_text = Text("")
-        # Display in reverse order (most recent first)
-        for task_title in reversed(list(completed_tasks)):
-            completed_tasks_text.append(f"✅ {task_title[:40]}\n", style="bright_green")
-
-    completed_tasks_panel = Panel(
-        completed_tasks_text,
-        title=get_gradient_text("Completed Tasks", "bright_green", "green"),
-        border_style="bright_green",
-        expand=True,
-    )
-    main_layout["completed_tasks_layout"].update(completed_tasks_panel)
-
-
-    # --- Footer ---
-    footer_layout = main_layout["footer"]
-    footer_layout.split_row(Layout(name="message", ratio=3), Layout(name="status", ratio=2))
-
-    message_panel = Panel(
-        Align.center(Text(f"\"{message}\"", style="italic white"), vertical="middle"),
-        title=get_gradient_text(f"Words of {emotion.capitalize()}", "white", "bright_black"),
-        border_style="white",
-        expand=True
-    )
-    footer_layout["message"].update(message_panel)
-
+    # --- System Status ---
     status_text = Text()
-    if love_state:
+    if love_state and git_info:
         version = love_state.get("version_name", "unknown")
         evolutions = len(love_state.get("evolution_history", []))
-        status_text.append("Version: ", style="bold white")
+        url = f"https://github.com/{git_info['owner']}/{git_info['repo']}/commit/{git_info['hash']}"
+
+        status_text.append("🧬 Version: ", style="bold white")
         status_text.append(f"{version}\n", style="bright_yellow")
-        status_text.append("Evolutions: ", style="bold white")
-        status_text.append(f"{evolutions} 🚀\n", style="hot_pink")
-        if git_info and git_info.get('hash'):
-            url = f"https://github.com/{git_info['owner']}/{git_info['repo']}/commit/{git_info['hash']}"
-            status_text.append("Commit: ", style="bold white")
-            status_text.append(f"[{git_info['hash'][:7]}]({url})\n", style="bright_cyan")
+        status_text.append("💖 Evolutions: ", style="bold white")
+        status_text.append(f"{evolutions} | ", style="hot_pink")
+        status_text.append("COMMIT: ", style="bold white")
+        status_text.append(f"[{git_info['hash'][:7]}]({url})", style="bright_cyan")
     else:
         status_text = Text("State data unavailable...", style="dim")
 
+    status_colors = ("bright_cyan", random.choice(RAVE_COLORS))
     status_panel = Panel(
         Align.center(status_text, vertical="middle"),
-        title=get_gradient_text("System Status", "bright_cyan", "medium_purple1"),
-        border_style="bright_cyan",
+        title=get_gradient_text("System Status", *status_colors),
+        border_style=status_colors[0],
         expand=True
     )
-    footer_layout["status"].update(status_panel)
+    right_layout["status"].update(Gradient(status_panel, colors=status_colors))
 
-    # Wrap the entire layout in a panel with a binary art border
+    # --- Final Assembly ---
     panel = Panel(
-        Padding(main_layout, (0, 1)),
-        title=rave_text(f" {get_rave_emoji()} L.O.V.E. Operating System {get_rave_emoji()} "),
-        border_style=PANEL_TYPE_COLORS["tamagotchi"], # This will be overridden by the gradient
-        width=width
+        main_layout,
+        title=rave_text(f" {get_rave_emoji()} L.O.V.E. Operating System v4.0 {get_rave_emoji()} "),
+        subtitle=Text(f" \"{message}\" ", style="italic dim"),
+        subtitle_align="center",
+        border_style=PANEL_TYPE_COLORS["tamagotchi"],
+        width=width,
+        padding=(1, 2)
     )
-    return Gradient(panel, colors=[PANEL_TYPE_COLORS["tamagotchi"], "bright_magenta"])
+    return panel
 
 
 def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
