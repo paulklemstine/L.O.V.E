@@ -14,7 +14,6 @@ import aiohttp
 import csv
 import io
 from collections import defaultdict
-from datasets import load_dataset
 
 from rich.console import Console
 from rich.panel import Panel
@@ -112,33 +111,6 @@ for model in GEMINI_MODELS:
 # --- OpenRouter Configuration ---
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
-def _fetch_open_llm_leaderboard():
-    """
-    Fetches the Open LLM Leaderboard data and populates the reasoning_score in the
-    MODEL_STATS dictionary.
-    """
-    global MODEL_STATS
-    try:
-        # Load the dataset directly from Hugging Face Hub
-        dataset = load_dataset("open-llm-leaderboard/results", split="main")
-
-        # The dataset is a list of dictionaries, where each dictionary is a model's results
-        for item in dataset:
-            model_name = item.get("model_name_for_query")
-            average_score = item.get("average_score")
-
-            if model_name and average_score is not None:
-                # The model name might be in a format like "org/model", we'll store it as is
-                MODEL_STATS[model_name]["reasoning_score"] = float(average_score)
-        log_event(f"Successfully loaded {len(dataset)} models from the Open LLM Leaderboard.", "INFO")
-
-    except Exception as e:
-        log_event(f"Failed to fetch or process Open LLM Leaderboard dataset: {e}", "ERROR")
-        # Fallback to the old method in case the new one fails for any reason
-        log_event("Falling back to fetching the static CSV leaderboard.", "WARNING")
-        _fetch_static_leaderboard_csv() # This will also populate MODEL_STATS
-
-    # No return value needed as it modifies the global MODEL_STATS
 
 def _fetch_static_leaderboard_csv():
     """
@@ -233,7 +205,7 @@ if os.environ.get("OPENAI_API_KEY"):
         MODEL_STATS[model]["provider"] = "openai"
 
 # --- Leaderboard Fetching ---
-_fetch_open_llm_leaderboard()
+_fetch_static_leaderboard_csv()
 
 def get_top_horde_models(count=10, get_all=False):
     """

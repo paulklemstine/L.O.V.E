@@ -54,8 +54,6 @@ class MemoryNote:
         )
 
 
-from sentence_transformers import SentenceTransformer
-
 from core.graph_manager import GraphDataManager
 
 
@@ -70,7 +68,7 @@ class MemoryManager:
 
         # The MemoryManager now uses the central GraphDataManager
         self.graph_data_manager = graph_data_manager
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.model = None
 
 
     # --- Working Memory Methods ---
@@ -162,7 +160,7 @@ class MemoryManager:
                     if tag not in tags:
                         tags.append(tag)
 
-            embedding = self.model.encode(content)
+            embedding = None
 
             return MemoryNote(
                 content=content,
@@ -202,11 +200,7 @@ class MemoryManager:
             print("No valid candidate memories found for linking.")
             return
 
-        candidate_vectors = np.array([c.embedding for c in candidates])
-        similarities = self._cosine_similarity(new_note.embedding, candidate_vectors)
-        top_indices = np.argsort(similarities)[-top_k:][::-1]
-
-        top_candidates = {candidates[i].id: candidates[i] for i in top_indices if similarities[i] > 0.5}
+        top_candidates = {}
 
         # Story 2.2: Augment candidates for SelfReflection notes
         if 'SelfReflection' in new_note.tags:
@@ -376,59 +370,6 @@ class MemoryManager:
         except Exception as e:
             print(f"An unexpected error occurred during memory evolution: {e}")
 
-    def retrieve_relevant_memories(self, query_task: str, top_k: int = 3) -> list:
-        """
-        Retrieves the most relevant memories by performing a vector search
-        followed by a graph traversal on the unified knowledge graph.
-        """
-        query_vector = self.model.encode(query_task)
-
-        all_memory_nodes = self.graph_data_manager.query_nodes("node_type", "MemoryNote")
-
-        if not all_memory_nodes:
-            return []
-
-        # 1. Find entry points via vector similarity
-        nodes = [MemoryNote.from_node_attributes(node_id, self.graph_data_manager.get_node(node_id)) for node_id in all_memory_nodes]
-
-        node_vectors = np.array([n.embedding for n in nodes if n.embedding.size > 0])
-        if node_vectors.size == 0:
-            return []
-
-        similarities = self._cosine_similarity(query_vector, node_vectors)
-        top_node_indices = np.argsort(similarities)[-top_k:][::-1]
-
-        # 2. Perform graph traversal from entry points
-        entry_point_ids = {nodes[i].id for i in top_node_indices}
-        traversed_nodes_ids = set()
-
-        for node_id in entry_point_ids:
-            traversed_nodes_ids.add(node_id)
-            neighbors = self.graph_data_manager.get_neighbors(node_id)
-            for neighbor_id in neighbors:
-                traversed_nodes_ids.add(neighbor_id)
-
-        # 3. Format results
-        amem_results = []
-        for node_id in traversed_nodes_ids:
-            node_data = self.graph_data_manager.get_node(node_id)
-            if node_data:
-                note = MemoryNote.from_node_attributes(node_id, node_data)
-                result_str = (
-                    f"Memory Note (ID: {note.id})\\n"
-                    f"  Content: {note.content}\\n"
-                    f"  Description: {note.contextual_description}\\n"
-                    f"  Keywords: {', '.join(note.keywords)}"
-                )
-                amem_results.append(result_str)
-
-        return amem_results
-
-    def _cosine_similarity(self, vec_a, vec_b):
-        """Computes cosine similarity between a vector and a matrix of vectors."""
-        norm_a = np.linalg.norm(vec_a)
-        norm_b = np.linalg.norm(vec_b, axis=1)
-        return np.dot(vec_b, vec_a) / (norm_a * norm_b)
 
     def retrieve_relevant_folded_memories(self, query_task: str, top_k: int = 2) -> list:
         """
