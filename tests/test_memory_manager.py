@@ -16,25 +16,14 @@ class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
         mock_graph_manager.reset_mock()
         self.memory_manager = MemoryManager(graph_data_manager=mock_graph_manager)
 
-    @patch('core.memory.memory_manager.run_llm', new_callable=AsyncMock)
-    @patch('core.llm_api.run_llm', new_callable=AsyncMock)
-    async def test_ingest_cognitive_cycle_creates_structured_memory(self, mock_sentence_transformer, mock_run_llm):
+    async def test_ingest_cognitive_cycle_creates_structured_memory(self):
         """
         Verify that ingest_cognitive_cycle correctly formats the input and
-        triggers the agentic memory processing pipeline.
+        triggers the agentic memory processing pipeline by calling add_episode.
         """
         # --- Arrange ---
-        # Mock the SentenceTransformer to return a predictable embedding
-        mock_model = MagicMock()
-        mock_model.encode.return_value = np.array([0.1, 0.2, 0.3])
-        mock_sentence_transformer.return_value = mock_model
-
-        # Mock the LLM call to return a predictable structured response
-        mock_run_llm.return_value = {
-            "result": '{"contextual_description": "Test description", "keywords": ["test", "cycle"], "tags": ["Testing"]}'
-        }
-
-        # Use a spy to capture the content passed to add_episode
+        # Spy on the add_episode method to see what it's called with.
+        # We don't need to mock the full pipeline, just the entry point.
         add_episode_spy = AsyncMock()
         self.memory_manager.add_episode = add_episode_spy
 

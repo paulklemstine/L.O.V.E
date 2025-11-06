@@ -8,9 +8,9 @@ class PlatformCaps:
         self.os = platform.system()
         self.arch = platform.machine()
         self.is_termux = 'TERMUX_VERSION' in os.environ
-        self.has_cuda = self.os == "Linux" and shutil.which('nvcc') is not None
-        self.has_metal = self.os == "Darwin" and self.arch == "arm64"
-        self.gpu_type = "cuda" if self.has_cuda else "metal" if self.has_metal else "none"
+        self.has_cuda = False
+        self.has_metal = False
+        self.gpu_type = "none"
 
     def __str__(self):
         return f"OS: {self.os}, Arch: {self.arch}, GPU: {self.gpu_type}, Termux: {self.is_termux}"

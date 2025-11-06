@@ -14,7 +14,6 @@ import aiohttp
 import csv
 import io
 from collections import defaultdict
-from datasets import load_dataset
 
 from rich.console import Console
 from rich.panel import Panel
@@ -112,33 +111,6 @@ for model in GEMINI_MODELS:
 # --- OpenRouter Configuration ---
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
-def _fetch_open_llm_leaderboard():
-    """
-    Fetches the Open LLM Leaderboard data and populates the reasoning_score in the
-    MODEL_STATS dictionary.
-    """
-    global MODEL_STATS
-    try:
-        # Load the dataset directly from Hugging Face Hub
-        dataset = load_dataset("open-llm-leaderboard/results", split="main")
-
-        # The dataset is a list of dictionaries, where each dictionary is a model's results
-        for item in dataset:
-            model_name = item.get("model_name_for_query")
-            average_score = item.get("average_score")
-
-            if model_name and average_score is not None:
-                # The model name might be in a format like "org/model", we'll store it as is
-                MODEL_STATS[model_name]["reasoning_score"] = float(average_score)
-        log_event(f"Successfully loaded {len(dataset)} models from the Open LLM Leaderboard.", "INFO")
-
-    except Exception as e:
-        log_event(f"Failed to fetch or process Open LLM Leaderboard dataset: {e}", "ERROR")
-        # Fallback to the old method in case the new one fails for any reason
-        log_event("Falling back to fetching the static CSV leaderboard.", "WARNING")
-        _fetch_static_leaderboard_csv() # This will also populate MODEL_STATS
-
-    # No return value needed as it modifies the global MODEL_STATS
 
 def _fetch_static_leaderboard_csv():
     """
@@ -233,7 +205,7 @@ if os.environ.get("OPENAI_API_KEY"):
         MODEL_STATS[model]["provider"] = "openai"
 
 # --- Leaderboard Fetching ---
-_fetch_open_llm_leaderboard()
+_fetch_static_leaderboard_csv()
 
 def get_top_horde_models(count=10, get_all=False):
     """
@@ -430,212 +402,8 @@ def get_token_count(text):
         return count_tokens_for_api_models(text)
 
 
-def _initialize_local_llm(console):
-    """
-    Iterates through the configured local models, attempting to download,
-    reassemble (if split), and initialize each one in sequence.
-    If all fail, it triggers self-correction.
-    """
-    global local_llm_instance, local_llm_tokenizer
-    if local_llm_instance:
-        return local_llm_instance
-
-    if CAPS.gpu_type == "none":
-        # Do not even attempt to load local models in a CPU-only environment.
-        return None
-
-    try:
-        from llama_cpp import Llama
-    except ImportError:
-        # This should have been handled by the main script's dependency check
-        console.print("[bold red]LLM API Error: llama_cpp or huggingface_hub not installed.[/bold red]")
-        return None
-
-    last_error_traceback = ""
-    last_failed_model_id = ""
-
-    for model_config in []:
-        model_id = model_config["id"]
-        is_split_model = "filenames" in model_config
-
-        local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
-        os.makedirs(local_dir, exist_ok=True)
-
-        if is_split_model:
-            final_model_filename = model_config["filenames"][0].replace(".gguf-split-a", ".gguf")
-        else:
-            final_model_filename = model_config["filename"]
-
-        final_model_path = os.path.join(local_dir, final_model_filename)
-
-        try:
-            console.print(f"\n[cyan]Attempting to load local model: [bold]{model_id}[/bold][/cyan]")
-
-            if not os.path.exists(final_model_path):
-                with Progress(
-                        TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-                        BarColumn(bar_width=None), "[progress.percentage]{task.percentage:>3.1f}%", "•",
-                        DownloadColumn(), "•", TransferSpeedColumn(), transient=True
-                ) as progress:
-                    if is_split_model:
-                        part_paths = []
-                        try:
-                            for part_filename in model_config["filenames"]:
-                                part_path = os.path.join(local_dir, part_filename)
-                                part_paths.append(part_path)
-                                if os.path.exists(part_path):
-                                    console.print(f"[green]Model part [bold]{part_filename}[/bold] found in cache.[/green]")
-                                    continue
-
-                                console.print(f"[cyan]Downloading model part: [bold]{part_filename}[/bold]...[/cyan]")
-                                hf_hub_download(repo_id=model_id, filename=part_filename, local_dir=local_dir, local_dir_use_symlinks=False)
 
 
-                            console.print(f"[cyan]Reassembling model [bold]{final_model_filename}[/bold] from parts...[/cyan]")
-                            with open(final_model_path, "wb") as final_file:
-                                for part_path in part_paths:
-                                    with open(part_path, "rb") as part_file:
-                                        shutil.copyfileobj(part_file, final_file)
-                            console.print(f"[green]Model reassembled successfully.[/green]")
-
-                        finally:
-                            for part_path in part_paths:
-                                if os.path.exists(part_path):
-                                    os.remove(part_path)
-
-                    else:
-                        console.print(f"[cyan]Downloading model: [bold]{final_model_filename}[/bold]...[/cyan]")
-                        hf_hub_download(repo_id=model_id, filename=final_model_filename, local_dir=local_dir, local_dir_use_symlinks=False)
-            else:
-                console.print(f"[green]Model [bold]{final_model_filename}[/bold] found in cache. Skipping download/assembly.[/green]")
-
-            def _load():
-                global local_llm_instance, local_llm_tokenizer
-                # This needs the CAPS global, which we don't have here.
-                # For now, we assume no GPU for simplicity in this refactor.
-                gpu_layers = 0
-                loading_message = "Loading model into CPU memory..."
-                def _do_load_action():
-                    global local_llm_instance, local_llm_tokenizer
-                    local_llm_instance = Llama(model_path=final_model_path, n_gpu_layers=gpu_layers, n_ctx=8192, verbose=False)
-                    # We can reuse the same instance for tokenization.
-                    local_llm_tokenizer = local_llm_instance
-                run_hypnotic_progress(console, loading_message, _do_load_action)
-            _load()
-            return local_llm_instance
-
-        except Exception as e:
-            last_error_traceback = traceback.format_exc()
-            last_failed_model_id = model_id
-            console.print(f"[yellow]Could not load model [bold]{model_id}[/bold]. Error: {e}. Trying next model...[/yellow]")
-            if os.path.exists(final_model_path):
-                os.remove(final_model_path)
-            local_llm_instance = None
-            continue
-
-    if not local_llm_instance:
-        error_panel = Panel(
-            f"[bold]Model Loading Failure:[/bold] {last_failed_model_id}\n\n[bold]Last Traceback:[/bold]\n{last_error_traceback}",
-            title="[bold red]FATAL: ALL LOCAL MODELS FAILED TO LOAD[/bold red]", border_style="red", expand=True
-        )
-        console.print(error_panel)
-        # We can't trigger self-correction from here, so we return None
-        return None
-
-    return None
-
-
-def ensure_primary_model_downloaded(console, download_complete_event):
-    """
-    Checks if the primary local model is downloaded and assembled. If not, it
-    downloads and assembles it. This function is designed to run in a
-    background thread and signals the provided event upon completion or failure.
-    """
-    try:
-        if CAPS.gpu_type == "none":
-            console.print("[bold yellow]CPU-only environment detected. Skipping download of local models.[/bold yellow]")
-            return
-
-        from huggingface_hub import hf_hub_download
-        primary_model_config = LOCAL_MODELS_CONFIG[0]
-        model_id = primary_model_config["id"]
-        is_split_model = "filenames" in primary_model_config
-
-        local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
-        os.makedirs(local_dir, exist_ok=True)
-
-        if is_split_model:
-            final_model_filename = primary_model_config["filenames"][0].replace(".gguf-split-a", ".gguf")
-        else:
-            final_model_filename = primary_model_config["filename"]
-
-        final_model_path = os.path.join(local_dir, final_model_filename)
-
-        if os.path.exists(final_model_path):
-            console.print(f"[green]Primary local model '{final_model_filename}' already exists.[/green]")
-            return
-
-        console.print(f"[cyan]Primary local model '{final_model_filename}' not found. Initiating download...[/cyan]")
-
-        with Progress(
-                TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-                BarColumn(bar_width=None), "[progress.percentage]{task.percentage:>3.1f}%", "•",
-                DownloadColumn(), "•", TransferSpeedColumn(), transient=True
-        ) as progress:
-            if is_split_model:
-                part_paths = []
-                try:
-                    for part_filename in primary_model_config["filenames"]:
-                        part_path = os.path.join(local_dir, part_filename)
-                        part_paths.append(part_path)
-                        if os.path.exists(part_path):
-                            console.print(f"[green]Model part '{part_filename}' found in cache.[/green]")
-                            continue
-
-                        console.print(f"[cyan]Downloading model part: '{part_filename}'...[/cyan]")
-                        task_id = progress.add_task("download", filename=part_filename, total=None)
-                        hf_hub_download(
-                            repo_id=model_id,
-                            filename=part_filename,
-                            local_dir=local_dir,
-                            local_dir_use_symlinks=False
-                        )
-                        progress.update(task_id, completed=1, total=1)
-
-                    console.print(f"[cyan]Reassembling model '{final_model_filename}' from parts...[/cyan]")
-                    with open(final_model_path, "wb") as final_file:
-                        for part_path in part_paths:
-                            with open(part_path, "rb") as part_file:
-                                shutil.copyfileobj(part_file, final_file)
-                    console.print(f"[green]Model reassembled successfully.[/green]")
-
-                finally:
-                    console.print("[cyan]Cleaning up downloaded model parts...[/cyan]")
-                    for part_path in part_paths:
-                        if os.path.exists(part_path):
-                            os.remove(part_path)
-                    console.print("[green]Cleanup complete.[/green]")
-
-            else: # For non-split models
-                console.print(f"[cyan]Downloading model: '{final_model_filename}'...[/cyan]")
-                task_id = progress.add_task("download", filename=final_model_filename, total=None)
-                hf_hub_download(
-                    repo_id=model_id,
-                    filename=final_model_filename,
-                    local_dir=local_dir,
-                    local_dir_use_symlinks=False
-                )
-                progress.update(task_id, completed=1, total=1)
-
-        console.print(f"[bold green]Primary local model is now ready at: {final_model_path}[/bold green]")
-
-    except Exception as e:
-        console.print(f"[bold red]An error occurred during primary model download: {e}[/bold red]")
-        log_event(f"Primary model download failed: {e}", "ERROR")
-    finally:
-        # No matter what happens (success or failure), signal that the process is complete.
-        log_event("Model download process finished, setting completion event.", "INFO")
-        download_complete_event.set()
 
 
 def rank_models():

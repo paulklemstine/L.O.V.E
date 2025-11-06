@@ -78,8 +78,6 @@ except (FileNotFoundError, json.JSONDecodeError):
 # This configuration is now managed in core.llm_api
 local_llm_instance = None
 
-# --- AI Horde Worker ---
-horde_worker_process = None
 
 
 
@@ -107,52 +105,6 @@ def _temp_save_state():
         # Log this critical failure to the low-level logger
         logging.critical(f"CRITICAL: Could not save state during dependency check: {e}")
 
-def _temp_get_os_info():
-    """
-    A temporary, self-contained capability checker to avoid importing core.capabilities
-    before dependencies are installed.
-    """
-    os_info = {
-        "os": "Unknown",
-        "is_termux": False,
-        "has_cuda": False,
-        "has_metal": False,
-        "gpu_type": "none"
-    }
-    system = platform.system()
-    if system == "Linux":
-        os_info["os"] = "Linux"
-        if "ANDROID_ROOT" in os.environ:
-            os_info["is_termux"] = True
-        # Check for CUDA
-        if os.path.exists('/dev/nvidia0'):
-            os_info["has_cuda"] = True
-            os_info["gpu_type"] = "cuda"
-        elif shutil.which('nvidia-smi'):
-            try:
-                result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
-                if "NVIDIA-SMI" in result.stdout:
-                    os_info["has_cuda"] = True
-                    os_info["gpu_type"] = "cuda"
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                pass # nvidia-smi might not be in PATH or might fail
-    elif system == "Darwin":
-        os_info["os"] = "macOS"
-        # On modern macOS, Metal is the primary GPU interface.
-        # A more robust check might involve system_profiler, but this is a good heuristic.
-        os_info["has_metal"] = True
-        os_info["gpu_type"] = "metal"
-    elif system == "Windows":
-        os_info["os"] = "Windows"
-        # A simple check for NVIDIA drivers on Windows
-        if os.path.exists(os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32", "nvapi64.dll")):
-            os_info["has_cuda"] = True
-            os_info["gpu_type"] = "cuda"
-
-    return os_info
-
-# Create a temporary capabilities object for the dependency checker
-_TEMP_CAPS = type('Caps', (object,), _temp_get_os_info())()
 
 
 def is_dependency_met(dependency_name):
@@ -173,7 +125,7 @@ def _install_system_packages():
     if is_dependency_met("system_packages"):
         print("System packages already installed. Skipping.")
         return
-    if _TEMP_CAPS.os == "Linux" and not _TEMP_CAPS.is_termux:
+    if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
         try:
             print("Ensuring build tools (build-essential, python3-dev) are installed...")
             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True)
@@ -203,25 +155,6 @@ def _install_system_packages():
                 logging.warning(f"nmap installation failed: {e}")
     mark_dependency_as_met("system_packages")
 
-def _install_cuda_toolkit():
-    """Installs the NVIDIA CUDA Toolkit if not present."""
-    if is_dependency_met("cuda_toolkit"):
-        print("NVIDIA CUDA Toolkit already installed. Skipping.")
-        return
-    if _TEMP_CAPS.os == "Linux" and not _TEMP_CAPS.is_termux and not shutil.which('nvcc'):
-        print("NVIDIA CUDA Toolkit not found. Attempting to install...")
-        try:
-            subprocess.check_call("wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb", shell=True)
-            subprocess.check_call("sudo dpkg -i /tmp/cuda-keyring.deb", shell=True)
-            subprocess.check_call("sudo apt-get update -q", shell=True)
-            subprocess.check_call("sudo DEBIAN_FRONTEND=noninteractive apt-get -y install cuda-toolkit-12-5", shell=True)
-            os.environ['PATH'] = '/usr/local/cuda/bin:' + os.environ.get('PATH', '')
-            print("Successfully installed NVIDIA CUDA Toolkit.")
-            logging.info("Successfully installed NVIDIA CUDA Toolkit.")
-        except Exception as e:
-            print(f"ERROR: Failed to install NVIDIA CUDA Toolkit. GPU acceleration will be disabled.")
-            logging.warning(f"CUDA Toolkit installation failed: {e}")
-    mark_dependency_as_met("cuda_toolkit")
 
 def _get_pip_executable():
     """
@@ -267,7 +200,7 @@ def _get_pip_executable():
         logging.critical(f"Failed to bootstrap pip with ensurepip: {e}. Attempting system-level installation.")
         try:
             # Check for Linux and non-Termux environment before using apt-get
-            if _TEMP_CAPS.os == "Linux" and not _TEMP_CAPS.is_termux:
+            if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
                 print("Attempting to install 'python3-pip' via apt-get...")
                 subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-pip", shell=True)
                 print("Successfully installed 'python3-pip'. Re-checking for pip executable...")
@@ -419,7 +352,6 @@ def _check_and_install_dependencies():
     subsystem before attempting installation.
     """
     _install_system_packages()
-    _install_cuda_toolkit()
     _install_python_requirements()
     _install_nodejs_deps()
     _configure_llm_api_key()
@@ -526,7 +458,7 @@ from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
 
-from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, execute_reasoning_task, MODEL_STATS
+from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, get_llm_api, execute_reasoning_task, MODEL_STATS
 from core.perception.config_scanner import scan_directory
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel, create_connectivity_panel
 from ui_utils import rainbow_text
