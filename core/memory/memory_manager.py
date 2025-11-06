@@ -457,3 +457,35 @@ class MemoryManager:
             results.append(f"Summary of past experience '{note.contextual_description}': {note.content}")
 
         return results
+
+    async def ingest_cognitive_cycle(self, command: str, output: str, reasoning_prompt: str):
+        """
+        Processes a full cognitive cycle (reasoning -> command -> output)
+        and adds it to the agentic memory as a single, structured event.
+        """
+        # Truncate the reasoning prompt and output to keep the memory note concise
+        truncated_reasoning = reasoning_prompt
+        if len(reasoning_prompt) > 2000:
+            truncated_reasoning = f"{reasoning_prompt[:1000]}\\n... (truncated) ...\\n{reasoning_prompt[-1000:]}"
+
+        truncated_output = output
+        if len(output) > 2000:
+            truncated_output = f"{output[:1000]}\\n... (truncated) ...\\n{output[-1000:]}"
+
+        cognitive_event = f"""Cognitive Event: Agent decided to act.
+- Reasoning Context (Truncated):
+---
+{truncated_reasoning}
+---
+- Action Taken:
+---
+CMD: {command}
+---
+- Outcome:
+---
+{truncated_output}
+---
+"""
+        # Add this structured event to the memory graph. The 'SelfReflection' tag
+        # will be added automatically by the agentic processing pipeline.
+        await self.add_episode(cognitive_event, tags=['CognitiveCycle'])

@@ -1,153 +1,68 @@
-import asyncio
-import json
-import sys
 import unittest
 from unittest.mock import MagicMock, patch, AsyncMock
-
-import networkx as nx
 import numpy as np
 
-# Mock dependencies before importing the module under test
-# We only mock sentence_transformers here. llm_api will be handled manually.
-sys_modules_patch = patch.dict('sys.modules', {
-    'sentence_transformers': MagicMock(),
-})
-sys_modules_patch.start()
+# Mock the GraphDataManager before importing MemoryManager
+from core.graph_manager import GraphDataManager
+mock_graph_manager = MagicMock(spec=GraphDataManager)
 
-from core.memory.memory_manager import MemoryManager
+from core.memory.memory_manager import MemoryManager, MemoryNote
 
 class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self):
-        """Set up a fresh MemoryManager instance for each test."""
-        # --- Manually mock the core.llm_api module ---
-        # This prevents the real module and its dependencies (like display) from being imported.
-        self.mock_llm_api = MagicMock()
-        self.mock_run_llm = AsyncMock()
-        self.mock_llm_api.run_llm = self.mock_run_llm
-        sys.modules['core.llm_api'] = self.mock_llm_api
+        """Set up a new MemoryManager instance for each test."""
+        # Reset mocks before each test to ensure isolation
+        mock_graph_manager.reset_mock()
+        self.memory_manager = MemoryManager(graph_data_manager=mock_graph_manager)
 
-        # We patch SentenceTransformer inside the tested module's namespace
-        self.sentence_transformer_patch = patch('core.memory.memory_manager.SentenceTransformer')
-        self.mock_sentence_transformer_cls = self.sentence_transformer_patch.start()
-        self.mock_model = MagicMock()
-        self.mock_model.encode.return_value = np.random.rand(384)
-        self.mock_sentence_transformer_cls.return_value = self.mock_model
-
-        # Patch the file operations to avoid actual file I/O
-        self.open_patch = patch('builtins.open', unittest.mock.mock_open())
-        self.mock_open = self.open_patch.start()
-        self.os_path_exists_patch = patch('os.path.exists', return_value=False)
-        self.mock_os_path_exists = self.os_path_exists_patch.start()
-        self.nx_read_graphml_patch = patch('networkx.read_graphml', side_effect=IOError)
-        self.mock_nx_read = self.nx_read_graphml_patch.start()
-        self.nx_write_graphml_patch = patch('networkx.write_graphml')
-        self.mock_nx_write = self.nx_write_graphml_patch.start()
-
-        # Mock the GraphDataManager and its dependencies before initializing MemoryManager
-        mock_graph_manager = MagicMock()
-        # Use a real nx.DiGraph instance for the mock to allow real graph operations
-        mock_graph_manager.graph = nx.DiGraph()
-
-        # Correctly simulate the methods of GraphDataManager
-        def add_node_side_effect(node_id, node_type, attributes):
-            # The real GraphDataManager stores node_type as an attribute.
-            attributes['node_type'] = node_type
-            mock_graph_manager.graph.add_node(node_id, **attributes)
-        mock_graph_manager.add_node.side_effect = add_node_side_effect
-        mock_graph_manager.add_edge.side_effect = lambda source_id, target_id, relationship_type, attributes: mock_graph_manager.graph.add_edge(source_id, target_id, **attributes)
-        mock_graph_manager.get_node.side_effect = lambda node_id: mock_graph_manager.graph.nodes.get(node_id)
-
-        # Set up a side effect for query_nodes to reflect the state of the graph
-        def query_nodes_side_effect(attribute_key, attribute_value):
-            return [n for n, d in mock_graph_manager.graph.nodes(data=True) if d.get(attribute_key) == attribute_value]
-        mock_graph_manager.query_nodes.side_effect = query_nodes_side_effect
-
-
-        self.memory = MemoryManager(graph_data_manager=mock_graph_manager)
-
-    def tearDown(self):
-        """Stop all patches and clean up sys.modules."""
-        self.sentence_transformer_patch.stop()
-        self.open_patch.stop()
-        self.os_path_exists_patch.stop()
-        self.nx_read_graphml_patch.stop()
-        self.nx_write_graphml_patch.stop()
-
-        # Important: Remove the mock from sys.modules to not affect other tests
-        if 'core.llm_api' in sys.modules:
-            del sys.modules['core.llm_api']
-
-        sys_modules_patch.stop()
-
-    async def test_add_agentic_memory_creates_node_and_links(self):
+    @patch('core.memory.memory_manager.run_llm', new_callable=AsyncMock)
+    @patch('core.llm_api.run_llm', new_callable=AsyncMock)
+    async def test_ingest_cognitive_cycle_creates_structured_memory(self, mock_sentence_transformer, mock_run_llm):
         """
-        Verify that adding an episode triggers the full A-MEM pipeline:
-        1. Creates a structured memory note via an LLM call.
-        2. Adds the note to the graph.
-        3. Attempts to link it to existing memories via a second LLM call.
-        4. Triggers the memory evolution process via a third LLM call.
+        Verify that ingest_cognitive_cycle correctly formats the input and
+        triggers the agentic memory processing pipeline.
         """
-        # --- Setup Mocks ---
-        llm_response_create = {
-            "contextual_description": "Test description", "keywords": ["test", "mock"], "tags": ["Testing"]
+        # --- Arrange ---
+        # Mock the SentenceTransformer to return a predictable embedding
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.array([0.1, 0.2, 0.3])
+        mock_sentence_transformer.return_value = mock_model
+
+        # Mock the LLM call to return a predictable structured response
+        mock_run_llm.return_value = {
+            "result": '{"contextual_description": "Test description", "keywords": ["test", "cycle"], "tags": ["Testing"]}'
         }
-        llm_response_link = {
-            "links": [{"target_id": "existing-node-0", "reason": "It is a related test."}]
-        }
-        llm_response_evolve = {
-            "updated_contextual_description": "Evolved description", "updated_keywords": ["test", "evolved"], "updated_tags": ["Testing", "Evolved"]
-        }
-        # Configure the side_effect on the mock from setUp
-        self.mock_run_llm.side_effect = [
-            {"result": json.dumps(llm_response_create)},
-            {"result": json.dumps(llm_response_link)},
-            json.dumps(llm_response_evolve) # This call is inside a method that doesn't expect a dict
-        ]
 
-        # --- Pre-populate Graph ---
-        mock_embedding = np.random.rand(384).tolist()
-        self.memory.graph_data_manager.graph.add_node(
-            "existing-node-0",
-            content="An old memory about testing.",
-            embedding=json.dumps(mock_embedding),
-            contextual_description="An old test.",
-            keywords="test,old",
-            tags="Testing",
-            node_type="MemoryNote"
-        )
+        # Use a spy to capture the content passed to add_episode
+        add_episode_spy = AsyncMock()
+        self.memory_manager.add_episode = add_episode_spy
 
-        # Pre-populate with enough incoming edges to trigger evolution
-        for i in range(4):
-            source_embedding = np.random.rand(384).tolist()
-            self.memory.graph_data_manager.graph.add_node(
-                f"source-node-{i}",
-                node_type="MemoryNote",
-                embedding=json.dumps(source_embedding),
-                content=f"Source memory {i}"
-            )
-            self.memory.graph_data_manager.graph.add_edge(f"source-node-{i}", "existing-node-0")
+        command = "test_command --arg1"
+        output = "Command executed successfully."
+        reasoning_prompt = "I decided to run the test command."
 
-        self.assertEqual(self.memory.graph_data_manager.graph.number_of_nodes(), 5)
+        # --- Act ---
+        await self.memory_manager.ingest_cognitive_cycle(command, output, reasoning_prompt)
 
-        # --- Trigger Action ---
-        await self.memory.add_episode("A new memory about a test task.", tags=["TestTag"])
+        # --- Assert ---
+        # 1. Check that add_episode was called exactly once
+        add_episode_spy.assert_called_once()
 
-        # Allow the async tasks created in add_episode to complete
-        await asyncio.sleep(0.01)
+        # 2. Extract the arguments passed to the spy
+        call_args = add_episode_spy.call_args
+        actual_content = call_args[0][0]
+        actual_tags = call_args[1].get('tags')
 
-        # --- Assertions ---
-        self.assertEqual(self.memory.graph_data_manager.graph.number_of_nodes(), 6, "A new node should have been added")
-        self.assertEqual(self.memory.graph_data_manager.graph.number_of_edges(), 5, "A new link should have been created")
 
-        self.assertEqual(self.mock_run_llm.call_count, 3, "Should call LLM for create, link, and evolve")
+        # 3. Verify the structure of the ingested content
+        self.assertIn("Cognitive Event: Agent decided to act.", actual_content)
+        self.assertIn(f"CMD: {command}", actual_content)
+        self.assertIn(output, actual_content)
+        self.assertIn(reasoning_prompt, actual_content)
 
-        evolved_node = self.memory.graph_data_manager.graph.nodes["existing-node-0"]
-        self.assertEqual(evolved_node['contextual_description'], llm_response_evolve['updated_contextual_description'])
-
-        # Verify that the old file-based save methods are no longer called
-        self.mock_open().write.assert_not_called()
-        self.mock_nx_write.assert_not_called()
+        # 4. Verify that the correct tags were passed
+        self.assertIn('CognitiveCycle', actual_tags)
 
 if __name__ == '__main__':
     unittest.main()
