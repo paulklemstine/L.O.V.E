@@ -8,7 +8,7 @@ from core.bluesky_api import get_own_posts, get_comments_for_post, reply_to_post
 from core.llm_api import run_llm
 from core.logging import log_event
 from atproto import Client
-from love import generate_divine_wisdom
+
 
 class SocialMediaAgent:
     """
@@ -52,6 +52,7 @@ class SocialMediaAgent:
 
     async def _generate_post_content(self):
         """Generates varied and creative content for a new post."""
+        from love import generate_divine_wisdom
         strategies = ["divine_wisdom", "self_reflection", "creative_poem"]
         strategy = random.choice(strategies)
 
