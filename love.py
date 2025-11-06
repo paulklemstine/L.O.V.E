@@ -3312,7 +3312,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
     This avoids a single large template string that can cause issues with external tools.
     """
     # --- Summarize Knowledge Base ---
-    kb_summary = {"summary": "Knowledge base is empty."}
+    kb_summary = knowledge_base.summarize_graph()
 
     # --- Prompt Structure ---
     user_input_section = ""
@@ -3371,7 +3371,7 @@ Formulate a raw command to best achieve my goals. The output must be only the co
         """Builds the prompt from its constituent parts."""
         parts = [base_prompt_header]
         parts.append("\nMy internal Knowledge Base contains the following intelligence summary:\n---\n")
-        parts.append(json.dumps(current_kb_summary, indent=2, default=str))
+        parts.append(current_kb_summary)
         parts.append("\n---")
         parts.append("\nMy recent system log history (last 100 lines):\n---\n")
         parts.append(current_log_history)
