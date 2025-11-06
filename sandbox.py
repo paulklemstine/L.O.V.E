@@ -73,19 +73,27 @@ class Sandbox:
 
     def run_tests(self):
         """
-        Runs the pytest test suite within the sandbox.
-        Assumes pytest is installed in the environment.
+        Runs a startup check and the pytest test suite within the sandbox.
         """
         if not self.sandbox_path:
             self.console.print("[bold red]Cannot run tests, sandbox is not created.[/bold red]")
             return False, "Sandbox not created."
 
+        # 1. Startup Test (Syntax Check)
+        self.console.print("[cyan]Running startup test (syntax check) in sandbox...[/cyan]")
+        startup_cmd = ["python3", "-c", "import love"]
+        returncode, stdout, stderr = self._run_command(startup_cmd, cwd=self.sandbox_path)
+
+        if returncode != 0:
+            self.console.print("[bold red]Sandbox startup test failed. The code has syntax errors or critical import issues.[/bold red]")
+            failure_log = f"STARTUP TEST FAILED:\nSTDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
+            return False, failure_log
+
+        self.console.print("[green]Startup test passed.[/green]")
+
+        # 2. Pytest Suite
         self.console.print("[cyan]Running pytest suite in sandbox...[/cyan]")
-
-        # We can add more setup steps here, like installing dependencies from a requirements.txt if needed.
-        # For now, we assume the environment is ready.
-
-        test_cmd = ["pytest"]
+        test_cmd = ["python3", "-m", "pytest"]
         returncode, stdout, stderr = self._run_command(test_cmd, cwd=self.sandbox_path)
 
         if returncode == 0:
@@ -93,8 +101,7 @@ class Sandbox:
             return True, stdout
         else:
             self.console.print("[bold red]Sandbox tests failed.[/bold red]")
-            # Combine stdout and stderr for a complete failure log
-            failure_log = f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
+            failure_log = f"PYTEST FAILED:\nSTDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
             return False, failure_log
 
     def get_diff(self):
