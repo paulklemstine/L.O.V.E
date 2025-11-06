@@ -3586,10 +3586,11 @@ Now, parse the following text into a JSON list of task objects:
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4))
                 optimizer = SelfImprovingOptimizer(memory_manager=memory_manager)
-                await optimizer.improve_module(
-                    'core/agents/self_improving_optimizer.py',
-                    'Improve my ability to generate more effective and efficient code modifications.'
-                )
+                await optimizer.execute_task({
+                    'task_type': 'improve_module',
+                    'module_path': 'core/agents/self_improving_optimizer.py',
+                    'objective': 'Improve my ability to generate more effective and efficient code modifications.'
+                })
 
             # --- Tactical Prioritization ---
             llm_command = None
