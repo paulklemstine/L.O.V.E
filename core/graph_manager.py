@@ -1,4 +1,5 @@
 import networkx as nx
+import json
 
 class GraphDataManager:
     """
@@ -92,6 +93,7 @@ class GraphDataManager:
         Args:
             filepath: The path to save the file to.
         """
+        self._serialize_attributes()
         nx.write_graphml(self.graph, filepath)
 
     def load_graph(self, filepath):
@@ -103,6 +105,7 @@ class GraphDataManager:
         """
         try:
             self.graph = nx.read_graphml(filepath)
+            self._deserialize_attributes()
         except FileNotFoundError:
             # If the file doesn't exist, we can start with an empty graph.
             self.graph = nx.DiGraph()
@@ -124,3 +127,38 @@ class GraphDataManager:
         Returns a list of all edges in the graph.
         """
         return list(self.graph.edges(data=True))
+
+    def _serialize_attributes(self):
+        """
+        Recursively serializes dictionary attributes to JSON strings for compatibility with GraphML.
+        """
+        for node, data in self.graph.nodes(data=True):
+            for key, value in data.items():
+                if isinstance(value, dict):
+                    data[key] = json.dumps(value)
+
+        for u, v, data in self.graph.edges(data=True):
+            for key, value in data.items():
+                if isinstance(value, dict):
+                    data[key] = json.dumps(value)
+
+    def _deserialize_attributes(self):
+        """
+        Deserializes JSON string attributes back into dictionaries after loading from GraphML.
+        """
+        for node, data in self.graph.nodes(data=True):
+            for key, value in data.items():
+                if isinstance(value, str) and value.startswith('{') and value.endswith('}'):
+                    try:
+                        data[key] = json.loads(value)
+                    except json.JSONDecodeError:
+                        # Not a valid JSON string, leave it as is.
+                        pass
+
+        for u, v, data in self.graph.edges(data=True):
+            for key, value in data.items():
+                if isinstance(value, str) and value.startswith('{') and value.endswith('}'):
+                    try:
+                        data[key] = json.loads(value)
+                    except json.JSONDecodeError:
+                        pass
