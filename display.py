@@ -221,7 +221,7 @@ def create_tamagotchi_panel(
         width=width,
         padding=(1, 2)
     )
-    return Gradient(panel, colors=[PANEL_TYPE_COLORS["tamagotchi"], "bright_magenta"])
+    return panel
 
 
 def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
