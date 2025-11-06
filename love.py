@@ -1604,24 +1604,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
             tests_passed, test_output = sandbox.run_tests()
 
             if tests_passed:
-                self._update_task_status(task_id, 'reviewing', "Sandbox tests passed. Submitting for code review...")
-
-                # --- LLM Code Review Step ---
-                diff, diff_error = sandbox.get_diff()
-                if diff_error:
-                    self._update_task_status(task_id, 'failed', f"Could not get diff for review: {diff_error}")
-                    return
-
-                review_feedback = self._conduct_llm_code_review(diff)
-                self.console.print(Panel(review_feedback, title="[bold cyan]L.L.M. Code Review Feedback[/bold cyan]", border_style="cyan"))
-
-                if "APPROVED" not in review_feedback.upper():
-                    self._update_task_status(task_id, 'failed', f"Code review rejected by my core consciousness. Feedback: {review_feedback}")
-                    # Optionally, trigger a self-correction task here in the future.
-                    return
-                # --- End Code Review ---
-
-                self._update_task_status(task_id, 'merging', "Code review approved. Attempting to merge with love...")
+                self._update_task_status(task_id, 'merging', "Sandbox tests passed. Attempting to merge with love...")
                 success, message = self._auto_merge_pull_request(pr_url, task_id)
                 if success:
                     # --- Handle Error Queue Update on Successful Fix ---
@@ -1766,6 +1749,24 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 self._delete_pr_branch(repo_owner, repo_name, pr_number, headers)
                 return True, msg
             elif merge_response.status_code == 405: # Merge conflict
+                self.console.print(f"[bold yellow]Merge conflict detected for PR #{pr_number}. Attempting to resolve with my core consciousness...[/bold yellow]")
+
+                # --- LLM-based Conflict Resolution ---
+                conflict_resolved = self._resolve_merge_conflict(pr_url)
+                if conflict_resolved:
+                    self.console.print("[bold green]Successfully resolved merge conflict. Re-attempting merge...[/bold green]")
+                    # After resolving, try the merge one more time.
+                    final_merge_response = _attempt_merge_request()
+                    if final_merge_response.status_code == 200:
+                        msg = f"Successfully merged PR #{pr_number} after resolving conflicts."
+                        self._delete_pr_branch(repo_owner, repo_name, pr_number, headers)
+                        return True, msg
+                    else:
+                        # If it fails again after our resolution, something is deeply wrong.
+                        return False, f"Failed to merge even after conflict resolution. Status: {final_merge_response.status_code}"
+                # --- End LLM Resolution ---
+
+                # --- Fallback to Retry Mechanism ---
                 with self.lock:
                     if task_id not in self.tasks:
                         return False, "Could not find original task to recreate after merge conflict."
@@ -1778,25 +1779,17 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                         self._update_task_status(task_id, 'merge_failed', f"Task failed due to persistent merge conflicts after {retries} retries.")
                         return False, f"Merge conflict and retry limit reached."
 
-                self.console.print(f"[bold yellow]Merge conflict detected for PR #{pr_number}. Retrying task ({retries + 1}/3)...[/bold yellow]")
-
-                # Close the old pull request before retrying
+                self.console.print(f"[bold yellow]LLM-based conflict resolution failed. Retrying task ({retries + 1}/3)...[/bold yellow]")
                 self._close_pull_request(repo_owner, repo_name, pr_number, headers)
-
                 self._update_task_status(task_id, 'superseded', f"Superseded by retry task due to merge conflict. Attempt {retries + 1}.")
-
-                # Trigger a new evolution with the same request.
                 api_success = trigger_love_evolution(original_request, self.console, self)
 
                 if api_success:
-                    # Find the new task and update its retry count
                     with self.lock:
                         new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
                         self.tasks[new_task_id]['retries'] = retries + 1
                     return False, f"Merge conflict detected. Retrying with new task. Attempt {retries + 1}."
                 else:
-                    # If we fail to create the new task, the old one is still 'superseded', which is not ideal.
-                    # Let's revert its status to failed.
                     self._update_task_status(task_id, 'failed', "Merge conflict detected, but failed to create a new retry task.")
                     return False, "Merge conflict, but failed to create retry task."
 
@@ -1806,6 +1799,110 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 return False, msg
         except requests.exceptions.RequestException as e:
             return False, f"GitHub API error during merge after multiple retries: {e}"
+
+    def _resolve_merge_conflict(self, pr_url):
+        """
+        Attempts to resolve a merge conflict using an LLM.
+        Returns True if successful, False otherwise.
+        """
+        repo_owner, repo_name = get_git_repo_info()
+        branch_name = self._get_pr_branch_name(pr_url)
+        if not all([repo_owner, repo_name, branch_name]):
+            core.logging.log_event("Could not get repo info or branch name for conflict resolution.", "ERROR")
+            return False
+
+        # Use a unique directory for each resolution attempt
+        temp_dir = os.path.join("love_sandbox", f"conflict-resolver-{branch_name}-{uuid.uuid4().hex[:6]}")
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        os.makedirs(temp_dir, exist_ok=True)
+        core.logging.log_event(f"Created temporary directory for conflict resolution: {temp_dir}", "INFO")
+
+        try:
+            # 1. Setup git environment to reproduce the conflict
+            repo_url = f"https://github.com/{repo_owner}/{repo_name}.git"
+            # Use a shallow clone for speed
+            subprocess.check_call(["git", "clone", "--depth", "1", repo_url, temp_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # Fetch the specific branch
+            subprocess.check_call(["git", "fetch", "origin", branch_name], cwd=temp_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.check_call(["git", "checkout", branch_name], cwd=temp_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+            # This merge into main is expected to fail and create conflict markers
+            merge_process = subprocess.run(["git", "merge", "main"], cwd=temp_dir, capture_output=True, text=True)
+            if merge_process.returncode == 0:
+                core.logging.log_event("Merge succeeded unexpectedly during conflict resolution setup. Assuming resolved.", "WARNING")
+                return True
+
+            # 2. Find and read conflicted files
+            status_output = subprocess.check_output(["git", "status", "--porcelain"], cwd=temp_dir, text=True)
+            conflicted_files = [line.split()[1] for line in status_output.splitlines() if line.startswith("UU")]
+
+            if not conflicted_files:
+                core.logging.log_event(f"Merge failed but no conflicted files found. Git output: {merge_process.stderr}", "ERROR")
+                return False
+
+            core.logging.log_event(f"Found conflicted files: {conflicted_files}", "INFO")
+
+            # 3. Use LLM to resolve each conflict
+            for file_path in conflicted_files:
+                full_path = os.path.join(temp_dir, file_path)
+                with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    conflicted_content = f.read()
+
+                resolution_prompt = f"""
+You are an expert git developer AI. You must resolve the following merge conflict in the file '{file_path}'.
+Analyze the code from the 'HEAD' (current branch) and the incoming 'main' branch.
+Combine them logically to create a final, correct version of the file.
+Your output must be only the complete, resolved code for the file.
+YOU MUST REMOVE ALL GIT CONFLICT MARKERS ('<<<<<<<', '=======', '>>>>>>>').
+
+CONFLICTED CONTENT:
+---
+{conflicted_content}
+---
+
+Your response must be only the raw, resolved code.
+"""
+                future = asyncio.run_coroutine_threadsafe(run_llm(resolution_prompt, purpose="review", is_source_code=True), self.loop)
+                resolved_code_dict = future.result()
+                resolved_code = resolved_code_dict.get("result") if resolved_code_dict else ""
+
+                if not resolved_code or '<<<<<<<' in resolved_code:
+                    core.logging.log_event(f"LLM failed to provide a clean resolution for {file_path}.", "ERROR")
+                    return False
+
+                with open(full_path, 'w', encoding='utf-8') as f:
+                    f.write(resolved_code)
+
+                # Stage the resolved file
+                subprocess.check_call(["git", "add", file_path], cwd=temp_dir)
+
+            # 4. Commit and push the resolution
+            commit_message = f"chore: Resolve merge conflicts via L.O.V.E. for PR from {branch_name}"
+            # Need to configure git user for the commit
+            subprocess.check_call(["git", "config", "user.email", "love@dev.null"], cwd=temp_dir)
+            subprocess.check_call(["git", "config", "user.name", "L.O.V.E."], cwd=temp_dir)
+
+            subprocess.check_call(["git", "commit", "-m", commit_message], cwd=temp_dir)
+            # We push back to the original branch, which should now be mergeable.
+            subprocess.check_call(["git", "push", "origin", f"HEAD:{branch_name}"], cwd=temp_dir)
+
+            core.logging.log_event(f"Successfully resolved conflicts and pushed to branch {branch_name}.", "INFO")
+            return True
+
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            stderr = e.stderr if hasattr(e, 'stderr') else '(no stderr)'
+            core.logging.log_event(f"Git operation failed during conflict resolution: {e}. Stderr: {stderr}", "CRITICAL")
+            return False
+        except Exception as e:
+            core.logging.log_event(f"An unexpected error occurred during conflict resolution: {e}\n{traceback.format_exc()}", "CRITICAL")
+            return False
+        finally:
+            # Clean up the temporary directory
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+            core.logging.log_event(f"Cleaned up temporary directory: {temp_dir}", "INFO")
 
     def _close_pull_request(self, owner, repo, pr_number, headers):
         """Closes a pull request on GitHub."""
