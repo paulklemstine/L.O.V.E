@@ -35,4 +35,7 @@ agent-framework
 datasets
 openevolve
 sentence-transformers
+torch
+torchvision
+torchaudio
 langextract
