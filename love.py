@@ -4077,6 +4077,11 @@ def _automatic_update_checker(console):
         time.sleep(300)
 
 
+def _strip_ansi_codes(text):
+    """Removes ANSI escape codes from a string."""
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
 def simple_ui_renderer():
     """
     Continuously gets items from the ui_panel_queue and renders them.
@@ -4123,7 +4128,11 @@ def simple_ui_renderer():
                 animation_active = False
 
             if isinstance(item, dict) and item.get('type') == 'log_message':
-                print(item.get('message', ''))
+                # Log plain text messages directly
+                plain_message = item.get('message', '')
+                print(plain_message)
+                with open(LOG_FILE, "a", encoding="utf-8") as f:
+                    f.write(plain_message + '\n')
                 continue
 
             # For all other items (e.g., rich Panels), render them fully.
@@ -4131,10 +4140,13 @@ def simple_ui_renderer():
             temp_console.print(item)
             output_str = temp_console.file.getvalue()
 
+            # Print the styled output to the live console
             print(output_str, end='')
 
+            # Strip ANSI codes and write the plain text to the log file
+            plain_output = _strip_ansi_codes(output_str)
             with open(LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(output_str)
+                f.write(plain_output)
 
         except queue.Empty:
             continue
