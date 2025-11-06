@@ -18,6 +18,7 @@ from datasets import load_dataset
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
+from rich.text import Text
 from bbs import run_hypnotic_progress
 from huggingface_hub import hf_hub_download
 from display import create_api_error_panel
@@ -800,7 +801,10 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                             except ValueError:
                                 pass # Use default
                         LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
-                        console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
+                        if provider == "horde":
+                            console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
+                        else:
+                            console.print(Text(f"API Error: {model_id} failed (Rate limit exceeded). Retrying in {retry_seconds}s.", style="yellow"))
 
                     elif e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
                         failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1
@@ -811,6 +815,10 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
 
                     else:
                         log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+                        if provider == "horde":
+                            console.print(create_api_error_panel(model_id, str(e), purpose))
+                        else:
+                            console.print(Text(f"API Error: {model_id} failed ({e.response.status_code}).", style="yellow"))
                     continue
 
                 except Exception as e:
@@ -822,14 +830,24 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
 
                     elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
                         error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-                        console.print(create_api_error_panel(model_id, error_message, purpose))
+                        retry_seconds = 60 # Default
                         retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
                         if retry_match:
-                            LLM_AVAILABILITY[model_id] = time.time() + float(retry_match.group(1)) + 1
+                            retry_seconds = float(retry_match.group(1)) + 1
+                        LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+
+                        if provider == "horde":
+                            console.print(create_api_error_panel(model_id, error_message, purpose))
                         else:
-                            LLM_AVAILABILITY[model_id] = time.time() + 60
+                            reason = "Quota Exceeded" if "quota" in error_message.lower() else "API Error"
+                            console.print(Text(f"API Error: {model_id} failed ({reason}). Retrying in {retry_seconds:.2f}s.", style="yellow"))
                     else:
                         LLM_AVAILABILITY[model_id] = time.time() + 60
+                        # For any other generic exception, show the full panel for Horde, one-liner for others.
+                        if provider == "horde":
+                             console.print(create_api_error_panel(model_id, str(e), purpose))
+                        else:
+                             console.print(Text(f"API Error: {model_id} failed. See love.log for details.", style="yellow"))
 
             if final_result:
                 break
