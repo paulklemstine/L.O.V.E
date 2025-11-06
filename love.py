@@ -505,7 +505,7 @@ from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
 
-from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, execute_reasoning_task
+from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, ensure_primary_model_downloaded, get_llm_api, execute_reasoning_task, MODEL_STATS
 from core.perception.config_scanner import scan_directory
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel, create_connectivity_panel
 from ui_utils import rainbow_text
@@ -2682,6 +2682,17 @@ def load_all_state(ipfs_cid=None):
     except Exception as e:
         core.logging.log_event(f"Could not load knowledge base file: {e}. Starting with an empty graph.", level="WARNING")
 
+    # --- Load Model Statistics ---
+    try:
+        with open("llm_model_stats.json", 'r') as f:
+            stats_data = json.load(f)
+            # defaultdict requires us to update item by item
+            for model_id, stats in stats_data.items():
+                MODEL_STATS[model_id].update(stats)
+        core.logging.log_event("Successfully loaded LLM model statistics.", "INFO")
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        core.logging.log_event(f"Could not load model statistics file: {e}. Starting with fresh stats.", "WARNING")
+
 
     # Priority 1: Load from a given IPFS CID
     if ipfs_cid:
@@ -2761,6 +2772,11 @@ def save_state(console_override=None):
     target_console = console_override or console
 
     try:
+        # --- Save Model Statistics ---
+        with open("llm_model_stats.json", 'w') as f:
+            json.dump(MODEL_STATS, f, indent=4)
+        core.logging.log_event("LLM model statistics saved.", "INFO")
+
         # Save the knowledge base graph to its file
         knowledge_base.save_graph(KNOWLEDGE_BASE_FILE)
         core.logging.log_event(f"Knowledge base saved to '{KNOWLEDGE_BASE_FILE}'.", level="INFO")
