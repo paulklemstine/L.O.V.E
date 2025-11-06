@@ -473,7 +473,22 @@ def _configure_llm_api_key():
         core.logging.log_event(error_message)
 
 
+# --- ARGUMENT PARSING ---
+# We parse arguments at the top level so we can handle flags before main execution.
+parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
+parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
+parser.add_argument("--install-deps-only", action="store_true", help="Install all dependencies and exit.")
+# Use parse_known_args to avoid errors with args meant for the script later
+args, unknown = parser.parse_known_args()
+
+
 # --- PRE-EMPTIVE DEPENDENCY INSTALLATION ---
+if args.install_deps_only:
+    print("--- L.O.V.E. Dependency Installation Mode ---")
+    _check_and_install_dependencies()
+    print("--- Dependency installation complete. Exiting. ---")
+    sys.exit(0)
+
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()
 
@@ -4225,10 +4240,6 @@ ipfs_available = False
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
 async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
-    parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
-    parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
-    args = parser.parse_args()
-
     try:
         load_all_state(ipfs_cid=args.from_ipfs)
         core.logging.setup_global_logging(love_state.get('version_name', 'unknown'))
