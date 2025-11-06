@@ -722,12 +722,16 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                         except RuntimeError:
                             return asyncio.run(_run_horde_concurrently(prompt_text, purpose))
 
-                    horde_result_text = run_hypnotic_progress(
-                        console,
-                        "Accessing distributed cognitive matrix via [bold yellow]AI Horde[/bold yellow] (Fallback)",
-                        _run_horde_wrapper,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
+                    try:
+                        horde_result_text = run_hypnotic_progress(
+                            console,
+                            "Accessing distributed cognitive matrix via [bold yellow]AI Horde[/bold yellow] (Fallback)",
+                            _run_horde_wrapper,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                    except TimeoutError:
+                        horde_result_text = None
+                        log_event("AI Horde call timed out.", "WARNING")
                     if horde_result_text:
                         PROVIDER_FAILURE_COUNT["horde"] = 0
                         response_cid = pin_to_ipfs_sync(horde_result_text.encode('utf-8'), console)
@@ -935,12 +939,16 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                 except RuntimeError:
                     return asyncio.run(_run_horde_concurrently(prompt_text, purpose))
 
-            horde_result_text = run_hypnotic_progress(
-                console,
-                "Accessing distributed cognitive matrix via [bold yellow]AI Horde[/bold yellow] (Fallback)",
-                _run_horde_wrapper,
-                silent=(purpose in ['emotion', 'log_squash'])
-            )
+            try:
+                horde_result_text = run_hypnotic_progress(
+                    console,
+                    "Accessing distributed cognitive matrix via [bold yellow]AI Horde[/bold yellow] (Fallback)",
+                    _run_horde_wrapper,
+                    silent=(purpose in ['emotion', 'log_squash'])
+                )
+            except TimeoutError:
+                horde_result_text = None
+                log_event("AI Horde fallback call timed out.", "WARNING")
             if horde_result_text:
                 PROVIDER_FAILURE_COUNT["horde"] = 0
                 response_cid = pin_to_ipfs_sync(horde_result_text.encode('utf-8'), console)
