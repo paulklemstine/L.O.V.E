@@ -170,12 +170,29 @@ def _fetch_static_leaderboard_csv():
     # No return value needed
 
 
+def _load_model_blacklist():
+    """Loads the model blacklist from core/model_blacklist.json."""
+    # Construct the path relative to the current file's location
+    blacklist_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "model_blacklist.json")
+    if not os.path.exists(blacklist_path):
+        # This is not an error, the file is optional.
+        return []
+    try:
+        with open(blacklist_path, "r") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        # Log the error but don't crash. Return an empty list.
+        log_event(f"Error loading or parsing model_blacklist.json: {e}", "WARNING")
+        return []
+
+
 def get_openrouter_models():
     """
     Fetches the list of free models from the OpenRouter API and updates their
     provider in MODEL_STATS.
     """
     global MODEL_STATS
+    blacklist = _load_model_blacklist()
     free_models = []
     try:
         api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -191,8 +208,12 @@ def get_openrouter_models():
         for model in models:
             if "free" in model['id'].lower():
                 model_id = model['id']
-                free_models.append(model_id)
-                MODEL_STATS[model_id]["provider"] = "openrouter"
+                full_model_id = f"openrouter:{model_id}"
+                if full_model_id not in blacklist:
+                    free_models.append(model_id)
+                    MODEL_STATS[model_id]["provider"] = "openrouter"
+                else:
+                    log_event(f"Model '{full_model_id}' is in the blacklist and will be ignored.", "INFO")
 
     except Exception as e:
         # Log the error, but don't crash the application
@@ -221,6 +242,7 @@ def get_top_horde_models(count=10, get_all=False):
     performance, and model size, with a preference for uncensored models.
     """
     global MODEL_STATS
+    blacklist = _load_model_blacklist()
     try:
         response = requests.get("https://aihorde.net/api/v2/status/models?type=text")
         response.raise_for_status()
@@ -234,7 +256,13 @@ def get_top_horde_models(count=10, get_all=False):
 
         scored_models = []
         for model in online_models:
-            MODEL_STATS[model['name']]["provider"] = "horde"
+            model_name = model['name']
+            full_model_id = f"horde:{model_name}"
+            if full_model_id in blacklist:
+                log_event(f"Model '{full_model_id}' is in the blacklist and will be ignored.", "INFO")
+                continue
+
+            MODEL_STATS[model_name]["provider"] = "horde"
             score = 0
             eta = model.get('eta', 999)
             performance = model.get('performance', 0)
@@ -263,11 +291,7 @@ def get_top_horde_models(count=10, get_all=False):
             elif '7b' in name or '8b' in name:
                 score += 100
 
-            # Boost score for preferred model types
-            if 'uncensored' in name or 'ablated' in name or 'aberrated' in name:
-                score *= 1.5
-
-            scored_models.append({'name': model['name'], 'score': score})
+            scored_models.append({'name': model_name, 'score': score})
 
         sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
         model_names = [model['name'] for model in sorted_models]
@@ -648,6 +672,12 @@ def rank_models():
         # --- Final Weighted Score ---
         # Weights: Reasoning: 40%, Speed: 30%, Reliability: 30%
         final_score = (0.4 * reasoning_score) + (0.3 * speed_score) + (0.3 * reliability_score)
+
+        # --- Boost score for preferred model types ---
+        model_name_lower = model_id.lower()
+        if 'uncensored' in model_name_lower or 'ablated' in model_name_lower or 'ablitterated' in model_name_lower:
+            final_score *= 1.2
+            log_event(f"Boosting score for preferred model type: {model_id}", "INFO")
 
         ranked_models.append({"model_id": model_id, "score": final_score})
 
