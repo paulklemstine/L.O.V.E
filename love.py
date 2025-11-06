@@ -3917,7 +3917,9 @@ Now, parse the following text into a JSON list of task objects:
                 final_output = error or output
                 love_state["autopilot_history"].append({"command": llm_command, "output": final_output, "timestamp": time.time()})
                 if not error:
-                    pass
+                    # Ingest the successful cycle into agentic memory
+                    if memory_manager:
+                        await memory_manager.ingest_cognitive_cycle(llm_command, final_output, cognitive_prompt)
                 save_state()
             else:
                 core.logging.log_event("Cognitive loop decided on no action.", "INFO")
