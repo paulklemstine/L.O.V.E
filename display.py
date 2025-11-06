@@ -99,6 +99,7 @@ def create_tamagotchi_panel(
             temp_console.print(Text.from_ansi(ansi_art))
             face_renderable = Text.from_ansi(temp_console.file.getvalue())
         else:
+            # Fallback if ANSI art generation fails
             face_renderable = get_tamagotchi_face(emotion)
     except Exception as e:
         # If ANSI rendering fails, log the full traceback for debugging

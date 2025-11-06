@@ -107,10 +107,16 @@ class GraphDataManager:
             # If the file doesn't exist, we can start with an empty graph.
             self.graph = nx.DiGraph()
 
-    def get_all_nodes(self):
+    def get_all_nodes(self, include_data=False):
         """
-        Returns a list of all node IDs in the graph.
+        Returns a list of all nodes in the graph.
+
+        Args:
+            include_data (bool): If True, returns a list of tuples (node_id, data_dict).
+                                 Otherwise, returns a list of node IDs.
         """
+        if include_data:
+            return list(self.graph.nodes(data=True))
         return list(self.graph.nodes())
 
     def get_all_edges(self):
