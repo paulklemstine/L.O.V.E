@@ -23,7 +23,7 @@ The system operates in a continuous, cyclical workflow, ensuring the knowledge b
 
 ### 1. Ingestion of Diverse Textual Data Streams
 
-The system is designed to be fed by multiple sources of unstructured text. The ingestion mechanism can be implemented within the main `cognitive_loop` of `love.py` to continuously monitor sources such as:
+The system is designed to be fed by multiple sources of unstructured text. The ingestion mechanism can be implemented within the main `cognitive_loop` of `jules.py` to continuously monitor sources such as:
 
 *   **Operational Logs:** The contents of `love.log`, which provide a real-time account of the AI's own actions, thoughts, and errors.
 *   **Tool Outputs:** The textual results from executed tools, such as web searches (`perform_webrequest`) or file reads.

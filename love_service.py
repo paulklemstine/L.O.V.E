@@ -1,7 +1,7 @@
 # L.O.V.E. MyRobotLab Service Wrapper
 #
 # This service acts as a bridge between the MyRobotLab environment and the
-# standalone L.O.V.E. agent script (love.py).
+# standalone L.O.V.E. agent script (jules.py).
 
 from org.myrobotlab.framework import Service
 import subprocess
@@ -34,7 +34,7 @@ class LoveService(Service):
 
 
     def _handle_mrl_call(self, payload):
-        """Handles a request from love.py to call an MRL service."""
+        """Handles a request from jules.py to call an MRL service."""
         service_name = payload.get("service")
         method_name = payload.get("method")
         args = payload.get("args", [])
@@ -71,7 +71,7 @@ class LoveService(Service):
             self.error(error_msg)
             response["error"] = error_msg
 
-        # Send the response back to the love.py process
+        # Send the response back to the jules.py process
         if self.love_process and self.love_process.poll() is None:
             try:
                 response_json = json.dumps(response)
@@ -95,7 +95,7 @@ class LoveService(Service):
                     continue
 
                 # If this is the stdout stream, check for special commands
-                if stream_name == 'love.py stdout':
+                if stream_name == 'jules.py stdout':
                     try:
                         payload = json.loads(line)
                         if payload.get("type") == "mrl_call":
@@ -119,9 +119,9 @@ class LoveService(Service):
         # Start peer services like Skyvern
         self.getRuntime().createAndStart("skyvern", "SkyvernService")
 
-        love_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "love.py")
+        love_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jules.py")
         if not os.path.exists(love_script_path):
-            self.error(f"Could not find love.py at {love_script_path}")
+            self.error(f"Could not find jules.py at {love_script_path}")
             return
 
         try:
@@ -135,8 +135,8 @@ class LoveService(Service):
             )
             self.running = True
 
-            self.stdout_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stdout, self.info, 'love.py stdout'))
-            self.stderr_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stderr, self.error, 'love.py stderr'))
+            self.stdout_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stdout, self.info, 'jules.py stdout'))
+            self.stderr_thread = threading.Thread(target=self._stream_reader, args=(self.love_process.stderr, self.error, 'jules.py stderr'))
             self.stdout_thread.daemon = True
             self.stderr_thread.daemon = True
             self.stdout_thread.start()

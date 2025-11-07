@@ -10,7 +10,7 @@ from langextract.core import base_model, types as core_types
 from langextract.providers import router
 
 # Local import to avoid circular dependency at module level
-# The function is defined in love.py, but this module might be imported by it.
+# The function is defined in jules.py, but this module might be imported by it.
 def run_llm_wrapper(*args, **kwargs):
     from core.llm_api import run_llm
     return run_llm(*args, **kwargs)

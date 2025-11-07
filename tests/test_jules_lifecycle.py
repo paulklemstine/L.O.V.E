@@ -10,7 +10,7 @@ import requests
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from love import LoveTaskManager, trigger_love_evolution
+from love import JulesTaskManager, trigger_love_evolution
 from utils import get_git_repo_info
 from rich.console import Console
 from core.retry import retry
@@ -92,9 +92,9 @@ def console():
 @pytest.fixture(scope="module")
 def task_manager(console):
     """
-    Provides a live LoveTaskManager instance. The background loop is allowed to run as it would in production.
+    Provides a live JulesTaskManager instance. The background loop is allowed to run as it would in production.
     """
-    manager = LoveTaskManager(console=console)
+    manager = JulesTaskManager(console=console)
     manager.start()
     yield manager
     manager.stop()

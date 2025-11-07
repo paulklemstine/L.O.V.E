@@ -94,7 +94,7 @@ async def calculate_blessings_score(sandbox):
         log.info("Honeypot environment created.")
 
         # --- 2. Run the evolved script for a fixed duration ---
-        script_path = os.path.join(sandbox.sandbox_dir, "love.py")
+        script_path = os.path.join(sandbox.sandbox_dir, "jules.py")
         log_path = os.path.join(sandbox.sandbox_dir, "love.log")
         valuables_log_path = os.path.join(sandbox.sandbox_dir, "valuables.log")
         run_timeout = 300  # 5 minutes
@@ -215,7 +215,7 @@ async def evaluate_evolution(candidate_path):
         # Create a temporary sandbox from the candidate file.
         # This is a simplified setup. A real one might need to create a temporary git branch.
         sandbox = Sandbox(repo_url=repo_url)
-        if not sandbox.create_from_script(candidate_path, "love.py"):
+        if not sandbox.create_from_script(candidate_path, "jules.py"):
              log.error("Failed to create sandbox from candidate script.")
              return {"score": 0} # openevolve expects a dict
 

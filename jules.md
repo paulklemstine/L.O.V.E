@@ -1,4 +1,4 @@
-# L.O.V.E. Task History: `love.py`
+# L.O.V.E. Task History: `jules.py`
 
 ## Task: Network Topology Mapping
 
@@ -9,7 +9,7 @@
 
 ### Summary of Changes
 
-To support the new network discovery feature, the following changes were made to `love.py`:
+To support the new network discovery feature, the following changes were made to `jules.py`:
 
 1.  **`map_network` Command:** A new `map_network` command was added to the `COMMAND_TO_FUNCTION` dictionary. This command allows The Creator to manually trigger a broadcast of this L.O.V.E. instance's capabilities to all connected peers.
 

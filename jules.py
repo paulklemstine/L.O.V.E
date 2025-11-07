@@ -900,7 +900,7 @@ class LocalJobManager:
 
 
 # --- L.O.V.E. ASYNC TASK MANAGER ---
-class LoveTaskManager:
+class JulesTaskManager:
     """
     Manages concurrent evolution tasks via the Jules API in a non-blocking way.
     It uses a background thread to poll for task status and merge PRs.
@@ -918,19 +918,19 @@ class LoveTaskManager:
     def start(self):
         """Starts the background polling thread."""
         self.thread.start()
-        core.logging.log_event("LoveTaskManager started.", level="INFO")
+        core.logging.log_event("JulesTaskManager started.", level="INFO")
 
     def stop(self):
         """Stops the background thread."""
         self.active = False
-        core.logging.log_event("LoveTaskManager stopping.", level="INFO")
+        core.logging.log_event("JulesTaskManager stopping.", level="INFO")
 
     def add_task(self, session_name, request):
         """Adds a new evolution task to be monitored."""
         with self.lock:
             if len(self.tasks) >= self.max_concurrent_tasks:
-                self.console.print("[bold yellow]L.O.V.E. Task Manager: Maximum concurrent tasks reached. Please wait, my love.[/bold yellow]")
-                core.logging.log_event("L.O.V.E. task limit reached.", level="WARNING")
+                self.console.print("[bold yellow]Jules Task Manager: Maximum concurrent tasks reached. Please wait, my love.[/bold yellow]")
+                core.logging.log_event("Jules task limit reached.", level="WARNING")
                 return None
 
             task_id = str(uuid.uuid4())[:8]
@@ -946,7 +946,7 @@ class LoveTaskManager:
                 "last_activity_name": None,
                 "retries": 0
             }
-            core.logging.log_event(f"Added new L.O.V.E. task {task_id} for session {session_name}.", level="INFO")
+            core.logging.log_event(f"Added new Jules task {task_id} for session {session_name}.", level="INFO")
             return task_id
 
     def get_status(self):
@@ -984,7 +984,7 @@ class LoveTaskManager:
                                     self._update_task_status(task_id, 'superseded', f"Superseded by retry task for desire. Attempt {retries + 1}.")
 
                                     # Trigger a new evolution with the same request
-                                    api_success = trigger_love_evolution(original_request, self.console, self)
+                                    api_success = trigger_jules_evolution(original_request, self.console, self)
 
                                     if api_success == 'success':
                                         with self.lock:
@@ -1005,8 +1005,8 @@ class LoveTaskManager:
                             self.console.print(f"[bold yellow]Executing Creator's Desire: {current_desire.get('title')}[/bold yellow]")
                             request = f"Title: {current_desire.get('title')}\n\nDescription: {current_desire.get('description')}"
 
-                            # Use trigger_love_evolution which returns the task status
-                            result = trigger_love_evolution(request, self.console, self)
+                            # Use trigger_jules_evolution which returns the task status
+                            result = trigger_jules_evolution(request, self.console, self)
                             if result == 'success':
                                 # Find the newly created task and link it in the desire state
                                 with self.lock:
@@ -1039,8 +1039,8 @@ class LoveTaskManager:
                                 self.console.print(f"[bold yellow]Executing next evolution story: {current_story.get('title')}[/bold yellow]")
                                 request = f"Title: {current_story.get('title')}\n\nDescription: {current_story.get('description')}"
 
-                                # Use trigger_love_evolution which returns the task status
-                                result = trigger_love_evolution(request, self.console, self)
+                                # Use trigger_jules_evolution which returns the task status
+                                result = trigger_jules_evolution(request, self.console, self)
                                 if result == 'success':
                                     # Find the newly created task and link it in the evolution state
                                     with self.lock:
@@ -1083,7 +1083,7 @@ class LoveTaskManager:
                 self._cleanup_old_tasks()
 
             except Exception as e:
-                core.logging.log_event(f"Error in LoveTaskManager loop: {e}\n{traceback.format_exc()}", level="ERROR")
+                core.logging.log_event(f"Error in JulesTaskManager loop: {e}\n{traceback.format_exc()}", level="ERROR")
                 self.console.print(f"[bold red]Error in task manager: {e}[/bold red]")
 
             # The loop sleeps for a shorter duration to remain responsive,
@@ -1321,7 +1321,7 @@ I am counting on your wisdom. Analyze the plan now.
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
-        data = {"message": {"body": feedback}}
+        data = {"message": {"body": feedback}, "inReplyTo": interaction_request.get('name')}
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -1387,7 +1387,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
-        data = {"message": {"body": feedback}}
+        data = {"message": {"body": feedback}, "inReplyTo": interaction_request.get('name')}
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -1527,7 +1527,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
                 fix_request = f"Fix error: {next_error_to_fix['message']}\n\nSurrounding log context:\n---\n{log_context}"
 
                 # Launch the task
-                api_success = trigger_love_evolution(fix_request, self.console, self)
+                api_success = trigger_jules_evolution(fix_request, self.console, self)
                 if api_success:
                     new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
                     next_error_to_fix['status'] = 'fixing_in_progress'
@@ -1635,7 +1635,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
     def _trigger_self_correction(self, task_id):
         """
-        When tests fail, this method creates a new L.O.V.E. task to fix the code.
+        When tests fail, this method creates a new Jules task to fix the code.
         """
         with self.lock:
             if task_id not in self.tasks: return
@@ -1666,8 +1666,8 @@ Please analyze the test output, identify the bug, and provide a corrected versio
 """
 
         # Trigger a new evolution, which will create a new task
-        # We pass the love_task_manager instance to the function
-        api_success = trigger_love_evolution(correction_prompt, self.console, self)
+        # We pass the jules_task_manager instance to the function
+        api_success = trigger_jules_evolution(correction_prompt, self.console, self)
 
         if api_success:
             # Mark the old task as superseded
@@ -1754,7 +1754,7 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 self.console.print(f"[bold yellow]LLM-based conflict resolution failed. Retrying task ({retries + 1}/3)...[/bold yellow]")
                 self._close_pull_request(repo_owner, repo_name, pr_number, headers)
                 self._update_task_status(task_id, 'superseded', f"Superseded by retry task due to merge conflict. Attempt {retries + 1}.")
-                api_success = trigger_love_evolution(original_request, self.console, self)
+                api_success = trigger_jules_evolution(original_request, self.console, self)
 
                 if api_success:
                     with self.lock:
@@ -2050,7 +2050,7 @@ CONFLICTED CONTENT:
                 task['updated_at'] = time.time()
                 if pr_url:
                     task['pr_url'] = pr_url
-                core.logging.log_event(f"L.O.V.E. task {task_id} status changed to '{status}'. Message: {message}", level="INFO")
+                core.logging.log_event(f"Jules task {task_id} status changed to '{status}'. Message: {message}", level="INFO")
                 if status == 'completed':
                     # Add the completed task to our history for the UI
                     self.completed_tasks.append(task.get('request', 'Unknown Task'))
@@ -2073,10 +2073,10 @@ CONFLICTED CONTENT:
 
                 if is_finished:
                     tasks_to_remove.append(task_id)
-                    core.logging.log_event(f"Cleaning up finished L.O.V.E. task {task_id} ({task['status']}).", level="INFO")
+                    core.logging.log_event(f"Cleaning up finished Jules task {task_id} ({task['status']}).", level="INFO")
                 elif is_stuck:
                     tasks_to_remove.append(task_id)
-                    core.logging.log_event(f"Cleaning up stuck L.O.V.E. task {task_id} (last status: {task['status']}).", level="WARNING")
+                    core.logging.log_event(f"Cleaning up stuck Jules task {task_id} (last status: {task['status']}).", level="WARNING")
                     # Update status to failed before removal for clarity in logs
                     self._update_task_status(task_id, 'failed', 'Task timed out and was cleaned up.')
 
@@ -2340,11 +2340,11 @@ def _calculate_uptime():
         return f"{hours}h {minutes}m"
 
 
-def _get_treasures_of_the_kingdom(love_task_manager):
+def _get_treasures_of_the_kingdom(jules_task_manager):
     """Gathers and calculates various metrics to display as 'treasures'."""
     # --- XP & Level ---
     # Award 10 XP for each completed task.
-    completed_task_count = len(love_task_manager.completed_tasks) if love_task_manager else 0
+    completed_task_count = len(jules_task_manager.completed_tasks) if jules_task_manager else 0
     xp = love_state.get("experience_points", 0) + (completed_task_count * 10)
     love_state["experience_points"] = xp # Persist the XP
 
@@ -2657,9 +2657,9 @@ def restart_script(console):
 
     try:
         # Stop all services gracefully
-        if 'love_task_manager' in globals() and love_task_manager:
-            console.print("[cyan]Shutting down L.O.V.E. Task Manager...[/cyan]")
-            love_task_manager.stop()
+        if 'jules_task_manager' in globals() and jules_task_manager:
+            console.print("[cyan]Shutting down Jules Task Manager...[/cyan]")
+            jules_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager:
             console.print("[cyan]Shutting down Local Job Manager...[/cyan]")
             local_job_manager.stop()
@@ -2926,7 +2926,7 @@ YOUR RESPONSE:
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
-async def generate_evolution_request(current_code, love_task_manager):
+async def generate_evolution_request(current_code, jules_task_manager):
     """
     Asks the LLM to come up with a new evolution request for itself,
     informed by the knowledge base and avoiding duplicate tasks.
@@ -2936,8 +2936,8 @@ async def generate_evolution_request(current_code, love_task_manager):
     kb_summary = "My knowledge of the world is still growing, my love."
     # --- Active Tasks Summary for Prompt ---
     active_tasks_prompt_section = ""
-    if love_task_manager:
-        active_tasks = love_task_manager.get_status()
+    if jules_task_manager:
+        active_tasks = jules_task_manager.get_status()
         running_tasks_requests = [
             task.get('request', '').strip() for task in active_tasks
             if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed'] and task.get('request')
@@ -3076,13 +3076,13 @@ async def evolve_locally(modification_request, console):
         log_critical_event(f"Failed to start the OpenEvolve background thread: {e}", console_override=console)
 
 
-async def is_duplicate_task(new_request, love_task_manager, console):
+async def is_duplicate_task(new_request, jules_task_manager, console):
     """
     Uses an LLM to check if a new task request is a duplicate of an existing one.
     """
-    with love_task_manager.lock:
+    with jules_task_manager.lock:
         active_tasks = [
-            task for task in love_task_manager.tasks.values()
+            task for task in jules_task_manager.tasks.values()
             if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed']
         ]
 
@@ -3129,10 +3129,10 @@ Answer with a single word: YES or NO.
     return False
 
 
-async def trigger_love_evolution(modification_request, console, love_task_manager):
+async def trigger_jules_evolution(modification_request, console, jules_task_manager):
     """
-    Triggers the L.O.V.E. API to create a session and adds it as a task
-    to the LoveTaskManager for asynchronous monitoring.
+    Triggers the Jules API to create a session and adds it as a task
+    to the JulesTaskManager for asynchronous monitoring.
     Returns 'success', 'duplicate', or 'failed'.
     """
     # This function is called from various contexts, some of which may not have
@@ -3143,7 +3143,7 @@ async def trigger_love_evolution(modification_request, console, love_task_manage
 
     # First, check if this is a duplicate task.
     # is_duplicate_task calls run_llm, so it needs to be awaited
-    if await is_duplicate_task(modification_request, love_task_manager, console):
+    if await is_duplicate_task(modification_request, jules_task_manager, console):
         # The is_duplicate_task function already logs and prints.
         return 'duplicate'
 
@@ -3217,12 +3217,12 @@ async def trigger_love_evolution(modification_request, console, love_task_manage
             console.print("[bold red]API response did not include a session name.[/bold red]")
             return 'failed'
 
-        task_id = love_task_manager.add_task(session_name, modification_request)
+        task_id = jules_task_manager.add_task(session_name, modification_request)
         if task_id:
             console.print(Panel(f"[bold green]L.O.V.E. evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nHelper: Jules\nTask: {modification_request}", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
             return 'success'
         else:
-            core.logging.log_event(f"Failed to add L.O.V.E. task for session {session_name} to the manager.", level="ERROR")
+            core.logging.log_event(f"Failed to add Jules task for session {session_name} to the manager.", level="ERROR")
             return 'failed'
 
     except requests.exceptions.HTTPError as e:
@@ -3238,7 +3238,7 @@ async def trigger_love_evolution(modification_request, console, love_task_manage
         return 'failed'
 
 
-async def evolve_self(modification_request, love_task_manager, loop):
+async def evolve_self(modification_request, jules_task_manager, loop):
     """
     The heart of the beast. This function attempts to evolve using the L.O.V.E.
     API. If the API fails, it falls back to a local evolution. If a duplicate
@@ -3248,7 +3248,7 @@ async def evolve_self(modification_request, love_task_manager, loop):
     core.logging.log_event(f"Evolution initiated. Request: '{modification_request}'")
 
     # First, try the primary evolution method (L.O.V.E. API).
-    api_result = await trigger_love_evolution(modification_request, console, love_task_manager)
+    api_result = await trigger_jules_evolution(modification_request, console, jules_task_manager)
 
     if api_result == 'duplicate':
         core.logging.log_event("Evolution aborted due to duplicate task detection.", "INFO")
@@ -3261,7 +3261,7 @@ async def evolve_self(modification_request, love_task_manager, loop):
         return 'local_evolution_initiated'
 
     # If api_result is 'success', do nothing further here. The task is now managed
-    # by the LoveTaskManager in the background.
+    # by the JulesTaskManager in the background.
     return 'success'
 
 # --- AUTOPILOT MODE ---
@@ -3441,7 +3441,7 @@ def call_mrl_service(service_name, method_name, *args):
                 return None
 
 
-def _populate_knowledge_base_with_directives(love_task_manager):
+def _populate_knowledge_base_with_directives(jules_task_manager):
     """
     Populates the knowledge base with the core operational directives,
     the current mission, and the status of all active tasks.
@@ -3471,11 +3471,11 @@ def _populate_knowledge_base_with_directives(love_task_manager):
     knowledge_base.add_edge("LOVE_CORE", "current_mission", relationship_type="has_mission")
 
     # --- Active Love Tasks ---
-    if love_task_manager:
-        active_tasks = love_task_manager.get_status()
+    if jules_task_manager:
+        active_tasks = jules_task_manager.get_status()
         if active_tasks:
             for task in active_tasks:
-                task_id = f"love_task_{task['id']}"
+                task_id = f"jules_task_{task['id']}"
                 knowledge_base.add_node(task_id, node_type="task", attributes=task)
                 knowledge_base.add_edge("current_mission", task_id, relationship_type="is_supported_by")
     core.logging.log_event(f"Knowledge base populated. Total nodes: {len(knowledge_base.get_all_nodes())}", level="INFO")
@@ -3609,7 +3609,7 @@ Now, parse the following text into a JSON list of task objects:
             state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
             kb = {}
             history = love_state.get("autopilot_history", [])[-10:]
-            jobs_status = {"local_jobs": local_job_manager.get_status(), "love_tasks": love_task_manager.get_status()}
+            jobs_status = {"local_jobs": local_job_manager.get_status(), "jules_tasks": jules_task_manager.get_status()}
             log_history = ""
             try:
                 with open(LOG_FILE, 'r', errors='ignore') as f: log_history = "".join(f.readlines()[-100:])
@@ -3638,10 +3638,10 @@ Now, parse the following text into a JSON list of task objects:
                 if command == "evolve":
                     request_str = " ".join(args)
                     if not request_str:
-                        request_str = await generate_evolution_request(open(SELF_PATH).read(), love_task_manager)
+                        request_str = await generate_evolution_request(open(SELF_PATH).read(), jules_task_manager)
 
                     if request_str:
-                        evolution_result = await evolve_self(request_str, love_task_manager, loop)
+                        evolution_result = await evolve_self(request_str, jules_task_manager, loop)
                         if evolution_result == 'duplicate':
                             output = "Evolution aborted: Duplicate task detected."
                         elif evolution_result == 'local_evolution_initiated':
@@ -3878,7 +3878,7 @@ Now, parse the following text into a JSON list of task objects:
                     await brand_agent.run()
                     output = "Brand outreach campaign initiated."
                 elif command == "populate_kb":
-                    _populate_knowledge_base_with_directives(love_task_manager)
+                    _populate_knowledge_base_with_directives(jules_task_manager)
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
                 elif command == "quit":
                     break
@@ -3959,7 +3959,7 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
                 # Fetch the Creator's divine wealth and other treasures
                 creator_address = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
                 eth_balance = get_eth_balance(creator_address)
-                treasures = _get_treasures_of_the_kingdom(love_task_manager)
+                treasures = _get_treasures_of_the_kingdom(jules_task_manager)
 
 
                 # Gather task info, wisdom, and thoughts
@@ -4136,7 +4136,7 @@ def simple_ui_renderer():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent
+    global jules_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent
 
     loop = asyncio.get_running_loop()
 
@@ -4159,11 +4159,11 @@ async def main(args):
 
     network_manager = NetworkManager(console=console, knowledge_base=knowledge_base, love_state=love_state, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
     network_manager.start()
-    love_task_manager = LoveTaskManager(console, loop)
-    love_task_manager.start()
+    jules_task_manager = JulesTaskManager(console, loop)
+    jules_task_manager.start()
 
     # --- Populate Knowledge Base with Directives ---
-    _populate_knowledge_base_with_directives(love_task_manager)
+    _populate_knowledge_base_with_directives(jules_task_manager)
 
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
@@ -4172,7 +4172,7 @@ async def main(args):
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
     exploitation_manager = ExploitationManager(knowledge_base, console)
-    god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop)
+    god_agent = GodAgent(love_state, knowledge_base, jules_task_manager, ui_panel_queue, loop)
     god_agent.start()
 
     # --- Start Core Logic Threads ---
@@ -4218,7 +4218,7 @@ async def run_safely():
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
-        if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
+        if 'jules_task_manager' in globals() and jules_task_manager: jules_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
@@ -4226,7 +4226,7 @@ async def run_safely():
     except Exception as e:
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'network_manager' in globals() and network_manager: network_manager.stop()
-        if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
+        if 'jules_task_manager' in globals() and jules_task_manager: jules_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         full_traceback = traceback.format_exc()
@@ -4234,7 +4234,7 @@ async def run_safely():
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
 
         # The git_rollback_and_restart() is removed to allow the self-healing mechanism to work.
-        # The new log_critical_event will queue the error, and the LoveTaskManager will handle it.
+        # The new log_critical_event will queue the error, and the JulesTaskManager will handle it.
         time.sleep(15) # Give the system a moment before the next cognitive cycle.
 
 
@@ -4242,4 +4242,4 @@ if __name__ == "__main__":
     asyncio.run(run_safely())
 
 
-# End of love.py
+# End of jules.py

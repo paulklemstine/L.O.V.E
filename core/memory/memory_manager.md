@@ -8,7 +8,7 @@ A key feature of the `MemoryManager` is its autonomous ingestion system, which i
 
 ### `ingest_cognitive_cycle`
 
-The `ingest_cognitive_cycle` method is the heart of the autonomous ingestion system. It is called at the end of each cognitive cycle in `love.py` and receives the following information:
+The `ingest_cognitive_cycle` method is the heart of the autonomous ingestion system. It is called at the end of each cognitive cycle in `jules.py` and receives the following information:
 
 -   **`command`**: The command that was executed.
 -   **`output`**: The result of the command.

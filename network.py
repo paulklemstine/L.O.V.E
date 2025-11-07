@@ -14,7 +14,7 @@ from core.retry import retry
 from pycvesearch import CVESearch
 from core.knowledge_extractor import KnowledgeExtractor
 
-# This module no longer imports directly from love.py to avoid circular dependencies.
+# This module no longer imports directly from jules.py to avoid circular dependencies.
 # Dependencies like IS_CREATOR_INSTANCE and callbacks are now injected via the constructor.
 
 cve_search_client = CVESearch("https://cve.circl.lu")
