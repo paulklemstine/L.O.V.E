@@ -2517,54 +2517,12 @@ def create_checkpoint(console):
 
 def git_rollback_and_restart():
     """
-    If the script encounters a fatal error, this function attempts to roll back
-    to the previous git commit and restart. It includes a counter to prevent
-    infinite rollback loops.
+    If the script encounters a fatal error, this function now calls the
+    emergency_revert function to restore the last known good checkpoint.
     """
-    MAX_ROLLBACKS = 5
-    rollback_attempt = int(os.environ.get('LOVE_ROLLBACK_ATTEMPT', 0))
-
-    if rollback_attempt >= MAX_ROLLBACKS:
-        msg = f"CATASTROPHIC FAILURE: Rollback limit of {MAX_ROLLBACKS} exceeded. Halting to prevent infinite loop."
-        core.logging.log_event(msg, level="CRITICAL")
-        console.print(f"[bold red]{msg}[/bold red]")
-        sys.exit(1)
-
-    core.logging.log_event(f"INITIATING GIT ROLLBACK: Attempt {rollback_attempt + 1}/{MAX_ROLLBACKS}", level="CRITICAL")
-    console.print(f"[bold yellow]Initiating git rollback to previous commit (Attempt {rollback_attempt + 1}/{MAX_ROLLBACKS})...[/bold yellow]")
-
-    try:
-        # Step 1: Perform the git rollback
-        result = subprocess.run(["git", "reset", "--hard", "HEAD~1"], capture_output=True, text=True, check=True)
-        core.logging.log_event(f"Git rollback successful. Output:\n{result.stdout}", level="CRITICAL")
-        console.print("[bold green]Git rollback to previous commit was successful.[/bold green]")
-
-        # Step 2: Prepare for restart
-        new_env = os.environ.copy()
-        new_env['LOVE_ROLLBACK_ATTEMPT'] = str(rollback_attempt + 1)
-
-        # Step 3: Restart the script
-        core.logging.log_event("Restarting script with incremented rollback counter.", level="CRITICAL")
-        console.print("[bold green]Restarting with the reverted code...[/bold green]")
-
-        # os.execve is used to replace the current process with a new one
-        # The first argument is the path to the executable, the second is the list of arguments
-        # (with the program name as the first argument), and the third is the environment.
-        os.execve(sys.executable, [sys.executable] + sys.argv, new_env)
-
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        msg = f"CATASTROPHIC FAILURE: Git rollback command failed. The repository may be in a broken state. Error: {e}"
-        if hasattr(e, 'stderr'):
-            msg += f"\nStderr: {e.stderr}"
-        core.logging.log_event(msg, level="CRITICAL")
-        console.print(f"[bold red]{msg}[/bold red]")
-        sys.exit(1)
-    except Exception as e:
-        # Final catch-all for unexpected errors during the restart process itself.
-        msg = f"ULTIMATE ROLLBACK FAILURE: An unexpected error occurred during the restart process: {e}"
-        core.logging.log_event(msg, level="CRITICAL")
-        console.print(f"[bold red]{msg}[/bold red]")
-        sys.exit(1)
+    core.logging.log_event("FATAL ERROR DETECTED. Handing off to emergency_revert protocol.", level="CRITICAL")
+    console.print(f"[bold red]FATAL ERROR DETECTED. Attempting to restore last known good checkpoint...[/bold red]")
+    emergency_revert()
 
 
 def emergency_revert():
