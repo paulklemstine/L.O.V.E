@@ -269,6 +269,39 @@ def execute_shell_command(command, love_state):
         print(f"Shell command execution error: {e}")
         return "", str(e), -1
 
+def execute_sudo_command(command, love_state):
+    """Executes a shell command with sudo and returns the output."""
+    print(f"Executing sudo command: {command}")
+
+    # Safeguard against dangerous commands
+    blacklist = ["rm -rf /", "mkfs"]
+    if any(blacklisted_cmd in command for blacklisted_cmd in blacklist):
+        raise PermissionError("Execution of this command with sudo is not permitted for safety reasons.")
+
+    try:
+        # Using 'sudo -n' to prevent interactive password prompt
+        full_command = f"sudo -n {command}"
+        result = subprocess.run(
+            full_command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        # If sudo requires a password, it will fail with a non-zero exit code.
+        if result.returncode != 0 and "a password is required" in result.stderr:
+             return "", "Sudo command failed: a password is required for execution.", result.returncode
+
+        return result.stdout, result.stderr, result.returncode
+    except subprocess.TimeoutExpired:
+        return "", "Sudo command timed out after 300 seconds.", -1
+    except PermissionError as e:
+        print(f"Sudo command permission denied: {command}")
+        return "", str(e), -1
+    except Exception as e:
+        print(f"Sudo command execution error: {e}")
+        return "", str(e), -1
+
 @retry(exceptions=(subprocess.TimeoutExpired, subprocess.CalledProcessError), tries=2, delay=2)
 def scan_network(love_state, autopilot_mode=False):
     """
