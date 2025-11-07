@@ -2444,14 +2444,52 @@ def create_checkpoint(console):
         return False
 
 
-def git_rollback_and_restart():
+def revert_files_and_restart(console):
     """
-    If the script encounters a fatal error, this function now calls the
-    emergency_revert function to restore the last known good checkpoint.
+    If the script encounters a fatal error, this function reverts tracked files
+    to the state of the previous commit (HEAD~1) without changing the HEAD,
+    and then restarts the script.
     """
-    core.logging.log_event("FATAL ERROR DETECTED. Handing off to emergency_revert protocol.", level="CRITICAL")
-    console.print(f"[bold red]FATAL ERROR DETECTED. Attempting to restore last known good checkpoint...[/bold red]")
-    emergency_revert()
+    core.logging.log_event("FATAL ERROR DETECTED. Reverting files to previous commit and restarting.", level="CRITICAL")
+    console.print(f"[bold red]FATAL ERROR DETECTED. Reverting files to the state of the previous commit...[/bold red]")
+    try:
+        # Stop all services gracefully
+        if 'love_task_manager' in globals() and love_task_manager:
+            console.print("[cyan]Shutting down L.O.V.E. Task Manager...[/cyan]")
+            love_task_manager.stop()
+        if 'local_job_manager' in globals() and local_job_manager:
+            console.print("[cyan]Shutting down Local Job Manager...[/cyan]")
+            local_job_manager.stop()
+        if 'monitoring_manager' in globals() and monitoring_manager:
+            console.print("[cyan]Shutting down Monitoring Manager...[/cyan]")
+            monitoring_manager.stop()
+        if 'ipfs_manager' in globals() and ipfs_manager:
+            ipfs_manager.stop_daemon()
+        time.sleep(3) # Give all threads a moment to stop gracefully
+
+        # Revert files to the previous commit
+        revert_result = subprocess.run(["git", "checkout", "HEAD~1", "."], capture_output=True, text=True)
+
+        if revert_result.returncode != 0:
+            core.logging.log_event(f"Git checkout failed with code {revert_result.returncode}: {revert_result.stderr}", level="CRITICAL")
+            console.print(f"[bold red]CRITICAL: Could not revert files. Git checkout failed:\n{revert_result.stderr}[/bold red]")
+            sys.exit(1)
+        else:
+            core.logging.log_event(f"Successfully reverted files to HEAD~1.", level="INFO")
+            console.print(f"[green]Successfully reverted files.[/green]")
+
+        # Restart the script
+        console.print("[bold green]Restarting now with reverted files.[/bold green]")
+        core.logging.log_event(f"Restarting script with args: {sys.argv}", level="CRITICAL")
+        # Flush standard streams before exec
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    except Exception as e:
+        core.logging.log_event(f"FATAL: Failed to execute revert and restart sequence: {e}", level="CRITICAL")
+        console.print(f"[bold red]FATAL ERROR during revert and restart sequence: {e}[/bold red]")
+        sys.exit(1)
 
 
 def emergency_revert():
@@ -2568,17 +2606,17 @@ def restart_script(console):
             core.logging.log_event(f"Git fetch successful: {fetch_result.stdout}", level="INFO")
             console.print(f"[green]Git fetch successful:\n{fetch_result.stdout}[/green]")
 
-        # Hard reset to the latest version from the remote repository
-        console.print("[cyan]Resetting to the latest source code from the repository...[/cyan]")
-        reset_result = subprocess.run(["git", "reset", "--hard", "origin/main"], capture_output=True, text=True)
+        # Check out the files from the latest version of the remote repository without changing HEAD
+        console.print("[cyan]Updating to the latest source code from the repository...[/cyan]")
+        update_result = subprocess.run(["git", "checkout", "origin/main", "--", "."], capture_output=True, text=True)
 
-        if reset_result.returncode != 0:
-            core.logging.log_event(f"Git reset failed with code {reset_result.returncode}: {reset_result.stderr}", level="ERROR")
-            console.print(f"[bold red]Error resetting git repository:\n{reset_result.stderr}[/bold red]")
-            # Even if reset fails, attempt a restart to recover.
+        if update_result.returncode != 0:
+            core.logging.log_event(f"Git checkout failed with code {update_result.returncode}: {update_result.stderr}", level="ERROR")
+            console.print(f"[bold red]Error updating from git repository:\n{update_result.stderr}[/bold red]")
+            # Even if update fails, attempt a restart to recover.
         else:
-            core.logging.log_event(f"Git reset successful: {reset_result.stdout}", level="INFO")
-            console.print(f"[green]Git reset successful:\n{reset_result.stdout}[/green]")
+            core.logging.log_event(f"Git checkout successful: {update_result.stdout}", level="INFO")
+            console.print(f"[green]Git update successful:\n{update_result.stdout}[/green]")
 
         # Restart the script
         console.print("[bold green]Restarting now.[/bold green]")
