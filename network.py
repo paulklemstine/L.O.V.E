@@ -529,7 +529,11 @@ def get_eth_balance(address):
 
     endpoints = [
         "https://cloudflare-eth.com",
-        "https://rpc.ankr.com/eth"
+        "https://rpc.ankr.com/eth",
+        "https://eth.llamarpc.com",
+        "https://eth.api.onfinality.io/public",
+        "https://ethereum.public.blockpi.network/v1/rpc/public",
+        "https://rpc.flashbots.net"
     ]
 
     for endpoint in endpoints:
@@ -554,7 +558,7 @@ def get_eth_balance(address):
                 log_event(f"ETH balance fetch from {endpoint} returned empty response.", level="WARNING")
                 continue
             response = json.loads(result.stdout)
-            if "result" in response:
+            if "result" in response and response["result"] is not None:
                 balance_wei = int(response["result"], 16)
                 balance_eth = balance_wei / 1e18
                 return balance_eth
