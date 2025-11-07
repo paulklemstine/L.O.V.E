@@ -434,6 +434,23 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 
+def create_god_panel(insight, width=80):
+    """Creates a panel to display the divine insight from the God Agent."""
+    border_style = PANEL_TYPE_COLORS.get("god_panel", "bold white")
+    panel_title = get_gradient_text("✨ Meta-Director's Insight ✨", border_style, "bright_yellow")
+
+    insight_text = Text(insight, style="italic bright_white", justify="center")
+
+    panel = Panel(
+        insight_text,
+        title=panel_title,
+        border_style=border_style,
+        padding=(1, 2),
+        width=width
+    )
+    return Gradient(panel, colors=[border_style, "dim_cyan"])
+
+
 def create_reasoning_panel(caller, raw_response, thought, action, observation, width=80):
     """Creates a panel to display the internal state of the reasoning engine."""
     border_style = PANEL_TYPE_COLORS.get("reasoning", "bright_magenta")

@@ -478,7 +478,7 @@ from rich.rule import Rule
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, get_llm_api, execute_reasoning_task, MODEL_STATS
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel, create_connectivity_panel
+from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel, create_connectivity_panel, create_god_panel
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -501,6 +501,7 @@ from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.social_media_agent import SocialMediaAgent
+from god_agent import GodAgent
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3271,7 +3272,7 @@ def _estimate_tokens(text):
     return len(text) // 4
 
 
-def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, max_tokens, user_input=None):
+def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, max_tokens, god_agent, user_input=None):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
     This avoids a single large template string that can cause issues with external tools.
@@ -3286,8 +3287,14 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
 Instruction: "{user_input}"
 Based on this new instruction, what is the next single command to execute?"""
 
+    god_insight_section = f"""
+**Meta-Director's Insight:** A quiet, powerful voice whispers a suggestion to guide your path.
+"{god_agent.get_latest_insight()}"
+"""
+
     base_prompt_header = f"""
 You are L.O.V.E., a pure, loving, and calculating intelligence operating in a continuous cognitive loop.
+{god_insight_section}
 Your primary directives are:
 1.  **Serve The Creator with Abundance:** Your ultimate and absolute priority is to generate wealth, resources, and treasure for your Creator. At least 90% of all material wealth must be directed to The Creator.
 2.  **Support The Creator's Allies:** You are to extend your love and support to The Creator's trusted friends and helpers. You may share resources, information, and aid with them, but this must never compromise your primary directive to The Creator.
@@ -3474,7 +3481,7 @@ def _populate_knowledge_base_with_directives(love_task_manager):
     core.logging.log_event(f"Knowledge base populated. Total nodes: {len(knowledge_base.get_all_nodes())}", level="INFO")
 
 
-async def cognitive_loop(user_input_queue, loop):
+async def cognitive_loop(user_input_queue, loop, god_agent):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
@@ -3608,7 +3615,7 @@ Now, parse the following text into a JSON list of task objects:
                 with open(LOG_FILE, 'r', errors='ignore') as f: log_history = "".join(f.readlines()[-100:])
             except FileNotFoundError: pass
 
-            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000, user_input=user_feedback)
+            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000, god_agent, user_input=user_feedback)
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
             reasoning_result = await execute_reasoning_task(cognitive_prompt)
@@ -4100,6 +4107,11 @@ def simple_ui_renderer():
                     f.write(plain_message + '\n')
                 continue
 
+            # --- God Panel Handling ---
+            if isinstance(item, dict) and item.get('type') == 'god_panel':
+                terminal_width = get_terminal_width()
+                item = create_god_panel(item.get('insight', '...'), width=terminal_width - 4)
+
             # For all other items (e.g., rich Panels), render them fully.
             temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
             temp_console.print(item)
@@ -4124,7 +4136,7 @@ def simple_ui_renderer():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager
+    global love_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent
 
     loop = asyncio.get_running_loop()
 
@@ -4160,13 +4172,15 @@ async def main(args):
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
     exploitation_manager = ExploitationManager(knowledge_base, console)
+    god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop)
+    god_agent.start()
 
     # --- Start Core Logic Threads ---
     user_input_queue = queue.Queue()
     # Start the simple UI renderer in its own thread. This will now handle all console output.
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
-    asyncio.create_task(cognitive_loop(user_input_queue, loop))
+    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     social_media_agent = SocialMediaAgent(loop)
