@@ -155,7 +155,7 @@ class SelfImprovingOptimizer(SpecialistAgent):
                     }
                 }
             )
-            gemini_react_engine = GeminiReActEngine(tool_registry)
+            gemini_react_engine = GeminiReActEngine(tool_registry, caller="SelfImprovingOptimizer")
         except FileNotFoundError:
             error_msg = "Error: gemini-cli is not available. Cannot run self-improvement cycle."
             print(error_msg)
