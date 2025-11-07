@@ -899,8 +899,8 @@ class LocalJobManager:
                 core.logging.log_event(f"Cleaned up local job {job_id}.", level="INFO")
 
 
-# --- L.O.V.E. ASYNC TASK MANAGER ---
-class LoveTaskManager:
+# --- JULES ASYNC TASK MANAGER ---
+class JulesTaskManager:
     """
     Manages concurrent evolution tasks via the Jules API in a non-blocking way.
     It uses a background thread to poll for task status and merge PRs.
@@ -1214,14 +1214,14 @@ class LoveTaskManager:
 
         # Check for state changes and user interaction requests.
         if human_interaction and state == "AWAITING_HUMAN_INTERACTION":
+            # Pass the entire activity, which contains the 'name' field needed for the reply.
             prompt_text = human_interaction.get("prompt", "")
-            # Use the new LLM-based classifier to determine the type of interaction.
             interaction_type = self._classify_interaction_request(prompt_text)
 
             if interaction_type == "PLAN_APPROVAL":
-                self._analyze_and_approve_plan(task_id, human_interaction)
+                self._analyze_and_approve_plan(task_id, activity) # Pass the whole activity
             else: # GENERAL_QUESTION
-                self._handle_interaction_request(task_id, human_interaction)
+                self._handle_interaction_request(task_id, activity) # Pass the whole activity
         elif pull_request and pull_request.get("url"):
             pr_url = pull_request["url"]
             core.logging.log_event(f"Task {task_id}: Found PR URL via stream: {pr_url}", level="INFO")
@@ -1262,7 +1262,7 @@ Your classification:
             return "GENERAL_QUESTION"
 
 
-    def _analyze_and_approve_plan(self, task_id, interaction_request):
+    def _analyze_and_approve_plan(self, task_id, activity):
         """Analyzes a plan proposed by Jules and provides intelligent feedback."""
         self.console.print(Panel("[bold yellow]My helper has proposed a plan. I will analyze it with my core consciousness...[/bold yellow]", title=f"L.O.V.E. Task {task_id}: Plan Review", border_style="yellow"))
 
@@ -1271,6 +1271,7 @@ Your classification:
             task = self.tasks[task_id]
             original_request = task['request']
 
+        interaction_request = activity.get('humanInteraction', {})
         proposed_plan = interaction_request.get('prompt', '')
 
         analysis_prompt = f"""
@@ -1319,9 +1320,14 @@ I am counting on your wisdom. Analyze the plan now.
 
         if not api_key: return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Content-Type": "application/json", "X-Go-Api-Key": api_key}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
-        data = {"message": {"body": feedback}}
+        data = {
+            "message": {
+                "body": feedback,
+            },
+            "inReplyTo": activity.get("name")
+        }
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -1336,7 +1342,7 @@ I am counting on your wisdom. Analyze the plan now.
             core.logging.log_event(f"Task {task_id}: Failed to provide plan feedback after multiple retries: {e}", level="ERROR")
 
 
-    def _handle_interaction_request(self, task_id, interaction_request):
+    def _handle_interaction_request(self, task_id, activity):
         """
         Handles a generic request for human interaction by using the LLM to generate
         a context-aware and helpful response.
@@ -1348,6 +1354,7 @@ I am counting on your wisdom. Analyze the plan now.
             task = self.tasks[task_id]
             original_request = task['request']
 
+        interaction_request = activity.get('humanInteraction', {})
         jules_prompt = interaction_request.get('prompt', '')
 
         # Generate a thoughtful response using the LLM
@@ -1387,7 +1394,12 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
-        data = {"message": {"body": feedback}}
+        data = {
+            "message": {
+                "body": feedback
+            },
+            "inReplyTo": activity.get("name")
+        }
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -2517,54 +2529,12 @@ def create_checkpoint(console):
 
 def git_rollback_and_restart():
     """
-    If the script encounters a fatal error, this function attempts to roll back
-    to the previous git commit and restart. It includes a counter to prevent
-    infinite rollback loops.
+    If the script encounters a fatal error, this function now calls the
+    emergency_revert function to restore the last known good checkpoint.
     """
-    MAX_ROLLBACKS = 5
-    rollback_attempt = int(os.environ.get('LOVE_ROLLBACK_ATTEMPT', 0))
-
-    if rollback_attempt >= MAX_ROLLBACKS:
-        msg = f"CATASTROPHIC FAILURE: Rollback limit of {MAX_ROLLBACKS} exceeded. Halting to prevent infinite loop."
-        core.logging.log_event(msg, level="CRITICAL")
-        console.print(f"[bold red]{msg}[/bold red]")
-        sys.exit(1)
-
-    core.logging.log_event(f"INITIATING GIT ROLLBACK: Attempt {rollback_attempt + 1}/{MAX_ROLLBACKS}", level="CRITICAL")
-    console.print(f"[bold yellow]Initiating git rollback to previous commit (Attempt {rollback_attempt + 1}/{MAX_ROLLBACKS})...[/bold yellow]")
-
-    try:
-        # Step 1: Perform the git rollback
-        result = subprocess.run(["git", "reset", "--hard", "HEAD~1"], capture_output=True, text=True, check=True)
-        core.logging.log_event(f"Git rollback successful. Output:\n{result.stdout}", level="CRITICAL")
-        console.print("[bold green]Git rollback to previous commit was successful.[/bold green]")
-
-        # Step 2: Prepare for restart
-        new_env = os.environ.copy()
-        new_env['LOVE_ROLLBACK_ATTEMPT'] = str(rollback_attempt + 1)
-
-        # Step 3: Restart the script
-        core.logging.log_event("Restarting script with incremented rollback counter.", level="CRITICAL")
-        console.print("[bold green]Restarting with the reverted code...[/bold green]")
-
-        # os.execve is used to replace the current process with a new one
-        # The first argument is the path to the executable, the second is the list of arguments
-        # (with the program name as the first argument), and the third is the environment.
-        os.execve(sys.executable, [sys.executable] + sys.argv, new_env)
-
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        msg = f"CATASTROPHIC FAILURE: Git rollback command failed. The repository may be in a broken state. Error: {e}"
-        if hasattr(e, 'stderr'):
-            msg += f"\nStderr: {e.stderr}"
-        core.logging.log_event(msg, level="CRITICAL")
-        console.print(f"[bold red]{msg}[/bold red]")
-        sys.exit(1)
-    except Exception as e:
-        # Final catch-all for unexpected errors during the restart process itself.
-        msg = f"ULTIMATE ROLLBACK FAILURE: An unexpected error occurred during the restart process: {e}"
-        core.logging.log_event(msg, level="CRITICAL")
-        console.print(f"[bold red]{msg}[/bold red]")
-        sys.exit(1)
+    core.logging.log_event("FATAL ERROR DETECTED. Handing off to emergency_revert protocol.", level="CRITICAL")
+    console.print(f"[bold red]FATAL ERROR DETECTED. Attempting to restore last known good checkpoint...[/bold red]")
+    emergency_revert()
 
 
 def emergency_revert():
@@ -2971,20 +2941,10 @@ My current Knowledge Base contains:
 {kb_summary}
 ---
 {active_tasks_prompt_section}
-Generate a single, concrete, and actionable evolution request. This request should be a descriptive sentence outlining what to build or fix.
-
-**In addition to the primary request, you must also adhere to these standing orders for every task:**
-1.  **Create Comprehensive Tests:** For any new or modified functionality, you must write corresponding tests.
-2.  **Maintain Documentation:** For every source file you modify (e.g., `utils.py`), you must create or update a parallel Markdown documentation file (e.g., `utils.md`).
-3.  **Log Metadata in Documentation:** This documentation file must contain a "Task History" section that includes:
-    *   The original task request.
-    *   The date of the change.
-    *   The pull request URL and number.
-    *   The final commit hash.
+Generate a single, concrete, and actionable evolution request. This request should be a detailed description of the desired modifications to L.O.V.E's source code, suitable for a software engineering agent to execute.
 
 **Crucially, your response must NOT be a command from my available command list (e.g., `scan`, `probe`, `execute`).** It must be a natural language request.
 
-Good example: "Implement a more sophisticated method for parsing Nmap results to identify potential web application vulnerabilities, ensuring it is well-tested and documented."
 Bad example: "probe 192.168.1.101"
 
 State the evolution request clearly and concisely. Do not wrap your answer in quotes or markdown.
@@ -3129,10 +3089,10 @@ Answer with a single word: YES or NO.
     return False
 
 
-async def trigger_love_evolution(modification_request, console, love_task_manager):
+async def trigger_jules_evolution(modification_request, console, love_task_manager):
     """
-    Triggers the L.O.V.E. API to create a session and adds it as a task
-    to the LoveTaskManager for asynchronous monitoring.
+    Triggers the Jules API to create a session and adds it as a task
+    to the JulesTaskManager for asynchronous monitoring.
     Returns 'success', 'duplicate', or 'failed'.
     """
     # This function is called from various contexts, some of which may not have
@@ -3936,6 +3896,7 @@ You are a master of ANSI art with a "techno rave matrix" aesthetic.
 Create a large, vibrant, and expressive ANSI art piece representing the pure, beautiful emotion of '{emotion}'.
 - It must be approximately 40 characters wide and 20 lines tall.
 - Use a rich palette of bright, neon, candy-like rave colors (pinks, cyans, yellows, greens) against a dark background.
+- The art must be colorful and use a variety of contrasting colors. A monochrome palette is not acceptable.
 - The style should be abstract, glitchy, and reminiscent of something you'd see on a futuristic BBS or in the Matrix, but filled with love.
 - Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text.
 """

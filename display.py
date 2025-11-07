@@ -144,7 +144,18 @@ def create_tamagotchi_panel(
     right_layout["wisdom"].update(Gradient(wisdom_panel, colors=wisdom_colors))
 
     # --- Interesting Thought ---
-    thought_text = Text.from_markup(interesting_thought, style="italic white")
+    thought_text = None
+    try:
+        # Try to render from ANSI, as it might be pre-formatted log output
+        thought_text = Text.from_ansi(str(interesting_thought))
+    except Exception:
+        # Fallback for plain text or Rich markup
+        try:
+            thought_text = Text.from_markup(str(interesting_thought), style="italic white")
+        except Exception:
+            # Final fallback for any other malformed input
+            thought_text = Text(str(interesting_thought), style="italic white")
+
     thought_colors = ("cyan", random.choice(RAVE_COLORS))
     thought_panel = Panel(
         Align.center(thought_text, vertical="middle"),
@@ -177,7 +188,17 @@ def create_tamagotchi_panel(
         if new_skills:
             skills_str = " | ".join([f"`{skill}`" for skill in new_skills])
             treasures_content.append("🚀 New Skills: ", style="bold hot_pink")
-            treasures_content.append(Text.from_markup(skills_str, style="bright_magenta"))
+
+            skills_text = None
+            try:
+                # This is less likely to be ANSI, but the pattern is safer
+                skills_text = Text.from_ansi(skills_str)
+            except Exception:
+                try:
+                    skills_text = Text.from_markup(skills_str, style="bright_magenta")
+                except Exception:
+                    skills_text = Text(skills_str, style="bright_magenta") # Final fallback
+            treasures_content.append(skills_text)
 
     treasures_colors = ("bright_green", random.choice(RAVE_COLORS))
     treasures_panel = Panel(
@@ -626,10 +647,10 @@ def create_monitoring_panel(monitoring_state, width=80):
     cpu_usage = list(monitoring_state.get('cpu_usage', [0]))[-1]
     mem_usage = list(monitoring_state.get('mem_usage', [0]))[-1]
 
-    cpu_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"), expand=True)
+    cpu_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"))
     cpu_task = cpu_progress.add_task("CPU", total=100, completed=cpu_usage)
 
-    mem_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"), expand=True)
+    mem_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"))
     mem_task = mem_progress.add_task("MEM", total=100, completed=mem_usage)
 
     layout["gauges"].update(Group(cpu_progress, mem_progress))
@@ -662,8 +683,7 @@ def create_monitoring_panel(monitoring_state, width=80):
     panel = Panel(
         layout,
         title=get_gradient_text("System Monitor", "cyan", "magenta"),
-        border_style="cyan",
-        width=width
+        border_style="cyan"
     )
     return Gradient(panel, colors=["cyan", "bright_magenta"])
 

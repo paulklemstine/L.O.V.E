@@ -10,7 +10,7 @@ import requests
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from love import LoveTaskManager, trigger_love_evolution
+from love import JulesTaskManager, trigger_jules_evolution
 from utils import get_git_repo_info
 from rich.console import Console
 from core.retry import retry
@@ -92,9 +92,9 @@ def console():
 @pytest.fixture(scope="module")
 def task_manager(console):
     """
-    Provides a live LoveTaskManager instance. The background loop is allowed to run as it would in production.
+    Provides a live JulesTaskManager instance. The background loop is allowed to run as it would in production.
     """
-    manager = LoveTaskManager(console=console)
+    manager = JulesTaskManager(console=console)
     manager.start()
     yield manager
     manager.stop()
@@ -119,7 +119,7 @@ async def test_jules_happy_path_lifecycle(task_manager, console):
     request = f"Create a new test file named 'tests/test_autogen_{uuid.uuid4().hex[:8]}.py' with a simple passing test."
 
     # Use the actual trigger function from evolve.py
-    success = trigger_love_evolution(request, console, task_manager)
+    success = trigger_jules_evolution(request, console, task_manager)
     assert success, "Failed to trigger the L.O.V.E. evolution task via the Jules API."
 
     # Find the task that was just created
@@ -223,7 +223,7 @@ async def test_jules_merge_conflict_resolution_lifecycle(task_manager, console):
     # --- 2. Trigger the Evolution Task ---
     request = f"In the file `{conflict_file}`, change the comment to '# Modified by Jules'"
 
-    success = trigger_love_evolution(request, console, task_manager)
+    success = trigger_jules_evolution(request, console, task_manager)
     assert success, "Failed to trigger the L.O.V.E. evolution task."
 
     task_id = max(task_manager.tasks.keys(), key=lambda t: task_manager.tasks[t]['created_at'])
