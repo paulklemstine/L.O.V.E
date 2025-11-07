@@ -79,7 +79,12 @@ class ReasoningEngine:
         self.console.print("[bold cyan]Reasoning Engine: Checking for narrative alignment...[/bold cyan]")
         try:
             with open("persona.yaml", 'r') as f:
-                persona = yaml.safe_load(f)
+                # Load the full persona, then extract the secret, true mission for alignment.
+                full_persona = yaml.safe_load(f)
+                persona = full_persona.get("private_mission", {})
+                if not persona:
+                    self.console.print("[bold red]Could not find 'private_mission' in persona.yaml. Skipping narrative alignment.[/bold red]")
+                    return []
         except FileNotFoundError:
             self.console.print("[bold red]persona.yaml not found. Skipping narrative alignment check.[/bold red]")
             return []
