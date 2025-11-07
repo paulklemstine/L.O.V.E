@@ -130,38 +130,43 @@ class GraphDataManager:
 
     def _serialize_attributes(self):
         """
-        Recursively serializes dictionary attributes to JSON strings for compatibility with GraphML.
+        Recursively serializes dictionary or list attributes to JSON strings for compatibility with GraphML.
         """
         for node, data in self.graph.nodes(data=True):
             for key, value in data.items():
-                if isinstance(value, dict):
+                if isinstance(value, (dict, list)):
                     data[key] = json.dumps(value)
 
         for u, v, data in self.graph.edges(data=True):
             for key, value in data.items():
-                if isinstance(value, dict):
+                if isinstance(value, (dict, list)):
                     data[key] = json.dumps(value)
 
     def _deserialize_attributes(self):
         """
-        Deserializes JSON string attributes back into dictionaries after loading from GraphML.
+        Deserializes JSON string attributes back into dictionaries or lists after loading from GraphML.
         """
         for node, data in self.graph.nodes(data=True):
             for key, value in data.items():
-                if isinstance(value, str) and value.startswith('{') and value.endswith('}'):
-                    try:
-                        data[key] = json.loads(value)
-                    except json.JSONDecodeError:
-                        # Not a valid JSON string, leave it as is.
-                        pass
+                if isinstance(value, str):
+                    # Check if the string is a JSON object or array
+                    if (value.startswith('{') and value.endswith('}')) or \
+                       (value.startswith('[') and value.endswith(']')):
+                        try:
+                            data[key] = json.loads(value)
+                        except json.JSONDecodeError:
+                            # Not a valid JSON string, leave it as is.
+                            pass
 
         for u, v, data in self.graph.edges(data=True):
             for key, value in data.items():
-                if isinstance(value, str) and value.startswith('{') and value.endswith('}'):
-                    try:
-                        data[key] = json.loads(value)
-                    except json.JSONDecodeError:
-                        pass
+                if isinstance(value, str):
+                    if (value.startswith('{') and value.endswith('}')) or \
+                       (value.startswith('[') and value.endswith(']')):
+                        try:
+                            data[key] = json.loads(value)
+                        except json.JSONDecodeError:
+                            pass
 
     def summarize_graph(self):
         """
