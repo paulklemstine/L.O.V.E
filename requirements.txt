@@ -322,7 +322,6 @@ httpx[http2]==0.28.1
     #   atproto
     #   datasets
     #   google-genai
-    #   llm-gemini
     #   mcp
     #   openai
     #   qdrant-client
@@ -347,8 +346,6 @@ idna==3.11
     #   requests
     #   trio
     #   yarl
-ijson==3.4.0.post0
-    # via llm-gemini
 importlib-metadata==8.7.0
     # via
     #   opentelemetry-api
@@ -389,10 +386,6 @@ langextract==1.0.9
 libipld==3.2.0
     # via atproto
 llm==0.27.1
-    # via
-    #   -r requirements.in
-    #   llm-gemini
-llm-gemini==0.26.1
     # via -r requirements.in
 loguru==0.7.3
     # via rich-gradient

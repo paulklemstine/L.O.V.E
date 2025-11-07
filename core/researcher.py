@@ -9,7 +9,7 @@ from typing import List, Dict, Any
 def _get_project_context() -> str:
     """Gathers context from the current project's codebase."""
     project_root = os.path.dirname(os.path.dirname(__file__))
-    context_files = ['love.py', 'README.md', 'core/llm_api.py', 'core/gemini_react_engine.py']
+    context_files = ['love.py', 'README.md', 'core/llm_api.py']
 
     context = "Project Context:\n\n"
     for file_path in context_files:
