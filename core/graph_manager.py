@@ -141,11 +141,15 @@ class GraphDataManager:
             for key, value in data.items():
                 if isinstance(value, (dict, list)):
                     data[key] = json.dumps(value)
+                elif value is None:
+                    data[key] = 'None'
 
         for u, v, data in graph_copy.edges(data=True):
             for key, value in data.items():
                 if isinstance(value, (dict, list)):
                     data[key] = json.dumps(value)
+                elif value is None:
+                    data[key] = 'None'
 
         return graph_copy
 
