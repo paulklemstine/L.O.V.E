@@ -93,8 +93,9 @@ class GraphDataManager:
         Args:
             filepath: The path to save the file to.
         """
-        self._serialize_attributes()
-        nx.write_graphml(self.graph, filepath)
+        # Create a serialized copy of the graph for saving
+        graph_to_save = self._serialize_attributes()
+        nx.write_graphml(graph_to_save, filepath)
 
     def load_graph(self, filepath):
         """
@@ -131,42 +132,45 @@ class GraphDataManager:
     def _serialize_attributes(self):
         """
         Recursively serializes dictionary or list attributes to JSON strings for compatibility with GraphML.
+        This creates a temporary graph with serialized attributes to avoid modifying the in-memory graph.
         """
-        for node, data in self.graph.nodes(data=True):
+        # Create a deep copy to avoid modifying the graph that's currently in memory
+        graph_copy = self.graph.copy()
+
+        for node, data in graph_copy.nodes(data=True):
             for key, value in data.items():
                 if isinstance(value, (dict, list)):
                     data[key] = json.dumps(value)
 
-        for u, v, data in self.graph.edges(data=True):
+        for u, v, data in graph_copy.edges(data=True):
             for key, value in data.items():
                 if isinstance(value, (dict, list)):
                     data[key] = json.dumps(value)
+
+        return graph_copy
 
     def _deserialize_attributes(self):
         """
         Deserializes JSON string attributes back into dictionaries or lists after loading from GraphML.
         """
-        for node, data in self.graph.nodes(data=True):
+        for _, data in self.graph.nodes(data=True):
             for key, value in data.items():
                 if isinstance(value, str):
-                    # Check if the string is a JSON object or array
-                    if (value.startswith('{') and value.endswith('}')) or \
-                       (value.startswith('[') and value.endswith(']')):
-                        try:
-                            data[key] = json.loads(value)
-                        except json.JSONDecodeError:
-                            # Not a valid JSON string, leave it as is.
-                            pass
+                    try:
+                        # Attempt to parse the string as JSON. If it's not a valid
+                        # JSON string, json.loads will raise an exception and we'll
+                        # leave the attribute as a plain string.
+                        data[key] = json.loads(value)
+                    except json.JSONDecodeError:
+                        continue # Not a JSON string, do nothing.
 
-        for u, v, data in self.graph.edges(data=True):
+        for _, _, data in self.graph.edges(data=True):
             for key, value in data.items():
                 if isinstance(value, str):
-                    if (value.startswith('{') and value.endswith('}')) or \
-                       (value.startswith('[') and value.endswith(']')):
-                        try:
-                            data[key] = json.loads(value)
-                        except json.JSONDecodeError:
-                            pass
+                    try:
+                        data[key] = json.loads(value)
+                    except json.JSONDecodeError:
+                        continue # Not a JSON string.
 
     def summarize_graph(self):
         """
