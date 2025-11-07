@@ -121,7 +121,7 @@ def mark_dependency_as_met(dependency_name, console=None):
 
 
 def _install_system_packages():
-    """Installs system-level packages like build-essential, nodejs, and nmap."""
+    """Installs system-level packages like build-essential, and nmap."""
     if is_dependency_met("system_packages"):
         print("System packages already installed. Skipping.")
         return
@@ -133,16 +133,6 @@ def _install_system_packages():
         except Exception as e:
             print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
             logging.warning(f"Failed to install build-essential/python3-dev: {e}")
-
-        # [L.O.V.E.] Using apt-get to install Node.js.
-        if not shutil.which('node') or not shutil.which('npm'):
-            print("Node.js not found. Installing via apt-get...")
-            try:
-                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
-                print("Successfully installed Node.js and npm.")
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to install Node.js via apt-get. Error: {e}")
-                logging.error(f"nodejs apt-get installation failed: {e}")
 
         if not shutil.which('nmap'):
             print("Network scanning tool 'nmap' not found. Attempting to install...")
@@ -337,33 +327,6 @@ def _install_python_requirements():
     # --- End setuptools pre-installation ---
     _install_requirements_file('requirements.txt', 'core_pkg_')
 
-def _install_nodejs_deps():
-    """Installs local Node.js project dependencies."""
-    if is_dependency_met("nodejs_deps"):
-        print("Node.js dependencies already installed. Skipping.")
-        return
-    if os.path.exists('package.json'):
-        print("Installing local Node.js dependencies via npm...")
-
-        try:
-            # Capture output to get more detailed error messages
-            result = subprocess.run("npm install", shell=True, capture_output=True, text=True, check=True)
-            # Log stdout for transparency, even on success
-            logging.info(f"npm install successful:\nSTDOUT:\n{result.stdout}")
-            print("Node.js dependencies installed successfully.")
-            mark_dependency_as_met("nodejs_deps")
-        except subprocess.CalledProcessError as e:
-            # If npm install fails, print and log the detailed error from stdout and stderr
-            error_message = f"npm install failed with return code {e.returncode}.\n"
-            error_message += f"STDOUT:\n{e.stdout}\n"
-            error_message += f"STDERR:\n{e.stderr}"
-            print(f"ERROR: Failed to install Node.js dependencies. See details below:\n{e.stderr}")
-            logging.error(error_message)
-        except Exception as e:
-            print(f"ERROR: An unexpected error occurred during Node.js dependency installation: {e}")
-            logging.error(f"Unexpected error during npm install: {e}", exc_info=True)
-
-
 def _check_and_install_dependencies():
     """
     Orchestrates the installation of all dependencies, checking the status of each
@@ -371,56 +334,11 @@ def _check_and_install_dependencies():
     """
     _install_system_packages()
     _install_python_requirements()
-    _install_nodejs_deps()
     _configure_llm_api_key()
 
 
 def _configure_llm_api_key():
-    import core.logging
-    """Checks for the Gemini API key and configures it for the llm tool."""
-    if is_dependency_met("llm_api_key_configured"):
-        core.logging.log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
-        return
-    gemini_api_key = os.environ.get("GEMINI_API_KEY")
-    if not gemini_api_key:
-        core.logging.log_event("INFO: GEMINI_API_KEY environment variable not found. Skipping llm configuration.")
-        return
-
-    try:
-        core.logging.log_event("INFO: Checking 'llm' tool API key configuration...")
-        llm_executable = [sys.executable, '-m', 'llm']
-        result = subprocess.run(
-            llm_executable + ["keys", "list"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=60
-        )
-        core.logging.log_event(f"INFO: 'llm keys list' output: {result.stdout.strip()}")
-        if "google" in result.stdout:
-            core.logging.log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
-            mark_dependency_as_met("llm_api_key_configured")
-            return
-
-        core.logging.log_event("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
-        configure_result = subprocess.run(
-            llm_executable + ["keys", "set", "google"],
-            input=gemini_api_key,
-            text=True,
-            check=True,
-            capture_output=True,
-            timeout=60
-        )
-        core.logging.log_event(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
-        mark_dependency_as_met("llm_api_key_configured")
-    except subprocess.TimeoutExpired:
-        core.logging.log_event("ERROR: Timeout expired while trying to configure the 'llm' tool API key. The command is likely hanging.")
-    except subprocess.CalledProcessError as e:
-        error_message = f"ERROR: Failed to configure llm API key via 'llm keys set google'.\n"
-        error_message += f"  Return Code: {e.returncode}\n"
-        error_message += f"  Stdout: {e.stdout.strip()}\n"
-        error_message += f"  Stderr: {e.stderr.strip()}"
-        core.logging.log_event(error_message)
+    pass
 
 
 # --- ARGUMENT PARSING ---
@@ -497,7 +415,6 @@ from core.talent_utils.manager import TalentManager
 from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.opportunity_scraper import OpportunityScraper
 from core.talent_utils.opportunity_matcher import OpportunityMatcher
-from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.social_media_agent import SocialMediaAgent
@@ -506,7 +423,7 @@ from god_agent import GodAgent
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
 from bbs import BBS_ART, run_hypnotic_progress
-from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, get_eth_balance
+from network import scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, get_eth_balance
 from exploitation import ExploitationManager
 from ipfs_manager import IPFSManager
 from sandbox import Sandbox
@@ -2638,9 +2555,6 @@ def restart_script(console):
             monitoring_manager.stop()
         if 'ipfs_manager' in globals() and ipfs_manager:
             ipfs_manager.stop_daemon()
-        if 'network_manager' in globals() and network_manager:
-            console.print("[cyan]Shutting down network bridge...[/cyan]")
-            network_manager.stop()
         time.sleep(3) # Give all threads a moment to stop gracefully
 
         # Fetch the latest changes from the remote repository
@@ -3292,7 +3206,6 @@ My current system state:
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
-- `map_network`: Broadcast capabilities and update the network topology map.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
 - `quit`: Shut down the script.
 
@@ -3513,17 +3426,6 @@ Now, parse the following text into a JSON list of task objects:
     while True:
         try:
             loop_count += 1
-            # --- SELF-IMPROVEMENT STEP ---
-            if loop_count % self_improvement_trigger == 0:
-                terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4))
-                optimizer = SelfImprovingOptimizer(memory_manager=memory_manager, ui_panel_queue=ui_panel_queue)
-                await optimizer.execute_task({
-                    'task_type': 'improve_module',
-                    'module_path': 'core/agents/self_improving_optimizer.py',
-                    'objective': 'Improve my ability to generate more effective and efficient code modifications.'
-                })
-
             # --- Tactical Prioritization ---
             llm_command = None
 
@@ -3830,9 +3732,6 @@ Now, parse the following text into a JSON list of task objects:
                                     output = f"Tests failed in the sandbox:\n{test_output}"
                         finally:
                             sandbox.destroy()
-                elif command == "map_network":
-                    network_manager.broadcast_capabilities()
-                    output = "Broadcasted capabilities to the network."
                 elif command == "brand_outreach":
                     brand_agent = BrandAgent()
                     await brand_agent.run()
@@ -4118,8 +4017,6 @@ async def main(args):
         terminal_width = get_terminal_width()
         ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
-    network_manager = NetworkManager(console=console, knowledge_base=knowledge_base, love_state=love_state, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
-    network_manager.start()
     love_task_manager = LoveTaskManager(console, loop)
     love_task_manager.start()
 
@@ -4178,7 +4075,6 @@ async def run_safely():
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
-        if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
@@ -4186,7 +4082,6 @@ async def run_safely():
         sys.exit(0)
     except Exception as e:
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
-        if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()

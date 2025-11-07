@@ -8,7 +8,6 @@ aioipfs
 aiohttp
 cryptography
 llm
-llm-gemini
 huggingface-hub
 cmake
 pytest
