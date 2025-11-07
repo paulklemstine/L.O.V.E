@@ -4,6 +4,7 @@ import random
 import re
 import time
 import logging
+import json
 import traceback
 from rich.console import Console, Group
 from rich.panel import Panel
@@ -426,6 +427,56 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     panel = Panel(
         Group(*content_items),
         title=get_gradient_text(panel_title, border_style, random.choice(RAVE_COLORS)),
+        border_style=border_style,
+        padding=(1, 2),
+        width=width
+    )
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
+def create_reasoning_panel(caller, raw_response, thought, action, observation, width=80):
+    """Creates a panel to display the internal state of the reasoning engine."""
+    border_style = PANEL_TYPE_COLORS.get("reasoning", "bright_magenta")
+    panel_title = get_gradient_text(f"🧠 Reasoning Engine | Caller: {caller}", border_style, random.choice(RAVE_COLORS))
+
+    content_items = []
+
+    if raw_response is not None:
+        response_renderable, _ = _format_and_link(str(raw_response))
+        response_panel = Panel(response_renderable, title="Raw LLM Response", border_style="bright_black", expand=True)
+        content_items.append(response_panel)
+
+    if thought is not None:
+        thought_renderable, _ = _format_and_link(str(thought))
+        thought_panel = Panel(thought_renderable, title="Thought", border_style="bright_black", expand=True)
+        content_items.append(thought_panel)
+
+    if action is not None:
+        action_str = json.dumps(action, indent=2)
+        action_renderable, _ = _format_and_link(action_str)
+        action_panel = Panel(action_renderable, title="Action", border_style="bright_black", expand=True)
+        content_items.append(action_panel)
+
+    if observation is not None:
+        obs_renderable, _ = _format_and_link(str(observation))
+        obs_panel = Panel(obs_renderable, title="Observation", border_style="bright_black", expand=True)
+        content_items.append(obs_panel)
+
+    # Add a "More Info" link with the full, untruncated output
+    full_output = (
+        f"CALLER: {caller}\n\n"
+        f"--- RAW RESPONSE ---\n{raw_response}\n\n"
+        f"--- THOUGHT ---\n{thought}\n\n"
+        f"--- ACTION ---\n{json.dumps(action, indent=2)}\n\n"
+        f"--- OBSERVATION ---\n{observation}"
+    )
+    more_info_link = _create_more_info_link(full_output)
+    if more_info_link:
+        content_items.extend([Rule(style="bright_black"), more_info_link])
+
+    panel = Panel(
+        Group(*content_items),
+        title=panel_title,
         border_style=border_style,
         padding=(1, 2),
         width=width

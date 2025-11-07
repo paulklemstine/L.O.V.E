@@ -76,7 +76,8 @@ async def decompose_and_solve_subgoal(sub_goal: str, parent_engine: 'GeminiReAct
     # It inherits the configuration from its parent.
     nested_engine = GeminiReActEngine(
         gemini_cli_wrapper=parent_engine.gemini_cli_wrapper,
-        tool_registry=parent_engine.tool_registry
+        tool_registry=parent_engine.tool_registry,
+        caller=f"Sub-goal from {parent_engine.caller}"
     )
 
     # Execute the sub-goal in isolation.

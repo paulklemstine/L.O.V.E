@@ -50,7 +50,7 @@ class UnifiedReasoningAgent(SpecialistAgent):
             }
         )
 
-        self.react_engine = GeminiReActEngine(tool_registry)
+        self.react_engine = GeminiReActEngine(tool_registry, caller="UnifiedReasoningAgent")
 
     async def execute_task(self, task_details: Dict) -> Dict:
         """
