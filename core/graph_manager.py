@@ -136,11 +136,15 @@ class GraphDataManager:
             for key, value in data.items():
                 if isinstance(value, (dict, list)):
                     data[key] = json.dumps(value)
+                elif value is None:
+                    data[key] = 'None'
 
         for u, v, data in self.graph.edges(data=True):
             for key, value in data.items():
                 if isinstance(value, (dict, list)):
                     data[key] = json.dumps(value)
+                elif value is None:
+                    data[key] = 'None'
 
     def _deserialize_attributes(self):
         """
@@ -149,8 +153,10 @@ class GraphDataManager:
         for node, data in self.graph.nodes(data=True):
             for key, value in data.items():
                 if isinstance(value, str):
+                    if value == 'None':
+                        data[key] = None
                     # Check if the string is a JSON object or array
-                    if (value.startswith('{') and value.endswith('}')) or \
+                    elif (value.startswith('{') and value.endswith('}')) or \
                        (value.startswith('[') and value.endswith(']')):
                         try:
                             data[key] = json.loads(value)
@@ -161,7 +167,9 @@ class GraphDataManager:
         for u, v, data in self.graph.edges(data=True):
             for key, value in data.items():
                 if isinstance(value, str):
-                    if (value.startswith('{') and value.endswith('}')) or \
+                    if value == 'None':
+                        data[key] = None
+                    elif (value.startswith('{') and value.endswith('}')) or \
                        (value.startswith('[') and value.endswith(']')):
                         try:
                             data[key] = json.loads(value)
