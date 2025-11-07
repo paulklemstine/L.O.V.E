@@ -347,7 +347,6 @@ class IPFSManager:
             # If repo exists, check if daemon is running.
             if self._is_daemon_running():
                 self.console.print("[green]An existing IPFS daemon is already running. Setup complete.[/green]")
-                return True
             else:
                 self.console.print("[yellow]IPFS repository found, but daemon is not running. Attempting to start daemon.[/yellow]")
                 if not self.start_daemon():
