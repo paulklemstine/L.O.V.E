@@ -608,3 +608,25 @@ async def recommend_tool_for_persistence(tool_name: str, reason: str) -> str:
     message = f"Recommendation to persist tool '{tool_name}' has been recorded in memory."
     print(f"--- {message} ---")
     return message
+
+
+async def invoke_gemini_react_engine(prompt: str) -> str:
+    """
+    Invokes the GeminiReActEngine to solve a sub-task.
+    This tool allows the meta-orchestrator (DeepAgent) to delegate complex
+    reasoning tasks to the GeminiReActEngine.
+    """
+    from core.gemini_react_engine import GeminiReActEngine
+    print(f"--- Invoking GeminiReActEngine for sub-task: '{prompt[:100]}...' ---")
+    try:
+        # We need a ToolRegistry for the GeminiReActEngine to use.
+        # For now, we'll create a temporary one. This will be improved
+        # when we properly integrate the tool registration.
+        # TODO: Pass the main ToolRegistry to this function.
+        tool_registry = ToolRegistry()
+        engine = GeminiReActEngine(tool_registry=tool_registry)
+        # The engine's run method is async.
+        result = await engine.run(prompt)
+        return f"GeminiReActEngine successfully executed the sub-task. Final result: {result}"
+    except Exception as e:
+        return f"Error invoking GeminiReActEngine: {e}"

@@ -9,7 +9,7 @@ import core.tools
 class GeminiReActEngine:
     """Manages the state of a Thought-Action-Observation loop."""
 
-    def __init__(self, tool_registry: core.tools.ToolRegistry, ui_panel_queue=None, memory_manager=None, caller="Unknown"):
+    def __init__(self, tool_registry: 'core.tools.ToolRegistry', ui_panel_queue=None, memory_manager=None, caller="Unknown"):
         self.tool_registry = tool_registry
         self.session_tool_registry = core.tools.ToolRegistry()
         self.history: List[Tuple[str, str, str]] = []

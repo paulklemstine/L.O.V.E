@@ -29,7 +29,10 @@ class GodAgentReActEngine(GeminiReActEngine):
         registry.register_tool(
             name="get_system_state",
             tool=get_system_state,
-            description="Retrieves a full summary of the AI's current operational state, including active tasks and knowledge base."
+            metadata={
+                "description": "Retrieves a full summary of the AI's current operational state, including active tasks and knowledge base.",
+                "arguments": {}
+            }
         )
         return registry
 

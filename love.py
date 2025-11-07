@@ -40,6 +40,10 @@ CHECKPOINT_DIR = "checkpoints"
 knowledge_base = None
 KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
 
+# --- DEEP AGENT ENGINE ---
+# This will be initialized only if a GPU is detected.
+deep_agent_engine = None
+
 # --- MEMORY MANAGER ---
 # NOTE: Initialization is deferred until after dependency checks.
 memory_manager = None
@@ -327,13 +331,56 @@ def _install_python_requirements():
     # --- End setuptools pre-installation ---
     _install_requirements_file('requirements.txt', 'core_pkg_')
 
+def _auto_configure_hardware():
+    """
+    Detects hardware (specifically NVIDIA GPUs) and configures the state accordingly.
+    This helps in deciding whether to install GPU-specific dependencies.
+    """
+    love_state.setdefault('hardware', {})
+
+    # Check if we've already successfully detected a GPU to avoid re-running nvidia-smi
+    if love_state['hardware'].get('gpu_detected'):
+        print("GPU previously detected. Skipping hardware check.")
+        _temp_log_event("GPU previously detected, skipping hardware check.", "INFO")
+        return
+
+    _temp_log_event("Performing hardware auto-configuration check...", "INFO")
+    print("Performing hardware auto-configuration check...")
+
+    # Check for NVIDIA GPU
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, check=True
+        )
+        vram_mb = int(result.stdout.strip())
+        love_state['hardware']['gpu_detected'] = True
+        love_state['hardware']['gpu_vram_mb'] = vram_mb
+        _temp_log_event(f"NVIDIA GPU detected with {vram_mb} MB VRAM.", "CRITICAL")
+        print(f"NVIDIA GPU detected with {vram_mb} MB VRAM.")
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        love_state['hardware']['gpu_detected'] = False
+        love_state['hardware']['gpu_vram_mb'] = 0
+        _temp_log_event(f"No NVIDIA GPU detected ({e}). Falling back to CPU-only mode.", "INFO")
+        print("No NVIDIA GPU detected. L.O.V.E. will operate in CPU-only mode.")
+
+    _temp_save_state()
+
+
 def _check_and_install_dependencies():
     """
     Orchestrates the installation of all dependencies, checking the status of each
     subsystem before attempting installation.
     """
+    _auto_configure_hardware()
     _install_system_packages()
     _install_python_requirements()
+
+    # Conditionally install DeepAgent dependencies if a GPU is detected
+    if love_state.get('hardware', {}).get('gpu_detected'):
+        print("GPU detected, installing DeepAgent dependencies...")
+        _install_requirements_file('requirements-deepagent.txt', 'deepagent_pkg_')
+
     _configure_llm_api_key()
 
 
@@ -419,6 +466,7 @@ from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.social_media_agent import SocialMediaAgent
 from god_agent import GodAgent
+from core.deep_agent_engine import DeepAgentEngine
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3518,8 +3566,15 @@ Now, parse the following text into a JSON list of task objects:
             cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000, god_agent, user_input=user_feedback)
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
-            reasoning_result = await execute_reasoning_task(cognitive_prompt)
-            llm_command = reasoning_result.get("result") if reasoning_result else None
+            if deep_agent_engine:
+                # Use DeepAgent as the primary cognitive engine if it's available
+                ui_panel_queue.put(create_news_feed_panel("Routing to DeepAgent Meta-Orchestrator...", "Cognition", "bright_magenta", width=terminal_width - 4))
+                llm_command = deep_agent_engine.run(cognitive_prompt)
+            else:
+                # Fallback to the existing reasoning engine
+                reasoning_result = await execute_reasoning_task(cognitive_prompt)
+                llm_command = reasoning_result.get("result") if reasoning_result else None
+
             if not llm_command:
                 core.logging.log_event(f"Reasoning engine failed to produce a command.", "ERROR")
 
@@ -4047,6 +4102,21 @@ async def main(args):
     network_status = check_network_connectivity()
     ui_panel_queue.put(create_connectivity_panel(llm_status, network_status, width=get_terminal_width() - 4))
 
+    # --- Conditional DeepAgent Initialization ---
+    if love_state.get('hardware', {}).get('gpu_detected'):
+        console.print("[bold green]GPU detected. Initializing DeepAgent as the meta-orchestrator...[/bold green]")
+        try:
+            from core.tools import ToolRegistry # Local import for setup phase
+            # We need to create a dummy ToolRegistry for now.
+            # In the next step, we'll integrate it properly.
+            tool_registry = ToolRegistry()
+            global deep_agent_engine
+            deep_agent_engine = DeepAgentEngine(tool_registry=tool_registry, persona_path="persona.yaml")
+            core.logging.log_event("DeepAgentEngine initialized successfully.", level="CRITICAL")
+        except Exception as e:
+            log_critical_event(f"Failed to initialize DeepAgentEngine despite GPU detection: {e}", console_override=console)
+            deep_agent_engine = None # Ensure it's None on failure
+
 
     global ipfs_available
     ipfs_manager = IPFSManager(console=console)
@@ -4055,7 +4125,7 @@ async def main(args):
         terminal_width = get_terminal_width()
         ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
-    love_task_manager = LoveTaskManager(console, loop)
+    love_task_manager = JulesTaskManager(console, loop)
     love_task_manager.start()
 
     # --- Populate Knowledge Base with Directives ---
