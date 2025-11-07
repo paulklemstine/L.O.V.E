@@ -115,9 +115,61 @@ class SelfImprovingOptimizer(SpecialistAgent):
 
         try:
             tool_registry = ToolRegistry()
-            tool_registry.register_tool("read_file", read_file, {"description": "mocked tool"})
-            tool_registry.register_tool("evolve", evolve, {"description": "mocked tool"})
-            tool_registry.register_tool("run_experiment", self.benchmarker.run_experiment, {"description": "mocked tool"})
+            tool_registry.register_tool(
+                "read_file",
+                read_file,
+                {
+                    "description": "Reads the content of a file.",
+                    "arguments": {
+                        "type": "object",
+                        "properties": {
+                            "filepath": {
+                                "type": "string",
+                                "description": "The path to the file to read."
+                            }
+                        },
+                        "required": ["filepath"]
+                    }
+                }
+            )
+            tool_registry.register_tool(
+                "evolve",
+                evolve,
+                {
+                    "description": "Evolves the codebase to meet a given goal.",
+                    "arguments": {
+                        "type": "object",
+                        "properties": {
+                            "goal": {
+                                "type": "string",
+                                "description": "The goal to achieve by evolving the codebase."
+                            }
+                        },
+                        "required": ["goal"]
+                    }
+                }
+            )
+            tool_registry.register_tool(
+                "run_experiment",
+                self.benchmarker.run_experiment,
+                {
+                    "description": "Runs an experiment to validate a hypothesis by executing new code in a temporary environment.",
+                    "arguments": {
+                        "type": "object",
+                        "properties": {
+                            "experiment_plan": {
+                                "type": "object",
+                                "description": "A plan designed by an ExperimentPlanner."
+                            },
+                            "new_code": {
+                                "type": "string",
+                                "description": "The new code to be executed."
+                            }
+                        },
+                        "required": ["experiment_plan", "new_code"]
+                    }
+                }
+            )
             tool_registry.register_tool(
                 "discover_new_tool",
                 discover_new_tool,
