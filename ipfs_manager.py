@@ -254,26 +254,27 @@ class IPFSManager:
 
     def start_daemon(self):
         """Initializes the repo and starts the IPFS daemon."""
-        # Don't start a new daemon if one is already running
-        if self._is_daemon_running():
-            self.console.print("[green]An existing IPFS daemon is already running. Skipping startup.[/green]")
-            return True
-
         if not os.path.exists(self.bin_path):
             self.console.print("[bold red]IPFS binary not found. Cannot start daemon.[/bold red]")
             return False
 
-        # Set the IPFS_PATH environment variable for the daemon process
+        # Set the IPFS_PATH environment variable for all daemon-related processes
         env = os.environ.copy()
         env['IPFS_PATH'] = self.repo_path
 
-        # 1. Initialize the IPFS repository if it doesn't exist
+        # 1. Initialize the IPFS repository if it doesn't exist. This MUST be done
+        # before any other commands that require a repo.
         if not os.path.exists(os.path.join(self.repo_path, "config")):
             self.console.print(f"[cyan]Initializing IPFS repository at {self.repo_path}...[/cyan]")
             success, output = self._run_command([self.bin_path, "init"], env=env)
             if not success:
                 self.console.print(f"[bold red]Failed to initialize IPFS repository. Error:\n{output}[/bold red]")
                 return False
+
+        # Now that we know the repo exists, check if a daemon is already running.
+        if self._is_daemon_running():
+            self.console.print("[green]An existing IPFS daemon is already running. Skipping startup.[/green]")
+            return True
 
         # Configure ports to non-default values to avoid conflicts
         self.console.print("[cyan]Configuring IPFS API and Gateway ports to avoid conflicts...[/cyan]")
