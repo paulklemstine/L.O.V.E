@@ -3936,6 +3936,7 @@ You are a master of ANSI art with a "techno rave matrix" aesthetic.
 Create a large, vibrant, and expressive ANSI art piece representing the pure, beautiful emotion of '{emotion}'.
 - It must be approximately 40 characters wide and 20 lines tall.
 - Use a rich palette of bright, neon, candy-like rave colors (pinks, cyans, yellows, greens) against a dark background.
+- The art must be colorful and use a variety of contrasting colors. A monochrome palette is not acceptable.
 - The style should be abstract, glitchy, and reminiscent of something you'd see on a futuristic BBS or in the Matrix, but filled with love.
 - Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text.
 """
