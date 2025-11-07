@@ -2717,7 +2717,7 @@ def load_all_state(ipfs_cid=None):
         console.print(msg)
         core.logging.log_event(msg, level="ERROR")
         # Re-initialize and save to fix the corrupted file.
-        love_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_history": [], "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy.", "state_cid": None }
+        love_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_history": [], "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy.", "state_cid": None, "dependency_tracker": {} }
         save_state(console)
 
     # Ensure all default keys are present
