@@ -160,12 +160,12 @@ def _load_model_blacklist():
 
 def get_openrouter_models():
     """
-    Fetches the list of free models from the OpenRouter API and updates their
-    provider in MODEL_STATS.
+    Fetches the list of free models from the OpenRouter API, ranks them based
+    on a scoring algorithm, and updates their provider in MODEL_STATS.
     """
     global MODEL_STATS
     blacklist = _load_model_blacklist()
-    free_models = []
+    ranked_models = []
     try:
         api_key = os.environ.get("OPENROUTER_API_KEY")
         if not api_key:
@@ -176,22 +176,52 @@ def get_openrouter_models():
         response.raise_for_status()
         models = response.json().get("data", [])
 
-        # Filter for models that are free
+        scored_models = []
         for model in models:
-            if "free" in model['id'].lower():
-                model_id = model['id']
-                full_model_id = f"openrouter:{model_id}"
-                if full_model_id not in blacklist:
-                    free_models.append(model_id)
-                    MODEL_STATS[model_id]["provider"] = "openrouter"
-                else:
-                    log_event(f"Model '{full_model_id}' is in the blacklist and will be ignored.", "INFO")
+            model_id = model.get('id')
+            if not model_id or "free" not in model_id.lower():
+                continue
+
+            full_model_id = f"openrouter:{model_id}"
+            if full_model_id in blacklist:
+                log_event(f"Model '{full_model_id}' is in the blacklist and will be ignored.", "INFO")
+                continue
+
+            MODEL_STATS[model_id]["provider"] = "openrouter"
+            score = 0
+            name_lower = model_id.lower()
+
+            # Score based on context length
+            context_length = model.get('context_length', 0)
+            score += context_length / 1000 # Add a point per 1000 tokens of context
+
+            # Infer model size and reward larger models
+            if '70b' in name_lower or '65b' in name_lower:
+                score += 500
+            elif '34b' in name_lower or '30b' in name_lower or '40b' in name_lower:
+                score += 300
+            elif '13b' in name_lower:
+                score += 150
+            elif '7b' in name_lower or '8b' in name_lower:
+                score += 100
+
+            # Boost for preferred keywords
+            if 'instruct' in name_lower or 'chat' in name_lower:
+                score += 200
+
+            scored_models.append({'name': model_id, 'score': score})
+
+        # Sort models by score in descending order
+        sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
+        ranked_models = [model['name'] for model in sorted_models]
+
+        log_event(f"Top 3 OpenRouter models: {ranked_models[:3]}", "INFO")
 
     except Exception as e:
         # Log the error, but don't crash the application
-        log_event(f"Could not fetch OpenRouter models: {e}", "WARNING")
+        log_event(f"Could not fetch and rank OpenRouter models: {e}", "WARNING")
 
-    return free_models
+    return ranked_models
 
 OPENROUTER_MODELS = get_openrouter_models()
 
@@ -491,8 +521,13 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
         local_model_ids = []
 
         # --- Dynamic Model Ranking ---
-        ranked_model_list = rank_models()
-        log_event(f"Top 5 ranked models: {ranked_model_list[:5]}", "INFO")
+        # Combine the pre-ranked lists from various providers.
+        # The order of concatenation here determines the absolute provider priority.
+        combined_models = OPENROUTER_MODELS + HORDE_MODELS + GEMINI_MODELS + OPENAI_MODELS
+        # Remove duplicates while preserving the new priority order
+        ranked_model_list = list(dict.fromkeys(combined_models))
+
+        log_event(f"Top 5 models from combined ranked list: {ranked_model_list[:5]}", "INFO")
         models_to_try = [m for m in ranked_model_list if time.time() >= LLM_AVAILABILITY.get(m, 0)]
 
         if not models_to_try:
