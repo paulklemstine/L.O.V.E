@@ -13,11 +13,12 @@ class SelfImprovingOptimizer(SpecialistAgent):
     from analyzing performance to deploying validated improvements.
     """
 
-    def __init__(self, memory_manager=None):
+    def __init__(self, memory_manager=None, ui_panel_queue=None):
         # These are components used internally by this specialist agent.
         self.benchmarker = AutomatedBenchmarker()
         self.git_manager = GitManager()
         self.memory_manager = memory_manager
+        self.ui_panel_queue = ui_panel_queue
         # This specialist might internally use other specialists.
         self.code_generator = CodeGenerationAgent()
 
@@ -155,7 +156,7 @@ class SelfImprovingOptimizer(SpecialistAgent):
                     }
                 }
             )
-            gemini_react_engine = GeminiReActEngine(tool_registry, caller="SelfImprovingOptimizer")
+            gemini_react_engine = GeminiReActEngine(tool_registry, ui_panel_queue=self.ui_panel_queue, caller="SelfImprovingOptimizer")
         except FileNotFoundError:
             error_msg = "Error: gemini-cli is not available. Cannot run self-improvement cycle."
             print(error_msg)
