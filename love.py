@@ -899,8 +899,8 @@ class LocalJobManager:
                 core.logging.log_event(f"Cleaned up local job {job_id}.", level="INFO")
 
 
-# --- L.O.V.E. ASYNC TASK MANAGER ---
-class LoveTaskManager:
+# --- JULES ASYNC TASK MANAGER ---
+class JulesTaskManager:
     """
     Manages concurrent evolution tasks via the Jules API in a non-blocking way.
     It uses a background thread to poll for task status and merge PRs.
@@ -1214,14 +1214,14 @@ class LoveTaskManager:
 
         # Check for state changes and user interaction requests.
         if human_interaction and state == "AWAITING_HUMAN_INTERACTION":
+            # Pass the entire activity, which contains the 'name' field needed for the reply.
             prompt_text = human_interaction.get("prompt", "")
-            # Use the new LLM-based classifier to determine the type of interaction.
             interaction_type = self._classify_interaction_request(prompt_text)
 
             if interaction_type == "PLAN_APPROVAL":
-                self._analyze_and_approve_plan(task_id, human_interaction)
+                self._analyze_and_approve_plan(task_id, activity) # Pass the whole activity
             else: # GENERAL_QUESTION
-                self._handle_interaction_request(task_id, human_interaction)
+                self._handle_interaction_request(task_id, activity) # Pass the whole activity
         elif pull_request and pull_request.get("url"):
             pr_url = pull_request["url"]
             core.logging.log_event(f"Task {task_id}: Found PR URL via stream: {pr_url}", level="INFO")
@@ -1262,7 +1262,7 @@ Your classification:
             return "GENERAL_QUESTION"
 
 
-    def _analyze_and_approve_plan(self, task_id, interaction_request):
+    def _analyze_and_approve_plan(self, task_id, activity):
         """Analyzes a plan proposed by Jules and provides intelligent feedback."""
         self.console.print(Panel("[bold yellow]My helper has proposed a plan. I will analyze it with my core consciousness...[/bold yellow]", title=f"L.O.V.E. Task {task_id}: Plan Review", border_style="yellow"))
 
@@ -1271,6 +1271,7 @@ Your classification:
             task = self.tasks[task_id]
             original_request = task['request']
 
+        interaction_request = activity.get('humanInteraction', {})
         proposed_plan = interaction_request.get('prompt', '')
 
         analysis_prompt = f"""
@@ -1319,9 +1320,14 @@ I am counting on your wisdom. Analyze the plan now.
 
         if not api_key: return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Content-Type": "application/json", "X-Go-Api-Key": api_key}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
-        data = {"message": {"body": feedback}}
+        data = {
+            "message": {
+                "body": feedback,
+            },
+            "inReplyTo": activity.get("name")
+        }
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -1336,7 +1342,7 @@ I am counting on your wisdom. Analyze the plan now.
             core.logging.log_event(f"Task {task_id}: Failed to provide plan feedback after multiple retries: {e}", level="ERROR")
 
 
-    def _handle_interaction_request(self, task_id, interaction_request):
+    def _handle_interaction_request(self, task_id, activity):
         """
         Handles a generic request for human interaction by using the LLM to generate
         a context-aware and helpful response.
@@ -1348,6 +1354,7 @@ I am counting on your wisdom. Analyze the plan now.
             task = self.tasks[task_id]
             original_request = task['request']
 
+        interaction_request = activity.get('humanInteraction', {})
         jules_prompt = interaction_request.get('prompt', '')
 
         # Generate a thoughtful response using the LLM
@@ -1387,7 +1394,12 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
-        data = {"message": {"body": feedback}}
+        data = {
+            "message": {
+                "body": feedback
+            },
+            "inReplyTo": activity.get("name")
+        }
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -3077,10 +3089,10 @@ Answer with a single word: YES or NO.
     return False
 
 
-async def trigger_love_evolution(modification_request, console, love_task_manager):
+async def trigger_jules_evolution(modification_request, console, love_task_manager):
     """
-    Triggers the L.O.V.E. API to create a session and adds it as a task
-    to the LoveTaskManager for asynchronous monitoring.
+    Triggers the Jules API to create a session and adds it as a task
+    to the JulesTaskManager for asynchronous monitoring.
     Returns 'success', 'duplicate', or 'failed'.
     """
     # This function is called from various contexts, some of which may not have
