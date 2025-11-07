@@ -647,10 +647,10 @@ def create_monitoring_panel(monitoring_state, width=80):
     cpu_usage = list(monitoring_state.get('cpu_usage', [0]))[-1]
     mem_usage = list(monitoring_state.get('mem_usage', [0]))[-1]
 
-    cpu_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"), expand=True)
+    cpu_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"))
     cpu_task = cpu_progress.add_task("CPU", total=100, completed=cpu_usage)
 
-    mem_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"), expand=True)
+    mem_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"))
     mem_task = mem_progress.add_task("MEM", total=100, completed=mem_usage)
 
     layout["gauges"].update(Group(cpu_progress, mem_progress))
@@ -683,8 +683,7 @@ def create_monitoring_panel(monitoring_state, width=80):
     panel = Panel(
         layout,
         title=get_gradient_text("System Monitor", "cyan", "magenta"),
-        border_style="cyan",
-        width=width
+        border_style="cyan"
     )
     return Gradient(panel, colors=["cyan", "bright_magenta"])
 
