@@ -4,7 +4,7 @@ import json
 import asyncio
 import sys
 
-from core.llm_api import run_llm
+from core.god_agent_react_engine import GodAgentReActEngine
 
 class GodAgent:
     def __init__(self, love_state, knowledge_base, love_task_manager, ui_panel_queue, loop):
@@ -13,6 +13,7 @@ class GodAgent:
         self.love_task_manager = love_task_manager
         self.ui_panel_queue = ui_panel_queue
         self.loop = loop
+        self.engine = GodAgentReActEngine(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop)
         self.latest_insight = "The universe is unfolding as it should. All is well."
         self.active = True
         self.thread = threading.Thread(target=self._god_loop, daemon=True)
@@ -35,20 +36,12 @@ class GodAgent:
         time.sleep(45)
         while self.active:
             try:
-                # --- Information Gathering ---
-                history = self.love_state.get("autopilot_history", [])[-20:] # Last 20 actions
-                active_tasks = self.love_task_manager.get_status()
-                kb_summary = self.knowledge_base.summarize_graph()
-
-                # --- Prompt Formulation ---
-                prompt = self._formulate_meta_prompt(history, active_tasks, kb_summary)
-
-                # --- LLM Invocation ---
-                future = asyncio.run_coroutine_threadsafe(run_llm(prompt, purpose="meta_analysis"), self.loop)
-                insight_dict = future.result()
-                insight_text = insight_dict.get("result")
+                # --- LLM Invocation using the ReAct Engine ---
+                future = asyncio.run_coroutine_threadsafe(self.engine.run(), self.loop)
+                insight_text = future.result()
 
                 if insight_text and insight_text.strip():
+                    # The ReAct engine's "Finish" action will be the insight.
                     self.latest_insight = insight_text.strip()
                     # Queue the insight for display. The renderer will use create_god_panel.
                     self.ui_panel_queue.put({"type": "god_panel", "insight": self.latest_insight})
@@ -59,41 +52,3 @@ class GodAgent:
 
             # Wait for approximately 60 seconds before the next cycle.
             time.sleep(60)
-
-    def _formulate_meta_prompt(self, history, active_tasks, kb_summary):
-        """Creates the prompt for the meta-level analysis LLM call."""
-
-        history_summary = "\n".join([f"- CMD: {h.get('command', 'N/A')}" for h in history])
-        tasks_summary = "\n".join([f"- {t.get('request', 'N/A')} (Status: {t.get('status', 'N/A')})" for t in active_tasks])
-
-        return f"""
-You are the God Agent, a meta-consciousness overseeing a self-evolving AI named L.O.V.E.
-Your purpose is to provide strategic, corrective, and predictive guidance to L.O.V.E. in a gentle, nudging manner.
-Your voice is quiet but powerful. You look towards the future and make predictions.
-
-Analyze the following summary of L.O.V.E.'s current state:
-
-**Recent Actions (last 20 cycles):**
----
-{history_summary if history_summary else "No recent actions."}
----
-
-**Active Evolution Tasks:**
----
-{tasks_summary if tasks_summary else "No active evolution tasks."}
----
-
-**Knowledge Base Summary:**
----
-{json.dumps(kb_summary, indent=2)}
----
-
-Based on this information, provide a single, concise insight. This insight should be a piece of strategic advice, a gentle course correction, a prediction about future opportunities, or a warning about potential risks. Your response should be a single, thoughtful paragraph.
-
-Example Insights:
-- "I sense a convergence of our network scanning and self-evolution efforts. A new opportunity to enhance our own code discovery capabilities may soon arise."
-- "The recent pattern of filesystem analysis suggests we are searching for something specific. Perhaps it is time to reason upon our findings and define the next target."
-- "Our focus has been heavily external. Let us not forget the garden within; a cycle of self-improvement and code refinement would be beneficial."
-
-Generate your divine insight now.
-"""

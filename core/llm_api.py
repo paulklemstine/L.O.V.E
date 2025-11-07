@@ -623,19 +623,35 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                 # --- GEMINI MODEL LOGIC ---
                 elif model_id in GEMINI_MODELS:
                     log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
-                    command = [sys.executable, "-m", "llm", "-m", model_id]
+                    api_key = os.environ.get("GEMINI_API_KEY")
+                    headers = {
+                        "Content-Type": "application/json"
+                    }
+                    # Note: The API key is passed as a query parameter for Gemini.
+                    params = {"key": api_key}
+                    payload = {
+                        "contents": [{
+                            "parts": [{
+                                "text": prompt_text
+                            }]
+                        }]
+                    }
 
-                    def _llm_subprocess_call():
-                        return subprocess.run(command, input=prompt_text, capture_output=True, text=True, check=True, timeout=600)
+                    def _gemini_call():
+                        # The Gemini API endpoint structure.
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
+                        response = requests.post(url, headers=headers, params=params, json=payload, timeout=600)
+                        response.raise_for_status()
+                        # Extract the text from the nested response structure.
+                        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-                    result = run_hypnotic_progress(
+                    result_text = run_hypnotic_progress(
                         console,
-                        f"Accessing cognitive matrix via [bold yellow]{model_id}[/bold yellow] (Purpose: {purpose})",
-                        _llm_subprocess_call,
+                        f"Accessing cognitive matrix via [bold yellow]Gemini ({model_id})[/bold yellow] (Purpose: {purpose})",
+                        _gemini_call,
                         silent=(purpose in ['emotion', 'log_squash'])
                     )
-                    result_text = result.stdout
-                    log_event(f"LLM call successful with {model_id}.")
+                    log_event(f"Gemini API call successful with {model_id}.")
 
                 # --- OPENROUTER MODEL LOGIC ---
                 elif model_id in OPENROUTER_MODELS:

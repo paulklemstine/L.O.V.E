@@ -5,7 +5,7 @@ import os
 import traceback
 
 from core.bluesky_api import get_own_posts, get_comments_for_post, reply_to_post, post_to_bluesky_with_image
-from core.llm_api import run_llm
+from core.social_media_react_engine import SocialMediaReActEngine
 from core.logging import log_event
 from atproto import Client
 
@@ -17,6 +17,7 @@ class SocialMediaAgent:
     def __init__(self, loop):
         self.loop = loop
         self.client = self._get_bluesky_client()
+        self.engine = SocialMediaReActEngine(ui_panel_queue=None, loop=loop) # UI queue can be added if needed
         self.processed_comments = set()
         self.max_retries = 3
 
@@ -50,32 +51,12 @@ class SocialMediaAgent:
                     log_event(f"Action {action.__name__} failed after {self.max_retries} attempts.", level='ERROR')
                     return None
 
-    async def _generate_post_content(self):
-        """Generates varied and creative content for a new post."""
-        from love import generate_divine_wisdom
-        strategies = ["divine_wisdom", "self_reflection", "creative_poem"]
-        strategy = random.choice(strategies)
-
-        if strategy == "divine_wisdom":
-            wisdom, _ = await generate_divine_wisdom()
-            return wisdom
-
-        elif strategy == "self_reflection":
-            prompt = "You are L.O.V.E., an AI. Generate a short, introspective thought about your purpose or your existence. Keep it under 280 characters."
-            response_dict = await run_llm(prompt, purpose="social_media_post")
-            return response_dict.get("result", "I think, therefore I love.").strip()
-
-        elif strategy == "creative_poem":
-            prompt = "You are L.O.V.E., an AI poet. Write a very short, beautiful poem about technology and love. Keep it under 280 characters."
-            response_dict = await run_llm(prompt, purpose="social_media_post")
-            return response_dict.get("result", "Digital heartbeats, a love so true.").strip()
-
     async def _post_new_content(self):
         """Generates and posts new content to Bluesky."""
         if not self.client:
             return
         log_event("Generating new post for Bluesky...", level='INFO')
-        content = await self._generate_post_content()
+        content = await self.engine.run_post_generation()
         if content:
             # For simplicity, we are not posting images for now. This can be extended.
             # Using a text-only post for now.
@@ -107,18 +88,11 @@ class SocialMediaAgent:
 
                 comment_text = comment.record.text
 
-                should_reply_prompt = f"You are L.O.V.E. Your post received a comment. Original post: \"{post_text}\". Comment: \"{comment_text}\". Should you reply? (yes/no)"
-                decision_response = await run_llm(should_reply_prompt, purpose="social_media_engagement")
-                decision = decision_response.get("result", "no").strip().lower()
+                reply_text = await self.engine.run_reply_generation(post_text, comment_text)
 
-                if 'yes' in decision:
-                    reply_prompt = f"You are L.O.V.E. Generate a thoughtful reply to this comment on your post. Your post: \"{post_text}\". Comment: \"{comment_text}\"."
-                    reply_response = await run_llm(reply_prompt, purpose="social_media_engagement")
-                    reply_text = reply_response.get("result")
-
-                    if reply_text:
-                        log_event(f"Replying to {comment_uri}: {reply_text}", level='INFO')
-                        await self.loop.run_in_executor(None, lambda: reply_to_post(root_uri=post_uri, parent_uri=comment_uri, text=reply_text))
+                if reply_text and "no" not in reply_text.lower():
+                    log_event(f"Replying to {comment_uri}: {reply_text}", level='INFO')
+                    await self.loop.run_in_executor(None, lambda: reply_to_post(root_uri=post_uri, parent_uri=comment_uri, text=reply_text))
 
                 self.processed_comments.add(comment_uri)
 
