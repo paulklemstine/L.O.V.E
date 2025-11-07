@@ -31,7 +31,7 @@ class MemoryNote:
     def to_node_attributes(self) -> dict:
         """Serializes the MemoryNote into a dictionary suitable for a graph node."""
         # Story 3.2: Safely handle cases where an embedding may not have been generated
-        embedding_json = json.dumps(self.embedding.tolist()) if self.embedding is not None else "[]"
+        embedding_json = json.dumps(self.embedding.tolist() if self.embedding is not None else [])
         return {
             "id": self.id,
             "content": self.content,
