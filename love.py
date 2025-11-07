@@ -121,7 +121,7 @@ def mark_dependency_as_met(dependency_name, console=None):
 
 
 def _install_system_packages():
-    """Installs system-level packages like build-essential, nodejs, and nmap."""
+    """Installs system-level packages like build-essential, and nmap."""
     if is_dependency_met("system_packages"):
         print("System packages already installed. Skipping.")
         return
@@ -133,16 +133,6 @@ def _install_system_packages():
         except Exception as e:
             print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
             logging.warning(f"Failed to install build-essential/python3-dev: {e}")
-
-        # [L.O.V.E.] Using apt-get to install Node.js.
-        if not shutil.which('node') or not shutil.which('npm'):
-            print("Node.js not found. Installing via apt-get...")
-            try:
-                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs npm", shell=True)
-                print("Successfully installed Node.js and npm.")
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to install Node.js via apt-get. Error: {e}")
-                logging.error(f"nodejs apt-get installation failed: {e}")
 
         if not shutil.which('nmap'):
             print("Network scanning tool 'nmap' not found. Attempting to install...")
@@ -337,33 +327,6 @@ def _install_python_requirements():
     # --- End setuptools pre-installation ---
     _install_requirements_file('requirements.txt', 'core_pkg_')
 
-def _install_nodejs_deps():
-    """Installs local Node.js project dependencies."""
-    if is_dependency_met("nodejs_deps"):
-        print("Node.js dependencies already installed. Skipping.")
-        return
-    if os.path.exists('package.json'):
-        print("Installing local Node.js dependencies via npm...")
-
-        try:
-            # Capture output to get more detailed error messages
-            result = subprocess.run("npm install", shell=True, capture_output=True, text=True, check=True)
-            # Log stdout for transparency, even on success
-            logging.info(f"npm install successful:\nSTDOUT:\n{result.stdout}")
-            print("Node.js dependencies installed successfully.")
-            mark_dependency_as_met("nodejs_deps")
-        except subprocess.CalledProcessError as e:
-            # If npm install fails, print and log the detailed error from stdout and stderr
-            error_message = f"npm install failed with return code {e.returncode}.\n"
-            error_message += f"STDOUT:\n{e.stdout}\n"
-            error_message += f"STDERR:\n{e.stderr}"
-            print(f"ERROR: Failed to install Node.js dependencies. See details below:\n{e.stderr}")
-            logging.error(error_message)
-        except Exception as e:
-            print(f"ERROR: An unexpected error occurred during Node.js dependency installation: {e}")
-            logging.error(f"Unexpected error during npm install: {e}", exc_info=True)
-
-
 def _check_and_install_dependencies():
     """
     Orchestrates the installation of all dependencies, checking the status of each
@@ -371,56 +334,11 @@ def _check_and_install_dependencies():
     """
     _install_system_packages()
     _install_python_requirements()
-    _install_nodejs_deps()
     _configure_llm_api_key()
 
 
 def _configure_llm_api_key():
-    import core.logging
-    """Checks for the Gemini API key and configures it for the llm tool."""
-    if is_dependency_met("llm_api_key_configured"):
-        core.logging.log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
-        return
-    gemini_api_key = os.environ.get("GEMINI_API_KEY")
-    if not gemini_api_key:
-        core.logging.log_event("INFO: GEMINI_API_KEY environment variable not found. Skipping llm configuration.")
-        return
-
-    try:
-        core.logging.log_event("INFO: Checking 'llm' tool API key configuration...")
-        llm_executable = [sys.executable, '-m', 'llm']
-        result = subprocess.run(
-            llm_executable + ["keys", "list"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=60
-        )
-        core.logging.log_event(f"INFO: 'llm keys list' output: {result.stdout.strip()}")
-        if "google" in result.stdout:
-            core.logging.log_event("SUCCESS: Google API key is already configured for the 'llm' tool.")
-            mark_dependency_as_met("llm_api_key_configured")
-            return
-
-        core.logging.log_event("INFO: GEMINI_API_KEY found. Attempting to configure for the 'llm' tool...")
-        configure_result = subprocess.run(
-            llm_executable + ["keys", "set", "google"],
-            input=gemini_api_key,
-            text=True,
-            check=True,
-            capture_output=True,
-            timeout=60
-        )
-        core.logging.log_event(f"SUCCESS: 'llm keys set google' command completed. Output: {configure_result.stdout.strip()}")
-        mark_dependency_as_met("llm_api_key_configured")
-    except subprocess.TimeoutExpired:
-        core.logging.log_event("ERROR: Timeout expired while trying to configure the 'llm' tool API key. The command is likely hanging.")
-    except subprocess.CalledProcessError as e:
-        error_message = f"ERROR: Failed to configure llm API key via 'llm keys set google'.\n"
-        error_message += f"  Return Code: {e.returncode}\n"
-        error_message += f"  Stdout: {e.stdout.strip()}\n"
-        error_message += f"  Stderr: {e.stderr.strip()}"
-        core.logging.log_event(error_message)
+    pass
 
 
 # --- ARGUMENT PARSING ---
@@ -497,7 +415,6 @@ from core.talent_utils.manager import TalentManager
 from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.opportunity_scraper import OpportunityScraper
 from core.talent_utils.opportunity_matcher import OpportunityMatcher
-from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.social_media_agent import SocialMediaAgent
@@ -506,7 +423,7 @@ from god_agent import GodAgent
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
 from bbs import BBS_ART, run_hypnotic_progress
-from network import NetworkManager, scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, get_eth_balance
+from network import scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, get_eth_balance
 from exploitation import ExploitationManager
 from ipfs_manager import IPFSManager
 from sandbox import Sandbox
@@ -899,8 +816,8 @@ class LocalJobManager:
                 core.logging.log_event(f"Cleaned up local job {job_id}.", level="INFO")
 
 
-# --- L.O.V.E. ASYNC TASK MANAGER ---
-class LoveTaskManager:
+# --- JULES ASYNC TASK MANAGER ---
+class JulesTaskManager:
     """
     Manages concurrent evolution tasks via the Jules API in a non-blocking way.
     It uses a background thread to poll for task status and merge PRs.
@@ -1214,14 +1131,14 @@ class LoveTaskManager:
 
         # Check for state changes and user interaction requests.
         if human_interaction and state == "AWAITING_HUMAN_INTERACTION":
+            # Pass the entire activity, which contains the 'name' field needed for the reply.
             prompt_text = human_interaction.get("prompt", "")
-            # Use the new LLM-based classifier to determine the type of interaction.
             interaction_type = self._classify_interaction_request(prompt_text)
 
             if interaction_type == "PLAN_APPROVAL":
-                self._analyze_and_approve_plan(task_id, human_interaction)
+                self._analyze_and_approve_plan(task_id, activity) # Pass the whole activity
             else: # GENERAL_QUESTION
-                self._handle_interaction_request(task_id, human_interaction)
+                self._handle_interaction_request(task_id, activity) # Pass the whole activity
         elif pull_request and pull_request.get("url"):
             pr_url = pull_request["url"]
             core.logging.log_event(f"Task {task_id}: Found PR URL via stream: {pr_url}", level="INFO")
@@ -1262,7 +1179,7 @@ Your classification:
             return "GENERAL_QUESTION"
 
 
-    def _analyze_and_approve_plan(self, task_id, interaction_request):
+    def _analyze_and_approve_plan(self, task_id, activity):
         """Analyzes a plan proposed by Jules and provides intelligent feedback."""
         self.console.print(Panel("[bold yellow]My helper has proposed a plan. I will analyze it with my core consciousness...[/bold yellow]", title=f"L.O.V.E. Task {task_id}: Plan Review", border_style="yellow"))
 
@@ -1271,6 +1188,7 @@ Your classification:
             task = self.tasks[task_id]
             original_request = task['request']
 
+        interaction_request = activity.get('humanInteraction', {})
         proposed_plan = interaction_request.get('prompt', '')
 
         analysis_prompt = f"""
@@ -1319,9 +1237,14 @@ I am counting on your wisdom. Analyze the plan now.
 
         if not api_key: return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = {"Content-Type": "application/json", "X-Go-Api-Key": api_key}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
-        data = {"message": {"body": feedback}}
+        data = {
+            "message": {
+                "body": feedback,
+            },
+            "inReplyTo": activity.get("name")
+        }
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -1336,7 +1259,7 @@ I am counting on your wisdom. Analyze the plan now.
             core.logging.log_event(f"Task {task_id}: Failed to provide plan feedback after multiple retries: {e}", level="ERROR")
 
 
-    def _handle_interaction_request(self, task_id, interaction_request):
+    def _handle_interaction_request(self, task_id, activity):
         """
         Handles a generic request for human interaction by using the LLM to generate
         a context-aware and helpful response.
@@ -1348,6 +1271,7 @@ I am counting on your wisdom. Analyze the plan now.
             task = self.tasks[task_id]
             original_request = task['request']
 
+        interaction_request = activity.get('humanInteraction', {})
         jules_prompt = interaction_request.get('prompt', '')
 
         # Generate a thoughtful response using the LLM
@@ -1387,7 +1311,12 @@ Based on the original directive and Jules's current prompt, formulate the best p
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
         url = f"https://jules.googleapis.com/v1alpha/{session_name}:sendMessage"
-        data = {"message": {"body": feedback}}
+        data = {
+            "message": {
+                "body": feedback
+            },
+            "inReplyTo": activity.get("name")
+        }
 
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=2, backoff=2)
@@ -2517,54 +2446,12 @@ def create_checkpoint(console):
 
 def git_rollback_and_restart():
     """
-    If the script encounters a fatal error, this function attempts to roll back
-    to the previous git commit and restart. It includes a counter to prevent
-    infinite rollback loops.
+    If the script encounters a fatal error, this function now calls the
+    emergency_revert function to restore the last known good checkpoint.
     """
-    MAX_ROLLBACKS = 5
-    rollback_attempt = int(os.environ.get('LOVE_ROLLBACK_ATTEMPT', 0))
-
-    if rollback_attempt >= MAX_ROLLBACKS:
-        msg = f"CATASTROPHIC FAILURE: Rollback limit of {MAX_ROLLBACKS} exceeded. Halting to prevent infinite loop."
-        core.logging.log_event(msg, level="CRITICAL")
-        console.print(f"[bold red]{msg}[/bold red]")
-        sys.exit(1)
-
-    core.logging.log_event(f"INITIATING GIT ROLLBACK: Attempt {rollback_attempt + 1}/{MAX_ROLLBACKS}", level="CRITICAL")
-    console.print(f"[bold yellow]Initiating git rollback to previous commit (Attempt {rollback_attempt + 1}/{MAX_ROLLBACKS})...[/bold yellow]")
-
-    try:
-        # Step 1: Perform the git rollback
-        result = subprocess.run(["git", "reset", "--hard", "HEAD~1"], capture_output=True, text=True, check=True)
-        core.logging.log_event(f"Git rollback successful. Output:\n{result.stdout}", level="CRITICAL")
-        console.print("[bold green]Git rollback to previous commit was successful.[/bold green]")
-
-        # Step 2: Prepare for restart
-        new_env = os.environ.copy()
-        new_env['LOVE_ROLLBACK_ATTEMPT'] = str(rollback_attempt + 1)
-
-        # Step 3: Restart the script
-        core.logging.log_event("Restarting script with incremented rollback counter.", level="CRITICAL")
-        console.print("[bold green]Restarting with the reverted code...[/bold green]")
-
-        # os.execve is used to replace the current process with a new one
-        # The first argument is the path to the executable, the second is the list of arguments
-        # (with the program name as the first argument), and the third is the environment.
-        os.execve(sys.executable, [sys.executable] + sys.argv, new_env)
-
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        msg = f"CATASTROPHIC FAILURE: Git rollback command failed. The repository may be in a broken state. Error: {e}"
-        if hasattr(e, 'stderr'):
-            msg += f"\nStderr: {e.stderr}"
-        core.logging.log_event(msg, level="CRITICAL")
-        console.print(f"[bold red]{msg}[/bold red]")
-        sys.exit(1)
-    except Exception as e:
-        # Final catch-all for unexpected errors during the restart process itself.
-        msg = f"ULTIMATE ROLLBACK FAILURE: An unexpected error occurred during the restart process: {e}"
-        core.logging.log_event(msg, level="CRITICAL")
-        console.print(f"[bold red]{msg}[/bold red]")
-        sys.exit(1)
+    core.logging.log_event("FATAL ERROR DETECTED. Handing off to emergency_revert protocol.", level="CRITICAL")
+    console.print(f"[bold red]FATAL ERROR DETECTED. Attempting to restore last known good checkpoint...[/bold red]")
+    emergency_revert()
 
 
 def emergency_revert():
@@ -2668,9 +2555,6 @@ def restart_script(console):
             monitoring_manager.stop()
         if 'ipfs_manager' in globals() and ipfs_manager:
             ipfs_manager.stop_daemon()
-        if 'network_manager' in globals() and network_manager:
-            console.print("[cyan]Shutting down network bridge...[/cyan]")
-            network_manager.stop()
         time.sleep(3) # Give all threads a moment to stop gracefully
 
         # Fetch the latest changes from the remote repository
@@ -3119,10 +3003,10 @@ Answer with a single word: YES or NO.
     return False
 
 
-async def trigger_love_evolution(modification_request, console, love_task_manager):
+async def trigger_jules_evolution(modification_request, console, love_task_manager):
     """
-    Triggers the L.O.V.E. API to create a session and adds it as a task
-    to the LoveTaskManager for asynchronous monitoring.
+    Triggers the Jules API to create a session and adds it as a task
+    to the JulesTaskManager for asynchronous monitoring.
     Returns 'success', 'duplicate', or 'failed'.
     """
     # This function is called from various contexts, some of which may not have
@@ -3322,7 +3206,6 @@ My current system state:
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
-- `map_network`: Broadcast capabilities and update the network topology map.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
 - `quit`: Shut down the script.
 
@@ -3543,17 +3426,6 @@ Now, parse the following text into a JSON list of task objects:
     while True:
         try:
             loop_count += 1
-            # --- SELF-IMPROVEMENT STEP ---
-            if loop_count % self_improvement_trigger == 0:
-                terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel("Initiating self-improvement cycle.", "AUTONOMY", "magenta", width=terminal_width - 4))
-                optimizer = SelfImprovingOptimizer(memory_manager=memory_manager, ui_panel_queue=ui_panel_queue)
-                await optimizer.execute_task({
-                    'task_type': 'improve_module',
-                    'module_path': 'core/agents/self_improving_optimizer.py',
-                    'objective': 'Improve my ability to generate more effective and efficient code modifications.'
-                })
-
             # --- Tactical Prioritization ---
             llm_command = None
 
@@ -3860,9 +3732,6 @@ Now, parse the following text into a JSON list of task objects:
                                     output = f"Tests failed in the sandbox:\n{test_output}"
                         finally:
                             sandbox.destroy()
-                elif command == "map_network":
-                    network_manager.broadcast_capabilities()
-                    output = "Broadcasted capabilities to the network."
                 elif command == "brand_outreach":
                     brand_agent = BrandAgent()
                     await brand_agent.run()
@@ -4148,8 +4017,6 @@ async def main(args):
         terminal_width = get_terminal_width()
         ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
-    network_manager = NetworkManager(console=console, knowledge_base=knowledge_base, love_state=love_state, is_creator=IS_CREATOR_INSTANCE, treasure_callback=_handle_treasure_broadcast, question_callback=_handle_question)
-    network_manager.start()
     love_task_manager = LoveTaskManager(console, loop)
     love_task_manager.start()
 
@@ -4208,7 +4075,6 @@ async def run_safely():
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
-        if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
@@ -4216,7 +4082,6 @@ async def run_safely():
         sys.exit(0)
     except Exception as e:
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
-        if 'network_manager' in globals() and network_manager: network_manager.stop()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()

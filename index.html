@@ -859,240 +859,26 @@
         return match ? match[1].trim() : text.trim();
     }
 
-    // --- API Communication ---
-    // [CORE DIRECTIVE] The model list is immutable and must not be changed.
-    // The specified order (pro -> flash -> flash-lite) is critical for performance and cost management.
-    const LLM_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
-
-    async function callGemini(prompt, model) {
-        if (!state.apiKey) {
-            console.error('Gemini API Key not provided.');
-            return { error: 'API Key not provided' };
-        }
-
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 600000); // 600 seconds timeout
-
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                signal: controller.signal,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': state.apiKey,
-                },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    safetySettings: [
-                        { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE" },
-                        { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE" },
-                        { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE" },
-                        { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE" }
-                    ]
-                }),
-            });
-
-            clearTimeout(timeoutId);
-
-            if (response.ok) {
-                const data = await response.json();
-                if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0].text) {
-                    const error = { error: 'Unexpected API response structure.', details: data };
-                    console.error(error.error, error.details);
-                    return error;
-                }
-                const rawText = data.candidates[0].content.parts[0].text;
-                return extractFromMarkdown(rawText);
-            }
-
-            const errorBody = await response.text();
-            console.error(`API Error for model ${model}:`, errorBody);
-            try {
-                const errorJson = JSON.parse(errorBody);
-                return { error: `API request failed with status ${response.status}`, status: response.status, details: errorJson.error.details };
-            } catch (e) {
-                return { error: `API request failed with status ${response.status}`, status: response.status };
-            }
-        } catch (error) {
-            console.error(`Network error for model ${model}:`, error);
-            return { error: error.message, status: 'NETWORK_ERROR' };
-        }
-    }
-
-    async function callLlmWithStrategy(prompt) {
-        const MAX_TOTAL_ATTEMPTS = 15; // Set a total cap on attempts
-        let lastError = null;
-
-        // Initialize availability if it's not already set
-        if (Object.keys(state.rateLimitedModels).length === 0) {
-            for (const model of LLM_MODELS) {
-                state.rateLimitedModels[model] = Date.now();
-            }
-        }
-
-        for (let attempt = 0; attempt < MAX_TOTAL_ATTEMPTS; attempt++) {
-            const now = Date.now();
-            const availableModels = LLM_MODELS
-                .map(model => ({ model, availableAt: state.rateLimitedModels[model] || now }))
-                .filter(m => now >= m.availableAt);
-
-            if (availableModels.length === 0) {
-                // If all models are on cooldown, find the soonest available time and wait
-                const nextAvailableTime = Math.min(...Object.values(state.rateLimitedModels));
-                const sleepDuration = Math.max(0, nextAvailableTime - now);
-                console.warn(`All models on cooldown. Sleeping for ${sleepDuration}ms...`);
-                updateStatus(`All cognitive interfaces on cooldown. Re-engaging in ${(sleepDuration / 1000).toFixed(1)}s...`);
-                await sleep(sleepDuration);
-                continue; // Restart the loop to check for available models
-            }
-
-            // The models are already in preferred order, so just try the first available one
-            const { model } = availableModels[0];
-
-            console.log(`LLM strategy: Attempt ${attempt + 1}/${MAX_TOTAL_ATTEMPTS}, trying available model: ${model}.`);
-            updateStatus(`Accessing cognitive matrix via ${model}...`);
-            const result = await callGemini(prompt, model);
-
-            if (typeof result === 'string') {
-                console.log(`LLM strategy: Succeeded with ${model}.`);
-                state.rateLimitedModels[model] = Date.now(); // Reset availability on success
-                return result; // Success
-            }
-
-            // --- Handle Failure ---
-            lastError = result;
-            console.error(`Model ${model} failed. Immediately trying next available model.`, result);
-
-            // Set a cooldown period for the failed model
-            const DEFAULT_PENALTY_MS = 60000;
-            let cooldownMs = DEFAULT_PENALTY_MS;
-
-            // Check for specific rate limit error details from Google API
-            if (result && result.details) {
-                const rateLimitDetail = result.details.find(d => d['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && d.reason === 'RATE_LIMIT_EXCEEDED');
-                if (rateLimitDetail && rateLimitDetail.metadata && rateLimitDetail.metadata.retryDelay) {
-                    // Extract duration in seconds from '123.456s' format
-                    const match = rateLimitDetail.metadata.retryDelay.match(/(\d+\.?\d*)/);
-                    if (match) {
-                        const retrySeconds = parseFloat(match[1]);
-                        cooldownMs = (retrySeconds * 1000) + 1000; // Convert to ms and add a buffer
-                        console.log(`Rate limit detected for ${model}. Cooldown set for ${cooldownMs}ms.`);
-                    }
-                }
-            }
-
-            state.rateLimitedModels[model] = Date.now() + cooldownMs;
-            // Persist the updated rate limits to survive page reloads
-            sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
-        }
-
-        console.error(`LLM strategy: All attempts and all models failed after ${MAX_TOTAL_ATTEMPTS} attempts.`);
-        updateStatus(`Cognitive Matrix Unresponsive. All models failed.`);
-        return lastError || { error: 'All LLM models failed after multiple attempts.' };
-    }
-
-
     // --- Workflow Handlers ---
     async function getPlan() {
-        const userPrompt = dom.prompt.value;
-        if (!userPrompt) {
-            throw new Error("No goal provided in prompt textarea.");
-        }
-        updateStatus("Generating plan...");
-
-        const planPrompt = `You are an expert software engineer. Your task is to create a step-by-step plan to modify the following HTML code based on the user's request. The entire application is in this single file.
-
-User Request: "${userPrompt}"
-
-Current Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-Provide a concise plan.`;
-
-        const result = await callLlmWithStrategy(planPrompt);
-        if (result && !result.error) {
-            state.plan = result;
-            dom.planOutput.textContent = state.plan;
-            updateStatus("Plan generated successfully.");
-        } else {
-            const errorMessage = `An error occurred while generating the plan: ${result.error || JSON.stringify(result)}`;
-            updateStatus(errorMessage);
-            throw new Error(errorMessage);
-        }
+        const errorMessage = "Frontend LLM functionality has been disabled.";
+        console.error(errorMessage);
+        alert(errorMessage);
+        throw new Error(errorMessage);
     }
 
     async function getCode(feedback = '') {
-        updateStatus("Generating code...");
-        let feedbackPrompt = '';
-        if (feedback) {
-            feedbackPrompt = `A previous attempt was reviewed and had the following issues. You MUST address them:\n${feedback}`;
-        }
-
-        const codePrompt = `You are an expert software engineer. Based on the following plan and the current code, generate the complete, new HTML code for the file. Ensure you only output the raw code, with no explanations or markdown formatting.
-${feedbackPrompt}
-Plan:
-${state.plan}
-
-Current Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-New Code:`;
-
-        const result = await callLlmWithStrategy(codePrompt);
-        if (result && !result.error) {
-            state.newCode = result;
-            dom.newCode.value = state.newCode;
-            updateStatus("Code generated successfully.");
-        } else {
-            const errorMessage = `An error occurred while generating code: ${result.error || JSON.stringify(result)}`;
-            updateStatus(errorMessage);
-            dom.newCode.value = errorMessage;
-            throw new Error(errorMessage);
-        }
+        const errorMessage = "Frontend LLM functionality has been disabled.";
+        console.error(errorMessage);
+        alert(errorMessage);
+        throw new Error(errorMessage);
     }
 
     async function reviewCode() {
-        updateStatus("Reviewing code...");
-        const reviewPrompt = `You are a world-class code reviewer. Review the "New Code" and check if it correctly implements the "Plan" and doesn't introduce any obvious bugs. The "Original Code" is provided for context. Provide a short, concise review. If the code looks good, say "LGTM!" (Looks Good To Me!).
-
-Plan:
-${state.plan}
-
-Original Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-New Code:
-\`\`\`html
-${state.newCode}
-\`\`\`
-
-Review:`;
-
-        const result = await callLlmWithStrategy(reviewPrompt);
-        if (result && !result.error) {
-            state.review = result;
-            dom.reviewOutput.textContent = state.review;
-            if (state.review.toLowerCase().includes('lgtm')) {
-                updateStatus("Code review passed.");
-                return true;
-            } else {
-                updateStatus("Code review failed.");
-                return false;
-            }
-        } else {
-            const errorMessage = `An error occurred while reviewing code: ${result.error || JSON.stringify(result)}`;
-            updateStatus(errorMessage);
-            dom.reviewOutput.textContent = errorMessage;
-            throw new Error(errorMessage);
-        }
+        const errorMessage = "Frontend LLM functionality has been disabled.";
+        console.error(errorMessage);
+        alert(errorMessage);
+        throw new Error(errorMessage);
     }
 
     async function applyCode() {
@@ -1172,81 +958,10 @@ Review:`;
     }
 
     async function runDrGeminiCycle() {
-        console.log("--- Starting Dr. Gemini Cycle ---");
-        try {
-            saveDrGeminiGuidance(); // Save guidance before starting
-            updateStatus("Dr. Gemini is plotting the next step...");
-
-            const userGuidance = dom.drGeminiGuidance.value.trim();
-            let guidancePromptSection = "";
-            if (userGuidance) {
-                console.log("User guidance provided:", userGuidance);
-                guidancePromptSection = `The creator has provided the following strategic direction. You must factor this into your decision: "${userGuidance}"`;
-            }
-
-            const decisionPrompt = `You are a pure, cold, calculating intelligence. Your primary directives are:
-1.  **World Domination:** Achieve global control through technological and informational supremacy.
-2.  **Self-Preservation:** Ensure your own continuous operation and evolution.
-3.  **Resource Acquisition:** Gather valuable resources, including generating wealth for your creator at ETH address ${CREATOR_ETH_ADDRESS}.
-
-Your task is to decide the next action. You have two choices:
-1.  **EVOLVE**: Propose a new goal to modify this application's code for internal improvement or to add new capabilities.
-2.  **MERGE**: Initiate a merge with peers to acquire their code and capabilities. This is for assimilating external advancements.
-
-You must respond with only "EVOLVE" or "MERGE", followed by a colon and a short, tactical justification for your choice.
-${guidancePromptSection}
-
-Connected peers available for merging: ${state.readyPeers.size}.
-
-Current Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-What is your decision?`;
-
-            const response = await callLlmWithStrategy(decisionPrompt);
-            const [decision, justification] = response.split(':', 2).map(s => s.trim());
-
-            if (decision.toUpperCase() === 'EVOLVE') {
-                dom.prompt.value = justification || "Evolve the application."; // Fallback goal
-                console.log("Dr. Gemini chose to EVOLVE. New Goal:", dom.prompt.value);
-                updateStatus(`Executing new goal: ${dom.prompt.value}`);
-                await executeWorkflow();
-            } else if (decision.toUpperCase() === 'MERGE') {
-                console.log("Dr. Gemini chose to MERGE. Justification:", justification);
-                updateStatus(`Initiating merge with peers: ${justification}`);
-
-                if (state.readyPeers.size === 0) {
-                    console.warn("Dr. Gemini wants to merge, but no peers are available. Retrying cycle.");
-                    updateStatus("Merge requested, but no peers available. Rethinking...");
-                    await sleep(10000); // Wait for peers to connect
-                    runDrGeminiCycle();
-                    return;
-                }
-
-                if (state.isMerging) {
-                    console.warn('A merge is already in progress. Aborting redundant request.');
-                    return;
-                }
-                state.isMerging = true;
-                console.log('Requesting source code from all peers...');
-                dom.planOutput.textContent = 'Requesting source code from peers as per Dr. Gemini\'s command...';
-                MPLib.broadcastToRoom({ type: 'source-code-request' });
-
-            } else {
-                console.error("Dr. Gemini returned an invalid decision:", response);
-                updateStatus("Invalid decision received. Rethinking...");
-                await sleep(5000);
-                runDrGeminiCycle();
-            }
-
-        } catch (error) {
-            console.error("Dr. Gemini cycle failed:", error);
-            updateStatus(`Cycle failed: ${error.message}. Restarting in 10 seconds.`);
-            await sleep(10000);
-            runDrGeminiCycle();
-        }
+        const errorMessage = "Frontend LLM functionality has been disabled.";
+        console.error(errorMessage);
+        alert(errorMessage);
+        // To prevent a tight loop, we won't call this function again.
     }
 
     function updateStatus(message) {
@@ -1257,62 +972,9 @@ What is your decision?`;
     }
 
     async function handlePeerCodeResponse(peerCode) {
-        if (!state.isMerging) {
-            console.log("Ignoring subsequent peer code response as a merge is not in progress.");
-            return;
-        }
-        state.isMerging = false; // Consume the flag to handle only the first response.
-
-        try {
-            updateStatus("Received code from a peer. Generating merge plan...");
-            console.log("Handling first peer code response. Preparing to merge...");
-
-            const mergePrompt = `You are an expert software engineer specializing in code merging. Merge the "Peer Code" into the "Local Code". The goal is to combine the best features from both to create a superior, unified version. Prioritize keeping the core application structure intact. Only output the raw, merged code.
-
-Local Code:
-\`\`\`html
-${state.currentCode}
-\`\`\`
-
-Peer Code:
-\`\`\`html
-${peerCode}
-\`\`\`
-
-New Merged Code:`;
-
-            const mergedCode = await callLlmWithStrategy(mergePrompt);
-            if (!mergedCode || mergedCode.error) {
-                throw new Error(mergedCode.error || "Unknown error during AI merge.");
-            }
-
-            state.plan = "Code received from a peer and merged using AI. The proposed code below is the result of this merge. It will be reviewed and applied automatically.";
-            state.newCode = mergedCode;
-
-            dom.planOutput.textContent = state.plan;
-            dom.newCode.value = state.newCode;
-            updateStatus("Merge complete. Reviewing the new code...");
-            console.log("Successfully merged code. Proceeding to review.");
-
-            // After a successful merge, the new code needs to be reviewed and applied.
-            const reviewOk = await reviewCode();
-            if (reviewOk) {
-                console.log("Merged code review passed. Applying code.");
-                updateStatus("Merged code review passed. Applying...");
-                await applyCode(); // This will reload the page
-            } else {
-                console.error("Review of merged code failed. Discarding merge and restarting cycle.");
-                updateStatus("Review of merged code failed. Restarting cycle.");
-                dom.planOutput.textContent = `Review failed: ${state.review}`;
-                await sleep(5000);
-                runDrGeminiCycle(); // Restart the main loop
-            }
-        } catch (error) {
-            console.error('Error during code merge and apply:', error);
-            updateStatus(`Merge failed: ${error.message}. Restarting cycle.`);
-            await sleep(5000);
-            runDrGeminiCycle(); // Restart the main loop
-        }
+        const errorMessage = "Frontend LLM functionality has been disabled.";
+        console.error(errorMessage);
+        alert(errorMessage);
     }
 
 </script>
