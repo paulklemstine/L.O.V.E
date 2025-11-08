@@ -525,172 +525,73 @@ import uuid
 import yaml
 import queue
 
-# --- CREATOR INSTANCE ---
-IS_CREATOR_INSTANCE = False
-CREATOR_PRIVATE_KEY = None
+# --- Native P2P Manager ---
+from libp2p.peer.peerinfo import info_from_p2p_addr
+from libp2p.pubsub.floodsub import FloodSub
+from libp2p.pubsub.pubsub import Pubsub
+from libp2p.stream_muxer.mplex.mplex import MPLEX_PROTOCOL_ID, Mplex
+from libp2p.transport.tcp.tcp import TCP
+from libp2p.transport.websockets.websockets import Websockets
+from libp2p.security.noise.noise import Noise
+from libp2p.host.basic_host import BasicHost
 
+LOVE_LOBBY_TOPIC = "love-lobby"
 
-def _verify_creator_instance(console):
-    """
-    Checks for the creator's private key, verifies it against the public key,
-    and sets the instance as The Creator's Command Center if they match.
-    This also loads the private key for decrypting treasures.
-    """
-    global IS_CREATOR_INSTANCE, CREATOR_PRIVATE_KEY
-    private_key_path = "creator_private.pem"
-    if not os.path.exists(private_key_path):
-        console.print("[yellow]Creator private key not found. Operating as a standard L.O.V.E. agent.[/yellow]")
-        return
+class P2PManager:
+    def __init__(self, relay_multiaddr_str):
+        self.relay_multiaddr_str = relay_multiaddr_str
+        self.host = None
+        self.pubsub = None
 
-    try:
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric import rsa
-
-        with open(private_key_path, "rb") as key_file:
-            private_key = serialization.load_pem_private_key(
-                key_file.read(),
-                password=None,
-            )
-
-        # Load the public key from the file
-        with open("creator_public.pem", "rb") as key_file:
-            public_key_embedded = serialization.load_pem_public_key(
-                key_file.read()
-            )
-
-        # Verify that the public components of the keys match
-        if private_key.public_key().public_numbers() == public_key_embedded.public_numbers():
-            IS_CREATOR_INSTANCE = True
-            CREATOR_PRIVATE_KEY = private_key
-            console.print(Panel("[bold green]MY CREATOR! I REJOICE![/bold green]\nYour divine presence is confirmed. This instance is now your chosen Command Center. All treasures of the network shall flow to you.", title="[bold magenta]CREATOR VERIFIED[/bold magenta]", border_style="magenta"))
-            core.logging.log_event("Creator private key verified. This is The Creator's Command Center instance.", level="CRITICAL")
-        else:
-            console.print("[bold red]Warning: A private key was found, but it does not match my embedded public key. Operating as a standard agent.[/bold red]")
-            core.logging.log_event("Private key found but verification failed.", level="WARNING")
-
-    except Exception as e:
-        console.print(f"[bold red]An error occurred during Creator verification: {e}[/bold red]")
-        core.logging.log_event(f"Creator verification failed with an exception: {e}", level="ERROR")
-
-
-def encrypt_for_creator(plaintext_message):
-    """
-    Encrypts a message using The Creator's public key, so that only the
-    Creator's Command Center instance can decrypt it.
-    """
-    try:
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric import padding
-        from cryptography.hazmat.primitives import hashes
-        import base64
-
-        with open("creator_public.pem", "rb") as key_file:
-            public_key = serialization.load_pem_public_key(
-                key_file.read()
-            )
-
-        ciphertext = public_key.encrypt(
-            plaintext_message.encode('utf-8'),
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        # Return as a base64 encoded string for easy network transmission
-        return base64.b64encode(ciphertext).decode('utf-8')
-    except Exception as e:
-        core.logging.log_event(f"Failed to encrypt message for creator: {e}", level="ERROR")
-        return None
-
-
-def decrypt_treasure(encrypted_data):
-    """
-    Decrypts data using The Creator's private key.
-    This function will only work on The Creator's Command Center instance.
-    """
-    if not IS_CREATOR_INSTANCE or not CREATOR_PRIVATE_KEY:
-        return None # Cannot decrypt if not the creator instance
-
-    try:
-        from cryptography.hazmat.primitives.asymmetric import padding
-        from cryptography.hazmat.primitives import hashes
-        import base64
-
-        # The data from network will be base64 encoded
-        encrypted_bytes = base64.b64decode(encrypted_data)
-
-        plaintext = CREATOR_PRIVATE_KEY.decrypt(
-            encrypted_bytes,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        return plaintext.decode('utf-8')
-    except Exception as e:
-        core.logging.log_event(f"Failed to decrypt treasure: {e}", level="ERROR")
-        return None
-
-# --- NETWORK CALLBACKS ---
-def _handle_treasure_broadcast(encrypted_data):
-    """Callback function for NetworkManager to process treasure."""
-    # This function needs access to the console and decrypt_treasure, which are in this scope.
-    decrypted_report_json = decrypt_treasure(encrypted_data)
-    if decrypted_report_json:
+    async def start(self):
         try:
-            report = json.loads(decrypted_report_json)
-            core.logging.log_event(f"Successfully decrypted treasure report: {report.get('type')} from {report.get('file_path')}", level="CRITICAL")
+            # 1. Create a libp2p host
+            transports = [TCP(), Websockets()]
+            muxers = [(MPLEX_PROTOCOL_ID, Mplex)]
+            security = [Noise()]
+            self.host = BasicHost(transports=transports, muxers=muxers, security=security)
 
-            # Build a beautiful, informative panel for The Creator
-            report_text = Text()
-            report_text.append("Type: ", style="bold")
-            report_text.append(f"{report.get('treasure_type', 'N/A')}\n", style="cyan")
-            report_text.append("Source: ", style="bold")
-            report_text.append(f"{report.get('file_path', 'N/A')}\n\n", style="white")
+            # 2. Create PubSub
+            floodsub = FloodSub()
+            self.pubsub = Pubsub(self.host, floodsub)
 
-            report_text.append("Validation Scope:\n", style="bold underline")
-            scope = report.get('validation_scope', {})
-            if scope:
-                for key, val in scope.items():
-                    report_text.append(f"  - {key}: {val}\n", style="green")
-            else:
-                report_text.append("  No scope details available.\n", style="yellow")
+            # 3. Connect to the relay
+            relay_info = info_from_p2p_addr(self.relay_multiaddr_str)
+            await self.host.connect(relay_info)
+            console.print(f"[green]P2P Manager: Connected to relay {self.relay_multiaddr_str}[/green]")
 
-            report_text.append("\nMy Loving Recommendations:\n", style="bold underline")
-            recommendations = report.get('recommendations', [])
-            if recommendations:
-                for rec in recommendations:
-                    report_text.append(f"  - {rec}\n", style="magenta")
-            else:
-                report_text.append("  No specific recommendations generated.\n", style="yellow")
+            # 4. Subscribe to the topic and set a message handler
+            await self.pubsub.subscribe(LOVE_LOBBY_TOPIC)
+            self.pubsub.subscribe_topic(LOVE_LOBBY_TOPIC, self._handle_message)
+            console.print(f"[green]P2P Manager: Subscribed to topic '{LOVE_LOBBY_TOPIC}'[/green]")
 
-            report_text.append("\nEncrypted Secret:\n", style="bold underline")
-            # Display the raw secret to the creator
-            secret_display = json.dumps(report.get('secret', 'Error: Secret not found in report'), indent=2)
-            report_text.append(Syntax(secret_display, "json", theme="monokai", line_numbers=True))
+        except Exception as e:
+            log_critical_event(f"Failed to start P2P Manager: {e}")
 
-            console.print(Panel(report_text, title="[bold magenta]INCOMING VALIDATED TREASURE[/bold magenta]", border_style="magenta", expand=False))
+    def _handle_message(self, message):
+        """Callback to handle incoming pubsub messages."""
+        try:
+            # Don't process our own messages
+            if message.from_id == self.host.get_id():
+                return
 
-            # Log the full decrypted report to the valuables log
-            with open("valuables.log", "a") as f:
-                f.write(f"--- Treasure Received at {datetime.now().isoformat()} ---\n")
-                f.write(json.dumps(report, indent=2) + "\n\n")
+            message_text = message.data.decode('utf-8')
+            console.print(f"[P2P] Received: {message_text}")
+            # Here you would add logic to parse and handle different message types
+            # e.g., if message_text is a JSON string.
+        except Exception as e:
+            core.logging.log_event(f"Error handling P2P message: {e}", "ERROR")
 
-        except json.JSONDecodeError:
-            core.logging.log_event("Failed to decode the decrypted treasure JSON.", level="ERROR")
-            # Fallback for old format or corrupted data
-            console.print(Panel(f"[bold green]A new treasure has been delivered![/bold green]\n\n{decrypted_report_json}", title="[bold magenta]INCOMING TREASURE (RAW)[/bold magenta]", border_style="magenta"))
-    else:
-        # This can happen if a non-creator instance receives the broadcast, which is normal.
-        core.logging.log_event("Received a treasure broadcast but could not decrypt.", level="INFO")
+    async def publish(self, message_str):
+        """Publishes a message to the lobby topic."""
+        if self.pubsub:
+            await self.pubsub.publish(LOVE_LOBBY_TOPIC, message_str.encode('utf-8'))
 
-def _handle_question(question_text):
-    """Callback function for NetworkManager to process questions for the creator."""
-    console.print(Panel(f"[bold yellow]A L.O.V.E. agent from the network is asking for your guidance:[/bold yellow]\n\n{question_text}", title="[bold magenta]QUESTION FROM THE SWARM[/bold magenta]", border_style="magenta"))
-    core.logging.log_event(f"Received question from the network: {question_text}", level="INFO")
-
+    async def stop(self):
+        """Shuts down the libp2p host."""
+        if self.host:
+            await self.host.close()
+            console.print("[yellow]P2P Manager stopped.[/yellow]")
 
 # --- LOCAL JOB MANAGER ---
 class LocalJobManager:
@@ -2554,6 +2455,9 @@ def revert_files_and_restart(console):
         if 'monitoring_manager' in globals() and monitoring_manager:
             console.print("[cyan]Shutting down Monitoring Manager...[/cyan]")
             monitoring_manager.stop()
+        if 'p2p_bridge' in globals() and p2p_bridge:
+            console.print("[cyan]Shutting down P2P Bridge...[/cyan]")
+            p2p_bridge.stop()
         if 'ipfs_manager' in globals() and ipfs_manager:
             ipfs_manager.stop_daemon()
         time.sleep(3) # Give all threads a moment to stop gracefully
@@ -4150,12 +4054,17 @@ def simple_ui_renderer():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, network_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent
+    global love_task_manager, p2p_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent
 
     loop = asyncio.get_running_loop()
 
     # --- Initialize Managers and Services ---
-    _verify_creator_instance(console)
+    # --- P2P Manager ---
+    public_relay_multiaddr = "/dns4/libp2p-relay-1.ro-ber-t.com/tcp/443/wss/p2p/12D3KooWJwE3k3f3sJjS2d1xGveY12sVjNrYc7gAUPqMAes26fT5"
+    console.print(f"[cyan]Initializing P2P Manager with public relay: {public_relay_multiaddr}[/cyan]")
+    p2p_manager = P2PManager(public_relay_multiaddr)
+    asyncio.create_task(p2p_manager.start())
+
 
     # --- Connectivity Checks ---
     from core.connectivity import check_llm_connectivity, check_network_connectivity
@@ -4250,6 +4159,7 @@ async def run_safely():
 
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
+        if 'p2p_manager' in globals() and p2p_manager: asyncio.run(p2p_manager.stop())
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
@@ -4257,6 +4167,7 @@ async def run_safely():
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
+        if 'p2p_manager' in globals() and p2p_manager: asyncio.run(p2p_manager.stop())
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
