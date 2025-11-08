@@ -299,7 +299,7 @@ def _install_requirements_file(requirements_path, tracker_prefix):
             logging.error(f"Failed to install package '{package_name}': {e}")
 
 def _install_python_requirements():
-    """Installs Python packages from requirements.txt."""
+    """Installs Python packages from requirements.txt and OS-specific dependencies."""
     print("Checking core Python packages from requirements.txt...")
     # --- Pre-install setuptools to ensure pkg_resources is available ---
     try:
@@ -330,6 +330,28 @@ def _install_python_requirements():
             logging.error("Could not find pip to install setuptools.")
     # --- End setuptools pre-installation ---
     _install_requirements_file('requirements.txt', 'core_pkg_')
+
+    # --- Install Windows-specific dependencies ---
+    if platform.system() == "Windows":
+        print("Windows detected. Checking for pywin32 dependency...")
+        if not is_dependency_met("pywin32_installed"):
+            if not _is_package_installed("pywin32"):
+                print("Installing pywin32 for Windows...")
+                pip_executable = _get_pip_executable()
+                if pip_executable:
+                    try:
+                        subprocess.check_call(pip_executable + ['install', 'pywin32', '--break-system-packages'])
+                        print("Successfully installed pywin32.")
+                        mark_dependency_as_met("pywin32_installed")
+                    except subprocess.CalledProcessError as e:
+                        print(f"ERROR: Failed to install pywin32. Reason: {e}")
+                        logging.error(f"Failed to install pywin32: {e}")
+                else:
+                    print("ERROR: Could not find pip to install pywin32.")
+                    logging.error("Could not find pip to install pywin32.")
+            else:
+                print("pywin32 is already installed.")
+                mark_dependency_as_met("pywin32_installed")
 
 def _auto_configure_hardware():
     """
