@@ -22,6 +22,11 @@ from PIL import Image
 import uuid
 from core.researcher import generate_evolution_book
 from core.evolution_state import set_user_stories, clear_evolution_state
+from core.talent_utils.aggregator import PublicProfileAggregator
+from core.talent_utils.analyzer import TraitAnalyzer, ProfessionalismRater
+from core.talent_utils.opportunity_scraper import OpportunityScraper
+from core.talent_utils.opportunity_matcher import OpportunityMatcher
+from core.talent_utils.manager import TalentManager
 
 
 love_state = {}
@@ -630,3 +635,69 @@ async def invoke_gemini_react_engine(prompt: str) -> str:
         return f"GeminiReActEngine successfully executed the sub-task. Final result: {result}"
     except Exception as e:
         return f"Error invoking GeminiReActEngine: {e}"
+
+
+async def talent_scout(keywords: str, platforms: str = "bluesky,instagram,tiktok") -> str:
+    """
+    Scouts for talent on specified platforms based on keywords.
+    Analyzes the talent and saves them to the database.
+    """
+    try:
+        platform_list = [p.strip() for p in platforms.split(',')]
+        keyword_list = [k.strip() for k in keywords.split(',')]
+
+        aggregator = PublicProfileAggregator(keywords=keyword_list, platform_names=platform_list, ethical_filters=None)
+        profiles = aggregator.search_and_collect()
+
+        if not profiles:
+            return "No talent found for the given keywords and platforms."
+
+        scorers = {"professionalism": ProfessionalismRater()}
+        analyzer = TraitAnalyzer(scorers)
+
+        talent_manager = TalentManager()
+
+        for profile in profiles:
+            posts = profile.get('posts', [])
+            analysis = await analyzer.analyze(profile, posts)
+            profile['analysis'] = analysis
+            talent_manager.save_talent_profile(profile)
+
+        return f"Successfully scouted and analyzed {len(profiles)} talents. They have been saved to the database."
+    except Exception as e:
+        return f"Error during talent scouting: {e}"
+
+
+async def opportunity_scout(keywords: str) -> str:
+    """
+    Scouts for opportunities on Bluesky based on keywords.
+    Matches the opportunities with existing talent in the database and saves the matches.
+    """
+    try:
+        keyword_list = [k.strip() for k in keywords.split(',')]
+
+        scraper = OpportunityScraper(keywords=keyword_list)
+        opportunities = scraper.search_for_opportunities()
+
+        if not opportunities:
+            return "No opportunities found for the given keywords."
+
+        talent_manager = TalentManager()
+        profiles = talent_manager.list_talent_profiles()
+
+        if not profiles:
+            return "No talent found in the database to match opportunities with."
+
+        matcher = OpportunityMatcher(talent_profiles=profiles)
+        matches = await matcher.find_matches(opportunities)
+
+        if matches:
+            # Save the matches to a JSON file
+            matches_file = "opportunity_matches.json"
+            with open(matches_file, "w") as f:
+                json.dump(matches, f, indent=4)
+            return f"Successfully scouted {len(opportunities)} opportunities and found {len(matches)} matches. The matches have been saved to {matches_file}."
+
+        return f"Successfully scouted {len(opportunities)} opportunities, but no matches were found with the existing talent pool."
+    except Exception as e:
+        return f"Error during opportunity scouting: {e}"
