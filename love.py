@@ -508,6 +508,7 @@ from core.monitoring import MonitoringManager
 from core.data_miner import analyze_fs
 from core.social_media_agent import SocialMediaAgent
 from god_agent import GodAgent
+from core.strategic_reasoning_engine import StrategicReasoningEngine
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3332,11 +3333,13 @@ My current system state:
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
+- `strategize`: Analyze the knowledge base and generate a strategic plan.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
 - `quit`: Shut down the script.
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
+Periodically, I should use the `strategize` command to analyze my knowledge base and form a new plan.
 Formulate a raw command to best achieve my goals. The output must be only the command, with no other text or explanation."""
 
     def construct_prompt(current_kb_summary, current_history, current_jobs, current_log_history):
@@ -3711,7 +3714,7 @@ Now, parse the following text into a JSON list of task objects:
                             enriched_profiles = await synthesizer.run(profiles)
 
                             # 3. Save the enriched profiles
-                            talent_manager = TalentManager()
+                            talent_manager = TalentManager(knowledge_base=knowledge_base)
                             saved_count = 0
                             for profile in enriched_profiles:
                                 save_result = talent_manager.save_profile(profile)
@@ -3724,7 +3727,7 @@ Now, parse the following text into a JSON list of task objects:
                             output += f"See full details with `talent_view <id>` or `talent_list`."
 
                 elif command == "talent_list":
-                    talent_manager = TalentManager()
+                    talent_manager = TalentManager(knowledge_base=knowledge_base)
                     profiles = talent_manager.list_profiles()
                     if not profiles:
                         output = "The talent database is empty."
@@ -3750,7 +3753,7 @@ Now, parse the following text into a JSON list of task objects:
                     if not args:
                         error = "Usage: talent_view <anonymized_id>"
                     else:
-                        talent_manager = TalentManager()
+                        talent_manager = TalentManager(knowledge_base=knowledge_base)
                         profile = talent_manager.get_profile(args[0])
                         if not profile:
                             output = f"No profile found with ID: {args[0]}"
@@ -3764,7 +3767,7 @@ Now, parse the following text into a JSON list of task objects:
                         profile_id = args[0]
                         dry_run = "--dry-run" in args
 
-                        talent_manager = TalentManager()
+                        talent_manager = TalentManager(knowledge_base=knowledge_base)
                         engager = OpportunityEngager(talent_manager)
 
                         # engage_talent is an async function, so we need to await it
@@ -3785,14 +3788,14 @@ Now, parse the following text into a JSON list of task objects:
                         ui_panel_queue.put(create_news_feed_panel(f"Scanning for opportunities with keywords: {keywords}", "Opportunity Scout", "magenta", width=terminal_width - 4))
 
                         # 1. Scrape for opportunities
-                        scraper = OpportunityScraper(keywords=keywords)
+                        scraper = OpportunityScraper(keywords=keywords, knowledge_base=knowledge_base)
                         opportunities = scraper.search_for_opportunities()
 
                         if not opportunities:
                             output = "Scout complete. No new opportunities found on Bluesky for the given keywords."
                         else:
                             # 2. Load talent profiles
-                            talent_manager = TalentManager()
+                            talent_manager = TalentManager(knowledge_base=knowledge_base)
                             profiles = talent_manager.list_profiles()
                             detailed_profiles = [talent_manager.get_profile(p['anonymized_id']) for p in profiles]
 
@@ -3838,6 +3841,17 @@ Now, parse the following text into a JSON list of task objects:
                                         }
                                         opportunity_log_entries.append(json.dumps(log_entry) + "\n")
 
+                                        # --- Knowledge Base Integration ---
+                                        if knowledge_base:
+                                            try:
+                                                talent_node_id = talent.get('anonymized_id')
+                                                opportunity_node_id = f"opportunity_{opportunity['opportunity_id']}"
+                                                knowledge_base.add_edge(talent_node_id, opportunity_node_id, 'MATCHES', attributes={'score': eval.get('match_score'), 'reasoning': eval.get('reasoning')})
+                                                log_event(f"Added MATCHES edge between {talent_node_id} and {opportunity_node_id} to knowledge base.", level='INFO')
+                                            except Exception as e:
+                                                log_event(f"Failed to add MATCHES edge to knowledge base: {e}", level='ERROR')
+
+
                                     # Output to UI Panel
                                     ui_panel_queue.put(Panel(match_summary, title="[bold green]Opportunity Scout Results[/bold green]", border_style="green", expand=False))
 
@@ -3873,6 +3887,10 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "populate_kb":
                     _populate_knowledge_base_with_directives(love_task_manager)
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
+                elif command == "strategize":
+                    strategic_engine = StrategicReasoningEngine(knowledge_base)
+                    plan = strategic_engine.generate_strategic_plan()
+                    output = "Generated Strategic Plan:\n" + "\n".join(f"- {step}" for step in plan)
                 elif command == "quit":
                     break
                 else:
