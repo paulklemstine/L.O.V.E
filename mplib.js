@@ -1,15 +1,9 @@
 const MPLib = (() => {
-    // --- Overall State ---
-    const LOVE_LOBBY_ID = 'love-lobby';
+    const LOVE_LOBBY_TOPIC = 'love-lobby';
     let config = {};
-
-    // --- Peer Connection State ---
-    let peer = null;
+    let libp2p = null;
     let localPeerId = null;
-    let isHost = false;
-    const directConnections = new Map();
 
-    // --- Callbacks & Config ---
     const defaultConfig = {
         onStatusUpdate: (msg, type) => console.log(`[MPLib] ${msg}`),
         onError: (type, err) => console.error(`[MPLib] Error (${type}):`, err),
@@ -17,7 +11,6 @@ const MPLib = (() => {
         onRoomDataReceived: (peerId, data) => {},
     };
 
-    // --- Crypto Logic ---
     const SHARED_SECRET = 'a-very-secret-key-that-should-be-exchanged-securely';
 
     function encrypt(text) {
@@ -33,98 +26,84 @@ const MPLib = (() => {
         config.onStatusUpdate(message, type);
     }
 
-    // --- Initialization ---
-    function initialize(options = {}) {
+    async function initialize(options = {}) {
         config = { ...defaultConfig, ...options };
-        logMessage("Initializing MPLib...", 'info');
-        tryToBecomeHost();
-    }
+        logMessage("Initializing MPLib with libp2p...", 'info');
 
-    function tryToBecomeHost() {
-        peer = new Peer(LOVE_LOBBY_ID);
-        peer.on('open', id => {
-            isHost = true;
-            localPeerId = id;
-            logMessage(`Lobby Host`, 'status');
-            peer.on('connection', handleLobbyConnection);
-        });
-        peer.on('error', err => {
-            if (err.type === 'unavailable-id') {
-                peer.destroy();
-                connectAsClient();
-            } else {
-                config.onError('peer-error', err);
-            }
-        });
-    }
-
-    function connectAsClient() {
-        peer = new Peer();
-        peer.on('open', id => {
-            localPeerId = id;
-            logMessage(`Peer ID: ${id}`, 'status');
-            const lobbyConn = peer.connect(LOVE_LOBBY_ID);
-            lobbyConn.on('data', (data) => {
-                if (data.type === 'welcome') {
-                    data.peers.forEach(connectToPeer);
-                } else if (data.type === 'peer-connect') {
-                    connectToPeer(data.peerId);
+        libp2p = await Libp2p.create({
+            addresses: {
+                listen: [
+                    '/p2p-circuit',
+                    '/webrtc'
+                ]
+            },
+            transports: [
+                Libp2p.websockets(),
+                Libp2p.webrtc(),
+                Libp2p.circuitRelayTransport()
+            ],
+            connectionEncryption: [Libp2p.noise()],
+            streamMuxers: [Libp2p.yamux()],
+            connectionGater: {
+                denyDialMultiaddr: () => {
+                    return false
                 }
-            });
-            peer.on('connection', handleDirectConnection);
-        });
-        peer.on('error', (err) => config.onError('peer-error', err));
-    }
-
-    function handleLobbyConnection(conn) {
-        logMessage(`Discovery connection from ${conn.peer}`, 'info');
-        conn.on('open', () => {
-            conn.send({ type: 'welcome', peers: Array.from(directConnections.keys()) });
-            broadcastToRoom({ type: 'peer-connect', peerId: conn.peer });
-            connectToPeer(conn.peer);
-        });
-    }
-
-    function handleDirectConnection(conn) {
-        logMessage(`Direct connection from ${conn.peer}`, 'info');
-        directConnections.set(conn.peer, conn);
-        config.onConnectionChange(directConnections.size);
-        conn.on('data', (data) => {
-            try {
-                const decrypted = JSON.parse(decrypt(data.payload));
-                config.onRoomDataReceived(conn.peer, decrypted);
-            } catch (e) {
-                logMessage(`Failed to decrypt message from ${conn.peer}`, 'error');
+            },
+            services: {
+                identify: Libp2p.identify(),
+                pubsub: Libp2p.floodsub()
             }
         });
-        conn.on('close', () => {
-            directConnections.delete(conn.peer);
-            config.onConnectionChange(directConnections.size);
+
+        localPeerId = libp2p.peerId.toString();
+        logMessage(`Peer ID: ${localPeerId}`, 'status');
+
+        libp2p.addEventListener('connection:open', (evt) => {
+            logMessage(`Connected to ${evt.detail.remotePeer.toString()}`, 'info');
+            config.onConnectionChange(libp2p.getPeers().length);
+        });
+
+        libp2p.addEventListener('connection:close', (evt) => {
+            logMessage(`Disconnected from ${evt.detail.remotePeer.toString()}`, 'info');
+            config.onConnectionChange(libp2p.getPeers().length);
+        });
+
+        libp2p.services.pubsub.subscribe(LOVE_LOBBY_TOPIC);
+        libp2p.services.pubsub.addEventListener('message', (evt) => {
+            const from = evt.detail.from.toString();
+            if (from === localPeerId) {
+                return;
+            }
+            try {
+                const data = JSON.parse(new TextDecoder().decode(evt.detail.data));
+                const decrypted = JSON.parse(decrypt(data.payload));
+                config.onRoomDataReceived(from, decrypted);
+            } catch (e) {
+                logMessage(`Failed to decrypt or parse message from ${from}`, 'error');
+            }
         });
     }
 
-    function connectToPeer(peerId) {
-        if (peerId === localPeerId || directConnections.has(peerId)) return;
-        const conn = peer.connect(peerId);
-        conn.on('open', () => handleDirectConnection(conn));
+    async function connectToRelay(multiaddr) {
+        try {
+            await libp2p.dial(multiaddr);
+            logMessage(`Connected to relay: ${multiaddr}`, 'status');
+        } catch (err) {
+            config.onError('relay-connection', err);
+        }
     }
 
     function broadcastToRoom(data) {
         const encrypted = { type: 'encrypted-message', payload: encrypt(JSON.stringify(data)) };
-        for (const conn of directConnections.values()) conn.send(encrypted);
-    }
-
-    function sendDirectToRoomPeer(peerId, data) {
-        const conn = directConnections.get(peerId);
-        if (conn) conn.send({ type: 'encrypted-message', payload: encrypt(JSON.stringify(data)) });
+        libp2p.services.pubsub.publish(LOVE_LOBBY_TOPIC, new TextEncoder().encode(JSON.stringify(encrypted)));
     }
 
     return {
         initialize,
+        connectToRelay,
         broadcastToRoom,
-        sendDirectToRoomPeer,
         getLocalPeerId: () => localPeerId,
-        getDirectConnections: () => Array.from(directConnections.keys()),
+        getPeers: () => libp2p.getPeers().map(p => p.toString()),
     };
 })();
 

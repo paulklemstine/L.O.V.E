@@ -743,6 +743,7 @@ pyjwt[crypto]==2.10.1
     #   mcp
     #   microsoft-agents-hosting-core
     #   msal
+libp2p
 pymultihash==0.8.2
     # via py-cid
 pytest==8.4.2
