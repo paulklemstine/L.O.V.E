@@ -46,17 +46,17 @@ class SocialMediaReActEngine(GeminiReActEngine):
         registry.register_tool(
             name="generate_post_content",
             tool=generate_post_content,
-            description="Generates content for a new social media post. Valid strategies are 'divine_wisdom', 'self_reflection', 'creative_poem'."
+            metadata={"description": "Generates content for a new social media post. Valid strategies are 'divine_wisdom', 'self_reflection', 'creative_poem'."}
         )
         registry.register_tool(
             name="decide_on_reply",
             tool=decide_on_reply,
-            description="Analyzes a post and a comment to decide if a reply is warranted."
+            metadata={"description": "Analyzes a post and a comment to decide if a reply is warranted."}
         )
         registry.register_tool(
             name="generate_reply",
             tool=generate_reply,
-            description="Generates a thoughtful reply to a comment on a post."
+            metadata={"description": "Generates a thoughtful reply to a comment on a post."}
         )
         return registry
 

@@ -32,6 +32,7 @@ class Orchestrator:
     def __init__(self, memory_manager):
         """Initializes the Supervisor and its registry of specialist agents."""
         print("Initializing Supervisor Orchestrator...")
+        self.tool_registry = ToolRegistry()
         self.specialist_registry = {
             "AnalystAgent": AnalystAgent,
             "CodeGenerationAgent": CodeGenerationAgent,
@@ -44,6 +45,29 @@ class Orchestrator:
         self.tool_registry = ToolRegistry()
         self.secure_executor = SecureExecutor()
         self._register_tools()
+
+        # Register tools
+        self.tool_registry.register_tool("talent_scout", talent_scout, {
+            "description": "Scouts for talent on specified platforms based on keywords.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "keywords": {"type": "string", "description": "Comma-separated keywords to search for"},
+                    "platforms": {"type": "string", "description": "Comma-separated platforms to search on (e.g., 'bluesky,instagram,tiktok')"}
+                },
+                "required": ["keywords"]
+            }
+        })
+        self.tool_registry.register_tool("opportunity_scout", opportunity_scout, {
+            "description": "Scouts for opportunities on Bluesky based on keywords and matches them with existing talent.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "keywords": {"type": "string", "description": "Comma-separated keywords to search for"}
+                },
+                "required": ["keywords"]
+            }
+        })
         print("Supervisor Orchestrator is ready.")
 
     def _register_tools(self):

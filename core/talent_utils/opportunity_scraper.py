@@ -8,8 +8,9 @@ class OpportunityScraper:
     Scans Bluesky for posts that represent potential opportunities based on keywords.
     """
 
-    def __init__(self, keywords):
+    def __init__(self, keywords, knowledge_base=None):
         self.keywords = keywords
+        self.knowledge_base = knowledge_base
         self.client = self._get_bluesky_client()
 
     def _get_bluesky_client(self):
@@ -72,6 +73,22 @@ class OpportunityScraper:
                             'like_count': getattr(post_view, 'like_count', 0),
                         }
                         all_opportunities.append(opportunity)
+
+                        # --- Knowledge Base Integration ---
+                        if self.knowledge_base:
+                            try:
+                                opportunity_node_id = f"opportunity_{opportunity['opportunity_id']}"
+                                self.knowledge_base.add_node(opportunity_node_id, 'opportunity', attributes=opportunity)
+
+                                # Simple skill extraction: for now, we'll assume the keywords are the skills.
+                                # A more advanced implementation would use NLP.
+                                for skill in self.keywords:
+                                    skill_id = f"skill_{skill.lower().replace(' ', '_')}"
+                                    self.knowledge_base.add_node(skill_id, 'skill', attributes={'name': skill})
+                                    self.knowledge_base.add_edge(opportunity_node_id, skill_id, 'REQUIRES_SKILL')
+                                log_event(f"Updated knowledge base for opportunity {opportunity_node_id}.", level='INFO')
+                            except Exception as e:
+                                log_event(f"Failed to update knowledge base for opportunity {opportunity['opportunity_id']}: {e}", level='ERROR')
 
             except Exception as e:
                 log_event(f"Error searching Bluesky for keyword '{keyword}': {e}", level='ERROR')
