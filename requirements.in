@@ -38,3 +38,5 @@ torch
 torchvision
 torchaudio
 langextract
+bitcoinlib
+monero-python
