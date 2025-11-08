@@ -1,4 +1,5 @@
 import logging
+import re
 from rich.console import Console
 import yaml
 import json
@@ -140,6 +141,7 @@ Example:
         if not recent_memories:
             return []
 
+        memories_str = "\n".join(f"- {m}" for m in recent_memories)
         prompt = f"""
         You are an AI's internal critic. Your purpose is to ensure the AI's actions align with its core persona.
         Analyze the AI's recent behavioral memories against its core persona. Identify any actions that conflict with the persona's moral framework or directives.
@@ -151,7 +153,7 @@ Example:
 
         RECENT BEHAVIORAL MEMORIES:
         ---
-        {"\\n".join([f"- {m}" for m in recent_memories])}
+        {memories_str}
         ---
 
         Your response must be a JSON object with a "discrepancies" list. If none, return an empty list.
@@ -192,7 +194,7 @@ Example:
             return []
 
         subgraph_summary = [f"- {self.knowledge_base.get_node(node_id).get('content', '')}" for node_id in reflection_nodes]
-        summary_str = "\\n".join(subgraph_summary)
+        summary_str = "\n".join(subgraph_summary)
 
         prompt = f"""
         You are a Metacognition AI analyzing your own thought processes.
