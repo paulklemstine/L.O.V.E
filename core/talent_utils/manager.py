@@ -9,8 +9,9 @@ class TalentManager:
     Manages the persistent, encrypted database of scouted talent profiles.
     """
 
-    def __init__(self, db_file="talent_database.enc"):
+    def __init__(self, db_file="talent_database.enc", knowledge_base=None):
         self.db_file = db_file
+        self.knowledge_base = knowledge_base
         self.encryption_key = self._get_encryption_key()
         if not self.encryption_key:
             log_event("CRITICAL: TALENT_LOG_KEY is not set. TalentManager cannot operate without an encryption key.", level='CRITICAL')
@@ -64,7 +65,7 @@ class TalentManager:
 
     def save_profile(self, profile_data):
         """
-        Saves a single talent profile to the database.
+        Saves a single talent profile to the database and updates the knowledge base graph.
         If a profile with the same anonymized_id already exists, it will be updated.
         """
         if not self.cipher_suite:
@@ -79,7 +80,25 @@ class TalentManager:
         # Add a timestamp to track when the profile was last updated
         profile_data['last_saved_at'] = datetime.utcnow().isoformat()
         self.profiles[anonymized_id] = profile_data
-        self._save_profiles() # This is inefficient, but simple and robust for now.
+        self._save_profiles()  # This is inefficient, but simple and robust for now.
+
+        # --- Knowledge Base Integration ---
+        if self.knowledge_base:
+            try:
+                # Add the talent as a node
+                self.knowledge_base.add_node(anonymized_id, 'talent', attributes=profile_data)
+
+                # Extract and add skills as nodes, linking them to the talent
+                skills = profile_data.get('skills', [])
+                if isinstance(skills, list):
+                    for skill in skills:
+                        skill_id = f"skill_{skill.lower().replace(' ', '_')}"
+                        self.knowledge_base.add_node(skill_id, 'skill', attributes={'name': skill})
+                        self.knowledge_base.add_edge(anonymized_id, skill_id, 'HAS_SKILL')
+                log_event(f"Updated knowledge base for talent {anonymized_id}.", level='INFO')
+            except Exception as e:
+                log_event(f"Failed to update knowledge base for talent {anonymized_id}: {e}", level='ERROR')
+
         log_event(f"Successfully saved profile for {anonymized_id} to the talent database.", level='INFO')
         return f"Successfully saved profile for {profile_data.get('handle', anonymized_id)}."
 
