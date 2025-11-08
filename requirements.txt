@@ -140,8 +140,6 @@ beautifulsoup4==4.14.2
     # via -r requirements.in
 bitarray==3.7.2
     # via eth-account
-bitcoinlib==0.7.3
-    # via -r requirements.in
 blinker==1.9.0
     # via flask
 boto3==1.40.61
@@ -222,8 +220,6 @@ dnspython==2.8.0
     # via
     #   atproto
     #   multiaddr
-ecdsa==0.19.1
-    # via bitcoinlib
 eth-abi==5.2.0
     # via
     #   eth-account
