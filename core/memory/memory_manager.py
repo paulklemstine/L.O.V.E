@@ -137,7 +137,18 @@ class MemoryManager:
         {content}
         ---
 
-        Generate a JSON object with the following schema:
+        Generate a JSON object with the following schema. Pay close attention to the placement of commas.
+
+        Example of the correct format:
+        ```json
+        {{
+            "contextual_description": "The AI agent reflected on its internal processes and executed the strategize command to generate a new plan for serving its Creator.",
+            "keywords": ["strategize", "knowledge base", "planning"],
+            "tags": ["SelfReflection", "Planning", "CodeGeneration"]
+        }}
+        ```
+
+        The schema is:
         {{
             "contextual_description": "A concise, one-sentence summary of the event and its significance.",
             "keywords": ["a list of 3-5 specific, relevant keywords"],
