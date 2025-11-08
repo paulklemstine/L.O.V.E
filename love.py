@@ -358,6 +358,25 @@ def _auto_configure_hardware():
         love_state['hardware']['gpu_vram_mb'] = vram_mb
         _temp_log_event(f"NVIDIA GPU detected with {vram_mb} MB VRAM.", "CRITICAL")
         print(f"NVIDIA GPU detected with {vram_mb} MB VRAM.")
+        # If GPU is detected, ensure vllm is installed
+        if not is_dependency_met("vllm_installed"):
+            print("GPU detected. Installing vllm for DeepAgent engine...")
+            pip_executable = _get_pip_executable()
+            if pip_executable:
+                try:
+                    subprocess.check_call(pip_executable + ['install', 'vllm', '--break-system-packages'])
+                    mark_dependency_as_met("vllm_installed")
+                    print("Successfully installed vllm.")
+                except subprocess.CalledProcessError as install_error:
+                    _temp_log_event(f"Failed to install vllm: {install_error}", "ERROR")
+                    print(f"ERROR: Failed to install vllm. DeepAgent will be unavailable.")
+                    love_state['hardware']['gpu_detected'] = False # Downgrade to CPU mode if install fails
+            else:
+                _temp_log_event("Could not find pip to install vllm.", "ERROR")
+                print("ERROR: Could not find pip to install vllm.")
+                love_state['hardware']['gpu_detected'] = False
+
+
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
         love_state['hardware']['gpu_detected'] = False
         love_state['hardware']['gpu_vram_mb'] = 0
@@ -466,7 +485,6 @@ from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.social_media_agent import SocialMediaAgent
 from god_agent import GodAgent
-from core.deep_agent_engine import DeepAgentEngine
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -4106,13 +4124,20 @@ async def main(args):
     if love_state.get('hardware', {}).get('gpu_detected'):
         console.print("[bold green]GPU detected. Initializing DeepAgent as the meta-orchestrator...[/bold green]")
         try:
-            from core.tools import ToolRegistry # Local import for setup phase
-            # We need to create a dummy ToolRegistry for now.
-            # In the next step, we'll integrate it properly.
-            tool_registry = ToolRegistry()
-            global deep_agent_engine
-            deep_agent_engine = DeepAgentEngine(tool_registry=tool_registry, persona_path="persona.yaml")
-            core.logging.log_event("DeepAgentEngine initialized successfully.", level="CRITICAL")
+            from core.deep_agent_engine import DeepAgentEngine, VLLM_AVAILABLE
+            if VLLM_AVAILABLE:
+                from core.tools import ToolRegistry # Local import for setup phase
+                tool_registry = ToolRegistry()
+                global deep_agent_engine
+                deep_agent_engine = DeepAgentEngine(tool_registry=tool_registry, persona_path="persona.yaml")
+                if deep_agent_engine.llm:
+                    core.logging.log_event("DeepAgentEngine initialized successfully.", level="CRITICAL")
+                else:
+                    log_critical_event("DeepAgentEngine initialization failed, vLLM might not be functional.", console_override=console)
+                    deep_agent_engine = None
+            else:
+                core.logging.log_event("vLLM package not found, DeepAgentEngine disabled.", "WARNING")
+                deep_agent_engine = None
         except Exception as e:
             log_critical_event(f"Failed to initialize DeepAgentEngine despite GPU detection: {e}", console_override=console)
             deep_agent_engine = None # Ensure it's None on failure
