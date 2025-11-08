@@ -9,13 +9,14 @@ import core.tools
 class GeminiReActEngine:
     """Manages the state of a Thought-Action-Observation loop."""
 
-    def __init__(self, tool_registry: 'core.tools.ToolRegistry', ui_panel_queue=None, memory_manager=None, caller="Unknown"):
+    def __init__(self, tool_registry: 'core.tools.ToolRegistry', ui_panel_queue=None, memory_manager=None, caller="Unknown", deep_agent_instance=None):
         self.tool_registry = tool_registry
         self.session_tool_registry = core.tools.ToolRegistry()
         self.history: List[Tuple[str, str, str]] = []
         self.memory_manager = memory_manager
         self.caller = caller
         self.ui_panel_queue = ui_panel_queue
+        self.deep_agent_instance = deep_agent_instance
 
     async def execute_goal(self, goal: str) -> str:
         """
@@ -29,7 +30,7 @@ class GeminiReActEngine:
             tool_metadata = f"{main_metadata}\n{session_metadata}"
 
             prompt = self._create_prompt(goal, tool_metadata)
-            response_dict = await execute_reasoning_task(prompt)
+            response_dict = await execute_reasoning_task(prompt, deep_agent_instance=self.deep_agent_instance)
 
             if not response_dict or not response_dict.get("result"):
                 # Log the failure

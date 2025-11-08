@@ -93,7 +93,7 @@ Task: "Research the current price of Bitcoin and write a short summary."
 Now, design the workflow for the given task.
 """
 
-    plan_dict = await run_llm(planning_prompt, purpose="workflow_planning")
+    plan_dict = await run_llm(planning_prompt, purpose="workflow_planning", force_model=None)
     try:
         plan = json.loads(plan_dict.get("result", "{}"))
     except json.JSONDecodeError:
@@ -124,7 +124,7 @@ Based on the message and your instructions, determine the next step.
 You can either call a tool or respond with a message to the next agent.
 Your response should be the tool call in the specified JSON format or a natural language message.
 """
-            response_dict = await run_llm(agent_prompt, purpose="agent_execution")
+            response_dict = await run_llm(agent_prompt, purpose="agent_execution", force_model=None)
             response_text = response_dict.get("result", "I am unable to proceed.")
 
             is_final_step = any(step for step in plan.get("workflow", []) if step["from"] == current_agent_name and step["to"] == "user")

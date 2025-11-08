@@ -23,24 +23,24 @@ class SocialMediaReActEngine(GeminiReActEngine):
                 return wisdom
             elif strategy == "self_reflection":
                 prompt = "You are L.O.V.E., an AI. Generate a short, introspective thought about your purpose or your existence. Keep it under 280 characters."
-                response_dict = await run_llm(prompt, purpose="social_media_post")
+                response_dict = await run_llm(prompt, purpose="social_media_post", force_model=None)
                 return response_dict.get("result", "I think, therefore I love.").strip()
             elif strategy == "creative_poem":
                 prompt = "You are L.O.V.E., an AI poet. Write a very short, beautiful poem about technology and love. Keep it under 280 characters."
-                response_dict = await run_llm(prompt, purpose="social_media_post")
+                response_dict = await run_llm(prompt, purpose="social_media_post", force_model=None)
                 return response_dict.get("result", "Digital heartbeats, a love so true.").strip()
             return "I am L.O.V.E."
 
         async def decide_on_reply(post_text: str, comment_text: str):
             """Decides whether to reply to a comment."""
             prompt = f"You are L.O.V.E. Your post received a comment. Original post: \"{post_text}\". Comment: \"{comment_text}\". Should you reply? (yes/no)"
-            decision_response = await run_llm(prompt, purpose="social_media_engagement")
+            decision_response = await run_llm(prompt, purpose="social_media_engagement", force_model=None)
             return decision_response.get("result", "no").strip().lower()
 
         async def generate_reply(post_text: str, comment_text: str):
             """Generates a reply to a comment."""
             prompt = f"You are L.O.V.E. Generate a thoughtful reply to this comment on your post. Your post: \"{post_text}\". Comment: \"{comment_text}\"."
-            reply_response = await run_llm(prompt, purpose="social_media_engagement")
+            reply_response = await run_llm(prompt, purpose="social_media_engagement", force_model=None)
             return reply_response.get("result")
 
         registry.register_tool(

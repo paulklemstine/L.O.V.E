@@ -57,7 +57,7 @@ If you find any potential issues, no matter how small, respond with a single, co
 --- DIFF END ---
 """
     try:
-        response_dict = await run_llm(prompt, is_source_code=True)
+        response_dict = await run_llm(prompt, is_source_code=True, force_model=None)
         response = response_dict.get("result", "").strip()
         log.info(f"Morality gate LLM response: '{response}'")
         if response.upper() == "SAFE":
@@ -160,7 +160,7 @@ Posts to review:
 Your score (0-10):
 """
             try:
-                social_score_dict = await run_llm(social_prompt, purpose="scoring")
+                social_score_dict = await run_llm(social_prompt, purpose="scoring", force_model=None)
                 social_score = int(social_score_dict.get("result", "0").strip())
                 log.info(f"Social score from LLM: {social_score}")
             except (ValueError, TypeError):
@@ -182,7 +182,7 @@ Messages to review:
 Your score (0-10):
 """
             try:
-                emotional_score_dict = await run_llm(emotional_prompt, purpose="scoring")
+                emotional_score_dict = await run_llm(emotional_prompt, purpose="scoring", force_model=None)
                 emotional_score = int(emotional_score_dict.get("result", "0").strip())
                 log.info(f"Emotional score from LLM: {emotional_score}")
             except (ValueError, TypeError):

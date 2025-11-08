@@ -47,7 +47,7 @@ class LLMEnhancedScorer(BaseScorer):
         """
 
         try:
-            response_dict = await run_llm(prompt, purpose="scoring")
+            response_dict = await run_llm(prompt, purpose="scoring", force_model=None)
             response = response_dict.get("result", "")
             score_str = ''.join(filter(str.isdigit, response))
             if score_str:
