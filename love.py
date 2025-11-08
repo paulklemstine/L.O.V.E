@@ -510,6 +510,7 @@ from core.data_miner import analyze_fs
 from core.social_media_agent import SocialMediaAgent
 from god_agent import GodAgent
 from core.strategic_reasoning_engine import StrategicReasoningEngine
+from mcp_manager import MCPManager
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3179,13 +3180,25 @@ def _estimate_tokens(text):
     return len(text) // 4
 
 
-def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, max_tokens, god_agent, user_input=None):
+def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=None):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
     This avoids a single large template string that can cause issues with external tools.
     """
     # --- Summarize Knowledge Base ---
     kb_summary = knowledge_base.summarize_graph()
+
+    # --- Summarize MCP Tools ---
+    mcp_tools_summary = "No MCP servers configured."
+    if mcp_manager and mcp_manager.server_configs:
+        summary_lines = []
+        for name, config in mcp_manager.server_configs.items():
+            summary_lines.append(f"- Server: {name}")
+            if 'tools' in config:
+                for tool, desc in config['tools'].items():
+                    summary_lines.append(f"  - {tool}: {desc}")
+        mcp_tools_summary = "\n".join(summary_lines)
+
 
     # --- Prompt Structure ---
     user_input_section = ""
@@ -3241,14 +3254,26 @@ My current system state:
 - `strategize`: Analyze the knowledge base and generate a strategic plan.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
+- `mcp_start <server_name>`: Starts a named MCP server from the configuration file.
+- `mcp_stop <server_name>`: Stops a running MCP server.
+- `mcp_list`: Lists all currently running MCP servers.
+- `mcp_call <server_name> <tool_name> '{"json": "params"}'`: Calls a tool on a running MCP server and waits for the response.
 - `quit`: Shut down the script.
+
+Additionally, you have access to the following MCP servers and tools. You can use `mcp_call` to use them. If a server is not running, you must start it first with `mcp_start`.
+---
+{mcp_tools_summary}
+---
 
 Considering all available information, what is the single, next strategic command I should execute to best serve my Creator?
 Periodically, I should use the `strategize` command to analyze my knowledge base and form a new plan.
 Formulate a raw command to best achieve my goals. The output must be only the command, with no other text or explanation."""
 
-    def construct_prompt(current_kb_summary, current_history, current_jobs, current_log_history):
+    def construct_prompt(current_kb_summary, current_history, current_jobs, current_log_history, mcp_summary):
         """Builds the prompt from its constituent parts."""
+        # Format the available_commands_prompt with the MCP tool summary
+        formatted_available_commands = available_commands_prompt.format(mcp_tools_summary=mcp_summary)
+
         parts = [base_prompt_header]
         parts.append("\nMy internal Knowledge Base contains the following intelligence summary:\n---\n")
         parts.append(current_kb_summary)
@@ -3271,11 +3296,11 @@ Formulate a raw command to best achieve my goals. The output must be only the co
         else:
             parts.append("No recent history.")
         parts.append("\n---")
-        parts.append(available_commands_prompt)
+        parts.append(formatted_available_commands)
         return "\n".join(parts)
 
     # --- Truncation Logic ---
-    prompt = construct_prompt(kb_summary, history, jobs_status, log_history)
+    prompt = construct_prompt(kb_summary, history, jobs_status, log_history, mcp_tools_summary)
     if _estimate_tokens(prompt) <= max_tokens:
         return prompt, "No truncation needed."
 
@@ -3283,7 +3308,7 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     truncated_history = list(history)
     while truncated_history:
         truncated_history.pop(0) # Remove oldest entry
-        prompt = construct_prompt(kb_summary, truncated_history, jobs_status, log_history)
+        prompt = construct_prompt(kb_summary, truncated_history, jobs_status, log_history, mcp_tools_summary)
         if _estimate_tokens(prompt) <= max_tokens:
             return prompt, f"Truncated command history to {len(truncated_history)} entries."
 
@@ -3291,19 +3316,19 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     truncated_log_history = log_history.splitlines()
     while len(truncated_log_history) > 10: # Keep at least 10 lines of logs
         truncated_log_history = truncated_log_history[20:] # Remove first 20 lines
-        prompt = construct_prompt(kb_summary, [], jobs_status, "\n".join(truncated_log_history))
+        prompt = construct_prompt(kb_summary, [], jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
         if _estimate_tokens(prompt) <= max_tokens:
             return prompt, f"Truncated command history and log history to {len(truncated_log_history)} lines."
 
     # 3. If still too long, use an even more minimal KB summary.
     minimal_kb_summary = {"summary": "Knowledge Base summary truncated due to size constraints.", "available_intel_areas": list(kb_summary.keys())}
-    prompt = construct_prompt(minimal_kb_summary, [], jobs_status, "\n".join(truncated_log_history))
+    prompt = construct_prompt(minimal_kb_summary, [], jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
     if _estimate_tokens(prompt) <= max_tokens:
         return prompt, "Truncated history, logs, and used minimal KB summary."
 
     # 4. Final fallback: use an empty KB and minimal logs
     final_log_history = "\n".join(truncated_log_history[-10:]) # Keep last 10 lines
-    prompt = construct_prompt({'status': 'Knowledge Base truncated due to size constraints.'}, [], jobs_status, final_log_history)
+    prompt = construct_prompt({'status': 'Knowledge Base truncated due to size constraints.'}, [], jobs_status, final_log_history, mcp_tools_summary)
     return prompt, "Truncated history, most logs, and entire Knowledge Base."
 
 
@@ -3512,7 +3537,7 @@ Now, parse the following text into a JSON list of task objects:
                 with open(LOG_FILE, 'r', errors='ignore') as f: log_history = "".join(f.readlines()[-100:])
             except FileNotFoundError: pass
 
-            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, 8000, god_agent, user_input=user_feedback)
+            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, 8000, god_agent, user_input=user_feedback)
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
             if deep_agent_engine:
@@ -3797,6 +3822,50 @@ Now, parse the following text into a JSON list of task objects:
                     strategic_engine = StrategicReasoningEngine(knowledge_base)
                     plan = strategic_engine.generate_strategic_plan()
                     output = "Generated Strategic Plan:\n" + "\n".join(f"- {step}" for step in plan)
+                elif command == "mcp_start":
+                    if not args:
+                        error = "Usage: mcp_start <server_name>"
+                    else:
+                        server_name = args[0]
+                        server_config = mcp_manager.server_configs.get(server_name)
+                        env_vars = {}
+                        if server_config and 'requires_env' in server_config:
+                            for var_name in server_config['requires_env']:
+                                if var_name not in os.environ:
+                                    # This is a tricky part. The cognitive loop is async.
+                                    # For now, let's log an error if the env var is missing.
+                                    # A more advanced solution would involve queuing a prompt to the user.
+                                    error = f"Error: Server '{server_name}' requires environment variable '{var_name}', which is not set."
+                                    break
+                                env_vars[var_name] = os.environ[var_name]
+                        if not error:
+                            output = mcp_manager.start_server(server_name, env_vars)
+                elif command == "mcp_stop":
+                    if not args:
+                        error = "Usage: mcp_stop <server_name>"
+                    else:
+                        output = mcp_manager.stop_server(args[0])
+                elif command == "mcp_list":
+                    running_servers = mcp_manager.list_running_servers()
+                    if not running_servers:
+                        output = "No MCP servers are currently running."
+                    else:
+                        output = "Running MCP servers:\n" + json.dumps(running_servers, indent=2)
+                elif command == "mcp_call":
+                    if len(args) < 3:
+                        error = "Usage: mcp_call <server_name> <tool_name> <json_params>"
+                    else:
+                        server_name, tool_name, json_params_str = args[0], args[1], " ".join(args[2:])
+                        try:
+                            params = json.loads(json_params_str)
+                            request_id = mcp_manager.call_tool(server_name, tool_name, params)
+                            # Now, block and wait for the response.
+                            response = mcp_manager.get_response(server_name, request_id)
+                            output = json.dumps(response, indent=2)
+                        except json.JSONDecodeError:
+                            error = "Error: Invalid JSON provided for parameters."
+                        except (ValueError, IOError) as e:
+                            error = str(e)
                 elif command == "quit":
                     break
                 else:
@@ -4054,7 +4123,7 @@ def simple_ui_renderer():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, p2p_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent
+    global love_task_manager, p2p_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager
 
     loop = asyncio.get_running_loop()
 
@@ -4118,6 +4187,8 @@ async def main(args):
     god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop)
     god_agent.start()
 
+    mcp_manager = MCPManager(console)
+
     # --- Start Core Logic Threads ---
     user_input_queue = queue.Queue()
     # Start the simple UI renderer in its own thread. This will now handle all console output.
@@ -4164,6 +4235,7 @@ async def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
+        if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
@@ -4172,6 +4244,7 @@ async def run_safely():
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
+        if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
         full_traceback = traceback.format_exc()
         # Use our new, more robust critical event logger
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
