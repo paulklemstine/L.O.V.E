@@ -10,6 +10,7 @@ from core.agents.metacognition_agent import MetacognitionAgent
 from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
 from core.agents.memory_folding_agent import MemoryFoldingAgent
+from core.agents.unified_reasoning_agent import UnifiedReasoningAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
 from core.tools import ToolRegistry, SecureExecutor, talent_scout, opportunity_scout
 from core.image_api import generate_image
@@ -142,6 +143,9 @@ class Orchestrator:
         """
         try:
             classification = await run_llm(prompt)
+            # Handle potential dictionary response
+            if isinstance(classification, dict):
+                classification = classification.get("result", "Procedural")
             return classification.strip()
         except Exception as e:
             print(f"Error during goal classification: {e}")
@@ -184,6 +188,9 @@ Now, generate the plan for the given goal.
 """
         try:
             response = await run_llm(prompt, is_source_code=False)
+            # Handle potential dictionary response
+            if isinstance(response, dict):
+                response = response.get("result", "[]")
             # Clean the response to extract only the JSON part
             json_match = re.search(r'\[.*\]', response, re.DOTALL)
             if not json_match:
@@ -217,61 +224,71 @@ Now, generate the plan for the given goal.
             asyncio.create_task(self.execute_goal(folding_goal))
 
         # 1. Classify Goal
-        # 2. Generate Plan for Procedural goals
-        plan = await self._generate_plan(goal)
-        if not isinstance(plan, list) or not plan:
-            return "Execution failed: The Supervisor could not generate a valid plan for this procedural goal."
+        goal_type = await self._classify_goal(goal)
+        print(f"Supervisor classified goal as: {goal_type}")
 
-        print("Supervisor generated the following plan:")
-        print(json.dumps(plan, indent=2))
+        final_result = ""
+        if goal_type == "Open-Ended":
+            # 2a. Delegate to UnifiedReasoningAgent for Open-Ended goals
+            print("--- Delegating to UnifiedReasoningAgent for Open-Ended goal. ---")
+            unified_reasoning_agent = UnifiedReasoningAgent(self.memory_manager)
+            final_result = await unified_reasoning_agent.execute_task({"goal": goal})
+        else:
+            # 2b. Generate Plan for Procedural goals
+            plan = await self._generate_plan(goal)
+            if not isinstance(plan, list) or not plan:
+                return "Execution failed: The Supervisor could not generate a valid plan for this procedural goal."
 
-        # 3. Execute Plan
-        step_results = {}
-        for i, step in enumerate(plan):
-            step_number = i + 1
-            tool_name = step.get("tool_name")
-            arguments_template = step.get("arguments", {})
+            print("Supervisor generated the following plan:")
+            print(json.dumps(plan, indent=2))
 
-            print(f"\n--- Executing Step {step_number}/{len(plan)}: Using {tool_name} ---")
+            # 3. Execute Plan
+            step_results = {}
+            for i, step in enumerate(plan):
+                step_number = i + 1
+                tool_name = step.get("tool_name")
+                arguments_template = step.get("arguments", {})
 
-            # Substitute context variables from previous steps
-            try:
-                arguments_str = json.dumps(arguments_template)
-                for key, value in step_results.items():
-                    arguments_str = arguments_str.replace(f'"{{{{{key}}}}}', json.dumps(value))
-                arguments = json.loads(arguments_str)
-                print(f"Arguments: {json.dumps(arguments, indent=2)}")
-            except Exception as e:
-                error_msg = f"Plan execution failed at step {step_number}: Failed to substitute context variables. Error: {e}"
-                print(error_msg)
-                return error_msg
+                print(f"\n--- Executing Step {step_number}/{len(plan)}: Using {tool_name} ---")
 
-            try:
-                # Emit agent dispatch event
-                dispatch_payload = {'event_type': 'agent_dispatch', 'agent_name': tool_name, 'task': arguments}
-                asyncio.create_task(self.metacognition_agent.execute_task(dispatch_payload))
-
-                result = await self.secure_executor.execute(tool_name, self.tool_registry, **arguments)
-
-                # Emit agent result event
-                result_payload = {'event_type': 'agent_result', 'agent_name': tool_name, 'result': result}
-                asyncio.create_task(self.metacognition_agent.execute_task(result_payload))
-
-                print(f"Step {step_number} result: {result}")
-
-                if isinstance(result, dict) and result.get("status") == "failure":
-                    error_msg = f"Plan execution failed at step {step_number} ({tool_name}): {result.get('result')}"
+                # Substitute context variables from previous steps
+                try:
+                    arguments_str = json.dumps(arguments_template)
+                    for key, value in step_results.items():
+                        arguments_str = arguments_str.replace(f'"{{{{{key}}}}}', json.dumps(value))
+                    arguments = json.loads(arguments_str)
+                    print(f"Arguments: {json.dumps(arguments, indent=2)}")
+                except Exception as e:
+                    error_msg = f"Plan execution failed at step {step_number}: Failed to substitute context variables. Error: {e}"
                     print(error_msg)
                     return error_msg
 
-                step_results[f"step_{step_number}_result"] = result
+                try:
+                    # Emit agent dispatch event
+                    dispatch_payload = {'event_type': 'agent_dispatch', 'agent_name': tool_name, 'task': arguments}
+                    asyncio.create_task(self.metacognition_agent.execute_task(dispatch_payload))
 
-            except Exception as e:
-                error_msg = f"An unexpected exception occurred at step {step_number} ({tool_name}): {e}"
-                print(error_msg)
-                return error_msg
+                    result = await self.secure_executor.execute(tool_name, self.tool_registry, **arguments)
 
-        final_result = step_results.get(f"step_{len(plan)}_result", "Plan finished with no final result.")
+                    # Emit agent result event
+                    result_payload = {'event_type': 'agent_result', 'agent_name': tool_name, 'result': result}
+                    asyncio.create_task(self.metacognition_agent.execute_task(result_payload))
+
+                    print(f"Step {step_number} result: {result}")
+
+                    if isinstance(result, dict) and result.get("status") == "failure":
+                        error_msg = f"Plan execution failed at step {step_number} ({tool_name}): {result.get('result')}"
+                        print(error_msg)
+                        return error_msg
+
+                    step_results[f"step_{step_number}_result"] = result
+
+                except Exception as e:
+                    error_msg = f"An unexpected exception occurred at step {step_number} ({tool_name}): {e}"
+                    print(error_msg)
+                    return error_msg
+            final_result = step_results.get(f"step_{len(plan)}_result", "Plan finished with no final result.")
+
         print(f"\n--- Supervisor finished goal: {goal} ---")
         print(f"Final Result: {final_result}")
         return final_result
