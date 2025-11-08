@@ -551,73 +551,6 @@ import uuid
 import yaml
 import queue
 
-# --- Native P2P Manager ---
-from libp2p.peer.peerinfo import info_from_p2p_addr
-from libp2p.pubsub.floodsub import FloodSub
-from libp2p.pubsub.pubsub import Pubsub
-from libp2p.stream_muxer.mplex.mplex import MPLEX_PROTOCOL_ID, Mplex
-from libp2p.transport.tcp.tcp import TCP
-from libp2p.transport.websocket.websocket import Websocket
-from libp2p.security.noise.noise import Noise
-from libp2p.host.basic_host import BasicHost
-
-LOVE_LOBBY_TOPIC = "love-lobby"
-
-class P2PManager:
-    def __init__(self, relay_multiaddr_str):
-        self.relay_multiaddr_str = relay_multiaddr_str
-        self.host = None
-        self.pubsub = None
-
-    async def start(self):
-        try:
-            # 1. Create a libp2p host
-            transports = [TCP(), Websocket()]
-            muxers = [(MPLEX_PROTOCOL_ID, Mplex)]
-            security = [Noise()]
-            self.host = BasicHost(transports=transports, muxers=muxers, security=security)
-
-            # 2. Create PubSub
-            floodsub = FloodSub()
-            self.pubsub = Pubsub(self.host, floodsub)
-
-            # 3. Connect to the relay
-            relay_info = info_from_p2p_addr(self.relay_multiaddr_str)
-            await self.host.connect(relay_info)
-            console.print(f"[green]P2P Manager: Connected to relay {self.relay_multiaddr_str}[/green]")
-
-            # 4. Subscribe to the topic and set a message handler
-            await self.pubsub.subscribe(LOVE_LOBBY_TOPIC)
-            self.pubsub.subscribe_topic(LOVE_LOBBY_TOPIC, self._handle_message)
-            console.print(f"[green]P2P Manager: Subscribed to topic '{LOVE_LOBBY_TOPIC}'[/green]")
-
-        except Exception as e:
-            log_critical_event(f"Failed to start P2P Manager: {e}")
-
-    def _handle_message(self, message):
-        """Callback to handle incoming pubsub messages."""
-        try:
-            # Don't process our own messages
-            if message.from_id == self.host.get_id():
-                return
-
-            message_text = message.data.decode('utf-8')
-            console.print(f"[P2P] Received: {message_text}")
-            # Here you would add logic to parse and handle different message types
-            # e.g., if message_text is a JSON string.
-        except Exception as e:
-            core.logging.log_event(f"Error handling P2P message: {e}", "ERROR")
-
-    async def publish(self, message_str):
-        """Publishes a message to the lobby topic."""
-        if self.pubsub:
-            await self.pubsub.publish(LOVE_LOBBY_TOPIC, message_str.encode('utf-8'))
-
-    async def stop(self):
-        """Shuts down the libp2p host."""
-        if self.host:
-            await self.host.close()
-            console.print("[yellow]P2P Manager stopped.[/yellow]")
 
 # --- LOCAL JOB MANAGER ---
 class LocalJobManager:
@@ -4191,16 +4124,11 @@ async def model_refresh_loop():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, p2p_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager
+    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager
 
     loop = asyncio.get_running_loop()
 
     # --- Initialize Managers and Services ---
-    # --- P2P Manager ---
-    public_relay_multiaddr = "/dns4/libp2p-relay-1.ro-ber-t.com/tcp/443/wss/p2p/12D3KooWJwE3k3f3sJjS2d1xGveY12sVjNrYc7gAUPqMAes26fT5"
-    console.print(f"[cyan]Initializing P2P Manager with public relay: {public_relay_multiaddr}[/cyan]")
-    p2p_manager = P2PManager(public_relay_multiaddr)
-    asyncio.create_task(p2p_manager.start())
 
 
     # --- Connectivity Checks ---
@@ -4300,7 +4228,6 @@ async def run_safely():
 
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
-        if 'p2p_manager' in globals() and p2p_manager: asyncio.run(p2p_manager.stop())
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
@@ -4309,7 +4236,6 @@ async def run_safely():
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
-        if 'p2p_manager' in globals() and p2p_manager: asyncio.run(p2p_manager.stop())
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
