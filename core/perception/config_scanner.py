@@ -25,6 +25,18 @@ SECRET_PATTERNS = {
         "treasure_type": "eth_private_key",
         "value_group": 2, # The second group captures the key itself
     },
+    "Bitcoin Private Key (WIF)": {
+        # Compressed or uncompressed WIF format
+        "pattern": r'([KL5][1-9A-HJ-NP-Za-km-z]{50,51})',
+        "treasure_type": "btc_private_key",
+        "value_group": 1,
+    },
+    "Monero Private Key": {
+        # Looks for a 64-char hex string assigned to a variable with a relevant name.
+        "pattern": r'(?i)(monero_private_key|xmr_key|priv_key)\s*[:=]\s*[\'"]?([a-fA-F0-9]{64})[\'"]?',
+        "treasure_type": "xmr_private_key",
+        "value_group": 2,
+    },
     # Generic Private Key Files
     "SSH Private Key": {
         "pattern": r'(-----BEGIN (?:RSA|OPENSSH|EC) PRIVATE KEY-----)',
