@@ -35,6 +35,11 @@ SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
 CHECKPOINT_DIR = "checkpoints"
 
+# --- CREATOR INSTANCE CHECK ---
+# This flag determines if the script is running in "Creator mode", with access to special features.
+from utils import verify_creator_instance
+IS_CREATOR_INSTANCE = verify_creator_instance()
+
 # --- KNOWLEDGE BASE ---
 # NOTE: Initialization is deferred until after dependency checks.
 knowledge_base = None
