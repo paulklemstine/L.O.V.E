@@ -44,6 +44,7 @@ class Orchestrator:
         self.metacognition_agent = MetacognitionAgent(self.memory_manager)
         self.tool_registry = ToolRegistry()
         self.secure_executor = SecureExecutor()
+        self.goal_counter = 0
         self._register_tools()
 
         # Register tools
@@ -206,6 +207,14 @@ Now, generate the plan for the given goal.
         manages the execution of that plan by the specialist agents.
         """
         print(f"\n--- Supervisor received new goal: {goal} ---")
+
+        self.goal_counter += 1
+        # Every 5 goals, trigger the memory folding agent.
+        if self.goal_counter % 5 == 0:
+            print("--- Supervisor: Goal threshold reached. Triggering autonomous memory folding. ---")
+            folding_goal = "Fold long memory chains to distill insights."
+            # Run this as a background task so it doesn't block the current goal
+            asyncio.create_task(self.execute_goal(folding_goal))
 
         # 1. Classify Goal
         # 2. Generate Plan for Procedural goals
