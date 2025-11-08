@@ -18,6 +18,7 @@ from core.agents.web_automation_agent import WebAutomationAgent
 from core.agents.memory_folding_agent import MemoryFoldingAgent
 from core.agents.unified_reasoning_agent import UnifiedReasoningAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
+from core.tools import ToolRegistry, talent_scout, opportunity_scout
 
 from love import memory_manager
 # Keep the old function for fallback compatibility as requested
@@ -37,6 +38,7 @@ class Orchestrator:
     def __init__(self, memory_manager):
         """Initializes the Supervisor and its registry of specialist agents."""
         print("Initializing Supervisor Orchestrator...")
+        self.tool_registry = ToolRegistry()
         self.specialist_registry = {
             "AnalystAgent": AnalystAgent,
             "CodeGenerationAgent": CodeGenerationAgent,
@@ -48,6 +50,29 @@ class Orchestrator:
         }
         self.memory_manager = memory_manager
         self.metacognition_agent = MetacognitionAgent(self.memory_manager)
+
+        # Register tools
+        self.tool_registry.register_tool("talent_scout", talent_scout, {
+            "description": "Scouts for talent on specified platforms based on keywords.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "keywords": {"type": "string", "description": "Comma-separated keywords to search for"},
+                    "platforms": {"type": "string", "description": "Comma-separated platforms to search on (e.g., 'bluesky,instagram,tiktok')"}
+                },
+                "required": ["keywords"]
+            }
+        })
+        self.tool_registry.register_tool("opportunity_scout", opportunity_scout, {
+            "description": "Scouts for opportunities on Bluesky based on keywords and matches them with existing talent.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "keywords": {"type": "string", "description": "Comma-separated keywords to search for"}
+                },
+                "required": ["keywords"]
+            }
+        })
         print("Supervisor Orchestrator is ready.")
 
     async def _classify_goal(self, goal: str) -> str:
