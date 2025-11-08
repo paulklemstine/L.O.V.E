@@ -467,6 +467,7 @@ from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
 from subversive import transform_request
+from core.agents.orchestrator import Orchestrator
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.intelligence_synthesizer import (
@@ -3657,7 +3658,8 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "ifconfig":
                     output, error = get_network_interfaces()
                 elif command == "reason":
-                    output = await ReasoningEngine(knowledge_base, console=None).analyze_and_prioritize()
+                    orchestrator = Orchestrator(memory_manager)
+                    output = await ReasoningEngine(knowledge_base, orchestrator.tool_registry, console=None).analyze_and_prioritize()
                 elif command == "generate_image":
                     output = generate_image(" ".join(args))
                 elif command == "talent_scout":

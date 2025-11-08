@@ -22,9 +22,111 @@ from PIL import Image
 import uuid
 from core.researcher import generate_evolution_book
 from core.evolution_state import set_user_stories, clear_evolution_state
+from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
+from core.talent_utils.intelligence_synthesizer import (
+    IntelligenceSynthesizer,
+    SentimentAnalyzer,
+    TopicModeler,
+    OpportunityIdentifier,
+    NetworkAnalyzer,
+    AttributeProfiler,
+)
+from core.talent_utils.manager import TalentManager
+from core.talent_utils.opportunity_scraper import OpportunityScraper
+from core.talent_utils.opportunity_matcher import OpportunityMatcher
+import io
+from rich.table import Table
+from datetime import datetime
 
 
 love_state = {}
+
+async def talent_scout(keywords: list) -> str:
+    """Finds and analyzes creative professionals based on keywords."""
+    filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
+    aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky", "instagram"], ethical_filters=filters)
+    profiles = aggregator.search_and_collect()
+
+    if not profiles:
+        return "Talent scout protocol complete. No new profiles found for the given keywords."
+
+    modules = [
+        SentimentAnalyzer(),
+        TopicModeler(),
+        OpportunityIdentifier(),
+        NetworkAnalyzer(),
+        AttributeProfiler(attributes_to_extract=["age range", "stated interests", "social behavior indicators"])
+    ]
+    synthesizer = IntelligenceSynthesizer(modules)
+    enriched_profiles = await synthesizer.run(profiles)
+
+    talent_manager = TalentManager()
+    saved_count = 0
+    for profile in enriched_profiles:
+        save_result = talent_manager.save_profile(profile)
+        if "Successfully" in save_result:
+            saved_count += 1
+
+    output = f"Talent scout protocol complete. Found and enriched {len(enriched_profiles)} profiles. "
+    output += f"Successfully saved {saved_count} to the talent database."
+    return output
+
+async def opportunity_scout(keywords: list) -> str:
+    """Scans Bluesky for opportunities and matches them to saved talent."""
+    scraper = OpportunityScraper(keywords=keywords)
+    opportunities = scraper.search_for_opportunities()
+
+    if not opportunities:
+        return "Scout complete. No new opportunities found on Bluesky for the given keywords."
+
+    talent_manager = TalentManager()
+    profiles = talent_manager.list_profiles()
+    detailed_profiles = [talent_manager.get_profile(p['anonymized_id']) for p in profiles]
+
+    if not detailed_profiles:
+        return f"Found {len(opportunities)} opportunities, but there are no talent profiles in the database to match them with."
+
+    matcher = OpportunityMatcher(talent_profiles=detailed_profiles)
+    matches = await matcher.find_matches(opportunities)
+
+    if not matches:
+        return f"Found {len(opportunities)} opportunities, but none were a suitable match for the {len(detailed_profiles)} talents in the database."
+
+    # Format and output results
+    match_summary = ""
+    opportunity_log_entries = []
+    for match in matches:
+        opportunity = match['opportunity']
+        talent = match['talent_profile']
+        eval = match['match_evaluation']
+
+        entry = (
+            f"MATCH FOUND (Score: {eval.get('match_score')})\\n"
+            f"  Talent: {talent.get('handle')} ({talent.get('display_name')})\\n"
+            f"  Opportunity: '{opportunity.get('text', '')[:100]}...' by {opportunity.get('author_handle')}\\n"
+            f"  Reasoning: {eval.get('reasoning')}\\n"
+            f"  Link: https://bsky.app/profile/{opportunity.get('author_did')}/post/{opportunity.get('opportunity_id')}\\n"
+        )
+        match_summary += entry + "\\n"
+
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "match_score": eval.get('match_score'),
+            "talent_handle": talent.get('handle'),
+            "talent_anonymized_id": talent.get('anonymized_id'),
+            "opportunity_text": opportunity.get('text'),
+            "opportunity_author": opportunity.get('author_handle'),
+            "opportunity_uri": opportunity.get('source_uri'),
+            "llm_reasoning": eval.get('reasoning'),
+            "opportunity_type": eval.get('opportunity_type')
+        }
+        opportunity_log_entries.append(json.dumps(log_entry) + "\\n")
+
+    with open("opportunities.txt", "a", encoding="utf-8") as f:
+        f.writelines(opportunity_log_entries)
+
+    return f"Scout complete. Found and processed {len(matches)} high-potential matches. Results saved to opportunities.txt."
+
 
 async def execute(command: str) -> str:
     """Executes a shell command."""

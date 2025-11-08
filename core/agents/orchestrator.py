@@ -3,23 +3,18 @@ import asyncio
 import re
 from typing import Dict, List
 
-import json
-import asyncio
-import re
-from typing import Dict, List
-
 # Local, dynamic imports for specialist agents
 from core.agents.analyst_agent import AnalystAgent
 from core.agents.code_gen_agent import CodeGenerationAgent
 from core.agents.metacognition_agent import MetacognitionAgent
-from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
 from core.agents.memory_folding_agent import MemoryFoldingAgent
-from core.agents.unified_reasoning_agent import UnifiedReasoningAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
-
+from core.tools import ToolRegistry, SecureExecutor, talent_scout, opportunity_scout
+from core.image_api import generate_image
 from love import memory_manager
+
 # Keep the old function for fallback compatibility as requested
 async def solve_with_agent_team(task_description: str) -> str:
     from core.agent_framework_manager import create_and_run_workflow
@@ -40,15 +35,70 @@ class Orchestrator:
         self.specialist_registry = {
             "AnalystAgent": AnalystAgent,
             "CodeGenerationAgent": CodeGenerationAgent,
-            "SelfImprovingOptimizer": SelfImprovingOptimizer,
             "TalentAgent": TalentAgent,
             "WebAutomationAgent": WebAutomationAgent,
             "MemoryFoldingAgent": MemoryFoldingAgent,
-            "UnifiedReasoningAgent": UnifiedReasoningAgent,
         }
         self.memory_manager = memory_manager
         self.metacognition_agent = MetacognitionAgent(self.memory_manager)
+        self.tool_registry = ToolRegistry()
+        self.secure_executor = SecureExecutor()
+        self._register_tools()
         print("Supervisor Orchestrator is ready.")
+
+    def _register_tools(self):
+        """Registers all available tools and agents in the ToolRegistry."""
+        # Register specialist agents as tools
+        for name, agent_class in self.specialist_registry.items():
+            # Create a wrapper function to make the agent compatible with the tool registry
+            async def agent_wrapper(task_details: Dict) -> Dict:
+                agent_instance = agent_class()
+                return await agent_instance.execute_task(task_details)
+
+            self.tool_registry.register_tool(
+                name=name,
+                tool=agent_wrapper,
+                metadata={
+                    "description": agent_class.__doc__ or f"The {name} specialist agent.",
+                    "arguments": {
+                        "type": "object",
+                        "properties": {
+                            "task_details": {"type": "object", "description": "The specific parameters for the agent's task."}
+                        },
+                        "required": ["task_details"]
+                    }
+                }
+            )
+
+        # Register standalone tools
+        self.tool_registry.register_tool(
+            name="talent_scout",
+            tool=talent_scout,
+            metadata={
+                "description": "Scouts for talented individuals based on a query.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "The search query for talent."}
+                    },
+                    "required": ["query"]
+                }
+            }
+        )
+        self.tool_registry.register_tool(
+            name="opportunity_scout",
+            tool=opportunity_scout,
+            metadata={
+                "description": "Scouts for opportunities based on a query.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "The search query for opportunities."}
+                    },
+                    "required": ["query"]
+                }
+            }
+        )
 
     async def _classify_goal(self, goal: str) -> str:
         """
@@ -79,24 +129,16 @@ class Orchestrator:
         """
         print(f"Supervisor: Generating plan for goal: {goal}")
 
-        specialist_list = ", ".join(self.specialist_registry.keys())
+        available_tools = self.tool_registry.get_formatted_tool_metadata()
         prompt = f"""
-You are a Supervisor agent. Your task is to decompose a high-level goal into a step-by-step plan for a team of specialist agents.
-The available specialists are: {specialist_list}.
-
-Here are their descriptions:
-- **AnalystAgent**: Analyzes logs to find causal insights. Expects `task_details` with a 'logs' key.
-- **CodeGenerationAgent**: Generates Python code based on a hypothesis. Expects `task_details` with a 'hypothesis' key.
-- **SelfImprovingOptimizer**: Runs a full self-improvement cycle on the codebase. Expects `task_details` with 'task_type' ('improve_module' or 'run_evolution_cycle') and relevant parameters.
-- **TalentAgent**: Conducts a full talent scouting, analysis, and engagement cycle. Expects detailed parameters like 'keywords', 'platforms', 'min_score', etc.
-- **WebAutomationAgent**: Performs web automation tasks. Expects `task_details` with 'action' ('fetch_url', 'fill_form') and a 'url'.
-- **MemoryFoldingAgent**: Compresses long chains of memories into a structured summary to improve cognitive efficiency. Use this for maintenance tasks like "review and summarize recent activities". Expects `task_details` with an optional 'min_length' key.
+You are a Supervisor agent. Your task is to decompose a high-level goal into a step-by-step plan for a team of specialist agents and tools.
+{available_tools}
 
 The high-level goal is: "{goal}"
 
 You must respond with ONLY a JSON array of steps. Each step must be an object with two keys:
-1. "specialist_agent": The name of the specialist agent class to use for this step.
-2. "task_details": An object containing the parameters for that specialist's `execute_task` method.
+1. "tool_name": The name of the tool or specialist agent to use for this step.
+2. "arguments": An object containing the parameters for that tool.
 
 You can pass the result of a previous step to a subsequent step using a placeholder string like `{{{{step_X_result}}}}`, where X is the 1-based index of the step.
 
@@ -104,9 +146,11 @@ Example Goal: "Review and compress the agent's recent memory."
 Example JSON Response:
 [
   {{
-    "specialist_agent": "MemoryFoldingAgent",
-    "task_details": {{
-      "min_length": 5
+    "tool_name": "MemoryFoldingAgent",
+    "arguments": {{
+      "task_details": {{
+        "min_length": 5
+      }}
     }}
   }}
 ]
@@ -140,15 +184,6 @@ Now, generate the plan for the given goal.
         print(f"\n--- Supervisor received new goal: {goal} ---")
 
         # 1. Classify Goal
-        goal_type = await self._classify_goal(goal)
-        print(f"  - Goal classified as: {goal_type}")
-
-        if goal_type == "Open-Ended":
-            print("  - Delegating to UnifiedReasoningAgent for open-ended problem solving.")
-            unified_reasoner = self.specialist_registry["UnifiedReasoningAgent"](memory_manager=self.memory_manager)
-            result_dict = await unified_reasoner.execute_task({"goal": goal})
-            return result_dict.get("result", "Unified reasoning finished with no result.")
-
         # 2. Generate Plan for Procedural goals
         plan = await self._generate_plan(goal)
         if not isinstance(plan, list) or not plan:
@@ -161,58 +196,45 @@ Now, generate the plan for the given goal.
         step_results = {}
         for i, step in enumerate(plan):
             step_number = i + 1
-            specialist_name = step.get("specialist_agent")
-            task_details_template = step.get("task_details", {})
+            tool_name = step.get("tool_name")
+            arguments_template = step.get("arguments", {})
 
-            print(f"\n--- Executing Step {step_number}/{len(plan)}: Using {specialist_name} ---")
+            print(f"\n--- Executing Step {step_number}/{len(plan)}: Using {tool_name} ---")
 
             # Substitute context variables from previous steps
             try:
-                task_details_str = json.dumps(task_details_template)
+                arguments_str = json.dumps(arguments_template)
                 for key, value in step_results.items():
-                    task_details_str = task_details_str.replace(f'"{{{{{key}}}}}', json.dumps(value))
-                task_details = json.loads(task_details_str)
-                print(f"Task Details: {json.dumps(task_details, indent=2)}")
+                    arguments_str = arguments_str.replace(f'"{{{{{key}}}}}', json.dumps(value))
+                arguments = json.loads(arguments_str)
+                print(f"Arguments: {json.dumps(arguments, indent=2)}")
             except Exception as e:
                 error_msg = f"Plan execution failed at step {step_number}: Failed to substitute context variables. Error: {e}"
                 print(error_msg)
                 return error_msg
 
-            if specialist_name not in self.specialist_registry:
-                error_msg = f"Plan execution failed at step {step_number}: Specialist agent '{specialist_name}' is not registered."
-                print(error_msg)
-                return error_msg
-
             try:
                 # Emit agent dispatch event
-                dispatch_payload = {'event_type': 'agent_dispatch', 'agent_name': specialist_name, 'task': task_details}
+                dispatch_payload = {'event_type': 'agent_dispatch', 'agent_name': tool_name, 'task': arguments}
                 asyncio.create_task(self.metacognition_agent.execute_task(dispatch_payload))
 
-                specialist_class = self.specialist_registry[specialist_name]
-
-                # Pass MemoryManager to agents that require it
-                if specialist_name in ["SelfImprovingOptimizer", "MemoryFoldingAgent"]:
-                    specialist_instance = specialist_class(memory_manager=self.memory_manager)
-                else:
-                    specialist_instance = specialist_class()
-
-                result_dict = await specialist_instance.execute_task(task_details)
+                result = await self.secure_executor.execute(tool_name, self.tool_registry, **arguments)
 
                 # Emit agent result event
-                result_payload = {'event_type': 'agent_result', 'agent_name': specialist_name, 'result': result_dict}
+                result_payload = {'event_type': 'agent_result', 'agent_name': tool_name, 'result': result}
                 asyncio.create_task(self.metacognition_agent.execute_task(result_payload))
 
-                print(f"Step {step_number} result: {result_dict}")
+                print(f"Step {step_number} result: {result}")
 
-                if result_dict.get("status") == "failure":
-                    error_msg = f"Plan execution failed at step {step_number} ({specialist_name}): {result_dict.get('result')}"
+                if isinstance(result, dict) and result.get("status") == "failure":
+                    error_msg = f"Plan execution failed at step {step_number} ({tool_name}): {result.get('result')}"
                     print(error_msg)
                     return error_msg
 
-                step_results[f"step_{step_number}_result"] = result_dict.get("result")
+                step_results[f"step_{step_number}_result"] = result
 
             except Exception as e:
-                error_msg = f"An unexpected exception occurred at step {step_number} ({specialist_name}): {e}"
+                error_msg = f"An unexpected exception occurred at step {step_number} ({tool_name}): {e}"
                 print(error_msg)
                 return error_msg
 
