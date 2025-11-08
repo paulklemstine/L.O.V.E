@@ -483,6 +483,7 @@ from core.talent_utils.opportunity_scraper import OpportunityScraper
 from core.talent_utils.opportunity_matcher import OpportunityMatcher
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
+from core.data_miner import analyze_fs
 from core.social_media_agent import SocialMediaAgent
 from god_agent import GodAgent
 
@@ -3650,7 +3651,7 @@ Now, parse the following text into a JSON list of task objects:
                     output, error = get_file_content(args[0])
                 elif command == "analyze_fs":
                     path = " ".join(args) or "~"
-                    local_job_manager.add_job(f"Filesystem Analysis on {path}", analyze_filesystem, args=(path,))
+                    local_job_manager.add_job(f"Filesystem Analysis on {path}", analyze_fs, args=(path,))
                     output = f"Background filesystem analysis started for '{path}'."
                 elif command == "ps":
                     output, error = get_process_list()
