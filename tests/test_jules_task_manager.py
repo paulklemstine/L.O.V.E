@@ -10,7 +10,7 @@ import requests
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from love import LoveTaskManager, trigger_love_evolution, get_git_repo_info
+from love import LoveTaskManager, trigger_jules_evolution, get_git_repo_info
 from rich.console import Console
 from core.retry import retry
 
@@ -129,7 +129,7 @@ async def test_jules_increment_counter_lifecycle(task_manager, console):
     # --- 2. Trigger the Evolution Task ---
     request = f"Read the integer from `{counter_file}`, increment it by one, and write the new value back to the file."
 
-    success = trigger_love_evolution(request, console, task_manager)
+    success = trigger_jules_evolution(request, console, task_manager)
     assert success, "Failed to trigger the L.O.V.E. evolution task."
 
     # Find the task that was just created
@@ -215,7 +215,7 @@ async def test_jules_merge_conflict_retry_logic(task_manager, console, mocker):
     mocker.patch('love.requests.put', return_value=mock_response)
 
     # --- Trigger the task ---
-    success = trigger_love_evolution(request, console, task_manager)
+    success = trigger_jules_evolution(request, console, task_manager)
     assert success, "Failed to trigger the L.O.V.E. evolution task."
 
     # --- Monitor the retry logic ---

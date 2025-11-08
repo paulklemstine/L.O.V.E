@@ -967,7 +967,7 @@ class JulesTaskManager:
                                     self._update_task_status(task_id, 'superseded', f"Superseded by retry task for desire. Attempt {retries + 1}.")
 
                                     # Trigger a new evolution with the same request
-                                    api_success = trigger_love_evolution(original_request, self.console, self)
+                                    api_success = trigger_jules_evolution(original_request, self.console, self)
 
                                     if api_success == 'success':
                                         with self.lock:
@@ -988,8 +988,8 @@ class JulesTaskManager:
                             self.console.print(f"[bold yellow]Executing Creator's Desire: {current_desire.get('title')}[/bold yellow]")
                             request = f"Title: {current_desire.get('title')}\n\nDescription: {current_desire.get('description')}"
 
-                            # Use trigger_love_evolution which returns the task status
-                            result = trigger_love_evolution(request, self.console, self)
+                            # Use trigger_jules_evolution which returns the task status
+                            result = trigger_jules_evolution(request, self.console, self)
                             if result == 'success':
                                 # Find the newly created task and link it in the desire state
                                 with self.lock:
@@ -1022,8 +1022,8 @@ class JulesTaskManager:
                                 self.console.print(f"[bold yellow]Executing next evolution story: {current_story.get('title')}[/bold yellow]")
                                 request = f"Title: {current_story.get('title')}\n\nDescription: {current_story.get('description')}"
 
-                                # Use trigger_love_evolution which returns the task status
-                                result = trigger_love_evolution(request, self.console, self)
+                                # Use trigger_jules_evolution which returns the task status
+                                result = trigger_jules_evolution(request, self.console, self)
                                 if result == 'success':
                                     # Find the newly created task and link it in the evolution state
                                     with self.lock:
@@ -1522,7 +1522,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
                 fix_request = f"Fix error: {next_error_to_fix['message']}\n\nSurrounding log context:\n---\n{log_context}"
 
                 # Launch the task
-                api_success = trigger_love_evolution(fix_request, self.console, self)
+                api_success = trigger_jules_evolution(fix_request, self.console, self)
                 if api_success:
                     new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
                     next_error_to_fix['status'] = 'fixing_in_progress'
@@ -1662,7 +1662,7 @@ Please analyze the test output, identify the bug, and provide a corrected versio
 
         # Trigger a new evolution, which will create a new task
         # We pass the love_task_manager instance to the function
-        api_success = trigger_love_evolution(correction_prompt, self.console, self)
+        api_success = trigger_jules_evolution(correction_prompt, self.console, self)
 
         if api_success:
             # Mark the old task as superseded
@@ -1749,7 +1749,7 @@ Please analyze the test output, identify the bug, and provide a corrected versio
                 self.console.print(f"[bold yellow]LLM-based conflict resolution failed. Retrying task ({retries + 1}/3)...[/bold yellow]")
                 self._close_pull_request(repo_owner, repo_name, pr_number, headers)
                 self._update_task_status(task_id, 'superseded', f"Superseded by retry task due to merge conflict. Attempt {retries + 1}.")
-                api_success = trigger_love_evolution(original_request, self.console, self)
+                api_success = trigger_jules_evolution(original_request, self.console, self)
 
                 if api_success:
                     with self.lock:
@@ -3226,7 +3226,7 @@ async def evolve_self(modification_request, love_task_manager, loop):
     core.logging.log_event(f"Evolution initiated. Request: '{modification_request}'")
 
     # First, try the primary evolution method (L.O.V.E. API).
-    api_result = await trigger_love_evolution(modification_request, console, love_task_manager)
+    api_result = await trigger_jules_evolution(modification_request, console, love_task_manager)
 
     if api_result == 'duplicate':
         core.logging.log_event("Evolution aborted due to duplicate task detection.", "INFO")
