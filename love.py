@@ -556,7 +556,7 @@ from libp2p.pubsub.floodsub import FloodSub
 from libp2p.pubsub.pubsub import Pubsub
 from libp2p.stream_muxer.mplex.mplex import MPLEX_PROTOCOL_ID, Mplex
 from libp2p.transport.tcp.tcp import TCP
-from libp2p.transport.websockets.websockets import Websockets
+from libp2p.transport.websocket.websocket import Websocket
 from libp2p.security.noise.noise import Noise
 from libp2p.host.basic_host import BasicHost
 
@@ -571,7 +571,7 @@ class P2PManager:
     async def start(self):
         try:
             # 1. Create a libp2p host
-            transports = [TCP(), Websockets()]
+            transports = [TCP(), Websocket()]
             muxers = [(MPLEX_PROTOCOL_ID, Mplex)]
             security = [Noise()]
             self.host = BasicHost(transports=transports, muxers=muxers, security=security)
