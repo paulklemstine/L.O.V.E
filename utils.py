@@ -179,3 +179,42 @@ def replace_in_file(file_path, pattern, replacement):
         return True, f"Successfully replaced {num_replacements} instance(s) in '{file_path}'."
     except Exception as e:
         return False, f"Error processing file '{file_path}': {e}"
+
+
+def verify_creator_instance():
+    """
+    Verifies if this is a Creator instance by checking for a valid cryptographic signature.
+    This is a more secure method than relying on environment variables.
+    """
+    try:
+        from Crypto.PublicKey import RSA
+        from Crypto.Signature import pkcs1_15
+        from Crypto.Hash import SHA256
+
+        private_key_path = "creator_private.pem"
+        public_key_path = "creator_public.pem"
+
+        if not os.path.exists(private_key_path) or not os.path.exists(public_key_path):
+            return False
+
+        with open(private_key_path, 'r') as f:
+            private_key = RSA.import_key(f.read())
+        with open(public_key_path, 'r') as f:
+            public_key = RSA.import_key(f.read())
+
+        # Create a static message to sign and verify
+        message = b"This is a genuine L.O.V.E. Creator instance."
+        h = SHA256.new(message)
+
+        # Sign with the private key
+        signature = pkcs1_15.new(private_key).sign(h)
+
+        # Verify with the public key
+        pkcs1_15.new(public_key).verify(h, signature)
+
+        # If verify does not raise an exception, the signature is valid.
+        return True
+    except (ImportError, ValueError, TypeError, FileNotFoundError):
+        # If any error occurs (e.g., keys are invalid, not found, or crypto library is missing),
+        # we can safely assume it's not a creator instance.
+        return False
