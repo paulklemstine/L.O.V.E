@@ -13,10 +13,10 @@ from core.agents.memory_folding_agent import MemoryFoldingAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
 from core.tools import ToolRegistry, SecureExecutor, talent_scout, opportunity_scout
 from core.image_api import generate_image
-from love import memory_manager
 
 # Keep the old function for fallback compatibility as requested
 async def solve_with_agent_team(task_description: str) -> str:
+    from love import memory_manager
     from core.agent_framework_manager import create_and_run_workflow
     orchestrator = Orchestrator(memory_manager)
     result = await create_and_run_workflow(task_description, orchestrator.tool_registry)
