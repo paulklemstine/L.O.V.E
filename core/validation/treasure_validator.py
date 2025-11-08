@@ -233,20 +233,6 @@ def _validate_xmr_private_key(private_key: str) -> Dict[str, Any]:
     except Exception as e:
         return {"validated": False, "error": f"An unexpected error occurred: {str(e)}"}
 
-# --- Validator Dispatch Table ---
-# This table maps treasure types to their respective validation functions.
-VALIDATORS = {
-    "aws_api_key": _validate_aws_api_key,
-    "eth_private_key": _validate_eth_private_key,
-    "ssh_private_key": _validate_ssh_private_key,
-    "crypto_seed_phrase": _validate_crypto_seed_phrase,
-    "btc_private_key": _validate_btc_private_key,
-    "xmr_private_key": _validate_xmr_private_key,
-    # Future validators for other key types will be added here.
-    # "gcp_api_key": _validate_gcp_api_key,
-}
-
-
 def _validate_crypto_seed_phrase(seed_phrase: str) -> Dict[str, Any]:
     """
     Validates a cryptocurrency seed phrase by checking its structure (word count).
@@ -278,3 +264,16 @@ def _validate_crypto_seed_phrase(seed_phrase: str) -> Dict[str, Any]:
             "Recommend scrubbing this finding from local logs after secure delivery."
         ]
     }
+
+# --- Validator Dispatch Table ---
+# This table maps treasure types to their respective validation functions.
+VALIDATORS = {
+    "aws_api_key": _validate_aws_api_key,
+    "eth_private_key": _validate_eth_private_key,
+    "ssh_private_key": _validate_ssh_private_key,
+    "crypto_seed_phrase": _validate_crypto_seed_phrase,
+    "btc_private_key": _validate_btc_private_key,
+    "xmr_private_key": _validate_xmr_private_key,
+    # Future validators for other key types will be added here.
+    # "gcp_api_key": _validate_gcp_api_key,
+}
