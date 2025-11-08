@@ -5,7 +5,13 @@ import yaml
 import json
 import subprocess
 from core.tools import ToolRegistry, invoke_gemini_react_engine
-from vllm import LLM, SamplingParams
+
+try:
+    from vllm import LLM, SamplingParams
+    VLLM_AVAILABLE = True
+except ImportError:
+    VLLM_AVAILABLE = False
+    LLM, SamplingParams = None, None
 
 class DeepAgentEngine:
     """
@@ -46,6 +52,10 @@ class DeepAgentEngine:
         """
         Initializes the vLLM instance and the DeepAgent itself.
         """
+        if not VLLM_AVAILABLE:
+            print("vLLM is not installed. DeepAgentEngine cannot be initialized.")
+            return
+
         model_name = self._select_model()
         print(f"Initializing DeepAgent with model: {model_name}...")
         try:
@@ -58,6 +68,7 @@ class DeepAgentEngine:
             print("vLLM engine initialized successfully.")
         except Exception as e:
             print(f"Error initializing vLLM: {e}")
+            self.llm = None # Ensure llm is None on failure
             raise
 
     def _adapt_tools_for_deepagent(self):
