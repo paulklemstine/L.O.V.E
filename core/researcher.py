@@ -42,7 +42,8 @@ async def generate_evolution_book() -> List[Dict[str, str]]:
     {project_context}
     """
 
-    research_topics_str = await run_llm(research_prompt)
+    research_topics_dict = await run_llm(research_prompt, force_model=None)
+    research_topics_str = research_topics_dict.get("result", "")
     research_topics = [topic.strip() for topic in research_topics_str.strip().split('\n') if topic.strip()]
 
     # Step 2: Conduct web research on the brainstormed topics
@@ -76,7 +77,8 @@ async def generate_evolution_book() -> List[Dict[str, str]]:
     {research_results}
     """
 
-    stories_json_str = await run_llm(story_generation_prompt, is_source_code=True)
+    stories_json_dict = await run_llm(story_generation_prompt, is_source_code=True, force_model=None)
+    stories_json_str = stories_json_dict.get("result", "")
 
     try:
         # Clean up the response to ensure it's valid JSON

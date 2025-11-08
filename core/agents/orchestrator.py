@@ -141,8 +141,8 @@ class Orchestrator:
         Respond with ONLY the classification.
         """
         try:
-            classification = await run_llm(prompt)
-            return classification.strip()
+            classification = await run_llm(prompt, force_model=None)
+            return classification.get("result", "").strip()
         except Exception as e:
             print(f"Error during goal classification: {e}")
             return "Procedural" # Default to procedural on error
@@ -183,9 +183,9 @@ Example JSON Response:
 Now, generate the plan for the given goal.
 """
         try:
-            response = await run_llm(prompt, is_source_code=False)
+            response = await run_llm(prompt, is_source_code=False, force_model=None)
             # Clean the response to extract only the JSON part
-            json_match = re.search(r'\[.*\]', response, re.DOTALL)
+            json_match = re.search(r'\[.*\]', response.get("result", ""), re.DOTALL)
             if not json_match:
                 print(f"Supervisor: Failed to extract JSON plan from LLM response: {response}")
                 return []

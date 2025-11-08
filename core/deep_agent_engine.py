@@ -134,7 +134,7 @@ Prompt: {prompt}
 
             if tool_name == "invoke_gemini_react_engine":
                 # This is a special case to handle the hierarchical call.
-                return asyncio.run(invoke_gemini_react_engine(**arguments))
+                return asyncio.run(invoke_gemini_react_engine(**arguments, deep_agent_instance=self))
 
             # For other tools, we would execute them here.
             # This part is still a placeholder.

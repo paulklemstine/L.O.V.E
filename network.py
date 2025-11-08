@@ -331,7 +331,7 @@ Nmap Scan Results:
 {probe_results}
 ---
 """
-    analysis_result_dict = await run_llm_func(analysis_prompt, purpose="analyze_source")
+    analysis_result_dict = await run_llm_func(analysis_prompt, purpose="analyze_source", force_model=None)
     analysis_result = analysis_result_dict.get("result", "LLM analysis failed.")
 
     # Step 3: Store the intelligence in the knowledge graph

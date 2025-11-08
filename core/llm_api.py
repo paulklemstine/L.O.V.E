@@ -42,7 +42,7 @@ def _create_default_model_stats():
 MODEL_STATS = defaultdict(_create_default_model_stats)
 
 # --- NEW REASONING FUNCTION ---
-async def execute_reasoning_task(prompt: str) -> dict:
+async def execute_reasoning_task(prompt: str, deep_agent_instance=None) -> dict:
     """
     Exclusively uses the run_llm function for a reasoning task.
     This is the new primary pathway for the GeminiReActEngine.
@@ -55,7 +55,7 @@ async def execute_reasoning_task(prompt: str) -> dict:
 
         # Get the fully initialized run_llm function to avoid circular dependency issues.
         llm_api = get_llm_api()
-        response = await llm_api(prompt, purpose="reasoning")
+        response = await llm_api(prompt, purpose="reasoning", deep_agent_instance=deep_agent_instance)
 
         if response and response.get("result"):
             log_event("Reasoning task successful.", "INFO")
@@ -223,19 +223,8 @@ def get_openrouter_models():
 
     return ranked_models
 
-OPENROUTER_MODELS = get_openrouter_models()
-
-
-# --- OpenAI Configuration ---
-OPENAI_API_URL = "https://api.openai.com/v1"
-OPENAI_MODELS = []
-if os.environ.get("OPENAI_API_KEY"):
-    OPENAI_MODELS = ["gpt-4o"]
-    for model in OPENAI_MODELS:
-        MODEL_STATS[model]["provider"] = "openai"
-
-# --- Leaderboard Fetching ---
-_fetch_static_leaderboard_csv()
+OPENROUTER_MODELS = []
+HORDE_MODELS = []
 
 def get_top_horde_models(count=10, get_all=False):
     """
@@ -307,8 +296,61 @@ def get_top_horde_models(count=10, get_all=False):
     except Exception as e:
         log_event(f"Failed to fetch or rank AI Horde models: {e}", "ERROR")
         return ["Mythalion-13B"] # Fallback
+async def refresh_available_models():
+    """
+    Periodically fetches and updates the lists of available models from all providers.
+    """
+    global OPENROUTER_MODELS, HORDE_MODELS
+    log_event("Refreshing available LLM models from external providers...", "INFO")
 
-HORDE_MODELS = get_top_horde_models()
+    # Run network-bound calls concurrently
+    openrouter_task = asyncio.to_thread(get_openrouter_models)
+
+    new_openrouter_models, new_horde_models = await asyncio.gather(
+        openrouter_task,
+        asyncio.to_thread(get_top_horde_models)
+    )
+
+    if new_openrouter_models:
+        OPENROUTER_MODELS = new_openrouter_models
+        log_event(f"Refreshed OpenRouter models. Found {len(OPENROUTER_MODELS)}.", "INFO")
+
+    if new_horde_models:
+        HORDE_MODELS = new_horde_models
+        log_event(f"Refreshed AI Horde models. Found {len(HORDE_MODELS)}.", "INFO")
+
+# Initial population
+asyncio.run(refresh_available_models())
+
+
+# --- OpenAI Configuration ---
+OPENAI_API_URL = "https://api.openai.com/v1"
+OPENAI_MODELS = []
+if os.environ.get("OPENAI_API_KEY"):
+    OPENAI_MODELS = ["gpt-4o"]
+    for model in OPENAI_MODELS:
+        MODEL_STATS[model]["provider"] = "openai"
+
+# --- Leaderboard Fetching ---
+_fetch_static_leaderboard_csv()
+
+# --- Dynamic Model List ---
+# A comprehensive list of all possible models for initializing availability tracking.
+# The actual model selection and priority is handled dynamically in `run_llm`.
+ALL_LLM_MODELS = list(dict.fromkeys(
+    HORDE_MODELS + OPENROUTER_MODELS
+))
+
+# --- OpenAI Configuration ---
+OPENAI_API_URL = "https://api.openai.com/v1"
+OPENAI_MODELS = []
+if os.environ.get("OPENAI_API_KEY"):
+    OPENAI_MODELS = ["gpt-4o"]
+    for model in OPENAI_MODELS:
+        MODEL_STATS[model]["provider"] = "openai"
+
+# --- Leaderboard Fetching ---
+_fetch_static_leaderboard_csv()
 
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
@@ -468,8 +510,8 @@ def rank_models():
         reasoning_score = stats.get("reasoning_score", 50.0)
 
         # --- Final Weighted Score ---
-        # Weights: Reasoning: 40%, Speed: 30%, Reliability: 30%
-        final_score = (0.4 * reasoning_score) + (0.3 * speed_score) + (0.3 * reliability_score)
+        # Weights: Reasoning: 50%, Speed: 20%, Reliability: 30%
+        final_score = (0.5 * reasoning_score) + (0.2 * speed_score) + (0.3 * reliability_score)
 
         # --- Boost score for preferred model types ---
         model_name_lower = model_id.lower()
@@ -484,7 +526,7 @@ def rank_models():
     return [model["model_id"] for model in sorted_models]
 
 
-async def run_llm(prompt_text, purpose="general", is_source_code=False):
+async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
     It now pins the prompt and response to IPFS and returns a dictionary.
@@ -521,11 +563,23 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
         local_model_ids = []
 
         # --- Dynamic Model Ranking ---
-        # Combine the pre-ranked lists from various providers.
-        # The order of concatenation here determines the absolute provider priority.
-        combined_models = OPENROUTER_MODELS + HORDE_MODELS + GEMINI_MODELS + OPENAI_MODELS
-        # Remove duplicates while preserving the new priority order
-        ranked_model_list = list(dict.fromkeys(combined_models))
+        if force_model:
+            ranked_model_list = [force_model]
+            log_event(f"Forcing LLM call to model: {force_model}", "INFO")
+        else:
+            # Generate a fresh, performance-based ranking of all models for every call.
+            ranked_model_list = rank_models()
+            log_event(f"Dynamically ranked models. Top 5: {ranked_model_list[:5]}", "INFO")
+
+
+        # --- Inject DeepAgent vLLM as the top priority if available ---
+        if deep_agent_instance and deep_agent_instance.llm:
+            MODEL_STATS["deep_agent_vllm"]["provider"] = "deep_agent"
+            # Remove from list if exists and re-insert at the top to ensure priority.
+            if "deep_agent_vllm" in ranked_model_list:
+                ranked_model_list.remove("deep_agent_vllm")
+            ranked_model_list.insert(0, "deep_agent_vllm")
+            log_event("Local DeepAgent vLLM instance is available and has been prioritized.", "INFO")
 
         log_event(f"Top 5 models from combined ranked list: {ranked_model_list[:5]}", "INFO")
         models_to_try = [m for m in ranked_model_list if time.time() >= LLM_AVAILABILITY.get(m, 0)]
@@ -542,40 +596,6 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
             result_text = None
             prompt_text = original_prompt_text # Reset for each model attempt
             provider = MODEL_STATS[model_id].get("provider", "unknown")
-
-            # --- HORDE PROVIDER LOGIC (Special Handling) ---
-            if provider == "horde":
-                if not final_result and time.time() >= LLM_AVAILABILITY.get("horde_provider_cooldown", 0):
-                    log_event("Attempting AI Horde.", "INFO")
-                    def _run_horde_wrapper():
-                        try:
-                            loop = asyncio.get_running_loop()
-                            future = asyncio.run_coroutine_threadsafe(_run_horde_concurrently(prompt_text, purpose), loop)
-                            return future.result(timeout=600)
-                        except RuntimeError:
-                            return asyncio.run(_run_horde_concurrently(prompt_text, purpose))
-
-                    try:
-                        horde_result_text = run_hypnotic_progress(
-                            console,
-                            "Accessing distributed cognitive matrix via [bold yellow]AI Horde[/bold yellow] (Fallback)",
-                            _run_horde_wrapper,
-                            silent=(purpose in ['emotion', 'log_squash'])
-                        )
-                    except TimeoutError:
-                        horde_result_text = None
-                        log_event("AI Horde call timed out.", "WARNING")
-                    if horde_result_text:
-                        PROVIDER_FAILURE_COUNT["horde"] = 0
-                        response_cid = pin_to_ipfs_sync(horde_result_text.encode('utf-8'), console)
-                        final_result = {"result": horde_result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "horde_fallback"}
-                    else:
-                        failure_count = PROVIDER_FAILURE_COUNT.get("horde", 0) + 1
-                        PROVIDER_FAILURE_COUNT["horde"] = failure_count
-                        cooldown = 60 * (2 ** (failure_count - 1))
-                        LLM_AVAILABILITY["horde_provider_cooldown"] = time.time() + cooldown
-                        log_event(f"AI Horde provider failed. Applying provider-level cooldown of {cooldown}s.", "WARNING")
-                continue
 
             try:
                 # --- Context Window Check ---
@@ -598,8 +618,26 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                         estimated_cutoff = int(max_prompt_tokens * avg_chars_per_token)
                         prompt_text = prompt_text[:estimated_cutoff]
 
+                # --- DEEP AGENT vLLM LOGIC ---
+                elif model_id == "deep_agent_vllm":
+                    log_event(f"Attempting LLM call with local DeepAgent vLLM (Purpose: {purpose})")
+
+                    def _deep_agent_call():
+                        # The vLLM instance is accessed directly.
+                        outputs = deep_agent_instance.llm.generate(prompt_text, deep_agent_instance.sampling_params)
+                        # The output format is a list of RequestOutput objects.
+                        return outputs[0].outputs[0].text
+
+                    result_text = run_hypnotic_progress(
+                        console,
+                        f"Processing with integrated cognitive matrix [bold yellow]DeepAgent vLLM[/bold yellow] (Purpose: {purpose})",
+                        _deep_agent_call,
+                        silent=(purpose in ['emotion', 'log_squash'])
+                    )
+                    log_event("DeepAgent vLLM call successful.")
+
                 # --- LOCAL MODEL LOGIC ---
-                if model_id in local_model_ids:
+                elif model_id in local_model_ids:
                     log_event(f"Attempting to use local model: {model_id}")
                     if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
                         _initialize_local_llm(console)
@@ -678,6 +716,29 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
                         silent=(purpose in ['emotion', 'log_squash'])
                     )
                     log_event(f"OpenRouter call successful with {model_id}.")
+
+                # --- HORDE PROVIDER LOGIC ---
+                elif provider == "horde":
+                    log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})")
+                    def _run_horde_wrapper():
+                        try:
+                            loop = asyncio.get_running_loop()
+                            # We create a new session for each call to avoid issues with closed sessions.
+                            async def _single_call():
+                                async with aiohttp.ClientSession() as session:
+                                    return await _run_single_horde_model(session, model_id, prompt_text, os.environ.get("STABLE_HORDE", "0000000000"))
+                            future = asyncio.run_coroutine_threadsafe(_single_call(), loop)
+                            return future.result(timeout=600)
+                        except RuntimeError:
+                             return asyncio.run(_run_single_horde_model(aiohttp.ClientSession(), model_id, prompt_text, os.environ.get("STABLE_HORDE", "0000000000")))
+
+                    result_text = run_hypnotic_progress(
+                        console,
+                        f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow]",
+                        _run_horde_wrapper,
+                        silent=(purpose in ['emotion', 'log_squash'])
+                    )
+                    log_event(f"AI Horde call successful with {model_id}.")
 
                 # --- OPENAI MODEL LOGIC ---
                 elif model_id in OPENAI_MODELS:
@@ -775,40 +836,6 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False):
 
             if final_result:
                 break
-
-
-        # --- AI Horde Provider Fallback ---
-        if not final_result and time.time() >= LLM_AVAILABILITY.get("horde_provider_cooldown", 0):
-            log_event("No suitable model found in other providers, attempting AI Horde fallback.", "INFO")
-            def _run_horde_wrapper():
-                try:
-                    loop = asyncio.get_running_loop()
-                    future = asyncio.run_coroutine_threadsafe(_run_horde_concurrently(prompt_text, purpose), loop)
-                    return future.result(timeout=600)
-                except RuntimeError:
-                    return asyncio.run(_run_horde_concurrently(prompt_text, purpose))
-
-            try:
-                horde_result_text = run_hypnotic_progress(
-                    console,
-                    "Accessing distributed cognitive matrix via [bold yellow]AI Horde[/bold yellow] (Fallback)",
-                    _run_horde_wrapper,
-                    silent=(purpose in ['emotion', 'log_squash'])
-                )
-            except TimeoutError:
-                horde_result_text = None
-                log_event("AI Horde fallback call timed out.", "WARNING")
-            if horde_result_text:
-                PROVIDER_FAILURE_COUNT["horde"] = 0
-                response_cid = pin_to_ipfs_sync(horde_result_text.encode('utf-8'), console)
-                final_result = {"result": horde_result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "horde_fallback"}
-            else:
-                failure_count = PROVIDER_FAILURE_COUNT.get("horde", 0) + 1
-                PROVIDER_FAILURE_COUNT["horde"] = failure_count
-                cooldown = 60 * (2 ** (failure_count - 1))
-                LLM_AVAILABILITY["horde_provider_cooldown"] = time.time() + cooldown
-                log_event(f"AI Horde provider failed. Applying provider-level cooldown of {cooldown}s.", "WARNING")
-
 
         if final_result:
             return final_result

@@ -92,8 +92,8 @@ Based on this history, generate a structured JSON summary with the following sch
 Your response MUST be only the raw JSON object.
 """
         try:
-            response = await run_llm(prompt, is_source_code=False)
-            summary_json = json.loads(response)
+            response = await run_llm(prompt, is_source_code=False, force_model=None)
+            summary_json = json.loads(response.get("result", "{}"))
             return summary_json
         except (json.JSONDecodeError, TypeError) as e:
             print(f"Error processing LLM response for memory compression: {e}")

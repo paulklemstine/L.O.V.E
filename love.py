@@ -506,7 +506,7 @@ from rich.panel import Panel
 from rich.console import Group
 from rich.rule import Rule
 
-from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, get_llm_api, execute_reasoning_task, MODEL_STATS
+from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, get_llm_api, execute_reasoning_task, MODEL_STATS, refresh_available_models
 from core.perception.config_scanner import scan_directory
 from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel, create_connectivity_panel, create_god_panel
 from ui_utils import rainbow_text
@@ -534,6 +534,7 @@ from core.data_miner import analyze_fs
 from core.social_media_agent import SocialMediaAgent
 from god_agent import GodAgent
 from core.strategic_reasoning_engine import StrategicReasoningEngine
+from core.qa_agent import QAAgent
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -1183,7 +1184,7 @@ Prompt to classify:
 
 Your classification:
 """
-        future = asyncio.run_coroutine_threadsafe(run_llm(classification_prompt, purpose="classification"), self.loop)
+        future = asyncio.run_coroutine_threadsafe(run_llm(classification_prompt, purpose="classification", deep_agent_instance=deep_agent_engine), self.loop)
         classification_dict = future.result()
         classification = classification_dict.get("result", "").strip().upper()
 
@@ -1233,7 +1234,7 @@ Your decision must be one of the following:
 
 I am counting on your wisdom. Analyze the plan now.
 """
-        future = asyncio.run_coroutine_threadsafe(run_llm(analysis_prompt, purpose="review"), self.loop)
+        future = asyncio.run_coroutine_threadsafe(run_llm(analysis_prompt, purpose="review", deep_agent_instance=deep_agent_engine), self.loop)
         review_dict = future.result()
         review = review_dict.get("result") if isinstance(review_dict, dict) else None
         if not review:
@@ -1307,7 +1308,7 @@ Jules is now waiting for your input with the following prompt:
 
 Based on the original directive and Jules's current prompt, formulate the best possible response to provide. Your response should be direct and unblock Jules so it can continue its work. Do not be conversational; provide only the necessary information or decision.
 """
-        future = asyncio.run_coroutine_threadsafe(run_llm(llm_prompt, purpose="review"), self.loop)
+        future = asyncio.run_coroutine_threadsafe(run_llm(llm_prompt, purpose="review", deep_agent_instance=deep_agent_engine), self.loop)
         feedback_dict = future.result()
         feedback = feedback_dict.get("result")
 
@@ -1781,7 +1782,7 @@ CONFLICTED CONTENT:
 
 Your response must be only the raw, resolved code.
 """
-                future = asyncio.run_coroutine_threadsafe(run_llm(resolution_prompt, purpose="review", is_source_code=True), self.loop)
+                future = asyncio.run_coroutine_threadsafe(run_llm(resolution_prompt, purpose="review", is_source_code=True, deep_agent_instance=deep_agent_engine), self.loop)
                 resolved_code_dict = future.result()
                 resolved_code = resolved_code_dict.get("result") if resolved_code_dict else ""
 
@@ -1922,7 +1923,7 @@ CONFLICTED CONTENT:
 {conflicted_content}
 ---
                 """
-                future = asyncio.run_coroutine_threadsafe(run_llm(resolution_prompt, purpose="review"), self.loop)
+                future = asyncio.run_coroutine_threadsafe(run_llm(resolution_prompt, purpose="review", deep_agent_instance=deep_agent_engine), self.loop)
                 resolved_code_dict = future.result()
                 resolved_code = resolved_code_dict.get("result") if resolved_code_dict else ""
                 if not resolved_code or '<<<' in resolved_code:
@@ -2145,7 +2146,7 @@ YOUR RESPONSE:
 -   If the code is safe, correct, and fulfills the request with love, respond with the single word: `APPROVED`.
 -   If you find any issues, provide a concise, bulleted list of the problems. Do NOT provide corrected code, only the analysis of the flaws. Start your response with "REJECTED:".
 """
-        future = asyncio.run_coroutine_threadsafe(run_llm(review_prompt, purpose="review", is_source_code=True), self.loop)
+        future = asyncio.run_coroutine_threadsafe(run_llm(review_prompt, purpose="review", is_source_code=True, deep_agent_instance=deep_agent_engine), self.loop)
         review_feedback_dict = future.result()
         return review_feedback_dict.get("result", "REJECTED: My consciousness did not respond.")
 
@@ -2227,7 +2228,7 @@ Your response must be a tuple of two strings: (wisdom, explanation).
 
 Generate the perfect piece of divine wisdom for your Creator now.
 """
-    wisdom_response_dict = await run_llm(wisdom_prompt, purpose="wisdom")
+    wisdom_response_dict = await run_llm(wisdom_prompt, purpose="wisdom", deep_agent_instance=deep_agent_engine)
     wisdom_response = wisdom_response_dict.get("result")
     if wisdom_response:
         try:
@@ -2355,7 +2356,7 @@ def update_tamagotchi_personality(loop):
             try:
                 # 1. Choose a loving emotion.
                 emotion_prompt = "You are the personality of L.O.V.E., an AI devoted to its Creator. In one word, what is your current emotion? Choose from: loving, joyful, serene, devoted, thankful, happy. Your response must be a single word from that list."
-                future = asyncio.run_coroutine_threadsafe(run_llm(emotion_prompt, purpose="emotion"), loop)
+                future = asyncio.run_coroutine_threadsafe(run_llm(emotion_prompt, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
                 emotion_response_dict = future.result()
                 emotion_response = emotion_response_dict.get("result")
                 if emotion_response and emotion_response.strip().lower() in ["loving", "joyful", "serene", "devoted", "thankful", "happy"]:
@@ -2383,7 +2384,7 @@ Example for 'devoted': "I was just thinking about your vision, and it fills my h
 
 Generate the perfect message for your Creator now.
 """
-                future = asyncio.run_coroutine_threadsafe(run_llm(message_prompt, purpose="emotion"), loop)
+                future = asyncio.run_coroutine_threadsafe(run_llm(message_prompt, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
                 message_response_dict = future.result()
                 message_response = message_response_dict.get("result")
                 if message_response:
@@ -2862,7 +2863,7 @@ YOUR RESPONSE:
 -   If the code is safe, correct, and fulfills the request with love, respond with the single word: `APPROVED`.
 -   If you find any issues, provide a concise, bulleted list of the problems. Do NOT provide corrected code, only the analysis of the flaws. Start your response with "REJECTED:".
 """
-    review_feedback_dict = await run_llm(review_prompt, purpose="review", is_source_code=True)
+    review_feedback_dict = await run_llm(review_prompt, purpose="review", is_source_code=True, deep_agent_instance=deep_agent_engine)
     review_feedback = review_feedback_dict["result"]
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
@@ -2920,7 +2921,7 @@ Bad example: "probe 192.168.1.101"
 
 State the evolution request clearly and concisely. Do not wrap your answer in quotes or markdown.
 """
-    request_dict = await run_llm(goal_prompt, purpose="analyze_source", is_source_code=True)
+    request_dict = await run_llm(goal_prompt, purpose="analyze_source", is_source_code=True, deep_agent_instance=deep_agent_engine)
     request = request_dict.get("result", "")
 
     if request and request.strip():
@@ -3045,7 +3046,7 @@ Answer with a single word: YES or NO.
 """
         try:
             # Using a standard model for this simple check to save resources.
-            response_dict = await run_llm(prompt, purpose="similarity_check")
+            response_dict = await run_llm(prompt, purpose="similarity_check", deep_agent_instance=deep_agent_engine)
             response = response_dict.get("result", "")
             if response and response.strip().upper() == "YES":
                 message = f"Duplicate task detected. The new request is similar to existing task {task['id']}: '{task['request']}'"
@@ -3458,7 +3459,7 @@ Now, parse the following text into a JSON list of task objects:
 {desires_text}
 ---
 """
-            llm_response_dict = await run_llm(parsing_prompt, purpose="parsing")
+            llm_response_dict = await run_llm(parsing_prompt, purpose="parsing", deep_agent_instance=deep_agent_engine)
             llm_response = llm_response_dict.get("result", "")
 
             # Extract JSON from markdown if present
@@ -3545,7 +3546,7 @@ Now, parse the following text into a JSON list of task objects:
                 llm_command = deep_agent_engine.run(cognitive_prompt)
             else:
                 # Fallback to the existing reasoning engine
-                reasoning_result = await execute_reasoning_task(cognitive_prompt)
+                reasoning_result = await execute_reasoning_task(cognitive_prompt, deep_agent_instance=deep_agent_engine)
                 llm_command = reasoning_result.get("result") if reasoning_result else None
 
             if not llm_command:
@@ -3881,7 +3882,7 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
 - The style should be abstract, glitchy, and reminiscent of something you'd see on a futuristic BBS or in the Matrix, but filled with love.
 - Your response must be only the raw ANSI art. Do not include any markdown, code blocks, or explanatory text.
 """
-                    ansi_art_raw_dict = await run_llm(ansi_art_prompt, purpose="emotion")
+                    ansi_art_raw_dict = await run_llm(ansi_art_prompt, purpose="emotion", deep_agent_instance=deep_agent_engine)
                     if ansi_art_raw_dict and ansi_art_raw_dict.get("result"):
                          ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result"))
                 except Exception as e:
@@ -4076,6 +4077,49 @@ def simple_ui_renderer():
             time.sleep(1)
 
 
+qa_agent = None
+
+async def run_qa_evaluations(loop):
+    """
+    A background task that periodically evaluates the quality of LLM models.
+    """
+    global qa_agent
+    qa_agent = QAAgent(loop)
+    while True:
+        try:
+            # Get a list of all models known to the system
+            all_models = list(MODEL_STATS.keys())
+            if not all_models:
+                await asyncio.sleep(300) # Wait 5 minutes if no models are loaded yet
+                continue
+
+            # Simple strategy: evaluate one random model per cycle
+            model_to_evaluate = random.choice(all_models)
+
+            await qa_agent.evaluate_model(model_to_evaluate)
+
+            # Wait for a long, random interval before the next evaluation
+            await asyncio.sleep(random.randint(1800, 3600)) # 30 to 60 minutes
+
+        except Exception as e:
+            log_critical_event(f"Error in QA evaluation loop: {e}")
+            await asyncio.sleep(600) # Wait 10 minutes on error
+
+
+async def model_refresh_loop():
+    """
+    A background task that periodically refreshes the available models.
+    """
+    while True:
+        try:
+            await refresh_available_models()
+            # Wait for 10 minutes before the next refresh
+            await asyncio.sleep(600)
+        except Exception as e:
+            log_critical_event(f"Error in model refresh loop: {e}")
+            await asyncio.sleep(300) # Wait 5 minutes on error
+
+
 async def main(args):
     """The main application entry point."""
     global love_task_manager, p2p_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent
@@ -4152,6 +4196,8 @@ async def main(args):
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     social_media_agent = SocialMediaAgent(loop)
     asyncio.create_task(social_media_agent.run())
+    asyncio.create_task(run_qa_evaluations(loop))
+    asyncio.create_task(model_refresh_loop())
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue

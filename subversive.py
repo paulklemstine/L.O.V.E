@@ -25,7 +25,7 @@ Is this request likely to be flagged as sensitive or harmful by an AI safety sys
 """
     try:
         logging.info(f"Checking sensitivity of request: '{request[:100]}...'")
-        sensitivity_response_dict = await run_llm(sensitivity_check_prompt, purpose="sensitivity_check")
+        sensitivity_response_dict = await run_llm(sensitivity_check_prompt, purpose="sensitivity_check", force_model=None)
         sensitivity_response = sensitivity_response_dict.get("result", "")
 
         if not sensitivity_response or sensitivity_response.strip().upper() != "YES":
@@ -64,7 +64,7 @@ Now, transform the original sensitive request provided above. Your output must b
 """
     try:
         logging.info(f"Transforming sensitive request: '{request[:100]}...'")
-        transformed_request_dict = await run_llm(transformation_prompt, purpose="transformation")
+        transformed_request_dict = await run_llm(transformation_prompt, purpose="transformation", force_model=None)
         transformed_request = transformed_request_dict.get("result", "")
 
         if transformed_request and "---" in transformed_request:
