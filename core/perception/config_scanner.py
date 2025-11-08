@@ -25,6 +25,12 @@ SECRET_PATTERNS = {
         "treasure_type": "eth_private_key",
         "value_group": 2, # The second group captures the key itself
     },
+    "Cryptocurrency Mnemonic (Seed Phrase)": {
+        # This pattern looks for a sequence of 12, 18, or 24 words, which is the standard for BIP-39 mnemonic phrases.
+        "pattern": r'((?:\b[a-zA-Z]{3,9}\b\s+){11,23}\b[a-zA-Z]{3,9}\b)',
+        "treasure_type": "crypto_seed_phrase",
+        "value_group": 1,
+    },
     "Bitcoin Private Key (WIF)": {
         # Compressed or uncompressed WIF format
         "pattern": r'([KL5][1-9A-HJ-NP-Za-km-z]{50,51})',
@@ -54,9 +60,19 @@ SECRET_PATTERNS = {
         "treasure_type": "github_token",
         "value_group": 1,
     },
+    "Slack Token": {
+        "pattern": r'(xox[p|b|o|a]-[0-9]{12}-[0-9]{12}-[0-9]{12}-[a-z0-9]{32})',
+        "treasure_type": "slack_token",
+        "value_group": 1,
+    },
+    "Stripe API Key": {
+        "pattern": r'((?:r|s)k_live_[0-9a-zA-Z]{24})',
+        "treasure_type": "stripe_api_key",
+        "value_group": 1,
+    },
     # Generic Patterns (less specific)
     "Generic API Key": {
-        "pattern": r'(?i)api_key\s*[:=]\s*[\'"]?([^\'"\s]{16,})[\'"]?',
+        "pattern": r'(?i)(?:api_key|access_token|auth_token|client_secret)\s*[:=]\s*[\'"]?([a-zA-Z0-9_.-]{20,})[\'"]?',
         "treasure_type": "generic_api_key",
         "value_group": 1,
     },
