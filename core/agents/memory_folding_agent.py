@@ -99,60 +99,12 @@ Your response MUST be only the raw JSON object.
             print(f"Error processing LLM response for memory compression: {e}")
             return {}
 
-    async def _store_and_link_folded_memory(self, summary: Dict, original_chain: List[str]):
-        """
-        Stores the compressed summary as a new MemoryNote and links it to the original chain.
-        """
-        # 1. Create the content for the new memory note from the summary
-        summary_content = (
-            f"Episodic Summary: {summary.get('Episodic Memory', 'N/A')}\n\n"
-            f"Final Outcome: {summary.get('Working Memory', 'N/A')}\n\n"
-            f"Tool Usage Summary: {summary.get('Tool Memory', 'N/A')}"
-        )
-
-        # 2. Agentically process the content to create a new MemoryNote object
-        # We bypass the full `add_episode` pipeline to control the linking process.
-        folded_note = await self.memory_manager._agentic_process_new_memory(
-            content=summary_content,
-            external_tags=["FoldedMemory"]
-        )
-
-        if not folded_note:
-            print("  - Failed to create a structured MemoryNote for the folded summary.")
-            return
-
-        # 3. Add the new node to the graph
-        self.memory_manager.graph_data_manager.add_node(
-            node_id=folded_note.id,
-            node_type="MemoryNote",
-            attributes=folded_note.to_node_attributes()
-        )
-        print(f"  - Stored new FoldedMemory note with ID: {folded_note.id}")
-
-        # 4. Link the new node to the start and end of the original chain
-        start_node_id = original_chain[0]
-        end_node_id = original_chain[-1]
-
-        self.memory_manager.graph_data_manager.add_edge(
-            source_id=folded_note.id,
-            target_id=start_node_id,
-            relationship_type="summarizes",
-            attributes={"reason": "This folded memory summarizes the chain starting here."}
-        )
-        self.memory_manager.graph_data_manager.add_edge(
-            source_id=folded_note.id,
-            target_id=end_node_id,
-            relationship_type="summarizes",
-            attributes={"reason": "This folded memory summarizes the chain ending here."}
-        )
-        print(f"  - Linked folded memory {folded_note.id} to start ({start_node_id}) and end ({end_node_id}) of the chain.")
-
     async def execute_task(self, task_details: Dict) -> Dict:
         """
         Executes the memory folding process.
         """
         print("--- MemoryFoldingAgent: Starting memory folding process ---")
-        min_length = task_details.get("min_length", 3)
+        min_length = task_details.get("min_length", 5) # Use a higher threshold
 
         chains = self._query_memory_chains(min_length=min_length)
 
@@ -165,11 +117,45 @@ Your response MUST be only the raw JSON object.
         for i, chain in enumerate(chains):
             print(f"Processing chain {i+1}/{len(chains)} (length {len(chain)})...")
             summary = await self._compress_chain_with_llm(chain)
-            if summary:
-                await self._store_and_link_folded_memory(summary, chain)
+            if not summary:
+                print(f"  - Failed to compress chain {i+1}.")
+                continue
+
+            summary_content = (
+                f"Episodic Summary: {summary.get('Episodic Memory', 'N/A')}\n\n"
+                f"Final Outcome: {summary.get('Working Memory', 'N/A')}\n\n"
+                f"Tool Usage Summary: {summary.get('Tool Memory', 'N/A')}"
+            )
+
+            # Use the main memory manager method to store the note.
+            # This ensures the new note is also linked to other relevant memories.
+            folded_note = await self.memory_manager.add_agentic_memory_note(
+                content=summary_content,
+                external_tags=["FoldedMemory"]
+            )
+
+            if folded_note:
+                print(f"  - Stored new FoldedMemory note with ID: {folded_note.id}")
+                # Manually add the summarization links
+                start_node_id = chain[0]
+                end_node_id = chain[-1]
+
+                self.memory_manager.graph_data_manager.add_edge(
+                    source_id=folded_note.id,
+                    target_id=start_node_id,
+                    relationship_type="summarizes",
+                    attributes={"reason": "This folded memory summarizes the chain starting here."}
+                )
+                self.memory_manager.graph_data_manager.add_edge(
+                    source_id=folded_note.id,
+                    target_id=end_node_id,
+                    relationship_type="summarizes",
+                    attributes={"reason": "This folded memory summarizes the chain ending here."}
+                )
+                print(f"  - Linked folded memory {folded_note.id} to start ({start_node_id}) and end ({end_node_id}) of the chain.")
                 folded_count += 1
             else:
-                print(f"  - Failed to compress chain {i+1}.")
+                print(f"  - Failed to store the folded memory for chain {i+1}.")
 
         result_message = f"Memory folding process complete. Successfully folded {folded_count}/{len(chains)} chains."
         return {"status": "success", "result": result_message}

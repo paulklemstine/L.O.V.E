@@ -97,17 +97,20 @@ class MemoryManager:
         # This is now an async function that can be awaited directly.
         await self.add_agentic_memory_note(content, external_tags=tags or [])
 
-    async def add_agentic_memory_note(self, content: str, external_tags: List[str] = None):
+    async def add_agentic_memory_note(self, content: str, external_tags: List[str] = None) -> MemoryNote | None:
         """
         The core of the A-MEM pipeline. It takes raw content, uses an LLM to
         create a structured MemoryNote, adds it to the knowledge graph,
         and then triggers the linking and evolution processes.
+
+        Returns:
+            The created MemoryNote object, or None if the process failed.
         """
         print("Starting agentic processing for new memory...")
         memory_note = await self._agentic_process_new_memory(content, external_tags=external_tags)
         if not memory_note:
             print("Agentic processing failed. Aborting memory addition.")
-            return
+            return None
 
         # Add the new node to the graph using the GraphDataManager
         self.graph_data_manager.add_node(
@@ -119,6 +122,8 @@ class MemoryManager:
 
         # Find and create links to related memories
         await self._find_and_link_related_memories(memory_note)
+
+        return memory_note
 
     async def _agentic_process_new_memory(self, content: str, external_tags: List[str] = None) -> MemoryNote | None:
         """
