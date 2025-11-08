@@ -1,4 +1,5 @@
 import logging
+import re
 from rich.console import Console
 import yaml
 import json
@@ -151,7 +152,7 @@ Example:
 
         RECENT BEHAVIORAL MEMORIES:
         ---
-        {"\\n".join([f"- {m}" for m in recent_memories])}
+        {"\n".join([f"- {m}" for m in recent_memories])}
         ---
 
         Your response must be a JSON object with a "discrepancies" list. If none, return an empty list.
@@ -192,7 +193,7 @@ Example:
             return []
 
         subgraph_summary = [f"- {self.knowledge_base.get_node(node_id).get('content', '')}" for node_id in reflection_nodes]
-        summary_str = "\\n".join(subgraph_summary)
+        summary_str = "\n".join(subgraph_summary)
 
         prompt = f"""
         You are a Metacognition AI analyzing your own thought processes.
