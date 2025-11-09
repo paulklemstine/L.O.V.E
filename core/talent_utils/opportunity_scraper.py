@@ -1,6 +1,7 @@
 import os
-from atproto import Client, models
+from atproto import Client
 from atproto_client.models.app.bsky.feed import search_posts
+from atproto_client.models.app.bsky.feed.post import Record as PostRecord
 from core.logging import log_event
 
 class OpportunityScraper:
@@ -57,7 +58,7 @@ class OpportunityScraper:
                     author = post_view.author
                     post_record = post_view.record
 
-                    if isinstance(post_record, models.AppBskyFeedPost):
+                    if isinstance(post_record, PostRecord):
                         opportunity = {
                             'platform': 'bluesky',
                             'opportunity_id': post_view.uri.split('/')[-1],
