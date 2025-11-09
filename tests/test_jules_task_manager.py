@@ -6,11 +6,12 @@ import subprocess
 import re
 import requests
 
+from unittest.mock import MagicMock
 # Ensure the app's root directory is in the Python path
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from love import LoveTaskManager, trigger_jules_evolution, get_git_repo_info
+from love import JulesTaskManager, trigger_jules_evolution, get_git_repo_info
 from rich.console import Console
 from core.retry import retry
 
