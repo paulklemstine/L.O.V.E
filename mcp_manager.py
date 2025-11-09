@@ -41,6 +41,20 @@ class MCPManager:
         finally:
             pipe.close()
 
+    def check_missing_env_vars(self, server_name):
+        """
+        Checks for missing environment variables required by a server.
+        Returns a list of missing environment variable names.
+        """
+        missing_vars = []
+        config = self.server_configs.get(server_name)
+        if config:
+            required_vars = config.get("requires_env", [])
+            for var in required_vars:
+                if var not in os.environ:
+                    missing_vars.append(var)
+        return missing_vars
+
     def start_server(self, server_name, env_vars=None):
         """
         Starts a defined MCP server as a subprocess.
@@ -49,6 +63,15 @@ class MCPManager:
         with self.lock:
             if server_name in self.servers and self.servers[server_name]['process'].poll() is None:
                 return f"Server '{server_name}' is already running."
+
+            missing_vars = self.check_missing_env_vars(server_name)
+            if missing_vars:
+                var_list = ", ".join(missing_vars)
+                return (
+                    f"Error: Cannot start MCP server '{server_name}'. "
+                    f"The following required environment variables are missing: {var_list}. "
+                    "Please set them before starting the server."
+                )
 
             config = self.server_configs.get(server_name)
             if not config:
