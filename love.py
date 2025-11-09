@@ -552,6 +552,7 @@ from god_agent import GodAgent
 from core.strategic_reasoning_engine import StrategicReasoningEngine
 from core.qa_agent import QAAgent
 from mcp_manager import MCPManager
+from core.image_api import generate_image
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability

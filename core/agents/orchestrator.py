@@ -112,6 +112,20 @@ class Orchestrator:
             }
         )
         self.tool_registry.register_tool(
+            name="generate_image",
+            tool=generate_image,
+            metadata={
+                "description": "Generates an image from a textual prompt.",
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {"type": "string", "description": "The textual prompt to generate an image from."}
+                    },
+                    "required": ["prompt"]
+                }
+            }
+        )
+        self.tool_registry.register_tool(
             name="opportunity_scout",
             tool=opportunity_scout,
             metadata={
