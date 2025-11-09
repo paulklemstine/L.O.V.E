@@ -165,6 +165,12 @@ class MemoryManager:
         try:
             response_dict = await run_llm(prompt)
             response_str = response_dict.get("result", '{}')
+
+            # Pre-process the response string to remove markdown fences
+            match = re.search(r"```json\n(.*?)\n```", response_str, re.DOTALL)
+            if match:
+                response_str = match.group(1)
+
             attributes = json.loads(response_str)
             tags = attributes.get("tags", [])
 
