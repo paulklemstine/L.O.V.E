@@ -39,3 +39,4 @@ torchvision
 torchaudio
 langextract
 monero-python
+networkx
