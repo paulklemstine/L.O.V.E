@@ -9,6 +9,7 @@ from rich.panel import Panel
 import netifaces
 import ipaddress
 import requests
+import shlex
 from xml.etree import ElementTree as ET
 from core.retry import retry
 from pycvesearch import CVESearch
@@ -233,9 +234,11 @@ def execute_shell_command(command, state):
         if command.strip().startswith(("sudo", "rm -rf")):
             raise PermissionError("Execution of this command is not permitted.")
 
+        # Use shlex to safely split the command into arguments
+        args = shlex.split(command)
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
+            shell=False,  # Set shell=False for security and reliability
             capture_output=True,
             text=True,
             timeout=300
