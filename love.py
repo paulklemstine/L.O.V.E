@@ -3807,7 +3807,7 @@ Now, parse the following text into a JSON list of task objects:
                     _populate_knowledge_base_with_directives(love_task_manager)
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
                 elif command == "strategize":
-                    strategic_engine = StrategicReasoningEngine(knowledge_base)
+                    strategic_engine = StrategicReasoningEngine(knowledge_base, love_state)
                     plan = strategic_engine.generate_strategic_plan()
                     output = "Generated Strategic Plan:\n" + "\n".join(f"- {step}" for step in plan)
                 elif command == "mcp_start":
@@ -3890,7 +3890,20 @@ Now, parse the following text into a JSON list of task objects:
 
                 # --- Post-Execution ---
                 final_output = error or output
-                love_state["autopilot_history"].append({"command": llm_command, "output": final_output, "timestamp": time.time()})
+
+                # --- Structured Outcome Logging ---
+                outcome_data = {"command": llm_command, "output": final_output, "timestamp": time.time()}
+                if command == "talent_scout" and not error:
+                    # Parse the output to get a structured result for the history
+                    found_match = re.search(r"Found and enriched (\d+) profiles", final_output)
+                    saved_match = re.search(r"Successfully saved (\d+)", final_output)
+                    outcome_data['outcome'] = {
+                        'profiles_found': int(found_match.group(1)) if found_match else 0,
+                        'profiles_saved': int(saved_match.group(1)) if saved_match else 0,
+                    }
+
+                love_state["autopilot_history"].append(outcome_data)
+
                 if not error:
                     # Ingest the successful cycle into agentic memory
                     if memory_manager:
