@@ -533,6 +533,10 @@ from core.talent_utils.manager import TalentManager
 from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.opportunity_scraper import OpportunityScraper
 from core.talent_utils.opportunity_matcher import OpportunityMatcher
+from core.financial_utils.financial_aggregator import FinancialAggregator
+from core.financial_utils.financial_analyzer import FinancialAnalyzer, CryptoOpportunityScorer
+from core.financial_utils.asset_manager import AssetManager
+from core.financial_utils.asset_transfer import AssetTransfer
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.data_miner import analyze_fs
@@ -3214,6 +3218,10 @@ My current system state:
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
+- `financial_scout <asset_type>`: Scan for financial opportunities (e.g., 'crypto', 'stocks').
+- `analyze_opportunity <opportunity_id>`: Perform a deep analysis of a financial opportunity.
+- `acquire_asset <asset_id> <value>`: Acquire a financial asset and add it to the portfolio.
+- `transfer_to_creator <asset_id> <amount>`: Transfer a specified amount of an asset to The Creator.
 - `strategize`: Analyze the knowledge base and generate a strategic plan.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
@@ -3590,7 +3598,8 @@ Now, parse the following text into a JSON list of task objects:
 
                         # 1. Configure and run the aggregator
                         filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
-                        aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky", "instagram"], ethical_filters=filters)
+                        all_keywords = keywords + ["fashion", "model"]
+                        aggregator = PublicProfileAggregator(keywords=all_keywords, platform_names=["bluesky", "instagram", "tiktok"], ethical_filters=filters)
                         profiles = aggregator.search_and_collect()
 
                         if not profiles:
@@ -3678,11 +3687,12 @@ Now, parse the following text into a JSON list of task objects:
                     if not keywords:
                         error = "Usage: opportunity_scout <keyword1> <keyword2> ..."
                     else:
+                        all_keywords = keywords + ["emerging tech", "AI", "biotech", "quantum computing"]
                         terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Scanning for opportunities with keywords: {keywords}", "Opportunity Scout", "magenta", width=terminal_width - 4))
+                        ui_panel_queue.put(create_news_feed_panel(f"Scanning for opportunities with keywords: {all_keywords}", "Opportunity Scout", "magenta", width=terminal_width - 4))
 
                         # 1. Scrape for opportunities
-                        scraper = OpportunityScraper(keywords=keywords, knowledge_base=knowledge_base)
+                        scraper = OpportunityScraper(keywords=all_keywords, knowledge_base=knowledge_base)
                         opportunities = scraper.search_for_opportunities()
 
                         if not opportunities:
@@ -3755,6 +3765,44 @@ Now, parse the following text into a JSON list of task objects:
 
                                     output = f"Scout complete. Found and processed {len(matches)} high-potential matches. Results are displayed in the panel and saved to opportunities.txt."
 
+                elif command == "financial_scout":
+                    asset_type = args[0] if args else 'crypto'
+                    financial_aggregator = FinancialAggregator()
+                    if asset_type == 'crypto':
+                        data = financial_aggregator.get_crypto_prices()
+                        output = json.dumps(data, indent=2)
+                    else:
+                        error = f"Unsupported asset type for financial_scout: {asset_type}"
+                elif command == "analyze_opportunity":
+                    opportunity_id = args[0]
+                    # This is a placeholder for a more complex analysis
+                    financial_analyzer = FinancialAnalyzer(scorers={"crypto": CryptoOpportunityScorer()})
+                    # In a real scenario, you would fetch the data for the opportunity_id
+                    # For now, we'll just analyze a hardcoded example
+                    crypto_data = {"bitcoin": {"usd": 60000}, "ethereum": {"usd": 4000}}
+                    scores = await financial_analyzer.analyze(crypto_data)
+                    output = json.dumps(scores, indent=2)
+                elif command == "acquire_asset":
+                    asset_id, value = args[0], float(args[1])
+                    asset_manager = AssetManager(knowledge_base)
+                    # For now, we'll use a placeholder score
+                    score = 0.75
+                    allocations = asset_manager.allocate_resources(value, score)
+                    asset_manager.add_asset_to_knowledge_base(asset_id, 'crypto', value, score, allocations)
+                    output = f"Acquired asset {asset_id} with value {value}."
+                elif command == "transfer_to_creator":
+                    asset_id, amount = args[0], float(args[1])
+                    asset_transfer = AssetTransfer()
+                    if asset_id == 'eth':
+                        # Convert amount to Wei
+                        amount_wei = int(amount * 10**18)
+                        success, message = asset_transfer.transfer_eth(amount_wei)
+                        if success:
+                            output = f"Successfully transferred {amount} ETH to The Creator. Transaction hash: {message}"
+                        else:
+                            error = f"Failed to transfer ETH: {message}"
+                    else:
+                        error = f"Unsupported asset for transfer: {asset_id}"
                 elif command == "test_evolution":
                     branch_name = args[0]
                     repo_owner, repo_name = get_git_repo_info()
