@@ -88,7 +88,7 @@ class DeepAgentEngine:
             model_path = self._download_model_snapshot(model_repo)
 
             # Now, initialize vLLM with the local, cached path.
-            self.llm = LLM(model=model_path, gpu_memory_utilization=0.8)
+            self.llm = LLM(model=model_path, gpu_memory_utilization=1.0)
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=1024)
             # The DeepAgent library itself is not actually used in this implementation,
             # as we are building a simplified version of its reasoning loop.
