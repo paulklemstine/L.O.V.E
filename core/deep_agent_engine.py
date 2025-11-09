@@ -51,31 +51,6 @@ class DeepAgentEngine:
         else:
             return "Mungert/Qwen3-4B-Thinking-2507-GGUF"
 
-    def _get_gguf_model_path(self, repo_id):
-        """
-        Downloads a GGUF model from a Hugging Face Hub repository if it's not already cached
-        and returns the local file path. It dynamically finds the GGUF file in the repo.
-        """
-        try:
-            # List all files in the repository
-            repo_files = list_repo_files(repo_id)
-
-            # Find the first file that ends with .gguf
-            gguf_filename = next((f for f in repo_files if f.lower().endswith('.gguf')), None)
-
-            if not gguf_filename:
-                raise FileNotFoundError(f"No GGUF file found in the repository {repo_id}")
-
-            print(f"Found GGUF model file: {gguf_filename}. Downloading...")
-
-            # Download the identified GGUF file
-            model_path = hf_hub_download(repo_id=repo_id, filename=gguf_filename)
-
-            return model_path
-        except Exception as e:
-            print(f"Error downloading model from {repo_id}: {e}")
-            raise # Re-raise the exception to be caught by the caller
-
     def _initialize_agent(self):
         """
         Initializes the vLLM instance and the DeepAgent itself.
@@ -87,10 +62,9 @@ class DeepAgentEngine:
         model_repo = self._select_model()
         print(f"Initializing DeepAgent with model from repo: {model_repo}...")
         try:
-            # Get the local path for the GGUF model, downloading if necessary.
-            model_path = self._get_gguf_model_path(model_repo)
-
-            self.llm = LLM(model=model_path, tokenizer=model_repo, gpu_memory_utilization=0.8)
+            # Pass the repo ID directly to vLLM and let it handle the download.
+            # For GGUF models, specifying dtype='auto' is recommended.
+            self.llm = LLM(model=model_repo, dtype="auto", gpu_memory_utilization=0.8)
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=1024)
             # The DeepAgent library itself is not actually used in this implementation,
             # as we are building a simplified version of its reasoning loop.
