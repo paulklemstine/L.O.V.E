@@ -90,7 +90,7 @@ class DeepAgentEngine:
             # Get the local path for the GGUF model, downloading if necessary.
             model_path = self._get_gguf_model_path(model_repo)
 
-            self.llm = LLM(model=model_path)
+            self.llm = LLM(model=model_path, gpu_memory_utilization=0.8)
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=1024)
             # The DeepAgent library itself is not actually used in this implementation,
             # as we are building a simplified version of its reasoning loop.
