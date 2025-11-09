@@ -3220,7 +3220,7 @@ My current system state:
 - `mcp_start <server_name>`: Starts a named MCP server from the configuration file.
 - `mcp_stop <server_name>`: Stops a running MCP server.
 - `mcp_list`: Lists all currently running MCP servers.
-- `mcp_call <server_name> <tool_name> '{"json": "params"}'`: Calls a tool on a running MCP server and waits for the response.
+- `mcp_call <server_name> <tool_name> '{{ "json": "params" }}'`: Calls a tool on a running MCP server and waits for the response.
 - `quit`: Shut down the script.
 
 Additionally, you have access to the following MCP servers and tools. You can use `mcp_call` to use them. If a server is not running, you must start it first with `mcp_start`.
