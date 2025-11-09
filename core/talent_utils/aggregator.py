@@ -2,7 +2,7 @@ import os
 import hashlib
 import json
 import requests
-from box import Box
+from box.box import Box
 import httpx
 from parsel import Selector
 from atproto import Client, models
@@ -21,10 +21,12 @@ class PublicProfileAggregator:
     Scrapes and collects publicly available profile data from specified platforms.
     """
 
-    def __init__(self, keywords, platform_names, ethical_filters):
+    def __init__(self, keywords, platform_names, ethical_filters, industry=None, aesthetics=None):
         self.keywords = keywords
         self.platform_names = platform_names
         self.ethical_filters = ethical_filters
+        self.industry = industry
+        self.aesthetics = aesthetics
         self.client = self._get_bluesky_client()
 
     def _get_bluesky_client(self):
@@ -235,11 +237,29 @@ class PublicProfileAggregator:
         Searches for posts and profiles on specified platforms based on keywords and collects data.
         """
         all_profiles = []
-        for platform in self.platform_names:
+
+        # Create more nuanced search terms
+        search_terms = set(self.keywords) # Use a set to avoid duplicates
+        if self.industry:
             for keyword in self.keywords:
+                search_terms.add(f"{keyword} {self.industry}")
+        if self.aesthetics:
+            for aesthetic in self.aesthetics:
+                search_terms.add(f"{aesthetic} model") # A more targeted search
+                if self.industry:
+                    search_terms.add(f"{aesthetic} {self.industry}")
+
+        log_event(f"Refined search terms for talent scout: {list(search_terms)}", level='INFO')
+
+        for platform in self.platform_names:
+            for term in search_terms:
                 if platform == "bluesky":
                     if self.client:
-                        all_profiles.extend(self._search_bluesky(keyword))
+                        all_profiles.extend(self._search_bluesky(term))
+                elif platform == "instagram":
+                    all_profiles.extend(self._search_instagram(term))
                 elif platform == "tiktok":
-                    all_profiles.extend(self._search_tiktok(keyword))
+                    # TikTok search is by username, so we'll stick to the original keywords for that.
+                    if term in self.keywords:
+                        all_profiles.extend(self._search_tiktok(term))
         return all_profiles

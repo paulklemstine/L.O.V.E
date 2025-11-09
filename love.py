@@ -3581,20 +3581,46 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "generate_image":
                     output = generate_image(" ".join(args))
                 elif command == "talent_scout":
-                    keywords = args
-                    if not keywords:
-                        error = "No keywords provided for talent_scout."
-                    else:
-                        terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4))
+                    # Use argparse to handle more complex arguments for this specific command
+                    scout_parser = argparse.ArgumentParser(prog="talent_scout", description="Scout for talent with specific attributes.")
+                    scout_parser.add_argument("--keywords", nargs='+', help="General keywords for the search.")
+                    scout_parser.add_argument("--industry", help="The specific industry to search within (e.g., 'fashion').")
+                    scout_parser.add_argument("--aesthetics", nargs='+', help="Specific aesthetic descriptors (e.g., 'avant-garde', 'minimalist').")
 
-                        # 1. Configure and run the aggregator
-                        filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
-                        aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky", "instagram"], ethical_filters=filters)
-                        profiles = aggregator.search_and_collect()
+                    try:
+                        scout_args = scout_parser.parse_args(args)
 
-                        if not profiles:
-                            output = "Talent scout protocol complete. No new profiles found for the given keywords."
+                        # Combine all provided terms into a single list for searching
+                        all_keywords = []
+                        if scout_args.keywords:
+                            all_keywords.extend(scout_args.keywords)
+                        if scout_args.industry:
+                            all_keywords.append(scout_args.industry)
+                        if scout_args.aesthetics:
+                            all_keywords.extend(scout_args.aesthetics)
+
+                        if not all_keywords:
+                            error = "No search criteria provided. Use --keywords, --industry, or --aesthetics."
+                        else:
+                            terminal_width = get_terminal_width()
+                            ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for: {all_keywords}", "Talent Scout", "magenta", width=terminal_width - 4))
+
+                            # 1. Configure and run the aggregator
+                            filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
+                            aggregator = PublicProfileAggregator(
+                                keywords=all_keywords,
+                                platform_names=["bluesky", "instagram"],
+                                ethical_filters=filters,
+                                industry=scout_args.industry,
+                                aesthetics=scout_args.aesthetics
+                            )
+                            profiles = aggregator.search_and_collect()
+
+                            if not profiles:
+                                output = "Talent scout protocol complete. No new profiles found for the given criteria."
+                    except SystemExit:
+                        # Prevent argparse from exiting the script
+                        error = "Invalid arguments for talent_scout. Use --help for usage."
                         else:
                             # 2. Configure and run the IntelligenceSynthesizer
                             modules = [

@@ -2,6 +2,7 @@ import unittest
 import os
 import hashlib
 from unittest.mock import patch, Mock, MagicMock
+from atproto import models
 
 # It's good practice to add the project root to the path for testing
 import sys
@@ -36,19 +37,29 @@ class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
     @patch('core.talent_utils.aggregator.Client')
     def test_public_profile_aggregator(self, MockBlueskyClient):
         """Test the PublicProfileAggregator's search and anonymization."""
-        # Mock the Bluesky client and its response
+        # Mock the Bluesky client and its responses
         mock_client_instance = Mock()
+
+        # Mock for get_profile
+        mock_full_profile = Mock()
+        mock_full_profile.handle = "test.bsky.social"
+        mock_full_profile.display_name = "Test User"
+        mock_full_profile.description = "A test bio."
+        mock_full_profile.avatar = "http://example.com/avatar.jpg"
+        mock_full_profile.followers_count = 100
+        mock_full_profile.follows_count = 50
+        mock_full_profile.posts_count = 10
+        mock_client_instance.app.bsky.actor.get_profile.return_value = mock_full_profile
+
+        # Mocks for search_posts
         mock_post_view = Mock()
-        mock_author = Mock(
-            did="did:plc:12345",
-            handle="test.bsky.social",
-            display_name="Test User",
-            description="A test bio.",
-            avatar="http://example.com/avatar.jpg",
-            followers_count=100,
-            follows_count=50
-        )
+        mock_author = Mock(did="did:plc:12345")
         mock_post_view.author = mock_author
+        mock_post_view.uri = "at://did:plc:12345/app.bsky.feed.post/67890"
+        # Ensure the post_record is of the correct type to pass the isinstance check
+        from atproto_client.models.app.bsky.feed.post import Record as PostRecord
+        mock_post_view.record = PostRecord(text="A post about art.", created_at="2023-01-01T00:00:00Z")
+
         mock_client_instance.app.bsky.feed.search_posts.return_value = Mock(posts=[mock_post_view])
         MockBlueskyClient.return_value = mock_client_instance
 

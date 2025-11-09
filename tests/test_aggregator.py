@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import requests
-from box import Box
+from box.box import Box
 import httpx
 
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
