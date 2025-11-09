@@ -173,6 +173,7 @@ def _validate_ssh_private_key(key_content: str) -> Dict[str, Any]:
             "is_encrypted": is_encrypted
         },
         "recommendations": recommendations
+    }
 def _validate_xmr_private_key(private_key: str) -> Dict[str, Any]:
     """
     Validates a Monero private key by checking its format.
