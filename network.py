@@ -206,9 +206,32 @@ def perform_webrequest(url, knowledge_base, autopilot_mode=False):
         return None, error_msg
 
 def execute_shell_command(command, state):
-    """Executes a shell command and returns the output."""
+    """
+    Executes a shell command and returns the output.
+    Intercepts `echo '...' > file.py` commands to bypass shell length limits.
+    """
     from core.logging import log_event # Local import
     log_event(f"Executing shell command: {command}")
+
+    # --- Intercept echo > file.py pattern ---
+    # This regex captures the content inside single quotes and the filename.
+    # It's designed to be robust against variations in spacing.
+    match = re.match(r"^\s*echo\s+'(.*)'\s*>\s*([\w\/\.\-]+.py)\s*$", command, re.DOTALL)
+
+    if match:
+        content, filename = match.groups()
+        log_event(f"Intercepted echo command. Writing {len(content)} chars to '{filename}' directly.", "INFO")
+        try:
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return f"File '{filename}' created successfully.", "", 0
+        except (IOError, OSError) as e:
+            log_event(f"File write error during echo interception: {e}", level="ERROR")
+            return "", str(e), 1
+
+    # --- Standard Command Execution ---
     try:
         # For security, we should not allow certain commands
         if command.strip().startswith(("sudo", "rm -rf")):
