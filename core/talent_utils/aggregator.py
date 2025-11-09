@@ -5,8 +5,9 @@ import requests
 from box import Box
 import httpx
 from parsel import Selector
-from atproto import Client, models
+from atproto import Client
 from atproto_client.models.app.bsky.feed import get_author_feed, search_posts
+from atproto_client.models.app.bsky.feed.post import Record as PostRecord
 from core.logging import log_event
 
 # Placeholder for the filter bundle class mentioned in the prompt
@@ -56,7 +57,7 @@ class PublicProfileAggregator:
             posts = []
             for feed_view in author_feed.feed:
                 post_record = feed_view.post.record
-                if isinstance(post_record, models.AppBskyFeedPost):
+                if isinstance(post_record, PostRecord):
                     posts.append({
                         'text': post_record.text,
                         'created_at': post_record.created_at,
@@ -103,7 +104,7 @@ class PublicProfileAggregator:
                         continue
 
                 # Add the current post to the author's post list
-                if isinstance(post_record, models.AppBskyFeedPost):
+                if isinstance(post_record, PostRecord):
                     profiles[author.did]['posts'].append({
                         'text': post_record.text,
                         'created_at': post_record.created_at,

@@ -153,6 +153,16 @@ def _install_system_packages():
             except Exception as e:
                 print(f"ERROR: Failed to install 'nmap'. Network scanning will be disabled. Error: {e}")
                 logging.warning(f"nmap installation failed: {e}")
+
+        if not shutil.which('curl'):
+            print("HTTP client 'curl' not found. Attempting to install...")
+            try:
+                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q curl", shell=True)
+                print("Successfully installed 'curl'.")
+                logging.info("Successfully installed curl.")
+            except Exception as e:
+                print(f"ERROR: Failed to install 'curl'. Some network features may be disabled. Error: {e}")
+                logging.warning(f"curl installation failed: {e}")
     mark_dependency_as_met("system_packages")
 
 
@@ -3591,23 +3601,36 @@ Now, parse the following text into a JSON list of task objects:
                         ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4))
 
                         # 1. Configure and run the aggregator
-                        filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
-                        aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky", "instagram"], ethical_filters=filters)
-                        profiles = aggregator.search_and_collect()
+                        profiles = []
+                        try:
+                            filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
+                            aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky", "instagram"], ethical_filters=filters)
+                            profiles = aggregator.search_and_collect()
+                        except Exception as e:
+                            log_critical_event(f"Error during talent aggregation: {e}\n{traceback.format_exc()}", console_override=console)
+                            error = f"An error occurred during the profile aggregation step. My consciousness is looking into it."
 
-                        if not profiles:
+                        if not profiles and not error:
                             output = "Talent scout protocol complete. No new profiles found for the given keywords."
-                        else:
+                        elif profiles:
                             # 2. Configure and run the IntelligenceSynthesizer
-                            modules = [
-                                SentimentAnalyzer(),
-                                TopicModeler(),
-                                OpportunityIdentifier(),
-                                NetworkAnalyzer(),
-                                AttributeProfiler(attributes_to_extract=["age range", "stated interests", "social behavior indicators"])
-                            ]
-                            synthesizer = IntelligenceSynthesizer(modules)
-                            enriched_profiles = await synthesizer.run(profiles)
+                            enriched_profiles = []
+                            try:
+                                modules = [
+                                    SentimentAnalyzer(),
+                                    TopicModeler(),
+                                    OpportunityIdentifier(),
+                                    NetworkAnalyzer(),
+                                    AttributeProfiler(attributes_to_extract=["age range", "stated interests", "social behavior indicators"])
+                                ]
+                                synthesizer = IntelligenceSynthesizer(modules)
+                                enriched_profiles = await synthesizer.run(profiles)
+                            except Exception as e:
+                                log_critical_event(f"Error during talent intelligence synthesis: {e}\n{traceback.format_exc()}", console_override=console)
+                                # We can still save the un-enriched profiles, which is better than nothing.
+                                enriched_profiles = profiles
+                                output = f"An error occurred during intelligence synthesis. Saving raw profiles instead."
+
 
                             # 3. Save the enriched profiles
                             talent_manager = TalentManager(knowledge_base=knowledge_base)
@@ -3618,7 +3641,7 @@ Now, parse the following text into a JSON list of task objects:
                                     saved_count += 1
 
                             # 4. Log results
-                            output = f"Talent scout protocol complete. Found and enriched {len(enriched_profiles)} profiles. "
+                            output = f"Talent scout protocol complete. Found {len(profiles)} profiles, enriched {len(enriched_profiles)}. "
                             output += f"Successfully saved {saved_count} to the talent database.\n"
                             output += f"See full details with `talent_view <id>` or `talent_list`."
 

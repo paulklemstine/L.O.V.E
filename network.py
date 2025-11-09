@@ -14,6 +14,7 @@ from xml.etree import ElementTree as ET
 from core.retry import retry
 from pycvesearch import CVESearch
 from core.knowledge_extractor import KnowledgeExtractor
+import shlex
 
 # This module no longer imports directly from love.py to avoid circular dependencies.
 # Dependencies like IS_CREATOR_INSTANCE and callbacks are now injected via the constructor.
@@ -226,31 +227,51 @@ def perform_webrequest(url, knowledge_base, autopilot_mode=False, api_key=None, 
         return None, error_msg
 
 def execute_shell_command(command, state):
-    """Executes a shell command and returns the output."""
-    from core.logging import log_event # Local import
-    log_event(f"Executing shell command: {command}")
-    try:
-        # For security, we should not allow certain commands
-        if command.strip().startswith(("sudo", "rm -rf")):
-            raise PermissionError("Execution of this command is not permitted.")
+    """
+    Executes a shell command and returns the output.
+    This function is designed to be safer by avoiding `shell=True` where possible.
+    """
+    from core.logging import log_event
 
-        # Use shlex to safely split the command into arguments
+    log_event(f"Executing shell command: {command}")
+
+    # For security, we should not allow certain commands
+    if command.strip().startswith(("sudo", "rm -rf")):
+        log_event(f"Shell command permission denied: {command}", level="WARNING")
+        return "", "Execution of this command is not permitted.", -1
+
+    try:
+        # Use shlex to safely parse the command into a list.
+        # This is the primary defense against shell injection vulnerabilities.
         args = shlex.split(command)
+
+        # Special handling for 'echo' to ensure we capture its output directly,
+        # which is a common source of issues with nested quotes.
+        if args[0] == 'echo':
+            # Reconstruct the string that echo should print, preserving quotes.
+            # shlex.split removes one layer of quotes, so this is what the user intended.
+            output_string = " ".join(args[1:])
+            return output_string + "\n", "", 0 # Simulate shell's newline
+
+        # For most commands, execute them directly without the shell.
         result = subprocess.run(
             args,
-            shell=False,  # Set shell=False for security and reliability
             capture_output=True,
             text=True,
-            timeout=300
+            timeout=300,
+            check=False # We will check the returncode manually
         )
         return result.stdout, result.stderr, result.returncode
+
     except subprocess.TimeoutExpired:
         return "", "Command timed out after 300 seconds.", -1
-    except PermissionError as e:
-        log_event(f"Shell command permission denied: {command}", level="WARNING")
-        return "", str(e), -1
+    except FileNotFoundError:
+        # This occurs if the command itself is not found (e.g., 'nmap' not installed)
+        error_msg = f"Command not found: {args[0]}"
+        log_event(error_msg, level="ERROR")
+        return "", error_msg, 127 # Standard exit code for "command not found"
     except Exception as e:
-        log_event(f"Shell command execution error: {e}", level="ERROR")
+        log_event(f"Shell command execution error for command '{command}': {e}", level="ERROR")
         return "", str(e), -1
 
 def track_ethereum_price():
