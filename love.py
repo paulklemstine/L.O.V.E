@@ -553,6 +553,9 @@ from core.strategic_reasoning_engine import StrategicReasoningEngine
 from core.qa_agent import QAAgent
 from mcp_manager import MCPManager
 from core.image_api import generate_image
+import http.server
+import socketserver
+import websockets
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -2081,6 +2084,72 @@ CONFLICTED CONTENT:
         except Exception as e:
             # Catching any other unexpected errors during the process
             core.logging.log_event(f"An unexpected error occurred during orphan reconciliation: {e}\n{traceback.format_exc()}", level="ERROR")
+
+# --- WEB INTERFACE SERVERS ---
+class WebServerManager:
+    """Manages the lightweight HTTP server in a background thread."""
+    def __init__(self, port=7860):
+        self.port = port
+        self.server = None
+        self.thread = None
+
+    def start(self):
+        Handler = http.server.SimpleHTTPRequestHandler
+        self.server = socketserver.TCPServer(("", self.port), Handler)
+        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        core.logging.log_event(f"HTTP server started on port {self.port}.", level="INFO")
+
+    def stop(self):
+        if self.server:
+            self.server.shutdown()
+            self.server.server_close()
+            core.logging.log_event("HTTP server shut down.", level="INFO")
+
+class WebSocketServerManager:
+    """Manages the WebSocket server for real-time UI updates."""
+    def __init__(self, user_input_queue, port=7861):
+        self.user_input_queue = user_input_queue
+        self.port = port
+        self.clients = set()
+        self.server = None
+        self.thread = None
+        self.loop = None
+
+    def start(self):
+        self.thread = Thread(target=self._start_server_sync, daemon=True)
+        self.thread.start()
+        core.logging.log_event(f"WebSocket server started on port {self.port}.", level="INFO")
+
+    def _start_server_sync(self):
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        start_server = websockets.serve(self._connection_handler, "localhost", self.port)
+        self.server = self.loop.run_until_complete(start_server)
+        self.loop.run_forever()
+
+    async def _connection_handler(self, websocket, path):
+        self.clients.add(websocket)
+        try:
+            async for message in websocket:
+                data = json.loads(message)
+                if data.get("type") == "user_command":
+                    self.user_input_queue.put(data.get("payload"))
+        finally:
+            self.clients.remove(websocket)
+
+    def stop(self):
+        if self.server:
+            self.loop.call_soon_threadsafe(self.loop.stop)
+            self.server.close()
+            core.logging.log_event("WebSocket server shut down.", level="INFO")
+
+    def broadcast(self, message):
+        if self.clients:
+            asyncio.run_coroutine_threadsafe(
+                asyncio.wait([client.send(message) for client in self.clients]),
+                self.loop
+            )
 
     def _conduct_llm_code_review(self, diff_text):
         """
@@ -4087,6 +4156,43 @@ def _strip_ansi_codes(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return ansi_escape.sub('', text)
 
+def serialize_panel_to_json(panel, panel_type_map):
+    """Serializes a Rich Panel object to a JSON string for the web UI."""
+    if not isinstance(panel, Panel):
+        return None
+
+    # Determine panel_type from border style
+    border_style = str(panel.border_style)
+    panel_type = "default"
+    for p_type, color in panel_type_map.items():
+        if color in border_style:
+            panel_type = p_type
+            break
+
+    # Extract title text
+    title = ""
+    if hasattr(panel.title, 'plain'):
+        title = panel.title.plain
+    elif isinstance(panel.title, str):
+        title = panel.title
+    # Clean up emojis and extra spaces from the title
+    title = re.sub(r'^\s*[^a-zA-Z0-9]*\s*(.*?)\s*[^a-zA-Z0-9]*\s*$', r'\1', title).strip()
+
+
+    # Render the content to a plain string, stripping ANSI codes
+    temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
+    temp_console.print(panel.renderable)
+    content_with_ansi = temp_console.file.getvalue()
+    plain_content = _strip_ansi_codes(content_with_ansi)
+
+    json_obj = {
+        "panel_type": panel_type,
+        "title": title,
+        "content": plain_content.strip()
+    }
+    return json.dumps(json_obj)
+
+
 def simple_ui_renderer():
     """
     Continuously gets items from the ui_panel_queue and renders them.
@@ -4146,6 +4252,13 @@ def simple_ui_renderer():
                 item = create_god_panel(item.get('insight', '...'), width=terminal_width - 4)
 
             # For all other items (e.g., rich Panels), render them fully.
+            # --- WEB SOCKET BROADCAST ---
+            from ui_utils import PANEL_TYPE_COLORS
+            if 'websocket_server_manager' in globals() and websocket_server_manager:
+                json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS)
+                if json_payload:
+                    websocket_server_manager.broadcast(json_payload)
+
             temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
             temp_console.print(item)
             output_str = temp_console.file.getvalue()
@@ -4212,11 +4325,17 @@ async def model_refresh_loop():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager
+    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager
 
     loop = asyncio.get_running_loop()
+    user_input_queue = queue.Queue()
+
 
     # --- Initialize Managers and Services ---
+    web_server_manager = WebServerManager()
+    web_server_manager.start()
+    websocket_server_manager = WebSocketServerManager(user_input_queue)
+    websocket_server_manager.start()
 
 
     # --- Connectivity Checks ---
@@ -4274,7 +4393,6 @@ async def main(args):
     mcp_manager = MCPManager(console)
 
     # --- Start Core Logic Threads ---
-    user_input_queue = queue.Queue()
     # Start the simple UI renderer in its own thread. This will now handle all console output.
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
@@ -4321,6 +4439,8 @@ async def run_safely():
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
+        if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
+        if 'websocket_server_manager' in globals() and websocket_server_manager: websocket_server_manager.stop()
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
@@ -4329,6 +4449,8 @@ async def run_safely():
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
+        if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
+        if 'websocket_server_manager' in globals() and websocket_server_manager: websocket_server_manager.stop()
         full_traceback = traceback.format_exc()
         # Use our new, more robust critical event logger
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
