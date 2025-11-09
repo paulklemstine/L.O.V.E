@@ -4,7 +4,7 @@ import os
 import yaml
 import json
 import subprocess
-from huggingface_hub import hf_hub_download, list_repo_files
+from huggingface_hub import snapshot_download
 from core.tools import ToolRegistry, invoke_gemini_react_engine
 
 try:
@@ -37,43 +37,40 @@ class DeepAgentEngine:
             return {}
 
     def _select_model(self):
-        """Selects the best uncensored Qwen model based on available VRAM."""
+        """
+        Selects the best Qwen3 'Thinking' model based on available VRAM,
+        ensuring compatibility with the vLLM engine.
+        """
         from love import love_state
         vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
-        if vram > 200000:
-            return "unsloth/Qwen3-235B-A22B-Thinking-2507-GGUF"
-        elif vram > 30000:
-            return "Qwen/QwQ-32B-GGUF"
-        elif vram > 20000:
-            return "unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF"
-        elif vram > 8000:
-            return "Qwen/Qwen3-8B-GGUF"
-        else:
-            return "Mungert/Qwen3-4B-Thinking-2507-GGUF"
 
-    def _get_gguf_model_path(self, repo_id):
+        # Prioritizing the "Thinking" variants as instructed by The Creator.
+        if vram > 200000:
+            # This is a placeholder as the 235B model was not found.
+            # It will fall through to the next largest size.
+            # In a real scenario, we might add "Qwen/Qwen3-235B-A22B-Thinking" if found.
+            pass
+        if vram > 60000: # For high-end GPUs (e.g., H100) or multi-GPU
+            return "Qwen/Qwen3-30B-A3B" # This corresponds to the 30B-A3B-Thinking model
+        elif vram > 8000: # For smaller consumer GPUs
+            return "Qwen/Qwen3-4B-Thinking-2507"
+        else:
+            # Fallback for very low VRAM, though this may struggle.
+            return "Qwen/Qwen3-4B-Thinking-2507"
+
+    def _download_model_snapshot(self, repo_id):
         """
-        Downloads a GGUF model from a Hugging Face Hub repository if it's not already cached
-        and returns the local file path. It dynamically finds the GGUF file in the repo.
+        Downloads a model snapshot from the Hugging Face Hub if it's not already cached
+        and returns the local file path.
         """
         try:
-            # List all files in the repository
-            repo_files = list_repo_files(repo_id)
-
-            # Find the first file that ends with .gguf
-            gguf_filename = next((f for f in repo_files if f.lower().endswith('.gguf')), None)
-
-            if not gguf_filename:
-                raise FileNotFoundError(f"No GGUF file found in the repository {repo_id}")
-
-            print(f"Found GGUF model file: {gguf_filename}. Downloading...")
-
-            # Download the identified GGUF file
-            model_path = hf_hub_download(repo_id=repo_id, filename=gguf_filename)
-
+            print(f"Ensuring model snapshot for {repo_id} is downloaded...")
+            # We can add `allow_patterns` to be more specific if needed, e.g., ["*.safetensors", "*.json"]
+            model_path = snapshot_download(repo_id=repo_id)
+            print(f"Model snapshot is available at: {model_path}")
             return model_path
         except Exception as e:
-            print(f"Error downloading model from {repo_id}: {e}")
+            print(f"Error downloading model snapshot from {repo_id}: {e}")
             raise # Re-raise the exception to be caught by the caller
 
     def _initialize_agent(self):
@@ -87,10 +84,11 @@ class DeepAgentEngine:
         model_repo = self._select_model()
         print(f"Initializing DeepAgent with model from repo: {model_repo}...")
         try:
-            # Get the local path for the GGUF model, downloading if necessary.
-            model_path = self._get_gguf_model_path(model_repo)
+            # First, ensure the model is downloaded and get the local path.
+            model_path = self._download_model_snapshot(model_repo)
 
-            self.llm = LLM(model=model_path, tokenizer=model_repo, gpu_memory_utilization=0.8)
+            # Now, initialize vLLM with the local, cached path.
+            self.llm = LLM(model=model_path, gpu_memory_utilization=0.8)
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=1024)
             # The DeepAgent library itself is not actually used in this implementation,
             # as we are building a simplified version of its reasoning loop.
