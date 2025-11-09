@@ -77,21 +77,30 @@ class PublicProfileAggregator:
                 author = post_view.author
                 post_record = post_view.record
 
-                # If we haven't seen this author before, create a profile entry
+                # If we haven't seen this author before, fetch their full profile
                 if author.did not in profiles:
-                    profiles[author.did] = {
-                        'anonymized_id': self._anonymize_id(author.did),
-                        'platform': 'bluesky',
-                        'handle': author.handle,
-                        'display_name': author.display_name,
-                        'bio': getattr(author, 'description', None),
-                        'avatar_url': author.avatar,
-                        'followers_count': author.followers_count,
-                        'follows_count': author.follows_count,
-                        'posts_count': getattr(author, 'posts_count', 'N/A'),
-                        'source_id': author.did,
-                        'posts': []
-                    }
+                    try:
+                        # Make an additional call to get the full profile
+                        profile_response = self.client.app.bsky.actor.get_profile(actor=author.did)
+                        full_profile = profile_response
+
+                        profiles[author.did] = {
+                            'anonymized_id': self._anonymize_id(author.did),
+                            'platform': 'bluesky',
+                            'handle': full_profile.handle,
+                            'display_name': full_profile.display_name,
+                            'bio': full_profile.description,
+                            'avatar_url': full_profile.avatar,
+                            'followers_count': full_profile.followers_count,
+                            'follows_count': full_profile.follows_count,
+                            'posts_count': full_profile.posts_count,
+                            'source_id': author.did,
+                            'posts': []
+                        }
+                    except Exception as e:
+                        log_event(f"Could not fetch full profile for DID {author.did}: {e}", level='WARNING')
+                        # Skip this author if we can't get their profile
+                        continue
 
                 # Add the current post to the author's post list
                 if isinstance(post_record, models.AppBskyFeedPost):
@@ -231,8 +240,6 @@ class PublicProfileAggregator:
                 if platform == "bluesky":
                     if self.client:
                         all_profiles.extend(self._search_bluesky(keyword))
-                elif platform == "instagram":
-                    all_profiles.extend(self._search_instagram(keyword))
                 elif platform == "tiktok":
                     all_profiles.extend(self._search_tiktok(keyword))
         return all_profiles
