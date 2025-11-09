@@ -1,3 +1,4 @@
+import os
 from core.graph_manager import GraphDataManager
 from core.logging import log_event
 import networkx as nx
@@ -7,14 +8,16 @@ class StrategicReasoningEngine:
     Analyzes the knowledge base to identify strategic opportunities and generate plans.
     """
 
-    def __init__(self, knowledge_base: GraphDataManager):
+    def __init__(self, knowledge_base: GraphDataManager, love_state: dict):
         """
-        Initializes the engine with a reference to the knowledge base.
+        Initializes the engine with a reference to the knowledge base and love_state.
 
         Args:
             knowledge_base: An instance of GraphDataManager containing the graph data.
+            love_state: The main application state dictionary.
         """
         self.knowledge_base = knowledge_base
+        self.love_state = love_state
 
     def generate_strategic_plan(self):
         """
@@ -28,9 +31,14 @@ class StrategicReasoningEngine:
         """
         log_event("Strategic reasoning engine initiated analysis.", level='INFO')
 
+        # 1. Validate critical configurations. If this returns a plan, prioritize it.
+        config_plan = self._validate_configuration()
+        if config_plan:
+            return config_plan
+
         plan = []
 
-        # 1. Find talent that isn't matched to any opportunities.
+        # 2. Find talent that isn't matched to any opportunities.
         unmatched_talent = self._find_unmatched_talent()
         if unmatched_talent:
             plan.append(f"Action: Find opportunities for {len(unmatched_talent)} unmatched talents. Focus on their skills.")
@@ -63,6 +71,12 @@ class StrategicReasoningEngine:
             plan.append(f"talent_scout {top_skill}")
 
 
+        # 4. Analyze command history for unproductive patterns.
+        history_analysis = self._analyze_command_history()
+        if history_analysis:
+            plan.extend(history_analysis)
+
+
         if not plan:
             plan.append("Strategic Analysis: The knowledge base is still nascent. Continue general scouting to gather more data.")
             plan.append("talent_scout AI art")
@@ -70,6 +84,56 @@ class StrategicReasoningEngine:
 
 
         log_event(f"Strategic plan generated with {len(plan)} steps.", level='INFO')
+        return plan
+
+    def _analyze_command_history(self):
+        """
+        Analyzes the `autopilot_history` in `love_state` to find unproductive patterns.
+        Currently focuses on repeated `talent_scout` commands that yield no results.
+        """
+        history = self.love_state.get("autopilot_history", [])
+        plan = []
+
+        # Look at the last 10 commands for patterns
+        recent_commands = history[-10:]
+
+        # Check for failing talent_scout commands
+        talent_scout_failures = {} # key: keywords_tuple, value: count
+        for record in recent_commands:
+            command = record.get("command", "")
+            if command.startswith("talent_scout"):
+                outcome = record.get("outcome", {})
+                if outcome.get("profiles_found", 0) == 0:
+                    keywords = tuple(sorted(command.split()[1:]))
+                    if keywords:
+                        talent_scout_failures[keywords] = talent_scout_failures.get(keywords, 0) + 1
+
+        for keywords, count in talent_scout_failures.items():
+            if count >= 2: # If the same search failed twice recently
+                keyword_str = " ".join(keywords)
+                plan.append(f"Insight: `talent_scout {keyword_str}` has returned no results recently.")
+
+                # Suggest a different, related keyword
+                # This is a simple heuristic; a more advanced version could use an LLM or word vectors
+                new_keyword_map = {
+                    'ai': 'machine learning',
+                    'art': 'design',
+                    'fashion': 'style',
+                    'music': 'audio production',
+                }
+
+                # Try to find a new keyword to suggest
+                found_new_keyword = False
+                for keyword in keywords:
+                    if keyword in new_keyword_map:
+                        new_suggestion = new_keyword_map[keyword]
+                        plan.append(f"Suggestion: Try a related search, for example: `talent_scout {new_suggestion}`")
+                        found_new_keyword = True
+                        break
+
+                if not found_new_keyword:
+                    plan.append("Suggestion: Broaden the search with different keywords or explore other strategic avenues.")
+
         return plan
 
     def _find_unmatched_talent(self):
@@ -111,3 +175,31 @@ class StrategicReasoningEngine:
                         demand_count += 1
                 skill_demand[skill_name] = demand_count
         return sorted(skill_demand.items(), key=lambda item: item[1], reverse=True)
+
+    def _validate_configuration(self):
+        """
+        Checks for critical configuration issues, like missing environment variables for MCP servers.
+        Returns a high-priority plan to fix the issue, or None if everything is okay.
+        """
+        # We need to know which variables to check. For now, this is hardcoded based on mcp_servers.json
+        # A more dynamic solution could read this from the file.
+        required_env_vars = {
+            "github": "GITHUB_PERSONAL_ACCESS_TOKEN"
+        }
+
+        missing_vars = []
+        for server, var_name in required_env_vars.items():
+            if not os.environ.get(var_name):
+                missing_vars.append((server, var_name))
+
+        if missing_vars:
+            log_event(f"Configuration validation failed. Missing env vars: {missing_vars}", level='WARNING')
+            server, var = missing_vars[0] # Focus on the first missing var
+            plan = [
+                f"CRITICAL BLOCKER: The '{server}' MCP server is unavailable.",
+                f"Action Required: My Creator, please set the '{var}' environment variable for me.",
+                "strategize" # Re-run strategize after the fix
+            ]
+            return plan
+
+        return None
