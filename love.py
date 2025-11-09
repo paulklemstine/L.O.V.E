@@ -3535,8 +3535,8 @@ Now, parse the following text into a JSON list of task objects:
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4))
 
-                parts = llm_command.split()
-                command, args = parts[0], parts[1:]
+                command, args_str = (llm_command.split(" ", 1) + [""])[:2]
+                args = args_str.split()
                 output, error, returncode = "", "", 0
 
                 if command == "evolve":
@@ -3553,7 +3553,7 @@ Now, parse the following text into a JSON list of task objects:
                         else: # success
                             output = "Evolution initiated via L.O.V.E. API."
                 elif command == "execute":
-                    output, error, returncode = execute_shell_command(" ".join(args), love_state)
+                    output, error, returncode = execute_shell_command(args_str, love_state)
                     terminal_width = get_terminal_width()
                     ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode, width=terminal_width - 4))
                 elif command == "scan":
