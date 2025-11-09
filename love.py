@@ -2968,8 +2968,11 @@ async def is_duplicate_task(new_request, love_task_manager, console):
             continue
 
         prompt = f"""
-You are a task analysis AI. Your goal is to determine if two task requests are functionally duplicates, even if they are worded differently.
-Compare the two requests below. Do they have the same underlying goal?
+You are a meticulous task analysis AI. Your goal is to determine if two software evolution requests are functionally duplicates.
+A task is a duplicate ONLY if it aims to modify the exact same command, function, or core logic block as an existing task.
+Be very strict. If the requests target different functionalities, even if they are related (e.g., both are about 'shell commands' but one is about parsing and the other is about execution), they are NOT duplicates.
+
+Compare the two requests below. Do they target the exact same core functionality?
 
 Request 1:
 ---
