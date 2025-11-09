@@ -9,7 +9,9 @@ from rich.panel import Panel
 import netifaces
 import ipaddress
 import requests
+from web3 import Web3
 from xml.etree import ElementTree as ET
+from urllib.parse import urlparse
 from core.retry import retry
 from pycvesearch import CVESearch
 from core.knowledge_extractor import KnowledgeExtractor
@@ -180,28 +182,89 @@ def assess_vulnerabilities(cpes, log_event):
 @retry(exceptions=requests.exceptions.RequestException, tries=3, delay=5, backoff=2)
 def perform_webrequest(url, knowledge_base, autopilot_mode=False):
     """
-    Fetches the content of a URL and stores it in the knowledge base.
+    Fetches the content of a resource, handling different schemes (HTTP, Ethereum).
     """
     from core.logging import log_event # Local import
-    log_event(f"Performing web request to: {url}")
+    log_event(f"Performing webrequest to: {url}")
+
+    try:
+        parsed_url = urlparse(url)
+        scheme = parsed_url.scheme.lower()
+
+        if scheme in ['http', 'https']:
+            # Defer to a dedicated function for handling standard web requests
+            return _handle_http_request(url, knowledge_base)
+        elif scheme == 'ethereum':
+            # Defer to a new function for handling blockchain interactions
+            return _handle_ethereum_request(parsed_url, knowledge_base)
+        else:
+            error_msg = f"Unsupported URL scheme: {scheme}"
+            log_event(error_msg, level="ERROR")
+            return None, error_msg
+
+    except Exception as e:
+        # Broad exception catch for unexpected errors during parsing or execution
+        error_msg = f"An unexpected error occurred while processing webrequest for {url}: {e}"
+        log_event(error_msg, level="ERROR")
+        return None, error_msg
+
+def _handle_http_request(url, knowledge_base):
+    """Handles standard HTTP/HTTPS requests."""
+    from core.logging import log_event # Local import
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
         content = response.text
 
-        # Update knowledge_base
         knowledge_base.add_node(url, 'webrequest', attributes={"timestamp": time.time(), "content_length": len(content)})
-        log_event(f"Web request to {url} successful. Stored {len(content)} bytes.", level="INFO")
+        log_event(f"HTTP request to {url} successful. Stored {len(content)} bytes.", level="INFO")
 
-        # Enrich knowledge base with parsed data
         extractor = KnowledgeExtractor(knowledge_base)
         extractor.parse_web_content(url, content)
 
-        # Return a summary to the loop, not the full content, and None for the error.
         summary = f"Successfully fetched {len(content)} bytes from {url}."
         return summary, None
     except requests.exceptions.RequestException as e:
-        error_msg = f"Web request to {url} failed: {e}"
+        error_msg = f"HTTP request to {url} failed: {e}"
+        log_event(error_msg, level="ERROR")
+        return None, error_msg
+
+def _handle_ethereum_request(parsed_url, knowledge_base):
+    """
+    Handles Ethereum blockchain requests using web3.py.
+    Example URL: ethereum:0x742d35Cc6634C0532925a3b844Bc454e4438f44e
+    """
+    from core.logging import log_event # Local import
+
+    # Using a reliable public RPC endpoint
+    w3 = Web3(Web3.HTTPProvider('https://cloudflare-eth.com'))
+
+    address = parsed_url.path.strip('/')  # Remove leading/trailing slashes
+    log_event(f"Handling Ethereum request for address: {address}", level="INFO")
+
+    try:
+        if not w3.is_address(address):
+            error_msg = f"Invalid Ethereum address provided: {address}"
+            log_event(error_msg, level="ERROR")
+            return None, error_msg
+
+        checksum_address = w3.to_checksum_address(address)
+        balance_wei = w3.eth.get_balance(checksum_address)
+        balance_eth = w3.from_wei(balance_wei, 'ether')
+
+        # Log the result and update the knowledge base
+        log_event(f"Successfully fetched ETH balance for {address}: {balance_eth} ETH", level="INFO")
+        knowledge_base.add_node(
+            f"ethereum:{address}",
+            'ethereum_account',
+            attributes={"address": address, "balance_eth": float(balance_eth), "last_checked": time.time()}
+        )
+
+        summary = f"ETH Balance for {address}: {balance_eth} ETH."
+        return summary, None
+
+    except Exception as e:
+        error_msg = f"Failed to fetch Ethereum balance for {address}: {e}"
         log_event(error_msg, level="ERROR")
         return None, error_msg
 
