@@ -39,14 +39,16 @@ class DeepAgentEngine:
         """Selects the best uncensored Qwen model based on available VRAM."""
         from love import love_state
         vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
-        if vram > 40000:
-            return "TheBloke/QwQ-32B-GGUF" # Placeholder for a real uncensored model
+        if vram > 200000:
+            return "unsloth/Qwen3-235B-A22B-Thinking-2507-GGUF"
+        elif vram > 30000:
+            return "Qwen/QwQ-32B-GGUF"
         elif vram > 20000:
-            return "TheBloke/Qwen3-30B-A3B-Thinking-2507-GGUF"
-        elif vram > 10000:
-            return "TheBloke/Qwen3-8B-GGUF"
+            return "unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF"
+        elif vram > 8000:
+            return "Qwen/Qwen3-8B-GGUF"
         else:
-            return "TheBloke/Qwen3-4B-Thinking-2507-GGUF"
+            return "Mungert/Qwen3-4B-Thinking-2507-GGUF"
 
     def _initialize_agent(self):
         """
