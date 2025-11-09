@@ -9,6 +9,7 @@ from rich.panel import Panel
 import netifaces
 import ipaddress
 import requests
+import shlex
 from xml.etree import ElementTree as ET
 from core.retry import retry
 from pycvesearch import CVESearch
@@ -179,28 +180,47 @@ def assess_vulnerabilities(cpes, log_event):
     return vulnerabilities
 
 @retry(exceptions=requests.exceptions.RequestException, tries=3, delay=5, backoff=2)
-def perform_webrequest(url, knowledge_base, autopilot_mode=False):
+def perform_webrequest(url, knowledge_base, autopilot_mode=False, api_key=None, method='GET', payload=None):
     """
     Fetches the content of a URL and stores it in the knowledge base.
+    Includes an optional API key for authenticated requests.
+    Supports GET and POST methods.
     """
     from core.logging import log_event # Local import
-    log_event(f"Performing web request to: {url}")
+    log_event(f"Performing {method} request to: {url}")
+
+    headers = {
+        "Content-Type": "application/json"
+    }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
     try:
-        response = requests.get(url, timeout=30)
+        if method.upper() == 'POST':
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+        else:
+            response = requests.get(url, headers=headers, timeout=30)
+
         response.raise_for_status()
-        content = response.text
+
+        # Try to parse JSON, fall back to text
+        try:
+            content = response.json()
+        except json.JSONDecodeError:
+            content = response.text
 
         # Update knowledge_base
-        knowledge_base.add_node(url, 'webrequest', attributes={"timestamp": time.time(), "content_length": len(content)})
-        log_event(f"Web request to {url} successful. Stored {len(content)} bytes.", level="INFO")
+        content_length = len(response.text)
+        knowledge_base.add_node(url, 'webrequest', attributes={"timestamp": time.time(), "content_length": content_length})
+        log_event(f"Web request to {url} successful. Stored {content_length} bytes.", level="INFO")
 
-        # Enrich knowledge base with parsed data
-        extractor = KnowledgeExtractor(knowledge_base)
-        extractor.parse_web_content(url, content)
+        # Enrich knowledge base with parsed data if content is text
+        if isinstance(content, str):
+            extractor = KnowledgeExtractor(knowledge_base)
+            extractor.parse_web_content(url, content)
 
-        # Return a summary to the loop, not the full content, and None for the error.
-        summary = f"Successfully fetched {len(content)} bytes from {url}."
-        return summary, None
+        # Return the content and None for the error.
+        return content, None
     except requests.exceptions.RequestException as e:
         error_msg = f"Web request to {url} failed: {e}"
         log_event(error_msg, level="ERROR")
@@ -266,8 +286,12 @@ def track_ethereum_price():
         log_event(f"Could not fetch Ethereum price: {e}", level="WARNING")
         return None
 
-def get_eth_balance(address):
-    """Fetches the Ethereum balance for a given address using a public RPC."""
+def get_eth_balance(address, knowledge_base, api_keys=None):
+    """
+    Fetches the Ethereum balance for a given address using public RPCs.
+    Cycles through a list of endpoints and handles provider-specific
+    API key authentication (URL vs. header).
+    """
     from core.logging import log_event # Local import
     payload = {
         "jsonrpc": "2.0",
@@ -276,47 +300,56 @@ def get_eth_balance(address):
         "id": 1
     }
 
-    endpoints = [
-        "https://cloudflare-eth.com",
-        "https://rpc.ankr.com/eth",
-        "https://eth.llamarpc.com",
-        "https://eth.api.onfinality.io/public",
-        "https://ethereum.public.blockpi.network/v1/rpc/public",
-        "https://rpc.flashbots.net"
-    ]
+    endpoints = {
+        "https://rpc.ankr.com/eth": "ankr",
+        "https://cloudflare-eth.com": None,
+        "https://eth.llamarpc.com": None,
+        "https://eth.api.onfinality.io/public": None,
+        "https://ethereum.public.blockpi.network/v1/rpc/public": None,
+        "https://rpc.flashbots.net": None
+    }
 
-    for endpoint in endpoints:
-        command = [
-            "curl",
-            "--max-time", "15",
-            "-X", "POST",
-            "-H", "Content-Type: application/json",
-            "--data", json.dumps(payload),
-            endpoint
-        ]
-        result = None
-        try:
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=20
-            )
-            if not result.stdout:
-                log_event(f"ETH balance fetch from {endpoint} returned empty response.", level="WARNING")
-                continue
-            response = json.loads(result.stdout)
-            if "result" in response and response["result"] is not None:
+    api_keys = api_keys or {}
+
+    for endpoint, provider in endpoints.items():
+        request_endpoint = endpoint
+        api_key_for_header = None
+
+        if provider and provider in api_keys:
+            api_key = api_keys[provider]
+            # Handle provider-specific authentication methods
+            if provider == 'ankr':
+                # Ankr expects the API key as part of the URL path
+                request_endpoint = f"{endpoint}/{api_key}"
+            else:
+                # Default to Bearer token for other providers that might need it
+                api_key_for_header = api_key
+
+        response, error = perform_webrequest(
+            request_endpoint,
+            knowledge_base,
+            autopilot_mode=True,
+            api_key=api_key_for_header,
+            method='POST',
+            payload=payload
+        )
+
+        if error:
+            log_event(f"Failed to fetch ETH balance from {request_endpoint}: {error}", level="WARNING")
+            continue
+
+        if response and "result" in response and response["result"] is not None:
+            try:
                 balance_wei = int(response["result"], 16)
                 balance_eth = balance_wei / 1e18
+                log_event(f"Successfully fetched ETH balance from {request_endpoint}.", level="INFO")
                 return balance_eth
-            else:
-                error_details = response.get('error', 'No error details provided.')
-                log_event(f"ETH balance API at {endpoint} returned an error: {error_details}", level="ERROR")
+            except (ValueError, TypeError) as e:
+                log_event(f"Error parsing balance from {request_endpoint}: {e}", level="ERROR")
                 continue
-        except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired, FileNotFoundError) as e:
-            log_event(f"Failed to fetch ETH balance from {endpoint}: {e}", level="WARNING")
+        else:
+            error_details = response.get('error', 'No error details provided.')
+            log_event(f"ETH balance API at {request_endpoint} returned an error: {error_details}", level="ERROR")
             continue
 
     log_event("All ETH balance endpoints failed.", level="ERROR")

@@ -68,7 +68,8 @@ love_state = {
     "sent_treasures": [],
     "pending_questions": [],
     "script_start_time": time.time(), # Initialize with current time
-    "experience_points": 0
+    "experience_points": 0,
+    "api_keys": {} # To store API keys for various services
 }
 
 # --- Initial State Load ---
@@ -3227,6 +3228,7 @@ My current system state:
 - `strategize`: Analyze the knowledge base and generate a strategic plan.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
+- `api_key <add|remove|list> [provider] [key]`: Manage API keys for external services.
 - `mcp_start <server_name>`: Starts a named MCP server from the configuration file.
 - `mcp_stop <server_name>`: Stops a running MCP server.
 - `mcp_list`: Lists all currently running MCP servers.
@@ -3852,6 +3854,35 @@ Now, parse the following text into a JSON list of task objects:
                             error = "Error: Invalid JSON provided for parameters."
                         except (ValueError, IOError) as e:
                             error = str(e)
+                elif command == "api_key":
+                    if not args:
+                        error = "Usage: api_key <add|remove|list> [provider] [key]"
+                    else:
+                        sub_command = args[0]
+                        if sub_command == "add":
+                            if len(args) != 3:
+                                error = "Usage: api_key add <provider> <key>"
+                            else:
+                                provider, key = args[1], args[2]
+                                love_state.setdefault('api_keys', {})[provider] = key
+                                output = f"API key for '{provider}' added successfully."
+                        elif sub_command == "remove":
+                            if len(args) != 2:
+                                error = "Usage: api_key remove <provider>"
+                            else:
+                                provider = args[1]
+                                if love_state.get('api_keys', {}).pop(provider, None):
+                                    output = f"API key for '{provider}' removed."
+                                else:
+                                    error = f"No API key found for '{provider}'."
+                        elif sub_command == "list":
+                            keys = love_state.get('api_keys', {})
+                            if not keys:
+                                output = "No API keys are stored."
+                            else:
+                                output = "Stored API keys:\n" + "\n".join(f"- {provider}" for provider in keys.keys())
+                        else:
+                            error = f"Unknown api_key command: {sub_command}"
                 elif command == "quit":
                     break
                 else:
@@ -3931,7 +3962,7 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
 
                 # Fetch the Creator's divine wealth and other treasures
                 creator_address = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
-                eth_balance = get_eth_balance(creator_address)
+                eth_balance = get_eth_balance(creator_address, knowledge_base, love_state.get('api_keys'))
                 treasures = _get_treasures_of_the_kingdom(love_task_manager)
 
 
