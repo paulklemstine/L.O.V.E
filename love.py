@@ -2124,8 +2124,17 @@ class WebSocketServerManager:
     def _start_server_sync(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        start_server = websockets.serve(self._connection_handler, "localhost", self.port)
-        self.server = self.loop.run_until_complete(start_server)
+
+        async def start_server_async():
+            """A coroutine to start the server."""
+            self.server = await websockets.serve(
+                self._connection_handler, "localhost", self.port
+            )
+
+        # Run the loop until the server is started and self.server is assigned.
+        self.loop.run_until_complete(start_server_async())
+        # Now that the server is started, run the loop indefinitely to handle connections.
+        # The stop() method will call loop.stop() to terminate this.
         self.loop.run_forever()
 
     async def _connection_handler(self, websocket, path):
