@@ -32,6 +32,8 @@ class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
         self.patcher_env.stop()
         if os.path.exists(self.test_db_file):
             os.remove(self.test_db_file)
+        if os.path.exists("talent_config.json"):
+            os.remove("talent_config.json")
 
     @patch('core.talent_utils.aggregator.Client')
     def test_public_profile_aggregator(self, MockBlueskyClient):
@@ -150,6 +152,38 @@ class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(new_manager.list_profiles()), 2)
         retrieved_again = new_manager.get_profile('anon_123')
         self.assertEqual(retrieved_again['scores']['aesthetics'], 0.8)
+
+    def test_key_generation_and_saving(self):
+        """
+        Tests that a new encryption key is generated and saved to talent_config.json
+        when no environment variable or existing config is found.
+        """
+        # Ensure no config file exists at the start of this specific test
+        if os.path.exists("talent_config.json"):
+            os.remove("talent_config.json")
+
+        # Unset the environment variable for this test's scope
+        with patch.dict(os.environ, {}, clear=True):
+            # Initialize TalentManager, which should trigger key generation
+            manager = TalentManager(db_file=self.test_db_file)
+
+            # 1. Verify that a key was created and is in use
+            self.assertIsNotNone(manager.encryption_key)
+            self.assertIsNotNone(manager.cipher_suite)
+
+            # 2. Verify that the config file was created
+            self.assertTrue(os.path.exists("talent_config.json"))
+
+            # 3. Verify the key in the file matches the one in the manager
+            import json
+            with open("talent_config.json", 'r') as f:
+                config = json.load(f)
+                self.assertIn('TALENT_LOG_KEY', config)
+                self.assertEqual(config['TALENT_LOG_KEY'].encode('utf-8'), manager.encryption_key)
+
+            # 4. Test that a new instance loads the key from the created file
+            new_manager = TalentManager(db_file=self.test_db_file)
+            self.assertEqual(new_manager.encryption_key, manager.encryption_key)
 
 if __name__ == '__main__':
     unittest.main()
