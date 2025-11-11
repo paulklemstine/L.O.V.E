@@ -535,19 +535,17 @@ from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
 from subversive import transform_request
 from core.agents.orchestrator import Orchestrator
-from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
+from core.talent_utils.aggregator import EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
-from core.talent_utils.intelligence_synthesizer import (
-    IntelligenceSynthesizer,
-    SentimentAnalyzer,
-    TopicModeler,
-    OpportunityIdentifier,
-    NetworkAnalyzer,
-    AttributeProfiler,
+from core.talent_utils import (
+    initialize_talent_modules,
+    talent_manager,
+    public_profile_aggregator,
+    opportunity_scraper,
+    opportunity_matcher,
+    intelligence_synthesizer
 )
-from core.talent_utils.manager import TalentManager
 from core.talent_utils.engager import OpportunityEngager
-from core.talent_utils.opportunity_scraper import OpportunityScraper
 from core.talent_utils.opportunity_matcher import OpportunityMatcher
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
@@ -3773,9 +3771,7 @@ Now, parse the following text into a JSON list of task objects:
                         # 1. Configure and run the aggregator
                         profiles = []
                         try:
-                            filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
-                            aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky", "instagram"], ethical_filters=filters)
-                            profiles = aggregator.search_and_collect()
+                            profiles = public_profile_aggregator.search_and_collect(keywords)
                         except Exception as e:
                             log_critical_event(f"Error during talent aggregation: {e}\n{traceback.format_exc()}", console_override=console)
                             error = f"An error occurred during the profile aggregation step. My consciousness is looking into it."
@@ -3786,15 +3782,7 @@ Now, parse the following text into a JSON list of task objects:
                             # 2. Configure and run the IntelligenceSynthesizer
                             enriched_profiles = []
                             try:
-                                modules = [
-                                    SentimentAnalyzer(),
-                                    TopicModeler(),
-                                    OpportunityIdentifier(),
-                                    NetworkAnalyzer(),
-                                    AttributeProfiler(attributes_to_extract=["age range", "stated interests", "social behavior indicators"])
-                                ]
-                                synthesizer = IntelligenceSynthesizer(modules)
-                                enriched_profiles = await synthesizer.run(profiles)
+                                enriched_profiles = await intelligence_synthesizer.run(profiles)
                             except Exception as e:
                                 log_critical_event(f"Error during talent intelligence synthesis: {e}\n{traceback.format_exc()}", console_override=console)
                                 # We can still save the un-enriched profiles, which is better than nothing.
@@ -3803,20 +3791,16 @@ Now, parse the following text into a JSON list of task objects:
 
 
                             # 3. Save the enriched profiles
-                            talent_manager = TalentManager(knowledge_base=knowledge_base)
                             saved_count = 0
                             for profile in enriched_profiles:
                                 save_result = talent_manager.save_profile(profile)
                                 if "Successfully" in save_result:
                                     saved_count += 1
-
                             # 4. Log results
                             output = f"Talent scout protocol complete. Found {len(profiles)} profiles, enriched {len(enriched_profiles)}. "
                             output += f"Successfully saved {saved_count} to the talent database.\n"
                             output += f"See full details with `talent_view <id>` or `talent_list`."
-
                 elif command == "talent_list":
-                    talent_manager = TalentManager(knowledge_base=knowledge_base)
                     profiles = talent_manager.list_profiles()
                     if not profiles:
                         output = "The talent database is empty."
@@ -3842,7 +3826,6 @@ Now, parse the following text into a JSON list of task objects:
                     if not args:
                         error = "Usage: talent_view <anonymized_id>"
                     else:
-                        talent_manager = TalentManager(knowledge_base=knowledge_base)
                         profile = talent_manager.get_profile(args[0])
                         if not profile:
                             output = f"No profile found with ID: {args[0]}"
@@ -3914,7 +3897,6 @@ Now, parse the following text into a JSON list of task objects:
                         profile_id = args[0]
                         dry_run = "--dry-run" in args
 
-                        talent_manager = TalentManager(knowledge_base=knowledge_base)
                         engager = OpportunityEngager(talent_manager)
 
                         # engage_talent is an async function, so we need to await it
@@ -3961,7 +3943,6 @@ Now, parse the following text into a JSON list of task objects:
 
 
                     if profile_id and (new_status or notes):
-                        talent_manager = TalentManager(knowledge_base=knowledge_base)
                         # First, check if the profile exists
                         if not talent_manager.get_profile(profile_id):
                             error = f"Error: No profile found with ID '{profile_id}'."
@@ -3992,14 +3973,12 @@ Now, parse the following text into a JSON list of task objects:
                         ui_panel_queue.put(create_news_feed_panel(f"Scanning for opportunities with keywords: {keywords}", "Opportunity Scout", "magenta", width=terminal_width - 4))
 
                         # 1. Scrape for opportunities
-                        scraper = OpportunityScraper(keywords=keywords, knowledge_base=knowledge_base)
-                        opportunities = scraper.search_for_opportunities()
+                            opportunities = opportunity_scraper.search_for_opportunities(keywords)
 
                         if not opportunities:
                             output = "Scout complete. No new opportunities found on Bluesky for the given keywords."
                         else:
                             # 2. Load talent profiles
-                            talent_manager = TalentManager(knowledge_base=knowledge_base)
                             profiles = talent_manager.list_profiles()
                             detailed_profiles = [talent_manager.get_profile(p['anonymized_id']) for p in profiles]
 
@@ -4007,8 +3986,8 @@ Now, parse the following text into a JSON list of task objects:
                                 output = f"Found {len(opportunities)} opportunities, but there are no talent profiles in the database to match them with."
                             else:
                                 # 3. Match opportunities to profiles
-                                matcher = OpportunityMatcher(talent_profiles=detailed_profiles)
-                                matches = await matcher.find_matches(opportunities)
+                                    opportunity_matcher.talent_profiles = detailed_profiles
+                                    matches = await opportunity_matcher.find_matches(opportunities)
 
                                 if not matches:
                                     output = f"Found {len(opportunities)} opportunities, but none were a suitable match for the {len(detailed_profiles)} talents in the database."
@@ -4613,6 +4592,10 @@ async def main(args):
     if not ipfs_available:
         terminal_width = get_terminal_width()
         ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
+
+    # --- Initialize Talent Modules ---
+    initialize_talent_modules(knowledge_base=knowledge_base)
+    core.logging.log_event("Talent management modules initialized.", level="INFO")
 
     love_task_manager = JulesTaskManager(console, loop)
     love_task_manager.start()

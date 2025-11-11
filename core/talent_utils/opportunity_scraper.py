@@ -9,8 +9,7 @@ class OpportunityScraper:
     Scans Bluesky for posts that represent potential opportunities based on keywords.
     """
 
-    def __init__(self, keywords, knowledge_base=None):
-        self.keywords = keywords
+    def __init__(self, knowledge_base=None):
         self.knowledge_base = knowledge_base
         self.client = self._get_bluesky_client()
 
@@ -32,7 +31,7 @@ class OpportunityScraper:
             log_event(f"Error connecting to Bluesky: {e}", level='ERROR')
             return None
 
-    def search_for_opportunities(self, limit=50):
+    def search_for_opportunities(self, keywords, limit=50):
         """
         Searches for posts on Bluesky that match the configured keywords.
 
@@ -44,7 +43,7 @@ class OpportunityScraper:
             return []
 
         all_opportunities = []
-        for keyword in self.keywords:
+        for keyword in keywords:
             log_event(f"Searching Bluesky for opportunities with keyword: '{keyword}'", level='DEBUG')
             try:
                 # Construct the search query. Using OR for keywords within the query string.
