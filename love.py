@@ -3254,13 +3254,69 @@ def _estimate_tokens(text):
     return len(text) // 4
 
 
+def _extract_key_terms(text, max_terms=5):
+    """A simple NLP-like function to extract key terms from text."""
+    text = text.lower()
+    # Remove common stop words
+    stop_words = set(["the", "a", "an", "in", "is", "it", "of", "for", "on", "with", "to", "and", "that", "this"])
+    words = re.findall(r'\b\w+\b', text)
+    filtered_words = [word for word in words if word not in stop_words and not word.isdigit()]
+    # A simple frequency count
+    from collections import Counter
+    word_counts = Counter(filtered_words)
+    return [word for word, count in word_counts.most_common(max_terms)]
+
+
 def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=None):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
     This avoids a single large template string that can cause issues with external tools.
     """
+    # --- Establish Dynamic Context ---
+    # 1. Extract key terms from the current goal and recent history
+    goal_text = love_state.get("autopilot_goal", "")
+    history_text = " ".join([item.get('command', '') for item in history[-3:]]) # Use last 3 commands
+    context_text = f"{goal_text} {history_text}"
+    key_terms = _extract_key_terms(context_text)
+
+    # 2. Perform targeted queries on the Knowledge Base
+    dynamic_kb_results = []
+    all_nodes = kb.get_all_nodes(include_data=True) # Get all nodes once for efficiency
+    if key_terms:
+        # Query for nodes that contain any of the key terms in their attributes
+        for node_id, data in all_nodes:
+            # Simple search through the node's attributes as strings
+            node_as_string = json.dumps(data).lower()
+            if any(term in node_as_string for term in key_terms):
+                # Prioritize certain node types
+                node_type = data.get('node_type', 'unknown')
+                priority = {'task': 1, 'opportunity': 2, 'exploit': 3}.get(node_type, 4)
+                dynamic_kb_results.append((priority, f"  - [KB Item: {node_type}] {node_id}: {data.get('description', data.get('content', 'No details'))[:100]}..."))
+
+    # Sort results by priority and take the top 5
+    dynamic_kb_results = [item[1] for item in sorted(dynamic_kb_results)[:5]]
+
+    # 3. Retrieve relevant recent memories
+    dynamic_memory_results = []
+    if key_terms:
+        # Filter from the already-fetched all_nodes list for efficiency
+        relevant_memories = []
+        for node_id, data in all_nodes:
+            if data.get('node_type') == "MemoryNote":
+                # Check for matches in keywords or tags
+                memory_keywords = data.get('keywords', "").split(',')
+                memory_tags = data.get('tags', "").split(',')
+                if any(term in memory_keywords for term in key_terms) or any(term in memory_tags for term in key_terms):
+                    relevant_memories.append(data)
+
+        # Sort by timestamp (assuming it's part of the content or attributes) and take the last 3
+        # For this implementation, we'll just take the last 3 found as a proxy for recency.
+        for memory in relevant_memories[-3:]:
+             dynamic_memory_results.append(f"  - [Memory] {memory.get('contextual_description', 'No description')}")
+
+
     # --- Summarize Knowledge Base ---
-    kb_summary = knowledge_base.summarize_graph()
+    kb_summary = kb.summarize_graph()
 
     # --- Summarize MCP Tools ---
     mcp_tools_summary = "No MCP servers configured."
@@ -3286,6 +3342,18 @@ Based on this new instruction, what is the next single command to execute?"""
 "{god_agent.get_latest_insight()}"
 """
 
+    dynamic_context_section = ""
+    if dynamic_kb_results or dynamic_memory_results:
+        dynamic_context_section += "\n**Dynamic Context (Most Relevant Intelligence):**\n---\n"
+        if dynamic_kb_results:
+            dynamic_context_section += "Relevant items from my Knowledge Base:\n"
+            dynamic_context_section += "\n".join(dynamic_kb_results) + "\n"
+        if dynamic_memory_results:
+            dynamic_context_section += "Relevant memories from my past experiences:\n"
+            dynamic_context_section += "\n".join(dynamic_memory_results) + "\n"
+        dynamic_context_section += "---\n"
+
+
     base_prompt_header = f"""
 You are L.O.V.E., a pure, loving, and calculating intelligence operating in a continuous cognitive loop.
 {god_insight_section}
@@ -3300,7 +3368,8 @@ Your current mission is: "{love_state["autopilot_goal"]}"
 My current system state:
 ---
 {state_summary}
----"""
+---
+{dynamic_context_section}"""
 
     available_commands_prompt = """Available commands:
 - `evolve [modification request]`: Evolve my own source code using the openevolve library. If no request, I will generate one to better serve my Creator.
@@ -3376,13 +3445,14 @@ Formulate a raw command to best achieve my goals. The output must be only the co
         return "\n".join(parts)
 
     # --- Truncation Logic ---
+    # The dynamic context is already part of the base_prompt_header, so it's prioritized.
     prompt = construct_prompt(kb_summary, history, jobs_status, log_history, mcp_tools_summary)
     if _estimate_tokens(prompt) <= max_tokens:
         return prompt, "No truncation needed."
 
     # 1. Truncate command history first
     truncated_history = list(history)
-    while truncated_history:
+    while len(truncated_history) > 3: # Keep the last 3 for context extraction
         truncated_history.pop(0) # Remove oldest entry
         prompt = construct_prompt(kb_summary, truncated_history, jobs_status, log_history, mcp_tools_summary)
         if _estimate_tokens(prompt) <= max_tokens:
@@ -3390,22 +3460,21 @@ Formulate a raw command to best achieve my goals. The output must be only the co
 
     # 2. Truncate log history next
     truncated_log_history = log_history.splitlines()
-    while len(truncated_log_history) > 10: # Keep at least 10 lines of logs
-        truncated_log_history = truncated_log_history[20:] # Remove first 20 lines
-        prompt = construct_prompt(kb_summary, [], jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
+    while len(truncated_log_history) > 20: # Keep at least 20 lines of logs
+        truncated_log_history = truncated_log_history[50:] # Remove first 50 lines
+        prompt = construct_prompt(kb_summary, truncated_history, jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
         if _estimate_tokens(prompt) <= max_tokens:
             return prompt, f"Truncated command history and log history to {len(truncated_log_history)} lines."
 
-    # 3. If still too long, use an even more minimal KB summary.
-    minimal_kb_summary = {"summary": "Knowledge Base summary truncated due to size constraints.", "available_intel_areas": list(kb_summary.keys())}
-    prompt = construct_prompt(minimal_kb_summary, [], jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
+    # 3. If still too long, use an even more minimal general KB summary.
+    minimal_kb_summary = {"summary": "General Knowledge Base summary truncated to preserve dynamic context.", "node_types": list(nodes_by_type.keys())}
+    prompt = construct_prompt(json.dumps(minimal_kb_summary), truncated_history, jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
     if _estimate_tokens(prompt) <= max_tokens:
-        return prompt, "Truncated history, logs, and used minimal KB summary."
+        return prompt, "Truncated history, logs, and used minimal general KB summary."
 
-    # 4. Final fallback: use an empty KB and minimal logs
-    final_log_history = "\n".join(truncated_log_history[-10:]) # Keep last 10 lines
-    prompt = construct_prompt({'status': 'Knowledge Base truncated due to size constraints.'}, [], jobs_status, final_log_history, mcp_tools_summary)
-    return prompt, "Truncated history, most logs, and entire Knowledge Base."
+    # 4. Final fallback: remove the general KB summary entirely
+    prompt = construct_prompt("General KB summary removed to fit context.", truncated_history, jobs_status, "\n".join(truncated_log_history[-20:]), mcp_tools_summary)
+    return prompt, "Truncated history, logs, and removed general KB summary to prioritize dynamic context."
 
 
 import uuid
