@@ -108,8 +108,10 @@ class DeepAgentEngine:
             from love import love_state
             vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
             # Now, initialize vLLM with the local, cached path.
-            if vram >= 6.5 * 1024 self.llm = LLM(model=model_path, gpu_memory_utilization=0.9)
-            else self.llm = LLM(model=model_path, gpu_memory_utilization=0.85, max_model_len=8192)
+            if vram >= 6.5 * 1024:
+                self.llm = LLM(model=model_path, gpu_memory_utilization=0.9)
+            else:
+                self.llm = LLM(model=model_path, gpu_memory_utilization=0.85, max_model_len=8192)
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=1024)
             # The DeepAgent library itself is not actually used in this implementation,
             # as we are building a simplified version of its reasoning loop.
