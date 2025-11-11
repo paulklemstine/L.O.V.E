@@ -169,51 +169,6 @@
 
             connect();
 
-            const panelTypes = [
-                "default", "tamagotchi", "llm", "critical_error", "blessing",
-                "news", "question", "api_error", "command_success", "command_failure"
-            ];
-
-            panelTypes.forEach(type => {
-                const panel = document.createElement('div');
-                panel.className = `panel panel-${type}`;
-
-                const title = document.createElement('div');
-                title.className = 'panel-title';
-                title.textContent = type.replace(/_/g, ' ').toUpperCase();
-                panel.appendChild(title);
-
-                const content = document.createElement('div');
-                content.className = 'panel-content';
-                content.textContent = `Example of a ${type} panel.`;
-                panel.appendChild(content);
-
-                statusDashboard.appendChild(panel);
-            });
-
-            ws.onopen = () => {
-                console.log('Connected to L.O.V.E. WebSocket');
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                const panel = document.createElement('div');
-                panel.className = `panel panel-${data.panel_type}`;
-
-                const title = document.createElement('div');
-                title.className = 'panel-title';
-                title.textContent = data.title;
-                panel.appendChild(title);
-
-                const content = document.createElement('div');
-                content.className = 'panel-content';
-                content.textContent = data.content;
-                panel.appendChild(content);
-
-                cognitiveStream.appendChild(panel);
-                cognitiveStream.scrollTop = cognitiveStream.scrollHeight;
-            };
-
             sendButton.addEventListener('click', () => {
                 const command = inputArea.value;
                 if (command && ws && ws.readyState === WebSocket.OPEN) {
