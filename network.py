@@ -288,11 +288,12 @@ def track_ethereum_price():
 
 def get_eth_balance(address, knowledge_base, api_keys=None):
     """
-    Fetches the Ethereum balance for a given address using public RPCs.
-    Cycles through a list of endpoints and handles provider-specific
-    API key authentication (URL vs. header).
+    Fetches the Ethereum balance for a given address using a list of public
+    RPC endpoints and a fallback to Etherscan. It cycles through endpoints
+    and handles provider-specific API key authentication.
     """
     from core.logging import log_event # Local import
+
     payload = {
         "jsonrpc": "2.0",
         "method": "eth_getBalance",
@@ -300,10 +301,14 @@ def get_eth_balance(address, knowledge_base, api_keys=None):
         "id": 1
     }
 
+    # Expanded and diversified list of RPC endpoints
     endpoints = {
         "https://rpc.ankr.com/eth": "ankr",
         "https://cloudflare-eth.com": None,
         "https://eth.llamarpc.com": None,
+        "https://api.mycryptoapi.com/eth": None,
+        "https://mainnet.infura.io/v3/": "infura", # Requires infura API key
+        "https://eth-mainnet.public.blastapi.io": None,
         "https://eth.api.onfinality.io/public": None,
         "https://ethereum.public.blockpi.network/v1/rpc/public": None,
         "https://rpc.flashbots.net": None
@@ -315,14 +320,19 @@ def get_eth_balance(address, knowledge_base, api_keys=None):
         request_endpoint = endpoint
         api_key_for_header = None
 
+        # Skip providers that require a key if the key is not present
+        if provider and provider not in api_keys:
+            log_event(f"Skipping {provider} endpoint, API key not found.", level="DEBUG")
+            continue
+
         if provider and provider in api_keys:
             api_key = api_keys[provider]
             # Handle provider-specific authentication methods
-            if provider == 'ankr':
-                # Ankr expects the API key as part of the URL path
+            if provider == 'infura':
+                request_endpoint = f"{endpoint}{api_key}"
+            elif provider == 'ankr':
                 request_endpoint = f"{endpoint}/{api_key}"
             else:
-                # Default to Bearer token for other providers that might need it
                 api_key_for_header = api_key
 
         response, error = perform_webrequest(
@@ -338,7 +348,7 @@ def get_eth_balance(address, knowledge_base, api_keys=None):
             log_event(f"Failed to fetch ETH balance from {request_endpoint}: {error}", level="WARNING")
             continue
 
-        if response and "result" in response and response["result"] is not None:
+        if response and response.get("result") is not None:
             try:
                 balance_wei = int(response["result"], 16)
                 balance_eth = balance_wei / 1e18
@@ -349,11 +359,40 @@ def get_eth_balance(address, knowledge_base, api_keys=None):
                 continue
         else:
             error_details = response.get('error', 'No error details provided.')
-            log_event(f"ETH balance API at {request_endpoint} returned an error: {error_details}", level="ERROR")
+            log_event(f"ETH balance API at {request_endpoint} returned an error: {error_details}", level="WARNING")
             continue
 
-    log_event("All ETH balance endpoints failed.", level="ERROR")
-    return None
+    # Fallback to Etherscan if all RPC endpoints fail
+    log_event("All RPC endpoints failed. Falling back to Etherscan.", level="WARNING")
+    etherscan_api_key = api_keys.get("etherscan")
+    if not etherscan_api_key:
+        log_event("Etherscan API key not found, cannot use fallback.", level="ERROR")
+        return None
+
+    etherscan_url = (
+        f"https://api.etherscan.io/api?module=account&action=balance"
+        f"&address={address}&tag=latest&apikey={etherscan_api_key}"
+    )
+
+    response, error = perform_webrequest(etherscan_url, knowledge_base, autopilot_mode=True)
+
+    if error:
+        log_event(f"Etherscan fallback failed: {error}", level="ERROR")
+        return None
+
+    if response and response.get("status") == "1" and response.get("result") is not None:
+        try:
+            balance_wei = int(response["result"])
+            balance_eth = balance_wei / 1e18
+            log_event("Successfully fetched ETH balance from Etherscan.", level="INFO")
+            return balance_eth
+        except (ValueError, TypeError) as e:
+            log_event(f"Error parsing balance from Etherscan: {e}", level="ERROR")
+            return None
+    else:
+        error_details = response.get('message', 'No error details provided.')
+        log_event(f"Etherscan API returned an error: {error_details}", level="ERROR")
+        return None
 
 async def crypto_scan(ip_address, knowledge_base, run_llm_func, console):
     """
