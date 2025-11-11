@@ -513,6 +513,8 @@ from rich.console import Console
 
 # --- GLOBAL CONSOLE INSTANCE ---
 # Use a single console object throughout the application to ensure consistent output.
+import io
+import argparse
 console = Console()
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -520,6 +522,8 @@ from rich.syntax import Syntax
 from rich.progress import Progress, BarColumn, TextColumn
 from rich.text import Text
 from rich.panel import Panel
+from rich.console import Group
+from rich.rule import Rule
 from rich.console import Group
 from rich.rule import Rule
 
@@ -3319,6 +3323,7 @@ My current system state:
 - `talent_list`: List all saved talent profiles from the database.
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
+- `talent_update <profile_id> --status <new_status> --notes "[notes]"`: Manually update a talent's status and add interaction notes.
 - `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
 - `strategize`: Analyze the knowledge base and generate a strategic plan.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
@@ -3772,7 +3777,65 @@ Now, parse the following text into a JSON list of task objects:
                         if not profile:
                             output = f"No profile found with ID: {args[0]}"
                         else:
-                            output = json.dumps(profile, indent=2, default=str)
+                            # Use rich to create a beautiful display
+                            from rich.table import Table
+                            from rich.panel import Panel
+                            from rich.text import Text
+
+                            # --- Main Info Table ---
+                            main_info = Text()
+                            main_info.append("Handle: ", style="bold")
+                            main_info.append(f"{profile.get('handle', 'N/A')}\n", style="cyan")
+                            main_info.append("Platform: ", style="bold")
+                            main_info.append(f"{profile.get('platform', 'N/A')}\n", style="green")
+                            main_info.append("Display Name: ", style="bold")
+                            main_info.append(f"{profile.get('display_name', 'N/A')}\n", style="yellow")
+                            main_info.append("Bio: ", style="bold")
+                            main_info.append(f"{profile.get('bio', 'N/A')}\n", "white")
+                            main_info.append("Status: ", style="bold")
+                            main_info.append(f"{profile.get('status', 'N/A').upper()}", style="bold magenta")
+
+
+                            # --- Interaction History Table ---
+                            history_table = Table(title="Interaction History", expand=True)
+                            history_table.add_column("Timestamp", style="dim", no_wrap=True)
+                            history_table.add_column("Type", style="cyan")
+                            history_table.add_column("Message/Note", style="white")
+
+                            for interaction in sorted(profile.get('interaction_history', []), key=lambda i: i['timestamp']):
+                                history_table.add_row(
+                                    interaction['timestamp'],
+                                    interaction.get('type', 'N/A'),
+                                    interaction.get('message', 'N/A')[:200] # Truncate long messages
+                                )
+
+                            # --- Skills ---
+                            skills_text = Text("Skills: ", style="bold")
+                            skills = profile.get('skills', [])
+                            if skills:
+                                skills_text.append(", ".join(skills), style="bold yellow")
+                            else:
+                                skills_text.append("None identified", style="dim")
+
+                            # --- Combine into a single panel group ---
+                            display_group = Group(
+                                main_info,
+                                Rule(),
+                                skills_text,
+                                Rule(),
+                                history_table
+                            )
+
+                            final_panel = Panel(
+                                display_group,
+                                title=f"[bold magenta]Talent Profile: {profile.get('anonymized_id')}[/bold magenta]",
+                                border_style="magenta"
+                            )
+
+                            # Render to an in-memory console to get the string output
+                            temp_console = Console(file=io.StringIO())
+                            temp_console.print(final_panel)
+                            output = temp_console.file.getvalue()
 
                 elif command == "talent_engage":
                     if not args:
@@ -3786,12 +3849,69 @@ Now, parse the following text into a JSON list of task objects:
 
                         # engage_talent is an async function, so we need to await it
                         # Since we are in an async loop, we can do this directly.
-                        await engager.engage_talent(profile_id, dry_run=dry_run)
+                        proposal_message = await engager.engage_talent(profile_id, dry_run=dry_run)
 
                         if dry_run:
                             output = f"Proposal generated for profile {profile_id} in dry-run mode. Check console for output."
                         else:
-                            output = f"Engagement proposal sent to profile {profile_id}."
+                            # Log the interaction
+                            talent_manager.add_interaction(
+                                anonymized_id=profile_id,
+                                interaction_type="initial_outreach",
+                                message=proposal_message,
+                                new_status="contacted"
+                            )
+                            output = f"Engagement proposal sent to profile {profile_id} and interaction has been logged."
+
+                elif command == "talent_update":
+                    # --- Argument Parsing for talent_update ---
+                    profile_id = None
+                    new_status = None
+                    notes = None
+                    try:
+                        update_parser = argparse.ArgumentParser(prog="talent_update", description="Update a talent profile.")
+                        update_parser.add_argument("profile_id")
+                        update_parser.add_argument("--status")
+                        update_parser.add_argument("--notes")
+                        parsed_args = update_parser.parse_args(args)
+
+                        profile_id = parsed_args.profile_id
+                        new_status = parsed_args.status
+                        notes = parsed_args.notes
+                    except SystemExit: # argparse calls sys.exit on --help or error
+                        # This is a bit of a hack to capture argparse's help text
+                        old_stdout = sys.stdout
+                        sys.stdout = captured_output = io.StringIO()
+                        try:
+                            update_parser.print_help()
+                        except SystemExit:
+                            pass
+                        sys.stdout = old_stdout
+                        error = captured_output.getvalue()
+
+
+                    if profile_id and (new_status or notes):
+                        talent_manager = TalentManager(knowledge_base=knowledge_base)
+                        # First, check if the profile exists
+                        if not talent_manager.get_profile(profile_id):
+                            error = f"Error: No profile found with ID '{profile_id}'."
+                        else:
+                            # Use the more efficient method calls
+                            if notes:
+                                talent_manager.add_interaction(
+                                    anonymized_id=profile_id,
+                                    interaction_type="manual_update",
+                                    message=notes,
+                                    new_status=new_status  # Pass status along if it exists
+                                )
+                            elif new_status:
+                                # Only update status if no notes are provided
+                                talent_manager.update_profile_status(profile_id, new_status)
+
+                            output = f"Successfully updated profile {profile_id}."
+                    elif not error:
+                        error = "Error: You must provide a profile_id and at least a --status or --notes argument."
+
 
                 elif command == "opportunity_scout":
                     keywords = args

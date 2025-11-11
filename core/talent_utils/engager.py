@@ -104,6 +104,9 @@ Your proposal:
         Args:
             profile_id: The anonymized ID of the talent profile.
             dry_run: If True, the proposal will be generated and printed but not sent.
+
+        Returns:
+            The generated proposal message.
         """
         print(f"Generating proposal for profile: {profile_id}")
         proposal = await self.generate_proposal(profile_id)
@@ -114,9 +117,11 @@ Your proposal:
 
         if dry_run:
             print("Dry run enabled. Proposal will not be sent.")
-            return
+            return proposal
 
         if self.talent_manager.get_talent_by_id(profile_id).get('platform') == 'bluesky':
             self.send_proposal_to_bluesky(profile_id, proposal)
         else:
             print("Engagement is currently only supported for Bluesky profiles.")
+
+        return proposal
