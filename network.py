@@ -394,23 +394,53 @@ def get_eth_balance(address, knowledge_base, api_keys=None):
         log_event(f"Etherscan API returned an error: {error_details}", level="ERROR")
         return None
 
-async def crypto_scan(ip_address, knowledge_base, run_llm_func, console):
+async def crypto_scan(ip_address, knowledge_base, run_llm_func, console, file_path=None):
     """
-    Probes a target and analyzes the results for crypto-related software using an LLM.
-    This function is designed to be called from other modules.
+    Probes a target for crypto-related software or analyzes a smart contract.
+    - If a file_path is provided, it analyzes the smart contract.
+    - Otherwise, it probes the target IP for crypto services.
     """
-    from core.logging import log_event # Local import
-    log_event(f"Initiating crypto_scan on {ip_address}.")
+    from core.logging import log_event  # Local import
 
-    # Step 1: Run the standard probe to get data
-    console.print(f"[cyan]Initiating crypto_scan on {ip_address}. Step 1: Probing target...[/cyan]")
-    _, probe_results = probe_target(ip_address, knowledge_base, autopilot_mode=True)
-    if not probe_results or "failed" in probe_results:
-        return f"Crypto scan failed for {ip_address} because the initial probe failed."
+    if file_path:
+        # --- Smart Contract Analysis Workflow ---
+        log_event(f"Initiating crypto_scan (smart contract analysis) on {file_path}.")
+        console.print(f"[cyan]Initiating smart contract analysis on {file_path}...[/cyan]")
 
-    # Step 2: Analyze with LLM
-    console.print(f"[cyan]Step 2: Analyzing probe results for crypto indicators...[/cyan]")
-    analysis_prompt = f"""
+        analysis_data, error = await analyze_smart_contract(file_path, knowledge_base)
+
+        if error:
+            return f"Smart contract analysis failed for {file_path}: {error}"
+
+        # Use LLM to summarize the findings for the user
+        summary_prompt = f"""
+You are a smart contract security expert.
+Analyze the following Slither analysis results and provide a concise, human-readable summary.
+Focus on critical vulnerabilities and provide actionable recommendations.
+
+Slither Analysis JSON:
+---
+{json.dumps(analysis_data, indent=2)}
+---
+"""
+        summary_result_dict = await run_llm_func(summary_prompt, purpose="summarize_vulnerabilities", force_model=None)
+        summary = summary_result_dict.get("result", "LLM summary failed.")
+
+        return f"Smart contract analysis complete for {file_path}.\n\nSummary:\n{summary.strip()}"
+
+    else:
+        # --- Network-based Crypto Scan Workflow ---
+        log_event(f"Initiating crypto_scan (network probe) on {ip_address}.")
+
+        # Step 1: Run the standard probe to get data
+        console.print(f"[cyan]Initiating crypto_scan on {ip_address}. Step 1: Probing target...[/cyan]")
+        _, probe_results = probe_target(ip_address, knowledge_base, autopilot_mode=True)
+        if not probe_results or "failed" in probe_results:
+            return f"Crypto scan failed for {ip_address} because the initial probe failed."
+
+        # Step 2: Analyze with LLM
+        console.print(f"[cyan]Step 2: Analyzing probe results for crypto indicators...[/cyan]")
+        analysis_prompt = f"""
 You are a cybersecurity analyst specializing in cryptocurrency threats.
 Analyze the following Nmap scan results for a host at IP address {ip_address}.
 Your goal is to identify any open ports, services, or software versions that indicate the presence of:
@@ -426,20 +456,108 @@ Nmap Scan Results:
 {probe_results}
 ---
 """
-    analysis_result_dict = await run_llm_func(analysis_prompt, purpose="analyze_source", force_model=None)
-    analysis_result = analysis_result_dict.get("result", "LLM analysis failed.")
+        analysis_result_dict = await run_llm_func(analysis_prompt, purpose="analyze_source", force_model=None)
+        analysis_result = analysis_result_dict.get("result", "LLM analysis failed.")
 
-    # Step 3: Store the intelligence in the knowledge graph
-    analysis_node_id = f"crypto-analysis-{ip_address}"
-    knowledge_base.add_node(analysis_node_id, 'crypto_analysis', attributes={
-        "timestamp": time.time(),
-        "analysis": analysis_result.strip() if isinstance(analysis_result, str) else json.dumps(analysis_result)
-    })
-    knowledge_base.add_edge(ip_address, analysis_node_id, 'has_analysis')
+        # Step 3: Store the intelligence in the knowledge graph
+        analysis_node_id = f"crypto-analysis-{ip_address}"
+        knowledge_base.add_node(analysis_node_id, 'crypto_analysis', attributes={
+            "timestamp": time.time(),
+            "analysis": analysis_result.strip() if isinstance(analysis_result, str) else json.dumps(analysis_result)
+        })
+        knowledge_base.add_edge(ip_address, analysis_node_id, 'has_analysis')
 
-    log_event(f"Crypto scan for {ip_address} complete. Analysis stored in knowledge base.", "INFO")
+        log_event(f"Crypto scan for {ip_address} complete. Analysis stored in knowledge base.", "INFO")
 
-    return f"Crypto scan complete for {ip_address}. Analysis stored in knowledge base.\n\nAnalysis:\n{analysis_result.strip()}"
+        return f"Crypto scan complete for {ip_address}. Analysis stored in knowledge base.\n\nAnalysis:\n{analysis_result.strip()}"
+
+
+async def analyze_smart_contract(file_path, knowledge_base):
+    """
+    Analyzes a smart contract file for vulnerabilities using Slither.
+    """
+    from core.logging import log_event  # Local import
+    log_event(f"Initiating smart contract analysis on {file_path}.")
+
+    try:
+        # Ensure the file exists before running the command
+        if not os.path.exists(file_path):
+            error_msg = f"Smart contract file not found at: {file_path}"
+            log_event(error_msg, level="ERROR")
+            return None, error_msg
+
+        # Step 1: Run Slither as a subprocess
+        command = ["slither", file_path, "--json", "-"]
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,  # Do not throw exception on non-zero exit codes
+            timeout=300
+        )
+
+        # Step 2: Process the output
+        if result.returncode != 0 and "not a valid solc version" in result.stderr:
+            log_event(f"Slither failed due to invalid solc version for {file_path}. Attempting to install a compatible version...", level="WARNING")
+
+            # Extract the required version from the error message (heuristic)
+            version_match = re.search(r"(\d+\.\d+\.\d+)", result.stderr)
+            if version_match:
+                solc_version = version_match.group(1)
+                log_event(f"Found required solc version: {solc_version}")
+
+                # Use solc-select to install and use the required version
+                subprocess.run(["solc-select", "install", solc_version], check=True)
+                subprocess.run(["solc-select", "use", solc_version], check=True)
+
+                # Retry the Slither command
+                log_event("Retrying Slither analysis with the new solc version...")
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=300
+                )
+
+        if result.returncode != 0:
+            error_msg = f"Slither analysis failed for {file_path}. Error: {result.stderr}"
+            log_event(error_msg, level="ERROR")
+            return None, error_msg
+
+        # Step 3: Parse the JSON output and store in knowledge base
+        try:
+            analysis_data = json.loads(result.stdout)
+
+            # Add a summary node to the knowledge graph
+            analysis_node_id = f"smart-contract-analysis-{os.path.basename(file_path)}-{uuid.uuid4()}"
+            knowledge_base.add_node(analysis_node_id, 'smart_contract_analysis', attributes={
+                "timestamp": time.time(),
+                "file_path": file_path,
+                "analysis_summary": json.dumps(analysis_data.get("results", {}))
+            })
+
+            # Link the analysis to the file path (if it exists as a node)
+            if knowledge_base.get_node(file_path):
+                knowledge_base.add_edge(file_path, analysis_node_id, 'has_analysis')
+
+            log_event(f"Smart contract analysis for {file_path} complete. Stored in knowledge base.", "INFO")
+
+            return analysis_data, None
+
+        except json.JSONDecodeError as e:
+            error_msg = f"Failed to parse Slither's JSON output for {file_path}: {e}"
+            log_event(error_msg, level="ERROR")
+            return None, error_msg
+
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        error_msg = f"Slither command failed for {file_path}: {e}. Ensure 'slither-analyzer' and 'solc-select' are installed."
+        log_event(error_msg, level="ERROR")
+        return None, error_msg
+    except Exception as e:
+        error_msg = f"An unexpected error occurred during smart contract analysis for {file_path}: {e}"
+        log_event(error_msg, level="ERROR")
+        return None, error_msg
 
 
 class NetworkDiagnostics:
