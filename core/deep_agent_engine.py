@@ -38,25 +38,39 @@ class DeepAgentEngine:
 
     def _select_model(self):
         """
-        Selects the best Qwen3 'Thinking' model based on available VRAM,
-        ensuring compatibility with the vLLM engine.
+        Selects the best vLLM-compatible model based on available VRAM.
         """
         from love import love_state
         vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
 
-        # Prioritizing the "Thinking" variants as instructed by The Creator.
-        if vram > 200000:
-            # This is a placeholder as the 235B model was not found.
-            # It will fall through to the next largest size.
-            # In a real scenario, we might add "Qwen/Qwen3-235B-A22B-Thinking" if found.
-            pass
-        if vram > 60000: # For high-end GPUs (e.g., H100) or multi-GPU
-            return "Qwen/Qwen3-30B-A3B" # This corresponds to the 30B-A3B-Thinking model
-        elif vram > 8000: # For smaller consumer GPUs
-            return "Qwen/Qwen3-4B-Thinking-2507"
+        # Models are selected based on VRAM requirements from the user-provided list.
+        # General-purpose reasoning models are preferred over specialized ones (e.g., math).
+        # When multiple models fit a VRAM tier, the one with the larger parameter count
+        # or better general performance is chosen.
+
+        if vram >= 148 * 1024:
+            # General SOTA reasoning model preferred over the math-specific variant.
+            return "meta-llama/Meta-Llama-3.1-70B-Instruct"
+        elif vram >= 44 * 1024:
+            # This has a slightly higher VRAM requirement than the Llama 70B AWQ.
+            return "TheBloke/deepseek-llm-67b-base-AWQ"
+        elif vram >= 42 * 1024:
+            return "hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4"
+        elif vram >= 22 * 1024:
+            return "Qwen/Qwen2-32B-Instruct-AWQ"
+        elif vram >= 20 * 1024:
+            # 8B model is preferred over the 7B models in the same VRAM tier.
+            return "meta-llama/Meta-Llama-3-8B-Instruct"
+        elif vram >= 6.5 * 1024:
+            # 8B AWQ model is preferred over the 7B AWQ models in the same VRAM tier.
+            return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
+        elif vram >= 4.5 * 1024:
+            return "microsoft/Phi-3-mini-4k-instruct"
+        elif vram >= 2.5 * 1024:
+            return "google/gemma-2b"
         else:
-            # Fallback for very low VRAM, though this may struggle.
-            return "Qwen/Qwen3-4B-Thinking-2507"
+            # Fallback to the smallest model for very low VRAM environments.
+            return "Qwen/Qwen2-1.5B-Instruct"
 
     def _download_model_snapshot(self, repo_id):
         """
