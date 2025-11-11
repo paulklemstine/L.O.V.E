@@ -176,40 +176,97 @@ class GraphDataManager:
                     except json.JSONDecodeError:
                         continue # Not a JSON string.
 
-    def summarize_graph(self):
+    def _estimate_tokens(self, text):
+        """A simple heuristic to estimate token count. Assumes ~4 chars per token."""
+        return len(text) // 4
+
+    def summarize_graph(self, max_tokens=1024):
         """
-        Generates a textual summary of the graph's contents.
+        Generates a textual summary of the graph's contents, prioritizing strategic
+        information and truncating intelligently to fit within a token limit.
+
+        Args:
+            max_tokens: The maximum number of tokens for the summary.
 
         Returns:
-            A string summarizing the node and edge counts by type.
+            A string summarizing the most important aspects of the knowledge base.
         """
         if not self.graph:
             return "The knowledge base is currently empty."
 
-        node_counts = {}
-        for _, data in self.graph.nodes(data=True):
+        # Prioritized order of node types for summarization
+        priority_order = [
+            'mission', 'task', 'opportunity', 'exploit', 'directive',
+            'talent', 'host', 'webrequest', 'skill', 'software',
+            'asset', 'entity', 'crypto_analysis'
+        ]
+
+        summary_parts = []
+        remaining_tokens = max_tokens
+
+        # --- HIGH PRIORITY: Always include Mission and Tasks ---
+        mission_nodes = self.query_nodes('node_type', 'mission')
+        if mission_nodes:
+            summary_parts.append("🎯 Current Mission:")
+            for node_id in mission_nodes:
+                node_data = self.get_node(node_id)
+                goal = node_data.get('goal', 'Not specified')
+                part = f"  - {goal}"
+                if self._estimate_tokens("\n".join(summary_parts) + part) < remaining_tokens:
+                    summary_parts.append(part)
+                    remaining_tokens -= self._estimate_tokens(part)
+                else:
+                    break
+            summary_parts.append("") # Add a newline
+
+        task_nodes = self.query_nodes('node_type', 'task')
+        if task_nodes:
+            summary_parts.append("🛠️ Active Tasks:")
+            for node_id in task_nodes:
+                node_data = self.get_node(node_id)
+                request = node_data.get('request', 'No description')
+                status = node_data.get('status', 'unknown')
+                part = f"  - [{status.upper()}] {request[:100]}..." # Truncate long requests
+                if self._estimate_tokens("\n".join(summary_parts) + part) < remaining_tokens:
+                    summary_parts.append(part)
+                    remaining_tokens -= self._estimate_tokens(part)
+                else:
+                    break
+            summary_parts.append("")
+
+        # --- General Summary by Priority ---
+        all_nodes = self.get_all_nodes(include_data=True)
+        nodes_by_type = {}
+        for node_id, data in all_nodes:
             node_type = data.get('node_type', 'unknown')
-            node_counts[node_type] = node_counts.get(node_type, 0) + 1
+            nodes_by_type.setdefault(node_type, []).append((node_id, data))
 
-        edge_counts = {}
-        for _, _, data in self.graph.edges(data=True):
-            rel_type = data.get('relationship_type', 'unknown')
-            edge_counts[rel_type] = edge_counts.get(rel_type, 0) + 1
+        summary_parts.append("📈 Intelligence Summary:")
+        for node_type in priority_order:
+            if node_type in nodes_by_type:
+                nodes = nodes_by_type[node_type]
+                part = f"- {node_type.capitalize()} ({len(nodes)} total)"
+                if self._estimate_tokens("\n".join(summary_parts) + part) < remaining_tokens:
+                    summary_parts.append(part)
+                    remaining_tokens -= self._estimate_tokens(part)
+                else:
+                    summary_parts.append("- (Summary truncated due to size...)")
+                    return "\n".join(summary_parts)
 
-        summary = ["Knowledge Base Summary:"]
+        # If there's still space, add some relationship stats
+        if remaining_tokens > 100:
+             edge_counts = {}
+             for _, _, data in self.graph.edges(data=True):
+                 rel_type = data.get('relationship_type', 'unknown')
+                 edge_counts[rel_type] = edge_counts.get(rel_type, 0) + 1
+             if edge_counts:
+                 summary_parts.append("\n🔗 Relationships:")
+                 for rel_type, count in sorted(edge_counts.items()):
+                     part = f"  - {rel_type}: {count}"
+                     if self._estimate_tokens("\n".join(summary_parts) + part) < remaining_tokens:
+                         summary_parts.append(part)
+                         remaining_tokens -= self._estimate_tokens(part)
+                     else:
+                         break # Stop adding relationships if space runs out
 
-        if node_counts:
-            summary.append("- Nodes:")
-            for node_type, count in sorted(node_counts.items()):
-                summary.append(f"  - {node_type}: {count}")
-        else:
-            summary.append("- No nodes found.")
-
-        if edge_counts:
-            summary.append("- Relationships:")
-            for rel_type, count in sorted(edge_counts.items()):
-                summary.append(f"  - {rel_type}: {count}")
-        else:
-            summary.append("- No relationships found.")
-
-        return "\n".join(summary)
+        return "\n".join(summary_parts)
