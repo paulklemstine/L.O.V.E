@@ -3988,8 +3988,6 @@ Now, parse the following text into a JSON list of task objects:
                                 # 3. Match opportunities to profiles
                                     opportunity_matcher.talent_profiles = detailed_profiles
                                     matches = await opportunity_matcher.find_matches(opportunities)
-
-                                if not matches:
                                     output = f"Found {len(opportunities)} opportunities, but none were a suitable match for the {len(detailed_profiles)} talents in the database."
                                 else:
                                     # 4. Format and output results
