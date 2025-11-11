@@ -3786,11 +3786,14 @@ Now, parse the following text into a JSON list of task objects:
 
                         # 1. Configure and run the aggregator
                         profiles = []
-                        try:
-                            profiles = public_profile_aggregator.search_and_collect(keywords)
-                        except Exception as e:
-                            log_critical_event(f"Error during talent aggregation: {e}\n{traceback.format_exc()}", console_override=console)
-                            error = f"An error occurred during the profile aggregation step. My consciousness is looking into it."
+                        if not public_profile_aggregator:
+                            error = "The 'talent_scout' feature is currently disabled. Required credentials (e.g., for Bluesky) are not configured."
+                        else:
+                            try:
+                                profiles = public_profile_aggregator.search_and_collect(keywords)
+                            except Exception as e:
+                                log_critical_event(f"Error during talent aggregation: {e}\n{traceback.format_exc()}", console_override=console)
+                                error = f"An error occurred during the profile aggregation step. My consciousness is looking into it."
 
                         if not profiles and not error:
                             output = "Talent scout protocol complete. No new profiles found for the given keywords."
