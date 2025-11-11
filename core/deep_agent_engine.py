@@ -67,7 +67,7 @@ class DeepAgentEngine:
         elif vram >= 4.5 * 1024:
             return "microsoft/Phi-3-mini-4k-instruct"
         elif vram >= 2.5 * 1024:
-            return "google/gemma-2b"
+            return "nidum/Nidum-Gemma-2B-Uncensored"
         else:
             # Fallback to the smallest model for very low VRAM environments.
             return "Qwen/Qwen2-1.5B-Instruct"
