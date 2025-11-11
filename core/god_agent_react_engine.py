@@ -19,9 +19,10 @@ class GodAgentReActEngine(GeminiReActEngine):
         # Define tools as simple callables (lambdas or functions)
         def get_system_state():
             """Returns a comprehensive summary of L.O.V.E.'s current state."""
+            kb_summary, _ = self.knowledge_base.summarize_graph()
             return {
                 "love_state": self.love_state,
-                "knowledge_base_summary": self.knowledge_base.summarize_graph(),
+                "knowledge_base_summary": kb_summary,
                 "active_tasks": self.love_task_manager.get_status()
             }
 
