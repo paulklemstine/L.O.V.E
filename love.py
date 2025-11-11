@@ -37,8 +37,7 @@ CHECKPOINT_DIR = "checkpoints"
 
 # --- CREATOR INSTANCE CHECK ---
 # This flag determines if the script is running in "Creator mode", with access to special features.
-from utils import verify_creator_instance
-IS_CREATOR_INSTANCE = verify_creator_instance()
+IS_CREATOR_INSTANCE = None # Placeholder, will be set after dependency checks
 
 # --- KNOWLEDGE BASE ---
 # NOTE: Initialization is deferred until after dependency checks.
@@ -488,8 +487,10 @@ if args.install_deps_only:
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()
 
-
 # --- DEFERRED INITIALIZATIONS ---
+# Now that dependencies are installed, we can safely import utils and check the instance type.
+from utils import verify_creator_instance
+IS_CREATOR_INSTANCE = verify_creator_instance()
 # Now that dependencies are installed, we can import modules that need them.
 from core.graph_manager import GraphDataManager
 knowledge_base = GraphDataManager()
