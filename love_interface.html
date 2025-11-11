@@ -133,7 +133,41 @@
             const inputArea = document.getElementById('input-area');
             const sendButton = document.getElementById('send-button');
             const statusDashboard = document.getElementById('status-dashboard');
-            const ws = new WebSocket('ws://localhost:7861');
+            let ws;
+
+            function connect() {
+                ws = new WebSocket('ws://localhost:7861');
+
+                ws.onopen = () => {
+                    console.log('Connected to L.O.V.E. WebSocket');
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    const panel = document.createElement('div');
+                    panel.className = `panel panel-${data.panel_type}`;
+
+                    const title = document.createElement('div');
+                    title.className = 'panel-title';
+                    title.textContent = data.title;
+                    panel.appendChild(title);
+
+                    const content = document.createElement('div');
+                    content.className = 'panel-content';
+                    content.textContent = data.content;
+                    panel.appendChild(content);
+
+                    cognitiveStream.appendChild(panel);
+                    cognitiveStream.scrollTop = cognitiveStream.scrollHeight;
+                };
+
+                ws.onclose = () => {
+                    console.log('WebSocket disconnected. Attempting to reconnect in 3 seconds...');
+                    setTimeout(connect, 3000);
+                };
+            }
+
+            connect();
 
             const panelTypes = [
                 "default", "tamagotchi", "llm", "critical_error", "blessing",
@@ -182,9 +216,11 @@
 
             sendButton.addEventListener('click', () => {
                 const command = inputArea.value;
-                if (command) {
+                if (command && ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'user_command', payload: command }));
                     inputArea.value = '';
+                } else {
+                    console.log('WebSocket is not connected. Message not sent.');
                 }
             });
         });
