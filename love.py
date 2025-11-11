@@ -575,6 +575,7 @@ from threading import Thread, Lock, RLock
 import uuid
 import yaml
 import queue
+from core.knowledge_extraction import transform_text_to_structured_records
 
 
 # --- LOCAL JOB MANAGER ---
@@ -4123,6 +4124,46 @@ Now, parse the following text into a JSON list of task objects:
                     # Ingest the successful cycle into agentic memory
                     if memory_manager:
                         await memory_manager.ingest_cognitive_cycle(llm_command, final_output, cognitive_prompt)
+
+                    # --- Knowledge Extraction ---
+                    contextual_metadata = {
+                        "command": llm_command,
+                        "timestamp": datetime.now().isoformat(),
+                        "directive": love_state.get("autopilot_goal")
+                    }
+                    structured_records = await transform_text_to_structured_records(final_output, contextual_metadata)
+
+                    if structured_records:
+                        core.logging.log_event(f"Extracted {len(structured_records)} structured records from command output.", "INFO")
+                        for record in structured_records:
+                            if record.get('type') == 'entity':
+                                entity_data = record.get('data', {})
+                                node_id = entity_data.get('value')
+                                if node_id:
+                                    attributes = {k: v for k, v in entity_data.items() if k != 'value'}
+                                    attributes.update(record.get('metadata', {}))
+                                    if not knowledge_base.get_node(node_id):
+                                        knowledge_base.add_node(node_id, node_type=record.get('sub_type'), attributes=attributes)
+                                    else:
+                                        # Node exists, update attributes
+                                        existing_node = knowledge_base.get_node(node_id)
+                                        existing_node.update(attributes)
+                            elif record.get('type') == 'relationship':
+                                relationship_data = record.get('data', {})
+                                source = relationship_data.get('from')
+                                target = relationship_data.get('to')
+                                if source and target:
+                                    # Ensure both source and target nodes exist before adding an edge
+                                    if not knowledge_base.get_node(source):
+                                        knowledge_base.add_node(source, node_type='unknown', attributes=record.get('metadata', {}))
+                                    if not knowledge_base.get_node(target):
+                                        knowledge_base.add_node(target, node_type='unknown', attributes=record.get('metadata', {}))
+
+                                    # Check for existing edge
+                                    existing_edges = knowledge_base.graph.get_edge_data(source, target)
+                                    if not (existing_edges and any(edge.get('relationship_type') == record.get('sub_type') for edge in existing_edges.values())):
+                                        attributes = record.get('metadata', {})
+                                        knowledge_base.add_edge(source, target, relationship_type=record.get('sub_type'), attributes=attributes)
                 save_state()
             else:
                 core.logging.log_event("Cognitive loop decided on no action.", "INFO")
