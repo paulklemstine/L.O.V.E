@@ -41,15 +41,21 @@ class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
         mock_post_view = Mock()
         mock_author = Mock(
             did="did:plc:12345",
+        )
+        mock_post_view.author = mock_author
+        mock_post_view.record = Mock(text="A post about art.", created_at="2023-01-01T00:00:00Z")
+        mock_client_instance.app.bsky.feed.search_posts.return_value = Mock(posts=[mock_post_view])
+
+        mock_full_profile = Mock(
             handle="test.bsky.social",
             display_name="Test User",
             description="A test bio.",
             avatar="http://example.com/avatar.jpg",
             followers_count=100,
-            follows_count=50
+            follows_count=50,
+            posts_count=10
         )
-        mock_post_view.author = mock_author
-        mock_client_instance.app.bsky.feed.search_posts.return_value = Mock(posts=[mock_post_view])
+        mock_client_instance.app.bsky.actor.get_profile.return_value = mock_full_profile
         MockBlueskyClient.return_value = mock_client_instance
 
         # Initialize the aggregator

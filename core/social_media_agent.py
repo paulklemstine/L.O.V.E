@@ -4,71 +4,66 @@ import time
 import os
 import traceback
 
-from core.bluesky_api import get_own_posts, get_comments_for_post, reply_to_post, post_to_bluesky_with_image
+from core.bluesky_api import get_own_posts, get_comments_for_post
 from core.social_media_react_engine import SocialMediaReActEngine
 from core.logging import log_event
-from atproto import Client
+from core.dispatcher import dispatch_structured_payload
+from core.interface_handlers import BlueskyAPIHandler
 
 
 class SocialMediaAgent:
     """
-    An autonomous agent that manages L.O.V.E.'s social media presence on Bluesky.
+    An autonomous agent that manages L.O.V.E.'s social media presence.
     """
     def __init__(self, loop):
         self.loop = loop
-        self.client = self._get_bluesky_client()
-        self.engine = SocialMediaReActEngine(ui_panel_queue=None, loop=loop) # UI queue can be added if needed
+        self.engine = SocialMediaReActEngine(ui_panel_queue=None, loop=loop)
         self.processed_comments = set()
         self.max_retries = 3
-
-    def _get_bluesky_client(self):
-        """Initializes and returns a Bluesky client."""
-        try:
-            client = Client()
-            username = os.environ.get("BLUESKY_USER")
-            password = os.environ.get("BLUESKY_PASSWORD")
-            if not username or not password:
-                log_event("Bluesky credentials not found.", level='WARNING')
-                return None
-            client.login(username, password)
-            return client
-        except Exception as e:
-            log_event(f"Error connecting to Bluesky: {e}", level='ERROR')
-            return None
+        self.handlers = {
+            'bluesky': BlueskyAPIHandler()
+        }
 
     async def _attempt_action(self, action, *args, **kwargs):
         """Wrapper to retry an action up to max_retries times."""
         for attempt in range(self.max_retries):
             try:
-                # The action to be performed is passed as a function
                 result = await action(*args, **kwargs)
                 return result
             except Exception as e:
                 log_event(f"Attempt {attempt + 1}/{self.max_retries} failed for action {action.__name__}. Error: {e}", level='WARNING')
                 if attempt < self.max_retries - 1:
-                    await asyncio.sleep(5 * (attempt + 1))  # Exponential backoff
+                    await asyncio.sleep(5 * (attempt + 1))
                 else:
                     log_event(f"Action {action.__name__} failed after {self.max_retries} attempts.", level='ERROR')
                     return None
 
-    async def _post_new_content(self):
-        """Generates and posts new content to Bluesky."""
-        if not self.client:
+    async def _post_new_content(self, platform: str):
+        """Generates and posts new content to a specified platform."""
+        handler = self.handlers.get(platform)
+        if not handler:
+            log_event(f"No handler found for platform: {platform}", level='WARNING')
             return
-        log_event("Generating new post for Bluesky...", level='INFO')
+
+        log_event(f"Generating new post for {platform}...", level='INFO')
         content = await self.engine.run_post_generation()
         if content:
-            # For simplicity, we are not posting images for now. This can be extended.
-            # Using a text-only post for now.
-            await self.loop.run_in_executor(None, lambda: self.client.send_post(text=content))
-            log_event(f"Posted to Bluesky: {content}", level='INFO')
+            payload = {
+                'action': 'post',
+                'platform_identifier': platform,
+                'content': content,
+            }
+            result = await dispatch_structured_payload(payload, handler)
+            log_event(f"Posted to {platform}: {content}. Result: {result}", level='INFO')
 
-    async def _check_and_reply_to_comments(self):
+    async def _check_and_reply_to_comments(self, platform: str):
         """Checks for new comments on posts and replies thoughtfully."""
-        if not self.client:
+        handler = self.handlers.get(platform)
+        if not handler:
+            log_event(f"No handler found for platform: {platform}", level='WARNING')
             return
 
-        log_event("Checking for new comments on Bluesky...", level='INFO')
+        log_event(f"Checking for new comments on {platform}...", level='INFO')
         posts = await self.loop.run_in_executor(None, get_own_posts)
         for post_record in posts:
             post_uri = post_record.uri
@@ -82,39 +77,44 @@ class SocialMediaAgent:
                 if comment_uri in self.processed_comments:
                     continue
 
-                if comment.author.did == self.client.me.did:
+                # Assuming the handler's client has a 'me' attribute with a 'did'
+                if comment.author.did == handler.client.me.did:
                     self.processed_comments.add(comment_uri)
                     continue
 
                 comment_text = comment.record.text
-
                 reply_text = await self.engine.run_reply_generation(post_text, comment_text)
 
                 if reply_text and "no" not in reply_text.lower():
                     log_event(f"Replying to {comment_uri}: {reply_text}", level='INFO')
-                    await self.loop.run_in_executor(None, lambda: reply_to_post(root_uri=post_uri, parent_uri=comment_uri, text=reply_text))
+                    payload = {
+                        'action': 'reply',
+                        'platform_identifier': platform,
+                        'content': reply_text,
+                        'root_uri': post_uri,
+                        'parent_uri': comment_uri
+                    }
+                    await dispatch_structured_payload(payload, handler)
 
                 self.processed_comments.add(comment_uri)
-
 
     async def run(self):
         """The main loop for the social media agent."""
         log_event("Social Media Agent started.", level='INFO')
         while True:
             try:
-                if self.client:
-                    # Randomly decide whether to post or to check for replies
-                    if random.random() < 0.3: # 30% chance to post
-                        await self._attempt_action(self._post_new_content)
-                    else: # 70% chance to check replies
-                        await self._attempt_action(self._check_and_reply_to_comments)
+                # Currently supports only Bluesky, can be extended to loop through handlers
+                platform = 'bluesky'
+                if platform in self.handlers:
+                    if random.random() < 0.3:
+                        await self._attempt_action(self._post_new_content, platform)
+                    else:
+                        await self._attempt_action(self._check_and_reply_to_comments, platform)
                 else:
-                    log_event("Bluesky client not available. Retrying connection...", level='WARNING')
-                    self.client = self._get_bluesky_client()
+                    log_event(f"Platform {platform} not supported.", level='WARNING')
 
-                # Wait for a random interval before the next cycle
                 await asyncio.sleep(random.randint(60, 180))
 
             except Exception as e:
                 log_event(f"Critical error in Social Media Agent loop: {e}\n{traceback.format_exc()}", level='CRITICAL')
-                await asyncio.sleep(300) # Wait 5 minutes after a major error
+                await asyncio.sleep(300)
