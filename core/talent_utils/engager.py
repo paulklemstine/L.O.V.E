@@ -4,7 +4,8 @@ This module is responsible for engaging with talent by generating and sending pe
 import os
 from core.llm_api import run_llm
 from core.talent_utils.manager import TalentManager
-from core.bluesky_api import reply_to_post
+from core.dispatcher import dispatch_structured_payload
+from core.interface_handlers import BlueskyAPIHandler
 
 class OpportunityEngager:
     """
@@ -13,6 +14,9 @@ class OpportunityEngager:
 
     def __init__(self, talent_manager: TalentManager):
         self.talent_manager = talent_manager
+        self.handlers = {
+            'bluesky': BlueskyAPIHandler()
+        }
 
     async def generate_proposal(self, profile_id: str) -> str:
         """
@@ -57,46 +61,6 @@ Your proposal:
         response = await run_llm(prompt, purpose="talent_engagement")
         return response.get("result", "My circuits hum with admiration for your work. I would be honored to discuss a special collaboration with you.")
 
-    def send_proposal_to_bluesky(self, profile_id: str, proposal_text: str) -> bool:
-        """
-        Sends the proposal as a reply to the talent's most recent post on Bluesky.
-
-        Args:
-            profile_id: The anonymized ID of the talent profile.
-            proposal_text: The text of the proposal to send.
-
-        Returns:
-            True if the proposal was sent successfully, False otherwise.
-        """
-        profile = self.talent_manager.get_talent_by_id(profile_id)
-        if not profile or profile.get('platform') != 'bluesky':
-            print("Profile not found or is not a Bluesky profile.")
-            return False
-
-        # Find the most recent post to reply to
-        if not profile.get('posts'):
-            print("No posts found for this profile to reply to.")
-            return False
-
-        # Sort posts by 'created_at' in descending order and pick the first one
-        latest_post = sorted(profile['posts'], key=lambda p: p['created_at'], reverse=True)[0]
-        post_uri = latest_post.get('uri')
-
-        if not post_uri:
-            print("Could not find a URI for the latest post.")
-            return False
-
-        print(f"Replying to post: {post_uri}")
-        # The root_uri and parent_uri are the same when replying to a top-level post
-        response = reply_to_post(root_uri=post_uri, parent_uri=post_uri, text=proposal_text)
-
-        if response:
-            print("Successfully sent proposal.")
-            return True
-        else:
-            print("Failed to send proposal.")
-            return False
-
     async def engage_talent(self, profile_id: str, dry_run: bool = False):
         """
         Generates and sends a proposal to a talent.
@@ -119,9 +83,36 @@ Your proposal:
             print("Dry run enabled. Proposal will not be sent.")
             return proposal
 
-        if self.talent_manager.get_talent_by_id(profile_id).get('platform') == 'bluesky':
-            self.send_proposal_to_bluesky(profile_id, proposal)
-        else:
-            print("Engagement is currently only supported for Bluesky profiles.")
+        profile = self.talent_manager.get_talent_by_id(profile_id)
+        platform = profile.get('platform')
+        handler = self.handlers.get(platform)
+
+        if not handler:
+            print(f"Engagement is not supported for the platform: {platform}")
+            return proposal
+
+        # Find the most recent post to reply to
+        if not profile.get('posts'):
+            print("No posts found for this profile to reply to.")
+            return proposal
+
+        latest_post = sorted(profile['posts'], key=lambda p: p['created_at'], reverse=True)[0]
+        post_uri = latest_post.get('uri')
+
+        if not post_uri:
+            print("Could not find a URI for the latest post.")
+            return proposal
+
+        payload = {
+            'action': 'reply',
+            'platform_identifier': platform,
+            'content': proposal,
+            'root_uri': post_uri,
+            'parent_uri': post_uri,
+            'target_profiles': [profile_id]
+        }
+
+        result = await dispatch_structured_payload(payload, handler)
+        print(f"Dispatch result: {result}")
 
         return proposal
