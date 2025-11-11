@@ -2311,6 +2311,11 @@ def _get_interesting_thought():
     thought = random.choice(interesting_thoughts)
     command = thought.get('command', 'an unknown action')
     output = thought.get('output', 'with an untold result')
+
+    # Ensure output is a string before manipulation
+    if not isinstance(output, str):
+        output = json.dumps(output) # Convert lists/dicts to a JSON string
+
     # Sanitize and shorten the output for display
     output_summary = (output.replace('\n', ' ').strip())[:100]
 
