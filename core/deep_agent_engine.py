@@ -41,7 +41,7 @@ class DeepAgentEngine:
         Selects the best vLLM-compatible model based on available VRAM.
         """
         from love import love_state
-        vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)*0.6
+        vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
 
         # Models are selected based on VRAM requirements from the user-provided list.
         # General-purpose reasoning models are preferred over specialized ones (e.g., math).
@@ -49,8 +49,9 @@ class DeepAgentEngine:
         # or better general performance is chosen.
 
         if vram >= 148 * 1024:
-            # General SOTA reasoning model preferred over the math-specific variant.
-            return "meta-llama/Meta-Llama-3.1-70B-Instruct"
+            # General SOTA reasoning model (AWQ variant)
+            # This tier assumes user has massive VRAM but still wants the AWQ version
+            return "hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4"
         elif vram >= 44 * 1024:
             # This has a slightly higher VRAM requirement than the Llama 70B AWQ.
             return "TheBloke/deepseek-llm-67b-base-AWQ"
@@ -59,18 +60,22 @@ class DeepAgentEngine:
         elif vram >= 22 * 1024:
             return "Qwen/Qwen2-32B-Instruct-AWQ"
         elif vram >= 20 * 1024:
-            # 8B model is preferred over the 7B models in the same VRAM tier.
-            return "meta-llama/Meta-Llama-3-8B-Instruct"
+            # 8B AWQ model is preferred over the 7B models in the same VRAM tier.
+            # Replaced unquantized 8B with its AWQ version
+            return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
         elif vram >= 6.5 * 1024:
             # 8B AWQ model is preferred over the 7B AWQ models in the same VRAM tier.
             return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
         elif vram >= 4.5 * 1024:
-            return "microsoft/Phi-3-mini-4k-instruct"
+        # Replaced unquantized Phi-3-mini with its AWQ/INT4 version
+            return "hugging-quants/Phi-3-mini-4k-instruct-AWQ-INT4"
         elif vram >= 2.5 * 1024:
-            return "nidum/Nidum-Gemma-2B-Uncensored"
+            # Replaced unquantized Gemma-2B with a standard AWQ version
+            return "TheBloke/Gemma-2B-AWQ"
         else:
-            # Fallback to the smallest model for very low VRAM environments.
-            return "Qwen/Qwen2-1.5B-Instruct"
+            # Fallback to the smallest AWQ model for very low VRAM environments.
+            # Replaced unquantized Qwen with its official AWQ version
+            return "Qwen/Qwen2-1.5B-Instruct-AWQ"
 
     def _download_model_snapshot(self, repo_id):
         """
@@ -102,7 +107,7 @@ class DeepAgentEngine:
             model_path = self._download_model_snapshot(model_repo)
 
             # Now, initialize vLLM with the local, cached path.
-            self.llm = LLM(model=model_path, gpu_memory_utilization=0.8)
+            self.llm = LLM(model=model_path, gpu_memory_utilization=0.85)
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=1024)
             # The DeepAgent library itself is not actually used in this implementation,
             # as we are building a simplified version of its reasoning loop.
