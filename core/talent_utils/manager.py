@@ -77,6 +77,10 @@ class TalentManager:
             log_event("Cannot save profile: Missing 'anonymized_id'.", level='ERROR')
             return "Error: Profile is missing anonymized_id."
 
+        # Initialize relationship fields if they don't exist
+        profile_data.setdefault('interaction_history', [])
+        profile_data.setdefault('status', 'new')
+
         # Add a timestamp to track when the profile was last updated
         profile_data['last_saved_at'] = datetime.utcnow().isoformat()
         self.profiles[anonymized_id] = profile_data
@@ -106,6 +110,42 @@ class TalentManager:
         """Retrieves a single talent profile by their anonymized ID."""
         return self.profiles.get(anonymized_id)
 
+    def add_interaction(self, anonymized_id: str, interaction_type: str, message: str, new_status: str = None):
+        """Adds a new interaction to a talent's history and optionally updates their status."""
+        if anonymized_id not in self.profiles:
+            return "Error: Profile not found."
+
+        profile = self.profiles[anonymized_id]
+
+        # Initialize history if it doesn't exist
+        if 'interaction_history' not in profile:
+            profile['interaction_history'] = []
+
+        # Add the new interaction
+        profile['interaction_history'].append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "type": interaction_type,
+            "message": message
+        })
+
+        # Optionally update the status
+        if new_status:
+            profile['status'] = new_status
+
+        # Save the entire database
+        self._save_profiles()
+        log_event(f"Added new interaction for {anonymized_id}.", level='INFO')
+        return "Interaction added successfully."
+
+    def update_profile_status(self, anonymized_id: str, new_status: str):
+        """Updates the status of a specific talent profile."""
+        if anonymized_id in self.profiles:
+            self.profiles[anonymized_id]['status'] = new_status
+            self._save_profiles()
+            log_event(f"Updated status for {anonymized_id} to '{new_status}'.", level='INFO')
+            return "Status updated successfully."
+        return "Error: Profile not found."
+
     def list_profiles(self):
         """
         Returns a list of summaries for all saved profiles.
@@ -118,6 +158,7 @@ class TalentManager:
                 "handle": profile_data.get('handle', 'N/A'),
                 "platform": profile_data.get('platform', 'N/A'),
                 "display_name": profile_data.get('display_name', 'N/A'),
+                "status": profile_data.get('status', 'N/A'),
                 "last_saved_at": profile_data.get('last_saved_at', 'N/A')
             }
             profile_list.append(summary)
