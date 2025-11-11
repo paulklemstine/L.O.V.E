@@ -4225,7 +4225,7 @@ Now, parse the following text into a JSON list of task objects:
 
                                     # Check for existing edge
                                     existing_edges = knowledge_base.graph.get_edge_data(source, target)
-                                    if not (existing_edges and any(edge.get('relationship_type') == record.get('sub_type') for edge in existing_edges.values())):
+                                    if not (existing_edges and existing_edges.get('relationship_type') == record.get('sub_type')):
                                         attributes = record.get('metadata', {})
                                         knowledge_base.add_edge(source, target, relationship_type=record.get('sub_type'), attributes=attributes)
                 save_state()
