@@ -776,8 +776,20 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
             except requests.exceptions.HTTPError as e:
                 if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
                 last_exception = e
-                log_event(f"Model {model_id} failed with HTTPError: {e}", level="WARNING")
-                if e.response.status_code == 429:
+                # --- Enhanced Error Logging ---
+                error_details = str(e)
+                if e.response:
+                    try:
+                        # Try to parse JSON for a structured error message.
+                        response_json = e.response.json()
+                        error_details = json.dumps(response_json, indent=2)
+                    except json.JSONDecodeError:
+                        # Fallback to raw text if not JSON.
+                        error_details = e.response.text
+                log_event(f"Model {model_id} failed with HTTPError: {e}. Details: {error_details}", level="WARNING")
+
+
+                if e.response and e.response.status_code == 429:
                     retry_after = e.response.headers.get("Retry-After")
                     retry_seconds = 300
                     if retry_after:
@@ -787,11 +799,11 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                             pass # Use default
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
                     if provider == "horde":
-                        console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose))
+                        console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
                     else:
                         console.print(Text(f"API Error: {model_id} failed (Rate limit exceeded). Retrying in {retry_seconds}s.", style="yellow"))
 
-                elif e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
+                elif e.response and e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
                     failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1
                     LLM_FAILURE_COUNT[model_id] = failure_count
                     cooldown = 60 * (2 ** failure_count)
@@ -801,9 +813,12 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                 else:
                     log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
                     if provider == "horde":
-                        console.print(create_api_error_panel(model_id, str(e), purpose))
+                        console.print(create_api_error_panel(model_id, str(e), purpose, more_info=error_details))
                     else:
-                        console.print(Text(f"API Error: {model_id} failed ({e.response.status_code}).", style="yellow"))
+                        # Also enhance the one-liner for non-horde providers
+                        status_code = e.response.status_code if e.response else "N/A"
+                        console.print(Text(f"API Error: {model_id} failed ({status_code}). Details: {error_details[:100]}...", style="yellow"))
+
                 continue
             except Exception as e:
                 if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
