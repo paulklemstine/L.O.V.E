@@ -24,14 +24,39 @@ class TalentManager:
             self.profiles = self._load_profiles()
 
     def _get_encryption_key(self):
-        """Retrieves the encryption key from environment variables."""
+        """
+        Retrieves the encryption key from environment variables, a config file,
+        or generates a new one if not found.
+        """
+        config_file = "talent_config.json"
         key = os.environ.get("TALENT_LOG_KEY")
-        if not key:
-            log_event("Warning: TALENT_LOG_KEY environment variable not found. Talent database will be inoperable.", level='WARNING')
+
+        if key:
+            log_event("Found TALENT_LOG_KEY in environment variables.", level='INFO')
+            return key.encode('utf-8')
+
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                    key = config.get('TALENT_LOG_KEY')
+                    if key:
+                        log_event(f"Loaded TALENT_LOG_KEY from {config_file}.", level='INFO')
+                        return key.encode('utf-8')
+            except (json.JSONDecodeError, IOError) as e:
+                log_event(f"Error reading {config_file}: {e}. A new key will be generated.", level='WARNING')
+
+        log_event("TALENT_LOG_KEY not found. Generating a new key and saving it to talent_config.json.", level='WARNING')
+        try:
+            new_key = Fernet.generate_key()
+            config_data = {'TALENT_LOG_KEY': new_key.decode('utf-8')}
+            with open(config_file, 'w') as f:
+                json.dump(config_data, f, indent=4)
+            log_event(f"Successfully generated and saved new TALENT_LOG_KEY to {config_file}.", level='INFO')
+            return new_key
+        except IOError as e:
+            log_event(f"CRITICAL: Could not write to {config_file}: {e}. Talent database will be inoperable.", level='CRITICAL')
             return None
-        # Key must be 32 url-safe base64-encoded bytes.
-        # We assume The Creator provides a valid key.
-        return key.encode('utf-8')
 
     def _load_profiles(self):
         """Loads and decrypts all talent profiles from the database file."""
