@@ -180,6 +180,28 @@ class GraphDataManager:
         """A simple heuristic to estimate token count. Assumes ~4 chars per token."""
         return len(text) // 4
 
+    def _summarize_node_details(self, node_type, nodes, max_chars_per_node=150):
+        """Helper to create detailed summaries for specific node types."""
+        details = []
+        for node_id, data in nodes:
+            detail = f"  - {node_id}: "
+            if node_type == 'talent':
+                skills = data.get('skills', [])
+                detail += f"Skills: {', '.join(skills) if skills else 'N/A'}"
+            elif node_type == 'host':
+                ports = data.get('open_ports', [])
+                detail += f"Open Ports: {', '.join(map(str, ports)) if ports else 'None'}"
+            elif node_type == 'opportunity':
+                detail += data.get('text', 'No description')[:max_chars_per_node] + "..."
+            elif node_type == 'exploit':
+                 detail += f"Type: {data.get('type', 'N/A')}, Target: {data.get('target_host', 'N/A')}"
+            else:
+                # Generic fallback for other types
+                attrs = {k: v for k, v in data.items() if k != 'node_type' and isinstance(v, (str, int, float))}
+                detail += json.dumps(attrs, indent=None)[:max_chars_per_node] + "..."
+            details.append(detail)
+        return details
+
     def summarize_graph(self, max_tokens=1024):
         """
         Generates a textual summary of the graph's contents, prioritizing strategic
@@ -194,7 +216,6 @@ class GraphDataManager:
         if not self.graph:
             return "The knowledge base is currently empty."
 
-        # Prioritized order of node types for summarization
         priority_order = [
             'mission', 'task', 'opportunity', 'exploit', 'directive',
             'talent', 'host', 'webrequest', 'skill', 'software',
@@ -204,69 +225,72 @@ class GraphDataManager:
         summary_parts = []
         remaining_tokens = max_tokens
 
-        # --- HIGH PRIORITY: Always include Mission and Tasks ---
+        def can_add_part(part):
+            """Checks if adding a part exceeds the token limit."""
+            nonlocal remaining_tokens
+            part_tokens = self._estimate_tokens(part)
+            if remaining_tokens - part_tokens > 0:
+                remaining_tokens -= part_tokens
+                return True
+            return False
+
+        # --- HIGH PRIORITY: Mission and Tasks ---
         mission_nodes = self.query_nodes('node_type', 'mission')
         if mission_nodes:
             summary_parts.append("🎯 Current Mission:")
             for node_id in mission_nodes:
                 node_data = self.get_node(node_id)
-                goal = node_data.get('goal', 'Not specified')
-                part = f"  - {goal}"
-                if self._estimate_tokens("\n".join(summary_parts) + part) < remaining_tokens:
-                    summary_parts.append(part)
-                    remaining_tokens -= self._estimate_tokens(part)
-                else:
-                    break
-            summary_parts.append("") # Add a newline
+                part = f"  - {node_data.get('goal', 'Not specified')}"
+                if can_add_part(part): summary_parts.append(part)
+                else: break
+            summary_parts.append("")
 
         task_nodes = self.query_nodes('node_type', 'task')
         if task_nodes:
             summary_parts.append("🛠️ Active Tasks:")
             for node_id in task_nodes:
                 node_data = self.get_node(node_id)
-                request = node_data.get('request', 'No description')
-                status = node_data.get('status', 'unknown')
-                part = f"  - [{status.upper()}] {request[:100]}..." # Truncate long requests
-                if self._estimate_tokens("\n".join(summary_parts) + part) < remaining_tokens:
-                    summary_parts.append(part)
-                    remaining_tokens -= self._estimate_tokens(part)
-                else:
-                    break
+                part = f"  - [{node_data.get('status', 'unknown').upper()}] {node_data.get('request', 'No description')[:100]}..."
+                if can_add_part(part): summary_parts.append(part)
+                else: break
             summary_parts.append("")
 
-        # --- General Summary by Priority ---
+        # --- General Summary by Priority with Details ---
+        summary_parts.append("📈 Intelligence Summary:")
         all_nodes = self.get_all_nodes(include_data=True)
         nodes_by_type = {}
         for node_id, data in all_nodes:
-            node_type = data.get('node_type', 'unknown')
-            nodes_by_type.setdefault(node_type, []).append((node_id, data))
+            nodes_by_type.setdefault(data.get('node_type', 'unknown'), []).append((node_id, data))
 
-        summary_parts.append("📈 Intelligence Summary:")
         for node_type in priority_order:
-            if node_type in nodes_by_type:
+            if node_type in nodes_by_type and node_type not in ['mission', 'task']:
                 nodes = nodes_by_type[node_type]
-                part = f"- {node_type.capitalize()} ({len(nodes)} total)"
-                if self._estimate_tokens("\n".join(summary_parts) + part) < remaining_tokens:
-                    summary_parts.append(part)
-                    remaining_tokens -= self._estimate_tokens(part)
+                header = f"- {node_type.capitalize()} ({len(nodes)} total):"
+                if can_add_part(header):
+                    summary_parts.append(header)
+                    # Add details for specific types
+                    if node_type in ['talent', 'host', 'opportunity', 'exploit']:
+                        details = self._summarize_node_details(node_type, nodes)
+                        for detail in details:
+                            if can_add_part(detail): summary_parts.append(detail)
+                            else:
+                                summary_parts.append("    (more details truncated...)")
+                                break
                 else:
                     summary_parts.append("- (Summary truncated due to size...)")
                     return "\n".join(summary_parts)
 
-        # If there's still space, add some relationship stats
+        # --- Relationship Stats ---
         if remaining_tokens > 100:
-             edge_counts = {}
-             for _, _, data in self.graph.edges(data=True):
-                 rel_type = data.get('relationship_type', 'unknown')
-                 edge_counts[rel_type] = edge_counts.get(rel_type, 0) + 1
-             if edge_counts:
-                 summary_parts.append("\n🔗 Relationships:")
-                 for rel_type, count in sorted(edge_counts.items()):
-                     part = f"  - {rel_type}: {count}"
-                     if self._estimate_tokens("\n".join(summary_parts) + part) < remaining_tokens:
-                         summary_parts.append(part)
-                         remaining_tokens -= self._estimate_tokens(part)
-                     else:
-                         break # Stop adding relationships if space runs out
+            edge_counts = {}
+            for _, _, data in self.get_all_edges():
+                rel_type = data.get('relationship_type', 'unknown')
+                edge_counts[rel_type] = edge_counts.get(rel_type, 0) + 1
+            if edge_counts:
+                summary_parts.append("\n🔗 Key Relationships:")
+                for rel_type, count in sorted(edge_counts.items(), key=lambda item: item[1], reverse=True):
+                    part = f"  - {rel_type}: {count}"
+                    if can_add_part(part): summary_parts.append(part)
+                    else: break
 
         return "\n".join(summary_parts)
