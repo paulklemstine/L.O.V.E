@@ -47,25 +47,6 @@ from core.talent_utils import (
 
 love_state = {}
 
-async def talent_scout(keywords: list) -> str:
-    """Finds and analyzes creative professionals based on keywords."""
-    profiles = public_profile_aggregator.search_and_collect(keywords)
-
-    if not profiles:
-        return "Talent scout protocol complete. No new profiles found for the given keywords."
-
-    enriched_profiles = await intelligence_synthesizer.run(profiles)
-
-    saved_count = 0
-    for profile in enriched_profiles:
-        save_result = talent_manager.save_profile(profile)
-        if "Successfully" in save_result:
-            saved_count += 1
-
-    output = f"Talent scout protocol complete. Found and enriched {len(enriched_profiles)} profiles. "
-    output += f"Successfully saved {saved_count} to the talent database."
-    return output
-
 async def opportunity_scout(keywords: list) -> str:
     """Scans Bluesky for opportunities and matches them to saved talent."""
     opportunities = opportunity_scraper.search_for_opportunities(keywords)
@@ -736,8 +717,8 @@ async def talent_scout(keywords: str, platforms: str = "bluesky,instagram,tiktok
         platform_list = [p.strip() for p in platforms.split(',')]
         keyword_list = [k.strip() for k in keywords.split(',')]
 
-        aggregator = PublicProfileAggregator(keywords=keyword_list, platform_names=platform_list, ethical_filters=None)
-        profiles = aggregator.search_and_collect()
+        aggregator = PublicProfileAggregator(platform_names=platform_list, ethical_filters=None)
+        profiles = aggregator.search_and_collect(keyword_list)
 
         if not profiles:
             return "No talent found for the given keywords and platforms."
