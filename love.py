@@ -3482,7 +3482,7 @@ Formulate a raw command to best achieve my goals. The output must be only the co
 
     # 4. If still too long, remove the log history entirely.
     current_log_history = ""
-    prompt = construct_prompt(minimal_kb_summary, truncated_history, jobs_status, current_log_history, mcp_tools_summary)
+    prompt = construct_prompt(json.dumps(minimal_kb_summary), truncated_history, jobs_status, current_log_history, mcp_tools_summary)
     if _get_token_count(prompt) <= max_tokens:
         return prompt, "Truncated history, used minimal KB summary, and removed log history."
 
