@@ -3682,7 +3682,7 @@ Now, parse the following text into a JSON list of task objects:
 
             # Determine the max_tokens dynamically from the deep_agent_engine if available
             max_tokens = 8000 # Default value
-            if deep_agent_engine and deep_agent_engine.max_model_len:
+            if deep_agent_engine and deep_agent_engine.max_model_len is not None:
                 # Subtract a buffer for the system prompt that will be added by the engine
                 max_tokens = deep_agent_engine.max_model_len - 1024
 
