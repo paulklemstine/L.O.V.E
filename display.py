@@ -393,20 +393,33 @@ def create_retry_panel(model_id, attempt, max_attempts, backoff_time, purpose, w
     )
     return Gradient(panel, colors=[PANEL_TYPE_COLORS["api_error"], "yellow"])
 
-def create_api_error_panel(model_id, error_message, purpose, width=80):
+def create_api_error_panel(model_id, error_message, purpose, more_info=None, width=80):
     """Creates a styled panel for non-fatal API errors."""
-    content = Text()
-    content.append("Accessing cognitive matrix via ", style="white")
-    content.append(f"[{model_id}]", style="bold yellow")
-    content.append(f" (Purpose: {purpose}) ... ", style="white")
-    content.append("Failed.", style="bold red")
+    content_items = []
+
+    header = Text()
+    header.append("Accessing cognitive matrix via ", style="white")
+    header.append(f"[{model_id}]", style="bold yellow")
+    header.append(f" (Purpose: {purpose}) ... ", style="white")
+    header.append("Failed.", style="bold red")
+    content_items.append(header)
+
 
     if error_message:
-        content.append("\n\nDetails:\n", style="bold white")
-        content.append(error_message, style="dim")
+        details_text = Text()
+        details_text.append("\nDetails: ", style="bold white")
+        details_text.append(error_message, style="dim")
+        content_items.append(details_text)
+
+    # Add the "More Info" link if the content is provided
+    if more_info:
+        more_info_link = _create_more_info_link(more_info)
+        if more_info_link:
+            content_items.extend([Rule(style="bright_black"), more_info_link])
+
 
     panel = Panel(
-        content,
+        Group(*content_items),
         title=get_gradient_text("API Connection Error", PANEL_TYPE_COLORS["api_error"], "bright_red"),
         border_style=PANEL_TYPE_COLORS["api_error"],
         padding=(1, 2),
