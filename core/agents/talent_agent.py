@@ -1,9 +1,10 @@
-from typing import Dict
+import random
+from typing import Dict, Any
 from core.agents.specialist_agent import SpecialistAgent
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.manager import TalentManager
-from core.talent_utils.matcher import OpportunityMatcher
+from core.talent_utils.campaign import generate_outreach_campaign
 
 class TalentAgent(SpecialistAgent):
     """
@@ -11,80 +12,61 @@ class TalentAgent(SpecialistAgent):
     management lifecycle.
     """
 
-    async def execute_task(self, task_details: Dict) -> Dict:
+    async def execute_task(self, task_details: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Runs a full scout -> analyze -> engage cycle based on task details.
+        Plans and executes a talent outreach campaign.
 
         Args:
-            task_details: A dictionary containing all necessary parameters:
-                          - opportunity_id (str)
-                          - contact_templates (dict)
-                          - keywords (list)
-                          - platforms (list)
-                          - filter_config (dict)
-                          - min_score (float)
-                          - engagement_type (str)
+            task_details: A dictionary containing all necessary parameters for the campaign.
 
         Returns:
-            A dictionary with the status and result of the cycle.
+            A dictionary with the status and result of the campaign.
         """
-        print(f"--- Starting Talent Scout for Opportunity: {task_details.get('opportunity_id')} ---")
-
-        # Extract parameters from task_details
-        opportunity_id = task_details.get("opportunity_id")
-        contact_templates = task_details.get("contact_templates")
-        keywords = task_details.get("keywords")
-        platforms = task_details.get("platforms")
-        filter_config = task_details.get("filter_config")
-        min_score = task_details.get("min_score")
-        engagement_type = task_details.get("engagement_type")
-
-        if not all([opportunity_id, contact_templates, keywords, platforms, filter_config, min_score, engagement_type]):
+        required_params = ["opportunity_id", "target_demographics", "engagement_strategy", "communication_templates", "performance_metrics"]
+        if not all(param in task_details for param in required_params):
             return {"status": "failure", "result": "Missing required parameters in task_details for TalentAgent."}
 
-        # Initialize utility classes within the task execution
-        analyzer = TraitAnalyzer(scorers={
-            "aesthetic": AestheticScorer(),
-            "professionalism": ProfessionalismRater()
-        })
-        talent_manager.add_opportunity({"id": opportunity_id, "description": "A cool project"})
+        print(f"--- Starting Talent Campaign for Opportunity: {task_details.get('opportunity_id')} ---")
 
-        # 1. Scout
-        print(f"Scouting for talent with keywords: {keywords} on {platforms}")
-        public_profile_aggregator.ethical_filters = EthicalFilterBundle(**filter_config)
-        profiles = public_profile_aggregator.search_and_collect(keywords)
-        print(f"Found {len(profiles)} initial profiles.")
+        campaign = await generate_outreach_campaign(
+            target_demographics=task_details.get("target_demographics", {}),
+            engagement_strategy=task_details.get("engagement_strategy", ""),
+            communication_templates=task_details.get("communication_templates", []),
+            performance_metrics=task_details.get("performance_metrics", [])
+        )
 
-        # 2. Analyze and Select
-        print("Analyzing profiles...")
+        execution_plan = campaign.get("execution_plan", {})
+        potential_targets = campaign.get("potential_targets", [])
+
+        analyzer = TraitAnalyzer(scorers={"aesthetic": AestheticScorer(), "professionalism": ProfessionalismRater()})
+        talent_manager = TalentManager()
+
+        talent_manager.add_opportunity({"id": task_details.get("opportunity_id"), "description": "A cool project"})
+
         selected_candidates = []
-        for profile in profiles:
-            posts = profile.get('posts', [])
+        min_score = task_details.get("min_score", 0.7)
+        for profile in potential_targets:
+            posts = profile.get("posts", [])
             scores = await analyzer.analyze(profile, posts)
-            profile['scores'] = scores
-            average_score = sum(scores.values()) / len(scores) if scores else 0
-            if average_score >= min_score:
+            if sum(scores.values()) / len(scores) if scores else 0 >= min_score:
                 selected_candidates.append(profile)
-                print(f"  - Selected {profile.get('handle')} with score {average_score:.2f}")
 
-        print(f"Selected {len(selected_candidates)} candidates after analysis.")
         if not selected_candidates:
-            result_message = "No candidates met the criteria. Cycle ends."
-            print(result_message)
-            return {"status": "success", "result": result_message}
+            return {"status": "success", "result": "No candidates met the criteria. Campaign ends."}
 
-        # 3. Engage
-        print("Engaging with selected candidates...")
+        communication_templates = execution_plan.get("templates", [])
+        if not communication_templates:
+            return {"status": "failure", "result": "No communication templates available for engagement."}
+
         for candidate in selected_candidates:
-            message = manager.record_outreach(
-                profile_id=candidate.get('anonymized_id'),
-                message_type=engagement_type,
-                dynamic_slots={"handle": candidate.get('handle'), "opportunity_id": opportunity_id}
-            )
-            if message:
-                print(f"  - Generated outreach message for {candidate.get('handle')}.")
-                print(f"    Message: {message}")
+            message_template = random.choice(communication_templates)
+            message = message_template.format(handle=candidate.get('handle'), opportunity_id=task_details.get("opportunity_id"))
 
-        result_message = f"Talent cycle complete. Engaged with {len(selected_candidates)} candidates."
-        print(result_message)
-        return {"status": "success", "result": result_message}
+            talent_manager.add_interaction(
+                anonymized_id=candidate.get('anonymized_id'),
+                interaction_type='outreach',
+                message=message
+            )
+            print(f"  - Recorded outreach for {candidate.get('handle')}: {message}")
+
+        return {"status": "success", "result": f"Talent campaign complete. Engaged with {len(selected_candidates)} candidates.", "campaign_plan": campaign}
