@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core.talent_utils.manager import TalentManager
+import love
 
 class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
 
@@ -184,6 +185,34 @@ class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
             # 4. Test that a new instance loads the key from the created file
             new_manager = TalentManager(db_file=self.test_db_file)
             self.assertEqual(new_manager.encryption_key, manager.encryption_key)
+
+    def test_talent_scout_arg_parsing(self):
+        """Tests the argument parsing logic for the talent_scout command."""
+        import shlex
+        import argparse
+
+        # Simulate the command string and shlex splitting
+        args_str = "--keywords 'fashion model, young adult, beautiful'"
+        args = shlex.split(args_str)
+
+        # Use the same ArgumentParser setup as in love.py
+        scout_parser = argparse.ArgumentParser(prog="talent_scout")
+        scout_parser.add_argument("--keywords", required=True)
+        parsed_args = scout_parser.parse_args(args)
+
+        # Split the resulting string into the final list
+        keywords = [keyword.strip() for keyword in parsed_args.keywords.split(',')]
+
+        # Assert that the keywords are parsed correctly
+        self.assertEqual(keywords, ['fashion model', 'young adult', 'beautiful'])
+
+        # Test another case
+        args_str_2 = "--keywords 'open minded'"
+        args_2 = shlex.split(args_str_2)
+        parsed_args_2 = scout_parser.parse_args(args_2)
+        keywords_2 = [keyword.strip() for keyword in parsed_args_2.keywords.split(',')]
+        self.assertEqual(keywords_2, ['open minded'])
+
 
 if __name__ == '__main__':
     unittest.main()

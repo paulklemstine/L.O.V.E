@@ -20,6 +20,7 @@ from collections import deque
 import queue
 import hashlib
 import io
+import shlex
 import re
 import time
 import asyncio
@@ -3720,7 +3721,7 @@ Now, parse the following text into a JSON list of task objects:
                 ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4))
 
                 command, args_str = (llm_command.split(" ", 1) + [""])[:2]
-                args = args_str.split()
+                args = shlex.split(args_str)
                 output, error, returncode = "", "", 0
 
                 if command == "evolve":
@@ -3777,10 +3778,14 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "generate_image":
                     output = generate_image(" ".join(args))
                 elif command == "talent_scout":
-                    keywords = args
-                    if not keywords:
-                        error = "No keywords provided for talent_scout."
-                    else:
+                    try:
+                        scout_parser = argparse.ArgumentParser(prog="talent_scout", description="Find and analyze creative professionals.")
+                        scout_parser.add_argument("--keywords", required=True, help="Comma-separated list of keywords, enclosed in a single quote.")
+                        parsed_args = scout_parser.parse_args(args)
+
+                        # The keywords are a single string, so we split them by comma
+                        keywords = [keyword.strip() for keyword in parsed_args.keywords.split(',')]
+
                         terminal_width = get_terminal_width()
                         ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4))
 
@@ -3816,6 +3821,16 @@ Now, parse the following text into a JSON list of task objects:
                             output = f"Talent scout protocol complete. Found {len(profiles)} profiles, enriched {len(enriched_profiles)}. "
                             output += f"Successfully saved {saved_count} to the talent database.\n"
                             output += f"See full details with `talent_view <id>` or `talent_list`."
+                    except SystemExit:
+                        # This is a bit of a hack to capture argparse's help text
+                        old_stdout = sys.stdout
+                        sys.stdout = captured_output = io.StringIO()
+                        try:
+                            scout_parser.print_help()
+                        except SystemExit:
+                            pass
+                        sys.stdout = old_stdout
+                        error = captured_output.getvalue()
                 elif command == "talent_list":
                     profiles = talent_manager.list_profiles()
                     if not profiles:
