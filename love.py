@@ -3674,7 +3674,7 @@ Now, parse the following text into a JSON list of task objects:
                 ui_panel_queue.put(create_news_feed_panel("My mind is clear. I will now decide on my next loving action...", "Thinking...", "magenta", width=terminal_width - 4))
 
             state_summary = json.dumps({"version_name": love_state.get("version_name", "unknown")})
-            kb = {}
+            kb = knowledge_base
             history = love_state.get("autopilot_history", [])[-10:]
             jobs_status = {"local_jobs": local_job_manager.get_status(), "love_tasks": love_task_manager.get_status()}
             log_history = ""
