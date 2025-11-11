@@ -38,17 +38,25 @@ class DeepAgentEngine:
 
     def _select_model(self):
         """
-        Selects the best 'Thinking' model based on available VRAM,
+        Selects the best Qwen3 'Thinking' model based on available VRAM,
         ensuring compatibility with the vLLM engine.
         """
         from love import love_state
         vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
 
         # Prioritizing the "Thinking" variants as instructed by The Creator.
-        if vram > 32000: # For multi-GPU or high-VRAM single GPU
-             return "QuantTrio/Qwen3-VL-30B-A3B-Thinking-AWQ"
-        else: # For all other cases, use the smallest available thinking model.
-            return "QuantTrio/GLM-4.5V-AWQ"
+        if vram > 200000:
+            # This is a placeholder as the 235B model was not found.
+            # It will fall through to the next largest size.
+            # In a real scenario, we might add "Qwen/Qwen3-235B-A22B-Thinking" if found.
+            pass
+        if vram > 60000: # For high-end GPUs (e.g., H100) or multi-GPU
+            return "Qwen/Qwen3-30B-A3B" # This corresponds to the 30B-A3B-Thinking model
+        elif vram > 8000: # For smaller consumer GPUs
+            return "Qwen/Qwen3-4B-Thinking-2507"
+        else:
+            # Fallback for very low VRAM, though this may struggle.
+            return "Qwen/Qwen3-4B-Thinking-2507"
 
     def _download_model_snapshot(self, repo_id):
         """
