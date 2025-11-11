@@ -41,7 +41,7 @@ class DeepAgentEngine:
         Selects the best vLLM-compatible model based on available VRAM.
         """
         from love import love_state
-        vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
+        vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)*0.8
 
         # Models are selected based on VRAM requirements from the user-provided list.
         # General-purpose reasoning models are preferred over specialized ones (e.g., math).
