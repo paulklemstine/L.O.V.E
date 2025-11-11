@@ -613,10 +613,27 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                         log_event(f"Prompt ({token_count} tokens) too long for {model_id}, skipping.", "INFO")
                         continue
                     else:
-                        log_event(f"Prompt ({token_count} tokens) too long for {model_id}, truncating.", "WARNING")
-                        avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
-                        estimated_cutoff = int(max_prompt_tokens * avg_chars_per_token)
-                        prompt_text = prompt_text[:estimated_cutoff]
+                        original_token_count = token_count
+                        log_event(f"Prompt ({original_token_count} tokens) is too long for the context length of {model_id} ({max_prompt_tokens} tokens). Truncating...", "WARNING")
+
+                        # Truncate text progressively until it fits within the token limit.
+                        while token_count > max_prompt_tokens:
+                            # Calculate the estimated number of characters to chop off.
+                            # We add a buffer of 100 tokens to be safe.
+                            tokens_to_remove = token_count - max_prompt_tokens + 100
+                            avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
+                            chars_to_remove = int(tokens_to_remove * avg_chars_per_token)
+
+                            # Ensure we don't chop off everything
+                            if chars_to_remove >= len(prompt_text):
+                                prompt_text = ""
+                            else:
+                                prompt_text = prompt_text[:-chars_to_remove]
+
+                            # Recalculate token count
+                            token_count = get_token_count(prompt_text)
+
+                        log_event(f"Prompt truncated from {original_token_count} to {token_count} tokens.", "INFO")
 
                 # --- DEEP AGENT vLLM LOGIC ---
                 elif model_id == "deep_agent_vllm":
