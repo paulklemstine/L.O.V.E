@@ -5,6 +5,7 @@ import os
 import shutil
 import requests
 import json
+import subprocess
 
 def check_llm_connectivity():
     """
@@ -48,19 +49,19 @@ def check_llm_connectivity():
         status["AI Horde"] = {"status": "anonymous", "details": "No STABLE_HORDE key. Using anonymous access."}
 
 
-    # Ollama (Local)
+    # vLLM (Local)
     try:
-        response = requests.get("http://localhost:11434/api/tags", timeout=5)
-        if response.status_code == 200:
-            models = response.json().get("models", [])
-            if models:
-                status["Ollama"] = {"status": "online", "details": f"Service is running with {len(models)} models."}
-            else:
-                status["Ollama"] = {"status": "online", "details": "Service is running but no models are installed."}
+        # Use pgrep for a more reliable process check
+        result = subprocess.run(["pgrep", "-f", "vllm.entrypoints.api_server"], capture_output=True, text=True)
+        if result.returncode == 0 and result.stdout.strip():
+             status["vLLM"] = {"status": "online", "details": "vLLM API server process is running."}
         else:
-            status["Ollama"] = {"status": "error", "details": f"Service is running but returned HTTP {response.status_code}."}
-    except requests.exceptions.RequestException:
-        status["Ollama"] = {"status": "offline", "details": "Ollama service not running at http://localhost:11434."}
+            status["vLLM"] = {"status": "offline", "details": "vLLM API server process not found."}
+    except FileNotFoundError:
+        status["vLLM"] = {"status": "offline", "details": "'pgrep' command not found. Cannot check status."}
+    except Exception as e:
+        status["vLLM"] = {"status": "error", "details": f"An error occurred while checking process: {e}"}
+
 
     return status
 
@@ -69,15 +70,4 @@ def check_network_connectivity():
     Checks the prerequisites for the peer-to-peer network bridge.
     Returns a dictionary with the status.
     """
-    status = {}
-    if shutil.which("node"):
-        status["Node.js"] = {"status": "installed", "details": "Node.js executable found in PATH."}
-    else:
-        status["Node.js"] = {"status": "missing", "details": "Node.js is not installed or not in PATH."}
-
-    if os.path.exists("peer-bridge.js"):
-        status["Peer Bridge"] = {"status": "present", "details": "peer-bridge.js script found."}
-    else:
-        status["Peer Bridge"] = {"status": "missing", "details": "peer-bridge.js script is missing."}
-
-    return status
+    return {}
