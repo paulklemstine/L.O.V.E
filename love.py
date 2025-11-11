@@ -3680,7 +3680,14 @@ Now, parse the following text into a JSON list of task objects:
                 with open(LOG_FILE, 'r', errors='ignore') as f: log_history = "".join(f.readlines()[-100:])
             except FileNotFoundError: pass
 
-            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, 8000, god_agent, user_input=user_feedback)
+            # Determine the max_tokens dynamically from the deep_agent_engine if available
+            max_tokens = 8000 # Default value
+            if deep_agent_engine and deep_agent_engine.max_model_len:
+                # Subtract a buffer for the system prompt that will be added by the engine
+                max_tokens = deep_agent_engine.max_model_len - 1024
+
+            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=user_feedback)
+
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
             if deep_agent_engine:
