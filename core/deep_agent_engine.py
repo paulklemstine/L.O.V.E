@@ -65,7 +65,7 @@ class DeepAgentEngine:
             return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
         elif vram >= 6.5 * 1024:
             # 8B AWQ model is preferred over the 7B AWQ models in the same VRAM tier.
-            return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
+            return "Sreenington/Phi-3-mini-4k-instruct-AWQ"
         elif vram >= 4.5 * 1024:
         # Replaced unquantized Phi-3-mini with its AWQ/INT4 version
             return "hugging-quants/Phi-3-mini-4k-instruct-AWQ-INT4"
