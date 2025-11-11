@@ -3973,7 +3973,7 @@ Now, parse the following text into a JSON list of task objects:
                         ui_panel_queue.put(create_news_feed_panel(f"Scanning for opportunities with keywords: {keywords}", "Opportunity Scout", "magenta", width=terminal_width - 4))
 
                         # 1. Scrape for opportunities
-                            opportunities = opportunity_scraper.search_for_opportunities(keywords)
+                        opportunities = opportunity_scraper.search_for_opportunities(keywords)
 
                         if not opportunities:
                             output = "Scout complete. No new opportunities found on Bluesky for the given keywords."
