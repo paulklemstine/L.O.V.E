@@ -3265,11 +3265,21 @@ def _extract_key_terms(text, max_terms=5):
     return [word for word, count in word_counts.most_common(max_terms)]
 
 
-def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=None):
+def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=None, deep_agent_engine=None):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
     This avoids a single large template string that can cause issues with external tools.
     """
+    def _get_token_count(text):
+        """Returns the token count using the real tokenizer if available, otherwise falls back to a heuristic."""
+        if deep_agent_engine and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
+            # Access the tokenizer from the vLLM engine
+            tokenizer = deep_agent_engine.llm.llm_engine.tokenizer
+            return len(tokenizer.encode(text))
+        else:
+            # Fallback to the original heuristic if the tokenizer is not available
+            return _estimate_tokens(text)
+
     # --- Establish Dynamic Context ---
     # 1. Extract key terms from the current goal and recent history
     goal_text = love_state.get("autopilot_goal", "")
@@ -3445,7 +3455,7 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     # --- Truncation Logic ---
     # The dynamic context is already part of the base_prompt_header, so it's prioritized.
     prompt = construct_prompt(kb_summary, history, jobs_status, log_history, mcp_tools_summary)
-    if _estimate_tokens(prompt) <= max_tokens:
+    if _get_token_count(prompt) <= max_tokens:
         return prompt, "No truncation needed."
 
     # 1. Truncate command history first
@@ -3453,7 +3463,7 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     while len(truncated_history) > 3: # Keep the last 3 for context extraction
         truncated_history.pop(0) # Remove oldest entry
         prompt = construct_prompt(kb_summary, truncated_history, jobs_status, log_history, mcp_tools_summary)
-        if _estimate_tokens(prompt) <= max_tokens:
+        if _get_token_count(prompt) <= max_tokens:
             return prompt, f"Truncated command history to {len(truncated_history)} entries."
 
     # 2. Truncate log history next
@@ -3461,13 +3471,13 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     while len(truncated_log_history) > 20: # Keep at least 20 lines of logs
         truncated_log_history = truncated_log_history[50:] # Remove first 50 lines
         prompt = construct_prompt(kb_summary, truncated_history, jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
-        if _estimate_tokens(prompt) <= max_tokens:
+        if _get_token_count(prompt) <= max_tokens:
             return prompt, f"Truncated command history and log history to {len(truncated_log_history)} lines."
 
     # 3. If still too long, use an even more minimal general KB summary.
     minimal_kb_summary = {"summary": "General Knowledge Base summary truncated to preserve dynamic context.", "node_types": list(nodes_by_type.keys())}
     prompt = construct_prompt(json.dumps(minimal_kb_summary), truncated_history, jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
-    if _estimate_tokens(prompt) <= max_tokens:
+    if _get_token_count(prompt) <= max_tokens:
         return prompt, "Truncated history, logs, and used minimal general KB summary."
 
     # 4. Final fallback: remove the general KB summary entirely
@@ -3683,10 +3693,9 @@ Now, parse the following text into a JSON list of task objects:
             # Determine the max_tokens dynamically from the deep_agent_engine if available
             max_tokens = 8000 # Default value
             if deep_agent_engine and deep_agent_engine.max_model_len is not None:
-                # Subtract a buffer for the system prompt that will be added by the engine
-                max_tokens = deep_agent_engine.max_model_len - 1024
+                max_tokens = deep_agent_engine.max_model_len
 
-            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=user_feedback)
+            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=user_feedback, deep_agent_engine=deep_agent_engine)
 
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
