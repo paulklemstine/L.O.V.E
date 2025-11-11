@@ -47,19 +47,12 @@ class TalentAgent(SpecialistAgent):
             "aesthetic": AestheticScorer(),
             "professionalism": ProfessionalismRater()
         })
-        manager = TalentManager()
-        matcher = OpportunityMatcher()
-        matcher.add_opportunity({"id": opportunity_id, "description": "A cool project"})
+        talent_manager.add_opportunity({"id": opportunity_id, "description": "A cool project"})
 
         # 1. Scout
         print(f"Scouting for talent with keywords: {keywords} on {platforms}")
-        ethical_filters = EthicalFilterBundle(**filter_config)
-        aggregator = PublicProfileAggregator(
-            keywords=keywords,
-            platform_names=platforms,
-            ethical_filters=ethical_filters
-        )
-        profiles = aggregator.search_and_collect()
+        public_profile_aggregator.ethical_filters = EthicalFilterBundle(**filter_config)
+        profiles = public_profile_aggregator.search_and_collect(keywords)
         print(f"Found {len(profiles)} initial profiles.")
 
         # 2. Analyze and Select

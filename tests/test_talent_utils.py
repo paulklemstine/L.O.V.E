@@ -60,10 +60,10 @@ class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
 
         # Initialize the aggregator
         filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art"}, privacy_level="public_only")
-        aggregator = PublicProfileAggregator(keywords=["art"], platform_names=["bluesky"], ethical_filters=filters)
+        aggregator = PublicProfileAggregator(platform_names=["bluesky"], ethical_filters=filters)
 
         # Run the search
-        profiles = aggregator.search_and_collect()
+        profiles = aggregator.search_and_collect(keywords=["art"])
 
         # Assertions
         self.assertEqual(len(profiles), 1)

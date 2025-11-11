@@ -31,41 +31,31 @@ from core.talent_utils.intelligence_synthesizer import (
     NetworkAnalyzer,
     AttributeProfiler,
 )
-from core.talent_utils.manager import TalentManager
-from core.talent_utils.opportunity_scraper import OpportunityScraper
 from core.talent_utils.opportunity_matcher import OpportunityMatcher
 import io
 from rich.table import Table
 from datetime import datetime
-from core.talent_utils.aggregator import PublicProfileAggregator
 from core.talent_utils.analyzer import TraitAnalyzer, ProfessionalismRater
-from core.talent_utils.opportunity_scraper import OpportunityScraper
-from core.talent_utils.opportunity_matcher import OpportunityMatcher
-from core.talent_utils.manager import TalentManager
+from core.talent_utils import (
+    talent_manager,
+    public_profile_aggregator,
+    opportunity_scraper,
+    opportunity_matcher,
+    intelligence_synthesizer
+)
 
 
 love_state = {}
 
 async def talent_scout(keywords: list) -> str:
     """Finds and analyzes creative professionals based on keywords."""
-    filters = EthicalFilterBundle(min_sentiment=0.7, required_tags={"art", "fashion"}, privacy_level="public_only")
-    aggregator = PublicProfileAggregator(keywords=keywords, platform_names=["bluesky", "instagram"], ethical_filters=filters)
-    profiles = aggregator.search_and_collect()
+    profiles = public_profile_aggregator.search_and_collect(keywords)
 
     if not profiles:
         return "Talent scout protocol complete. No new profiles found for the given keywords."
 
-    modules = [
-        SentimentAnalyzer(),
-        TopicModeler(),
-        OpportunityIdentifier(),
-        NetworkAnalyzer(),
-        AttributeProfiler(attributes_to_extract=["age range", "stated interests", "social behavior indicators"])
-    ]
-    synthesizer = IntelligenceSynthesizer(modules)
-    enriched_profiles = await synthesizer.run(profiles)
+    enriched_profiles = await intelligence_synthesizer.run(profiles)
 
-    talent_manager = TalentManager()
     saved_count = 0
     for profile in enriched_profiles:
         save_result = talent_manager.save_profile(profile)
@@ -78,21 +68,19 @@ async def talent_scout(keywords: list) -> str:
 
 async def opportunity_scout(keywords: list) -> str:
     """Scans Bluesky for opportunities and matches them to saved talent."""
-    scraper = OpportunityScraper(keywords=keywords)
-    opportunities = scraper.search_for_opportunities()
+    opportunities = opportunity_scraper.search_for_opportunities(keywords)
 
     if not opportunities:
         return "Scout complete. No new opportunities found on Bluesky for the given keywords."
 
-    talent_manager = TalentManager()
     profiles = talent_manager.list_profiles()
     detailed_profiles = [talent_manager.get_profile(p['anonymized_id']) for p in profiles]
 
     if not detailed_profiles:
         return f"Found {len(opportunities)} opportunities, but there are no talent profiles in the database to match them with."
 
-    matcher = OpportunityMatcher(talent_profiles=detailed_profiles)
-    matches = await matcher.find_matches(opportunities)
+    opportunity_matcher.talent_profiles = detailed_profiles
+    matches = await opportunity_matcher.find_matches(opportunities)
 
     if not matches:
         return f"Found {len(opportunities)} opportunities, but none were a suitable match for the {len(detailed_profiles)} talents in the database."

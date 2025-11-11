@@ -22,8 +22,7 @@ class PublicProfileAggregator:
     Scrapes and collects publicly available profile data from specified platforms.
     """
 
-    def __init__(self, keywords, platform_names, ethical_filters):
-        self.keywords = keywords
+    def __init__(self, platform_names, ethical_filters):
         self.platform_names = platform_names
         self.ethical_filters = ethical_filters
         self.client = self._get_bluesky_client()
@@ -231,13 +230,13 @@ class PublicProfileAggregator:
             return []
 
 
-    def search_and_collect(self):
+    def search_and_collect(self, keywords):
         """
         Searches for posts and profiles on specified platforms based on keywords and collects data.
         """
         all_profiles = []
         for platform in self.platform_names:
-            for keyword in self.keywords:
+            for keyword in keywords:
                 if platform == "bluesky":
                     if self.client:
                         all_profiles.extend(self._search_bluesky(keyword))
