@@ -149,6 +149,15 @@ class DeepAgentEngine:
 
         return formatted_tools
 
+    @property
+    def max_model_len(self):
+        """
+        Returns the maximum model length from the vLLM engine's model config.
+        """
+        if self.llm and hasattr(self.llm, 'llm_engine') and hasattr(self.llm.llm_engine, 'model_config'):
+            return self.llm.llm_engine.model_config.max_model_len
+        return None
+
     def run(self, prompt: str):
         """
         Executes a prompt using a simplified DeepAgent-style reasoning loop.
