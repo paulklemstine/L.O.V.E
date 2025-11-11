@@ -3480,9 +3480,32 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     if _get_token_count(prompt) <= max_tokens:
         return prompt, "Truncated history, logs, and used minimal general KB summary."
 
-    # 4. Final fallback: remove the general KB summary entirely
-    prompt = construct_prompt("General KB summary removed to fit context.", truncated_history, jobs_status, "\n".join(truncated_log_history[-20:]), mcp_tools_summary)
-    return prompt, "Truncated history, logs, and removed general KB summary to prioritize dynamic context."
+    # 4. If still too long, remove the log history entirely.
+    current_log_history = ""
+    prompt = construct_prompt(minimal_kb_summary, truncated_history, jobs_status, current_log_history, mcp_tools_summary)
+    if _get_token_count(prompt) <= max_tokens:
+        return prompt, "Truncated history, used minimal KB summary, and removed log history."
+
+    # 5. If still too long, remove the general KB summary entirely.
+    current_kb_summary = ""
+    prompt = construct_prompt(current_kb_summary, truncated_history, jobs_status, current_log_history, mcp_tools_summary)
+    if _get_token_count(prompt) <= max_tokens:
+        return prompt, "Truncated history and removed both log history and general KB summary."
+
+    # 6. Final, most aggressive step: If the prompt is still too long, hard truncate it to the max token length.
+    if _get_token_count(prompt) > max_tokens:
+        if deep_agent_engine and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
+            tokenizer = deep_agent_engine.llm.llm_engine.tokenizer
+            token_ids = tokenizer.encode(prompt)
+            truncated_token_ids = token_ids[:max_tokens]
+            prompt = tokenizer.decode(truncated_token_ids)
+            truncation_reason = "CRITICAL: Prompt was aggressively truncated to the maximum token limit using the model's tokenizer."
+        else:
+            # Fallback to character-based truncation if tokenizer is not available
+            safe_char_limit = max_tokens * 3
+            prompt = prompt[:safe_char_limit]
+            truncation_reason = "CRITICAL: Prompt was aggressively truncated by character limit as a fallback."
+        return prompt, truncation_reason
 
 
 import uuid
