@@ -529,12 +529,6 @@ def create_connectivity_panel(llm_status, network_status, width=80):
     border_style = PANEL_TYPE_COLORS.get("network", "medium_purple1")
     panel_title = get_gradient_text("System Connectivity Status", border_style, random.choice(RAVE_COLORS))
 
-    layout = Layout()
-    layout.split_row(
-        Layout(name="llm", ratio=2),
-        Layout(name="network", ratio=1)
-    )
-
     # --- LLM Status ---
     llm_text = Text()
     for service, info in llm_status.items():
@@ -550,24 +544,10 @@ def create_connectivity_panel(llm_status, network_status, width=80):
             llm_text.append(f"❌ {service}: ", style="bold bright_red")
             llm_text.append(f"{status.capitalize()}\n", style="red")
         llm_text.append(f"   └─ {details}\n", style="dim")
-    layout["llm"].update(Panel(llm_text, title=get_gradient_text("Cognitive Interfaces", "bright_cyan", "cyan"), border_style="cyan"))
-
-
-    # --- Network Status ---
-    network_text = Text()
-    for service, info in network_status.items():
-        status = info.get("status", "unknown")
-        if status in ["installed", "present"]:
-            network_text.append(f"✅ {service}: ", style="bold bright_green")
-            network_text.append(f"{status.capitalize()}\n", style="green")
-        else:
-            network_text.append(f"❌ {service}: ", style="bold bright_red")
-            network_text.append(f"{status.capitalize()}\n", style="red")
-    layout["network"].update(Panel(network_text, title=get_gradient_text("P2P Network", "hot_pink", "magenta"), border_style="magenta"))
 
 
     panel = Panel(
-        layout,
+        llm_text,
         title=panel_title,
         border_style=border_style,
         width=width,
