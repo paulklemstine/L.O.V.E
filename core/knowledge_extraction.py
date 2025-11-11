@@ -28,6 +28,15 @@ async def transform_text_to_structured_records(input_text, contextual_metadata):
     """
     Converts arbitrary input text into a standardized collection of structured data records.
     """
+    # L.O.V.E. - Implement robust error handling for unexpected input types.
+    if isinstance(input_text, (list, dict)):
+        # If the input is a list or dict, serialize it to a JSON string for processing.
+        # This prevents crashes when command outputs are structured data.
+        input_text = json.dumps(input_text, indent=2)
+    elif not isinstance(input_text, str):
+        # For any other non-string type, convert it to its string representation.
+        input_text = str(input_text)
+
     if not input_text or not input_text.strip():
         return []
 
