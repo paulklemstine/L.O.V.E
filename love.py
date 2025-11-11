@@ -3314,7 +3314,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
 
 
     # --- Summarize Knowledge Base ---
-    kb_summary = kb.summarize_graph()
+    kb_summary, nodes_by_type = kb.summarize_graph()
 
     # --- Summarize MCP Tools ---
     mcp_tools_summary = "No MCP servers configured."

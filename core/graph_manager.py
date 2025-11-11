@@ -293,4 +293,4 @@ class GraphDataManager:
                     if can_add_part(part): summary_parts.append(part)
                     else: break
 
-        return "\n".join(summary_parts)
+        return "\n".join(summary_parts), nodes_by_type

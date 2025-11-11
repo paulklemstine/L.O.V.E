@@ -62,7 +62,7 @@ class ReasoningEngine:
         """
         from love import love_state # Local import to get current goal
 
-        kb_summary = self.knowledge_base.summarize_graph()
+        kb_summary, _ = self.knowledge_base.summarize_graph()
         available_tools = self.tool_registry.get_formatted_tool_metadata()
         current_mission = love_state.get("autopilot_goal", "Mission not defined.")
         insights_summary = "\n".join(f"- {insight}" for insight in insights) if insights else "No special insights at this time."
