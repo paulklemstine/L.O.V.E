@@ -293,9 +293,21 @@ class MemoryManager:
 
         try:
             response_dict = await run_llm(prompt)
-            response_str = response_dict.get("result", '{{}}')
+            response_str = response_dict.get("result", '[]')
+
+            # Pre-process the response string to remove markdown fences
+            match = re.search(r"```json\n(.*?)\n```", response_str, re.DOTALL)
+            if match:
+                response_str = match.group(1)
+
             link_data = json.loads(response_str)
-            links_to_create = link_data.get("links", [])
+
+            if isinstance(link_data, dict):
+                links_to_create = link_data.get("links", [])
+            elif isinstance(link_data, list):
+                links_to_create = link_data
+            else:
+                links_to_create = []
 
             if not links_to_create:
                 print("LLM determined no meaningful links to create.")
