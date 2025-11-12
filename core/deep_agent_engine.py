@@ -111,7 +111,7 @@ class DeepAgentEngine:
             if vram >= 6.5 * 1024:
                 self.llm = LLM(model=model_path, gpu_memory_utilization=0.9)
             else:
-                self.llm = LLM(model=model_path, gpu_memory_utilization=0.80, max_model_len=4096)
+                self.llm = LLM(model=model_path, gpu_memory_utilization=0.80, max_model_len=6469)
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=1024)
             # The DeepAgent library itself is not actually used in this implementation,
             # as we are building a simplified version of its reasoning loop.
