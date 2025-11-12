@@ -180,6 +180,28 @@ If you have enough information to answer the prompt, use the 'Finish' tool.
 
 Prompt: {prompt}
 """
+        # --- Truncation Safeguard ---
+        # This is the final check before sending the prompt to the model.
+        # It ensures that the prompt, including all headers and tool definitions,
+        # fits within the model's context window.
+        if self.max_model_len:
+            tokenizer = self.llm.llm_engine.tokenizer
+            token_ids = tokenizer.encode(system_prompt)
+
+            # Check if the token count exceeds the model's limit
+            if len(token_ids) > self.max_model_len:
+                # Leave a buffer for the model's response (using max_tokens from sampling_params)
+                safe_max_tokens = self.max_model_len - self.sampling_params.max_tokens
+
+                # Truncate the token list
+                truncated_token_ids = token_ids[:safe_max_tokens]
+
+                # Decode the truncated tokens back into a string
+                system_prompt = tokenizer.decode(truncated_token_ids)
+
+                # Log this event for debugging
+                print(f"WARNING: The cognitive prompt was truncated to {safe_max_tokens} tokens to fit the model's limit.")
+
         outputs = self.llm.generate(system_prompt, self.sampling_params)
         response_text = outputs[0].outputs[0].text
 
