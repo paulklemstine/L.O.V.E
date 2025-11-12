@@ -3271,6 +3271,82 @@ def _extract_key_terms(text, max_terms=5):
     return [word for word, count in word_counts.most_common(max_terms)]
 
 
+async def _summarize_prompt_if_needed(prompt, max_tokens, deep_agent_engine):
+    """
+    Summarizes the middle part of a prompt if it exceeds the token limit,
+    preserving the header and footer.
+    """
+    def _get_token_count(text):
+        if deep_agent_engine and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
+            tokenizer = deep_agent_engine.llm.llm_engine.tokenizer
+            return len(tokenizer.encode(text))
+        else:
+            return _estimate_tokens(text)
+
+    if _get_token_count(prompt) <= max_tokens:
+        return prompt # No summarization needed
+
+    core.logging.log_event("Prompt exceeds model's maximum length. Initiating summarization...", "WARNING")
+
+    # --- 1. Isolate Header, History, and Footer ---
+    # The prompt is complexly built. We will define the start of the "history" section
+    # and the start of the "footer" section (the commands list).
+    history_start_marker = "\nMy internal Knowledge Base contains the following intelligence summary:\n---"
+    footer_start_marker = "Available commands:"
+
+    try:
+        header_end_index = prompt.find(history_start_marker)
+        footer_start_index = prompt.find(footer_start_marker)
+
+        if header_end_index == -1 or footer_start_index == -1:
+             # If markers are not found, we can't safely summarize. Fallback to truncation.
+            core.logging.log_event("Could not find markers for summarization. The prompt will be truncated by the next step.", "ERROR")
+            return prompt
+
+        header = prompt[:header_end_index]
+        history_content = prompt[header_end_index:footer_start_index]
+        footer = prompt[footer_start_index:]
+
+        # --- 2. Decide what to summarize ---
+        # We will summarize the first half of the history content to preserve recent events.
+        history_lines = history_content.splitlines()
+        split_point = len(history_lines) // 2
+        to_summarize = "\n".join(history_lines[:split_point])
+        to_keep = "\n".join(history_lines[split_point:])
+
+        # --- 3. Perform Summarization ---
+        summarization_prompt = f"""
+You are an expert summarization AI. Condense the following context from a long-running AI agent's memory into a concise summary.
+Focus on key events, findings, and completed tasks. The goal is to retain as much meaningful information as possible in the shortest form.
+
+Content to summarize:
+---
+{to_summarize}
+---
+
+Your concise summary:
+"""
+        # We need to call run_llm asynchronously. Since this function is async, we can await it.
+        summary_dict = await run_llm(summarization_prompt, purpose="summarization", deep_agent_instance=deep_agent_engine)
+        summary = summary_dict.get("result", "[Summarization failed]")
+
+        # --- 4. Reconstruct the prompt ---
+        new_prompt = f"{header}\n[--- History Summary ---]\n{summary}\n[--- End Summary ---]\n{to_keep}{footer}"
+
+        # --- 5. Final Check ---
+        if _get_token_count(new_prompt) > max_tokens:
+            core.logging.log_event("Summarized prompt is still too long. Aggressive truncation will occur.", "WARNING")
+            # Return the summarized prompt anyway, the existing truncation will handle the rest.
+            return new_prompt
+        else:
+            core.logging.log_event("Successfully summarized prompt to fit within the context window.", "INFO")
+            return new_prompt
+
+    except Exception as e:
+        log_critical_event(f"Error during prompt summarization: {e}")
+        return prompt # Return original prompt on error
+
+
 def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=None, deep_agent_engine=None):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
@@ -3725,6 +3801,11 @@ Now, parse the following text into a JSON list of task objects:
                 max_tokens = deep_agent_engine.max_model_len
 
             cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=user_feedback, deep_agent_engine=deep_agent_engine)
+
+            # --- Summarization Step ---
+            # We call the summarization function here, after the initial build.
+            cognitive_prompt = await _summarize_prompt_if_needed(cognitive_prompt, max_tokens, deep_agent_engine)
+
 
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
