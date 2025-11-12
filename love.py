@@ -2142,7 +2142,7 @@ class WebSocketServerManager:
         # The stop() method will call loop.stop() to terminate this.
         self.loop.run_forever()
 
-    async def _connection_handler(self, websocket, path):
+    async def _connection_handler(self, websocket):
         self.clients.add(websocket)
         try:
             async for message in websocket:
