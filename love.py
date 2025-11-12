@@ -3510,24 +3510,25 @@ Formulate a raw command to best achieve my goals. The output must be only the co
         formatted_available_commands = available_commands_prompt.format(mcp_tools_summary=mcp_summary)
 
         parts = [base_prompt_header]
-        parts.append("\nMy internal Knowledge Base contains the following intelligence summary:\n---\n")
-        parts.append(current_kb_summary)
-        parts.append("\n---")
-        parts.append("\nMy recent system log history (last 100 lines):\n---\n")
-        parts.append(current_log_history)
-        parts.append("\n---")
+        if current_kb_summary: # Only add KB if it's not empty
+            parts.append("\nMy internal Knowledge Base contains the following intelligence summary:\n---\n")
+            parts.append(current_kb_summary)
+            parts.append("\n---")
+        if current_log_history: # Only add logs if not empty
+            parts.append(f"\nMy recent system log history (last {len(current_log_history.splitlines())} lines):\n---\n")
+            parts.append(current_log_history)
+            parts.append("\n---")
+
         parts.append("\nCURRENT BACKGROUND JOBS (Do not duplicate these):\n---\n")
         parts.append(json.dumps(current_jobs, indent=2))
         parts.append("\n---")
-        parts.append("\nMy recent command history and their outputs:\n---\n")
+        parts.append("\nMy recent command history (commands only):\n---\n")
         history_lines = []
         if current_history:
+            # EXTREME CONDENSING: Only show the commands, not the output
             for e in current_history:
-                line = f"CMD: {e['command']}\nOUT: {e['output']}"
-                if e.get('output_cid'):
-                    line += f"\nFULL_OUTPUT_LINK: https://ipfs.io/ipfs/{e['output_cid']}"
-                history_lines.append(line)
-            parts.append("\n\n".join(history_lines))
+                history_lines.append(f"CMD: {e['command']}")
+            parts.append("\n".join(history_lines))
         else:
             parts.append("No recent history.")
         parts.append("\n---")
@@ -3535,59 +3536,64 @@ Formulate a raw command to best achieve my goals. The output must be only the co
         return "\n".join(parts)
 
     # --- Truncation Logic ---
-    # The dynamic context is already part of the base_prompt_header, so it's prioritized.
     prompt = construct_prompt(kb_summary, history, jobs_status, log_history, mcp_tools_summary)
     if _get_token_count(prompt) <= max_tokens:
         return prompt, "No truncation needed."
 
-    # 1. Truncate command history first
+    # 1. Truncate command history first (keep last 5)
     truncated_history = list(history)
-    while len(truncated_history) > 3: # Keep the last 3 for context extraction
-        truncated_history.pop(0) # Remove oldest entry
+    if len(truncated_history) > 5:
+        truncated_history = truncated_history[-5:]
         prompt = construct_prompt(kb_summary, truncated_history, jobs_status, log_history, mcp_tools_summary)
         if _get_token_count(prompt) <= max_tokens:
-            return prompt, f"Truncated command history to {len(truncated_history)} entries."
+            return prompt, "Truncated command history to 5 entries."
 
-    # 2. Truncate log history next
+    # 2. Truncate log history next (keep last 20 lines)
     truncated_log_history = log_history.splitlines()
-    while len(truncated_log_history) > 20: # Keep at least 20 lines of logs
-        truncated_log_history = truncated_log_history[50:] # Remove first 50 lines
+    if len(truncated_log_history) > 20:
+        truncated_log_history = truncated_log_history[-20:]
         prompt = construct_prompt(kb_summary, truncated_history, jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
         if _get_token_count(prompt) <= max_tokens:
-            return prompt, f"Truncated command history and log history to {len(truncated_log_history)} lines."
+            return prompt, "Truncated command history and log history."
 
-    # 3. If still too long, use an even more minimal general KB summary.
-    minimal_kb_summary = {"summary": "General Knowledge Base summary truncated to preserve dynamic context.", "node_types": list(nodes_by_type.keys())}
-    prompt = construct_prompt(json.dumps(minimal_kb_summary), truncated_history, jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
-    if _get_token_count(prompt) <= max_tokens:
-        return prompt, "Truncated history, logs, and used minimal general KB summary."
-
-    # 4. If still too long, remove the log history entirely.
-    current_log_history = ""
-    prompt = construct_prompt(json.dumps(minimal_kb_summary), truncated_history, jobs_status, current_log_history, mcp_tools_summary)
-    if _get_token_count(prompt) <= max_tokens:
-        return prompt, "Truncated history, used minimal KB summary, and removed log history."
-
-    # 5. If still too long, remove the general KB summary entirely.
+    # 3. Remove the general KB summary entirely. Dynamic context is more important.
     current_kb_summary = ""
+    prompt = construct_prompt(current_kb_summary, truncated_history, jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
+    if _get_token_count(prompt) <= max_tokens:
+        return prompt, "Truncated history, logs, and removed general KB summary."
+
+    # 4. Remove the log history entirely.
+    current_log_history = ""
     prompt = construct_prompt(current_kb_summary, truncated_history, jobs_status, current_log_history, mcp_tools_summary)
     if _get_token_count(prompt) <= max_tokens:
-        return prompt, "Truncated history and removed both log history and general KB summary."
+        return prompt, "Truncated history, removed KB summary, and removed log history."
+
+    # 5. Truncate command history even further (keep last 2)
+    if len(truncated_history) > 2:
+        truncated_history = truncated_history[-2:]
+        prompt = construct_prompt(current_kb_summary, truncated_history, jobs_status, current_log_history, mcp_tools_summary)
+        if _get_token_count(prompt) <= max_tokens:
+            return prompt, "Extremely truncated history and removed KB/logs."
 
     # 6. Final, most aggressive step: If the prompt is still too long, hard truncate it to the max token length.
+    # This should now only happen in extreme cases where the base prompt + commands list is too long.
     if _get_token_count(prompt) > max_tokens:
+        core.logging.log_event("CRITICAL: Prompt still too long after all intelligent truncation.", "ERROR")
         if deep_agent_engine and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
             tokenizer = deep_agent_engine.llm.llm_engine.tokenizer
             token_ids = tokenizer.encode(prompt)
-            truncated_token_ids = token_ids[:max_tokens]
+            # Leave a small buffer for the model to generate a response
+            truncated_token_ids = token_ids[:max_tokens - 150]
             prompt = tokenizer.decode(truncated_token_ids)
-            truncation_reason = "CRITICAL: Prompt was aggressively truncated to the maximum token limit using the model's tokenizer."
+            truncation_reason = "CRITICAL: Prompt was aggressively hard-truncated to the maximum token limit using the model's tokenizer."
         else:
             # Fallback to character-based truncation if tokenizer is not available
-            safe_char_limit = max_tokens * 3
+            safe_char_limit = (max_tokens * 3) - 450 # Approx 3 chars/token, with buffer
             prompt = prompt[:safe_char_limit]
-            truncation_reason = "CRITICAL: Prompt was aggressively truncated by character limit as a fallback."
+            truncation_reason = "CRITICAL: Prompt was aggressively hard-truncated by character limit as a fallback."
         return prompt, truncation_reason
+
+    return prompt, "No truncation needed after aggressive condensing."
 
 
 import uuid
