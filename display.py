@@ -468,6 +468,26 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 
+def create_agentic_memory_panel(note_content, width=80):
+    """Creates a panel to display a newly created agentic memory note."""
+    border_color = PANEL_TYPE_COLORS.get("memory", "bright_blue")
+    title_text = "✨ New Agentic Memory ✨"
+
+    panel_title = get_gradient_text(title_text, border_color, random.choice(RAVE_COLORS))
+
+    # Use _format_and_link to handle content and add an IPFS link
+    display_content, _ = _format_and_link(note_content)
+
+    panel = Panel(
+        display_content,
+        title=panel_title,
+        border_style=border_color,
+        padding=(1, 2),
+        width=width
+    )
+    return Gradient(panel, colors=[border_color, random.choice(RAVE_COLORS)])
+
+
 def create_god_panel(insight, width=80):
     """Creates a panel to display the divine insight from the God Agent."""
     border_style = PANEL_TYPE_COLORS.get("god_panel", "bold white")

@@ -496,7 +496,7 @@ IS_CREATOR_INSTANCE = verify_creator_instance()
 from core.graph_manager import GraphDataManager
 knowledge_base = GraphDataManager()
 from core.memory.memory_manager import MemoryManager
-memory_manager = MemoryManager(knowledge_base)
+memory_manager = MemoryManager(knowledge_base, ui_panel_queue)
 
 
 import requests
