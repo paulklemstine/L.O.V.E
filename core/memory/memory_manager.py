@@ -59,14 +59,17 @@ class MemoryNote:
 from core.graph_manager import GraphDataManager
 
 
+from display import create_agentic_memory_panel, get_terminal_width
+
 class MemoryManager:
     """
     Manages the agent's agentic memory system, which is integrated directly
     into the central knowledge graph managed by GraphDataManager.
     """
-    def __init__(self, graph_data_manager: GraphDataManager):
+    def __init__(self, graph_data_manager: GraphDataManager, ui_panel_queue=None):
         # Working Memory for the current task context
         self.working_memory = {}
+        self.ui_panel_queue = ui_panel_queue
 
         # The MemoryManager now uses the central GraphDataManager
         self.graph_data_manager = graph_data_manager
@@ -118,7 +121,13 @@ class MemoryManager:
             node_type="MemoryNote",
             attributes=memory_note.to_node_attributes()
         )
-        print(f"Successfully created agentic memory note {memory_note.id}.")
+        if self.ui_panel_queue:
+            terminal_width = get_terminal_width()
+            panel = create_agentic_memory_panel(memory_note.content, width=terminal_width - 4)
+            self.ui_panel_queue.put(panel)
+        else:
+            print(f"Successfully created agentic memory note {memory_note.id}.")
+
 
         # Find and create links to related memories
         await self._find_and_link_related_memories(memory_note)
