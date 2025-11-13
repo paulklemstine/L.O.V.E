@@ -3836,7 +3836,15 @@ Now, parse the following text into a JSON list of task objects:
                 ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4))
 
                 command, args_str = (llm_command.split(" ", 1) + [""])[:2]
-                args = shlex.split(args_str)
+                try:
+                    args = shlex.split(args_str)
+                except ValueError as e:
+                    # This happens if the LLM-generated command has an unclosed quote.
+                    error = f"Invalid command format from LLM: {e}. The command was: '{llm_command}'. Skipping execution."
+                    core.logging.log_event(error, level="WARNING")
+                    love_state["autopilot_history"].append({"command": llm_command, "output": error, "timestamp": time.time()})
+                    # Use continue to skip the rest of the command execution logic for this malformed command
+                    continue
                 output, error, returncode = "", "", 0
 
                 if command == "evolve":
