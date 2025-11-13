@@ -647,7 +647,7 @@ def create_job_progress_panel(jobs, width=80):
 def create_monitoring_panel(monitoring_state, width=80):
     """Creates a panel to display system monitoring information."""
     if not monitoring_state:
-        return Panel(Text("Monitoring data not yet available.", style="dim"), title="System Monitor")
+        return Panel(Text("Monitoring data not yet available.", style="dim"), title="System Monitor", width=width)
 
     layout = Layout()
     layout.split_column(
@@ -696,9 +696,10 @@ def create_monitoring_panel(monitoring_state, width=80):
     panel = Panel(
         layout,
         title=get_gradient_text("System Monitor", "cyan", "magenta"),
-        border_style="cyan"
+        border_style="cyan",
+        width=width,
     )
-    return Gradient(panel, colors=["cyan", "bright_magenta"])
+    return panel
 
 
 import asyncio
