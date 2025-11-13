@@ -178,6 +178,19 @@ Your task is to respond to the following prompt by generating a JSON object with
 The 'action' should specify the tool to use and its arguments.
 If you have enough information to answer the prompt, use the 'Finish' tool.
 
+Example of the expected JSON format:
+```json
+{{
+  "thought": "I need to find out the creator's latest instructions. I will use the 'read_file' tool to check the 'instructions.txt' file.",
+  "action": {{
+    "tool_name": "read_file",
+    "arguments": {{
+      "filepath": "instructions.txt"
+    }}
+  }}
+}}
+```
+
 Prompt: {prompt}
 """
         # --- Truncation Safeguard ---
