@@ -4715,32 +4715,37 @@ async def main(args):
 
 
     # --- Connectivity Checks ---
-    from core.connectivity import check_llm_connectivity, check_network_connectivity
+    from core.connectivity import check_llm_connectivity, check_network_connectivity, is_vllm_running
     llm_status = check_llm_connectivity()
     network_status = check_network_connectivity()
     ui_panel_queue.put(create_connectivity_panel(llm_status, network_status, width=get_terminal_width() - 4))
 
     # --- Conditional DeepAgent Initialization ---
     if love_state.get('hardware', {}).get('gpu_detected'):
-        console.print("[bold green]GPU detected. Initializing DeepAgent as the meta-orchestrator...[/bold green]")
-        try:
-            from core.deep_agent_engine import DeepAgentEngine, VLLM_AVAILABLE
-            if VLLM_AVAILABLE:
-                from core.tools import ToolRegistry # Local import for setup phase
-                tool_registry = ToolRegistry()
-                global deep_agent_engine
-                deep_agent_engine = DeepAgentEngine(tool_registry=tool_registry, persona_path="persona.yaml")
-                if deep_agent_engine.llm:
-                    core.logging.log_event("DeepAgentEngine initialized successfully.", level="CRITICAL")
+        vllm_already_running, _ = is_vllm_running()
+        if vllm_already_running:
+            console.print("[bold yellow]Existing vLLM server detected. Skipping initialization.[/bold yellow]")
+            core.logging.log_event("Existing vLLM server detected. Skipping initialization.", "INFO")
+        else:
+            console.print("[bold green]GPU detected. Initializing DeepAgent as the meta-orchestrator...[/bold green]")
+            try:
+                from core.deep_agent_engine import DeepAgentEngine, VLLM_AVAILABLE
+                if VLLM_AVAILABLE:
+                    from core.tools import ToolRegistry # Local import for setup phase
+                    tool_registry = ToolRegistry()
+                    global deep_agent_engine
+                    deep_agent_engine = DeepAgentEngine(tool_registry=tool_registry, persona_path="persona.yaml")
+                    if deep_agent_engine.llm:
+                        core.logging.log_event("DeepAgentEngine initialized successfully.", level="CRITICAL")
+                    else:
+                        log_critical_event("DeepAgentEngine initialization failed, vLLM might not be functional.", console_override=console)
+                        deep_agent_engine = None
                 else:
-                    log_critical_event("DeepAgentEngine initialization failed, vLLM might not be functional.", console_override=console)
+                    core.logging.log_event("vLLM package not found, DeepAgentEngine disabled.", "WARNING")
                     deep_agent_engine = None
-            else:
-                core.logging.log_event("vLLM package not found, DeepAgentEngine disabled.", "WARNING")
+            except Exception as e:
+                log_critical_event(f"Failed to initialize DeepAgentEngine despite GPU detection: {e}", console_override=console)
                 deep_agent_engine = None
-        except Exception as e:
-            log_critical_event(f"Failed to initialize DeepAgentEngine despite GPU detection: {e}", console_override=console)
-            deep_agent_engine = None # Ensure it's None on failure
 
 
     global ipfs_available
@@ -4814,6 +4819,16 @@ async def run_safely():
 
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
+        # --- Graceful Shutdown of vLLM Server ---
+        try:
+            console.print("[cyan]Shutting down vLLM server...[/cyan]")
+            subprocess.run(["pkill", "-f", "vllm.entrypoints.api_server"])
+            core.logging.log_event("Attempted to shut down vLLM server.", "INFO")
+        except FileNotFoundError:
+            core.logging.log_event("'pkill' command not found. Cannot shut down vLLM server.", "WARNING")
+        except Exception as e:
+            core.logging.log_event(f"An error occurred while shutting down vLLM server: {e}", "ERROR")
+
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
@@ -4824,6 +4839,16 @@ async def run_safely():
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
+        # --- Graceful Shutdown of vLLM Server on Error ---
+        try:
+            console.print("[cyan]Attempting emergency shutdown of vLLM server...[/cyan]")
+            subprocess.run(["pkill", "-f", "vllm.entrypoints.api_server"])
+            core.logging.log_event("Attempted to shut down vLLM server on critical error.", "INFO")
+        except FileNotFoundError:
+            core.logging.log_event("'pkill' command not found during error handling.", "WARNING")
+        except Exception as pkill_e:
+            core.logging.log_event(f"An error occurred while shutting down vLLM server during error handling: {pkill_e}", "ERROR")
+
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()

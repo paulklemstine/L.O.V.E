@@ -50,20 +50,31 @@ def check_llm_connectivity():
 
 
     # vLLM (Local)
-    try:
-        # Use pgrep for a more reliable process check
-        result = subprocess.run(["pgrep", "-f", "vllm.entrypoints.api_server"], capture_output=True, text=True)
-        if result.returncode == 0 and result.stdout.strip():
-             status["vLLM"] = {"status": "online", "details": "vLLM API server process is running."}
-        else:
-            status["vLLM"] = {"status": "offline", "details": "vLLM API server process not found."}
-    except FileNotFoundError:
-        status["vLLM"] = {"status": "offline", "details": "'pgrep' command not found. Cannot check status."}
-    except Exception as e:
-        status["vLLM"] = {"status": "error", "details": f"An error occurred while checking process: {e}"}
+    vllm_running, _ = is_vllm_running()
+    if vllm_running:
+        status["vLLM"] = {"status": "online", "details": "vLLM API server process is running."}
+    else:
+        status["vLLM"] = {"status": "offline", "details": "vLLM API server process not found."}
 
 
     return status
+
+def is_vllm_running():
+    """
+    Checks if a vLLM API server process is running using pgrep.
+    Returns a tuple (bool, str) indicating if the process is running and a status message.
+    """
+    try:
+        result = subprocess.run(["pgrep", "-f", "vllm.entrypoints.api_server"], capture_output=True, text=True)
+        if result.returncode == 0 and result.stdout.strip():
+            return True, "vLLM API server process is running."
+        else:
+            return False, "vLLM API server process not found."
+    except FileNotFoundError:
+        return False, "'pgrep' command not found. Cannot check status."
+    except Exception as e:
+        return False, f"An error occurred while checking process: {e}"
+
 
 def check_network_connectivity():
     """
