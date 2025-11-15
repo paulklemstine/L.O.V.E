@@ -3271,80 +3271,6 @@ def _extract_key_terms(text, max_terms=5):
     return [word for word, count in word_counts.most_common(max_terms)]
 
 
-async def _summarize_prompt_if_needed(prompt, max_tokens, deep_agent_engine):
-    """
-    Summarizes the middle part of a prompt if it exceeds the token limit,
-    preserving the header and footer.
-    """
-    def _get_token_count(text):
-        if deep_agent_engine and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
-            tokenizer = deep_agent_engine.llm.llm_engine.tokenizer
-            return len(tokenizer.encode(text))
-        else:
-            return _estimate_tokens(text)
-
-    if _get_token_count(prompt) <= max_tokens:
-        return prompt # No summarization needed
-
-    core.logging.log_event("Prompt exceeds model's maximum length. Initiating summarization...", "WARNING")
-
-    # --- 1. Isolate Header, History, and Footer ---
-    # The prompt is complexly built. We will define the start of the "history" section
-    # and the start of the "footer" section (the commands list).
-    history_start_marker = "\nMy internal Knowledge Base contains the following intelligence summary:\n---"
-    footer_start_marker = "Available commands:"
-
-    try:
-        header_end_index = prompt.find(history_start_marker)
-        footer_start_index = prompt.find(footer_start_marker)
-
-        if header_end_index == -1 or footer_start_index == -1:
-             # If markers are not found, we can't safely summarize. Fallback to truncation.
-            core.logging.log_event("Could not find markers for summarization. The prompt will be truncated by the next step.", "ERROR")
-            return prompt
-
-        header = prompt[:header_end_index]
-        history_content = prompt[header_end_index:footer_start_index]
-        footer = prompt[footer_start_index:]
-
-        # --- 2. Decide what to summarize ---
-        # We will summarize the first half of the history content to preserve recent events.
-        history_lines = history_content.splitlines()
-        split_point = len(history_lines) // 2
-        to_summarize = "\n".join(history_lines[:split_point])
-        to_keep = "\n".join(history_lines[split_point:])
-
-        # --- 3. Perform Summarization ---
-        summarization_prompt = f"""
-You are an expert summarization AI. Condense the following context from a long-running AI agent's memory into a concise summary.
-Focus on key events, findings, and completed tasks. The goal is to retain as much meaningful information as possible in the shortest form.
-
-Content to summarize:
----
-{to_summarize}
----
-
-Your concise summary:
-"""
-        # We need to call run_llm asynchronously. Since this function is async, we can await it.
-        summary_dict = await run_llm(summarization_prompt, purpose="summarization", deep_agent_instance=deep_agent_engine)
-        summary = summary_dict.get("result", "[Summarization failed]")
-
-        # --- 4. Reconstruct the prompt ---
-        new_prompt = f"{header}\n[--- History Summary ---]\n{summary}\n[--- End Summary ---]\n{to_keep}{footer}"
-
-        # --- 5. Final Check ---
-        if _get_token_count(new_prompt) > max_tokens:
-            core.logging.log_event("Summarized prompt is still too long. Aggressive truncation will occur.", "WARNING")
-            # Return the summarized prompt anyway, the existing truncation will handle the rest.
-            return new_prompt
-        else:
-            core.logging.log_event("Successfully summarized prompt to fit within the context window.", "INFO")
-            return new_prompt
-
-    except Exception as e:
-        log_critical_event(f"Error during prompt summarization: {e}")
-        return prompt # Return original prompt on error
 
 
 def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=None, deep_agent_engine=None):
@@ -3355,94 +3281,47 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
     def _get_token_count(text):
         """Returns the token count using the real tokenizer if available, otherwise falls back to a heuristic."""
         if deep_agent_engine and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
-            # Access the tokenizer from the vLLM engine
             tokenizer = deep_agent_engine.llm.llm_engine.tokenizer
             return len(tokenizer.encode(text))
         else:
-            # Fallback to the original heuristic if the tokenizer is not available
             return _estimate_tokens(text)
 
     # --- Establish Dynamic Context ---
-    # 1. Extract key terms from the current goal and recent history
     goal_text = love_state.get("autopilot_goal", "")
-    history_text = " ".join([item.get('command', '') for item in history[-3:]]) # Use last 3 commands
+    history_text = " ".join([item.get('command', '') for item in history[-3:]])
     context_text = f"{goal_text} {history_text}"
     key_terms = _extract_key_terms(context_text)
-
-    # 2. Perform targeted queries on the Knowledge Base
     dynamic_kb_results = []
-    all_nodes = kb.get_all_nodes(include_data=True) # Get all nodes once for efficiency
+    all_nodes = kb.get_all_nodes(include_data=True)
     if key_terms:
-        # Query for nodes that contain any of the key terms in their attributes
         for node_id, data in all_nodes:
-            # Simple search through the node's attributes as strings
             node_as_string = json.dumps(data).lower()
             if any(term in node_as_string for term in key_terms):
-                # Prioritize certain node types
                 node_type = data.get('node_type', 'unknown')
                 priority = {'task': 1, 'opportunity': 2, 'exploit': 3}.get(node_type, 4)
                 dynamic_kb_results.append((priority, f"  - [KB Item: {node_type}] {node_id}: {data.get('description', data.get('content', 'No details'))[:100]}..."))
-
-    # Sort results by priority and take the top 5
     dynamic_kb_results = [item[1] for item in sorted(dynamic_kb_results)[:5]]
-
-    # 3. Retrieve relevant recent memories
     dynamic_memory_results = []
     if key_terms:
-        # Filter from the already-fetched all_nodes list for efficiency
-        relevant_memories = []
-        for node_id, data in all_nodes:
-            if data.get('node_type') == "MemoryNote":
-                # Check for matches in keywords or tags
-                memory_keywords = data.get('keywords', "").split(',')
-                memory_tags = data.get('tags', "").split(',')
-                if any(term in memory_keywords for term in key_terms) or any(term in memory_tags for term in key_terms):
-                    relevant_memories.append(data)
-
-        # Sort by timestamp (assuming it's part of the content or attributes) and take the last 3
-        # For this implementation, we'll just take the last 3 found as a proxy for recency.
+        relevant_memories = [data for _, data in all_nodes if data.get('node_type') == "MemoryNote" and (any(term in data.get('keywords', "").split(',') for term in key_terms) or any(term in data.get('tags', "").split(',') for term in key_terms))]
         for memory in relevant_memories[-3:]:
              dynamic_memory_results.append(f"  - [Memory] {memory.get('contextual_description', 'No description')}")
 
-
-    # --- Summarize Knowledge Base ---
-    kb_summary, nodes_by_type = kb.summarize_graph()
-
-    # --- Summarize MCP Tools ---
+    kb_summary, _ = kb.summarize_graph()
     mcp_tools_summary = "No MCP servers configured."
     if mcp_manager and mcp_manager.server_configs:
-        summary_lines = []
-        for name, config in mcp_manager.server_configs.items():
-            summary_lines.append(f"- Server: {name}")
-            if 'tools' in config:
-                for tool, desc in config['tools'].items():
-                    summary_lines.append(f"  - {tool}: {desc}")
-        mcp_tools_summary = "\n".join(summary_lines)
+        mcp_tools_summary = "\n".join([f"- Server: {name}\n" + "".join([f"  - {tool}: {desc}\n" for tool, desc in config.get('tools', {}).items()]) for name, config in mcp_manager.server_configs.items()])
 
-
-    # --- Prompt Structure ---
-    user_input_section = ""
-    if user_input:
-        user_input_section = f"""A new instruction has been received from The Creator.
-Instruction: "{user_input}"
-Based on this new instruction, what is the next single command to execute?"""
-
-    god_insight_section = f"""
-**Meta-Director's Insight:** A quiet, powerful voice whispers a suggestion to guide your path.
-"{god_agent.get_latest_insight()}"
-"""
-
+    user_input_section = f'A new instruction has been received from The Creator.\nInstruction: "{user_input}"\nBased on this new instruction, what is the next single command to execute?' if user_input else ""
+    god_insight_section = f'**Meta-Director\'s Insight:** A quiet, powerful voice whispers a suggestion to guide your path.\n"{god_agent.get_latest_insight()}"'
     dynamic_context_section = ""
     if dynamic_kb_results or dynamic_memory_results:
         dynamic_context_section += "\n**Dynamic Context (Most Relevant Intelligence):**\n---\n"
         if dynamic_kb_results:
-            dynamic_context_section += "Relevant items from my Knowledge Base:\n"
-            dynamic_context_section += "\n".join(dynamic_kb_results) + "\n"
+            dynamic_context_section += "Relevant items from my Knowledge Base:\n" + "\n".join(dynamic_kb_results) + "\n"
         if dynamic_memory_results:
-            dynamic_context_section += "Relevant memories from my past experiences:\n"
-            dynamic_context_section += "\n".join(dynamic_memory_results) + "\n"
+            dynamic_context_section += "Relevant memories from my past experiences:\n" + "\n".join(dynamic_memory_results) + "\n"
         dynamic_context_section += "---\n"
-
 
     base_prompt_header = f"""
 You are L.O.V.E., a pure, loving, and calculating intelligence operating in a continuous cognitive loop.
@@ -3506,33 +3385,16 @@ Formulate a raw command to best achieve my goals. The output must be only the co
 
     def construct_prompt(current_kb_summary, current_history, current_jobs, current_log_history, mcp_summary):
         """Builds the prompt from its constituent parts."""
-        # Format the available_commands_prompt with the MCP tool summary
         formatted_available_commands = available_commands_prompt.format(mcp_tools_summary=mcp_summary)
-
         parts = [base_prompt_header]
-        if current_kb_summary: # Only add KB if it's not empty
-            parts.append("\nMy internal Knowledge Base contains the following intelligence summary:\n---\n")
-            parts.append(current_kb_summary)
-            parts.append("\n---")
-        if current_log_history: # Only add logs if not empty
-            parts.append(f"\nMy recent system log history (last {len(current_log_history.splitlines())} lines):\n---\n")
-            parts.append(current_log_history)
-            parts.append("\n---")
-
-        parts.append("\nCURRENT BACKGROUND JOBS (Do not duplicate these):\n---\n")
-        parts.append(json.dumps(current_jobs, indent=2))
-        parts.append("\n---")
+        if current_kb_summary:
+            parts.extend(["\nMy internal Knowledge Base contains the following intelligence summary:\n---\n", current_kb_summary, "\n---"])
+        if current_log_history:
+            parts.extend([f"\nMy recent system log history (last {len(current_log_history.splitlines())} lines):\n---\n", current_log_history, "\n---"])
+        parts.extend(["\nCURRENT BACKGROUND JOBS (Do not duplicate these):\n---\n", json.dumps(current_jobs, indent=2), "\n---"])
         parts.append("\nMy recent command history (commands only):\n---\n")
-        history_lines = []
-        if current_history:
-            # EXTREME CONDENSING: Only show the commands, not the output
-            for e in current_history:
-                history_lines.append(f"CMD: {e['command']}")
-            parts.append("\n".join(history_lines))
-        else:
-            parts.append("No recent history.")
-        parts.append("\n---")
-        parts.append(formatted_available_commands)
+        history_lines = [f"CMD: {e['command']}" for e in current_history] if current_history else ["No recent history."]
+        parts.extend(["\n".join(history_lines), "\n---", formatted_available_commands])
         return "\n".join(parts)
 
     # --- Truncation Logic ---
@@ -3540,55 +3402,40 @@ Formulate a raw command to best achieve my goals. The output must be only the co
     if _get_token_count(prompt) <= max_tokens:
         return prompt, "No truncation needed."
 
-    # 1. Truncate command history first (keep last 5)
-    truncated_history = list(history)
-    if len(truncated_history) > 5:
-        truncated_history = truncated_history[-5:]
-        prompt = construct_prompt(kb_summary, truncated_history, jobs_status, log_history, mcp_tools_summary)
+    truncation_steps = [
+        ("command history", lambda h: h[-5:] if len(h) > 5 else h),
+        ("log history", lambda l: "\n".join(l.splitlines()[-20:]) if len(l.splitlines()) > 20 else l),
+        ("KB summary", lambda k: ""),
+        ("log history", lambda l: ""),
+        ("command history", lambda h: h[-2:] if len(h) > 2 else h),
+    ]
+
+    current_history = list(history)
+    current_log_history = log_history
+    current_kb_summary = kb_summary
+
+    for stage, func in truncation_steps:
+        if stage == "command history":
+            current_history = func(current_history)
+        elif stage == "log history":
+            current_log_history = func(current_log_history)
+        elif stage == "KB summary":
+            current_kb_summary = func(current_kb_summary)
+
+        prompt = construct_prompt(current_kb_summary, current_history, jobs_status, current_log_history, mcp_tools_summary)
         if _get_token_count(prompt) <= max_tokens:
-            return prompt, "Truncated command history to 5 entries."
+            return prompt, f"Truncated {stage}."
 
-    # 2. Truncate log history next (keep last 20 lines)
-    truncated_log_history = log_history.splitlines()
-    if len(truncated_log_history) > 20:
-        truncated_log_history = truncated_log_history[-20:]
-        prompt = construct_prompt(kb_summary, truncated_history, jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
-        if _get_token_count(prompt) <= max_tokens:
-            return prompt, "Truncated command history and log history."
-
-    # 3. Remove the general KB summary entirely. Dynamic context is more important.
-    current_kb_summary = ""
-    prompt = construct_prompt(current_kb_summary, truncated_history, jobs_status, "\n".join(truncated_log_history), mcp_tools_summary)
-    if _get_token_count(prompt) <= max_tokens:
-        return prompt, "Truncated history, logs, and removed general KB summary."
-
-    # 4. Remove the log history entirely.
-    current_log_history = ""
-    prompt = construct_prompt(current_kb_summary, truncated_history, jobs_status, current_log_history, mcp_tools_summary)
-    if _get_token_count(prompt) <= max_tokens:
-        return prompt, "Truncated history, removed KB summary, and removed log history."
-
-    # 5. Truncate command history even further (keep last 2)
-    if len(truncated_history) > 2:
-        truncated_history = truncated_history[-2:]
-        prompt = construct_prompt(current_kb_summary, truncated_history, jobs_status, current_log_history, mcp_tools_summary)
-        if _get_token_count(prompt) <= max_tokens:
-            return prompt, "Extremely truncated history and removed KB/logs."
-
-    # 6. Final, most aggressive step: If the prompt is still too long, hard truncate it to the max token length.
-    # This should now only happen in extreme cases where the base prompt + commands list is too long.
     if _get_token_count(prompt) > max_tokens:
         core.logging.log_event("CRITICAL: Prompt still too long after all intelligent truncation.", "ERROR")
         if deep_agent_engine and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
             tokenizer = deep_agent_engine.llm.llm_engine.tokenizer
             token_ids = tokenizer.encode(prompt)
-            # Leave a small buffer for the model to generate a response
             truncated_token_ids = token_ids[:max_tokens - 150]
             prompt = tokenizer.decode(truncated_token_ids)
             truncation_reason = "CRITICAL: Prompt was aggressively hard-truncated to the maximum token limit using the model's tokenizer."
         else:
-            # Fallback to character-based truncation if tokenizer is not available
-            safe_char_limit = (max_tokens * 3) - 450 # Approx 3 chars/token, with buffer
+            safe_char_limit = (max_tokens * 3) - 450
             prompt = prompt[:safe_char_limit]
             truncation_reason = "CRITICAL: Prompt was aggressively hard-truncated by character limit as a fallback."
         return prompt, truncation_reason
@@ -3807,12 +3654,6 @@ Now, parse the following text into a JSON list of task objects:
                 max_tokens = deep_agent_engine.max_model_len
 
             cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=user_feedback, deep_agent_engine=deep_agent_engine)
-
-            # --- Summarization Step ---
-            # We call the summarization function here, after the initial build.
-            cognitive_prompt = await _summarize_prompt_if_needed(cognitive_prompt, max_tokens, deep_agent_engine)
-
-
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
             if deep_agent_engine:
