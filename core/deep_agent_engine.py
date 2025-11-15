@@ -7,6 +7,29 @@ import subprocess
 from huggingface_hub import snapshot_download
 from core.tools import ToolRegistry, invoke_gemini_react_engine
 
+
+def _recover_json(json_str: str):
+    """
+    Iteratively tries to parse a JSON string, removing characters from the end
+    until a valid JSON object is found.
+    """
+    while len(json_str) > 0:
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            # This is the core recovery logic. If the JSON is malformed,
+            # we assume it's because it was truncated. We find the last
+            # closing brace '}' and try to parse the string up to that point.
+            # This is a heuristic that works well for truncated JSON objects.
+            last_brace = json_str.rfind('}')
+            if last_brace == -1:
+                # If there are no closing braces, the object is unrecoverable.
+                raise e
+            json_str = json_str[:last_brace+1]
+    # If the loop finishes, the string is empty and no JSON was found.
+    raise json.JSONDecodeError("Could not recover JSON object from string", "", 0)
+
+
 try:
     from vllm import LLM, SamplingParams
     VLLM_AVAILABLE = True
@@ -216,10 +239,10 @@ Prompt: {prompt}
                 print(f"WARNING: The cognitive prompt was truncated to {safe_max_tokens} tokens to fit the model's limit.")
 
         outputs = self.llm.generate(system_prompt, self.sampling_params)
-        response_text = outputs[0].outputs[0].text
+        response_text = outputs[0].outputs[0].text.strip()
 
         try:
-            parsed_response = json.loads(response_text)
+            parsed_response = _recover_json(response_text)
             thought = parsed_response.get("thought", "")
             action = parsed_response.get("action", {})
             tool_name = action.get("tool_name")
