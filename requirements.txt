@@ -1005,3 +1005,4 @@ zipp==3.23.0
 # pip
 # setuptools
 slither-analyzer
+langchain_core
