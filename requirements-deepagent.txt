@@ -28,3 +28,4 @@ spotipy
 sympy
 tqdm
 deepagents
+langchain_core
