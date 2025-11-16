@@ -912,7 +912,7 @@ trio==0.31.0
     #   trio-typing
 trio-typing==0.10.0
     # via multiaddr
-typer==0.12.5
+typer<0.13,>=0.12.5
     # via rich-gradient
 types-requests==2.32.4.20250913
     # via web3
@@ -1005,3 +1005,4 @@ zipp==3.23.0
 # pip
 # setuptools
 slither-analyzer
+langchain_core
