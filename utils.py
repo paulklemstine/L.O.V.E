@@ -2,6 +2,7 @@ import subprocess
 import os
 import sys
 import platform
+import ast
 import shutil
 import logging
 import netifaces
@@ -101,6 +102,62 @@ def list_directory(path="."):
         return None, f"Error listing directory '{path}': {e.stderr}"
     except Exception as e:
         return None, f"An unexpected error occurred: {e}"
+
+def summarize_python_code(code: str) -> str:
+    """
+    Summarizes Python code using AST to extract imports, class and function
+    definitions, including their signatures and full docstrings.
+    """
+    summary = []
+    try:
+        tree = ast.parse(code)
+
+        # Extract imports
+        imports = []
+        for node in tree.body:
+            if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+                imports.append(ast.unparse(node))
+
+        if imports:
+            summary.append("Imports:")
+            for imp in imports:
+                summary.append(f"  - {imp}")
+            summary.append("") # Add a blank line for spacing
+
+        # Extract functions and classes
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef):
+                docstring = ast.get_docstring(node, clean=True)
+                # Reconstruct signature without the body
+                func_node_copy = ast.FunctionDef(name=node.name, args=node.args, returns=node.returns, decorator_list=node.decorator_list, body=[])
+                signature = ast.unparse(func_node_copy).strip()
+
+                summary.append(f"Function: {signature}")
+                if docstring:
+                    indented_docstring = "\n".join([f"    {line}" for line in docstring.splitlines()])
+                    summary.append(f"  - Docstring:\n{indented_docstring}")
+
+            elif isinstance(node, ast.ClassDef):
+                docstring = ast.get_docstring(node, clean=True)
+                summary.append(f"Class: {node.name}")
+                if docstring:
+                    indented_docstring = "\n".join([f"    {line}" for line in docstring.splitlines()])
+                    summary.append(f"  - Docstring:\n{indented_docstring}")
+
+                for method in node.body:
+                    if isinstance(method, ast.FunctionDef):
+                        method_docstring = ast.get_docstring(method, clean=True)
+                        # Reconstruct signature without the body
+                        method_node_copy = ast.FunctionDef(name=method.name, args=method.args, returns=method.returns, decorator_list=method.decorator_list, body=[])
+                        method_signature = ast.unparse(method_node_copy).strip()
+
+                        summary.append(f"  - Method: {method_signature}")
+                        if method_docstring:
+                            indented_method_docstring = "\n".join([f"      {line}" for line in method_docstring.splitlines()])
+                            summary.append(f"    - Docstring:\n{indented_method_docstring}")
+    except SyntaxError as e:
+        return f"Syntax error in code: {e}"
+    return "\n".join(summary)
 
 
 def get_file_content(filepath):
