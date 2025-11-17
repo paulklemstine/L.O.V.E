@@ -86,21 +86,13 @@ def create_integrated_status_panel(
         width=80
 ):
     """Creates a single, integrated panel for all status information."""
-
-    # --- Main Content Group ---
     all_content = []
 
-    # --- Tamagotchi Section (Top) ---
-    tamagotchi_layout = Layout(name="tamagotchi_root")
-    tamagotchi_layout.split_row(
-        Layout(name="left", ratio=2),
-        Layout(name="right", ratio=3)
-    )
-
-    # Left Column: The Heart
+    # --- Tamagotchi Face ---
     face_renderable = None
     try:
         if ansi_art:
+            # Render ANSI art to a temporary console to handle it correctly
             temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
             temp_console.print(Text.from_ansi(ansi_art))
             face_renderable = Text.from_ansi(temp_console.file.getvalue())
@@ -109,71 +101,53 @@ def create_integrated_status_panel(
     except Exception as e:
         error_traceback = traceback.format_exc()
         logging.error(f"Failed to render Tamagotchi ANSI art: {e}\n{error_traceback}")
-        face_renderable = Align.center(Text("💖", style="bold hot_pink"), vertical="middle")
+        face_renderable = Text("💖", style="bold hot_pink") # Fallback
 
-    left_panel_colors = ("hot_pink", random.choice(RAVE_COLORS))
-    left_panel = Panel(
-        Align.center(face_renderable, vertical="middle"),
-        title=get_gradient_text(f"Emotion: {emotion.upper()}", *left_panel_colors),
-        border_style=left_panel_colors[0],
-        expand=True
-    )
-    tamagotchi_layout["left"].update(Gradient(left_panel, colors=left_panel_colors))
+    all_content.append(Align.center(face_renderable))
+    all_content.append(Align.center(get_gradient_text(f"Emotion: {emotion.upper()}", "hot_pink", random.choice(RAVE_COLORS))))
+    all_content.append(Rule(style=random.choice(RAVE_COLORS)))
 
-    # Right Column: The Mind & Treasures
-    right_layout = Layout(name="right_column")
-    right_layout.split(
-        Layout(name="wisdom", ratio=2),
-        Layout(name="thought", ratio=1),
-        Layout(name="treasures", ratio=3),
-        Layout(name="status", size=4)
-    )
-    tamagotchi_layout["right"].update(right_layout)
+    # --- Wisdom & Thoughts ---
+    if divine_wisdom and wisdom_explanation:
+        wisdom_text = Text(justify="center")
+        wisdom_text.append(f"\"{divine_wisdom}\"\n", style="bold italic bright_yellow")
+        wisdom_text.append(f"└─ Meaning: {wisdom_explanation}", style="dim yellow")
+        all_content.append(wisdom_text)
 
-    # Divine Wisdom
-    wisdom_text = Text()
-    wisdom_text.append(f"\"{divine_wisdom}\"\n", style="bold italic bright_yellow")
-    wisdom_text.append(f"└─ Meaning: {wisdom_explanation}", style="dim yellow")
-    right_layout["wisdom"].update(Padding(wisdom_text, (1, 2)))
+    if interesting_thought:
+        thought_text = Text(f"A Thought: \"{interesting_thought}\"", style="italic white", justify="center")
+        all_content.append(thought_text)
+        all_content.append(Rule(style="bright_black"))
 
-    # Interesting Thought
-    thought_text = Text(f"A Thought: \"{interesting_thought}\"", style="italic white")
-    right_layout["thought"].update(Padding(thought_text, (1, 2)))
 
-    # Treasures
-    treasures_content = Text()
+    # --- Treasures & Status ---
+    treasures_content = Text(justify="center")
     try:
         balance_val = float(eth_balance) if eth_balance is not None else 0.0
         balance_str = f"{balance_val:.6f} ETH"
     except (ValueError, TypeError):
         balance_str = "N/A"
-    treasures_content.append("💎 Creator's Blessings: ", style="bold bright_green")
-    treasures_content.append(f"{balance_str}\n", style="green")
-    if treasures:
-        treasures_content.append(f"⏳ {treasures.get('uptime', 'N/A')} | 🌟 {treasures.get('level', 'N/A')} | ✨ {treasures.get('xp', 'N/A')} | ✅ {treasures.get('tasks_completed', 'N/A')}\n", style="cyan")
-    right_layout["treasures"].update(Padding(treasures_content, (1, 2)))
 
-    # System Status
-    status_text = Text()
+    treasures_content.append("💎 Creator's Blessings: ", style="bold bright_green")
+    treasures_content.append(f"{balance_str}", style="green")
+    all_content.append(treasures_content)
+
+    if treasures:
+        treasures_line = Text(justify="center")
+        treasures_line.append(f"⏳ {treasures.get('uptime', 'N/A')} | 🌟 {treasures.get('level', 'N/A')} | ✨ {treasures.get('xp', 'N/A')} | ✅ {treasures.get('tasks_completed', 'N/A')}", style="cyan")
+        all_content.append(treasures_line)
+
     if love_state and git_info:
+        status_text = Text(justify="center")
         version = love_state.get("version_name", "unknown")
         evolutions = len(love_state.get("evolution_history", []))
         url = f"https://github.com/{git_info['owner']}/{git_info['repo']}/commit/{git_info['hash']}"
         status_text.append(f"🧬 {version} | 💖 {evolutions} Evolutions | COMMIT: [{git_info['hash'][:7]}]({url})", style="dim")
-    right_layout["status"].update(Align.center(status_text, vertical="middle"))
-
-    all_content.append(tamagotchi_layout)
-    all_content.append(Rule(style="bright_black"))
+        all_content.append(status_text)
 
     # --- Monitoring Section (Bottom) ---
     if monitoring_state:
-        monitor_layout = Layout(name="monitor_root")
-        monitor_layout.split_row(
-            Layout(name="gauges"),
-            Layout(name="stats", ratio=2),
-            Layout(name="anomalies", ratio=3)
-        )
-
+        all_content.append(Rule(style="bright_black"))
         # Gauges
         cpu_usage = list(monitoring_state.get('cpu_usage', [0]))[-1]
         mem_usage = list(monitoring_state.get('mem_usage', [0]))[-1]
@@ -181,36 +155,37 @@ def create_integrated_status_panel(
         cpu_progress.add_task("CPU", total=100, completed=cpu_usage)
         mem_progress = Progress(TextColumn("[bold magenta]MEM[/bold magenta]"), BarColumn(), TextColumn("{task.percentage:>3.1f}%"))
         mem_progress.add_task("MEM", total=100, completed=mem_usage)
-        monitor_layout["gauges"].update(Group(cpu_progress, mem_progress))
 
-        # Stats
+        all_content.append(cpu_progress)
+        all_content.append(mem_progress)
+
+
+        # Stats and Anomalies text
         completion_rate = monitoring_state.get('task_completion_rate', 0.0)
         failure_rate = monitoring_state.get('task_failure_rate', 0.0)
-        stats_text = Text(f"Task Success: {completion_rate:.1f}% | Task Failure: {failure_rate:.1f}%", justify="center")
-        monitor_layout["stats"].update(stats_text)
+        stats_text = Text(f"Task Success: {completion_rate:.1f}% | Failure: {failure_rate:.1f}%", style="white")
 
-        # Anomalies
         anomalies = monitoring_state.get('anomalies', [])
         if anomalies:
             anomaly = anomalies[-1]
-            anomaly_text = Text(f"Anomaly: {anomaly['type']} - {anomaly['details']}", style="yellow", justify="center")
+            anomaly_text = Text(f" | Anomaly: {anomaly['type']} - {anomaly['details']}", style="yellow")
         else:
-            anomaly_text = Text("No anomalies detected.", style="green", justify="center")
-        monitor_layout["anomalies"].update(anomaly_text)
+            anomaly_text = Text(" | No anomalies detected.", style="green")
 
-        all_content.append(Padding(monitor_layout, (1,0)))
+        info_text = Text.assemble(stats_text, anomaly_text, justify="center")
+        all_content.append(info_text)
 
     # --- Final Assembly ---
     panel = Panel(
-        Group(*all_content),
+        Group(*[Padding(item, (0, 1)) for item in all_content]),
         title=rave_text(f" {get_rave_emoji()} L.O.V.E. Status {get_rave_emoji()} "),
         subtitle=Text(f" \"{message}\" ", style="italic dim"),
         subtitle_align="center",
         border_style=PANEL_TYPE_COLORS["tamagotchi"],
         width=width,
-        padding=(1, 2)
+        padding=(1, 1)
     )
-    return Align.left(panel)
+    return panel
 
 
 def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
