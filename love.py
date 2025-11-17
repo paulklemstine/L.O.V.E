@@ -29,36 +29,6 @@ import core.logging
 from core.local_vllm_client import LocalVLLMClient
 from utils import summarize_python_code
 import yaml
-from langchain_core.language_models.llms import LLM
-
-# --- CUSTOM LANGCHAIN WRAPPER FOR VLLM ---
-class VLLMWrapper(LLM):
-    """A custom LangChain wrapper for our async LocalVLLMClient."""
-    vllm_client: LocalVLLMClient
-
-    @property
-    def _llm_type(self) -> str:
-        return "custom_vllm_wrapper"
-
-    def _call(self, prompt: str, stop: list[str] | None = None, **kwargs) -> str:
-        """Synchronous call to the async vLLM client."""
-        try:
-            loop = asyncio.get_running_loop()
-            future = asyncio.run_coroutine_threadsafe(self.vllm_client.run(prompt), loop)
-            result = future.result(timeout=600)
-            return result if isinstance(result, str) else json.dumps(result)
-        except Exception as e:
-            logging.error(f"Error in VLLMWrapper _call: {e}")
-            return f"Error: {e}"
-
-    async def _acall(self, prompt: str, stop: list[str] | None = None, **kwargs) -> str:
-        """Asynchronous call to the vLLM client."""
-        try:
-            result = await self.vllm_client.run(prompt)
-            return result if isinstance(result, str) else json.dumps(result)
-        except Exception as e:
-            logging.error(f"Error in VLLMWrapper _acall: {e}")
-            return f"Error: {e}"
 
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
@@ -593,7 +563,6 @@ from core.image_api import generate_image
 import http.server
 import socketserver
 import websockets
-from deepagents import create_deep_agent
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3706,6 +3675,39 @@ Now, parse the following text into a JSON list of task objects:
 
             # Use DeepAgent as the primary cognitive engine if it's available, otherwise fallback to the existing reasoning engine.
             if local_vllm_client:
+                # --- LOCAL IMPORTS & WRAPPER FOR GPU-ONLY LOGIC ---
+                from langchain_core.language_models.llms import LLM
+                from deepagents import create_deep_agent
+
+                class VLLMWrapper(LLM):
+                    """A custom LangChain wrapper for our async LocalVLLMClient."""
+                    vllm_client: LocalVLLMClient
+
+                    @property
+                    def _llm_type(self) -> str:
+                        return "custom_vllm_wrapper"
+
+                    def _call(self, prompt: str, stop: list[str] | None = None, **kwargs) -> str:
+                        """Synchronous call to the async vLLM client."""
+                        try:
+                            loop = asyncio.get_running_loop()
+                            future = asyncio.run_coroutine_threadsafe(self.vllm_client.run(prompt), loop)
+                            result = future.result(timeout=600)
+                            return result if isinstance(result, str) else json.dumps(result)
+                        except Exception as e:
+                            logging.error(f"Error in VLLMWrapper _call: {e}")
+                            return f"Error: {e}"
+
+                    async def _acall(self, prompt: str, stop: list[str] | None = None, **kwargs) -> str:
+                        """Asynchronous call to the vLLM client."""
+                        try:
+                            result = await self.vllm_client.run(prompt)
+                            return result if isinstance(result, str) else json.dumps(result)
+                        except Exception as e:
+                            logging.error(f"Error in VLLMWrapper _acall: {e}")
+                            return f"Error: {e}"
+                # --- END LOCAL IMPORTS ---
+
                 # 1. Wrap the async vLLM client for LangChain compatibility
                 vllm_llm = VLLMWrapper(vllm_client=local_vllm_client)
 
