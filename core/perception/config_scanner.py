@@ -1,5 +1,6 @@
 import os
 import re
+import logging
 from typing import List, Dict, Any
 
 # Enhanced patterns for more accurate categorization and validation.
@@ -162,6 +163,15 @@ def scan_directory(directory: str) -> List[Dict[str, Any]]:
     Returns:
         A list of all structured findings.
     """
+    # Get the absolute path of the agent's root directory (2 levels up from this file)
+    agent_root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    scan_dir_abs = os.path.abspath(directory)
+
+    # Prevent the agent from scanning its own source code
+    if scan_dir_abs.startswith(agent_root_dir):
+        logging.warning(f"Scan of agent's own directory ('{scan_dir_abs}') was blocked.")
+        return []
+
     all_findings = []
     for root, _, files in os.walk(directory):
         for file in files:
