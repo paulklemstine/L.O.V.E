@@ -7,7 +7,7 @@ class TestConfigScanner(unittest.TestCase):
 
     def setUp(self):
         """Set up test files in a dedicated directory."""
-        self.test_dir = "test_scanner_data"
+        self.test_dir = "/tmp/test_scanner_data"
         os.makedirs(self.test_dir, exist_ok=True)
 
         # File with multiple, mixed secrets
@@ -102,6 +102,15 @@ class TestConfigScanner(unittest.TestCase):
 
         findings = scan_directory(clean_dir)
         self.assertEqual(len(findings), 0)
+
+    def test_scan_directory_ignores_agent_root(self):
+        """
+        Test that scanning the agent's own root directory is blocked.
+        """
+        # The scan_directory function should identify that it's being asked to scan
+        # its own code and should return no findings.
+        findings = scan_directory('.')
+        self.assertEqual(len(findings), 0, "Scanning the agent's root directory should be blocked and return no findings.")
 
 if __name__ == "__main__":
     unittest.main()

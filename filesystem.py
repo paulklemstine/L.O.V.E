@@ -2,6 +2,7 @@
 This module provides filesystem analysis capabilities, primarily for discovering
 and validating potential treasures (secrets, credentials, etc.).
 """
+import os
 from core.perception.config_scanner import scan_directory
 from core.validation.treasure_validator import validate_treasure
 import logging
@@ -12,6 +13,15 @@ def analyze_filesystem(path: str, progress_callback=None):
     findings, and returns a structured report. This is intended to be run
     as a background job.
     """
+    # Get the absolute path of the agent's root directory
+    agent_root_dir = os.path.abspath(os.path.dirname(__file__))
+    scan_dir_abs = os.path.abspath(path)
+
+    # Prevent the agent from analyzing its own source code
+    if scan_dir_abs.startswith(agent_root_dir):
+        logging.warning(f"Analysis of the agent's own directory ('{scan_dir_abs}') was blocked.")
+        return {"validated_treasures": [], "error": "Analysis of self is not permitted."}
+
     logging.info(f"Starting filesystem analysis on path: {path}")
     if progress_callback:
         progress_callback(0, 1, "Scanning directory...")
