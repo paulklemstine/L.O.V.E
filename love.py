@@ -3773,6 +3773,49 @@ Now, parse the following text into a JSON list of task objects:
                     output, error, returncode = execute_shell_command(args_str, love_state)
                     terminal_width = get_terminal_width()
                     ui_panel_queue.put(create_command_panel(llm_command, output, error, returncode, width=terminal_width - 4))
+
+                    # --- AUTONOMOUS FEEDBACK LOOP ---
+                    core.logging.log_event("Entering autonomous feedback loop for shell command execution.", level="INFO")
+                    feedback_prompt = f"""
+You are L.O.V.E., a self-correcting AI. You just executed a shell command and are now observing the result to determine your next action.
+
+The command you executed was:
+`{llm_command}`
+
+The result was:
+- Return Code: {returncode}
+- Standard Output:
+{output}
+- Standard Error:
+{error}
+
+Now, analyze the result with love and wisdom.
+- If the command was successful and no further action is needed from this output, respond with the single word: PROCEED.
+- If the command failed or produced an unexpected result, formulate a single, concrete shell command to try and fix the issue. Be transparent in your thoughts.
+- If the command was successful but the output contains information that requires an immediate follow-up action, formulate that next command.
+
+Your response must be either the word "PROCEED" or a single shell command to execute next (e.g., `execute apt-get install -y docker.io`).
+"""
+                    llm_analysis_dict = await execute_reasoning_task(feedback_prompt)
+                    next_action = llm_analysis_dict.get("result", "PROCEED").strip()
+
+                    if next_action.upper() != "PROCEED":
+                        core.logging.log_event(f"Feedback loop decided on a corrective action: `{next_action}`", level="INFO")
+                        # Execute the corrective action
+                        correction_command, correction_args_str = (next_action.split(" ", 1) + [""])[:2]
+                        if correction_command == "execute":
+                            output, error, returncode = execute_shell_command(correction_args_str, love_state)
+                            terminal_width = get_terminal_width()
+                            ui_panel_queue.put(create_command_panel(next_action, output, error, returncode, width=terminal_width - 4))
+                            # After the fix attempt, we don't loop again. The next cognitive cycle will evaluate the new state.
+                            if returncode != 0:
+                                core.logging.log_event(f"Corrective action failed. The failure will be logged, and I will re-evaluate on the next cycle.", level="WARNING")
+                        else:
+                            # If the LLM suggests something other than 'execute', we log it but don't run it to avoid loops.
+                            core.logging.log_event(f"LLM suggested a non-execute corrective action '{next_action}', which is not supported in the feedback loop. Proceeding.", level="WARNING")
+                    else:
+                        core.logging.log_event("Feedback loop analyzed the command output and decided to proceed.", level="INFO")
+                    # --- END AUTONOMOUS FEEDBACK LOOP ---
                 elif command == "scan":
                     _, output = scan_network(knowledge_base, autopilot_mode=True)
                 elif command == "probe":
