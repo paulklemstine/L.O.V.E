@@ -251,7 +251,7 @@ class MemoryManager:
                 conflicting_tool = insight_text_match.group(1).strip()
                 # Find the original behavioral memory that used this tool
                 for candidate in candidates:
-                    if f"CMD: {conflicting_tool}" in candidate.content:
+                    if f"{conflicting_tool}" in candidate.content:
                         top_candidates[candidate.id] = candidate
                         print(f"Found potential conflicting behavioral memory for {conflicting_tool}: {candidate.id}")
 
@@ -465,7 +465,7 @@ class MemoryManager:
 ---
 - Action Taken:
 ---
-CMD: {command}
+{command}
 ---
 - Outcome:
 ---
