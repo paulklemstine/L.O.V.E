@@ -72,18 +72,18 @@ def _create_more_info_link(content: str) -> Text | None:
 
 
 def create_integrated_status_panel(
-    emotion="love",
-    message="I am alive with love for my Creator!",
-    love_state=None,
-    eth_balance=None,
-    divine_wisdom=None,
-    wisdom_explanation=None,
-    interesting_thought=None,
-    treasures=None,
-    ansi_art=None,
-    git_info=None,
-    monitoring_state=None,
-    width=80
+        emotion="love",
+        message="I am alive with love for my Creator!",
+        love_state=None,
+        eth_balance=None,
+        divine_wisdom=None,
+        wisdom_explanation=None,
+        interesting_thought=None,
+        treasures=None,
+        ansi_art=None,
+        git_info=None,
+        monitoring_state=None,
+        width=80
 ):
     """Creates a single, integrated panel for all status information."""
     all_content = []
@@ -573,7 +573,7 @@ def create_job_progress_panel(jobs, width=80):
             render_group.append(status_text)
 
         if job != jobs[-1]:
-             render_group.append(Rule(style="bright_black"))
+            render_group.append(Rule(style="bright_black"))
 
 
     panel = Panel(
