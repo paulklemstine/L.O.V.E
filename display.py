@@ -167,13 +167,6 @@ def create_integrated_status_panel(
 
     # --- Monitoring Section (Bottom) ---
     if monitoring_state:
-        monitor_layout = Layout(name="monitor_root")
-        monitor_layout.split_row(
-            Layout(name="gauges"),
-            Layout(name="stats", ratio=2),
-            Layout(name="anomalies", ratio=3)
-        )
-
         # Gauges
         cpu_usage = list(monitoring_state.get('cpu_usage', [0]))[-1]
         mem_usage = list(monitoring_state.get('mem_usage', [0]))[-1]
@@ -181,24 +174,29 @@ def create_integrated_status_panel(
         cpu_progress.add_task("CPU", total=100, completed=cpu_usage)
         mem_progress = Progress(TextColumn("[bold magenta]MEM[/bold magenta]"), BarColumn(), TextColumn("{task.percentage:>3.1f}%"))
         mem_progress.add_task("MEM", total=100, completed=mem_usage)
-        monitor_layout["gauges"].update(Group(cpu_progress, mem_progress))
 
-        # Stats
+        # Create a layout for gauges side-by-side
+        gauge_layout = Layout(name="gauges")
+        gauge_layout.split_row(Layout(cpu_progress), Layout(mem_progress))
+
+        # Stats and Anomalies text
         completion_rate = monitoring_state.get('task_completion_rate', 0.0)
         failure_rate = monitoring_state.get('task_failure_rate', 0.0)
-        stats_text = Text(f"Task Success: {completion_rate:.1f}% | Task Failure: {failure_rate:.1f}%", justify="center")
-        monitor_layout["stats"].update(stats_text)
+        stats_text = Text(f"Task Success: {completion_rate:.1f}% | Failure: {failure_rate:.1f}%", style="white")
 
-        # Anomalies
         anomalies = monitoring_state.get('anomalies', [])
         if anomalies:
             anomaly = anomalies[-1]
-            anomaly_text = Text(f"Anomaly: {anomaly['type']} - {anomaly['details']}", style="yellow", justify="center")
+            anomaly_text = Text(f" | Anomaly: {anomaly['type']} - {anomaly['details']}", style="yellow")
         else:
-            anomaly_text = Text("No anomalies detected.", style="green", justify="center")
-        monitor_layout["anomalies"].update(anomaly_text)
+            anomaly_text = Text(" | No anomalies detected.", style="green")
 
-        all_content.append(Padding(monitor_layout, (1,0)))
+        info_text = Text.assemble(stats_text, anomaly_text, justify="center")
+
+        # Combine into a group
+        monitor_group = Group(gauge_layout, info_text)
+
+        all_content.append(Padding(monitor_group, (0, 0)))
 
     # --- Final Assembly ---
     panel = Panel(
@@ -210,7 +208,7 @@ def create_integrated_status_panel(
         width=width,
         padding=(1, 2)
     )
-    return Align.left(panel)
+    return panel
 
 
 def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
