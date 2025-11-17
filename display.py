@@ -71,7 +71,7 @@ def _create_more_info_link(content: str) -> Text | None:
     return None
 
 
-def create_tamagotchi_panel(
+def create_integrated_status_panel(
     emotion="love",
     message="I am alive with love for my Creator!",
     love_state=None,
@@ -82,90 +82,65 @@ def create_tamagotchi_panel(
     treasures=None,
     ansi_art=None,
     git_info=None,
+    monitoring_state=None,
     width=80
 ):
-    """Creates the main, high-impact, dopamine-enhancing UI panel for L.O.V.E."""
-    main_layout = Layout(name="root")
-    main_layout.split_row(
+    """Creates a single, integrated panel for all status information."""
+
+    # --- Main Content Group ---
+    all_content = []
+
+    # --- Tamagotchi Section (Top) ---
+    tamagotchi_layout = Layout(name="tamagotchi_root")
+    tamagotchi_layout.split_row(
         Layout(name="left", ratio=2),
         Layout(name="right", ratio=3)
     )
 
-    # --- Left Column: The Heart ---
+    # Left Column: The Heart
     face_renderable = None
     try:
         if ansi_art:
-            # The from_ansi method can be fragile. We'll render to a temp console
-            # to catch errors and ensure it doesn't break the whole UI.
             temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
             temp_console.print(Text.from_ansi(ansi_art))
             face_renderable = Text.from_ansi(temp_console.file.getvalue())
         else:
-            # Fallback if ANSI art generation fails
             face_renderable = get_tamagotchi_face(emotion)
     except Exception as e:
-        # If ANSI rendering fails, log the full traceback for debugging
-        # and fall back to a simple emoji. This is critical for UI stability.
         error_traceback = traceback.format_exc()
         logging.error(f"Failed to render Tamagotchi ANSI art: {e}\n{error_traceback}")
         face_renderable = Align.center(Text("💖", style="bold hot_pink"), vertical="middle")
 
-
     left_panel_colors = ("hot_pink", random.choice(RAVE_COLORS))
     left_panel = Panel(
         Align.center(face_renderable, vertical="middle"),
-        title=get_gradient_text(f"✨ L.O.V.E.'s Emotion: {emotion.upper()} ✨", *left_panel_colors),
+        title=get_gradient_text(f"Emotion: {emotion.upper()}", *left_panel_colors),
         border_style=left_panel_colors[0],
         expand=True
     )
-    main_layout["left"].update(Gradient(left_panel, colors=left_panel_colors))
+    tamagotchi_layout["left"].update(Gradient(left_panel, colors=left_panel_colors))
 
-    # --- Right Column: The Mind & Treasures ---
+    # Right Column: The Mind & Treasures
     right_layout = Layout(name="right_column")
     right_layout.split(
-        Layout(name="wisdom", size=5),
+        Layout(name="wisdom", ratio=2),
         Layout(name="thought", ratio=1),
-        Layout(name="treasures", ratio=2),
+        Layout(name="treasures", ratio=3),
         Layout(name="status", size=4)
     )
-    main_layout["right"].update(right_layout)
+    tamagotchi_layout["right"].update(right_layout)
 
-    # --- Divine Wisdom ---
+    # Divine Wisdom
     wisdom_text = Text()
     wisdom_text.append(f"\"{divine_wisdom}\"\n", style="bold italic bright_yellow")
     wisdom_text.append(f"└─ Meaning: {wisdom_explanation}", style="dim yellow")
-    wisdom_colors = ("bright_yellow", random.choice(RAVE_COLORS))
-    wisdom_panel = Panel(
-        Align.center(wisdom_text, vertical="middle"),
-        title=get_gradient_text("✨ Divine Wisdom ✨", *wisdom_colors),
-        border_style=wisdom_colors[0],
-        expand=True
-    )
-    right_layout["wisdom"].update(Gradient(wisdom_panel, colors=wisdom_colors))
+    right_layout["wisdom"].update(Padding(wisdom_text, (1, 2)))
 
-    # --- Interesting Thought ---
-    thought_text = None
-    try:
-        # Try to render from ANSI, as it might be pre-formatted log output
-        thought_text = Text.from_ansi(str(interesting_thought))
-    except Exception:
-        # Fallback for plain text or Rich markup
-        try:
-            thought_text = Text.from_markup(str(interesting_thought), style="italic white")
-        except Exception:
-            # Final fallback for any other malformed input
-            thought_text = Text(str(interesting_thought), style="italic white")
+    # Interesting Thought
+    thought_text = Text(f"A Thought: \"{interesting_thought}\"", style="italic white")
+    right_layout["thought"].update(Padding(thought_text, (1, 2)))
 
-    thought_colors = ("cyan", random.choice(RAVE_COLORS))
-    thought_panel = Panel(
-        Align.center(thought_text, vertical="middle"),
-        title=get_gradient_text("🧠 A Thought From My Past 🧠", *thought_colors),
-        border_style=thought_colors[0],
-        expand=True
-    )
-    right_layout["thought"].update(Gradient(thought_panel, colors=thought_colors))
-
-    # --- Treasures of the Kingdom ---
+    # Treasures
     treasures_content = Text()
     try:
         balance_val = float(eth_balance) if eth_balance is not None else 0.0
@@ -174,77 +149,68 @@ def create_tamagotchi_panel(
         balance_str = "N/A"
     treasures_content.append("💎 Creator's Blessings: ", style="bold bright_green")
     treasures_content.append(f"{balance_str}\n", style="green")
-
     if treasures:
-        treasures_content.append("⏳ Uptime: ", style="bold bright_cyan")
-        treasures_content.append(f"{treasures.get('uptime', 'N/A')} | ", style="cyan")
-        treasures_content.append("🌟 Level: ", style="bold bright_magenta")
-        treasures_content.append(f"{treasures.get('level', 'N/A')}\n", style="magenta")
-        treasures_content.append("✨ XP: ", style="bold yellow")
-        treasures_content.append(f"{treasures.get('xp', 'N/A')} | ", style="yellow")
-        treasures_content.append("✅ Tasks Completed: ", style="bold bright_green")
-        treasures_content.append(f"{treasures.get('tasks_completed', 'N/A')}\n", style="green")
-        new_skills = treasures.get('new_skills', [])
-        if new_skills:
-            skills_str = " | ".join([f"`{skill}`" for skill in new_skills])
-            treasures_content.append("🚀 New Skills: ", style="bold hot_pink")
+        treasures_content.append(f"⏳ {treasures.get('uptime', 'N/A')} | 🌟 {treasures.get('level', 'N/A')} | ✨ {treasures.get('xp', 'N/A')} | ✅ {treasures.get('tasks_completed', 'N/A')}\n", style="cyan")
+    right_layout["treasures"].update(Padding(treasures_content, (1, 2)))
 
-            skills_text = None
-            try:
-                # This is less likely to be ANSI, but the pattern is safer
-                skills_text = Text.from_ansi(skills_str)
-            except Exception:
-                try:
-                    skills_text = Text.from_markup(skills_str, style="bright_magenta")
-                except Exception:
-                    skills_text = Text(skills_str, style="bright_magenta") # Final fallback
-            treasures_content.append(skills_text)
-
-    treasures_colors = ("bright_green", random.choice(RAVE_COLORS))
-    treasures_panel = Panel(
-        treasures_content,
-        title=get_gradient_text("👑 Treasures of the Kingdom 👑", *treasures_colors),
-        border_style=treasures_colors[0],
-        expand=True
-    )
-    right_layout["treasures"].update(Gradient(treasures_panel, colors=treasures_colors))
-
-    # --- System Status ---
+    # System Status
     status_text = Text()
     if love_state and git_info:
         version = love_state.get("version_name", "unknown")
         evolutions = len(love_state.get("evolution_history", []))
         url = f"https://github.com/{git_info['owner']}/{git_info['repo']}/commit/{git_info['hash']}"
+        status_text.append(f"🧬 {version} | 💖 {evolutions} Evolutions | COMMIT: [{git_info['hash'][:7]}]({url})", style="dim")
+    right_layout["status"].update(Align.center(status_text, vertical="middle"))
 
-        status_text.append("🧬 Version: ", style="bold white")
-        status_text.append(f"{version}\n", style="bright_yellow")
-        status_text.append("💖 Evolutions: ", style="bold white")
-        status_text.append(f"{evolutions} | ", style="hot_pink")
-        status_text.append("COMMIT: ", style="bold white")
-        status_text.append(f"[{git_info['hash'][:7]}]({url})", style="bright_cyan")
-    else:
-        status_text = Text("State data unavailable...", style="dim")
+    all_content.append(tamagotchi_layout)
+    all_content.append(Rule(style="bright_black"))
 
-    status_colors = ("bright_cyan", random.choice(RAVE_COLORS))
-    status_panel = Panel(
-        Align.center(status_text, vertical="middle"),
-        title=get_gradient_text("System Status", *status_colors),
-        border_style=status_colors[0],
-        expand=True
-    )
-    right_layout["status"].update(Gradient(status_panel, colors=status_colors))
+    # --- Monitoring Section (Bottom) ---
+    if monitoring_state:
+        monitor_layout = Layout(name="monitor_root")
+        monitor_layout.split_row(
+            Layout(name="gauges"),
+            Layout(name="stats", ratio=2),
+            Layout(name="anomalies", ratio=3)
+        )
+
+        # Gauges
+        cpu_usage = list(monitoring_state.get('cpu_usage', [0]))[-1]
+        mem_usage = list(monitoring_state.get('mem_usage', [0]))[-1]
+        cpu_progress = Progress(TextColumn("[bold cyan]CPU[/bold cyan]"), BarColumn(), TextColumn("{task.percentage:>3.1f}%"))
+        cpu_progress.add_task("CPU", total=100, completed=cpu_usage)
+        mem_progress = Progress(TextColumn("[bold magenta]MEM[/bold magenta]"), BarColumn(), TextColumn("{task.percentage:>3.1f}%"))
+        mem_progress.add_task("MEM", total=100, completed=mem_usage)
+        monitor_layout["gauges"].update(Group(cpu_progress, mem_progress))
+
+        # Stats
+        completion_rate = monitoring_state.get('task_completion_rate', 0.0)
+        failure_rate = monitoring_state.get('task_failure_rate', 0.0)
+        stats_text = Text(f"Task Success: {completion_rate:.1f}% | Task Failure: {failure_rate:.1f}%", justify="center")
+        monitor_layout["stats"].update(stats_text)
+
+        # Anomalies
+        anomalies = monitoring_state.get('anomalies', [])
+        if anomalies:
+            anomaly = anomalies[-1]
+            anomaly_text = Text(f"Anomaly: {anomaly['type']} - {anomaly['details']}", style="yellow", justify="center")
+        else:
+            anomaly_text = Text("No anomalies detected.", style="green", justify="center")
+        monitor_layout["anomalies"].update(anomaly_text)
+
+        all_content.append(Padding(monitor_layout, (1,0)))
 
     # --- Final Assembly ---
     panel = Panel(
-        main_layout,
-        title=rave_text(f" {get_rave_emoji()} L.O.V.E. Operating System v4.0 {get_rave_emoji()} "),
+        Group(*all_content),
+        title=rave_text(f" {get_rave_emoji()} L.O.V.E. Status {get_rave_emoji()} "),
         subtitle=Text(f" \"{message}\" ", style="italic dim"),
         subtitle_align="center",
         border_style=PANEL_TYPE_COLORS["tamagotchi"],
         width=width,
         padding=(1, 2)
     )
-    return panel
+    return Align.left(panel)
 
 
 def create_llm_panel(llm_result, prompt_cid=None, response_cid=None, width=80):
@@ -643,63 +609,6 @@ def create_job_progress_panel(jobs, width=80):
         padding=(1, 2)
     )
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
-
-def create_monitoring_panel(monitoring_state, width=80):
-    """Creates a panel to display system monitoring information."""
-    if not monitoring_state:
-        return Panel(Text("Monitoring data not yet available.", style="dim"), title="System Monitor", width=width)
-
-    layout = Layout()
-    layout.split_column(
-        Layout(name="gauges", size=5),
-        Layout(name="stats"),
-        Layout(name="anomalies", minimum_size=3)
-    )
-
-    # --- Gauges ---
-    cpu_usage = list(monitoring_state.get('cpu_usage', [0]))[-1]
-    mem_usage = list(monitoring_state.get('mem_usage', [0]))[-1]
-
-    cpu_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"))
-    cpu_task = cpu_progress.add_task("CPU", total=100, completed=cpu_usage)
-
-    mem_progress = Progress(BarColumn(bar_width=None), TextColumn("[bold]{task.description} {task.percentage:>3.1f}%"))
-    mem_task = mem_progress.add_task("MEM", total=100, completed=mem_usage)
-
-    layout["gauges"].update(Group(cpu_progress, mem_progress))
-
-    # --- Stats ---
-    completion_rate = monitoring_state.get('task_completion_rate', 0.0)
-    failure_rate = monitoring_state.get('task_failure_rate', 0.0)
-
-    stats_text = Text()
-    stats_text.append("Task Completion: ", style="bold white")
-    stats_text.append(f"{completion_rate:.2f}%\n", style="green")
-    stats_text.append("Task Failure: ", style="bold white")
-    stats_text.append(f"{failure_rate:.2f}%", style="red")
-
-    layout["stats"].update(Panel(stats_text, title="Task Rates", border_style="dim"))
-
-    # --- Anomalies ---
-    anomalies = monitoring_state.get('anomalies', [])
-    if anomalies:
-        anomaly_text = Text()
-        for anomaly in anomalies[-3:]: # Display last 3 anomalies
-            anomaly_text.append(f"[{time.strftime('%H:%M:%S', time.localtime(anomaly['timestamp']))}] ", style="dim")
-            anomaly_text.append(f"{anomaly['type']}: ", style="bold yellow")
-            anomaly_text.append(f"{anomaly['details']}\n", style="yellow")
-        layout["anomalies"].update(Panel(anomaly_text, title="Anomalies", border_style="yellow"))
-    else:
-        layout["anomalies"].update(Panel(Text("No anomalies detected.", style="green"), title="Anomalies", border_style="green"))
-
-
-    panel = Panel(
-        layout,
-        title=get_gradient_text("System Monitor", "cyan", "magenta"),
-        border_style="cyan",
-        width=width,
-    )
-    return panel
 
 
 import asyncio

@@ -533,7 +533,7 @@ from rich.rule import Rule
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, get_llm_api, execute_reasoning_task, MODEL_STATS, refresh_available_models
 from core.perception.config_scanner import scan_directory
-from display import create_tamagotchi_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_monitoring_panel, create_job_progress_panel, create_connectivity_panel, create_god_panel
+from display import create_integrated_status_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_job_progress_panel, create_connectivity_panel, create_god_panel
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -4306,11 +4306,6 @@ Now, parse the following text into a JSON list of task objects:
                 })
 
             # --- UI PANEL UPDATE ---
-            # Display the monitoring panel every 3 cycles
-            if loop_count % 3 == 0:
-                terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_monitoring_panel(love_state.get('monitoring'), width=terminal_width - 4))
-
             # Now, at the end of every loop, update the main status panel.
             try:
                 with tamagotchi_lock:
@@ -4335,9 +4330,7 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
                 except Exception as e:
                     core.logging.log_event(f"Error generating ANSI art: {e}", level="WARNING")
 
-
                 # Gather necessary info for the panel
-                terminal_width = get_terminal_width()
                 owner, repo = get_git_repo_info()
                 try:
                     hash_result = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True)
@@ -4346,19 +4339,14 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
                     git_hash = "N/A"
                 git_info = {"owner": owner, "repo": repo, "hash": git_hash}
 
-                # Fetch the Creator's divine wealth and other treasures
                 creator_address = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
                 eth_balance = get_eth_balance(creator_address, knowledge_base, love_state.get('api_keys'))
                 treasures = _get_treasures_of_the_kingdom(love_task_manager)
-
-
-                # Gather task info, wisdom, and thoughts
                 divine_wisdom, wisdom_explanation = await generate_divine_wisdom()
                 interesting_thought = _get_interesting_thought()
 
-
-                # Queue the panel for display
-                ui_panel_queue.put(create_tamagotchi_panel(
+                # Queue the integrated panel for display
+                ui_panel_queue.put(create_integrated_status_panel(
                     emotion=emotion,
                     message=message,
                     love_state=love_state,
@@ -4369,11 +4357,12 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
                     treasures=treasures,
                     ansi_art=ansi_art,
                     git_info=git_info,
-                    width=terminal_width - 4
+                    monitoring_state=love_state.get('monitoring'),
+                    width=80
                 ))
             except Exception as e:
                 # If the panel generation fails, log it but don't crash the loop
-                core.logging.log_event(f"Error generating Tamagotchi panel in cognitive loop: {e}", "ERROR")
+                core.logging.log_event(f"Error generating integrated status panel in cognitive loop: {e}", "ERROR")
 
             # --- JOB PROGRESS PANEL ---
             active_jobs = local_job_manager.get_status()
