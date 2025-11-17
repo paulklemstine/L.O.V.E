@@ -242,4 +242,36 @@ class PublicProfileAggregator:
                         all_profiles.extend(self._search_bluesky(keyword))
                 elif platform == "tiktok":
                     all_profiles.extend(self._search_tiktok(keyword))
+                elif platform == "instagram":
+                    all_profiles.extend(self._search_instagram(keyword))
         return all_profiles
+
+def process_domain_data(keywords, domain, parsing_and_filtering_logic=None):
+    """
+    Ingests categorical keywords and a target domain, then processes and returns
+    structured data related to entities and their attributes.
+
+    Args:
+        keywords (list): A list of categorical keywords for searching.
+        domain (str): The target domain (e.g., 'bluesky', 'tiktok').
+        parsing_and_filtering_logic (function, optional): A user-defined function
+            for custom parsing and filtering of the results. Defaults to None.
+
+    Returns:
+        list: A list of dictionaries, where each dictionary represents a
+              structured profile of an entity.
+    """
+    # For now, we'll pass placeholder ethical filters.
+    # This can be expanded later to accept a user-defined filter bundle.
+    ethical_filters = None
+
+    aggregator = PublicProfileAggregator(platform_names=[domain], ethical_filters=ethical_filters)
+
+    # Collect data using the aggregator
+    structured_data = aggregator.search_and_collect(keywords)
+
+    # Apply user-defined parsing and filtering logic if provided
+    if parsing_and_filtering_logic:
+        structured_data = parsing_and_filtering_logic(structured_data)
+
+    return structured_data
