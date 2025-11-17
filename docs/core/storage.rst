@@ -1,0 +1,2 @@
+.. automodule:: core.storage
+   :members:

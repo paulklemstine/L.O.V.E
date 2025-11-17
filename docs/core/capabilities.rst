@@ -1,0 +1,2 @@
+.. automodule:: core.capabilities
+   :members:

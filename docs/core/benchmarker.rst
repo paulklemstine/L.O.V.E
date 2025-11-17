@@ -1,0 +1,2 @@
+.. automodule:: core.benchmarker
+   :members:
