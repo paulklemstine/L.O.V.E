@@ -541,9 +541,9 @@ from subversive import transform_request
 from core.agents.orchestrator import Orchestrator
 from core.talent_utils.aggregator import EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
+from core import talent_utils
 from core.talent_utils import (
     initialize_talent_modules,
-    talent_manager,
     public_profile_aggregator,
     opportunity_scraper,
     opportunity_matcher,
@@ -3712,7 +3712,7 @@ Now, parse the following text into a JSON list of task objects:
                 vllm_llm = VLLMWrapper(vllm_client=local_vllm_client)
 
                 # 2. Define the tools for the DeepAgent
-                tools = [evolve_self, execute_shell_command, scan_network, probe_target, perform_webrequest, exploitation_manager.find_and_run_exploits, list_directory, replace_in_file, get_file_content, analyze_fs, get_process_list, get_network_interfaces, generate_image, talent_manager.save_profile, talent_manager.list_profiles, talent_manager.get_profile, opportunity_scraper.search_for_opportunities]
+                tools = [evolve_self, execute_shell_command, scan_network, probe_target, perform_webrequest, exploitation_manager.find_and_run_exploits, list_directory, replace_in_file, get_file_content, analyze_fs, get_process_list, get_network_interfaces, generate_image, talent_utils.talent_manager.save_profile, talent_utils.talent_manager.list_profiles, talent_utils.talent_manager.get_profile, opportunity_scraper.search_for_opportunities]
 
                 # 3. Create the DeepAgent instance
                 agent = create_deep_agent(
@@ -3852,7 +3852,7 @@ Now, parse the following text into a JSON list of task objects:
                             # 3. Save the enriched profiles
                             saved_count = 0
                             for profile in enriched_profiles:
-                                save_result = talent_manager.save_profile(profile)
+                                save_result = talent_utils.talent_manager.save_profile(profile)
                                 if "Successfully" in save_result:
                                     saved_count += 1
                             # 4. Log results
@@ -3870,7 +3870,7 @@ Now, parse the following text into a JSON list of task objects:
                         sys.stdout = old_stdout
                         error = captured_output.getvalue()
                 elif command == "talent_list":
-                    profiles = talent_manager.list_profiles()
+                    profiles = talent_utils.talent_manager.list_profiles()
                     if not profiles:
                         output = "The talent database is empty."
                     else:
@@ -3895,7 +3895,7 @@ Now, parse the following text into a JSON list of task objects:
                     if not args:
                         error = "Usage: talent_view <anonymized_id>"
                     else:
-                        profile = talent_manager.get_profile(args[0])
+                        profile = talent_utils.talent_manager.get_profile(args[0])
                         if not profile:
                             output = f"No profile found with ID: {args[0]}"
                         else:
@@ -3966,7 +3966,7 @@ Now, parse the following text into a JSON list of task objects:
                         profile_id = args[0]
                         dry_run = "--dry-run" in args
 
-                        engager = OpportunityEngager(talent_manager)
+                        engager = OpportunityEngager(talent_utils.talent_manager)
 
                         # engage_talent is an async function, so we need to await it
                         # Since we are in an async loop, we can do this directly.
@@ -3976,7 +3976,7 @@ Now, parse the following text into a JSON list of task objects:
                             output = f"Proposal generated for profile {profile_id} in dry-run mode. Check console for output."
                         else:
                             # Log the interaction
-                            talent_manager.add_interaction(
+                            talent_utils.talent_manager.add_interaction(
                                 anonymized_id=profile_id,
                                 interaction_type="initial_outreach",
                                 message=proposal_message,
@@ -4013,12 +4013,12 @@ Now, parse the following text into a JSON list of task objects:
 
                     if profile_id and (new_status or notes):
                         # First, check if the profile exists
-                        if not talent_manager.get_profile(profile_id):
+                        if not talent_utils.talent_manager.get_profile(profile_id):
                             error = f"Error: No profile found with ID '{profile_id}'."
                         else:
                             # Use the more efficient method calls
                             if notes:
-                                talent_manager.add_interaction(
+                                talent_utils.talent_manager.add_interaction(
                                     anonymized_id=profile_id,
                                     interaction_type="manual_update",
                                     message=notes,
@@ -4026,7 +4026,7 @@ Now, parse the following text into a JSON list of task objects:
                                 )
                             elif new_status:
                                 # Only update status if no notes are provided
-                                talent_manager.update_profile_status(profile_id, new_status)
+                                talent_utils.talent_manager.update_profile_status(profile_id, new_status)
 
                             output = f"Successfully updated profile {profile_id}."
                     elif not error:
@@ -4048,8 +4048,8 @@ Now, parse the following text into a JSON list of task objects:
                             output = "Scout complete. No new opportunities found on Bluesky for the given keywords."
                         else:
                             # 2. Load talent profiles
-                            profiles = talent_manager.list_profiles()
-                            detailed_profiles = [talent_manager.get_profile(p['anonymized_id']) for p in profiles]
+                            profiles = talent_utils.talent_manager.list_profiles()
+                            detailed_profiles = [talent_utils.talent_manager.get_profile(p['anonymized_id']) for p in profiles]
 
                             if not detailed_profiles:
                                 output = f"Found {len(opportunities)} opportunities, but there are no talent profiles in the database to match them with."
