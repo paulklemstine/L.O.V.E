@@ -4346,6 +4346,7 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
                 interesting_thought = _get_interesting_thought()
 
                 # Queue the integrated panel for display
+                terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_integrated_status_panel(
                     emotion=emotion,
                     message=message,
@@ -4358,7 +4359,7 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
                     ansi_art=ansi_art,
                     git_info=git_info,
                     monitoring_state=love_state.get('monitoring'),
-                    width=80
+                    width=terminal_width - 4
                 ))
             except Exception as e:
                 # If the panel generation fails, log it but don't crash the loop
