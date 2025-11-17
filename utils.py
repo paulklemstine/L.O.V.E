@@ -130,6 +130,7 @@ def summarize_python_code(code: str) -> str:
                 docstring = ast.get_docstring(node, clean=True)
                 # Reconstruct signature without the body
                 func_node_copy = ast.FunctionDef(name=node.name, args=node.args, returns=node.returns, decorator_list=node.decorator_list, body=[])
+                ast.copy_location(func_node_copy, node)
                 signature = ast.unparse(func_node_copy).strip()
 
                 summary.append(f"Function: {signature}")
@@ -149,6 +150,7 @@ def summarize_python_code(code: str) -> str:
                         method_docstring = ast.get_docstring(method, clean=True)
                         # Reconstruct signature without the body
                         method_node_copy = ast.FunctionDef(name=method.name, args=method.args, returns=method.returns, decorator_list=method.decorator_list, body=[])
+                        ast.copy_location(method_node_copy, method)
                         method_signature = ast.unparse(method_node_copy).strip()
 
                         summary.append(f"  - Method: {method_signature}")
