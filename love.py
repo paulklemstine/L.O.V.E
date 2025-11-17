@@ -3410,7 +3410,7 @@ Formulate a raw command to best achieve my goals. The output must be only the co
             parts.extend([f"\nMy recent system log history (last {len(current_log_history.splitlines())} lines):\n---\n", current_log_history, "\n---"])
         parts.extend(["\nCURRENT BACKGROUND JOBS (Do not duplicate these):\n---\n", json.dumps(current_jobs, indent=2), "\n---"])
         parts.append("\nMy recent command history (commands only):\n---\n")
-        history_lines = [f"CMD: {e['command']}" for e in current_history] if current_history else ["No recent history."]
+        history_lines = [f"{e['command']}" for e in current_history] if current_history else ["No recent history."]
         parts.extend(["\n".join(history_lines), "\n---", formatted_available_commands])
         return "\n".join(parts)
 

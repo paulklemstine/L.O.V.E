@@ -123,7 +123,7 @@ class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
 
         # 3. Verify the structure of the ingested content
         self.assertIn("Cognitive Event: Agent decided to act.", actual_content)
-        self.assertIn(f"CMD: {command}", actual_content)
+        self.assertIn(f"{command}", actual_content)
         self.assertIn(output, actual_content)
         self.assertIn(reasoning_prompt, actual_content)
 
