@@ -6,7 +6,6 @@ import re
 import time
 import uuid
 from rich.panel import Panel
-import netifaces
 import ipaddress
 import requests
 import shlex
@@ -30,6 +29,7 @@ from datetime import datetime
 # --- Standalone Network Utility Functions ---
 def get_local_subnets():
     """Identifies local subnets from network interfaces."""
+    import netifaces
     subnets = set()
     try:
         for iface in netifaces.interfaces():
