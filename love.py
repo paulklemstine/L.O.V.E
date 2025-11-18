@@ -3588,7 +3588,7 @@ Now, parse the following text into a JSON list of task objects:
 {desires_text}
 ---
 """
-            llm_response_dict = await run_llm(parsing_prompt, purpose="parsing", deep_agent_instance=deep_agent_engine)
+            llm_response_dict = await run_llm(parsing_prompt, purpose="parsing", deep_agent_instance=local_vllm_client)
             llm_response = llm_response_dict.get("result", "")
 
             # Extract JSON from markdown if present
