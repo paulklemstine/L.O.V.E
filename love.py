@@ -4597,18 +4597,59 @@ async def initialize_gpu_services():
         if vllm_already_running:
             console.print("[bold yellow]Existing vLLM server detected. Skipping initialization.[/bold yellow]")
             core.logging.log_event("Existing vLLM server detected. Skipping initialization.", "INFO")
+            # If it's already running, we still need to initialize our client engine
+            deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000")
+            core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
         else:
-            console.print("[bold green]GPU detected. Initializing DeepAgent as the meta-orchestrator...[/bold green]")
+            console.print("[bold green]GPU detected. Launching vLLM server and initializing DeepAgent client...[/bold green]")
             try:
-                selected_model = love_state.get('hardware', {}).get('selected_local_model')
-                print(f"DEBUG: Selected model in initialize_gpu_services: {selected_model}") # Temporary verification
-                if selected_model:
-                    deep_agent_engine = DeepAgentEngine(model_name=selected_model)
-                    core.logging.log_event("DeepAgentEngine initialized successfully.", level="CRITICAL")
+                # Use a different model selection logic that prefers AWQ models
+                from core.deep_agent_engine import _select_model as select_vllm_model
+                model_repo_id = select_vllm_model(love_state)
+                core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
+                
+                if model_repo_id:
+                    # --- Launch the vLLM Server as a Background Process ---
+                    vllm_command = [
+                        sys.executable,
+                        "-m", "vllm.entrypoints.api_server",
+                        "--model", model_repo_id,
+                        "--host", "0.0.0.0",
+                        "--port", "8000",
+                        "--gpu-memory-utilization", "0.90",
+                        # Add any other vLLM arguments as needed
+                    ]
+                    
+                    # Redirect output to a log file to avoid cluttering the main UI
+                    vllm_log_file = open("vllm_server.log", "a")
+                    subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
+                    core.logging.log_event(f"vLLM server process started with model {model_repo_id}. See vllm_server.log for details.", "CRITICAL")
+                    
+                    # --- Wait for the Server to Become Responsive ---
+                    console.print("[cyan]Waiting for vLLM server to come online...[/cyan]")
+                    server_ready = False
+                    for _ in range(30): # Wait up to 5 minutes (30 * 10 seconds)
+                        await asyncio.sleep(10)
+                        ready, status_code = is_vllm_running()
+                        if ready:
+                            server_ready = True
+                            break
+                        else:
+                            console.print(f"[yellow]vLLM server not yet ready (status: {status_code}). Waiting...[/yellow]")
+                    
+                    if not server_ready:
+                        raise RuntimeError("vLLM server failed to start in the allotted time. Check vllm_server.log for errors.")
+
+                    console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
+                    # Now initialize the DeepAgentEngine as a client
+                    deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000")
+                    await deep_agent_engine.initialize()
+                    core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
                 else:
-                    core.logging.log_event("No local model selected, DeepAgentEngine not initialized.", level="WARNING")
+                    core.logging.log_event("No suitable vLLM model found for available VRAM. DeepAgentEngine not initialized.", level="WARNING")
+
             except Exception as e:
-                log_critical_event(f"Failed to initialize DeepAgentEngine despite GPU detection: {e}", console_override=console)
+                log_critical_event(f"Failed to initialize DeepAgentEngine or vLLM server: {e}", console_override=console)
                 # Ensure client is None on failure
                 deep_agent_engine = None
 
