@@ -4695,8 +4695,8 @@ ipfs_available = False
 async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     try:
-        load_all_state(ipfs_cid=args.from_ipfs)
         core.logging.setup_global_logging(love_state.get('version_name', 'unknown'))
+        load_all_state(ipfs_cid=args.from_ipfs)
 
         if "autopilot_mode" in love_state:
             del love_state["autopilot_mode"]
