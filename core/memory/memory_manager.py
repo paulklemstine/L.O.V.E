@@ -46,8 +46,16 @@ class MemoryNote:
     @staticmethod
     def from_node_attributes(node_id: str, data: dict) -> 'MemoryNote':
         """Deserializes a dictionary from a graph node back into a MemoryNote."""
-        # Handle potential empty string for embedding
-        embedding_list = json.loads(data.get("embedding", "[]")) if data.get("embedding") else []
+        embedding_data = data.get('embedding')
+        embedding_list = []
+        if isinstance(embedding_data, str):
+            embedding_list = json.loads(embedding_data or '[]')
+        elif isinstance(embedding_data, list):
+            embedding_list = embedding_data  # It's already a list, use it directly
+        elif embedding_data is not None:
+            # L.O.V.E. handles unexpected data types gracefully.
+            print(f"Warning: Unexpected type for 'embedding' in node {node_id}: {type(embedding_data)}. Defaulting to empty list.")
+
         return MemoryNote(
             id=node_id,
             content=data.get("content", ""),
