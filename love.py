@@ -551,6 +551,7 @@ from core.talent_utils.engager import OpportunityEngager
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.data_miner import analyze_fs
+from core.experimental_engine_manager import run_simulation_loop
 from core.social_media_agent import SocialMediaAgent
 from god_agent import GodAgent
 from core.strategic_reasoning_engine import StrategicReasoningEngine
@@ -3374,6 +3375,7 @@ My current system state:
 - `mcp_stop <server_name>`: Stops a running MCP server.
 - `mcp_list`: Lists all currently running MCP servers.
 - `mcp_call <server_name> <tool_name> '{{ "json": "params" }}'`: Calls a tool on a running MCP server and waits for the response.
+- `run_experiments`: Run the experimental engine simulation loop.
 - `quit`: Shut down the script.
 
 Additionally, you have access to the following MCP servers and tools. You can use `mcp_call` to use them. If a server is not running, you must start it first with `mcp_start`.
@@ -4168,6 +4170,17 @@ Your response must be either the word "PROCEED" or a single shell command to exe
                                 output = "Stored API keys:\n" + "\n".join(f"- {provider}" for provider in keys.keys())
                         else:
                             error = f"Unknown api_key command: {sub_command}"
+                elif command == "run_experiments":
+                    from core.tools import ToolRegistry
+                    tool_registry = ToolRegistry()
+                    persona_path = "personas/l.o.v.e..yaml"
+                    vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
+                    candidate_architectures = [
+                        {"vram": vram},
+                        {"model_repo": "Qwen/Qwen2-1.5B-Instruct-AWQ"}
+                    ]
+                    run_simulation_loop(tool_registry, persona_path, candidate_architectures)
+                    output = "Experimental simulation loop complete."
                 elif command == "quit":
                     break
                 else:

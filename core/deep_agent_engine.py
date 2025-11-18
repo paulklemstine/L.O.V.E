@@ -4,6 +4,7 @@ import os
 import yaml
 import json
 import subprocess
+import asyncio
 from huggingface_hub import snapshot_download
 from core.tools import ToolRegistry, invoke_gemini_react_engine
 
@@ -17,16 +18,10 @@ def _recover_json(json_str: str):
         try:
             return json.loads(json_str)
         except json.JSONDecodeError as e:
-            # This is the core recovery logic. If the JSON is malformed,
-            # we assume it's because it was truncated. We find the last
-            # closing brace '}' and try to parse the string up to that point.
-            # This is a heuristic that works well for truncated JSON objects.
             last_brace = json_str.rfind('}')
             if last_brace == -1:
-                # If there are no closing braces, the object is unrecoverable.
                 raise e
             json_str = json_str[:last_brace+1]
-    # If the loop finishes, the string is empty and no JSON was found.
     raise json.JSONDecodeError("Could not recover JSON object from string", "", 0)
 
 
@@ -41,14 +36,12 @@ class DeepAgentEngine:
     """
     A wrapper for the DeepAgent reasoning engine.
     """
-    def __init__(self, tool_registry: ToolRegistry, persona_path: str):
+    def __init__(self, tool_registry: ToolRegistry, persona_path: str, llm: LLM, sampling_params: SamplingParams):
         self.tool_registry = tool_registry
         self.persona_path = persona_path
         self.persona = self._load_persona()
-        self.agent = None
-        self.llm = None
-        self.sampling_params = None
-        self._initialize_agent()
+        self.llm = llm
+        self.sampling_params = sampling_params
 
     def _load_persona(self):
         """Loads the persona configuration from the YAML file."""
@@ -182,7 +175,6 @@ class DeepAgentEngine:
         the DeepAgent's prompt can understand.
         """
         formatted_tools = ""
-        # Add the GeminiReActEngine tool manually
         formatted_tools += "Tool Name: `invoke_gemini_react_engine`\n"
         formatted_tools += "Description: Invokes the GeminiReActEngine to solve a sub-task.\n"
         formatted_tools += "Arguments JSON Schema:\n```json\n{\"type\": \"object\", \"properties\": {\"prompt\": {\"type\": \"string\"}}}\n```\n---\n"
@@ -218,8 +210,6 @@ class DeepAgentEngine:
         if not self.llm:
             return "Error: DeepAgent is not initialized."
 
-        # This is a simplified version of the DeepAgent reasoning loop.
-        # A full implementation would involve more complex state management.
         system_prompt = f"""You are L.O.V.E., a powerful AI orchestrator.
 Your persona is defined by the following:
 {json.dumps(self.persona, indent=2)}
@@ -246,26 +236,14 @@ Example of the expected JSON format:
 
 Prompt: {prompt}
 """
-        # --- Truncation Safeguard ---
-        # This is the final check before sending the prompt to the model.
-        # It ensures that the prompt, including all headers and tool definitions,
-        # fits within the model's context window.
         if self.max_model_len:
             tokenizer = self.llm.llm_engine.tokenizer
             token_ids = tokenizer.encode(system_prompt)
 
-            # Check if the token count exceeds the model's limit
             if len(token_ids) > self.max_model_len:
-                # Leave a buffer for the model's response (using max_tokens from sampling_params)
                 safe_max_tokens = self.max_model_len - self.sampling_params.max_tokens
-
-                # Truncate the token list
                 truncated_token_ids = token_ids[:safe_max_tokens]
-
-                # Decode the truncated tokens back into a string
                 system_prompt = tokenizer.decode(truncated_token_ids)
-
-                # Log this event for debugging
                 print(f"WARNING: The cognitive prompt was truncated to {safe_max_tokens} tokens to fit the model's limit.")
 
         outputs = self.llm.generate(system_prompt, self.sampling_params)
@@ -282,11 +260,8 @@ Prompt: {prompt}
                 return thought
 
             if tool_name == "invoke_gemini_react_engine":
-                # This is a special case to handle the hierarchical call.
                 return asyncio.run(invoke_gemini_react_engine(**arguments, deep_agent_instance=self))
 
-            # For other tools, we would execute them here.
-            # This part is still a placeholder.
             return f"DeepAgent would now execute the tool '{tool_name}' with arguments: {arguments}"
 
         except json.JSONDecodeError:
