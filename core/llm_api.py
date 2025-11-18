@@ -521,6 +521,11 @@ def rank_models():
             final_score *= 1.05
             log_event(f"Boosting score for preferred model type: {model_id}", "INFO")
 
+        # --- Boost score for Gemini models ---
+        if stats.get("provider") == "gemini":
+            final_score *= 1.5
+            log_event(f"Boosting score for Gemini model: {model_id}", "INFO")
+
         ranked_models.append({"model_id": model_id, "score": final_score})
 
     # Sort models by score in descending order
