@@ -1,4 +1,12 @@
 {
+    "gemini-3-pro-preview": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "gemini"
+    },
     "gemini-2.5-pro": {
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,

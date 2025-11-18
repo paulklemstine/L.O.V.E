@@ -85,6 +85,7 @@ HARDWARE_TEST_MODEL_CONFIG = {
 # https://ai.google.dev/gemini-api/docs/models/gemini
 MODEL_CONTEXT_SIZES = {
     # Gemini Models
+    "gemini-3-pro-preview": 1000000,
     "gemini-2.5-pro": 1000000,
     "gemini-2.5-flash": 1000000,
     "gemini-2.5-flash-lite": 1000000,
@@ -101,6 +102,7 @@ MODEL_CONTEXT_SIZES = {
 
 # --- Gemini Configuration ---
 GEMINI_MODELS = [
+    "gemini-3-pro-preview",
     "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
