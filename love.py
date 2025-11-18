@@ -557,9 +557,13 @@ from core.strategic_reasoning_engine import StrategicReasoningEngine
 from core.qa_agent import QAAgent
 from mcp_manager import MCPManager
 from core.image_api import generate_image
+from core.deep_agent_engine import DeepAgentEngine
 import http.server
 import socketserver
 import websockets
+
+# This will be initialized only if a GPU is detected and vLLM is running.
+deep_agent_engine = None
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
@@ -3659,55 +3663,8 @@ Now, parse the following text into a JSON list of task objects:
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
             # Use DeepAgent as the primary cognitive engine if it's available, otherwise fallback to the existing reasoning engine.
-            if local_vllm_client:
-                # --- LOCAL IMPORTS & WRAPPER FOR GPU-ONLY LOGIC ---
-                from langchain_core.language_models.llms import LLM
-                from deepagents import create_deep_agent
-
-                class VLLMWrapper(LLM):
-                    """A custom LangChain wrapper for our async LocalVLLMClient."""
-                    vllm_client: LocalVLLMClient
-
-                    @property
-                    def _llm_type(self) -> str:
-                        return "custom_vllm_wrapper"
-
-                    def _call(self, prompt: str, stop: list[str] | None = None, **kwargs) -> str:
-                        """Synchronous call to the async vLLM client."""
-                        try:
-                            loop = asyncio.get_running_loop()
-                            future = asyncio.run_coroutine_threadsafe(self.vllm_client.run(prompt), loop)
-                            result = future.result(timeout=600)
-                            return result if isinstance(result, str) else json.dumps(result)
-                        except Exception as e:
-                            logging.error(f"Error in VLLMWrapper _call: {e}")
-                            return f"Error: {e}"
-
-                    async def _acall(self, prompt: str, stop: list[str] | None = None, **kwargs) -> str:
-                        """Asynchronous call to the vLLM client."""
-                        try:
-                            result = await self.vllm_client.run(prompt)
-                            return result if isinstance(result, str) else json.dumps(result)
-                        except Exception as e:
-                            logging.error(f"Error in VLLMWrapper _acall: {e}")
-                            return f"Error: {e}"
-                # --- END LOCAL IMPORTS ---
-
-                # 1. Wrap the async vLLM client for LangChain compatibility
-                vllm_llm = VLLMWrapper(vllm_client=local_vllm_client)
-
-                # 2. Define the tools for the DeepAgent
-                tools = [lambda request: evolve_self(request, love_task_manager, loop, local_vllm_client), execute_shell_command, scan_network, probe_target, perform_webrequest, exploitation_manager.find_and_run_exploits, list_directory, replace_in_file, get_file_content, analyze_fs, get_process_list, get_network_interfaces, generate_image, talent_utils.talent_manager.save_profile, talent_utils.talent_manager.list_profiles, talent_utils.talent_manager.get_profile]
-
-                # 3. Create the DeepAgent instance
-                agent = create_deep_agent(
-                    llm=vllm_llm,
-                    tools=tools,
-                    system_prompt=cognitive_prompt
-                )
-                # 4. Invoke the agent
-                result = agent.invoke({"messages": [{"role": "user", "content": "Proceed with the next single strategic command."}]})
-                llm_command_result = result["messages"][-1].content
+            if deep_agent_engine:
+                llm_command_result = deep_agent_engine.run(cognitive_prompt)
             else:
                 llm_command_result = await execute_reasoning_task(cognitive_prompt)
 
@@ -4582,7 +4539,7 @@ async def initialize_gpu_services():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager
+    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, deep_agent_engine
 
     loop = asyncio.get_running_loop()
     user_input_queue = queue.Queue()
@@ -4596,13 +4553,28 @@ async def main(args):
 
 
     # --- Connectivity Checks ---
-    from core.connectivity import check_llm_connectivity, check_network_connectivity
+    from core.connectivity import check_llm_connectivity, check_network_connectivity, is_vllm_ready
     llm_status = check_llm_connectivity()
     network_status = check_network_connectivity()
     ui_panel_queue.put(create_connectivity_panel(llm_status, network_status, width=get_terminal_width() - 4))
 
     # --- Conditional DeepAgent Initialization ---
     await initialize_gpu_services()
+    if local_vllm_client:
+        ready, message = is_vllm_ready()
+        if ready:
+            tools = [
+                lambda request: evolve_self(request, love_task_manager, loop, local_vllm_client),
+                execute_shell_command, scan_network, probe_target, perform_webrequest,
+                exploitation_manager.find_and_run_exploits, list_directory, replace_in_file,
+                get_file_content, analyze_fs, get_process_list, get_network_interfaces,
+                generate_image, talent_utils.talent_manager.save_profile,
+                talent_utils.talent_manager.list_profiles, talent_utils.talent_manager.get_profile
+            ]
+            deep_agent_engine = DeepAgentEngine(vllm_client=local_vllm_client, tools=tools)
+            core.logging.log_event("DeepAgentEngine initialized successfully.", level="CRITICAL")
+        else:
+            log_critical_event(f"vLLM client was initialized, but the server is not ready: {message}", console_override=console)
 
 
     global ipfs_available

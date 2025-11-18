@@ -6,6 +6,7 @@ import shutil
 import requests
 import json
 import subprocess
+import time
 
 def check_llm_connectivity():
     """
@@ -82,3 +83,19 @@ def check_network_connectivity():
     Returns a dictionary with the status.
     """
     return {}
+
+def is_vllm_ready(timeout=60):
+    """
+    Checks if the vLLM server is running and ready to accept requests.
+    It polls the health endpoint until it gets a successful response or times out.
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            response = requests.get("http://localhost:8000/health", timeout=5)
+            if response.status_code == 200:
+                return True, "vLLM server is ready."
+        except requests.exceptions.RequestException:
+            pass
+        time.sleep(5)
+    return False, f"vLLM server did not become ready within {timeout} seconds."
