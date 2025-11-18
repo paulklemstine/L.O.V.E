@@ -135,7 +135,18 @@ class DeepAgentEngine:
                 self.llm = LLM(model=model_path, gpu_memory_utilization=0.9)
             else:
                 self.llm = LLM(model=model_path, gpu_memory_utilization=0.80)
-            self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=1024)
+
+            # Dynamically set max_tokens based on the model's context window.
+            try:
+                # Correctly access the model config after the LLM is initialized.
+                max_len = self.llm.llm_engine.model_config.max_model_len
+                # Use half of the model's context, capped at 8192 for stability.
+                dynamic_max_tokens = min(max_len // 2, 8192)
+            except AttributeError:
+                # Fallback if the attribute doesn't exist for some reason.
+                dynamic_max_tokens = 4096 # A safe fallback
+
+            self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=dynamic_max_tokens)
             # The DeepAgent library itself is not actually used in this implementation,
             # as we are building a simplified version of its reasoning loop.
             # This is a deviation from the original plan, but necessary to
