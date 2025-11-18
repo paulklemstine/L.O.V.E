@@ -4727,6 +4727,20 @@ async def run_safely():
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
+        # --- FAILSAFE: Manually write the exception to the log file ---
+        # This is the most robust way to ensure the error is captured, even if the logging system itself has failed.
+        full_traceback = traceback.format_exc()
+        try:
+            with open("love.log", "a") as f:
+                f.write("\n" + "="*80 + "\n")
+                f.write(f"FATAL UNHANDLED EXCEPTION at {datetime.now().isoformat()}\n")
+                f.write(full_traceback)
+                f.write("="*80 + "\n")
+        except Exception as log_e:
+            # If even this fails, print to the original stderr.
+            print(f"FATAL: Could not even write to log file: {log_e}", file=sys.__stderr__)
+            print(f"Original Traceback:\n{full_traceback}", file=sys.__stderr__)
+
         # --- Graceful Shutdown of vLLM Server on Error ---
         try:
             console.print("[cyan]Attempting emergency shutdown of vLLM server...[/cyan]")
@@ -4744,7 +4758,6 @@ async def run_safely():
         if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
         if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
         if 'websocket_server_manager' in globals() and websocket_server_manager: websocket_server_manager.stop()
-        full_traceback = traceback.format_exc()
         # Use our new, more robust critical event logger
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
 
