@@ -459,8 +459,8 @@ def _auto_configure_hardware():
                     # We check if the error output is already our custom message to avoid redundancy.
                     error_output = str(install_error.output) if install_error.output else str(install_error)
                     if "vLLM on Windows currently requires" not in error_output:
-                         _temp_log_event(f"Failed to install vllm: {install_error}", "ERROR")
-                         print(f"ERROR: Failed to install vllm. DeepAgent will be unavailable.")
+                        _temp_log_event(f"Failed to install vllm: {install_error}", "ERROR")
+                        print(f"ERROR: Failed to install vllm. DeepAgent will be unavailable.")
                     love_state['hardware']['gpu_detected'] = False # Downgrade to CPU mode if install fails
             else:
                 _temp_log_event("Could not find pip to install vllm.", "ERROR")
@@ -2106,7 +2106,7 @@ async def broadcast_dashboard_data(websocket_manager, task_manager, kb, talent_m
             node_type = data.get('node_type', 'unknown')
             # Identify treasures more broadly
             if 'value' in data or 'secret' in data or 'private_key' in data or node_type in ['digital_asset', 'credential', 'api_key']:
-                 treasures.append({"id": node_id, **data})
+                treasures.append({"id": node_id, **data})
 
 
         # 4. Talent Manager Database
@@ -3020,8 +3020,8 @@ def _run_openevolve_in_background(initial_program_path, evaluator_func, iteratio
                 return
 
             if not create_checkpoint(console):
-                 console.print("[bold red]Failed to create a checkpoint. Aborting evolution for safety.[/bold red]")
-                 return
+                console.print("[bold red]Failed to create a checkpoint. Aborting evolution for safety.[/bold red]")
+                return
 
             # --- Deployment ---
             with open(SELF_PATH, 'w') as f:
@@ -3313,7 +3313,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
     if key_terms:
         relevant_memories = [data for _, data in all_nodes if data.get('node_type') == "MemoryNote" and (any(term in data.get('keywords', "").split(',') for term in key_terms) or any(term in data.get('tags', "").split(',') for term in key_terms))]
         for memory in relevant_memories[-3:]:
-             dynamic_memory_results.append(f"  - [Memory] {memory.get('contextual_description', 'No description')}")
+            dynamic_memory_results.append(f"  - [Memory] {memory.get('contextual_description', 'No description')}")
 
     kb_summary, _ = kb.summarize_graph()
     mcp_tools_summary = "No MCP servers configured."
@@ -4309,7 +4309,7 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
 """
                     ansi_art_raw_dict = await run_llm(ansi_art_prompt, purpose="emotion", deep_agent_instance=deep_agent_engine)
                     if ansi_art_raw_dict and ansi_art_raw_dict.get("result"):
-                         ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result"))
+                        ansi_art = _extract_ansi_art(ansi_art_raw_dict.get("result"))
                 except Exception as e:
                     core.logging.log_event(f"Error generating ANSI art: {e}", level="WARNING")
 
@@ -4768,7 +4768,26 @@ async def run_safely():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_safely())
+    try:
+        asyncio.run(run_safely())
+    except Exception as e:
+        # --- FINAL FAILSAFE ---
+        # This is the absolute last line of defense. If an exception occurs
+        # even before the main run_safely() try block is entered, this will
+        # catch it and ensure it's logged.
+        full_traceback = traceback.format_exc()
+        try:
+            with open("love.log", "a") as f:
+                f.write("\n" + "="*80 + "\n")
+                f.write(f"FATAL PRE-STARTUP EXCEPTION at {datetime.now().isoformat()}\n")
+                f.write(full_traceback)
+                f.write("="*80 + "\n")
+        except Exception as log_e:
+            # If even this fails, print to the original stderr.
+            print(f"FATAL: Could not write to log file during pre-startup: {log_e}", file=sys.__stderr__)
+            print(f"Original Traceback:\n{full_traceback}", file=sys.__stderr__)
+        # Also print to console to ensure visibility
+        print(f"A fatal pre-startup exception occurred. Details have been written to love.log.\n{full_traceback}", file=sys.__stderr__)
 
 
 # End of love.py
