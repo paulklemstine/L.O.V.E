@@ -4,7 +4,7 @@ import os
 import yaml
 import json
 import subprocess
-from huggingface_hub import snapshot_download
+from huggingface_hub import snapshot_download, hf_hub_download
 from core.tools import ToolRegistry, invoke_gemini_react_engine
 
 
@@ -115,6 +115,22 @@ class DeepAgentEngine:
             print(f"Error downloading model snapshot from {repo_id}: {e}")
             raise # Re-raise the exception to be caught by the caller
 
+    def _get_max_model_len_from_config(self, repo_id):
+        """Downloads the model's config.json and reads the max_model_len."""
+        try:
+            config_path = hf_hub_download(repo_id=repo_id, filename="config.json")
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            # Common keys for max context length in different model configs
+            possible_keys = ['max_position_embeddings', 'max_sequence_length', 'n_ctx']
+            for key in possible_keys:
+                if key in config:
+                    return config[key]
+            return 8192 # Default if no key is found
+        except Exception as e:
+            print(f"Could not read max_model_len from config for {repo_id}: {e}. Falling back to default.")
+            return 8192
+
     def _initialize_agent(self):
         """
         Initializes the vLLM instance and the DeepAgent itself.
@@ -126,32 +142,55 @@ class DeepAgentEngine:
         model_repo = self._select_model()
         print(f"Initializing DeepAgent with model from repo: {model_repo}...")
         try:
-            # First, ensure the model is downloaded and get the local path.
             model_path = self._download_model_snapshot(model_repo)
-            from love import love_state
-            vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
-            # Now, initialize vLLM with the local, cached path.
-            if vram >= 6.5 * 1024:
-                self.llm = LLM(model=model_path, gpu_memory_utilization=0.9)
+            from love import love_state, save_state
+
+            # --- Dynamic max_model_len Determination ---
+            hardware_state = love_state.setdefault('hardware', {})
+            # Use a unique key for each model to store its optimal context length
+            model_context_key = f"optimal_max_len_{model_repo.replace('/', '_')}"
+
+            if hardware_state.get(model_context_key):
+                max_len = hardware_state[model_context_key]
+                print(f"Using previously determined optimal max_model_len for {model_repo}: {max_len}")
             else:
-                self.llm = LLM(model=model_path, gpu_memory_utilization=0.80)
+                theoretical_max_len = self._get_max_model_len_from_config(model_repo)
+                print(f"Determining optimal max_model_len for {model_repo}, starting from {theoretical_max_len}...")
 
-            # Dynamically set max_tokens based on the model's context window.
-            try:
-                # Correctly access the model config after the LLM is initialized.
-                max_len = self.llm.llm_engine.model_config.max_model_len
-                # Use half of the model's context, capped at 8192 for stability.
-                dynamic_max_tokens = min(max_len // 2, 8192)
-            except AttributeError:
-                # Fallback if the attribute doesn't exist for some reason.
-                dynamic_max_tokens = 4096 # A safe fallback
+                # Start high and reduce until the model loads
+                max_len_to_try = theoretical_max_len
+                min_len = 2048
+                step = 2048
+                successful_load = False
 
+                while max_len_to_try >= min_len:
+                    try:
+                        # Attempt to initialize the model with the current max_len
+                        print(f"  Attempting to load model with max_model_len: {max_len_to_try}...")
+                        temp_llm = LLM(model=model_path, max_model_len=max_len_to_try, gpu_memory_utilization=0.9)
+                        # If we get here, the model loaded successfully
+                        self.llm = temp_llm
+                        max_len = max_len_to_try
+                        hardware_state[model_context_key] = max_len
+                        save_state() # Persist the successful value
+                        print(f"Successfully loaded model with max_model_len: {max_len}. Saved to state.")
+                        successful_load = True
+                        break
+                    except Exception as e:
+                        # A generic exception is caught, but we check for CUDA OOM messages
+                        if 'CUDA out of memory' in str(e) or 'Failed to allocate' in str(e):
+                            print(f"  Failed to load with max_model_len {max_len_to_try} (CUDA OOM). Reducing and retrying.")
+                            max_len_to_try -= step
+                        else:
+                            # It's a different error, so we should fail fast
+                            raise e
+                if not successful_load:
+                    raise RuntimeError(f"Could not load model {model_repo} even with a minimal context length of {min_len}.")
+
+            dynamic_max_tokens = min(max_len // 2, 8192)
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=dynamic_max_tokens)
-            # The DeepAgent library itself is not actually used in this implementation,
-            # as we are building a simplified version of its reasoning loop.
-            # This is a deviation from the original plan, but necessary to
-            # create a functional implementation without the full DeepAgent dependency.
             print("vLLM engine initialized successfully.")
+
         except Exception as e:
             print(f"Error initializing vLLM: {e}")
             self.llm = None # Ensure llm is None on failure

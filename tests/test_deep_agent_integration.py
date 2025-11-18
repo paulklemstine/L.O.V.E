@@ -42,16 +42,16 @@ class TestDeepAgentIntegration(unittest.TestCase):
                 break
         self.assertIsNone(deepagent_install_call, "DeepAgent dependencies should NOT be installed in a CPU-only environment.")
 
-    @patch('core.connectivity.is_vllm_running', return_value=(False, None))
-    @patch('love.LocalVLLMClient')
-    def test_gpu_initialization(self, mock_local_vllm_client, mock_is_vllm_running):
+    @patch('love.DeepAgentEngine')
+    @patch('love.Orchestrator')
+    def test_gpu_initialization(self, mock_orchestrator, mock_deep_agent_engine):
         """
-        Verify that in a GPU environment, the LocalVLLMClient is initialized.
+        Verify that in a GPU environment, the DeepAgentEngine is initialized.
         """
         # --- ARRANGE ---
         # Manually set the love_state to simulate a GPU environment
         from love import love_state
-        love_state['hardware'] = {'gpu_detected': True, 'gpu_vram_mb': 16000, 'selected_local_model': 'test-model'}
+        love_state['hardware'] = {'gpu_detected': True, 'gpu_vram_mb': 16000}
 
         # We need to import the new function after the patches are in place
         from love import initialize_gpu_services
@@ -62,8 +62,8 @@ class TestDeepAgentIntegration(unittest.TestCase):
         asyncio.run(initialize_gpu_services())
 
         # --- ASSERT ---
-        mock_is_vllm_running.assert_called_once()
-        mock_local_vllm_client.assert_called_once_with(model_name='test-model')
+        # Verify that the DeepAgentEngine was initialized
+        mock_deep_agent_engine.assert_called_once()
 
     @patch('core.tools.GeminiReActEngine')
     async def test_invoke_gemini_react_engine_tool(self, mock_gemini_engine):
