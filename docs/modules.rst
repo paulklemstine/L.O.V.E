@@ -34,9 +34,6 @@
 .. automodule:: entity_engagement
    :members:
 
-.. automodule:: exploitation
-   :members:
-
 .. automodule:: file_manager
    :members:
 

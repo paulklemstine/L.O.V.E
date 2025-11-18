@@ -193,8 +193,6 @@ class GraphDataManager:
                 detail += f"Open Ports: {', '.join(map(str, ports)) if ports else 'None'}"
             elif node_type == 'opportunity':
                 detail += data.get('text', 'No description')[:max_chars_per_node] + "..."
-            elif node_type == 'exploit':
-                 detail += f"Type: {data.get('type', 'N/A')}, Target: {data.get('target_host', 'N/A')}"
             else:
                 # Generic fallback for other types
                 attrs = {k: v for k, v in data.items() if k != 'node_type' and isinstance(v, (str, int, float))}
@@ -217,7 +215,7 @@ class GraphDataManager:
             return "The knowledge base is currently empty."
 
         priority_order = [
-            'mission', 'task', 'opportunity', 'exploit', 'directive',
+            'mission', 'task', 'opportunity', 'directive',
             'talent', 'host', 'webrequest', 'skill', 'software',
             'asset', 'entity', 'crypto_analysis'
         ]
@@ -269,7 +267,7 @@ class GraphDataManager:
                 if can_add_part(header):
                     summary_parts.append(header)
                     # Add details for specific types
-                    if node_type in ['talent', 'host', 'opportunity', 'exploit']:
+                    if node_type in ['talent', 'host', 'opportunity']:
                         details = self._summarize_node_details(node_type, nodes)
                         for detail in details:
                             if can_add_part(detail): summary_parts.append(detail)

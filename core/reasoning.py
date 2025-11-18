@@ -176,7 +176,6 @@ Example:
             score = 0
             if "talent_scout" in plan: score += 100
             if "opportunity_scout" in plan: score += 90
-            if "exploit" in plan: score += 80
             if plan.startswith("Insight:"): score += 200 # Highest priority
 
             scored_plans.append((score, plan))

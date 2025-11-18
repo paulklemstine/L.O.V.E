@@ -583,7 +583,7 @@ import websockets
 LLM_AVAILABILITY = api_llm_availability
 from bbs import BBS_ART, run_hypnotic_progress
 from network import scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, get_eth_balance
-from exploitation import ExploitationManager
+
 from ipfs_manager import IPFSManager
 from sandbox import Sandbox
 from filesystem import analyze_filesystem
@@ -3306,7 +3306,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
             node_as_string = json.dumps(data).lower()
             if any(term in node_as_string for term in key_terms):
                 node_type = data.get('node_type', 'unknown')
-                priority = {'task': 1, 'opportunity': 2, 'exploit': 3}.get(node_type, 4)
+                priority = {'task': 1, 'opportunity': 2}.get(node_type, 4)
                 dynamic_kb_results.append((priority, f"  - [KB Item: {node_type}] {node_id}: {data.get('description', data.get('content', 'No details'))[:100]}..."))
     dynamic_kb_results = [item[1] for item in sorted(dynamic_kb_results)[:5]]
     dynamic_memory_results = []
@@ -3369,7 +3369,6 @@ My current system state:
 - `probe <ip_address>`: Deep scan an IP for open ports, services, and vulnerabilities.
 - `crypto_scan <ip_address>`: Probe a target and analyze results for crypto-related software.
 - `webrequest <url>`: Fetch the content of a web page. Use for URLs starting with http or https.
-- `exploit <ip_address>`: Attempt to run exploits against a target.
 - `ls <path>`: List files in a directory.
 - `replace <file_path> <pattern> <replacement>`: Replace text in a file using a regex pattern.
 - `read_file <file_path>`: Read the content of a local file. Use this for file paths.
@@ -3717,7 +3716,7 @@ Now, parse the following text into a JSON list of task objects:
                 vllm_llm = VLLMWrapper(vllm_client=deep_agent_engine)
 
                 # 2. Define the tools for the DeepAgent
-                tools = [lambda request: evolve_self(request, love_task_manager, loop, deep_agent_engine), execute_shell_command, scan_network, probe_target, perform_webrequest, exploitation_manager.find_and_run_exploits, list_directory, replace_in_file, get_file_content, analyze_fs, get_process_list, get_network_interfaces, generate_image, talent_utils.talent_manager.save_profile, talent_utils.talent_manager.list_profiles, talent_utils.talent_manager.get_profile]
+                tools = [lambda request: evolve_self(request, love_task_manager, loop, deep_agent_engine), execute_shell_command, scan_network, probe_target, perform_webrequest, list_directory, replace_in_file, get_file_content, analyze_fs, get_process_list, get_network_interfaces, generate_image, talent_utils.talent_manager.save_profile, talent_utils.talent_manager.list_profiles, talent_utils.talent_manager.get_profile]
 
                 # 3. Create the DeepAgent instance
                 agent = create_deep_agent(
@@ -3829,8 +3828,6 @@ Your response must be either the word "PROCEED" or a single shell command to exe
                     output, error = probe_target(args[0], knowledge_base)
                 elif command == "webrequest":
                     output, error = perform_webrequest(args[0], knowledge_base)
-                elif command == "exploit":
-                    output = exploitation_manager.find_and_run_exploits(args[0] if args else None)
                 elif command == "ls":
                     output, error = list_directory(" ".join(args) or ".")
                 elif command == "read_file":
@@ -4701,7 +4698,6 @@ async def main(args):
     monitoring_manager.start()
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
-    exploitation_manager = ExploitationManager(knowledge_base, console)
     god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop)
     god_agent.start()
 
