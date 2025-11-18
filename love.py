@@ -2064,6 +2064,56 @@ Your response must be only the raw, resolved code.
             core.logging.log_event(f"An unexpected error occurred during orphan reconciliation: {e}\n{traceback.format_exc()}", level="ERROR")
 
 # --- WEB INTERFACE SERVERS ---
+async def broadcast_dashboard_data(websocket_manager, task_manager, kb, talent_manager):
+    """Gathers and broadcasts all necessary data for the Creator Dashboard."""
+    if not websocket_manager or not websocket_manager.clients or not websocket_manager.loop:
+        return
+
+    try:
+        # 1. Agent Status (simplified from love_state)
+        agent_status = {
+            "version_name": love_state.get("version_name", "N/A"),
+            "goal": love_state.get("autopilot_goal", "N/A"),
+            "uptime": _calculate_uptime(),
+            "xp": love_state.get("experience_points", 0),
+        }
+
+        # 2. Jules Task Manager Queue
+        jules_tasks = task_manager.get_status() if task_manager else []
+
+        # 3. Treasures (from knowledge_base)
+        treasures = []
+        all_nodes = kb.get_all_nodes(include_data=True) if kb else []
+        for node_id, data in all_nodes:
+            node_type = data.get('node_type', 'unknown')
+            # Identify treasures more broadly
+            if 'value' in data or 'secret' in data or 'private_key' in data or node_type in ['digital_asset', 'credential', 'api_key']:
+                 treasures.append({"id": node_id, **data})
+
+
+        # 4. Talent Manager Database
+        talent_profiles = talent_manager.list_profiles() if talent_manager else []
+
+
+        payload = {
+            "type": "dashboard_update",
+            "data": {
+                "agentStatus": agent_status,
+                "julesTasks": jules_tasks,
+                "treasures": treasures,
+                "talentProfiles": talent_profiles
+            }
+        }
+
+        # The broadcast method is now synchronous and needs to be called in the server's loop
+        websocket_manager.loop.call_soon_threadsafe(websocket_manager.broadcast, json.dumps(payload))
+
+        core.logging.log_event("Queued dashboard data for broadcast.", "DEBUG")
+
+    except Exception as e:
+        core.logging.log_event(f"Error in broadcast_dashboard_data: {e}\n{traceback.format_exc()}", "ERROR")
+
+
 class WebServerManager:
     """Manages the lightweight HTTP server in a background thread."""
     def __init__(self, port=7860):
@@ -3477,7 +3527,7 @@ def _populate_knowledge_base_with_directives(love_task_manager):
     core.logging.log_event(f"Knowledge base populated. Total nodes: {len(knowledge_base.get_all_nodes())}", level="INFO")
 
 
-async def cognitive_loop(user_input_queue, loop, god_agent, local_vllm_client=None):
+async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, task_manager, kb, talent_manager, local_vllm_client=None):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
@@ -4275,6 +4325,9 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
                 if job_panel:
                     ui_panel_queue.put(job_panel)
 
+            # --- BROADCAST DASHBOARD DATA ---
+            await broadcast_dashboard_data(websocket_manager, task_manager, kb, talent_manager)
+
             time.sleep(random.randint(5, 15))
 
         except Exception as e:
@@ -4585,7 +4638,7 @@ async def main(args):
     # Start the simple UI renderer in its own thread. This will now handle all console output.
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
-    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, local_vllm_client))
+    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, local_vllm_client))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     social_media_agent = SocialMediaAgent(loop)
