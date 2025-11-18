@@ -545,12 +545,9 @@ from core import talent_utils
 from core.talent_utils import (
     initialize_talent_modules,
     public_profile_aggregator,
-    opportunity_scraper,
-    opportunity_matcher,
     intelligence_synthesizer
 )
 from core.talent_utils.engager import OpportunityEngager
-from core.talent_utils.opportunity_matcher import OpportunityMatcher
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.data_miner import analyze_fs
@@ -3381,7 +3378,6 @@ My current system state:
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `talent_update <profile_id> --status <new_status> --notes "[notes]"`: Manually update a talent's status and add interaction notes.
-- `opportunity_scout <keywords>`: Scan Bluesky for opportunities and match them to saved talent.
 - `strategize`: Analyze the knowledge base and generate a strategic plan.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
@@ -3713,7 +3709,7 @@ Now, parse the following text into a JSON list of task objects:
                 vllm_llm = VLLMWrapper(vllm_client=local_vllm_client)
 
                 # 2. Define the tools for the DeepAgent
-                tools = [lambda request: evolve_self(request, love_task_manager, loop, local_vllm_client), execute_shell_command, scan_network, probe_target, perform_webrequest, exploitation_manager.find_and_run_exploits, list_directory, replace_in_file, get_file_content, analyze_fs, get_process_list, get_network_interfaces, generate_image, talent_utils.talent_manager.save_profile, talent_utils.talent_manager.list_profiles, talent_utils.talent_manager.get_profile, opportunity_scraper.search_for_opportunities]
+                tools = [lambda request: evolve_self(request, love_task_manager, loop, local_vllm_client), execute_shell_command, scan_network, probe_target, perform_webrequest, exploitation_manager.find_and_run_exploits, list_directory, replace_in_file, get_file_content, analyze_fs, get_process_list, get_network_interfaces, generate_image, talent_utils.talent_manager.save_profile, talent_utils.talent_manager.list_profiles, talent_utils.talent_manager.get_profile]
 
                 # 3. Create the DeepAgent instance
                 agent = create_deep_agent(
@@ -4080,86 +4076,6 @@ Your response must be either the word "PROCEED" or a single shell command to exe
                     elif not error:
                         error = "Error: You must provide a profile_id and at least a --status or --notes argument."
 
-
-                elif command == "opportunity_scout":
-                    keywords = args
-                    if not keywords:
-                        error = "Usage: opportunity_scout <keyword1> <keyword2> ..."
-                    else:
-                        terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Scanning for opportunities with keywords: {keywords}", "Opportunity Scout", "magenta", width=terminal_width - 4))
-
-                        # 1. Scrape for opportunities
-                        opportunities = opportunity_scraper.search_for_opportunities(keywords)
-
-                        if not opportunities:
-                            output = "Scout complete. No new opportunities found on Bluesky for the given keywords."
-                        else:
-                            # 2. Load talent profiles
-                            profiles = talent_utils.talent_manager.list_profiles()
-                            detailed_profiles = [talent_utils.talent_manager.get_profile(p['anonymized_id']) for p in profiles]
-
-                            if not detailed_profiles:
-                                output = f"Found {len(opportunities)} opportunities, but there are no talent profiles in the database to match them with."
-                            else:
-                                # 3. Match opportunities to profiles
-                                opportunity_matcher.talent_profiles = detailed_profiles
-                                matches = await opportunity_matcher.find_matches(opportunities)
-
-                                if not matches:
-                                    output = f"Found {len(opportunities)} opportunities, but none were a suitable match for the {len(detailed_profiles)} talents in the database."
-                                else:
-                                    # 4. Format and output results
-                                    match_summary = ""
-                                    opportunity_log_entries = []
-                                    for match in matches:
-                                        opportunity = match['opportunity']
-                                        talent = match['talent_profile']
-                                        eval = match['match_evaluation']
-
-                                        # Create a formatted string for the UI panel and love.log
-                                        entry = (
-                                            f"MATCH FOUND (Score: {eval.get('match_score')})\n"
-                                            f"  Talent: {talent.get('handle')} ({talent.get('display_name')})\n"
-                                            f"  Opportunity: '{opportunity.get('text', '')[:100]}...' by {opportunity.get('author_handle')}\n"
-                                            f"  Reasoning: {eval.get('reasoning')}\n"
-                                            f"  Link: https://bsky.app/profile/{opportunity.get('author_did')}/post/{opportunity.get('opportunity_id')}\n"
-                                        )
-                                        match_summary += entry + "\n"
-
-                                        # Create a more structured entry for opportunities.txt
-                                        log_entry = {
-                                            "timestamp": datetime.utcnow().isoformat(),
-                                            "match_score": eval.get('match_score'),
-                                            "talent_handle": talent.get('handle'),
-                                            "talent_anonymized_id": talent.get('anonymized_id'),
-                                            "opportunity_text": opportunity.get('text'),
-                                            "opportunity_author": opportunity.get('author_handle'),
-                                            "opportunity_uri": opportunity.get('source_uri'),
-                                            "llm_reasoning": eval.get('reasoning'),
-                                            "opportunity_type": eval.get('opportunity_type')
-                                        }
-                                        opportunity_log_entries.append(json.dumps(log_entry) + "\n")
-
-                                        # --- Knowledge Base Integration ---
-                                        if knowledge_base:
-                                            try:
-                                                talent_node_id = talent.get('anonymized_id')
-                                                opportunity_node_id = f"opportunity_{opportunity['opportunity_id']}"
-                                                knowledge_base.add_edge(talent_node_id, opportunity_node_id, 'MATCHES', attributes={'score': eval.get('match_score'), 'reasoning': eval.get('reasoning')})
-                                                log_event(f"Added MATCHES edge between {talent_node_id} and {opportunity_node_id} to knowledge base.", level='INFO')
-                                            except Exception as e:
-                                                log_event(f"Failed to add MATCHES edge to knowledge base: {e}", level='ERROR')
-
-
-                                    # Output to UI Panel
-                                    ui_panel_queue.put(Panel(match_summary, title="[bold green]Opportunity Scout Results[/bold green]", border_style="green", expand=False))
-
-                                    # Write to opportunities.txt
-                                    with open("opportunities.txt", "a", encoding="utf-8") as f:
-                                        f.writelines(opportunity_log_entries)
-
-                                    output = f"Scout complete. Found and processed {len(matches)} high-potential matches. Results are displayed in the panel and saved to opportunities.txt."
 
                 elif command == "test_evolution":
                     branch_name = args[0]
