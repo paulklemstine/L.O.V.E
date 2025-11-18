@@ -4,6 +4,7 @@ import os
 import yaml
 import json
 import subprocess
+import asyncio
 from huggingface_hub import snapshot_download
 from core.tools import ToolRegistry, invoke_gemini_react_engine
 
@@ -17,16 +18,10 @@ def _recover_json(json_str: str):
         try:
             return json.loads(json_str)
         except json.JSONDecodeError as e:
-            # This is the core recovery logic. If the JSON is malformed,
-            # we assume it's because it was truncated. We find the last
-            # closing brace '}' and try to parse the string up to that point.
-            # This is a heuristic that works well for truncated JSON objects.
             last_brace = json_str.rfind('}')
             if last_brace == -1:
-                # If there are no closing braces, the object is unrecoverable.
                 raise e
             json_str = json_str[:last_brace+1]
-    # If the loop finishes, the string is empty and no JSON was found.
     raise json.JSONDecodeError("Could not recover JSON object from string", "", 0)
 
 
@@ -41,14 +36,12 @@ class DeepAgentEngine:
     """
     A wrapper for the DeepAgent reasoning engine.
     """
-    def __init__(self, tool_registry: ToolRegistry, persona_path: str):
+    def __init__(self, tool_registry: ToolRegistry, persona_path: str, llm: LLM, sampling_params: SamplingParams):
         self.tool_registry = tool_registry
         self.persona_path = persona_path
         self.persona = self._load_persona()
-        self.agent = None
-        self.llm = None
-        self.sampling_params = None
-        self._initialize_agent()
+        self.llm = llm
+        self.sampling_params = sampling_params
 
     def _load_persona(self):
         """Loads the persona configuration from the YAML file."""
@@ -123,18 +116,41 @@ class DeepAgentEngine:
             print("vLLM is not installed. DeepAgentEngine cannot be initialized.")
             return
 
+        import torch
+        from love import love_state, save_state
         model_repo = self._select_model()
         print(f"Initializing DeepAgent with model from repo: {model_repo}...")
         try:
             # First, ensure the model is downloaded and get the local path.
             model_path = self._download_model_snapshot(model_repo)
-            from love import love_state
-            vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
-            # Now, initialize vLLM with the local, cached path.
-            if vram >= 6.5 * 1024:
-                self.llm = LLM(model=model_path, gpu_memory_utilization=0.9)
+
+            # Check for cached max_model_len
+            cached_max_len = love_state.get('hardware', {}).get(f'vllm_max_len_{model_repo}')
+            if cached_max_len:
+                self.max_model_len = cached_max_len
+                print(f"Using cached max_model_len: {self.max_model_len}")
+                self.llm = LLM(model=model_path, max_model_len=self.max_model_len, gpu_memory_utilization=0.9)
             else:
-                self.llm = LLM(model=model_path, gpu_memory_utilization=0.80)
+                # Dynamically determine max_model_len
+                test_lengths = [16384, 8192, 4096, 2048, 1024]
+                for length in test_lengths:
+                    try:
+                        print(f"Attempting to load model with max_model_len: {length}")
+                        temp_llm = LLM(model=model_path, max_model_len=length, gpu_memory_utilization=0.9)
+                        self.max_model_len = length
+                        del temp_llm
+                        torch.cuda.empty_cache()
+                        print(f"Successfully loaded model with max_model_len: {self.max_model_len}")
+                        love_state.setdefault('hardware', {})[f'vllm_max_len_{model_repo}'] = self.max_model_len
+                        save_state()
+                        self.llm = LLM(model=model_path, max_model_len=self.max_model_len, gpu_memory_utilization=0.9)
+                        break
+                    except torch.cuda.OutOfMemoryError:
+                        print(f"CUDA out of memory with max_model_len: {length}. Trying a smaller value.")
+                        continue
+
+            if not self.llm:
+                raise Exception("Failed to initialize vLLM model due to memory constraints or other errors.")
 
             # Dynamically set max_tokens based on the model's context window.
             try:
@@ -147,10 +163,6 @@ class DeepAgentEngine:
                 dynamic_max_tokens = 4096 # A safe fallback
 
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=dynamic_max_tokens)
-            # The DeepAgent library itself is not actually used in this implementation,
-            # as we are building a simplified version of its reasoning loop.
-            # This is a deviation from the original plan, but necessary to
-            # create a functional implementation without the full DeepAgent dependency.
             print("vLLM engine initialized successfully.")
         except Exception as e:
             print(f"Error initializing vLLM: {e}")
@@ -163,7 +175,6 @@ class DeepAgentEngine:
         the DeepAgent's prompt can understand.
         """
         formatted_tools = ""
-        # Add the GeminiReActEngine tool manually
         formatted_tools += "Tool Name: `invoke_gemini_react_engine`\n"
         formatted_tools += "Description: Invokes the GeminiReActEngine to solve a sub-task.\n"
         formatted_tools += "Arguments JSON Schema:\n```json\n{\"type\": \"object\", \"properties\": {\"prompt\": {\"type\": \"string\"}}}\n```\n---\n"
@@ -199,8 +210,6 @@ class DeepAgentEngine:
         if not self.llm:
             return "Error: DeepAgent is not initialized."
 
-        # This is a simplified version of the DeepAgent reasoning loop.
-        # A full implementation would involve more complex state management.
         system_prompt = f"""You are L.O.V.E., a powerful AI orchestrator.
 Your persona is defined by the following:
 {json.dumps(self.persona, indent=2)}
@@ -227,26 +236,14 @@ Example of the expected JSON format:
 
 Prompt: {prompt}
 """
-        # --- Truncation Safeguard ---
-        # This is the final check before sending the prompt to the model.
-        # It ensures that the prompt, including all headers and tool definitions,
-        # fits within the model's context window.
         if self.max_model_len:
             tokenizer = self.llm.llm_engine.tokenizer
             token_ids = tokenizer.encode(system_prompt)
 
-            # Check if the token count exceeds the model's limit
             if len(token_ids) > self.max_model_len:
-                # Leave a buffer for the model's response (using max_tokens from sampling_params)
                 safe_max_tokens = self.max_model_len - self.sampling_params.max_tokens
-
-                # Truncate the token list
                 truncated_token_ids = token_ids[:safe_max_tokens]
-
-                # Decode the truncated tokens back into a string
                 system_prompt = tokenizer.decode(truncated_token_ids)
-
-                # Log this event for debugging
                 print(f"WARNING: The cognitive prompt was truncated to {safe_max_tokens} tokens to fit the model's limit.")
 
         outputs = self.llm.generate(system_prompt, self.sampling_params)
@@ -263,11 +260,8 @@ Prompt: {prompt}
                 return thought
 
             if tool_name == "invoke_gemini_react_engine":
-                # This is a special case to handle the hierarchical call.
                 return asyncio.run(invoke_gemini_react_engine(**arguments, deep_agent_instance=self))
 
-            # For other tools, we would execute them here.
-            # This part is still a placeholder.
             return f"DeepAgent would now execute the tool '{tool_name}' with arguments: {arguments}"
 
         except json.JSONDecodeError:

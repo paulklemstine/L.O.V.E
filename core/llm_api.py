@@ -296,11 +296,12 @@ def get_top_horde_models(count=10, get_all=False):
     except Exception as e:
         log_event(f"Failed to fetch or rank AI Horde models: {e}", "ERROR")
         return ["Mythalion-13B"] # Fallback
+_models_initialized = False
 async def refresh_available_models():
     """
     Periodically fetches and updates the lists of available models from all providers.
     """
-    global OPENROUTER_MODELS, HORDE_MODELS
+    global OPENROUTER_MODELS, HORDE_MODELS, _models_initialized
     log_event("Refreshing available LLM models from external providers...", "INFO")
 
     # Run network-bound calls concurrently
@@ -319,8 +320,7 @@ async def refresh_available_models():
         HORDE_MODELS = new_horde_models
         log_event(f"Refreshed AI Horde models. Found {len(HORDE_MODELS)}.", "INFO")
 
-# Initial population
-asyncio.run(refresh_available_models())
+    _models_initialized = True
 
 
 # --- OpenAI Configuration ---
@@ -533,7 +533,10 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
     - 'goal_generation': Prioritizes local, uncensored models.
     - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
     """
-    global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT
+    global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT, _models_initialized
+    if not _models_initialized:
+        await refresh_available_models()
+
     # Moved import here to break circular dependency
     from love import ui_panel_queue
     console = Console()
