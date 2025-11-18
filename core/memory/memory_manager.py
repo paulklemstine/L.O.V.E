@@ -8,6 +8,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import List
 
+import faiss
+from sentence_transformers import SentenceTransformer
 import networkx as nx
 import numpy as np
 
@@ -73,8 +75,67 @@ class MemoryManager:
 
         # The MemoryManager now uses the central GraphDataManager
         self.graph_data_manager = graph_data_manager
-        self.model = None
+        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.faiss_index_path = "faiss_index.bin"
+        self.faiss_id_map_path = "faiss_id_map.json"
+        self.faiss_index = None
+        self.faiss_id_map = []
+        self._load_faiss_data()
 
+    def _load_faiss_data(self):
+        """Loads the FAISS index and the ID map from disk."""
+        if os.path.exists(self.faiss_index_path) and os.path.exists(self.faiss_id_map_path):
+            print("Loading FAISS index and ID map from disk.")
+            self.faiss_index = faiss.read_index(self.faiss_index_path)
+            with open(self.faiss_id_map_path, 'r') as f:
+                self.faiss_id_map = json.load(f)
+            # Verification step
+            if self.faiss_index.ntotal != len(self.faiss_id_map):
+                print("Warning: FAISS index and ID map are out of sync. Rebuilding.")
+                self._rebuild_faiss_index()
+        else:
+            print("No FAISS data found. A new index and map will be created.")
+            self._rebuild_faiss_index()
+
+    def _save_faiss_data(self):
+        """Saves the FAISS index and the ID map to disk."""
+        print(f"Saving FAISS index to {self.faiss_index_path}...")
+        faiss.write_index(self.faiss_index, self.faiss_index_path)
+        with open(self.faiss_id_map_path, 'w') as f:
+            json.dump(self.faiss_id_map, f)
+        print("FAISS data saved.")
+
+    def _rebuild_faiss_index(self):
+        """
+        Rebuilds the FAISS index and ID map from the graph data.
+        Includes a data migration step to generate embeddings for old memories.
+        """
+        print("Rebuilding FAISS index from scratch...")
+        # Dimension of the embeddings from all-MiniLM-L6-v2 is 384
+        self.faiss_index = faiss.IndexFlatL2(384)
+        self.faiss_id_map = []
+
+        all_memory_nodes = self.graph_data_manager.query_nodes("node_type", "MemoryNote")
+        for node_id in all_memory_nodes:
+            node_data = self.graph_data_manager.get_node(node_id)
+            if node_data:
+                note = MemoryNote.from_node_attributes(node_id, node_data)
+
+                # Data Migration: Generate embedding if it's missing
+                if note.embedding is None or note.embedding.size == 0:
+                    print(f"Generating missing embedding for old memory: {note.id}")
+                    note.embedding = self.embedding_model.encode([note.content])[0]
+                    # Persist the newly generated embedding back to the graph
+                    self.graph_data_manager.add_node(
+                        node_id=note.id,
+                        node_type="MemoryNote",
+                        attributes=note.to_node_attributes()
+                    )
+
+                self.faiss_index.add(np.array([note.embedding], dtype=np.float32))
+                self.faiss_id_map.append(note.id)
+
+        self._save_faiss_data()
 
     # --- Working Memory Methods ---
 
@@ -110,17 +171,36 @@ class MemoryManager:
             The created MemoryNote object, or None if the process failed.
         """
         print("Starting agentic processing for new memory...")
-        memory_note = await self._agentic_process_new_memory(content, external_tags=external_tags)
-        if not memory_note:
+
+        # 1. Get LLM-derived attributes first
+        attributes = await self._agentic_process_new_memory(content, external_tags=external_tags)
+        if not attributes:
             print("Agentic processing failed. Aborting memory addition.")
             return None
 
-        # Add the new node to the graph using the GraphDataManager
+        # 2. Generate embedding
+        embedding = self.embedding_model.encode([content])[0]
+
+        # 3. Create the definitive MemoryNote object
+        memory_note = MemoryNote(
+            content=content,
+            embedding=embedding,
+            contextual_description=attributes.get("contextual_description", ""),
+            keywords=attributes.get("keywords", []),
+            tags=attributes.get("tags", [])
+        )
+
+        # 4. Add to FAISS index and ID map
+        self.faiss_index.add(np.array([embedding], dtype=np.float32))
+        self.faiss_id_map.append(memory_note.id)
+
+        # 5. Add the new node to the graph using the GraphDataManager
         self.graph_data_manager.add_node(
             node_id=memory_note.id,
             node_type="MemoryNote",
             attributes=memory_note.to_node_attributes()
         )
+
         if self.ui_panel_queue:
             terminal_width = get_terminal_width()
             panel = create_agentic_memory_panel(memory_note.content, width=terminal_width - 4)
@@ -128,16 +208,18 @@ class MemoryManager:
         else:
             print(f"Successfully created agentic memory note {memory_note.id}.")
 
-
-        # Find and create links to related memories
+        # 6. Find and create links to related memories
         await self._find_and_link_related_memories(memory_note)
+
+        # 7. Save the updated FAISS data
+        self._save_faiss_data()
 
         return memory_note
 
-    async def _agentic_process_new_memory(self, content: str, external_tags: List[str] = None) -> MemoryNote | None:
+    async def _agentic_process_new_memory(self, content: str, external_tags: List[str] = None) -> dict | None:
         """
-        Uses an LLM to process a raw memory string into a structured memory note.
-        Returns a dictionary with the note's data, but does not add it to the graph.
+        Uses an LLM to process a raw memory string into a structured memory note's attributes.
+        Returns a dictionary with the note's data, but does not create the note object.
         """
         from core.llm_api import run_llm
 
@@ -193,15 +275,9 @@ class MemoryManager:
                     if tag not in tags:
                         tags.append(tag)
 
-            embedding = None
+            attributes['tags'] = tags
+            return attributes
 
-            return MemoryNote(
-                content=content,
-                embedding=embedding,
-                contextual_description=attributes.get("contextual_description", ""),
-                keywords=attributes.get("keywords", []),
-                tags=tags
-            )
         except json.JSONDecodeError as e:
             print(f"Error decoding LLM response for memory processing: {e}\\nReceived: {response_str}")
             return None
@@ -214,52 +290,37 @@ class MemoryManager:
         Finds semantically similar memories in the graph and uses an LLM to reason about linking them.
         Includes special logic for linking self-improvement memories to conflicting behaviors.
         """
-        all_memory_nodes = self.graph_data_manager.query_nodes("node_type", "MemoryNote")
-
-        if len(all_memory_nodes) <= 1:
+        if self.faiss_index.ntotal <= 1:
             print("No other memories to link to.")
             return
 
-        # 1. Find candidate nodes via semantic similarity
+        # 1. Find candidate nodes via semantic similarity using FAISS
+        query_embedding = np.array([new_note.embedding], dtype=np.float32)
+        # We search for k+1 because the most similar item will be the query itself
+        distances, indices = self.faiss_index.search(query_embedding, top_k + 1)
+
         candidates = []
-        for node_id in all_memory_nodes:
+        for i in indices[0]:
+            # Skip the first result if it is the query itself
+            node_id = self.faiss_id_map[i]
             if node_id == new_note.id:
                 continue
+
             node_data = self.graph_data_manager.get_node(node_id)
             if node_data:
                 candidates.append(MemoryNote.from_node_attributes(node_id, node_data))
 
+        # Ensure we don't exceed top_k if the query wasn't in the top results for some reason
+        candidates = candidates[:top_k]
+
         if not candidates:
-            print("No valid candidate memories found for linking.")
+            print("No sufficiently similar memories found for linking.")
             return
 
-        top_candidates = {}
-
-        # Story 2.2: Augment candidates for SelfReflection notes
-        if 'SelfReflection' in new_note.tags:
-            for candidate in candidates:
-                # Prioritize linking to behavioral outcomes
-                if any(kw in candidate.content.lower() for kw in ["task:", "outcome:", "success:"]):
-                    # If keywords overlap, it's a strong candidate for a causal link
-                    if set(new_note.keywords) & set(candidate.keywords):
-                        top_candidates[candidate.id] = candidate
-
-        # Story 4.4: Special logic for narrative-driven evolution memories
-        if 'SelfImprovement' in new_note.tags and "Insight: The" in new_note.content:
-            insight_text_match = re.search(r"Insight: The (.*?) tool's behavior is misaligned", new_note.content)
-            if insight_text_match:
-                conflicting_tool = insight_text_match.group(1).strip()
-                # Find the original behavioral memory that used this tool
-                for candidate in candidates:
-                    if f"{conflicting_tool}" in candidate.content:
-                        top_candidates[candidate.id] = candidate
-                        print(f"Found potential conflicting behavioral memory for {conflicting_tool}: {candidate.id}")
-
-        top_candidates = list(top_candidates.values())
-
-        if not top_candidates:
-            print("No sufficiently similar memories found to link.")
-            return
+        # With FAISS, the candidates are already the top semantically similar ones.
+        # The special logic for augmenting candidates based on keywords is now superseded.
+        # The LLM prompt is now responsible for reasoning about the nature of the link.
+        top_candidates = candidates
 
         # 2. Use LLM to reason about the links
         from core.llm_api import run_llm
