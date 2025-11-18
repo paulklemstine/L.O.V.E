@@ -513,7 +513,6 @@ _check_and_install_dependencies()
 from utils import verify_creator_instance
 IS_CREATOR_INSTANCE = verify_creator_instance()
 # Now that dependencies are installed, we can import modules that need them.
-from core.local_vllm_client import LocalVLLMClient
 from core.graph_manager import GraphDataManager
 knowledge_base = GraphDataManager()
 from core.memory.memory_manager import MemoryManager
