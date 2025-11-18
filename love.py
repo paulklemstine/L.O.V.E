@@ -4768,7 +4768,26 @@ async def run_safely():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_safely())
+    try:
+        asyncio.run(run_safely())
+    except Exception as e:
+        # --- FINAL FAILSAFE ---
+        # This is the absolute last line of defense. If an exception occurs
+        # even before the main run_safely() try block is entered, this will
+        # catch it and ensure it's logged.
+        full_traceback = traceback.format_exc()
+        try:
+            with open("love.log", "a") as f:
+                f.write("\n" + "="*80 + "\n")
+                f.write(f"FATAL PRE-STARTUP EXCEPTION at {datetime.now().isoformat()}\n")
+                f.write(full_traceback)
+                f.write("="*80 + "\n")
+        except Exception as log_e:
+            # If even this fails, print to the original stderr.
+            print(f"FATAL: Could not write to log file during pre-startup: {log_e}", file=sys.__stderr__)
+            print(f"Original Traceback:\n{full_traceback}", file=sys.__stderr__)
+        # Also print to console to ensure visibility
+        print(f"A fatal pre-startup exception occurred. Details have been written to love.log.\n{full_traceback}", file=sys.__stderr__)
 
 
 # End of love.py
