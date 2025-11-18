@@ -1,0 +1,1 @@
+pkill python3 -o || true && pkill node -o || true && pkill ipfs -o || true && ps -a
