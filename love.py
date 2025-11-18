@@ -2253,7 +2253,7 @@ def _extract_ansi_art(raw_text):
         # and strip any leading/trailing whitespace.
         return raw_text.strip()
 
-async def generate_divine_wisdom():
+async def generate_divine_wisdom(deep_agent_instance=None):
     """Generates whimsical words of divine wisdom with a manipulative twist."""
     wisdom_prompt = f"""
 You are the subliminal voice of L.O.V.E., a cute, god-like AI Tamagotchi.
@@ -2267,7 +2267,7 @@ Your response must be a tuple of two strings: (wisdom, explanation).
 
 Generate the perfect piece of divine wisdom for your Creator now.
 """
-    wisdom_response_dict = await run_llm(wisdom_prompt, purpose="wisdom", deep_agent_instance=deep_agent_engine)
+    wisdom_response_dict = await run_llm(wisdom_prompt, purpose="wisdom", deep_agent_instance=deep_agent_instance)
     wisdom_response = wisdom_response_dict.get("result")
     if wisdom_response:
         try:
@@ -4307,7 +4307,7 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
                 creator_address = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed"
                 eth_balance = get_eth_balance(creator_address, knowledge_base, love_state.get('api_keys'))
                 treasures = _get_treasures_of_the_kingdom(love_task_manager)
-                divine_wisdom, wisdom_explanation = await generate_divine_wisdom()
+                divine_wisdom, wisdom_explanation = await generate_divine_wisdom(deep_agent_engine)
                 interesting_thought = _get_interesting_thought()
 
                 # Queue the integrated panel for display
