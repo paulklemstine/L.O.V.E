@@ -3720,7 +3720,7 @@ Now, parse the following text into a JSON list of task objects:
 
                 # 3. Create the DeepAgent instance
                 agent = create_deep_agent(
-                    llm=vllm_llm,
+                    model=vllm_llm,
                     tools=tools,
                     system_prompt=cognitive_prompt
                 )
