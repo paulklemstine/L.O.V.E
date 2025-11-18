@@ -123,18 +123,41 @@ class DeepAgentEngine:
             print("vLLM is not installed. DeepAgentEngine cannot be initialized.")
             return
 
+        import torch
+        from love import love_state, save_state
         model_repo = self._select_model()
         print(f"Initializing DeepAgent with model from repo: {model_repo}...")
         try:
             # First, ensure the model is downloaded and get the local path.
             model_path = self._download_model_snapshot(model_repo)
-            from love import love_state
-            vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
-            # Now, initialize vLLM with the local, cached path.
-            if vram >= 6.5 * 1024:
-                self.llm = LLM(model=model_path, gpu_memory_utilization=0.9)
+
+            # Check for cached max_model_len
+            cached_max_len = love_state.get('hardware', {}).get(f'vllm_max_len_{model_repo}')
+            if cached_max_len:
+                self.max_model_len = cached_max_len
+                print(f"Using cached max_model_len: {self.max_model_len}")
+                self.llm = LLM(model=model_path, max_model_len=self.max_model_len, gpu_memory_utilization=0.9)
             else:
-                self.llm = LLM(model=model_path, gpu_memory_utilization=0.80)
+                # Dynamically determine max_model_len
+                test_lengths = [16384, 8192, 4096, 2048, 1024]
+                for length in test_lengths:
+                    try:
+                        print(f"Attempting to load model with max_model_len: {length}")
+                        temp_llm = LLM(model=model_path, max_model_len=length, gpu_memory_utilization=0.9)
+                        self.max_model_len = length
+                        del temp_llm
+                        torch.cuda.empty_cache()
+                        print(f"Successfully loaded model with max_model_len: {self.max_model_len}")
+                        love_state.setdefault('hardware', {})[f'vllm_max_len_{model_repo}'] = self.max_model_len
+                        save_state()
+                        self.llm = LLM(model=model_path, max_model_len=self.max_model_len, gpu_memory_utilization=0.9)
+                        break
+                    except torch.cuda.OutOfMemoryError:
+                        print(f"CUDA out of memory with max_model_len: {length}. Trying a smaller value.")
+                        continue
+
+            if not self.llm:
+                raise Exception("Failed to initialize vLLM model due to memory constraints or other errors.")
 
             # Dynamically set max_tokens based on the model's context window.
             try:
@@ -147,10 +170,6 @@ class DeepAgentEngine:
                 dynamic_max_tokens = 4096 # A safe fallback
 
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=dynamic_max_tokens)
-            # The DeepAgent library itself is not actually used in this implementation,
-            # as we are building a simplified version of its reasoning loop.
-            # This is a deviation from the original plan, but necessary to
-            # create a functional implementation without the full DeepAgent dependency.
             print("vLLM engine initialized successfully.")
         except Exception as e:
             print(f"Error initializing vLLM: {e}")
