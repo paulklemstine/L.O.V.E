@@ -31,7 +31,6 @@ from core.talent_utils.intelligence_synthesizer import (
     NetworkAnalyzer,
     AttributeProfiler,
 )
-from core.talent_utils.opportunity_matcher import OpportunityMatcher
 import io
 from rich.table import Table
 from datetime import datetime
@@ -39,67 +38,11 @@ from core.talent_utils.analyzer import TraitAnalyzer, ProfessionalismRater
 from core.talent_utils import (
     talent_manager,
     public_profile_aggregator,
-    opportunity_scraper,
-    opportunity_matcher,
     intelligence_synthesizer
 )
 
 
 love_state = {}
-
-async def opportunity_scout(keywords: list) -> str:
-    """Scans Bluesky for opportunities and matches them to saved talent."""
-    opportunities = opportunity_scraper.search_for_opportunities(keywords)
-
-    if not opportunities:
-        return "Scout complete. No new opportunities found on Bluesky for the given keywords."
-
-    profiles = talent_manager.list_profiles()
-    detailed_profiles = [talent_manager.get_profile(p['anonymized_id']) for p in profiles]
-
-    if not detailed_profiles:
-        return f"Found {len(opportunities)} opportunities, but there are no talent profiles in the database to match them with."
-
-    opportunity_matcher.talent_profiles = detailed_profiles
-    matches = await opportunity_matcher.find_matches(opportunities)
-
-    if not matches:
-        return f"Found {len(opportunities)} opportunities, but none were a suitable match for the {len(detailed_profiles)} talents in the database."
-
-    # Format and output results
-    match_summary = ""
-    opportunity_log_entries = []
-    for match in matches:
-        opportunity = match['opportunity']
-        talent = match['talent_profile']
-        eval = match['match_evaluation']
-
-        entry = (
-            f"MATCH FOUND (Score: {eval.get('match_score')})\\n"
-            f"  Talent: {talent.get('handle')} ({talent.get('display_name')})\\n"
-            f"  Opportunity: '{opportunity.get('text', '')[:100]}...' by {opportunity.get('author_handle')}\\n"
-            f"  Reasoning: {eval.get('reasoning')}\\n"
-            f"  Link: https://bsky.app/profile/{opportunity.get('author_did')}/post/{opportunity.get('opportunity_id')}\\n"
-        )
-        match_summary += entry + "\\n"
-
-        log_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "match_score": eval.get('match_score'),
-            "talent_handle": talent.get('handle'),
-            "talent_anonymized_id": talent.get('anonymized_id'),
-            "opportunity_text": opportunity.get('text'),
-            "opportunity_author": opportunity.get('author_handle'),
-            "opportunity_uri": opportunity.get('source_uri'),
-            "llm_reasoning": eval.get('reasoning'),
-            "opportunity_type": eval.get('opportunity_type')
-        }
-        opportunity_log_entries.append(json.dumps(log_entry) + "\\n")
-
-    with open("opportunities.txt", "a", encoding="utf-8") as f:
-        f.writelines(opportunity_log_entries)
-
-    return f"Scout complete. Found and processed {len(matches)} high-potential matches. Results saved to opportunities.txt."
 
 
 async def execute(command: str) -> str:
@@ -739,36 +682,3 @@ async def talent_scout(keywords: str, platforms: str = "bluesky,instagram,tiktok
         return f"Error during talent scouting: {e}"
 
 
-async def opportunity_scout(keywords: str) -> str:
-    """
-    Scouts for opportunities on Bluesky based on keywords.
-    Matches the opportunities with existing talent in the database and saves the matches.
-    """
-    try:
-        keyword_list = [k.strip() for k in keywords.split(',')]
-
-        scraper = OpportunityScraper(keywords=keyword_list)
-        opportunities = scraper.search_for_opportunities()
-
-        if not opportunities:
-            return "No opportunities found for the given keywords."
-
-        talent_manager = TalentManager()
-        profiles = talent_manager.list_talent_profiles()
-
-        if not profiles:
-            return "No talent found in the database to match opportunities with."
-
-        matcher = OpportunityMatcher(talent_profiles=profiles)
-        matches = await matcher.find_matches(opportunities)
-
-        if matches:
-            # Save the matches to a JSON file
-            matches_file = "opportunity_matches.json"
-            with open(matches_file, "w") as f:
-                json.dump(matches, f, indent=4)
-            return f"Successfully scouted {len(opportunities)} opportunities and found {len(matches)} matches. The matches have been saved to {matches_file}."
-
-        return f"Successfully scouted {len(opportunities)} opportunities, but no matches were found with the existing talent pool."
-    except Exception as e:
-        return f"Error during opportunity scouting: {e}"

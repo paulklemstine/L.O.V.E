@@ -9,8 +9,6 @@
 
 from .aggregator import PublicProfileAggregator
 from .manager import TalentManager
-from .matcher import OpportunityMatcher
-from .opportunity_scraper import OpportunityScraper
 from .intelligence_synthesizer import IntelligenceSynthesizer, SentimentAnalyzer, TopicModeler, OpportunityIdentifier, NetworkAnalyzer, AttributeProfiler
 
 # --- Singleton Instances ---
@@ -19,8 +17,6 @@ from .intelligence_synthesizer import IntelligenceSynthesizer, SentimentAnalyzer
 
 talent_manager: TalentManager = None
 public_profile_aggregator: PublicProfileAggregator = None
-opportunity_scraper: OpportunityScraper = None
-opportunity_matcher: OpportunityMatcher = None
 intelligence_synthesizer: IntelligenceSynthesizer = None
 
 def initialize_talent_modules(knowledge_base=None):
@@ -28,8 +24,8 @@ def initialize_talent_modules(knowledge_base=None):
     Initializes the singleton instances of the talent utility modules.
     This function should be called once when the application starts.
     """
-    global talent_manager, public_profile_aggregator, opportunity_scraper
-    global opportunity_matcher, intelligence_synthesizer
+    global talent_manager, public_profile_aggregator
+    global intelligence_synthesizer
 
     # Initialize TalentManager
     talent_manager = TalentManager(knowledge_base=knowledge_base)
@@ -40,14 +36,6 @@ def initialize_talent_modules(knowledge_base=None):
         platform_names=["bluesky"],
         ethical_filters=None
     )
-
-    # Initialize OpportunityScraper
-    opportunity_scraper = OpportunityScraper(
-        knowledge_base=knowledge_base
-    )
-
-    # Initialize OpportunityMatcher
-    opportunity_matcher = OpportunityMatcher()
 
     # Initialize IntelligenceSynthesizer with a default set of analysis modules
     intelligence_synthesizer = IntelligenceSynthesizer(modules=[
