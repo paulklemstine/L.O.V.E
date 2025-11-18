@@ -3741,6 +3741,8 @@ Now, parse the following text into a JSON list of task objects:
             # --- Command Execution ---
             if llm_command and llm_command.strip():
                 llm_command = llm_command.strip()
+                if llm_command.startswith("CMD:"):
+                    llm_command = llm_command[4:].strip()
 
                 terminal_width = get_terminal_width()
                 ui_panel_queue.put(create_news_feed_panel(f"Executing: `{llm_command}`", "Action", "yellow", width=terminal_width - 4))
