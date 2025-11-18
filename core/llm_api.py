@@ -516,7 +516,7 @@ def rank_models():
         # --- Boost score for preferred model types ---
         model_name_lower = model_id.lower()
         if 'uncensored' in model_name_lower or 'ablated' in model_name_lower or 'ablitterated' in model_name_lower:
-            final_score *= 1.2
+            final_score *= 1.05
             log_event(f"Boosting score for preferred model type: {model_id}", "INFO")
 
         ranked_models.append({"model_id": model_id, "score": final_score})
