@@ -10,7 +10,6 @@ from network import crypto_scan
 from datetime import datetime
 import time
 import ipaddress
-import netifaces
 import requests
 from xml.etree import ElementTree as ET
 from pycvesearch import CVESearch
@@ -201,6 +200,7 @@ def _parse_llm_command(raw_text):
 
 def get_local_subnets():
     """Identifies local subnets from network interfaces."""
+    import netifaces
     subnets = set()
     try:
         for iface in netifaces.interfaces():

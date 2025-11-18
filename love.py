@@ -88,7 +88,15 @@ except (FileNotFoundError, json.JSONDecodeError):
     pass # If file doesn't exist or is corrupt, we proceed with the default state.
 
 # --- Local Model Configuration ---
-# This configuration is now managed in core.llm_api
+# This map determines which local GGUF model to use based on available VRAM.
+# The keys are VRAM in MB. The logic will select the largest model that fits.
+VRAM_MODEL_MAP = {
+    4096:  {"repo_id": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF", "filename": "tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf"},
+    6144:  {"repo_id": "TheBloke/Uncensored-Jordan-7B-GGUF", "filename": "uncensored-jordan-7b.Q4_K_M.gguf"},
+    8192:  {"repo_id": "TheBloke/Llama-2-13B-chat-GGUF", "filename": "llama-2-13b-chat.Q4_K_M.gguf"},
+    16384: {"repo_id": "TheBloke/CodeLlama-34B-Instruct-GGUF", "filename": "codellama-34b-instruct.Q4_K_M.gguf"},
+    32768: {"repo_id": "TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF", "filename": "mixtral-8x7b-instruct-v0.1.Q5_K_M.gguf"},
+}
 local_llm_instance = None
 
 
@@ -399,6 +407,24 @@ def _auto_configure_hardware():
         love_state['hardware']['gpu_vram_mb'] = vram_mb
         _temp_log_event(f"NVIDIA GPU detected with {vram_mb} MB VRAM.", "CRITICAL")
         print(f"NVIDIA GPU detected with {vram_mb} MB VRAM.")
+
+        # --- Select the best model based on available VRAM ---
+        selected_model = None
+        for required_vram, model_info in sorted(VRAM_MODEL_MAP.items(), reverse=True):
+            if vram_mb >= required_vram:
+                selected_model = model_info
+                break
+
+        if selected_model:
+            love_state['hardware']['selected_local_model'] = selected_model
+            _temp_log_event(f"Selected local model {selected_model['repo_id']} for {vram_mb}MB VRAM.", "CRITICAL")
+            print(f"Selected local model: {selected_model['repo_id']}")
+        else:
+            love_state['hardware']['selected_local_model'] = None
+            _temp_log_event(f"No suitable local model found for {vram_mb}MB VRAM. CPU fallback will be used.", "WARNING")
+            print(f"No suitable local model found for {vram_mb}MB VRAM. Continuing in CPU-only mode.")
+
+
         # If GPU is detected, ensure vllm is installed
         if not is_dependency_met("vllm_installed"):
             print("GPU detected. Installing vllm for DeepAgent engine...")
@@ -456,16 +482,7 @@ def _check_and_install_dependencies():
     Orchestrates the installation of all dependencies, checking the status of each
     subsystem before attempting installation.
     """
-    _auto_configure_hardware()
-    _install_system_packages()
-    _install_python_requirements()
-
-    # Conditionally install DeepAgent dependencies if a GPU is detected
-    if love_state.get('hardware', {}).get('gpu_detected'):
-        print("GPU detected, installing DeepAgent dependencies...")
-        _install_requirements_file('requirements-deepagent.txt', 'deepagent_pkg_')
-
-    _configure_llm_api_key()
+    pass
 
 
 def _configure_llm_api_key():
@@ -496,6 +513,7 @@ _check_and_install_dependencies()
 from utils import verify_creator_instance
 IS_CREATOR_INSTANCE = verify_creator_instance()
 # Now that dependencies are installed, we can import modules that need them.
+from core.local_vllm_client import LocalVLLMClient
 from core.graph_manager import GraphDataManager
 knowledge_base = GraphDataManager()
 from core.memory.memory_manager import MemoryManager
@@ -4583,6 +4601,7 @@ async def initialize_gpu_services():
             console.print("[bold green]GPU detected. Initializing DeepAgent as the meta-orchestrator...[/bold green]")
             try:
                 selected_model = love_state.get('hardware', {}).get('selected_local_model')
+                print(f"DEBUG: Selected model in initialize_gpu_services: {selected_model}") # Temporary verification
                 if selected_model:
                     deep_agent_engine = DeepAgentEngine(model_name=selected_model)
                     core.logging.log_event("DeepAgentEngine initialized successfully.", level="CRITICAL")

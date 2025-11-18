@@ -5,11 +5,11 @@ import platform
 import ast
 import shutil
 import logging
-import netifaces
 import re
 
 
 def get_network_interfaces(autopilot_mode=False):
+    import netifaces
     """
     Retrieves detailed information about all network interfaces.
     Returns a tuple of (details_dict, error_string).
