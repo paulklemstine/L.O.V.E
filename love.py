@@ -2141,6 +2141,7 @@ class WebServerManager:
 
     def start(self):
         Handler = http.server.SimpleHTTPRequestHandler
+        socketserver.TCPServer.allow_reuse_address = True
         self.server = socketserver.TCPServer(("", self.port), Handler)
         self.thread = Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
