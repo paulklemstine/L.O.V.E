@@ -3505,6 +3505,12 @@ def call_mrl_service(service_name, method_name, *args):
                 print(f"Error in call_mrl_service waiting for response: {e}", file=sys.stderr, flush=True)
                 return None
 
+def evolve_self_wrapper(request):
+    """
+    Triggers the self-evolution process.
+    Use this tool when the agent needs to upgrade its own code, improve its capabilities, or modify its internal structure.
+    """
+    return evolve_self(request, love_task_manager, loop, deep_agent_engine)
 
 def _populate_knowledge_base_with_directives(love_task_manager):
     """
@@ -3716,8 +3722,23 @@ Now, parse the following text into a JSON list of task objects:
                 vllm_llm = VLLMWrapper(vllm_client=deep_agent_engine)
 
                 # 2. Define the tools for the DeepAgent
-                tools = [lambda request: evolve_self(request, love_task_manager, loop, deep_agent_engine), execute_shell_command, scan_network, probe_target, perform_webrequest, list_directory, replace_in_file, get_file_content, analyze_fs, get_process_list, get_network_interfaces, generate_image, talent_utils.talent_manager.save_profile, talent_utils.talent_manager.list_profiles, talent_utils.talent_manager.get_profile]
-
+                tools = [
+                    evolve_self_wrapper,
+                    execute_shell_command,
+                    scan_network,
+                    probe_target,
+                    perform_webrequest,
+                    list_directory,
+                    replace_in_file,
+                    get_file_content,
+                    analyze_fs,
+                    get_process_list,
+                    get_network_interfaces,
+                    generate_image,
+                    talent_utils.talent_manager.save_profile,
+                    talent_utils.talent_manager.list_profiles,
+                    talent_utils.talent_manager.get_profile
+                ]
                 # 3. Create the DeepAgent instance
                 agent = create_deep_agent(
                     model=vllm_llm,
