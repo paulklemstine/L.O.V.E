@@ -46,15 +46,16 @@ class SocialMediaAgent:
             return
 
         log_event(f"Generating new post for {platform}...", level='INFO')
-        content = await self.engine.run_post_generation()
-        if content:
+        post_data = await self.engine.run_post_generation()
+        if post_data and post_data.get('text'):
             payload = {
                 'action': 'post',
                 'platform_identifier': platform,
-                'content': content,
+                'content': post_data.get('text'),
+                'image': post_data.get('image')
             }
             result = await dispatch_structured_payload(payload, handler)
-            log_event(f"Posted to {platform}: {content}. Result: {result}", level='INFO')
+            log_event(f"Posted to {platform}: {post_data.get('text')}. Image attached: {post_data.get('image') is not None}. Result: {result}", level='INFO')
 
     async def _check_and_reply_to_comments(self, platform: str):
         """Checks for new comments on posts and replies thoughtfully."""
@@ -101,19 +102,32 @@ class SocialMediaAgent:
     async def run(self):
         """The main loop for the social media agent."""
         log_event("Social Media Agent started.", level='INFO')
+        last_post_time = 0
+        last_comment_check_time = 0
+        post_interval = 600  # 10 minutes
+        comment_check_interval = 300  # 5 minutes
+
         while True:
             try:
-                # Currently supports only Bluesky, can be extended to loop through handlers
+                current_time = time.time()
                 platform = 'bluesky'
-                if platform in self.handlers:
-                    if random.random() < 0.3:
-                        await self._attempt_action(self._post_new_content, platform)
-                    else:
-                        await self._attempt_action(self._check_and_reply_to_comments, platform)
-                else:
-                    log_event(f"Platform {platform} not supported.", level='WARNING')
 
-                await asyncio.sleep(random.randint(60, 180))
+                # Check if it's time to post new content
+                if current_time - last_post_time >= post_interval:
+                    log_event("Scheduled post time reached. Attempting to post.", level='INFO')
+                    if platform in self.handlers:
+                        await self._attempt_action(self._post_new_content, platform)
+                    last_post_time = time.time()
+
+                # Check if it's time to check for comments
+                if current_time - last_comment_check_time >= comment_check_interval:
+                    log_event("Scheduled comment check time reached. Attempting to check.", level='INFO')
+                    if platform in self.handlers:
+                        await self._attempt_action(self._check_and_reply_to_comments, platform)
+                    last_comment_check_time = time.time()
+
+                # Sleep for a short interval to prevent a busy loop and allow for graceful exit
+                await asyncio.sleep(60)
 
             except Exception as e:
                 log_event(f"Critical error in Social Media Agent loop: {e}\n{traceback.format_exc()}", level='CRITICAL')
