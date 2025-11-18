@@ -3288,7 +3288,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
     """
     def _get_token_count(text):
         """Returns the token count using the real tokenizer if available, otherwise falls back to a heuristic."""
-        if deep_agent_engine and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
+        if deep_agent_engine and hasattr(deep_agent_engine, 'llm') and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
             tokenizer = deep_agent_engine.llm.llm_engine.tokenizer
             return len(tokenizer.encode(text))
         else:
