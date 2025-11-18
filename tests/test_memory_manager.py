@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch, AsyncMock
 import numpy as np
+import os
 
 # Mock the GraphDataManager before importing MemoryManager
 from core.graph_manager import GraphDataManager
@@ -91,7 +92,13 @@ class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
         """Set up a new MemoryManager instance for each test."""
         # Reset mocks before each test to ensure isolation
         mock_graph_manager.reset_mock()
-        self.memory_manager = MemoryManager(graph_data_manager=mock_graph_manager)
+
+        # Patch the sentence transformer model to avoid loading it in every test
+        self.mock_sentence_transformer = MagicMock()
+        self.mock_sentence_transformer.encode.return_value = np.random.rand(1, 384)
+
+        with patch('sentence_transformers.SentenceTransformer', return_value=self.mock_sentence_transformer):
+            self.memory_manager = MemoryManager(graph_data_manager=mock_graph_manager)
 
     async def test_ingest_cognitive_cycle_creates_structured_memory(self):
         """
@@ -129,6 +136,81 @@ class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
 
         # 4. Verify that the correct tags were passed
         self.assertIn('CognitiveCycle', actual_tags)
+
+class TestMemoryManagerSemanticSearch(unittest.IsolatedAsyncioTestCase):
+
+    def setUp(self):
+        """Set up for semantic search tests, including real FAISS objects."""
+        self.mock_graph_manager = MagicMock(spec=GraphDataManager)
+        self.memory_manager = MemoryManager(graph_data_manager=self.mock_graph_manager)
+
+        # Clean up any old index files
+        if os.path.exists(self.memory_manager.faiss_index_path):
+            os.remove(self.memory_manager.faiss_index_path)
+        if os.path.exists(self.memory_manager.faiss_id_map_path):
+            os.remove(self.memory_manager.faiss_id_map_path)
+
+    def tearDown(self):
+        """Clean up FAISS index files after tests."""
+        if os.path.exists(self.memory_manager.faiss_index_path):
+            os.remove(self.memory_manager.faiss_index_path)
+        if os.path.exists(self.memory_manager.faiss_id_map_path):
+            os.remove(self.memory_manager.faiss_id_map_path)
+
+    async def test_semantic_search_finds_related_memories(self):
+        """
+        Verify that _find_and_link_related_memories uses FAISS to find semantically
+        similar notes and passes them as candidates to the LLM.
+        """
+        # --- Arrange ---
+        # 1. Create memory notes with known semantic relationships
+        note1 = MemoryNote(content="The cat sat on the mat.", embedding=self.memory_manager.embedding_model.encode(["The cat sat on the mat."])[0], contextual_description="", keywords=[], tags=[])
+        note2 = MemoryNote(content="A feline was resting on the rug.", embedding=self.memory_manager.embedding_model.encode(["A feline was resting on the rug."])[0], contextual_description="", keywords=[], tags=[])
+        note3 = MemoryNote(content="The dog barked at the moon.", embedding=self.memory_manager.embedding_model.encode(["The dog barked at the moon."])[0], contextual_description="", keywords=[], tags=[])
+
+        # 2. Manually populate the memory manager's state
+        self.memory_manager.faiss_index.add(np.array([note1.embedding, note2.embedding, note3.embedding], dtype=np.float32))
+        self.memory_manager.faiss_id_map.extend([note1.id, note2.id, note3.id])
+
+        # Mock the graph manager to return the notes when queried
+        self.mock_graph_manager.get_node.side_effect = lambda node_id: {
+            note1.id: note1.to_node_attributes(),
+            note2.id: note2.to_node_attributes(),
+            note3.id: note3.to_node_attributes(),
+        }.get(node_id)
+
+        # 3. Create the new note to be linked
+        new_note_content = "There was a kitty on the carpet."
+        new_note = MemoryNote(
+            content=new_note_content,
+            embedding=self.memory_manager.embedding_model.encode([new_note_content])[0],
+            contextual_description="", keywords=[], tags=[]
+        )
+
+        # 4. Mock the LLM call to isolate the candidate selection logic
+        mock_run_llm = AsyncMock(return_value={"result": "[]"})
+
+        # --- Act ---
+        with patch('core.llm_api.run_llm', new=mock_run_llm):
+            await self.memory_manager._find_and_link_related_memories(new_note, top_k=2)
+
+        # --- Assert ---
+        # 1. Verify that the LLM was called
+        mock_run_llm.assert_called_once()
+
+        # 2. Extract the prompt sent to the LLM
+        prompt = mock_run_llm.call_args[0][0]
+
+        # 3. Check that the prompt contains the summaries of the correct candidates
+        self.assertIn(note1.id, prompt)
+        self.assertIn(note1.content, prompt)
+        self.assertIn(note2.id, prompt)
+        self.assertIn(note2.content, prompt)
+
+        # 4. Check that the prompt does NOT contain the dissimilar note
+        self.assertNotIn(note3.id, prompt)
+        self.assertNotIn(note3.content, prompt)
+
 
 if __name__ == '__main__':
     unittest.main()
