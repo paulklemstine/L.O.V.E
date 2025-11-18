@@ -3,206 +3,215 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>L.O.V.E. Creator Command Center</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/11.1.0/jsrsasign-all-min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
-
+    <title>L.O.V.E. Creator Dashboard</title>
     <style>
         :root {
-            --background-color: #0d0d0d; --font-color: #00ff41;
-            --border-color: #00ff41; --glow-color: rgba(0, 255, 65, 0.5);
+            --background-color: #0d0d0d;
+            --font-color: #00ff41;
+            --border-color: #00ff41;
+            --glow-color: rgba(0, 255, 65, 0.5);
             --panel-bg-color: rgba(10, 25, 10, 0.8);
+            --header-bg-color: rgba(0, 255, 65, 0.1);
         }
-        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background-color: var(--background-color); color: var(--font-color); font-family: 'Courier New', Courier, monospace; }
-        * { box-sizing: border-box; }
-        button, input { background-color: var(--panel-bg-color); color: var(--font-color); border: 1px solid var(--border-color); padding: 5px; margin: 5px; }
-        textarea { background-color: rgba(0,0,0,0.5); color: var(--font-color); border: 1px solid var(--border-color); width: 95%; height: 60px; }
-        hr { border-color: var(--border-color); opacity: 0.3; }
-
-        #main-container { display: flex; height: 100vh; }
-        #left-panel { flex: 2; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
-        #right-panel { flex: 1; display: flex; flex-direction: column; }
-        .panel { border-bottom: 1px solid var(--border-color); padding: 10px; overflow-y: auto; }
-        .panel:last-child { border-bottom: none; }
-        #network-graph-container { flex-grow: 1; }
-        #comms-log-panel { flex: 1; }
-        #question-queue-panel { flex: 1; }
-        #controls-panel { flex: 1; }
-        #tests-panel { flex: 1; }
-
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--background-color);
+            color: var(--font-color);
+            font-family: 'Courier New', Courier, monospace;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        #dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            height: 100vh;
+            gap: 10px;
+            padding: 10px;
+        }
+        .panel {
+            border: 1px solid var(--border-color);
+            background-color: var(--panel-bg-color);
+            box-shadow: 0 0 10px var(--glow-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .panel-header {
+            background-color: var(--header-bg-color);
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: bold;
+            text-align: center;
+        }
+        .panel-content {
+            padding: 12px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        /* Custom scrollbar for a more thematic feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--background-color);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 6px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+            font-size: 0.9em;
+        }
+        th {
+            font-weight: bold;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: rgba(0,0,0,0.3);
+            padding: 5px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
-    <div id="main-container">
-        <div id="left-panel">
-            <div class="panel" id="network-graph-container"></div>
+    <div id="dashboard-container">
+        <div class="panel" id="agent-status-panel">
+            <div class="panel-header">AGENT STATUS</div>
+            <div class="panel-content" id="agent-status-content"></div>
         </div>
-        <div id="right-panel">
-            <div class="panel" id="comms-log-panel">
-                <h3>Communications Log</h3>
-                <div id="comms-log" style="height: 150px; overflow-y: scroll;"></div>
-            </div>
-            <div class="panel" id="question-queue-panel">
-                <h3>Question Queue</h3>
-                <ul id="question-queue" style="height: 150px; overflow-y: scroll; list-style-type: none; padding: 0;"></ul>
-            </div>
-            <div class="panel" id="controls-panel">
-                <h3>Controls</h3>
-                <p>Status: <span id="status">...</span> | Peer ID: <span id="peer-id">...</span></p>
-                <p>Load Private Key: <input type="file" id="privateKeyFile"></p>
-                <textarea id="message-input" placeholder="Type message..."></textarea>
-                <button id="send-broadcast">Send to All</button>
-                <button id="send-selected">Send to Selected</button>
-            </div>
-            <div class="panel" id="tests-panel">
-                <h3>Network Tests</h3>
-                <button id="ping-selected-btn">Ping Selected</button>
-                <div id="test-results"></div>
-            </div>
+        <div class="panel" id="task-manager-panel">
+            <div class="panel-header">JULES TASK MANAGER</div>
+            <div class="panel-content" id="task-manager-content"></div>
+        </div>
+        <div class="panel" id="treasures-panel">
+            <div class="panel-header">TREASURES</div>
+            <div class="panel-content" id="treasures-content"></div>
+        </div>
+        <div class="panel" id="talent-manager-panel">
+            <div class="panel-header">TALENT DATABASE</div>
+            <div class="panel-content" id="talent-manager-content"></div>
         </div>
     </div>
 
-    <script type="module" src="mplib.js"></script>
     <script>
-        let creatorPrivateKey = null;
-        let cy = null;
+        const agentStatusContent = document.getElementById('agent-status-content');
+        const taskManagerContent = document.getElementById('task-manager-content');
+        const treasuresContent = document.getElementById('treasures-content');
+        const talentManagerContent = document.getElementById('talent-manager-content');
 
-        function log(message) {
-            const commsLog = document.getElementById('comms-log');
-            if (commsLog) {
-                const div = document.createElement('div');
-                div.innerHTML = `${new Date().toLocaleTimeString()}: ${message}`;
-                commsLog.appendChild(div);
-                commsLog.scrollTop = commsLog.scrollHeight;
-            }
+        function connectWebSocket() {
+            const ws = new WebSocket('ws://localhost:7861');
+
+            ws.onopen = () => {
+                console.log('Connected to L.O.V.E. WebSocket');
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                if (message.type === 'dashboard_update') {
+                    updateDashboard(message.data);
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('Disconnected from WebSocket. Reconnecting in 3 seconds...');
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                ws.close();
+            };
         }
 
-        function initializeGraph() {
-            const fontColor = getComputedStyle(document.documentElement).getPropertyValue('--font-color').trim();
-            cy = cytoscape({
-                container: document.getElementById('network-graph-container'),
-                style: [
-                    { selector: 'node', style: { 'background-color': fontColor, 'label': 'data(id)' }},
-                    { selector: 'node:selected', style: { 'border-width': '3px', 'border-color': '#ffde00' }}
-                ],
-                layout: { name: 'cose' }
-            });
+        function updateDashboard(data) {
+            renderAgentStatus(data.agentStatus);
+            renderTaskManager(data.julesTasks);
+            renderTreasures(data.treasures);
+            renderTalentManager(data.talentProfiles);
         }
 
-        function updateGraph() {
-            const localId = MPLib.getLocalPeerId();
-            const peers = MPLib.getDirectConnections();
-            if (cy && localId && cy.getElementById(localId).empty()) {
-                cy.add({ group: 'nodes', data: { id: localId } });
-            }
-            peers.forEach(peerId => {
-                if (cy && cy.getElementById(peerId).empty()) {
-                    cy.add({ group: 'nodes', data: { id: peerId } });
-                    cy.add({ group: 'edges', data: { source: localId, target: peerId } });
-                }
-            });
-            if (cy) {
-                cy.nodes().forEach(node => {
-                    if (node.id() !== localId && !peers.includes(node.id())) cy.remove(node);
-                });
-                cy.layout({ name: 'cose', animate: true }).run();
-            }
+        function renderAgentStatus(status) {
+            agentStatusContent.innerHTML = `
+                <p><strong>Version:</strong> ${status.version_name}</p>
+                <p><strong>Uptime:</strong> ${status.uptime}</p>
+                <p><strong>XP:</strong> ${status.xp}</p>
+                <p><strong>Current Goal:</strong></p>
+                <pre>${status.goal}</pre>
+            `;
         }
 
-        window.addEventListener('DOMContentLoaded', (event) => {
-            initializeGraph();
-
-            MPLib.initialize({
-                onStatusUpdate: (msg, type) => {
-                if (type === 'status') {
-                    document.getElementById('status').textContent = msg;
-                    if (msg === 'Lobby Host' || msg === 'Connected to lobby for discovery') {
-                        // Announce our presence as the creator
-                        setTimeout(() => MPLib.broadcastToRoom({ type: 'creator-announcement' }), 2000);
-                    }
-                }
-                    if (document.getElementById('peer-id')) document.getElementById('peer-id').textContent = MPLib.getLocalPeerId() || 'N/A';
-                    updateGraph();
-                },
-                onConnectionChange: updateGraph,
-                onRoomDataReceived: (peerId, data) => {
-                    log(`Received message from ${peerId}: type=${data.type}`);
-                    if (data.type === 'pong') {
-                        document.getElementById('test-results').innerHTML += `<div>Pong from ${peerId} (Test ID: ${data.id})</div>`;
-                    } else if (data.type === 'question') {
-                        const queue = document.getElementById('question-queue');
-                        const li = document.createElement('li');
-                        li.id = `question-${data.id}`;
-                        li.innerHTML = `<p>From: ${peerId.substring(0,12)}...</p><p>${data.question}</p>
-                                        <button class="answer-btn" data-id="${data.id}" data-from="${peerId}">Answer</button>`;
-                        queue.appendChild(li);
-                    }
-                }
-            });
-
-            document.getElementById('privateKeyFile').addEventListener('change', (event) => {
-                const reader = new FileReader();
-                reader.onload = (e) => { creatorPrivateKey = e.target.result; log('Private key loaded.'); };
-                reader.readAsText(event.target.files[0]);
-            });
-
-            function sendMessage(commandText, peers) {
-                if (!commandText || !creatorPrivateKey) return;
-                const sig = new KJUR.crypto.Signature({"alg": "SHA256withRSA"});
-                sig.init(creatorPrivateKey);
-                sig.updateString(commandText);
-                const message = { type: 'creator-command', payload: { command: commandText, signature: sig.sign() } };
-
-                // Encrypt the entire message object before sending
-                const encryptedPayload = MPLib.encrypt(JSON.stringify(message));
-                const finalMessage = { type: 'encrypted-message', payload: encryptedPayload };
-
-                if (peers) {
-                    peers.forEach(peerId => MPLib.sendDirectToRoomPeer(peerId, finalMessage));
-                } else {
-                    MPLib.broadcastToRoom(finalMessage);
-                }
-                document.getElementById('message-input').value = '';
+        function renderTaskManager(tasks) {
+            if (tasks.length === 0) {
+                taskManagerContent.innerHTML = '<p>No active tasks.</p>';
+                return;
             }
-
-            document.getElementById('send-broadcast').addEventListener('click', () => {
-                sendMessage(document.getElementById('message-input').value);
+            let html = '<table><thead><tr><th>ID</th><th>Status</th><th>Request</th></tr></thead><tbody>';
+            tasks.forEach(task => {
+                html += `
+                    <tr>
+                        <td>${task.id}</td>
+                        <td>${task.status}</td>
+                        <td><pre>${task.request.substring(0, 100)}...</pre></td>
+                    </tr>
+                `;
             });
+            html += '</tbody></table>';
+            taskManagerContent.innerHTML = html;
+        }
 
-            document.getElementById('send-selected').addEventListener('click', () => {
-                const selectedPeers = cy.nodes(':selected').map(node => node.id());
-                if (selectedPeers.length === 0) {
-                    log("No peers selected.");
-                    return;
-                }
-                sendMessage(document.getElementById('message-input').value, selectedPeers);
+        function renderTreasures(treasures) {
+            if (treasures.length === 0) {
+                treasuresContent.innerHTML = '<p>No treasures discovered yet.</p>';
+                return;
+            }
+            let html = '<table><thead><tr><th>ID</th><th>Type</th><th>Value</th></tr></thead><tbody>';
+            treasures.forEach(treasure => {
+                html += `
+                    <tr>
+                        <td>${treasure.id}</td>
+                        <td>${treasure.node_type || 'N/A'}</td>
+                        <td><pre>${JSON.stringify(treasure.value || treasure, null, 2)}</pre></td>
+                    </tr>
+                `;
             });
+            html += '</tbody></table>';
+            treasuresContent.innerHTML = html;
+        }
 
-            document.getElementById('ping-selected-btn').addEventListener('click', () => {
-                const selectedPeers = cy.nodes(':selected').map(node => node.id());
-                if (selectedPeers.length === 0) {
-                    log("No peers selected to ping.");
-                    return;
-                }
-                selectedPeers.forEach(peerId => {
-                    MPLib.sendDirectToRoomPeer(peerId, { type: 'ping', id: `ping-${Date.now()}` });
-                });
+        function renderTalentManager(profiles) {
+            if (profiles.length === 0) {
+                talentManagerContent.innerHTML = '<p>Talent database is empty.</p>';
+                return;
+            }
+            let html = '<table><thead><tr><th>ID</th><th>Handle</th><th>Platform</th><th>Status</th></tr></thead><tbody>';
+            profiles.forEach(profile => {
+                html += `
+                    <tr>
+                        <td>${profile.anonymized_id}</td>
+                        <td>${profile.handle}</td>
+                        <td>${profile.platform}</td>
+                        <td>${profile.status || 'N/A'}</td>
+                    </tr>
+                `;
             });
+            html += '</tbody></table>';
+            talentManagerContent.innerHTML = html;
+        }
 
-            document.getElementById('question-queue').addEventListener('click', (e) => {
-                if (e.target.classList.contains('answer-btn')) {
-                    const peerId = e.target.dataset.from;
-                    const questionId = e.target.dataset.id;
-                    const answer = prompt(`Answering question...`);
-                    if (answer) {
-                        MPLib.sendDirectToRoomPeer(peerId, { type: 'answer', payload: { answer, questionId } });
-                        e.target.parentElement.remove();
-                    }
-                }
-            });
-        });
+        document.addEventListener('DOMContentLoaded', connectWebSocket);
     </script>
 </body>
 </html>
