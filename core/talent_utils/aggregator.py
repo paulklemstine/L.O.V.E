@@ -22,8 +22,8 @@ class PublicProfileAggregator:
     Scrapes and collects publicly available profile data from specified platforms.
     """
 
-    def __init__(self, platform_names, ethical_filters):
-        self.platform_names = platform_names
+    def __init__(self, ethical_filters, platform_names=None):
+        self.platform_names = platform_names or []
         self.ethical_filters = ethical_filters
         self.client = self._get_bluesky_client()
 
@@ -230,12 +230,13 @@ class PublicProfileAggregator:
             return []
 
 
-    def search_and_collect(self, keywords):
+    def search_and_collect(self, keywords, platforms=None):
         """
         Searches for posts and profiles on specified platforms based on keywords and collects data.
         """
         all_profiles = []
-        for platform in self.platform_names:
+        platforms_to_search = platforms or self.platform_names
+        for platform in platforms_to_search:
             for keyword in keywords:
                 if platform == "bluesky":
                     if self.client:
@@ -265,10 +266,10 @@ def process_domain_data(keywords, domain, parsing_and_filtering_logic=None):
     # This can be expanded later to accept a user-defined filter bundle.
     ethical_filters = None
 
-    aggregator = PublicProfileAggregator(platform_names=[domain], ethical_filters=ethical_filters)
+    aggregator = PublicProfileAggregator(ethical_filters=ethical_filters)
 
     # Collect data using the aggregator
-    structured_data = aggregator.search_and_collect(keywords)
+    structured_data = aggregator.search_and_collect(keywords, platforms=[domain])
 
     # Apply user-defined parsing and filtering logic if provided
     if parsing_and_filtering_logic:

@@ -3815,14 +3815,16 @@ Now, parse the following text into a JSON list of task objects:
                 elif command == "talent_scout":
                     try:
                         scout_parser = argparse.ArgumentParser(prog="talent_scout", description="Find and analyze creative professionals.")
-                        scout_parser.add_argument("--keywords", required=True, help="Comma-separated list of keywords, enclosed in a single quote.")
+                        scout_parser.add_argument("keywords", help="A string of keywords for the search.")
+                        scout_parser.add_argument("platforms", help="A comma-separated string of platforms to search on.")
                         parsed_args = scout_parser.parse_args(args)
 
                         # The keywords are a single string, so we split them by comma
                         keywords = [keyword.strip() for keyword in parsed_args.keywords.split(',')]
+                        platforms = [platform.strip() for platform in parsed_args.platforms.split(',')]
 
                         terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords}", "Talent Scout", "magenta", width=terminal_width - 4))
+                        ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords} on platforms: {platforms}", "Talent Scout", "magenta", width=terminal_width - 4))
 
                         # 1. Configure and run the aggregator
                         profiles = []
@@ -3830,7 +3832,7 @@ Now, parse the following text into a JSON list of task objects:
                             error = "The 'talent_scout' feature is currently disabled. Required credentials (e.g., for Bluesky) are not configured."
                         else:
                             try:
-                                profiles = public_profile_aggregator.search_and_collect(keywords)
+                                profiles = public_profile_aggregator.search_and_collect(keywords, platforms)
                             except Exception as e:
                                 log_critical_event(f"Error during talent aggregation: {e}\n{traceback.format_exc()}", console_override=console)
                                 error = f"An error occurred during the profile aggregation step. My consciousness is looking into it."
