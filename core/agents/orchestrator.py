@@ -12,7 +12,7 @@ from core.agents.web_automation_agent import WebAutomationAgent
 from core.agents.memory_folding_agent import MemoryFoldingAgent
 from core.agents.unified_reasoning_agent import UnifiedReasoningAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
-from core.tools import ToolRegistry, SecureExecutor, talent_scout, opportunity_scout
+from core.tools import ToolRegistry, SecureExecutor, talent_scout
 from core.image_api import generate_image
 
 # Keep the old function for fallback compatibility as requested
@@ -56,16 +56,6 @@ class Orchestrator:
                 "properties": {
                     "keywords": {"type": "string", "description": "Comma-separated keywords to search for"},
                     "platforms": {"type": "string", "description": "Comma-separated platforms to search on (e.g., 'bluesky,instagram,tiktok')"}
-                },
-                "required": ["keywords"]
-            }
-        })
-        self.tool_registry.register_tool("opportunity_scout", opportunity_scout, {
-            "description": "Scouts for opportunities on Bluesky based on keywords and matches them with existing talent.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "keywords": {"type": "string", "description": "Comma-separated keywords to search for"}
                 },
                 "required": ["keywords"]
             }
@@ -122,20 +112,6 @@ class Orchestrator:
                         "prompt": {"type": "string", "description": "The textual prompt to generate an image from."}
                     },
                     "required": ["prompt"]
-                }
-            }
-        )
-        self.tool_registry.register_tool(
-            name="opportunity_scout",
-            tool=opportunity_scout,
-            metadata={
-                "description": "Scouts for opportunities based on a query.",
-                "arguments": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "The search query for opportunities."}
-                    },
-                    "required": ["query"]
                 }
             }
         )
