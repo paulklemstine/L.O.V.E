@@ -1,10 +1,12 @@
 import json
 import os
 from typing import List, Dict, Any, Optional
+import uuid
 
-DESIRE_STATE_FILE = "desires.json"
+DESIRE_STATE_FILE = "desire_state.json"
 
 def get_desire_state_path() -> str:
+    """Gets the absolute path to the desire_state.json file."""
     return os.path.join(os.path.dirname(os.path.dirname(__file__)), DESIRE_STATE_FILE)
 
 def load_desire_state() -> Dict[str, Any]:
@@ -21,7 +23,7 @@ def load_desire_state() -> Dict[str, Any]:
     try:
         with open(path, 'r') as f:
             state = json.load(f)
-            state.setdefault("current_task_id", None) # Ensure compatibility
+            state.setdefault("current_task_id", None)
             return state
     except (json.JSONDecodeError, IOError):
         return default_state
@@ -32,40 +34,47 @@ def save_desire_state(state: Dict[str, Any]) -> None:
     with open(path, 'w') as f:
         json.dump(state, f, indent=2)
 
-def set_desires(desires: List[Dict[str, str]]) -> None:
+def set_desires(desires: List[Dict[str, Any]]) -> None:
     """Sets the desires and activates the process."""
+    desires_with_ids = []
+    for desire in desires:
+        if "id" not in desire:
+            desire["id"] = str(uuid.uuid4())
+        desires_with_ids.append(desire)
+
     state = {
-        "desires": desires,
+        "desires": desires_with_ids,
         "current_desire_index": 0,
         "active": True,
         "current_task_id": None
     }
     save_desire_state(state)
 
-def get_current_desire() -> Optional[Dict[str, str]]:
+def get_current_desire() -> Optional[Dict[str, Any]]:
     """Gets the current desire to be implemented."""
     state = load_desire_state()
-    if not state["active"] or not state["desires"]:
+    if not state.get("active") or not state.get("desires"):
         return None
-    index = state["current_desire_index"]
-    if 0 <= index < len(state["desires"]):
-        return state["desires"][index]
+    index = state.get("current_desire_index", -1)
+    desires = state.get("desires", [])
+    if 0 <= index < len(desires):
+        return desires[index]
     return None
 
 def set_current_task_id_for_desire(task_id: str) -> None:
     """Sets the task ID for the current desire."""
     state = load_desire_state()
-    if state["active"]:
+    if state.get("active"):
         state["current_task_id"] = task_id
         save_desire_state(state)
 
 def advance_to_next_desire() -> None:
     """Marks the current desire as complete and advances to the next one."""
     state = load_desire_state()
-    if state["active"]:
+    if state.get("active"):
         state["current_desire_index"] += 1
-        state["current_task_id"] = None  # Reset for the next desire
-        if state["current_desire_index"] >= len(state["desires"]):
+        state["current_task_id"] = None
+        if state["current_desire_index"] >= len(state.get("desires", [])):
             clear_desire_state()
         else:
             save_desire_state(state)
@@ -79,3 +88,48 @@ def clear_desire_state() -> None:
         "current_task_id": None
     }
     save_desire_state(state)
+
+# --- Functions for God Agent Tools ---
+
+def get_desires() -> List[Dict[str, Any]]:
+    """God Agent Tool: Gets all desires."""
+    state = load_desire_state()
+    return state.get("desires", [])
+
+def add_desire(title: str, description: str, plan: List[str] = None, notes: str = "") -> Dict[str, Any]:
+    """God Agent Tool: Adds a new desire to the backlog."""
+    state = load_desire_state()
+    new_desire = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "description": description,
+        "plan": plan if plan is not None else [],
+        "notes": notes,
+        "state": "pending"
+    }
+    state["desires"].append(new_desire)
+    save_desire_state(state)
+    return new_desire
+
+def remove_desire(desire_id: str) -> bool:
+    """God Agent Tool: Removes a desire from the backlog by its ID."""
+    state = load_desire_state()
+    original_length = len(state["desires"])
+    state["desires"] = [d for d in state["desires"] if d.get("id") != desire_id]
+    if len(state["desires"]) < original_length:
+        save_desire_state(state)
+        return True
+    return False
+
+def reorder_desires(desire_ids: List[str]) -> bool:
+    """God Agent Tool: Reorders the desires based on a provided list of IDs."""
+    state = load_desire_state()
+    desire_map = {d["id"]: d for d in state["desires"]}
+
+    if len(desire_ids) != len(state["desires"]) or set(desire_ids) != set(desire_map.keys()):
+        return False
+
+    reordered_desires = [desire_map[id] for id in desire_ids]
+    state["desires"] = reordered_desires
+    save_desire_state(state)
+    return True
