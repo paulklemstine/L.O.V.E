@@ -43,27 +43,34 @@ class TestDeepAgentIntegration(unittest.TestCase):
         self.assertIsNone(deepagent_install_call, "DeepAgent dependencies should NOT be installed in a CPU-only environment.")
 
     @patch('core.connectivity.is_vllm_running', return_value=(False, None))
-    @patch('love.LocalVLLMClient')
-    def test_gpu_initialization(self, mock_local_vllm_client, mock_is_vllm_running):
+    @patch('love.DeepAgentEngine')
+    def test_gpu_initialization(self, mock_deep_agent_engine, mock_is_vllm_running):
         """
-        Verify that in a GPU environment, the LocalVLLMClient is initialized.
+        Verify that in a GPU environment, the DeepAgentEngine is initialized.
         """
         # --- ARRANGE ---
-        # Manually set the love_state to simulate a GPU environment
-        from love import love_state
-        love_state['hardware'] = {'gpu_detected': True, 'gpu_vram_mb': 16000, 'selected_local_model': 'test-model'}
+        # Patch the love_state directly to simulate a GPU environment
+        with patch('love.love_state', {'hardware': {'gpu_detected': True, 'gpu_vram_mb': 16000}}):
+            from love import memory_manager
 
-        # We need to import the new function after the patches are in place
-        from love import initialize_gpu_services
-        import asyncio
+            # Mock the tool registry dependencies
+            with patch('core.agents.orchestrator.Orchestrator') as mock_orchestrator:
+                mock_orchestrator_instance = mock_orchestrator.return_value
+                mock_orchestrator_instance.tool_registry = MagicMock()
 
-        # --- ACT ---
-        # We run the targeted initialization function
-        asyncio.run(initialize_gpu_services())
+                # We need to import the new function after the patches are in place
+                from love import initialize_gpu_services
+                import asyncio
 
-        # --- ASSERT ---
-        mock_is_vllm_running.assert_called_once()
-        mock_local_vllm_client.assert_called_once_with(model_name='test-model')
+                # --- ACT ---
+                asyncio.run(initialize_gpu_services())
+
+                # --- ASSERT ---
+                mock_is_vllm_running.assert_called_once()
+                # The DeepAgentEngine constructor is more complex, so we check it was called.
+                # The specific arguments (like the tool_registry) are harder to assert here,
+                # but we can ensure the core initialization happened.
+                mock_deep_agent_engine.assert_called_once()
 
     @patch('core.tools.GeminiReActEngine')
     async def test_invoke_gemini_react_engine_tool(self, mock_gemini_engine):

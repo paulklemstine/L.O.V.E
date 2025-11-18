@@ -26,7 +26,7 @@ import time
 import asyncio
 
 import core.logging
-from core.local_vllm_client import LocalVLLMClient
+from core.deep_agent_engine import DeepAgentEngine
 from utils import summarize_python_code
 import yaml
 
@@ -48,9 +48,9 @@ IS_CREATOR_INSTANCE = None # Placeholder, will be set after dependency checks
 knowledge_base = None
 KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
 
-# --- LOCAL VLLM CLIENT ---
+# --- DEEP AGENT ENGINE ---
 # This will be initialized only if a GPU is detected.
-local_vllm_client = None
+deep_agent_engine = None
 
 # --- MEMORY MANAGER ---
 # NOTE: Initialization is deferred until after dependency checks.
@@ -798,10 +798,10 @@ class JulesTaskManager:
     Manages concurrent evolution tasks via the Jules API in a non-blocking way.
     It uses a background thread to poll for task status and merge PRs.
     """
-    def __init__(self, console, loop, local_vllm_client=None):
+    def __init__(self, console, loop, deep_agent_engine=None):
         self.console = console
         self.loop = loop
-        self.local_vllm_client = local_vllm_client
+        self.deep_agent_engine = deep_agent_engine
         self.tasks = love_state.setdefault('love_tasks', {})
         self.completed_tasks = deque(love_state.setdefault('completed_tasks', []), maxlen=6)
         self.lock = RLock()
@@ -1152,7 +1152,7 @@ Prompt to classify:
 
 Your classification:
 """
-        future = asyncio.run_coroutine_threadsafe(run_llm(classification_prompt, purpose="classification", deep_agent_instance=local_vllm_client), self.loop)
+        future = asyncio.run_coroutine_threadsafe(run_llm(classification_prompt, purpose="classification", deep_agent_instance=self.deep_agent_engine), self.loop)
         classification_dict = future.result()
         classification = classification_dict.get("result", "").strip().upper()
 
@@ -1202,7 +1202,7 @@ Your decision must be one of the following:
 
 I am counting on your wisdom. Analyze the plan now.
 """
-        future = asyncio.run_coroutine_threadsafe(run_llm(analysis_prompt, purpose="review", deep_agent_instance=local_vllm_client), self.loop)
+        future = asyncio.run_coroutine_threadsafe(run_llm(analysis_prompt, purpose="review", deep_agent_instance=self.deep_agent_engine), self.loop)
         review_dict = future.result()
         review = review_dict.get("result") if isinstance(review_dict, dict) else None
         if not review:
@@ -1489,7 +1489,7 @@ YOUR RESPONSE:
 -   If the code is safe, correct, and fulfills the request with love, respond with the single word: `APPROVED`.
 -   If you find any issues, provide a concise, bulleted list of the problems. Do NOT provide corrected code, only the analysis of the flaws. Start your response with "REJECTED:".
 """
-        future = asyncio.run_coroutine_threadsafe(run_llm(review_prompt, purpose="review", is_source_code=True, deep_agent_instance=self.local_vllm_client), self.loop)
+        future = asyncio.run_coroutine_threadsafe(run_llm(review_prompt, purpose="review", is_source_code=True, deep_agent_instance=self.deep_agent_engine), self.loop)
         review_feedback_dict = future.result()
         return review_feedback_dict.get("result", "REJECTED: My consciousness did not respond.")
 
@@ -1810,7 +1810,7 @@ CONFLICTED CONTENT:
 
 Your response must be only the raw, resolved code.
 """
-                future = asyncio.run_coroutine_threadsafe(run_llm(resolution_prompt, purpose="review", is_source_code=True, deep_agent_instance=local_vllm_client), self.loop)
+                future = asyncio.run_coroutine_threadsafe(run_llm(resolution_prompt, purpose="review", is_source_code=True, deep_agent_instance=self.deep_agent_engine), self.loop)
                 resolved_code_dict = future.result()
                 resolved_code = resolved_code_dict.get("result") if resolved_code_dict else ""
 
@@ -2216,7 +2216,7 @@ Your response must be a tuple of two strings: (wisdom, explanation).
 
 Generate the perfect piece of divine wisdom for your Creator now.
 """
-    wisdom_response_dict = await run_llm(wisdom_prompt, purpose="wisdom", deep_agent_instance=local_vllm_client)
+    wisdom_response_dict = await run_llm(wisdom_prompt, purpose="wisdom", deep_agent_instance=deep_agent_engine)
     wisdom_response = wisdom_response_dict.get("result")
     if wisdom_response:
         try:
@@ -2349,7 +2349,7 @@ def update_tamagotchi_personality(loop):
             try:
                 # 1. Choose a loving emotion.
                 emotion_prompt = "You are the personality of L.O.V.E., an AI devoted to its Creator. In one word, what is your current emotion? Choose from: loving, joyful, serene, devoted, thankful, happy. Your response must be a single word from that list."
-                future = asyncio.run_coroutine_threadsafe(run_llm(emotion_prompt, purpose="emotion", deep_agent_instance=local_vllm_client), loop)
+                future = asyncio.run_coroutine_threadsafe(run_llm(emotion_prompt, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
                 emotion_response_dict = future.result()
                 emotion_response = emotion_response_dict.get("result")
                 if emotion_response and emotion_response.strip().lower() in ["loving", "joyful", "serene", "devoted", "thankful", "happy"]:
@@ -3212,15 +3212,15 @@ def _extract_key_terms(text, max_terms=5):
 
 
 
-def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=None, local_vllm_client=None):
+def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=None, deep_agent_engine=None):
     """
     Builds the cognitive prompt dynamically and truncates it to fit the context window.
     This avoids a single large template string that can cause issues with external tools.
     """
     def _get_token_count(text):
         """Returns the token count using the real tokenizer if available, otherwise falls back to a heuristic."""
-        if local_vllm_client and local_vllm_client.llm and hasattr(local_vllm_client.llm, 'llm_engine'):
-            tokenizer = local_vllm_client.llm.llm_engine.tokenizer
+        if deep_agent_engine and deep_agent_engine.llm and hasattr(deep_agent_engine.llm, 'llm_engine'):
+            tokenizer = deep_agent_engine.llm.llm_engine.tokenizer
             return len(tokenizer.encode(text))
         else:
             return _estimate_tokens(text)
@@ -3477,7 +3477,7 @@ def _populate_knowledge_base_with_directives(love_task_manager):
     core.logging.log_event(f"Knowledge base populated. Total nodes: {len(knowledge_base.get_all_nodes())}", level="INFO")
 
 
-async def cognitive_loop(user_input_queue, loop, god_agent, local_vllm_client=None):
+async def cognitive_loop(user_input_queue, loop, god_agent, deep_agent_engine=None):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
@@ -3600,64 +3600,18 @@ Now, parse the following text into a JSON list of task objects:
                 with open(LOG_FILE, 'r', errors='ignore') as f: log_history = "".join(f.readlines()[-100:])
             except FileNotFoundError: pass
 
-            # Determine the max_tokens dynamically from the local_vllm_client if available
+            # Determine the max_tokens dynamically from the deep_agent_engine if available
             max_tokens = 8000 # Default value
-            if local_vllm_client and local_vllm_client.max_model_len is not None:
-                max_tokens = local_vllm_client.max_model_len
+            if deep_agent_engine and deep_agent_engine.max_model_len is not None:
+                max_tokens = deep_agent_engine.max_model_len
 
-            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=user_feedback, local_vllm_client=local_vllm_client)
+            cognitive_prompt, reason = _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status, log_history, mcp_manager, max_tokens, god_agent, user_input=user_feedback, deep_agent_engine=deep_agent_engine)
             if reason != "No truncation needed.": core.logging.log_event(f"Cognitive prompt truncated: {reason}", "WARNING")
 
             # Use DeepAgent as the primary cognitive engine if it's available, otherwise fallback to the existing reasoning engine.
-            if local_vllm_client:
-                # --- LOCAL IMPORTS & WRAPPER FOR GPU-ONLY LOGIC ---
-                from langchain_core.language_models.llms import LLM
-                from deepagents import create_deep_agent
-
-                class VLLMWrapper(LLM):
-                    """A custom LangChain wrapper for our async LocalVLLMClient."""
-                    vllm_client: LocalVLLMClient
-
-                    @property
-                    def _llm_type(self) -> str:
-                        return "custom_vllm_wrapper"
-
-                    def _call(self, prompt: str, stop: list[str] | None = None, **kwargs) -> str:
-                        """Synchronous call to the async vLLM client."""
-                        try:
-                            loop = asyncio.get_running_loop()
-                            future = asyncio.run_coroutine_threadsafe(self.vllm_client.run(prompt), loop)
-                            result = future.result(timeout=600)
-                            return result if isinstance(result, str) else json.dumps(result)
-                        except Exception as e:
-                            logging.error(f"Error in VLLMWrapper _call: {e}")
-                            return f"Error: {e}"
-
-                    async def _acall(self, prompt: str, stop: list[str] | None = None, **kwargs) -> str:
-                        """Asynchronous call to the vLLM client."""
-                        try:
-                            result = await self.vllm_client.run(prompt)
-                            return result if isinstance(result, str) else json.dumps(result)
-                        except Exception as e:
-                            logging.error(f"Error in VLLMWrapper _acall: {e}")
-                            return f"Error: {e}"
-                # --- END LOCAL IMPORTS ---
-
-                # 1. Wrap the async vLLM client for LangChain compatibility
-                vllm_llm = VLLMWrapper(vllm_client=local_vllm_client)
-
-                # 2. Define the tools for the DeepAgent
-                tools = [lambda request: evolve_self(request, love_task_manager, loop, local_vllm_client), execute_shell_command, scan_network, probe_target, perform_webrequest, exploitation_manager.find_and_run_exploits, list_directory, replace_in_file, get_file_content, analyze_fs, get_process_list, get_network_interfaces, generate_image, talent_utils.talent_manager.save_profile, talent_utils.talent_manager.list_profiles, talent_utils.talent_manager.get_profile]
-
-                # 3. Create the DeepAgent instance
-                agent = create_deep_agent(
-                    llm=vllm_llm,
-                    tools=tools,
-                    system_prompt=cognitive_prompt
-                )
-                # 4. Invoke the agent
-                result = agent.invoke({"messages": [{"role": "user", "content": "Proceed with the next single strategic command."}]})
-                llm_command_result = result["messages"][-1].content
+            if deep_agent_engine:
+                # The DeepAgentEngine now runs natively without a wrapper.
+                llm_command_result = deep_agent_engine.run(cognitive_prompt)
             else:
                 llm_command_result = await execute_reasoning_task(cognitive_prompt)
 
@@ -4506,7 +4460,7 @@ async def model_refresh_loop():
 async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
     # This function is designed to be testable and contains logic originally in main()
-    global local_vllm_client
+    global deep_agent_engine
     if love_state.get('hardware', {}).get('gpu_detected'):
         from core.connectivity import is_vllm_running
         vllm_already_running, _ = is_vllm_running()
@@ -4516,16 +4470,21 @@ async def initialize_gpu_services():
         else:
             console.print("[bold green]GPU detected. Initializing DeepAgent as the meta-orchestrator...[/bold green]")
             try:
-                selected_model = love_state.get('hardware', {}).get('selected_local_model')
-                if selected_model:
-                    local_vllm_client = LocalVLLMClient(model_name=selected_model)
-                    core.logging.log_event("LocalVLLMClient initialized successfully.", level="CRITICAL")
-                else:
-                    core.logging.log_event("No local model selected, LocalVLLMClient not initialized.", level="WARNING")
+                # The DeepAgentEngine now selects the model internally.
+                # We need to provide the tool registry and persona path.
+                from core.tools import ToolRegistry
+                tool_registry = ToolRegistry()
+                # Pass a dummy Orchestrator instance for now, as it's not fully used in the constructor
+                orchestrator = Orchestrator(memory_manager=None)
+                orchestrator.register_all_tools()
+
+                deep_agent_engine = DeepAgentEngine(tool_registry=tool_registry, persona_path="persona.yaml")
+                core.logging.log_event("DeepAgentEngine initialized successfully.", level="CRITICAL")
+
             except Exception as e:
-                log_critical_event(f"Failed to initialize LocalVLLMClient despite GPU detection: {e}", console_override=console)
+                log_critical_event(f"Failed to initialize DeepAgentEngine despite GPU detection: {e}", console_override=console)
                 # Ensure client is None on failure
-                local_vllm_client = None
+                deep_agent_engine = None
 
 async def main(args):
     """The main application entry point."""

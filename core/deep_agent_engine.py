@@ -118,6 +118,7 @@ class DeepAgentEngine:
     def _initialize_agent(self):
         """
         Initializes the vLLM instance and the DeepAgent itself.
+        This method now dynamically determines the optimal max_model_len based on available VRAM.
         """
         if not VLLM_AVAILABLE:
             print("vLLM is not installed. DeepAgentEngine cannot be initialized.")
@@ -125,34 +126,97 @@ class DeepAgentEngine:
 
         model_repo = self._select_model()
         print(f"Initializing DeepAgent with model from repo: {model_repo}...")
-        try:
-            # First, ensure the model is downloaded and get the local path.
-            model_path = self._download_model_snapshot(model_repo)
-            from love import love_state
-            vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
-            # Now, initialize vLLM with the local, cached path.
-            if vram >= 6.5 * 1024:
-                self.llm = LLM(model=model_path, gpu_memory_utilization=0.9)
-            else:
-                self.llm = LLM(model=model_path, gpu_memory_utilization=0.80)
 
-            # Dynamically set max_tokens based on the model's context window.
+        # --- Dynamic max_model_len Discovery ---
+        # A cache file to store the optimal max_model_len for the current hardware and model.
+        # The filename is a hash of the model repo and VRAM to ensure uniqueness.
+        import hashlib
+        from love import love_state
+        vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
+        cache_key = f"{model_repo}_{vram}".encode('utf-8')
+        cache_hash = hashlib.sha256(cache_key).hexdigest()
+        cache_filename = f".vllm_cache_{cache_hash}.json"
+
+        cached_max_len = None
+        if os.path.exists(cache_filename):
+            try:
+                with open(cache_filename, 'r') as f:
+                    cached_max_len = json.load(f).get('max_model_len')
+                if cached_max_len:
+                    print(f"Found cached optimal max_model_len: {cached_max_len}")
+            except (json.JSONDecodeError, IOError):
+                pass # If cache is invalid, we'll just rediscover.
+
+        try:
+            model_path = self._download_model_snapshot(model_repo)
+
+            # Get the model's default max length from its config file.
+            config_path = os.path.join(model_path, 'config.json')
+            with open(config_path, 'r') as f:
+                model_config = json.load(f)
+
+            # The context window key can vary between models. We check for common ones.
+            context_keys = ['max_position_embeddings', 'n_ctx', 'max_seq_len']
+            max_len_from_config = next((model_config.get(key) for key in context_keys if model_config.get(key)), 8192) # Default fallback
+
+
+            # --- Iterative Loading to Find Optimal Context Size ---
+            # We start with the cached value if available, otherwise the model's default.
+            # Then, we decrease the context size in steps until the model loads successfully.
+            # This is to prevent CUDA out-of-memory errors.
+            max_len_to_try = cached_max_len or max_len_from_config
+            gpu_mem_util = 0.9 if vram >= 6.5 * 1024 else 0.80
+
+            # The loop will try to load the model with decreasing context sizes.
+            # The step size for reduction is heuristic.
+            while max_len_to_try > 1024: # A reasonable lower bound
+                try:
+                    print(f"Attempting to load vLLM with max_model_len: {max_len_to_try}...")
+                    self.llm = LLM(
+                        model=model_path,
+                        gpu_memory_utilization=gpu_mem_util,
+                        max_model_len=max_len_to_try
+                    )
+                    # If we reach here, the model loaded successfully.
+                    print(f"Successfully loaded model with max_model_len: {max_len_to_try}")
+
+                    # Cache the successful value for next time.
+                    with open(cache_filename, 'w') as f:
+                        json.dump({'max_model_len': max_len_to_try}, f)
+
+                    break # Exit the loop
+                except RuntimeError as e:
+                    # More specific exception for CUDA OOM, which vLLM often raises as RuntimeError
+                    if "CUDA out of memory" in str(e):
+                        print(f"CUDA out of memory with max_model_len={max_len_to_try}. Reducing context size.")
+                    else:
+                        # Re-raise other runtime errors
+                        raise
+                except Exception as e:
+                    # We expect this might fail, especially on the first try.
+                    # This is usually a CUDA OOM error.
+                    print(f"Failed to load with max_model_len={max_len_to_try}: {e}")
+                    # Reduce the context length and try again.
+                    max_len_to_try = int(max_len_to_try * 0.85) # Reduce by 15%
+
+            if not self.llm:
+                raise RuntimeError("Failed to initialize vLLM even with reduced context window. The model may be too large for the available VRAM.")
+
+
+            # Dynamically set max_tokens based on the discovered context window.
             try:
                 # Correctly access the model config after the LLM is initialized.
-                max_len = self.llm.llm_engine.model_config.max_model_len
+                final_max_len = self.llm.llm_engine.model_config.max_model_len
+                self.max_model_len = final_max_len
                 # Use half of the model's context, capped at 8192 for stability.
-                dynamic_max_tokens = min(max_len // 2, 8192)
+                dynamic_max_tokens = min(final_max_len // 2, 8192)
             except AttributeError:
-                # Fallback if the attribute doesn't exist for some reason.
                 dynamic_max_tokens = 4096 # A safe fallback
 
             self.sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=dynamic_max_tokens)
-            # The DeepAgent library itself is not actually used in this implementation,
-            # as we are building a simplified version of its reasoning loop.
-            # This is a deviation from the original plan, but necessary to
-            # create a functional implementation without the full DeepAgent dependency.
             print("vLLM engine initialized successfully.")
-        except Exception as e:
+
+        except (RuntimeError, ValueError, FileNotFoundError) as e:
             print(f"Error initializing vLLM: {e}")
             self.llm = None # Ensure llm is None on failure
             raise
