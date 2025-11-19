@@ -3875,6 +3875,7 @@ Now, parse the following text into a JSON list of task objects:
                 # --- LOCAL IMPORTS & WRAPPER FOR GPU-ONLY LOGIC ---
                 from langchain_core.language_models.llms import LLM
                 from deepagents import create_deep_agent
+                from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
                 class VLLMWrapper(LLM):
                     """A custom LangChain wrapper for our async DeepAgentEngine."""
@@ -3942,7 +3943,42 @@ Now, parse the following text into a JSON list of task objects:
                     system_prompt=cognitive_prompt
                 )
                 # 4. Invoke the agent
-                result = agent.invoke({"messages": [{"role": "user", "content": "Proceed with the next single strategic command."}]})
+                # --- Construct Message History ---
+                message_history = []
+                # Handle the initial state where history is empty
+                if not history and not user_feedback:
+                    # On the very first turn with no history and no user input, start with a simple prompt.
+                    # This requires at least one message to be in the list.
+                    message_history.append(HumanMessage(content="Proceed with the next single strategic command."))
+                else:
+                    for i, entry in enumerate(history):
+                        command = entry.get("command", "")
+                        output = entry.get("output", "")
+                        # USER_FEEDBACK is from the user, so it's a HumanMessage
+                        if command == "USER_FEEDBACK":
+                            message_history.append(HumanMessage(content=output))
+                        # Other commands are initiated by the AI
+                        else:
+                            # Split command into tool name and arguments
+                            parts = command.split()
+                            tool_name = parts[0] if parts else "unknown_tool"
+                            tool_args = " ".join(parts[1:]) if len(parts) > 1 else ""
+                            tool_call_id = f"tool_call_{i}_{uuid.uuid4().hex[:4]}"
+
+                            # The AI's intent to call a tool
+                            message_history.append(AIMessage(content="", tool_calls=[{"name": tool_name, "args": tool_args, "id": tool_call_id}]))
+                            # The result of executing that tool
+                            message_history.append(ToolMessage(content=str(output), tool_call_id=tool_call_id))
+
+                    # If there was user feedback in this cycle, it should be the last message
+                    if user_feedback:
+                         message_history.append(HumanMessage(content=user_feedback))
+                    else:
+                        # If no user feedback, add the default prompt to continue
+                        message_history.append(HumanMessage(content="Proceed with the next single strategic command."))
+
+
+                result = agent.invoke({"messages": message_history})
                 llm_command_result = result["messages"][-1].content
             else:
                 llm_command_result = await execute_reasoning_task(cognitive_prompt)
