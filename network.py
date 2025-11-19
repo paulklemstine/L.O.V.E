@@ -231,6 +231,10 @@ def execute_shell_command(command, state):
     Executes a shell command and returns the output.
     This function is designed to be safer by avoiding `shell=True` where possible.
     """
+    """
+    Executes a shell command and returns the output.
+    This function is designed to be safer by avoiding `shell=True` where possible.
+    """
     from core.logging import log_event
 
     log_event(f"Executing shell command: {command}")
@@ -698,6 +702,11 @@ class NetworkDiagnostics:
         log_event(f"Opportunity found: {opportunity['title']}", "INFO")
         return opportunity
 def check_port_connectivity(target_host, ports):
+    """
+    Checks the status of specified ports on a target host.
+    - target_host: The IP address or hostname of the target.
+    - ports: A list of port numbers to check.
+    """
     """
     Checks the status of specified ports on a target host.
     - target_host: The IP address or hostname of the target.
