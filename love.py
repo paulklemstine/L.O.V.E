@@ -4831,15 +4831,19 @@ async def initialize_gpu_services():
                         # We expect this to fail, so we capture stderr. Timeout is important.
                         result = subprocess.run(preflight_command, capture_output=True, text=True, timeout=180)
 
-                        # Use regex to find the estimated length from the error message
-                        match = re.search(r"estimated maximum model length is (\d+)", result.stderr)
+                        # Use regex to find the estimated length from the new error message format
+                        match = re.search(r"max_position_embeddings=(\d+)", result.stderr)
+                        if not match:
+                            # Fallback to the other possible key in the error message
+                            match = re.search(r"model_max_length=(\d+)", result.stderr)
+
                         if match:
                             max_len = int(match.group(1))
                             core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len}", "INFO")
                             console.print(f"[green]Determined optimal max_model_len: {max_len}[/green]")
                         else:
                             core.logging.log_event(f"Could not determine optimal max_model_len from pre-flight check. Stderr: {result.stderr}", "WARNING")
-                            console.print("[yellow]Could not determine optimal max_model_len. Proceeding without it.[/yellow]")
+                            console.print("[yellow]Could not determine optimal max_model_len from vLLM error. Proceeding without it.[/yellow]")
                     except (subprocess.TimeoutExpired, Exception) as e:
                         core.logging.log_event(f"An error occurred during vLLM pre-flight check: {e}", "WARNING")
                         console.print(f"[yellow]An error occurred during vLLM pre-flight check: {e}. Proceeding without dynamic max_model_len.[/yellow]")
