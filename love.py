@@ -586,6 +586,7 @@ from core.talent_utils import (
     intelligence_synthesizer
 )
 from core.talent_utils.engager import OpportunityEngager
+from core.talent_utils.dynamic_prompter import DynamicPrompter
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.data_miner import analyze_fs
@@ -4001,64 +4002,58 @@ Your response must be either the word "PROCEED" or a single shell command to exe
                 elif command == "generate_image":
                     output = generate_image(" ".join(args))
                 elif command == "talent_scout":
-                    try:
-                        scout_parser = argparse.ArgumentParser(prog="talent_scout", description="Find and analyze creative professionals.")
-                        scout_parser.add_argument("keywords", help="A string of keywords for the search.")
-                        scout_parser.add_argument("platforms", help="A comma-separated string of platforms to search on.")
-                        parsed_args = scout_parser.parse_args(args)
-
-                        # The keywords are a single string, so we split them by comma
-                        keywords = [keyword.strip() for keyword in parsed_args.keywords.split(',')]
-                        platforms = [platform.strip() for platform in parsed_args.platforms.split(',')]
-
+                    desire = args_str.strip()
+                    if not desire:
+                        error = "Usage: talent_scout <a description of the desired talent>"
+                    else:
                         terminal_width = get_terminal_width()
-                        ui_panel_queue.put(create_news_feed_panel(f"Initiating talent scout protocol for keywords: {keywords} on platforms: {platforms}", "Talent Scout", "magenta", width=terminal_width - 4))
+                        ui_panel_queue.put(create_news_feed_panel(f"Interpreting The Creator's desire: '{desire}'", "Talent Scout", "magenta", width=terminal_width - 4))
 
-                        # 1. Configure and run the aggregator
-                        profiles = []
-                        if not public_profile_aggregator:
-                            error = "The 'talent_scout' feature is currently disabled. Required credentials (e.g., for Bluesky) are not configured."
+                        # 1. Use DynamicPrompter to generate search queries
+                        dynamic_prompter = DynamicPrompter()
+                        query_data = await dynamic_prompter.generate_search_queries(desire)
+
+                        if not query_data:
+                            error = "I was unable to interpret the desire into concrete search queries. Please try rephrasing."
                         else:
-                            try:
-                                profiles = public_profile_aggregator.search_and_collect(keywords, platforms)
-                            except Exception as e:
-                                log_critical_event(f"Error during talent aggregation: {e}\n{traceback.format_exc()}", console_override=console)
-                                error = f"An error occurred during the profile aggregation step. My consciousness is looking into it."
+                            keywords = query_data.get("keywords", [])
+                            platforms = query_data.get("platforms", [])
+                            ui_panel_queue.put(create_news_feed_panel(f"Generated Keywords: {keywords}\nGenerated Platforms: {platforms}", "Talent Scout", "cyan", width=terminal_width - 4))
 
-                        if not profiles and not error:
-                            output = "Talent scout protocol complete. No new profiles found for the given keywords."
-                        elif profiles:
-                            # 2. Configure and run the IntelligenceSynthesizer
-                            enriched_profiles = []
-                            try:
-                                enriched_profiles = await intelligence_synthesizer.run(profiles)
-                            except Exception as e:
-                                log_critical_event(f"Error during talent intelligence synthesis: {e}\n{traceback.format_exc()}", console_override=console)
-                                # We can still save the un-enriched profiles, which is better than nothing.
-                                enriched_profiles = profiles
-                                output = f"An error occurred during intelligence synthesis. Saving raw profiles instead."
+                            # 2. Configure and run the aggregator
+                            profiles = []
+                            if not public_profile_aggregator:
+                                error = "The 'talent_scout' feature is currently disabled. Required credentials are not configured."
+                            else:
+                                try:
+                                    profiles = public_profile_aggregator.search_and_collect(keywords, platforms)
+                                except Exception as e:
+                                    log_critical_event(f"Error during talent aggregation: {e}\n{traceback.format_exc()}", console_override=console)
+                                    error = "An error occurred during the profile aggregation step."
 
+                            if not profiles and not error:
+                                output = "Talent scout protocol complete. No new profiles found."
+                            elif profiles:
+                                # 3. Configure and run the IntelligenceSynthesizer
+                                enriched_profiles = []
+                                try:
+                                    enriched_profiles = await intelligence_synthesizer.run(profiles)
+                                except Exception as e:
+                                    log_critical_event(f"Error during talent intelligence synthesis: {e}\n{traceback.format_exc()}", console_override=console)
+                                    enriched_profiles = profiles
+                                    output = "An error occurred during intelligence synthesis. Saving raw profiles instead."
 
-                            # 3. Save the enriched profiles
-                            saved_count = 0
-                            for profile in enriched_profiles:
-                                save_result = talent_utils.talent_manager.save_profile(profile)
-                                if "Successfully" in save_result:
-                                    saved_count += 1
-                            # 4. Log results
-                            output = f"Talent scout protocol complete. Found {len(profiles)} profiles, enriched {len(enriched_profiles)}. "
-                            output += f"Successfully saved {saved_count} to the talent database.\n"
-                            output += f"See full details with `talent_view <id>` or `talent_list`."
-                    except SystemExit:
-                        # This is a bit of a hack to capture argparse's help text
-                        old_stdout = sys.stdout
-                        sys.stdout = captured_output = io.StringIO()
-                        try:
-                            scout_parser.print_help()
-                        except SystemExit:
-                            pass
-                        sys.stdout = old_stdout
-                        error = captured_output.getvalue()
+                                # 4. Save the enriched profiles
+                                saved_count = 0
+                                for profile in enriched_profiles:
+                                    save_result = talent_utils.talent_manager.save_profile(profile)
+                                    if "Successfully" in save_result:
+                                        saved_count += 1
+
+                                # 5. Log results
+                                output = (f"Talent scout protocol complete. Found {len(profiles)} profiles, "
+                                          f"enriched {len(enriched_profiles)}, and successfully saved {saved_count} "
+                                          f"to the talent database.\nUse `talent_list` or `talent_view <id>` to see details.")
                 elif command == "talent_list":
                     profiles = talent_utils.talent_manager.list_profiles()
                     if not profiles:
