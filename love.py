@@ -540,7 +540,7 @@ def _configure_llm_api_key():
 
             _temp_log_event("Configuring Google API key for the llm tool...", "INFO")
             subprocess.run(
-                ['llm', 'keys', 'set', 'google', '-v', api_key],
+                ['llm', 'keys', 'set', 'google', '--value', api_key],
                 check=True, capture_output=True, text=True
             )
             _temp_log_event("Successfully set Google API key for llm tool.", "INFO")
