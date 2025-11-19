@@ -422,7 +422,7 @@ def _auto_configure_hardware():
             target_vram_mb = max(0, free_vram_mb - buffer_mb)
             utilization_ratio = target_vram_mb / vram_mb if vram_mb > 0 else 0
             # Clamp the value between 0.1 and 0.95 for safety
-            safe_utilization = max(0.1, min(utilization_ratio, 0.95))
+            safe_utilization = max(0.1, min(utilization_ratio, 0.85))
             love_state['hardware']['gpu_utilization'] = round(safe_utilization, 2)
             _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Calculated safe GPU utilization: {love_state['hardware']['gpu_utilization']}", "INFO")
         except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
