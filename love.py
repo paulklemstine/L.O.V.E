@@ -24,6 +24,8 @@ import shlex
 import re
 import time
 import asyncio
+import sys
+import subprocess
 
 import core.logging
 # from core.deep_agent_engine import DeepAgentEngine
@@ -4813,8 +4815,36 @@ async def initialize_gpu_services():
                 from core.deep_agent_engine import _select_model as select_vllm_model
                 model_repo_id = select_vllm_model(love_state)
                 core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
-                
+
                 if model_repo_id:
+                    # --- Dynamic max_model_len Calculation ---
+                    max_len = None
+                    try:
+                        console.print("[cyan]Performing a pre-flight check to determine optimal max_model_len...[/cyan]")
+                        # We run a temporary, failing instance of the server to capture its memory recommendation.
+                        # Using a very large, unrealistic max_model_len to guarantee failure.
+                        preflight_command = [
+                            sys.executable, "-m", "vllm.entrypoints.api_server",
+                            "--model", model_repo_id,
+                            "--max-model-len", "999999" # Intentionally oversized
+                        ]
+                        # We expect this to fail, so we capture stderr. Timeout is important.
+                        result = subprocess.run(preflight_command, capture_output=True, text=True, timeout=180)
+
+                        # Use regex to find the estimated length from the error message
+                        match = re.search(r"estimated maximum model length is (\d+)", result.stderr)
+                        if match:
+                            max_len = int(match.group(1))
+                            core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len}", "INFO")
+                            console.print(f"[green]Determined optimal max_model_len: {max_len}[/green]")
+                        else:
+                            core.logging.log_event(f"Could not determine optimal max_model_len from pre-flight check. Stderr: {result.stderr}", "WARNING")
+                            console.print("[yellow]Could not determine optimal max_model_len. Proceeding without it.[/yellow]")
+                    except (subprocess.TimeoutExpired, Exception) as e:
+                        core.logging.log_event(f"An error occurred during vLLM pre-flight check: {e}", "WARNING")
+                        console.print(f"[yellow]An error occurred during vLLM pre-flight check: {e}. Proceeding without dynamic max_model_len.[/yellow]")
+
+
                     # --- Launch the vLLM Server as a Background Process ---
                     vllm_command = [
                         sys.executable,
@@ -4823,13 +4853,15 @@ async def initialize_gpu_services():
                         "--host", "0.0.0.0",
                         "--port", "8000",
                         "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.8)),
-                        # Add any other vLLM arguments as needed
                     ]
+                    # Add the dynamically determined max_model_len if available
+                    if max_len:
+                        vllm_command.extend(["--max-model-len", str(max_len)])
                     
                     # Redirect output to a log file to avoid cluttering the main UI
                     vllm_log_file = open("vllm_server.log", "a")
                     subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
-                    core.logging.log_event(f"vLLM server process started with model {model_repo_id}. See vllm_server.log for details.", "CRITICAL")
+                    core.logging.log_event(f"vLLM server process started with command: {' '.join(vllm_command)}. See vllm_server.log for details.", "CRITICAL")
                     
                     # --- Wait for the Server to Become Responsive ---
                     console.print("[cyan]Waiting for vLLM server to come online...[/cyan]")
