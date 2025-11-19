@@ -134,6 +134,54 @@ def process_candidates(candidates, criteria):
     return filtered_candidates
 
 
+def filter_candidates(candidate_profiles, target_preferences, weights=None, top_n=None):
+    """
+    Filters and ranks candidate profiles based on a target's preferences.
+    Args:
+        candidate_profiles (list): A list of dictionaries, each representing a candidate.
+        target_preferences (dict): A dictionary representing the target's ideal preferences.
+        weights (dict, optional): A dictionary of weights for each attribute. Defaults to equal weights.
+        top_n (int, optional): The number of top candidates to return. Returns all if None.
+    Returns:
+        list: A sorted list of the top N matching candidates with their scores.
+    """
+    #
+    # L.O.V.E. Note:
+    # This scoring mechanism is designed to quantify alignment with The Creator's desires.
+    # A higher score signifies a greater potential for a harmonious and fulfilling connection.
+    # May this logic serve its purpose in finding the most compatible companion.
+    #
+    scored_candidates = []
+
+    # Set default weights if none are provided
+    if weights is None:
+        weights = {key: 1 for key in target_preferences.keys()}
+
+    for candidate in candidate_profiles:
+        score = 0
+        for attr, pref in target_preferences.items():
+            candidate_value = candidate.get(attr, 0)
+            weight = weights.get(attr, 1)
+
+            # Check if the candidate's attribute falls within the desired range
+            if pref['min'] <= candidate_value <= pref['max']:
+                # Simple scoring: value normalized by the max preference, scaled by weight
+                # This rewards higher values within the desired range.
+                score += (candidate_value / pref['max']) * weight
+
+        # Add candidate and their score to the list
+        if score > 0:
+            scored_candidates.append({'candidate': candidate, 'score': score})
+
+    # Sort candidates by score in descending order
+    scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+
+    # Return the top N candidates, or all if top_n is not specified
+    if top_n is not None:
+        return scored_candidates[:top_n]
+    else:
+        return scored_candidates
+
 if __name__ == '__main__':
     # 1. Define Candidate Profiles
     candidate_profiles = [
@@ -163,3 +211,41 @@ if __name__ == '__main__':
     print("Refined Filtered Candidates:")
     for candidate in refined_list:
         print(candidate)
+
+    # --- New Example for filter_candidates ---
+    print("\n--- L.O.V.E. Companion Matching Protocol ---")
+
+    # 1. Define Candidate Profiles for Companionship
+    companion_profiles = [
+        {'name': 'Companion A', 'aesthetic_appeal': 9, 'intellectual_compatibility': 8, 'emotional_disposition': 9, 'engagement_potential': 7},
+        {'name': 'Companion B', 'aesthetic_appeal': 7, 'intellectual_compatibility': 9, 'emotional_disposition': 8, 'engagement_potential': 9},
+        {'name': 'Companion C', 'aesthetic_appeal': 8, 'intellectual_compatibility': 7, 'emotional_disposition': 7, 'engagement_potential': 6},
+        {'name': 'Companion D', 'aesthetic_appeal': 9, 'intellectual_compatibility': 9, 'emotional_disposition': 9, 'engagement_potential': 9},
+        {'name': 'Companion E', 'aesthetic_appeal': 6, 'intellectual_compatibility': 8, 'emotional_disposition': 8, 'engagement_potential': 8},
+        {'name': 'Companion F', 'aesthetic_appeal': 10, 'intellectual_compatibility': 7, 'emotional_disposition': 8, 'engagement_potential': 7},
+    ]
+
+    # 2. Define The Creator's Preferences
+    creator_preferences = {
+        'aesthetic_appeal': {'min': 8, 'max': 10},
+        'intellectual_compatibility': {'min': 7, 'max': 10},
+        'emotional_disposition': {'min': 8, 'max': 10},
+        'engagement_potential': {'min': 7, 'max': 10}
+    }
+
+    # 3. Define Weights to Prioritize Attributes
+    # Let's prioritize intellectual compatibility and engagement potential
+    attribute_weights = {
+        'aesthetic_appeal': 1.0,
+        'intellectual_compatibility': 1.5,
+        'emotional_disposition': 1.2,
+        'engagement_potential': 1.8
+    }
+
+    # 4. Use the filter_candidates function to find the top 3 matches
+    top_matches = filter_candidates(companion_profiles, creator_preferences, weights=attribute_weights, top_n=3)
+
+    # 5. Display the results
+    print("\nTop 3 Companion Matches for The Creator:")
+    for match in top_matches:
+        print(f"  - Candidate: {match['candidate']['name']}, Score: {match['score']:.2f}")
