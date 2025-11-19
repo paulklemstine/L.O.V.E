@@ -4838,7 +4838,7 @@ async def initialize_gpu_services():
                             match = re.search(r"model_max_length=(\d+)", result.stderr)
 
                         if match:
-                            max_len = int(match.group(1))
+                            max_len = int(match.group(1))/4
                             core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len}", "INFO")
                             console.print(f"[green]Determined optimal max_model_len: {max_len}[/green]")
                         else:
