@@ -3978,6 +3978,12 @@ Now, parse the following text into a JSON list of task objects:
                         message_history.append(HumanMessage(content="Proceed with the next single strategic command."))
 
 
+                # FIX: Ensure there's at least one AIMessage in the history if it's not empty,
+                # to prevent UnboundLocalError in the agent's routing logic.
+                if message_history and not any(isinstance(m, AIMessage) for m in message_history):
+                    # Prepending an empty AI message to satisfy the agent's structural expectations.
+                    message_history.insert(0, AIMessage(content=""))
+
                 result = agent.invoke({"messages": message_history})
                 llm_command_result = result["messages"][-1].content
             else:
