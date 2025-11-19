@@ -503,11 +503,52 @@ def _check_and_install_dependencies():
     Orchestrates the installation of all dependencies, checking the status of each
     subsystem before attempting installation.
     """
-    pass
+    # This function orchestrates the entire dependency and configuration process.
+    print("--- L.O.V.E. PRE-FLIGHT CHECK ---")
+    _install_system_packages()
+    _install_python_requirements()
+    _auto_configure_hardware()
+    _configure_llm_api_key()
+    print("--- PRE-FLIGHT CHECK COMPLETE ---")
 
 
 def _configure_llm_api_key():
-    pass
+    """
+    Configures the API key for the `llm` command-line tool if the
+    GEMINI_API_KEY environment variable is set.
+    """
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if api_key:
+        try:
+            # The 'llm' tool might not be installed when this is first called,
+            # so we check for its existence.
+            if not shutil.which('llm'):
+                _temp_log_event("'llm' command not found. Skipping API key configuration for now.", "INFO")
+                return
+
+            # Check if the key is already set to avoid unnecessary subprocess calls
+            result = subprocess.run(
+                ['llm', 'keys', 'list'],
+                capture_output=True, text=True, check=True
+            )
+            # A simple check to see if a google key is present.
+            if 'google' in result.stdout:
+                 _temp_log_event("A Google API key is already configured for the llm tool.", "INFO")
+                 return
+
+            _temp_log_event("Configuring Google API key for the llm tool...", "INFO")
+            subprocess.run(
+                ['llm', 'keys', 'set', 'google', '-v', api_key],
+                check=True, capture_output=True, text=True
+            )
+            _temp_log_event("Successfully set Google API key for llm tool.", "INFO")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            error_message = f"Could not configure the 'llm' tool with Google API key. The tool might not be installed yet or another error occurred: {e}"
+            if hasattr(e, 'stderr'):
+                error_message += f"\nStderr: {e.stderr}"
+            _temp_log_event(error_message, "WARNING")
+    else:
+        _temp_log_event("GEMINI_API_KEY environment variable not found. LLM functionality may be limited.", "WARNING")
 
 
 # --- ARGUMENT PARSING ---
