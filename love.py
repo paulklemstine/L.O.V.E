@@ -408,6 +408,27 @@ def _auto_configure_hardware():
         _temp_log_event(f"NVIDIA GPU detected with {vram_mb} MB VRAM.", "CRITICAL")
         print(f"NVIDIA GPU detected with {vram_mb} MB VRAM.")
 
+        # --- Dynamically Calculate GPU Memory Utilization ---
+        try:
+            free_mem_result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, check=True
+            )
+            free_vram_mb = int(free_mem_result.stdout.strip())
+            # Leave a 512MB buffer for safety
+            buffer_mb = 512
+            target_vram_mb = max(0, free_vram_mb - buffer_mb)
+            utilization_ratio = target_vram_mb / vram_mb if vram_mb > 0 else 0
+            # Clamp the value between 0.1 and 0.95 for safety
+            safe_utilization = max(0.1, min(utilization_ratio, 0.95))
+            love_state['hardware']['gpu_utilization'] = round(safe_utilization, 2)
+            _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Calculated safe GPU utilization: {love_state['hardware']['gpu_utilization']}", "INFO")
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
+            # Fallback to a conservative default if the free memory check fails
+            love_state['hardware']['gpu_utilization'] = 0.8
+            _temp_log_event(f"Could not determine free VRAM ({e}). Falling back to default GPU utilization: 0.8", "WARNING")
+
+
         # --- Select the best model based on available VRAM ---
         selected_model = None
         for required_vram, model_info in sorted(VRAM_MODEL_MAP.items(), reverse=True):
@@ -4643,7 +4664,7 @@ async def initialize_gpu_services():
                         "--model", model_repo_id,
                         "--host", "0.0.0.0",
                         "--port", "8000",
-                        "--gpu-memory-utilization", "0.90",
+                        "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.8)),
                         # Add any other vLLM arguments as needed
                     ]
                     
