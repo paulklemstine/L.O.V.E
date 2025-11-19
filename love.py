@@ -26,9 +26,9 @@ import time
 import asyncio
 
 import core.logging
-from core.deep_agent_engine import DeepAgentEngine
+# from core.deep_agent_engine import DeepAgentEngine
 from utils import summarize_python_code
-import yaml
+# import yaml
 
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
@@ -571,7 +571,10 @@ if args.install_deps_only:
 _check_and_install_dependencies()
 
 # --- DEFERRED INITIALIZATIONS ---
+# Now that the dependencies are installed, we can safely import modules that depend on them.
+from core.deep_agent_engine import DeepAgentEngine
 # Now that dependencies are installed, we can safely import utils and check the instance type.
+import yaml
 from utils import verify_creator_instance
 IS_CREATOR_INSTANCE = verify_creator_instance()
 # Now that dependencies are installed, we can import modules that need them.
