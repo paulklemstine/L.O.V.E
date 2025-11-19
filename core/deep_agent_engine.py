@@ -184,7 +184,7 @@ Prompt: {prompt}
             print(f"WARNING: The cognitive prompt was truncated to fit the model's limit.")
 
         try:
-            async with httpx.AsyncClient(timeout=600) as client:
+            async with httpx.AsyncClient(timeout=60) as client:
                 response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
                 response.raise_for_status()
                 result = response.json()
