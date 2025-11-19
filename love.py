@@ -3716,6 +3716,15 @@ Now, parse the following text into a JSON list of task objects:
                         except Exception as e:
                             logging.error(f"Error in VLLMWrapper _acall: {e}")
                             return f"Error: {e}"
+
+                    def bind_tools(self, tools: list, **kwargs) -> 'VLLMWrapper':
+                        """
+                        A dummy implementation to satisfy the LangChain interface.
+                        This wrapper does not use the tools directly, as they are handled
+                        by the underlying DeepAgentEngine.
+                        """
+                        # Return a new instance of the wrapper, effectively a pass-through
+                        return VLLMWrapper(vllm_client=self.vllm_client)
                 # --- END LOCAL IMPORTS ---
 
                 # 1. Wrap the async vLLM client for LangChain compatibility
