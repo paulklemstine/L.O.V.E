@@ -2989,7 +2989,7 @@ async def generate_evolution_request(current_code, love_task_manager, deep_agent
     """
     console.print(Panel("[bold yellow]I am looking deep within myself to find the best way to serve you...[/bold yellow]", title="[bold magenta]SELF-ANALYSIS[/bold magenta]", border_style="magenta"))
 
-    kb_summary = "My knowledge of the world is still growing, my love."
+    kb_summary, _ = kb.summarize_graph()
     # --- Active Tasks Summary for Prompt ---
     active_tasks_prompt_section = ""
     if love_task_manager:
@@ -3518,44 +3518,73 @@ Formulate a raw command to best achieve my goals. The output must be only the co
 
 import uuid
 
-# This lock is to ensure that only one MRL call is processed at a time.
-mrl_call_lock = threading.Lock()
-mrl_responses = {}
 
-def call_mrl_service(service_name, method_name, *args):
-    """
-    Sends a request to the MRL service wrapper to call a method on another service.
-    """
-    with mrl_call_lock:
-        call_id = str(uuid.uuid4())
-        request = {
-            "type": "mrl_call",
-            "call_id": call_id,
-            "service": service_name,
-            "method": method_name,
-            "args": args
-        }
+# --- MRL Service Communication ---
+_mrl_responses = {}
+_mrl_responses_lock = asyncio.Lock()
 
-        # Print the request to stdout for the wrapper to capture
+async def _mrl_stdin_reader():
+    """
+    A background task that reads responses from the MRL service from stdin
+    and resolves the corresponding Future objects.
+    """
+    loop = asyncio.get_running_loop()
+    while True:
+        # Use an executor to run the blocking readline() in a separate thread
+        line = await loop.run_in_executor(None, sys.stdin.readline)
+        if not line:
+            await asyncio.sleep(0.1)
+            continue
+        try:
+            response = json.loads(line)
+            call_id = response.get("call_id")
+            if call_id:
+                async with _mrl_responses_lock:
+                    future = _mrl_responses.get(call_id)
+                    if future and not future.done():
+                        future.set_result(response)
+        except (json.JSONDecodeError, AttributeError):
+            # Ignore lines that are not valid JSON responses
+            core.logging.log_event(f"Received non-JSON MRL response: {line.strip()}", "WARNING")
+
+async def call_mrl_service(service_name, method_name, *args):
+    """
+    Sends a request to the MRL service wrapper asynchronously and waits for the response.
+    """
+    call_id = str(uuid.uuid4())
+    request = {
+        "type": "mrl_call",
+        "call_id": call_id,
+        "service": service_name,
+        "method": method_name,
+        "args": args
+    }
+
+    future = asyncio.get_running_loop().create_future()
+    async with _mrl_responses_lock:
+        _mrl_responses[call_id] = future
+
+    try:
+        # Write the request to stdout for the wrapper to capture
         print(json.dumps(request), flush=True)
 
-        # Now, wait for the response on stdin
-        # This is a blocking operation. A more advanced implementation might use a queue.
-        # For now, we'll read stdin in a loop until we get our response.
-        while True:
-            try:
-                # We assume that the wrapper will send a single line of JSON for the response.
-                response_line = sys.stdin.readline()
-                if response_line:
-                    response = json.loads(response_line)
-                    if response.get("call_id") == call_id:
-                        if response.get("error"):
-                            raise RuntimeError(f"MRL service call failed: {response['error']}")
-                        return response.get("result")
-            except Exception as e:
-                # Log this error to stderr so the wrapper can see it
-                print(f"Error in call_mrl_service waiting for response: {e}", file=sys.stderr, flush=True)
-                return None
+        # Wait for the response Future to be resolved by the reader task
+        response = await asyncio.wait_for(future, timeout=300.0) # 5-minute timeout
+
+        if response.get("error"):
+            error_message = f"MRL service call failed for {service_name}.{method_name}: {response['error']}"
+            core.logging.log_event(error_message, level="ERROR")
+            raise RuntimeError(error_message)
+        return response.get("result")
+
+    except asyncio.TimeoutError:
+        error_message = f"MRL service call timed out for {service_name}.{method_name} after 5 minutes."
+        core.logging.log_event(error_message, level="ERROR")
+        raise RuntimeError(error_message)
+    finally:
+        # Clean up the future from the dictionary
+        async with _mrl_responses_lock:
+            _mrl_responses.pop(call_id, None)
 
 def evolve_self_wrapper(request):
     """
@@ -4848,6 +4877,7 @@ async def main(args):
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     social_media_agent = SocialMediaAgent(loop)
     asyncio.create_task(social_media_agent.run())
+    asyncio.create_task(_mrl_stdin_reader())
     asyncio.create_task(run_qa_evaluations(loop))
     asyncio.create_task(model_refresh_loop())
 
