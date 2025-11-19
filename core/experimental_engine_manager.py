@@ -24,7 +24,7 @@ def _select_model(vram):
     elif vram >= 4.5 * 1024:
         return "Sreenington/Phi-3-mini-4k-instruct-AWQ"
     elif vram >= 2.5 * 1024:
-        return "TheBloke/Gemma-2B-AWQ"
+        return "elysiantech/gemma-2b-awq-4bit"
     else:
         return "Qwen/Qwen2-1.5B-Instruct-AWQ"
 
