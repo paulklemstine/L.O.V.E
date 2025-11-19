@@ -67,6 +67,7 @@ def _recover_json(json_str: str):
 
 
 import httpx
+import logging
 
 class DeepAgentEngine:
     """
@@ -181,7 +182,10 @@ Prompt: {prompt}
         if self.max_model_len and estimated_tokens > self.max_model_len:
             max_chars = (self.max_model_len - self.sampling_params['max_tokens']) * 3
             payload['prompt'] = system_prompt[:max_chars]
+            logging.warning(f"Cognitive prompt was truncated to fit the model's limit.")
             print(f"WARNING: The cognitive prompt was truncated to fit the model's limit.")
+
+        logging.debug(f"DeepAgentEngine sending prompt to vLLM: {system_prompt}")
 
         try:
             async with httpx.AsyncClient(timeout=60) as client:
@@ -191,6 +195,7 @@ Prompt: {prompt}
 
             if result.get("choices"):
                 response_text = result["choices"][0].get("text", "").strip()
+                logging.debug(f"DeepAgentEngine received raw response from vLLM: {response_text}")
                 try:
                     parsed_response = _recover_json(response_text)
                     thought = parsed_response.get("thought", "")
@@ -214,10 +219,13 @@ Prompt: {prompt}
                         return f"Error: Tool '{tool_name}' not found."
 
                 except json.JSONDecodeError:
+                    logging.error(f"DeepAgent generated invalid JSON: {response_text}")
                     return f"Error: DeepAgent generated invalid JSON: {response_text}"
             else:
+                logging.error("The vLLM server returned an empty or invalid response.")
                 return "Error: The vLLM server returned an empty or invalid response."
         except httpx.RequestError as e:
             error_message = f"Error communicating with vLLM server: {e}"
+            logging.error(error_message)
             print(error_message)
             return error_message
