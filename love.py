@@ -3962,8 +3962,17 @@ Now, parse the following text into a JSON list of task objects:
                             # Split command into tool name and arguments
                             parts = command.split()
                             tool_name = parts[0] if parts else "unknown_tool"
-                            tool_args = " ".join(parts[1:]) if len(parts) > 1 else ""
+                            tool_args_str = " ".join(parts[1:]) if len(parts) > 1 else ""
                             tool_call_id = f"tool_call_{i}_{uuid.uuid4().hex[:4]}"
+
+                            # FIX: The 'args' field for tool_calls must be a dictionary.
+                            # An empty string from tool_args causes a Pydantic validation error.
+                            # This converts the raw argument string into a dictionary to prevent crashing.
+                            tool_args = {}
+                            if tool_args_str:
+                                # This is a heuristic. We pack the raw string into a generic key
+                                # to satisfy the type requirement for the AIMessage history.
+                                tool_args = {"__arg_str": tool_args_str}
 
                             # The AI's intent to call a tool
                             message_history.append(AIMessage(content="", tool_calls=[{"name": tool_name, "args": tool_args, "id": tool_call_id}]))
