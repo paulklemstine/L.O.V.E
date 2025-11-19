@@ -4904,7 +4904,7 @@ async def main(args):
     monitoring_manager.start()
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
-    god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop)
+    god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine)
     god_agent.start()
 
     mcp_manager = MCPManager(console)

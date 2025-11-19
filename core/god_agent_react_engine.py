@@ -5,9 +5,15 @@ import core.tools
 from core import desire_state, evolution_state
 
 class GodAgentReActEngine(GeminiReActEngine):
-    def __init__(self, love_state, knowledge_base, love_task_manager, ui_panel_queue, loop):
+    def __init__(self, love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine=None):
         # The God Agent does not require memory_manager, so we pass None.
-        super().__init__(tool_registry=self._get_tool_registry(), ui_panel_queue=ui_panel_queue, memory_manager=None, caller="GodAgent")
+        super().__init__(
+            tool_registry=self._get_tool_registry(),
+            ui_panel_queue=ui_panel_queue,
+            memory_manager=None,
+            caller="GodAgent",
+            deep_agent_instance=deep_agent_engine
+        )
         self.love_state = love_state
         self.knowledge_base = knowledge_base
         self.love_task_manager = love_task_manager
