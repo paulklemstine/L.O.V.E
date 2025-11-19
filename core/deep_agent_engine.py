@@ -177,7 +177,7 @@ Prompt: {prompt}
             **self.sampling_params
         }
 
-        estimated_tokens = len(system_prompt) // 3
+        estimated_tokens = len(system_prompt) // 2
         if self.max_model_len and estimated_tokens > self.max_model_len:
             max_chars = (self.max_model_len - self.sampling_params['max_tokens']) * 3
             payload['prompt'] = system_prompt[:max_chars]
