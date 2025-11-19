@@ -427,7 +427,7 @@ def _auto_configure_hardware():
             _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Calculated safe GPU utilization: {love_state['hardware']['gpu_utilization']}", "INFO")
         except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
             # Fallback to a conservative default if the free memory check fails
-            love_state['hardware']['gpu_utilization'] = 0.8
+            love_state['hardware']['gpu_utilization'] = 0.7
             _temp_log_event(f"Could not determine free VRAM ({e}). Falling back to default GPU utilization: 0.8", "WARNING")
 
 
@@ -4856,7 +4856,7 @@ async def initialize_gpu_services():
                         "--model", model_repo_id,
                         "--host", "0.0.0.0",
                         "--port", "8000",
-                        "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.8)),
+                        "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.7)),
                     ]
                     # Add the dynamically determined max_model_len if available
                     if max_len:
