@@ -43,7 +43,8 @@ def _select_model(love_state):
         return "Sreenington/Phi-3-mini-4k-instruct-AWQ"
     elif vram >= 4.5 * 1024:
         # Replaced unquantized Gemma-2B with a standard AWQ version
-        return "elysiantech/gemma-2b-awq-4bit"
+        # Using a smaller model for this tier to be more conservative on VRAM.
+        return "Qwen/Qwen2-1.5B-Instruct-AWQ"
     else:
         # Fallback to the smallest AWQ model for very low VRAM environments.
         # Replaced unquantized Qwen with its official AWQ version
