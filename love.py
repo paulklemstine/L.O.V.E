@@ -4730,8 +4730,13 @@ async def model_refresh_loop():
 
 async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
-    # This function is designed to be testable and contains logic originally in main()
     global deep_agent_engine
+
+    # --- FIX: Initialize ToolRegistry here ---
+    from core.tools import ToolRegistry
+    tool_registry = ToolRegistry()
+    # -----------------------------------------
+
     if love_state.get('hardware', {}).get('gpu_detected'):
         from core.connectivity import is_vllm_running
         vllm_already_running, _ = is_vllm_running()
@@ -4739,7 +4744,8 @@ async def initialize_gpu_services():
             console.print("[bold yellow]Existing vLLM server detected. Skipping initialization.[/bold yellow]")
             core.logging.log_event("Existing vLLM server detected. Skipping initialization.", "INFO")
             # If it's already running, we still need to initialize our client engine
-            deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000")
+            # --- FIX: Pass tool_registry ---
+            deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry)
             core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
         else:
             console.print("[bold green]GPU detected. Launching vLLM server and initializing DeepAgent client...[/bold green]")
@@ -4750,24 +4756,19 @@ async def initialize_gpu_services():
                 core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
 
                 if model_repo_id:
-                    # --- Dynamic max_model_len Calculation ---
+                    # ... (Keep existing max_model_len calculation logic unchanged) ...
                     max_len = None
                     try:
                         console.print("[cyan]Performing a pre-flight check to determine optimal max_model_len...[/cyan]")
-                        # We run a temporary, failing instance of the server to capture its memory recommendation.
-                        # Using a very large, unrealistic max_model_len to guarantee failure.
                         preflight_command = [
                             sys.executable, "-m", "vllm.entrypoints.api_server",
                             "--model", model_repo_id,
-                            "--max-model-len", "999999" # Intentionally oversized
+                            "--max-model-len", "999999"
                         ]
-                        # We expect this to fail, so we capture stderr. Timeout is important.
                         result = subprocess.run(preflight_command, capture_output=True, text=True, timeout=180)
 
-                        # Use regex to find the estimated length from the new error message format
                         match = re.search(r"max_position_embeddings=(\d+)", result.stderr)
                         if not match:
-                            # Fallback to the other possible key in the error message
                             match = re.search(r"model_max_length=(\d+)", result.stderr)
 
                         if match:
@@ -4791,19 +4792,16 @@ async def initialize_gpu_services():
                         "--port", "8000",
                         "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.7)),
                     ]
-                    # Add the dynamically determined max_model_len if available
                     if max_len:
                         vllm_command.extend(["--max-model-len", str(max_len)])
-                    
-                    # Redirect output to a log file to avoid cluttering the main UI
+
                     vllm_log_file = open("vllm_server.log", "a")
                     subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
                     core.logging.log_event(f"vLLM server process started with command: {' '.join(vllm_command)}. See vllm_server.log for details.", "CRITICAL")
-                    
-                    # --- Wait for the Server to Become Responsive ---
+
                     console.print("[cyan]Waiting for vLLM server to come online...[/cyan]")
                     server_ready = False
-                    for _ in range(30): # Wait up to 5 minutes (30 * 10 seconds)
+                    for _ in range(30):
                         await asyncio.sleep(10)
                         ready, status_code = is_vllm_running()
                         if ready:
@@ -4811,22 +4809,23 @@ async def initialize_gpu_services():
                             break
                         else:
                             console.print(f"[yellow]vLLM server not yet ready (status: {status_code}). Waiting...[/yellow]")
-                    
+
                     if not server_ready:
                         raise RuntimeError("vLLM server failed to start in the allotted time. Check vllm_server.log for errors.")
 
                     console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
-                    # Now initialize the DeepAgentEngine as a client
-                    deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000")
+                    # --- FIX: Pass tool_registry ---
+                    deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry)
                     await deep_agent_engine.initialize()
                     core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
                 else:
                     core.logging.log_event("No suitable vLLM model found for available VRAM. DeepAgentEngine not initialized.", level="WARNING")
 
             except Exception as e:
-                log_critical_event(f"Failed to initialize DeepAgentEngine or vLLM server: {e}", console_override=console)
                 # Ensure client is None on failure
                 deep_agent_engine = None
+                # Use the wrapper function for safe logging
+                log_critical_event(f"Failed to initialize DeepAgentEngine or vLLM server: {e}", console_override=console)
 
 async def main(args):
     """The main application entry point."""
