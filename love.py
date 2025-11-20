@@ -3952,7 +3952,8 @@ Now, analyze the result with love and wisdom.
 
 Your response must be either the word "PROCEED" or a single shell command to execute next (e.g., `execute apt-get install -y docker.io`).
 """
-                    llm_analysis_dict = await execute_reasoning_task(feedback_prompt)
+                    # FIX: Use run_llm directly and pass deep_agent_engine to force local inference
+                    llm_analysis_dict = await run_llm(feedback_prompt, purpose="reasoning", deep_agent_instance=deep_agent_engine)
                     next_action = llm_analysis_dict.get("result", "PROCEED").strip()
 
                     if next_action.upper() != "PROCEED":
