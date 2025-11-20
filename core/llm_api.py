@@ -13,6 +13,7 @@ import random
 import aiohttp
 import csv
 import io
+import signal
 from collections import defaultdict
 
 from rich.console import Console
@@ -29,8 +30,27 @@ from core.token_utils import count_tokens_for_api_models
 from core.logging import log_event
 from display import WaitingAnimation
 
-_global_ui_queue = None
+def graceful_shutdown(signum, frame):
+    console.print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
 
+    # Trigger the existing cleanup logic
+    if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
+    if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
+    if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
+
+    # Kill vLLM specifically
+    try:
+        subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
+    except Exception:
+        pass
+
+    sys.exit(0)
+
+# Register the signal in main or global scope (before main loop)
+signal.signal(signal.SIGTERM, graceful_shutdown)
+signal.signal(signal.SIGINT, graceful_shutdown) # Handle Ctrl+C same way
+
+_global_ui_queue = None
 def set_ui_queue(queue_instance):
     global _global_ui_queue
     _global_ui_queue = queue_instance
