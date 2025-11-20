@@ -13,7 +13,7 @@ import random
 import aiohttp
 import csv
 import io
-import signal
+
 from collections import defaultdict
 
 from rich.console import Console
@@ -29,9 +29,9 @@ from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
 from core.logging import log_event
 from display import WaitingAnimation
-
+import signal
 def graceful_shutdown(signum, frame):
-    console.print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
+    Console().print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
 
     # Trigger the existing cleanup logic
     if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
