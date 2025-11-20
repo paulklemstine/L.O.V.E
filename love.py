@@ -3956,7 +3956,8 @@ Now, parse the following text into a JSON list of task objects:
                     model=vllm_llm,
                     tools=tools,
                     system_prompt=cognitive_prompt,
-                    middleware=custom_middleware
+                    middleware=[]
+                    #middleware=custom_middleware
                 )
                 # 4. Invoke the agent
                 # --- Construct Message History ---
