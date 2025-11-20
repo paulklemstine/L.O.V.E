@@ -188,7 +188,7 @@ Prompt: {prompt}
         logging.debug(f"DeepAgentEngine sending prompt to vLLM: {system_prompt}")
 
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            async with httpx.AsyncClient(timeout=600) as client:
                 response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
                 response.raise_for_status()
                 result = response.json()
