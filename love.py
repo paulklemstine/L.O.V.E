@@ -3949,7 +3949,7 @@ Now, parse the following text into a JSON list of task objects:
                 middleware_stack = [
                     TodoListMiddleware(),
                     FilesystemMiddleware(),
-                    SubAgentMiddleware(),
+                    SubAgentMiddleware(default_model=vllm_llm),
                     SummarizationMiddleware(model=vllm_llm),
                     PatchToolCallsMiddleware(),
                 ]
