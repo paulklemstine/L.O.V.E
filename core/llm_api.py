@@ -583,7 +583,7 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
 
 
         # --- Inject DeepAgent vLLM as the top priority if available ---
-        if deep_agent_instance and deep_agent_instance.llm:
+        if deep_agent_instance:
             MODEL_STATS["deep_agent_vllm"]["provider"] = "deep_agent"
             # Remove from list if exists and re-insert at the top to ensure priority.
             if "deep_agent_vllm" in ranked_model_list:
@@ -648,19 +648,9 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                 # --- DEEP AGENT vLLM LOGIC ---
                 elif model_id == "deep_agent_vllm":
                     log_event(f"Attempting LLM call with local DeepAgent vLLM (Purpose: {purpose})")
-
-                    def _deep_agent_call():
-                        # The vLLM instance is accessed directly.
-                        outputs = deep_agent_instance.llm.generate(prompt_text, deep_agent_instance.sampling_params)
-                        # The output format is a list of RequestOutput objects.
-                        return outputs[0].outputs[0].text
-
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Processing with integrated cognitive matrix [bold yellow]DeepAgent vLLM[/bold yellow] (Purpose: {purpose})",
-                        _deep_agent_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
+                    # We await directly here to avoid deadlocks with run_hypnotic_progress
+                    # The WaitingAnimation (started at function entry) handles the visual feedback.
+                    result_text = await deep_agent_instance.generate(prompt_text)
                     log_event("DeepAgent vLLM call successful.")
 
                 # --- LOCAL MODEL LOGIC ---
