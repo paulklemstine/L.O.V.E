@@ -3943,10 +3943,10 @@ Now, parse the following text into a JSON list of task objects:
                     talent_utils.talent_manager.get_profile
                 ]
                 # 3. Create the DeepAgent instance
-                # 3. Create the DeepAgent instance
                 # We pass an empty middleware list because create_deep_agent automatically adds
                 # the default stack (TodoList, Filesystem, etc.). Adding them manually here
                 # would cause DuplicateMiddleware errors.
+
                 agent = create_deep_agent(
                     model=vllm_llm,
                     tools=tools,
