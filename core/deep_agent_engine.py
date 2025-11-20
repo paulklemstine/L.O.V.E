@@ -7,7 +7,8 @@ import subprocess
 import asyncio
 from huggingface_hub import snapshot_download
 from core.tools import ToolRegistry, invoke_gemini_react_engine
-
+import httpx
+import logging
 
 def _select_model(love_state):
     """
@@ -65,10 +66,6 @@ def _recover_json(json_str: str):
             json_str = json_str[:last_brace+1]
     raise json.JSONDecodeError("Could not recover JSON object from string", "", 0)
 
-
-import httpx
-import logging
-
 class DeepAgentEngine:
     """
     A client for the vLLM server, acting as a reasoning engine.
@@ -85,10 +82,11 @@ class DeepAgentEngine:
             "max_tokens": 4096  # Default, can be overridden
         }
         self.max_model_len = 8192 # Initialize with a default
+        self.model_name = "vllm-model" # Default model name
 
     async def initialize(self):
         """Asynchronous part of initialization."""
-        self.max_model_len = await self._fetch_max_model_len()
+        self.max_model_len = await self._fetch_model_metadata()
 
     def _load_persona(self):
         """Loads the persona configuration from the YAML file."""
@@ -99,8 +97,8 @@ class DeepAgentEngine:
             print(f"Error loading persona file: {e}")
             return {}
 
-    async def _fetch_max_model_len(self):
-        """Fetches the max_model_len from the running vLLM server's model metadata."""
+    async def _fetch_model_metadata(self):
+        """Fetches the max_model_len and model name from the running vLLM server's model metadata."""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{self.api_url}/v1/models")
@@ -108,12 +106,15 @@ class DeepAgentEngine:
                 models_data = response.json()
                 # Assuming the server is running a single model, take the first one
                 if models_data.get("data"):
-                    max_len = int(models_data["data"][0].get("context_length", 8192) /2)
+                    model_data = models_data["data"][0]
+                    max_len = int(model_data.get("context_length", 8192) / 2)
+                    self.model_name = model_data.get("id", "vllm-model")
                     print(f"vLLM server model context length: {max_len}")
+                    print(f"vLLM server model name: {self.model_name}")
                     return max_len
             return 8192 # Default fallback
-        except (httpx.RequestError, KeyError) as e:
-            print(f"Could not fetch model metadata from vLLM server: {e}. Using default context size.")
+        except (httpx.RequestError, KeyError, Exception) as e:
+            print(f"Could not fetch model metadata from vLLM server: {e}. Using default context size and model name.")
             return 8192 # Default fallback
 
     def _adapt_tools_for_deepagent(self):
@@ -125,6 +126,10 @@ class DeepAgentEngine:
         formatted_tools += "Tool Name: `invoke_gemini_react_engine`\n"
         formatted_tools += "Description: Invokes the GeminiReActEngine to solve a sub-task.\n"
         formatted_tools += "Arguments JSON Schema:\n```json\n{\"type\": \"object\", \"properties\": {\"prompt\": {\"type\": \"string\"}}}\n```\n---\n"
+
+        if not self.tool_registry:
+             formatted_tools += "No additional tools available.\n"
+             return formatted_tools
 
         for name, data in self.tool_registry.list_tools().items():
             metadata = data['metadata']
@@ -147,7 +152,7 @@ class DeepAgentEngine:
         """
         headers = {"Content-Type": "application/json"}
         payload = {
-            "model": "vllm-model",
+            "model": self.model_name,
             "prompt": prompt,
             **self.sampling_params
         }
@@ -203,7 +208,7 @@ Prompt: {prompt}
 """
         headers = {"Content-Type": "application/json"}
         payload = {
-            "model": "vllm-model",
+            "model": self.model_name,
             "prompt": system_prompt,
             **self.sampling_params
         }
