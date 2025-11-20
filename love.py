@@ -4817,6 +4817,8 @@ async def initialize_gpu_services():
                         "--host", "0.0.0.0",
                         "--port", "8000",
                         "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.7)),
+                        "--generation-config", "vllm",
+                        "--served-model-name", "vllm-model",
                     ]
                     if max_len:
                         vllm_command.extend(["--max-model-len", str(max_len)])
