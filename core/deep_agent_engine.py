@@ -141,6 +141,36 @@ class DeepAgentEngine:
 
         return formatted_tools
 
+    async def generate(self, prompt: str) -> str:
+        """
+        Generates text using the vLLM server.
+        """
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "model": "vllm-model",
+            "prompt": prompt,
+            **self.sampling_params
+        }
+
+        estimated_tokens = len(prompt) // 2
+        if self.max_model_len and estimated_tokens > self.max_model_len:
+            max_chars = (self.max_model_len - self.sampling_params['max_tokens']) * 3
+            payload['prompt'] = prompt[:max_chars]
+            logging.warning(f"Cognitive prompt was truncated to fit the model's limit.")
+
+        try:
+            async with httpx.AsyncClient(timeout=600) as client:
+                response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
+                response.raise_for_status()
+                result = response.json()
+                if result.get("choices"):
+                    return result["choices"][0].get("text", "").strip()
+                else:
+                    return "Error: Empty response from vLLM."
+        except Exception as e:
+            logging.error(f"Error generating text with vLLM: {e}")
+            return f"Error: {e}"
+
     async def run(self, prompt: str):
         """
         Executes a prompt using a simplified DeepAgent-style reasoning loop.
