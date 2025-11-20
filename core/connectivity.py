@@ -65,7 +65,7 @@ def is_vllm_running():
     Returns a tuple (bool, str) indicating if the process is running and a status message.
     """
     try:
-        result = subprocess.run(["pgrep", "-f", "vllm.entrypoints.api_server"], capture_output=True, text=True)
+        result = subprocess.run(["pgrep", "-f", "vllm.entrypoints.openai.api_server"], capture_output=True, text=True)
         if result.returncode == 0 and result.stdout.strip():
             return True, "vLLM API server process is running."
         else:

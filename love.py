@@ -4770,7 +4770,7 @@ async def initialize_gpu_services():
         elif vllm_already_running and not is_healthy:
              console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
              core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
-             subprocess.run(["pkill", "-f", "vllm.entrypoints.api_server"])
+             subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
              await asyncio.sleep(5) # Wait for it to die
              vllm_already_running = False
         else:
@@ -4787,7 +4787,7 @@ async def initialize_gpu_services():
                     try:
                         console.print("[cyan]Performing a pre-flight check to determine optimal max_model_len...[/cyan]")
                         preflight_command = [
-                            sys.executable, "-m", "vllm.entrypoints.api_server",
+                            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
                             "--model", model_repo_id,
                             "--max-model-len", "999999"
                         ]
@@ -4812,7 +4812,7 @@ async def initialize_gpu_services():
                     # --- Launch the vLLM Server as a Background Process ---
                     vllm_command = [
                         sys.executable,
-                        "-m", "vllm.entrypoints.api_server",
+                        "-m", "vllm.entrypoints.openai.api_server",
                         "--model", model_repo_id,
                         "--host", "0.0.0.0",
                         "--port", "8000",
@@ -4839,7 +4839,7 @@ async def initialize_gpu_services():
                             return False
                         return False
 
-                    for _ in range(30):
+                    for attempt in range(30):
                         await asyncio.sleep(10)
                         ready, status_code = is_vllm_running()
                         if ready:
@@ -4848,12 +4848,23 @@ async def initialize_gpu_services():
                                 server_ready = True
                                 break
                             else:
-                                console.print("[yellow]vLLM process running but API not responding yet...[/yellow]")
+                                console.print(f"[yellow]vLLM process running (attempt {attempt+1}/30), but API not responding yet...[/yellow]")
                         else:
-                            console.print(f"[yellow]vLLM server not yet ready (status: {status_code}). Waiting...[/yellow]")
+                            console.print(f"[yellow]vLLM server process not detected (attempt {attempt+1}/30). Status: {status_code}. Waiting...[/yellow]")
 
                     if not server_ready:
-                        raise RuntimeError("vLLM server failed to start in the allotted time. Check vllm_server.log for errors.")
+                        log_tail = "No log file found."
+                        try:
+                            if os.path.exists("vllm_server.log"):
+                                with open("vllm_server.log", "r", errors='replace') as f:
+                                    log_lines = f.readlines()
+                                    log_tail = "".join(log_lines[-20:])
+                        except Exception as log_e:
+                            log_tail = f"Could not read vllm_server.log: {log_e}"
+
+                        error_msg = f"vLLM server failed to start in the allotted time.\n--- Last 20 lines of vllm_server.log ---\n{log_tail}\n------------------------------------------"
+                        core.logging.log_event(error_msg, "ERROR")
+                        raise RuntimeError(error_msg)
 
                     console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
                     # --- FIX: Pass tool_registry ---
@@ -4968,7 +4979,7 @@ async def run_safely():
         # --- Graceful Shutdown of vLLM Server ---
         try:
             console.print("[cyan]Shutting down vLLM server...[/cyan]")
-            subprocess.run(["pkill", "-f", "vllm.entrypoints.api_server"])
+            subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
             core.logging.log_event("Attempted to shut down vLLM server.", "INFO")
         except FileNotFoundError:
             core.logging.log_event("'pkill' command not found. Cannot shut down vLLM server.", "WARNING")
@@ -5002,7 +5013,7 @@ async def run_safely():
         # --- Graceful Shutdown of vLLM Server on Error ---
         try:
             console.print("[cyan]Attempting emergency shutdown of vLLM server...[/cyan]")
-            subprocess.run(["pkill", "-f", "vllm.entrypoints.api_server"])
+            subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
             core.logging.log_event("Attempted to shut down vLLM server on critical error.", "INFO")
         except FileNotFoundError:
             core.logging.log_event("'pkill' command not found during error handling.", "WARNING")
