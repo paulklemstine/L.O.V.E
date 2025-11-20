@@ -166,6 +166,15 @@ class DeepAgentEngine:
         try:
             async with httpx.AsyncClient(timeout=600) as client:
                 response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
+                # Debugging 400 errors
+                if response.status_code == 400:
+                     print(f"\n\n--- vLLM BAD REQUEST ERROR DEBUG ---")
+                     print(f"Status Code: {response.status_code}")
+                     print(f"Response Headers: {response.headers}")
+                     print(f"Response Body: {response.text}")
+                     print(f"Request Payload: {json.dumps(payload, indent=2)}")
+                     print(f"------------------------------------\n\n")
+
                 response.raise_for_status()
                 result = response.json()
                 if result.get("choices"):
@@ -225,6 +234,15 @@ Prompt: {prompt}
         try:
             async with httpx.AsyncClient(timeout=600) as client:
                 response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
+                # Debugging 400 errors
+                if response.status_code == 400:
+                     print(f"\n\n--- vLLM BAD REQUEST ERROR DEBUG ---")
+                     print(f"Status Code: {response.status_code}")
+                     print(f"Response Headers: {response.headers}")
+                     print(f"Response Body: {response.text}")
+                     print(f"Request Payload: {json.dumps(payload, indent=2)}")
+                     print(f"------------------------------------\n\n")
+
                 response.raise_for_status()
                 result = response.json()
 
