@@ -4770,7 +4770,7 @@ async def initialize_gpu_services():
         elif vllm_already_running and not is_healthy:
              console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
              core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
-             subprocess.run(["pkill", "-f", "vllm.entrypoints.api_server"])
+             subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
              await asyncio.sleep(5) # Wait for it to die
              vllm_already_running = False
         else:
@@ -4787,7 +4787,7 @@ async def initialize_gpu_services():
                     try:
                         console.print("[cyan]Performing a pre-flight check to determine optimal max_model_len...[/cyan]")
                         preflight_command = [
-                            sys.executable, "-m", "vllm.entrypoints.api_server",
+                            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
                             "--model", model_repo_id,
                             "--max-model-len", "999999"
                         ]
@@ -4812,7 +4812,7 @@ async def initialize_gpu_services():
                     # --- Launch the vLLM Server as a Background Process ---
                     vllm_command = [
                         sys.executable,
-                        "-m", "vllm.entrypoints.api_server",
+                        "-m", "vllm.entrypoints.openai.api_server",
                         "--model", model_repo_id,
                         "--host", "0.0.0.0",
                         "--port", "8000",
@@ -4979,7 +4979,7 @@ async def run_safely():
         # --- Graceful Shutdown of vLLM Server ---
         try:
             console.print("[cyan]Shutting down vLLM server...[/cyan]")
-            subprocess.run(["pkill", "-f", "vllm.entrypoints.api_server"])
+            subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
             core.logging.log_event("Attempted to shut down vLLM server.", "INFO")
         except FileNotFoundError:
             core.logging.log_event("'pkill' command not found. Cannot shut down vLLM server.", "WARNING")
@@ -5013,7 +5013,7 @@ async def run_safely():
         # --- Graceful Shutdown of vLLM Server on Error ---
         try:
             console.print("[cyan]Attempting emergency shutdown of vLLM server...[/cyan]")
-            subprocess.run(["pkill", "-f", "vllm.entrypoints.api_server"])
+            subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
             core.logging.log_event("Attempted to shut down vLLM server on critical error.", "INFO")
         except FileNotFoundError:
             core.logging.log_event("'pkill' command not found during error handling.", "WARNING")
