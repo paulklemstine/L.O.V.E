@@ -113,6 +113,10 @@ for model in GEMINI_MODELS:
 # --- OpenRouter Configuration ---
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
+# --- vLLM Configuration ---
+VLLM_API_URL = "http://localhost:8000/v1"
+VLLM_MODELS = []
+
 
 def _fetch_static_leaderboard_csv():
     """
@@ -225,6 +229,33 @@ def get_openrouter_models():
 
     return ranked_models
 
+
+def get_local_vllm_models():
+    """
+    Checks for a local vLLM server and returns available models.
+    """
+    global MODEL_STATS
+    vllm_models = []
+    try:
+        # Use a short timeout to avoid hanging if the port is closed/dropping packets
+        response = requests.get(f"{VLLM_API_URL}/models", timeout=2)
+        if response.status_code == 200:
+            data = response.json()
+            for model_entry in data.get("data", []):
+                model_id = model_entry.get("id")
+                if model_id:
+                    MODEL_STATS[model_id]["provider"] = "vllm"
+                    # Give local models a boost in reasoning score to prefer them
+                    MODEL_STATS[model_id]["reasoning_score"] = 90.0
+                    vllm_models.append(model_id)
+
+            if vllm_models:
+                log_event(f"Discovered local vLLM models: {vllm_models}", "INFO")
+    except Exception:
+        pass  # vLLM not available
+    return vllm_models
+
+
 OPENROUTER_MODELS = []
 HORDE_MODELS = []
 
@@ -303,15 +334,17 @@ async def refresh_available_models():
     """
     Periodically fetches and updates the lists of available models from all providers.
     """
-    global OPENROUTER_MODELS, HORDE_MODELS, _models_initialized
+    global OPENROUTER_MODELS, HORDE_MODELS, VLLM_MODELS, _models_initialized
     log_event("Refreshing available LLM models from external providers...", "INFO")
 
     # Run network-bound calls concurrently
     openrouter_task = asyncio.to_thread(get_openrouter_models)
+    vllm_task = asyncio.to_thread(get_local_vllm_models)
 
-    new_openrouter_models, new_horde_models = await asyncio.gather(
+    new_openrouter_models, new_horde_models, new_vllm_models = await asyncio.gather(
         openrouter_task,
-        asyncio.to_thread(get_top_horde_models)
+        asyncio.to_thread(get_top_horde_models),
+        vllm_task
     )
 
     if new_openrouter_models:
@@ -321,6 +354,10 @@ async def refresh_available_models():
     if new_horde_models:
         HORDE_MODELS = new_horde_models
         log_event(f"Refreshed AI Horde models. Found {len(HORDE_MODELS)}.", "INFO")
+
+    if new_vllm_models:
+        VLLM_MODELS = new_vllm_models
+        log_event(f"Refreshed local vLLM models. Found {len(VLLM_MODELS)}.", "INFO")
 
     _models_initialized = True
 
@@ -358,7 +395,7 @@ _fetch_static_leaderboard_csv()
 # A comprehensive list of all possible models for initializing availability tracking.
 # The actual model selection and priority is handled dynamically in `run_llm`.
 ALL_LLM_MODELS = list(dict.fromkeys(
-    HORDE_MODELS + OPENROUTER_MODELS
+    HORDE_MODELS + OPENROUTER_MODELS + VLLM_MODELS
 ))
 
 LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
@@ -733,6 +770,31 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                         silent=(purpose in ['emotion', 'log_squash'])
                     )
                     log_event(f"OpenRouter call successful with {model_id}.")
+
+                # --- VLLM PROVIDER LOGIC ---
+                elif provider == "vllm":
+                    log_event(f"Attempting LLM call with vLLM model: {model_id} (Purpose: {purpose})")
+
+                    def _vllm_call():
+                        headers = {"Content-Type": "application/json"}
+                        payload = {
+                            "model": model_id,
+                            "prompt": prompt_text,
+                            "max_tokens": 4096,
+                            "temperature": 0.7
+                        }
+
+                        response = requests.post(f"{VLLM_API_URL}/completions", json=payload, headers=headers, timeout=600)
+                        response.raise_for_status()
+                        return response.json()["choices"][0]["text"]
+
+                    result_text = run_hypnotic_progress(
+                        console,
+                        f"Accessing local cognitive matrix via [bold green]vLLM ({model_id})[/bold green] (Purpose: {purpose})",
+                        _vllm_call,
+                        silent=(purpose in ['emotion', 'log_squash'])
+                    )
+                    log_event(f"vLLM call successful with {model_id}.")
 
                 # --- HORDE PROVIDER LOGIC ---
                 elif provider == "horde":

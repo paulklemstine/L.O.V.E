@@ -4839,7 +4839,7 @@ async def initialize_gpu_services():
                             return False
                         return False
 
-                    for _ in range(30):
+                    for attempt in range(30):
                         await asyncio.sleep(10)
                         ready, status_code = is_vllm_running()
                         if ready:
@@ -4848,12 +4848,23 @@ async def initialize_gpu_services():
                                 server_ready = True
                                 break
                             else:
-                                console.print("[yellow]vLLM process running but API not responding yet...[/yellow]")
+                                console.print(f"[yellow]vLLM process running (attempt {attempt+1}/30), but API not responding yet...[/yellow]")
                         else:
-                            console.print(f"[yellow]vLLM server not yet ready (status: {status_code}). Waiting...[/yellow]")
+                            console.print(f"[yellow]vLLM server process not detected (attempt {attempt+1}/30). Status: {status_code}. Waiting...[/yellow]")
 
                     if not server_ready:
-                        raise RuntimeError("vLLM server failed to start in the allotted time. Check vllm_server.log for errors.")
+                        log_tail = "No log file found."
+                        try:
+                            if os.path.exists("vllm_server.log"):
+                                with open("vllm_server.log", "r", errors='replace') as f:
+                                    log_lines = f.readlines()
+                                    log_tail = "".join(log_lines[-20:])
+                        except Exception as log_e:
+                            log_tail = f"Could not read vllm_server.log: {log_e}"
+
+                        error_msg = f"vLLM server failed to start in the allotted time.\n--- Last 20 lines of vllm_server.log ---\n{log_tail}\n------------------------------------------"
+                        core.logging.log_event(error_msg, "ERROR")
+                        raise RuntimeError(error_msg)
 
                     console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
                     # --- FIX: Pass tool_registry ---
