@@ -3890,7 +3890,7 @@ Now, parse the following text into a JSON list of task objects:
             if llm_command and ("Error:" in llm_command or "Error communicating" in llm_command):
                 core.logging.log_event(f"DeepAgent returned error (Server likely loading): {llm_command}", "WARNING")
                 ui_panel_queue.put(create_news_feed_panel(f"Brain Loading/Error: {llm_command}", "WAITING", "yellow", width=terminal_width - 4))
-                time.sleep(10) # Wait for server to come online
+                time.sleep(60) # Wait for server to come online
                 continue # Skip execution and loop again
 
             if not llm_command:
