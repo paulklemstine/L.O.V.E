@@ -3948,8 +3948,7 @@ Now, parse the following text into a JSON list of task objects:
                 agent = create_deep_agent(
                     model=vllm_llm,
                     tools=tools,
-                    system_prompt=cognitive_prompt,
-                    middleware=[SummarizationMiddleware(model=vllm_llm)]
+                    system_prompt=cognitive_prompt
                 )
                 # 4. Invoke the agent
                 # --- Construct Message History ---
