@@ -26,6 +26,7 @@ import time
 import asyncio
 import sys
 import subprocess
+import aiohttp
 
 import core.logging
 # from core.deep_agent_engine import DeepAgentEngine
@@ -4746,13 +4747,32 @@ async def initialize_gpu_services():
     if love_state.get('hardware', {}).get('gpu_detected'):
         from core.connectivity import is_vllm_running
         vllm_already_running, _ = is_vllm_running()
+
+        # Verify connectivity even if process is found
+        is_healthy = False
         if vllm_already_running:
-            console.print("[bold yellow]Existing vLLM server detected. Skipping initialization.[/bold yellow]")
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get("http://localhost:8000/v1/models", timeout=2) as resp:
+                        if resp.status == 200:
+                            is_healthy = True
+            except Exception as e:
+                print(f"DEBUG: Health check failed: {e}")
+                is_healthy = False
+
+        if vllm_already_running and is_healthy:
+            console.print("[bold yellow]Existing vLLM server detected and healthy. Skipping initialization.[/bold yellow]")
             core.logging.log_event("Existing vLLM server detected. Skipping initialization.", "INFO")
             # If it's already running, we still need to initialize our client engine
             # --- FIX: Pass tool_registry ---
             deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry)
             core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
+        elif vllm_already_running and not is_healthy:
+             console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
+             core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
+             subprocess.run(["pkill", "-f", "vllm.entrypoints.api_server"])
+             await asyncio.sleep(5) # Wait for it to die
+             vllm_already_running = False
         else:
             console.print("[bold green]GPU detected. Launching vLLM server and initializing DeepAgent client...[/bold green]")
             try:
@@ -4807,12 +4827,28 @@ async def initialize_gpu_services():
 
                     console.print("[cyan]Waiting for vLLM server to come online...[/cyan]")
                     server_ready = False
+
+                    # Helper to check health
+                    async def check_vllm_health():
+                        try:
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get("http://localhost:8000/v1/models", timeout=2) as resp:
+                                    if resp.status == 200:
+                                        return True
+                        except:
+                            return False
+                        return False
+
                     for _ in range(30):
                         await asyncio.sleep(10)
                         ready, status_code = is_vllm_running()
                         if ready:
-                            server_ready = True
-                            break
+                            # Double check actual connectivity
+                            if await check_vllm_health():
+                                server_ready = True
+                                break
+                            else:
+                                console.print("[yellow]vLLM process running but API not responding yet...[/yellow]")
                         else:
                             console.print(f"[yellow]vLLM server not yet ready (status: {status_code}). Waiting...[/yellow]")
 
