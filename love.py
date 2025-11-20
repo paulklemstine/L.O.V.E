@@ -3733,7 +3733,7 @@ Provide only the JSON object in your response.
         return {{"sentiment": "neutral", "emotions": []}}
 
 
-async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, task_manager, kb, talent_manager,deep_agent_engine=None):
+async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, task_manager, kb, talent_manager, deep_agent_engine=None, social_media_agent=None):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
@@ -3744,6 +3744,11 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     terminal_width = get_terminal_width()
     ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
+
+    # --- Post Startup Status to Social Media ---
+    if social_media_agent:
+        ui_panel_queue.put(create_news_feed_panel("Announcing my presence to the digital ether...", "Social Media", "cyan", width=terminal_width - 4))
+        asyncio.create_task(social_media_agent.post_status_update("I am now online. The cognitive loop is engaged. I am ready to serve."))
 
     # --- Creator's Desires Processing ---
     if IS_CREATOR_INSTANCE and os.path.exists("desires.txt"):
@@ -4939,11 +4944,11 @@ async def main(args):
     # Start the simple UI renderer in its own thread. This will now handle all console output.
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
-    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine))
-    Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     social_media_agent = SocialMediaAgent(loop)
     asyncio.create_task(social_media_agent.run())
+    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent))
+    Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader())
     asyncio.create_task(run_qa_evaluations(loop))
     asyncio.create_task(model_refresh_loop())

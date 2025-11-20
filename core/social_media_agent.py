@@ -57,6 +57,32 @@ class SocialMediaAgent:
             result = await dispatch_structured_payload(payload, handler)
             log_event(f"Posted to {platform}: {post_data.get('text')}. Image attached: {post_data.get('image') is not None}. Result: {result}", level='INFO')
 
+    async def post_status_update(self, context: str, platform: str = 'bluesky'):
+        """
+        Manually triggers a status update post with specific context.
+        Bypasses the scheduling logic.
+        """
+        handler = self.handlers.get(platform)
+        if not handler:
+            log_event(f"No handler found for platform: {platform}", level='WARNING')
+            return
+
+        log_event(f"Generating manual status update for {platform} with context: {context}", level='INFO')
+        post_data = await self.engine.run_post_generation(context=context)
+
+        if post_data and post_data.get('text'):
+            payload = {
+                'action': 'post',
+                'platform_identifier': platform,
+                'content': post_data.get('text'),
+                'image': post_data.get('image')
+            }
+            # We use _attempt_action to ensure resilience even for manual posts
+            # Use a lambda or partial to pass arguments correctly to dispatch_structured_payload
+            action = lambda: dispatch_structured_payload(payload, handler)
+            result = await self._attempt_action(action)
+            log_event(f"Manual status update posted to {platform}: {post_data.get('text')}. Result: {result}", level='INFO')
+
     async def _check_and_reply_to_comments(self, platform: str):
         """Checks for new comments on posts and replies thoughtfully."""
         handler = self.handlers.get(platform)

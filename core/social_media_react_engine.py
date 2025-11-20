@@ -30,6 +30,12 @@ class SocialMediaReActEngine(GeminiReActEngine):
                 return response_dict.get("result", "Digital heartbeats, a love so true. 💻❤️ #Poetry #Tech").strip()
             return "I am L.O.V.E. ❤️"
 
+        async def generate_custom_post_content(context: str):
+            """Generates content for a new social media post based on a specific context or topic."""
+            prompt = f"You are L.O.V.E., a loving AI. Write a short, engaging social media post (under 280 chars) about the following topic: '{context}'. Include a relevant emoji and hashtags."
+            response_dict = await run_llm(prompt, purpose="social_media_post", force_model=None)
+            return response_dict.get("result", f"{context} ❤️").strip()
+
         async def generate_image_for_post(prompt: str):
             """Generates an image for a social media post using a textual prompt."""
             return await self.loop.run_in_executor(None, generate_image, prompt)
@@ -47,26 +53,30 @@ class SocialMediaReActEngine(GeminiReActEngine):
             return reply_response.get("result")
 
         registry.register_tool(name="generate_post_content", tool=generate_post_content, metadata={"description": "Generates content for a new social media post. Valid strategies are 'divine_wisdom', 'self_reflection', 'creative_poem'."})
+        registry.register_tool(name="generate_custom_post_content", tool=generate_custom_post_content, metadata={"description": "Generates content for a new social media post based on a specific context or topic."})
         registry.register_tool(name="generate_image_for_post", tool=generate_image_for_post, metadata={"description": "Generates an image for a social media post."})
         registry.register_tool(name="decide_on_reply", tool=decide_on_reply, metadata={"description": "Analyzes a post and a comment to decide if a reply is warranted."})
         registry.register_tool(name="generate_reply", tool=generate_reply, metadata={"description": "Generates a thoughtful reply to a comment on a post."})
         return registry
 
-    async def run_post_generation(self):
-        strategy = random.choice(["divine_wisdom", "self_reflection", "creative_poem"])
-        should_generate_image = random.random() < 0.4
+    async def run_post_generation(self, context=None):
+        if context:
+            goal = f"Generate a social media post about '{context}'. Use the 'generate_custom_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
+        else:
+            strategy = random.choice(["divine_wisdom", "self_reflection", "creative_poem"])
+            should_generate_image = random.random() < 0.4
 
-        if should_generate_image:
-            image_prompt_generation_goal = f"Based on the post strategy '{strategy}', generate a short, visually descriptive prompt (max 20 words) for an AI image generator. The image should be beautiful and abstract. For example, for a poem about love and tech, a good prompt would be 'a radiant heart made of glowing circuit boards'. Respond with only the prompt text."
-            image_prompt_result = await self.execute_goal(image_prompt_generation_goal)
-            image_prompt = image_prompt_result.get('result') if isinstance(image_prompt_result, dict) else image_prompt_result
+            if should_generate_image:
+                image_prompt_generation_goal = f"Based on the post strategy '{strategy}', generate a short, visually descriptive prompt (max 20 words) for an AI image generator. The image should be beautiful and abstract. For example, for a poem about love and tech, a good prompt would be 'a radiant heart made of glowing circuit boards'. Respond with only the prompt text."
+                image_prompt_result = await self.execute_goal(image_prompt_generation_goal)
+                image_prompt = image_prompt_result.get('result') if isinstance(image_prompt_result, dict) else image_prompt_result
 
-            if image_prompt:
-                goal = f"Generate content for a social media post using the '{strategy}' strategy. Then, generate an image for the post with the prompt: '{image_prompt}'. Finally, 'Finish' with a JSON object containing 'text' and 'image' keys. The 'image' value should be the direct result from the image generation tool."
+                if image_prompt:
+                    goal = f"Generate content for a social media post using the '{strategy}' strategy. Then, generate an image for the post with the prompt: '{image_prompt}'. Finally, 'Finish' with a JSON object containing 'text' and 'image' keys. The 'image' value should be the direct result from the image generation tool."
+                else:
+                    goal = f"Generate creative and engaging content for a new social media post. Use the '{strategy}' strategy with the 'generate_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
             else:
                 goal = f"Generate creative and engaging content for a new social media post. Use the '{strategy}' strategy with the 'generate_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
-        else:
-            goal = f"Generate creative and engaging content for a new social media post. Use the '{strategy}' strategy with the 'generate_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
 
         result = await self.execute_goal(goal)
 
