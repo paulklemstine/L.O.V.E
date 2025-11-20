@@ -29,6 +29,32 @@ from core.token_utils import count_tokens_for_api_models
 from core.logging import log_event
 from display import WaitingAnimation
 
+_global_ui_queue = None
+
+def set_ui_queue(queue_instance):
+    global _global_ui_queue
+    _global_ui_queue = queue_instance
+
+# 3. Update run_llm to use the global variable
+async def run_llm(prompt_text, purpose="general", ...):
+    # ... existing setup ...
+
+    # Use the global queue if set, otherwise fallback or pass None (which disables animation)
+    animation_queue = _global_ui_queue
+
+    # Only start animation if the queue exists
+    if animation_queue:
+        animation = WaitingAnimation(animation_queue)
+        animation.start()
+    else:
+        animation = None # Handle graceful fallback in your finally block
+
+    try:
+    # ... existing logic ...
+    finally:
+        if animation: # Only stop if it started
+            animation.stop()
+
 # --- Model Performance & Statistics Tracking ---
 def _create_default_model_stats():
     return {
@@ -600,7 +626,7 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
         await refresh_available_models()
 
     # Moved import here to break circular dependency
-    from love import ui_panel_queue
+    #from love import ui_panel_queue
     console = Console()
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call

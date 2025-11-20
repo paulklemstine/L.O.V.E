@@ -37,6 +37,10 @@ from utils import summarize_python_code
 # This queue will hold UI panels to be displayed by the main rendering thread.
 ui_panel_queue = queue.Queue()
 core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
+
+import core.llm_api
+core.llm_api.set_ui_queue(ui_panel_queue)
+
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
