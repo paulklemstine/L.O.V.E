@@ -3876,11 +3876,11 @@ Now, parse the following text into a JSON list of task objects:
                 from langchain_core.language_models.llms import LLM
                 from deepagents import create_deep_agent
                 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-                from deepagents.middleware.filesystem import FilesystemMiddleware
-                from deepagents.middleware.subagents import SubAgentMiddleware
-                from deepagents.middleware.summarization import SummarizationMiddleware
-                from langchain.agents.middleware import PatchToolCallsMiddleware
-                from langchain.agents.middleware.todo import TodoListMiddleware
+                #from deepagents.middleware.filesystem import FilesystemMiddleware
+                #from deepagents.middleware.subagents import SubAgentMiddleware
+                #from deepagents.middleware.summarization import SummarizationMiddleware
+                #from langchain.agents.middleware import PatchToolCallsMiddleware
+                #from langchain.agents.middleware.todo import TodoListMiddleware
 
                 class VLLMWrapper(LLM):
                     """A custom LangChain wrapper for our async DeepAgentEngine."""
