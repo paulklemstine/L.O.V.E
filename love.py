@@ -3896,7 +3896,7 @@ Now, parse the following text into a JSON list of task objects:
                         try:
                             loop = asyncio.get_running_loop()
                             future = asyncio.run_coroutine_threadsafe(self.vllm_client.run(prompt), loop)
-                            result = future.result(timeout=600)
+                            result = future.result(timeout=60)
                             return result if isinstance(result, str) else json.dumps(result)
                         except Exception as e:
                             logging.error(f"Error in VLLMWrapper _call: {e}")
@@ -3950,8 +3950,7 @@ Now, parse the following text into a JSON list of task objects:
                 agent = create_deep_agent(
                     model=vllm_llm,
                     tools=tools,
-                    system_prompt=cognitive_prompt,
-                    middleware=[]
+                    system_prompt=cognitive_prompt
                 )
                 # 4. Invoke the agent
                 # --- Construct Message History ---
