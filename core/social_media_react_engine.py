@@ -68,8 +68,10 @@ class SocialMediaReActEngine(GeminiReActEngine):
 
             if should_generate_image:
                 image_prompt_generation_goal = f"Based on the post strategy '{strategy}', generate a short, visually descriptive prompt (max 20 words) for an AI image generator. The image should be beautiful and abstract. For example, for a poem about love and tech, a good prompt would be 'a radiant heart made of glowing circuit boards'. Respond with only the prompt text."
-                image_prompt_result = await self.execute_goal(image_prompt_generation_goal)
-                image_prompt = image_prompt_result.get('result') if isinstance(image_prompt_result, dict) else image_prompt_result
+
+                # Use run_llm directly to avoid ReAct loop overhead/confusion for simple text generation
+                image_prompt_response = await run_llm(image_prompt_generation_goal, purpose="social_media_post", force_model=None)
+                image_prompt = image_prompt_response.get('result', '').strip()
 
                 if image_prompt:
                     goal = f"Generate content for a social media post using the '{strategy}' strategy. Then, generate an image for the post with the prompt: '{image_prompt}'. Finally, 'Finish' with a JSON object containing 'text' and 'image' keys. The 'image' value should be the direct result from the image generation tool."
