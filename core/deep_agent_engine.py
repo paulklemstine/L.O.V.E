@@ -108,7 +108,7 @@ class DeepAgentEngine:
                 models_data = response.json()
                 # Assuming the server is running a single model, take the first one
                 if models_data.get("data"):
-                    max_len = models_data["data"][0].get("context_length", 8192) /2
+                    max_len = int(models_data["data"][0].get("context_length", 8192) /1.5)
                     print(f"vLLM server model context length: {max_len}")
                     return max_len
             return 8192 # Default fallback
