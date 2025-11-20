@@ -513,8 +513,26 @@ def get_token_count(text):
         return count_tokens_for_api_models(text)
 
 
+def truncate_for_log(text: str, length: int = 150) -> str:
+    """
+    Truncates text for logging and escapes brackets for rich markup.
+    """
+    if not text:
+        return ""
 
+    # Truncate
+    if len(text) > length:
+        truncated = text[:length] + "..."
+    else:
+        truncated = text
 
+    # Clean up newlines for inline display
+    truncated = truncated.replace("\n", " ")
+
+    # Escape square brackets so rich doesn't interpret them as style tags
+    truncated = truncated.replace("[", "\\[")
+
+    return truncated
 
 
 def rank_models():
@@ -682,8 +700,11 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
 
                         log_event(f"Prompt truncated from {original_token_count} to {token_count} tokens.", "INFO")
 
+                # --- User Feedback: Request Logging ---
+                console.print(Text(f"Request: {truncate_for_log(prompt_text)}", style="dim"))
+
                 # --- DEEP AGENT vLLM LOGIC ---
-                elif model_id == "deep_agent_vllm":
+                if model_id == "deep_agent_vllm":
                     log_event(f"Attempting LLM call with local DeepAgent vLLM (Purpose: {purpose})")
                     # We await directly here to avoid deadlocks with run_hypnotic_progress
                     # The WaitingAnimation (started at function entry) handles the visual feedback.
@@ -847,12 +868,15 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
 
                 # --- Success Case ---
                 if result_text is not None:
+                    # --- User Feedback: Response Logging ---
+                    console.print(Text(f"Response: {truncate_for_log(result_text)}", style="dim"))
+
                     PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
                     LLM_AVAILABILITY[model_id] = time.time()
                     response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
                     final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": model_id}
                     break
-            except requests.exceptions.HTTPError as e:
+            except requests.exceptions.RequestException as e:
                 if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
                 last_exception = e
                 # --- Enhanced Error Logging ---
