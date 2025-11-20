@@ -3887,6 +3887,12 @@ Now, parse the following text into a JSON list of task objects:
             else:
                 llm_command = llm_command_result
 
+            if llm_command and ("Error:" in llm_command or "Error communicating" in llm_command):
+                core.logging.log_event(f"DeepAgent returned error (Server likely loading): {llm_command}", "WARNING")
+                ui_panel_queue.put(create_news_feed_panel(f"Brain Loading/Error: {llm_command}", "WAITING", "yellow", width=terminal_width - 4))
+                time.sleep(10) # Wait for server to come online
+                continue # Skip execution and loop again
+
             if not llm_command:
                 core.logging.log_event(f"Reasoning engine failed to produce a command.", "ERROR")
 
@@ -3952,7 +3958,6 @@ Now, analyze the result with love and wisdom.
 
 Your response must be either the word "PROCEED" or a single shell command to execute next (e.g., `execute apt-get install -y docker.io`).
 """
-                    # FIX: Use run_llm directly and pass deep_agent_engine to force local inference
                     llm_analysis_dict = await run_llm(feedback_prompt, purpose="reasoning", deep_agent_instance=deep_agent_engine)
                     next_action = llm_analysis_dict.get("result", "PROCEED").strip()
 
