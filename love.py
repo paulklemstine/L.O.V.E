@@ -3876,11 +3876,12 @@ Now, parse the following text into a JSON list of task objects:
                 from langchain_core.language_models.llms import LLM
                 from deepagents import create_deep_agent
                 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-                #from deepagents.middleware.filesystem import FilesystemMiddleware
-                #from deepagents.middleware.subagents import SubAgentMiddleware
-                #from deepagents.middleware.summarization import SummarizationMiddleware
-                #from langchain.agents.middleware import PatchToolCallsMiddleware
-                #from langchain.agents.middleware.todo import TodoListMiddleware
+                # Imports for reference; defaults are handled by create_deep_agent
+                from deepagents.middleware.filesystem import FilesystemMiddleware
+                from deepagents.middleware.subagents import SubAgentMiddleware
+                from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
+                from langchain.agents.middleware.summarization import SummarizationMiddleware
+                from langchain.agents.middleware.todo import TodoListMiddleware
 
                 class VLLMWrapper(LLM):
                     """A custom LangChain wrapper for our async DeepAgentEngine."""
@@ -3942,22 +3943,15 @@ Now, parse the following text into a JSON list of task objects:
                     talent_utils.talent_manager.get_profile
                 ]
                 # 3. Create the DeepAgent instance
-                # The default middleware stack appears to have an initialization issue that causes a KeyError.
-                # By explicitly constructing the middleware stack here, we ensure all components,
-                # including the SummarizationMiddleware, are correctly initialized.
-                #custom_middleware = [
-                    #TodoListMiddleware(),
-                    #FilesystemMiddleware(),
-                    #SubAgentMiddleware(subagents=[]),
-                    #SummarizationMiddleware(llm=vllm_llm),
-                    #PatchToolCallsMiddleware(llm=vllm_llm),
-                #]
+                # 3. Create the DeepAgent instance
+                # We pass an empty middleware list because create_deep_agent automatically adds
+                # the default stack (TodoList, Filesystem, etc.). Adding them manually here
+                # would cause DuplicateMiddleware errors.
                 agent = create_deep_agent(
                     model=vllm_llm,
                     tools=tools,
                     system_prompt=cognitive_prompt,
                     middleware=[]
-                    #middleware=custom_middleware
                 )
                 # 4. Invoke the agent
                 # --- Construct Message History ---
