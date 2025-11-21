@@ -225,7 +225,8 @@ class DeepAgentEngine:
                     response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
 
                     # Dynamic Context Length Correction
-                    if response.status_code == 400:
+                    # vLLM can return 400 or 500 errors with the context length message in the body.
+                    if response.status_code in [400, 500]:
                         error_msg = response.text
                         match = re.search(r"maximum context length is (\d+) tokens", error_msg)
                         if match:
@@ -293,7 +294,8 @@ Prompt: {prompt}
                     response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
 
                     # Dynamic Context Length Correction
-                    if response.status_code == 400:
+                    # vLLM can return 400 or 500 errors with the context length message in the body.
+                    if response.status_code in [400, 500]:
                         error_msg = response.text
                         match = re.search(r"maximum context length is (\d+) tokens", error_msg)
                         if match:
