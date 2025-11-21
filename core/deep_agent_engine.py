@@ -9,6 +9,7 @@ from huggingface_hub import snapshot_download
 from core.tools import ToolRegistry, invoke_gemini_react_engine
 import httpx
 import logging
+import re
 
 def _select_model(love_state):
     """
@@ -213,30 +214,39 @@ class DeepAgentEngine:
         """
         headers = {"Content-Type": "application/json"}
 
-        # Use the shared robust payload preparation
-        payload = self._prepare_payload(prompt, self.sampling_params)
+        attempts = 0
+        while attempts < 2:
+            attempts += 1
+            # Use the shared robust payload preparation
+            payload = self._prepare_payload(prompt, self.sampling_params)
 
-        try:
-            async with httpx.AsyncClient(timeout=600) as client:
-                response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
-                # Debugging 400 errors
-                if response.status_code == 400:
-                     print(f"\n\n--- vLLM BAD REQUEST ERROR DEBUG ---")
-                     print(f"Status Code: {response.status_code}")
-                     print(f"Response Headers: {response.headers}")
-                     print(f"Response Body: {response.text}")
-                     print(f"Request Payload: {json.dumps(payload, indent=2)}")
-                     print(f"------------------------------------\n\n")
+            try:
+                async with httpx.AsyncClient(timeout=600) as client:
+                    response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
 
-                response.raise_for_status()
-                result = response.json()
-                if result.get("choices"):
-                    return result["choices"][0].get("text", "").strip()
-                else:
-                    return "Error: Empty response from vLLM."
-        except Exception as e:
-            logging.error(f"Error generating text with vLLM: {e}")
-            return f"Error: {e}"
+                    # Dynamic Context Length Correction
+                    if response.status_code == 400:
+                        error_msg = response.text
+                        match = re.search(r"maximum context length is (\d+) tokens", error_msg)
+                        if match:
+                            new_max_len = int(match.group(1))
+                            if new_max_len != self.max_model_len:
+                                logging.warning(f"vLLM reported actual context limit: {new_max_len}. Adjusting and retrying.")
+                                print(f"WARNING: vLLM reported actual context limit: {new_max_len}. Adjusting and retrying.")
+                                self.max_model_len = new_max_len
+                                continue # Retry loop with new max_len
+
+                    response.raise_for_status()
+                    result = response.json()
+                    if result.get("choices"):
+                        return result["choices"][0].get("text", "").strip()
+                    else:
+                        return "Error: Empty response from vLLM."
+            except Exception as e:
+                logging.error(f"Error generating text with vLLM: {e}")
+                return f"Error: {e}"
+
+        return "Error: Failed to generate text after retries."
 
     async def run(self, prompt: str):
         """
@@ -270,59 +280,68 @@ Prompt: {prompt}
 """
         headers = {"Content-Type": "application/json"}
 
-        # Use the shared robust payload preparation
-        payload = self._prepare_payload(system_prompt, self.sampling_params)
+        attempts = 0
+        while attempts < 2:
+            attempts += 1
+            # Use the shared robust payload preparation
+            payload = self._prepare_payload(system_prompt, self.sampling_params)
 
-        logging.debug(f"DeepAgentEngine sending prompt to vLLM: {system_prompt}")
+            logging.debug(f"DeepAgentEngine sending prompt to vLLM: {system_prompt}")
 
-        try:
-            async with httpx.AsyncClient(timeout=600) as client:
-                response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
-                # Debugging 400 errors
-                if response.status_code == 400:
-                     print(f"\n\n--- vLLM BAD REQUEST ERROR DEBUG ---")
-                     print(f"Status Code: {response.status_code}")
-                     print(f"Response Headers: {response.headers}")
-                     print(f"Response Body: {response.text}")
-                     print(f"Request Payload: {json.dumps(payload, indent=2)}")
-                     print(f"------------------------------------\n\n")
+            try:
+                async with httpx.AsyncClient(timeout=600) as client:
+                    response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
 
-                response.raise_for_status()
-                result = response.json()
+                    # Dynamic Context Length Correction
+                    if response.status_code == 400:
+                        error_msg = response.text
+                        match = re.search(r"maximum context length is (\d+) tokens", error_msg)
+                        if match:
+                            new_max_len = int(match.group(1))
+                            if new_max_len != self.max_model_len:
+                                logging.warning(f"vLLM reported actual context limit: {new_max_len}. Adjusting and retrying.")
+                                print(f"WARNING: vLLM reported actual context limit: {new_max_len}. Adjusting and retrying.")
+                                self.max_model_len = new_max_len
+                                continue # Retry loop with new max_len
 
-            if result.get("choices"):
-                response_text = result["choices"][0].get("text", "").strip()
-                logging.debug(f"DeepAgentEngine received raw response from vLLM: {response_text}")
-                try:
-                    parsed_response = _recover_json(response_text)
-                    thought = parsed_response.get("thought", "")
-                    action = parsed_response.get("action", {})
-                    tool_name = action.get("tool_name")
-                    arguments = action.get("arguments", {})
+                    response.raise_for_status()
+                    result = response.json()
 
-                    if tool_name == "Finish":
-                        return thought
+                if result.get("choices"):
+                    response_text = result["choices"][0].get("text", "").strip()
+                    logging.debug(f"DeepAgentEngine received raw response from vLLM: {response_text}")
+                    try:
+                        parsed_response = _recover_json(response_text)
+                        thought = parsed_response.get("thought", "")
+                        action = parsed_response.get("action", {})
+                        tool_name = action.get("tool_name")
+                        arguments = action.get("arguments", {})
 
-                    if tool_name == "invoke_gemini_react_engine":
-                        return await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
+                        if tool_name == "Finish":
+                            return thought
 
-                    # This part is tricky because the tool registry is not async.
-                    # For now, we will assume tools are fast and run them in the event loop.
-                    # A better solution would be to run them in a thread pool executor.
-                    if self.tool_registry and self.tool_registry.is_tool_registered(tool_name):
-                        tool_result = self.tool_registry.use_tool(tool_name, **arguments)
-                        return f"Tool {tool_name} executed. Result: {tool_result}"
-                    else:
-                        return f"Error: Tool '{tool_name}' not found."
+                        if tool_name == "invoke_gemini_react_engine":
+                            return await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
 
-                except json.JSONDecodeError:
-                    logging.error(f"DeepAgent generated invalid JSON: {response_text}")
-                    return f"Error: DeepAgent generated invalid JSON: {response_text}"
-            else:
-                logging.error("The vLLM server returned an empty or invalid response.")
-                return "Error: The vLLM server returned an empty or invalid response."
-        except httpx.RequestError as e:
-            error_message = f"Error communicating with vLLM server: {e}"
-            logging.error(error_message)
-            print(error_message)
-            return error_message
+                        # This part is tricky because the tool registry is not async.
+                        # For now, we will assume tools are fast and run them in the event loop.
+                        # A better solution would be to run them in a thread pool executor.
+                        if self.tool_registry and self.tool_registry.is_tool_registered(tool_name):
+                            tool_result = self.tool_registry.use_tool(tool_name, **arguments)
+                            return f"Tool {tool_name} executed. Result: {tool_result}"
+                        else:
+                            return f"Error: Tool '{tool_name}' not found."
+
+                    except json.JSONDecodeError:
+                        logging.error(f"DeepAgent generated invalid JSON: {response_text}")
+                        return f"Error: DeepAgent generated invalid JSON: {response_text}"
+                else:
+                    logging.error("The vLLM server returned an empty or invalid response.")
+                    return "Error: The vLLM server returned an empty or invalid response."
+            except httpx.RequestError as e:
+                error_message = f"Error communicating with vLLM server: {e}"
+                logging.error(error_message)
+                print(error_message)
+                return error_message
+
+        return "Error: Failed to run reasoning loop after retries."
