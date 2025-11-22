@@ -4908,8 +4908,19 @@ async def initialize_gpu_services():
                             match = re.search(r"model_max_length=(\d+)", result.stderr)
 
                         if match:
-                            max_len = int(match.group(1))//8
-                            core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len}", "INFO")
+                            raw_max_len = int(match.group(1))
+                            # Use the full detected length, but ensure it's at least 4096 if possible.
+                            # If the model reports something huge (like 1M), we might want to cap it,
+                            # but for now, let's trust the model's reported capability or the user's VRAM.
+                            # The previous division by 8 was too aggressive.
+                            max_len = raw_max_len
+                            
+                            # Ensure we don't go below a usable minimum for DeepAgent
+                            if max_len < 4096:
+                                core.logging.log_event(f"Detected max_len {max_len} is small. Attempting to force 4096.", "WARNING")
+                                max_len = 4096
+
+                            core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len} (Raw: {raw_max_len})", "INFO")
                             console.print(f"[green]Determined optimal max_model_len: {max_len}[/green]")
                         else:
                             core.logging.log_event(f"Could not determine optimal max_model_len from pre-flight check. Stderr: {result.stderr}", "WARNING")
