@@ -62,7 +62,10 @@ def initialize_deep_agent_engine(tool_registry, persona_path, architecture):
         if vram >= 6.5 * 1024:
             llm = LLM(model=model_path, gpu_memory_utilization=0.9)
         else:
-            llm = LLM(model=model_path, gpu_memory_utilization=0.7)
+            if model_repo == "Qwen/Qwen2-1.5B-Instruct-AWQ":
+                llm = LLM(model=model_path, gpu_memory_utilization=0.7, max_model_len=3072)
+            else:
+                llm = LLM(model=model_path, gpu_memory_utilization=0.7)
 
         max_len = llm.llm_engine.model_config.max_model_len
         dynamic_max_tokens = min(max_len // 2, 8192)
