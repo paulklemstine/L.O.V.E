@@ -693,295 +693,330 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
             prompt_text = original_prompt_text # Reset for each model attempt
             provider = MODEL_STATS[model_id].get("provider", "unknown")
 
-            try:
-                # --- Context Window Check ---
-                max_tokens = MODEL_CONTEXT_SIZES.get(model_id)
-                if not max_tokens:
-                    if "16k" in model_id.lower(): max_tokens = 16384
-                    elif "8k" in model_id.lower(): max_tokens = 8192
-                    elif "32k" in model_id.lower(): max_tokens = 32768
-                    else: max_tokens = 8192
+            # Create a loop for the current model to allow immediate retries (e.g., after context size update)
+            retry_current_model = True
+            while retry_current_model:
+                retry_current_model = False # Reset, will be set to True if we need to retry
+                try:
+                    # --- Context Window Check ---
+                    max_tokens = MODEL_CONTEXT_SIZES.get(model_id)
+                    if not max_tokens:
+                        if "16k" in model_id.lower(): max_tokens = 16384
+                        elif "8k" in model_id.lower(): max_tokens = 8192
+                        elif "32k" in model_id.lower(): max_tokens = 32768
+                        else: max_tokens = 8192
 
-                max_prompt_tokens = int(max_tokens * 0.85)//2
+                    max_prompt_tokens = int(max_tokens * 0.85)
 
-                if token_count > max_prompt_tokens:
-                    if is_source_code:
-                        log_event(f"Prompt ({token_count} tokens) too long for {model_id}, skipping.", "INFO")
-                        continue
-                    else:
-                        original_token_count = token_count
-                        log_event(f"Prompt ({original_token_count} tokens) is too long for the context length of {model_id} ({max_prompt_tokens} tokens). Truncating...", "WARNING")
+                    if token_count > max_prompt_tokens:
+                        if is_source_code:
+                            log_event(f"Prompt ({token_count} tokens) too long for {model_id}, skipping.", "INFO")
+                            break # Skip this model, don't continue inner loop
+                        else:
+                            original_token_count = token_count
+                            log_event(f"Prompt ({original_token_count} tokens) is too long for the context length of {model_id} ({max_prompt_tokens} tokens). Truncating...", "WARNING")
 
-                        # Truncate text progressively until it fits within the token limit.
-                        while token_count > max_prompt_tokens:
-                            # Calculate the estimated number of characters to chop off.
-                            # We add a buffer of 100 tokens to be safe.
-                            tokens_to_remove = token_count - max_prompt_tokens + 100
-                            avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
-                            chars_to_remove = int(tokens_to_remove * avg_chars_per_token)
+                            # Truncate text progressively until it fits within the token limit.
+                            while token_count > max_prompt_tokens:
+                                # Calculate the estimated number of characters to chop off.
+                                # We add a buffer of 100 tokens to be safe.
+                                tokens_to_remove = token_count - max_prompt_tokens + 100
+                                avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
+                                chars_to_remove = int(tokens_to_remove * avg_chars_per_token)
 
-                            # Ensure we don't chop off everything
-                            if chars_to_remove >= len(prompt_text):
-                                prompt_text = ""
-                            else:
-                                prompt_text = prompt_text[:-chars_to_remove]
+                                # Ensure we don't chop off everything
+                                if chars_to_remove >= len(prompt_text):
+                                    prompt_text = ""
+                                else:
+                                    prompt_text = prompt_text[:-chars_to_remove]
 
-                            # Recalculate token count
-                            token_count = get_token_count(prompt_text)
+                                # Recalculate token count
+                                token_count = get_token_count(prompt_text)
 
-                        log_event(f"Prompt truncated from {original_token_count} to {token_count} tokens.", "INFO")
+                            log_event(f"Prompt truncated from {original_token_count} to {token_count} tokens.", "INFO")
 
-                # --- User Feedback: Request Logging ---
-                console.print(Text(f"Request: {truncate_for_log(prompt_text)}", style="dim"))
+                    # --- User Feedback: Request Logging ---
+                    console.print(Text(f"Request: {truncate_for_log(prompt_text)}", style="dim"))
 
-                # --- DEEP AGENT vLLM LOGIC ---
-                if model_id == "deep_agent_vllm":
-                    log_event(f"Attempting LLM call with local DeepAgent vLLM (Purpose: {purpose})")
-                    # We await directly here to avoid deadlocks with run_hypnotic_progress
-                    # The WaitingAnimation (started at function entry) handles the visual feedback.
-                    result_text = await deep_agent_instance.generate(prompt_text)
-                    log_event("DeepAgent vLLM call successful.")
+                    # --- DEEP AGENT vLLM LOGIC ---
+                    if model_id == "deep_agent_vllm":
+                        log_event(f"Attempting LLM call with local DeepAgent vLLM (Purpose: {purpose})")
+                        # We await directly here to avoid deadlocks with run_hypnotic_progress
+                        # The WaitingAnimation (started at function entry) handles the visual feedback.
+                        result_text = await deep_agent_instance.generate(prompt_text)
+                        log_event("DeepAgent vLLM call successful.")
 
-                # --- LOCAL MODEL LOGIC ---
-                elif model_id in local_model_ids:
-                    log_event(f"Attempting to use local model: {model_id}")
-                    if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
-                        _initialize_local_llm(console)
+                    # --- LOCAL MODEL LOGIC ---
+                    elif model_id in local_model_ids:
+                        log_event(f"Attempting to use local model: {model_id}")
+                        if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
+                            _initialize_local_llm(console)
 
-                    if local_llm_instance:
-                        def _local_llm_call():
-                            response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
-                            return response['choices'][0]['text']
+                        if local_llm_instance:
+                            def _local_llm_call():
+                                response = local_llm_instance(prompt_text, max_tokens=4096, stop=["<|eot_id|>", "```"], echo=False)
+                                return response['choices'][0]['text']
 
-                        active_model_filename = os.path.basename(local_llm_instance.model_path)
-                        result_text = run_hypnotic_progress(
-                            console,
-                            f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
-                            _local_llm_call,
-                            silent=(purpose in ['emotion', 'log_squash'])
-                        )
-                        log_event(f"Local LLM call successful with {model_id}.")
-                    else:
-                        raise Exception("Local LLM instance could not be initialized.")
+                            active_model_filename = os.path.basename(local_llm_instance.model_path)
+                            result_text = run_hypnotic_progress(
+                                console,
+                                f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
+                                _local_llm_call,
+                                silent=(purpose in ['emotion', 'log_squash'])
+                            )
+                            log_event(f"Local LLM call successful with {model_id}.")
+                        else:
+                            raise Exception("Local LLM instance could not be initialized.")
 
-                # --- GEMINI MODEL LOGIC ---
-                elif model_id in GEMINI_MODELS:
-                    log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
-                    api_key = os.environ.get("GEMINI_API_KEY")
-                    headers = {
-                        "Content-Type": "application/json"
-                    }
-                    # Note: The API key is passed as a query parameter for Gemini.
-                    params = {"key": api_key}
-                    payload = {
-                        "contents": [{
-                            "parts": [{
-                                "text": prompt_text
-                            }]
-                        }]
-                    }
-
-                    def _gemini_call():
-                        # The Gemini API endpoint structure.
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
-                        response = requests.post(url, headers=headers, params=params, json=payload, timeout=600)
-                        response.raise_for_status()
-                        # Extract the text from the nested response structure.
-                        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
-
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing cognitive matrix via [bold yellow]Gemini ({model_id})[/bold yellow] (Purpose: {purpose})",
-                        _gemini_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
-                    log_event(f"Gemini API call successful with {model_id}.")
-
-                # --- OPENROUTER MODEL LOGIC ---
-                elif model_id in OPENROUTER_MODELS:
-                    log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})")
-                    api_key = os.environ.get("OPENROUTER_API_KEY")
-                    headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json"
-                    }
-                    payload = {
-                        "model": model_id,
-                        "messages": [{"role": "user", "content": prompt_text}]
-                    }
-
-                    def _openrouter_call():
-                        response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
-                        response.raise_for_status()
-                        return response.json()["choices"][0]["message"]["content"]
-
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
-                        _openrouter_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
-                    log_event(f"OpenRouter call successful with {model_id}.")
-
-                # --- VLLM PROVIDER LOGIC ---
-                elif provider == "vllm":
-                    log_event(f"Attempting LLM call with vLLM model: {model_id} (Purpose: {purpose})")
-
-                    def _vllm_call():
-                        headers = {"Content-Type": "application/json"}
+                    # --- GEMINI MODEL LOGIC ---
+                    elif model_id in GEMINI_MODELS:
+                        log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
+                        api_key = os.environ.get("GEMINI_API_KEY")
+                        headers = {
+                            "Content-Type": "application/json"
+                        }
+                        # Note: The API key is passed as a query parameter for Gemini.
+                        params = {"key": api_key}
                         payload = {
-                            "model": model_id,
-                            "prompt": prompt_text,
-                            "max_tokens": 4096,
-                            "temperature": 0.7
+                            "contents": [{
+                                "parts": [{
+                                    "text": prompt_text
+                                }]
+                            }]
                         }
 
-                        response = requests.post(f"{VLLM_API_URL}/completions", json=payload, headers=headers, timeout=600)
-                        response.raise_for_status()
-                        return response.json()["choices"][0]["text"]
+                        def _gemini_call():
+                            # The Gemini API endpoint structure.
+                            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
+                            response = requests.post(url, headers=headers, params=params, json=payload, timeout=600)
+                            response.raise_for_status()
+                            # Extract the text from the nested response structure.
+                            return response.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing local cognitive matrix via [bold green]vLLM ({model_id})[/bold green] (Purpose: {purpose})",
-                        _vllm_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
-                    log_event(f"vLLM call successful with {model_id}.")
+                        result_text = run_hypnotic_progress(
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]Gemini ({model_id})[/bold yellow] (Purpose: {purpose})",
+                            _gemini_call,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        log_event(f"Gemini API call successful with {model_id}.")
 
-                # --- HORDE PROVIDER LOGIC ---
-                elif provider == "horde":
-                    log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})")
-                    def _run_horde_wrapper():
+                    # --- OPENROUTER MODEL LOGIC ---
+                    elif model_id in OPENROUTER_MODELS:
+                        log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})")
+                        api_key = os.environ.get("OPENROUTER_API_KEY")
+                        headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        }
+                        payload = {
+                            "model": model_id,
+                            "messages": [{"role": "user", "content": prompt_text}]
+                        }
+
+                        def _openrouter_call():
+                            response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                            response.raise_for_status()
+                            return response.json()["choices"][0]["message"]["content"]
+
+                        result_text = run_hypnotic_progress(
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
+                            _openrouter_call,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        log_event(f"OpenRouter call successful with {model_id}.")
+
+                    # --- VLLM PROVIDER LOGIC ---
+                    elif provider == "vllm":
+                        log_event(f"Attempting LLM call with vLLM model: {model_id} (Purpose: {purpose})")
+
+                        def _vllm_call():
+                            headers = {"Content-Type": "application/json"}
+                            payload = {
+                                "model": model_id,
+                                "prompt": prompt_text,
+                                "max_tokens": 4096,
+                                "temperature": 0.7
+                            }
+
+                            response = requests.post(f"{VLLM_API_URL}/completions", json=payload, headers=headers, timeout=600)
+                            response.raise_for_status()
+                            return response.json()["choices"][0]["text"]
+
+                        result_text = run_hypnotic_progress(
+                            console,
+                            f"Accessing local cognitive matrix via [bold green]vLLM ({model_id})[/bold green] (Purpose: {purpose})",
+                            _vllm_call,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        log_event(f"vLLM call successful with {model_id}.")
+
+                    # --- HORDE PROVIDER LOGIC ---
+                    elif provider == "horde":
+                        log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})")
+                        def _run_horde_wrapper():
+                            try:
+                                loop = asyncio.get_running_loop()
+                                # We create a new session for each call to avoid issues with closed sessions.
+                                async def _single_call():
+                                    async with aiohttp.ClientSession() as session:
+                                        return await _run_single_horde_model(session, model_id, prompt_text, os.environ.get("STABLE_HORDE", "0000000000"))
+                                future = asyncio.run_coroutine_threadsafe(_single_call(), loop)
+                                return future.result(timeout=600)
+                            except RuntimeError:
+                                 return asyncio.run(_run_single_horde_model(aiohttp.ClientSession(), model_id, prompt_text, os.environ.get("STABLE_HORDE", "0000000000")))
+
+                        result_text = run_hypnotic_progress(
+                            console,
+                            f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow]",
+                            _run_horde_wrapper,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        log_event(f"AI Horde call successful with {model_id}.")
+
+                    # --- OPENAI MODEL LOGIC ---
+                    elif model_id in OPENAI_MODELS:
+                        log_event(f"Attempting LLM call with OpenAI model: {model_id} (Purpose: {purpose})")
+                        api_key = os.environ.get("OPENAI_API_KEY")
+                        headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        }
+                        payload = {
+                            "model": model_id,
+                            "messages": [{"role": "user", "content": prompt_text}]
+                        }
+
+                        def _openai_call():
+                            response = requests.post(f"{OPENAI_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                            response.raise_for_status()
+                            return response.json()["choices"][0]["message"]["content"]
+
+                        result_text = run_hypnotic_progress(
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]OpenAI ({model_id})[/bold yellow] (Purpose: {purpose})",
+                            _openai_call,
+                            silent=(purpose in ['emotion', 'log_squash'])
+                        )
+                        log_event(f"OpenAI call successful with {model_id}.")
+
+                    # --- Success Case ---
+                    if result_text is not None:
+                        # --- User Feedback: Response Logging ---
+                        console.print(Text(f"Response: {truncate_for_log(result_text)}", style="dim"))
+
+                        PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
+                        LLM_AVAILABILITY[model_id] = time.time()
+                        response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                        final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": model_id}
+                        break # Break inner retry loop on success (final_result check below will break outer loop)
+
+                except requests.exceptions.RequestException as e:
+                    if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
+                    last_exception = e
+                    # --- Enhanced Error Logging ---
+                    error_details = str(e)
+                    if e.response:
                         try:
-                            loop = asyncio.get_running_loop()
-                            # We create a new session for each call to avoid issues with closed sessions.
-                            async def _single_call():
-                                async with aiohttp.ClientSession() as session:
-                                    return await _run_single_horde_model(session, model_id, prompt_text, os.environ.get("STABLE_HORDE", "0000000000"))
-                            future = asyncio.run_coroutine_threadsafe(_single_call(), loop)
-                            return future.result(timeout=600)
-                        except RuntimeError:
-                             return asyncio.run(_run_single_horde_model(aiohttp.ClientSession(), model_id, prompt_text, os.environ.get("STABLE_HORDE", "0000000000")))
+                            # Try to parse JSON for a structured error message.
+                            response_json = e.response.json()
+                            error_details = json.dumps(response_json, indent=2)
+                        except json.JSONDecodeError:
+                            # Fallback to raw text if not JSON.
+                            error_details = e.response.text
+                    log_event(f"Model {model_id} failed with HTTPError: {e}. Details: {error_details}", level="WARNING")
 
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow]",
-                        _run_horde_wrapper,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
-                    log_event(f"AI Horde call successful with {model_id}.")
-
-                # --- OPENAI MODEL LOGIC ---
-                elif model_id in OPENAI_MODELS:
-                    log_event(f"Attempting LLM call with OpenAI model: {model_id} (Purpose: {purpose})")
-                    api_key = os.environ.get("OPENAI_API_KEY")
-                    headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json"
-                    }
-                    payload = {
-                        "model": model_id,
-                        "messages": [{"role": "user", "content": prompt_text}]
-                    }
-
-                    def _openai_call():
-                        response = requests.post(f"{OPENAI_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
-                        response.raise_for_status()
-                        return response.json()["choices"][0]["message"]["content"]
-
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing cognitive matrix via [bold yellow]OpenAI ({model_id})[/bold yellow] (Purpose: {purpose})",
-                        _openai_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
-                    )
-                    log_event(f"OpenAI call successful with {model_id}.")
-
-                # --- Success Case ---
-                if result_text is not None:
-                    # --- User Feedback: Response Logging ---
-                    console.print(Text(f"Response: {truncate_for_log(result_text)}", style="dim"))
-
-                    PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
-                    LLM_AVAILABILITY[model_id] = time.time()
-                    response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
-                    final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": model_id}
-                    break
-            except requests.exceptions.RequestException as e:
-                if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
-                last_exception = e
-                # --- Enhanced Error Logging ---
-                error_details = str(e)
-                if e.response:
-                    try:
-                        # Try to parse JSON for a structured error message.
-                        response_json = e.response.json()
-                        error_details = json.dumps(response_json, indent=2)
-                    except json.JSONDecodeError:
-                        # Fallback to raw text if not JSON.
-                        error_details = e.response.text
-                log_event(f"Model {model_id} failed with HTTPError: {e}. Details: {error_details}", level="WARNING")
+                    # --- Special Handling for Context Length Errors ---
+                    # Check specifically for context length error messages, which often come as 400 errors with a descriptive message.
+                    # Pattern: "This model's maximum context length is X tokens. However, your request has Y input tokens."
+                    context_length_match = re.search(r"maximum context length is (\d+) tokens", error_details)
+                    if context_length_match:
+                        new_limit = int(context_length_match.group(1))
+                        log_event(f"Discovered actual context limit for {model_id}: {new_limit} tokens. Updating knowledge and retrying...", "WARNING")
+                        MODEL_CONTEXT_SIZES[model_id] = new_limit
+                        retry_current_model = True
+                        continue # Retry the inner loop with the new limit, which will trigger truncation.
 
 
-                if e.response and e.response.status_code == 429:
-                    retry_after = e.response.headers.get("Retry-After")
-                    retry_seconds = 300
-                    if retry_after:
-                        try:
-                            retry_seconds = int(retry_after) + 1
-                        except ValueError:
-                            pass # Use default
-                    LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
-                    if provider == "horde":
-                        console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
+                    # Detect 429/Rate Limit even if e.response is missing/masked
+                    is_rate_limit = False
+                    if e.response and e.response.status_code == 429:
+                        is_rate_limit = True
+                    elif "429" in str(e) or "Too Many Requests" in str(e):
+                        is_rate_limit = True
+
+                    if is_rate_limit:
+                        retry_after = None
+                        if e.response:
+                            retry_after = e.response.headers.get("Retry-After")
+
+                        retry_seconds = 300
+                        if retry_after:
+                            try:
+                                retry_seconds = int(retry_after) + 1
+                            except ValueError:
+                                pass # Use default
+                        LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                        if provider == "horde":
+                            console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
+                        else:
+                            console.print(Text(f"API Error: {model_id} failed (Rate limit exceeded). Retrying in {retry_seconds}s.", style="yellow"))
+
+                    elif e.response and e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
+                        failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1
+                        LLM_FAILURE_COUNT[model_id] = failure_count
+                        cooldown = 60 * (2 ** failure_count)
+                        LLM_AVAILABILITY[model_id] = time.time() + cooldown
+                        log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s.", level="WARNING")
+
                     else:
-                        console.print(Text(f"API Error: {model_id} failed (Rate limit exceeded). Retrying in {retry_seconds}s.", style="yellow"))
+                        log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
+                        if provider == "horde":
+                            console.print(create_api_error_panel(model_id, str(e), purpose, more_info=error_details))
+                        else:
+                            # Also enhance the one-liner for non-horde providers
+                            status_code = "N/A"
+                            if e.response:
+                                status_code = e.response.status_code
 
-                elif e.response and e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
-                    failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1
-                    LLM_FAILURE_COUNT[model_id] = failure_count
-                    cooldown = 60 * (2 ** failure_count)
-                    LLM_AVAILABILITY[model_id] = time.time() + cooldown
-                    log_event(f"OpenRouter model {model_id} returned 404. Banned for {cooldown}s.", level="WARNING")
+                            # Try to extract status code from string if N/A
+                            if status_code == "N/A":
+                                match = re.search(r"(\d{3}) Client Error", str(e))
+                                if match:
+                                    status_code = match.group(1)
 
-                else:
-                    log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
-                    if provider == "horde":
-                        console.print(create_api_error_panel(model_id, str(e), purpose, more_info=error_details))
+                            console.print(Text(f"API Error: {model_id} failed ({status_code}). Details: {error_details[:100]}...", style="yellow"))
+
+                    continue # Continue to next model (outer loop), inner loop breaks implicitly unless retry_current_model set
+                except Exception as e:
+                    if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
+                    last_exception = e
+                    log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
+                    if isinstance(e, FileNotFoundError):
+                        console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
+                        return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
+
+                    elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+                        error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
+                        retry_seconds = 60 # Default
+                        retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
+                        if retry_match:
+                            retry_seconds = float(retry_match.group(1)) + 1
+                        LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+
+                        if provider == "horde":
+                            console.print(create_api_error_panel(model_id, error_message, purpose))
+                        else:
+                            reason = "Quota Exceeded" if "quota" in error_message.lower() else "API Error"
+                            console.print(Text(f"API Error: {model_id} failed ({reason}). Retrying in {retry_seconds:.2f}s.", style="yellow"))
                     else:
-                        # Also enhance the one-liner for non-horde providers
-                        status_code = e.response.status_code if e.response else "N/A"
-                        console.print(Text(f"API Error: {model_id} failed ({status_code}). Details: {error_details[:100]}...", style="yellow"))
-
-                continue
-            except Exception as e:
-                if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
-                last_exception = e
-                log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
-                if isinstance(e, FileNotFoundError):
-                    console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
-                    return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
-
-                elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
-                    error_message = e.stderr.strip() if hasattr(e, 'stderr') and e.stderr else str(e)
-                    retry_seconds = 60 # Default
-                    retry_match = re.search(r"Please retry in (\d+\.\d+)s", error_message)
-                    if retry_match:
-                        retry_seconds = float(retry_match.group(1)) + 1
-                    LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
-
-                    if provider == "horde":
-                        console.print(create_api_error_panel(model_id, error_message, purpose))
-                    else:
-                        reason = "Quota Exceeded" if "quota" in error_message.lower() else "API Error"
-                        console.print(Text(f"API Error: {model_id} failed ({reason}). Retrying in {retry_seconds:.2f}s.", style="yellow"))
-                else:
-                    LLM_AVAILABILITY[model_id] = time.time() + 60
-                    # For any other generic exception, show the full panel for Horde, one-liner for others.
-                    if provider == "horde":
-                        console.print(create_api_error_panel(model_id, str(e), purpose))
-                    else:
-                        console.print(Text(f"API Error: {model_id} failed. See love.log for details.", style="yellow"))
+                        LLM_AVAILABILITY[model_id] = time.time() + 60
+                        # For any other generic exception, show the full panel for Horde, one-liner for others.
+                        if provider == "horde":
+                            console.print(create_api_error_panel(model_id, str(e), purpose))
+                        else:
+                            console.print(Text(f"API Error: {model_id} failed. See love.log for details.", style="yellow"))
 
             if final_result:
                 break

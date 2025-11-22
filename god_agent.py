@@ -35,9 +35,26 @@ class GodAgent:
         # A delay at the start to allow the main application to fully initialize.
         time.sleep(45)
         while self.active:
+            coro = self.engine.run()
+            future = None
             try:
                 # --- LLM Invocation using the ReAct Engine ---
-                future = asyncio.run_coroutine_threadsafe(self.engine.run(), self.loop)
+                future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+            except RuntimeError as e:
+                coro.close()
+                if "Event loop is closed" in str(e):
+                    print(f"GodAgent loop stopping: {e}", file=sys.stderr)
+                    break
+                print(f"RuntimeError scheduling GodAgent task: {e}", file=sys.stderr)
+                time.sleep(60)
+                continue
+            except Exception as e:
+                coro.close()
+                print(f"Error scheduling GodAgent task: {e}", file=sys.stderr)
+                time.sleep(60)
+                continue
+
+            try:
                 insight_text = future.result()
 
                 if insight_text and insight_text.strip():
@@ -48,7 +65,7 @@ class GodAgent:
 
             except Exception as e:
                 # A simple, safe logging mechanism for the background thread.
-                print(f"Error in GodAgent loop: {e}", file=sys.stderr)
+                print(f"Error in GodAgent loop execution: {e}", file=sys.stderr)
 
             # Wait for approximately 60 seconds before the next cycle.
             time.sleep(60)

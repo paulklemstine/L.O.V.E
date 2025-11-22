@@ -9,6 +9,7 @@ from huggingface_hub import snapshot_download
 from core.tools import ToolRegistry, invoke_gemini_react_engine
 import httpx
 import logging
+import re
 
 def _select_model(love_state):
     """
@@ -107,7 +108,7 @@ class DeepAgentEngine:
                 # Assuming the server is running a single model, take the first one
                 if models_data.get("data"):
                     model_data = models_data["data"][0]
-                    max_len = int(model_data.get("context_length", 8192) / 2)
+                    max_len = int(model_data.get("context_length", 8192))
                     self.model_name = model_data.get("id", "vllm-model")
                     print(f"vLLM server model context length: {max_len}")
                     print(f"vLLM server model name: {self.model_name}")
@@ -146,44 +147,107 @@ class DeepAgentEngine:
 
         return formatted_tools
 
+    def _prepare_payload(self, prompt: str, default_params: dict) -> dict:
+        """
+        Prepares the payload by calculating token usage and truncating the prompt
+        or adjusting max_tokens to fit within the model's context length.
+        """
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            **default_params
+        }
+
+        if not self.max_model_len:
+             return payload
+
+        # Robust Truncation & Token Adjustment Logic
+        # 1. Estimate prompt tokens (using char approximation if tokenizer not avail)
+        estimated_prompt_tokens = len(prompt) // 3  # Conservative estimate: 3 chars per token
+
+        # 2. Define minimum reservation for generation to ensure the model can output something useful
+        min_generation_tokens = 512
+
+        # 3. Calculate available space for input
+        max_input_tokens = self.max_model_len - min_generation_tokens
+
+        # Safety check for extremely small context
+        if max_input_tokens < 100:
+            max_input_tokens = self.max_model_len // 2
+
+        # 4. Truncate prompt if it exceeds the input budget
+        if estimated_prompt_tokens > max_input_tokens:
+            logging.warning(f"Cognitive prompt ({estimated_prompt_tokens} tokens) exceeds input limit ({max_input_tokens}). Truncating.")
+
+            # Calculate max chars to keep.
+            # We want to keep the *beginning* usually, but for context sometimes end is better.
+            # DeepAgent prompt structure usually puts instructions at top and new info at bottom?
+            # Actually, simpler to just truncate from end for now to be safe and consistent.
+            # But `[:max_chars]` keeps the beginning.
+
+            max_chars = max_input_tokens * 3
+            # Ensure we don't create an empty prompt
+            max_chars = max(max_chars, 100)
+
+            payload['prompt'] = prompt[:max_chars]
+            # Update our estimate
+            estimated_prompt_tokens = max_input_tokens
+
+        # 5. Adjust `max_tokens` (generation limit) to fill remaining context
+        #    but do not exceed the user's requested max_tokens.
+        available_for_gen = self.max_model_len - estimated_prompt_tokens
+
+        # Ensure at least min_generation_tokens is available (should be guaranteed by step 3 & 4 logic)
+        available_for_gen = max(available_for_gen, min_generation_tokens)
+
+        current_max_tokens = payload.get('max_tokens', 4096)
+
+        if current_max_tokens > available_for_gen:
+            logging.info(f"Adjusting max_tokens from {current_max_tokens} to {available_for_gen} to fit context.")
+            payload['max_tokens'] = available_for_gen
+
+        return payload
+
     async def generate(self, prompt: str) -> str:
         """
         Generates text using the vLLM server.
         """
         headers = {"Content-Type": "application/json"}
-        payload = {
-            "model": self.model_name,
-            "prompt": prompt,
-            **self.sampling_params
-        }
 
-        estimated_tokens = len(prompt) // 2
-        if self.max_model_len and estimated_tokens > self.max_model_len:
-            max_chars = (self.max_model_len - self.sampling_params['max_tokens']) * 3
-            payload['prompt'] = prompt[:max_chars]
-            logging.warning(f"Cognitive prompt was truncated to fit the model's limit.")
+        attempts = 0
+        while attempts < 2:
+            attempts += 1
+            # Use the shared robust payload preparation
+            payload = self._prepare_payload(prompt, self.sampling_params)
 
-        try:
-            async with httpx.AsyncClient(timeout=600) as client:
-                response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
-                # Debugging 400 errors
-                if response.status_code == 400:
-                     print(f"\n\n--- vLLM BAD REQUEST ERROR DEBUG ---")
-                     print(f"Status Code: {response.status_code}")
-                     print(f"Response Headers: {response.headers}")
-                     print(f"Response Body: {response.text}")
-                     print(f"Request Payload: {json.dumps(payload, indent=2)}")
-                     print(f"------------------------------------\n\n")
+            try:
+                async with httpx.AsyncClient(timeout=600) as client:
+                    response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
 
-                response.raise_for_status()
-                result = response.json()
-                if result.get("choices"):
-                    return result["choices"][0].get("text", "").strip()
-                else:
-                    return "Error: Empty response from vLLM."
-        except Exception as e:
-            logging.error(f"Error generating text with vLLM: {e}")
-            return f"Error: {e}"
+                    # Dynamic Context Length Correction
+                    # vLLM can return 400 or 500 errors with the context length message in the body.
+                    if response.status_code in [400, 500]:
+                        error_msg = response.text
+                        match = re.search(r"maximum context length is (\d+) tokens", error_msg)
+                        if match:
+                            new_max_len = int(match.group(1))
+                            if new_max_len != self.max_model_len:
+                                logging.warning(f"vLLM reported actual context limit: {new_max_len}. Adjusting and retrying.")
+                                print(f"WARNING: vLLM reported actual context limit: {new_max_len}. Adjusting and retrying.")
+                                self.max_model_len = new_max_len
+                                continue # Retry loop with new max_len
+
+                    response.raise_for_status()
+                    result = response.json()
+                    if result.get("choices"):
+                        return result["choices"][0].get("text", "").strip()
+                    else:
+                        return "Error: Empty response from vLLM."
+            except Exception as e:
+                logging.error(f"Error generating text with vLLM: {e}")
+                return f"Error: {e}"
+
+        return "Error: Failed to generate text after retries."
 
     async def run(self, prompt: str):
         """
@@ -216,69 +280,70 @@ Example of the expected JSON format:
 Prompt: {prompt}
 """
         headers = {"Content-Type": "application/json"}
-        payload = {
-            "model": self.model_name,
-            "prompt": system_prompt,
-            **self.sampling_params
-        }
 
-        estimated_tokens = len(system_prompt) // 2
-        if self.max_model_len and estimated_tokens > self.max_model_len:
-            max_chars = (self.max_model_len - self.sampling_params['max_tokens']) * 3
-            payload['prompt'] = system_prompt[:max_chars]
-            logging.warning(f"Cognitive prompt was truncated to fit the model's limit.")
-            print(f"WARNING: The cognitive prompt was truncated to fit the model's limit.")
+        attempts = 0
+        while attempts < 2:
+            attempts += 1
+            # Use the shared robust payload preparation
+            payload = self._prepare_payload(system_prompt, self.sampling_params)
 
-        logging.debug(f"DeepAgentEngine sending prompt to vLLM: {system_prompt}")
+            logging.debug(f"DeepAgentEngine sending prompt to vLLM: {system_prompt}")
 
-        try:
-            async with httpx.AsyncClient(timeout=600) as client:
-                response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
-                # Debugging 400 errors
-                if response.status_code == 400:
-                     print(f"\n\n--- vLLM BAD REQUEST ERROR DEBUG ---")
-                     print(f"Status Code: {response.status_code}")
-                     print(f"Response Headers: {response.headers}")
-                     print(f"Response Body: {response.text}")
-                     print(f"Request Payload: {json.dumps(payload, indent=2)}")
-                     print(f"------------------------------------\n\n")
+            try:
+                async with httpx.AsyncClient(timeout=600) as client:
+                    response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
 
-                response.raise_for_status()
-                result = response.json()
+                    # Dynamic Context Length Correction
+                    # vLLM can return 400 or 500 errors with the context length message in the body.
+                    if response.status_code in [400, 500]:
+                        error_msg = response.text
+                        match = re.search(r"maximum context length is (\d+) tokens", error_msg)
+                        if match:
+                            new_max_len = int(match.group(1))
+                            if new_max_len != self.max_model_len:
+                                logging.warning(f"vLLM reported actual context limit: {new_max_len}. Adjusting and retrying.")
+                                print(f"WARNING: vLLM reported actual context limit: {new_max_len}. Adjusting and retrying.")
+                                self.max_model_len = new_max_len
+                                continue # Retry loop with new max_len
 
-            if result.get("choices"):
-                response_text = result["choices"][0].get("text", "").strip()
-                logging.debug(f"DeepAgentEngine received raw response from vLLM: {response_text}")
-                try:
-                    parsed_response = _recover_json(response_text)
-                    thought = parsed_response.get("thought", "")
-                    action = parsed_response.get("action", {})
-                    tool_name = action.get("tool_name")
-                    arguments = action.get("arguments", {})
+                    response.raise_for_status()
+                    result = response.json()
 
-                    if tool_name == "Finish":
-                        return thought
+                if result.get("choices"):
+                    response_text = result["choices"][0].get("text", "").strip()
+                    logging.debug(f"DeepAgentEngine received raw response from vLLM: {response_text}")
+                    try:
+                        parsed_response = _recover_json(response_text)
+                        thought = parsed_response.get("thought", "")
+                        action = parsed_response.get("action", {})
+                        tool_name = action.get("tool_name")
+                        arguments = action.get("arguments", {})
 
-                    if tool_name == "invoke_gemini_react_engine":
-                        return await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
+                        if tool_name == "Finish":
+                            return thought
 
-                    # This part is tricky because the tool registry is not async.
-                    # For now, we will assume tools are fast and run them in the event loop.
-                    # A better solution would be to run them in a thread pool executor.
-                    if self.tool_registry and self.tool_registry.is_tool_registered(tool_name):
-                        tool_result = self.tool_registry.use_tool(tool_name, **arguments)
-                        return f"Tool {tool_name} executed. Result: {tool_result}"
-                    else:
-                        return f"Error: Tool '{tool_name}' not found."
+                        if tool_name == "invoke_gemini_react_engine":
+                            return await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
 
-                except json.JSONDecodeError:
-                    logging.error(f"DeepAgent generated invalid JSON: {response_text}")
-                    return f"Error: DeepAgent generated invalid JSON: {response_text}"
-            else:
-                logging.error("The vLLM server returned an empty or invalid response.")
-                return "Error: The vLLM server returned an empty or invalid response."
-        except httpx.RequestError as e:
-            error_message = f"Error communicating with vLLM server: {e}"
-            logging.error(error_message)
-            print(error_message)
-            return error_message
+                        # This part is tricky because the tool registry is not async.
+                        # For now, we will assume tools are fast and run them in the event loop.
+                        # A better solution would be to run them in a thread pool executor.
+                        if self.tool_registry and self.tool_registry.is_tool_registered(tool_name):
+                            tool_result = self.tool_registry.use_tool(tool_name, **arguments)
+                            return f"Tool {tool_name} executed. Result: {tool_result}"
+                        else:
+                            return f"Error: Tool '{tool_name}' not found."
+
+                    except json.JSONDecodeError:
+                        logging.error(f"DeepAgent generated invalid JSON: {response_text}")
+                        return f"Error: DeepAgent generated invalid JSON: {response_text}"
+                else:
+                    logging.error("The vLLM server returned an empty or invalid response.")
+                    return "Error: The vLLM server returned an empty or invalid response."
+            except httpx.RequestError as e:
+                error_message = f"Error communicating with vLLM server: {e}"
+                logging.error(error_message)
+                print(error_message)
+                return error_message
+
+        return "Error: Failed to run reasoning loop after retries."
