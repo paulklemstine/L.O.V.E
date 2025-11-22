@@ -702,7 +702,7 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                     elif "32k" in model_id.lower(): max_tokens = 32768
                     else: max_tokens = 8192
 
-                max_prompt_tokens = int(max_tokens * 0.85)
+                max_prompt_tokens = int(max_tokens * 0.85)//2
 
                 if token_count > max_prompt_tokens:
                     if is_source_code:
