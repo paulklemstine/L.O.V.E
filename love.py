@@ -196,6 +196,24 @@ def _install_system_packages():
             except Exception as e:
                 print(f"ERROR: Failed to install 'curl'. Some network features may be disabled. Error: {e}")
                 logging.warning(f"curl installation failed: {e}")
+
+        if not shutil.which('docker'):
+            print("Container runtime 'docker' not found. Attempting to install...")
+            print("This may take a few minutes...")
+            try:
+                # Download and run the official Docker installation script
+                subprocess.check_call("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh", shell=True)
+                subprocess.check_call("sudo sh /tmp/get-docker.sh", shell=True)
+                # Add current user to docker group
+                import getpass
+                current_user = getpass.getuser()
+                subprocess.check_call(f"sudo usermod -aG docker {current_user}", shell=True)
+                print("Successfully installed 'docker'.")
+                print(f"IMPORTANT: You need to log out and back in for Docker group membership to take effect.")
+                logging.info("Successfully installed docker.")
+            except Exception as e:
+                print(f"ERROR: Failed to install 'docker'. MCP github server will be unavailable. Error: {e}")
+                logging.warning(f"docker installation failed: {e}")
     mark_dependency_as_met("system_packages")
 
 
