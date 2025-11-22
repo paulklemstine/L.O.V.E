@@ -4737,11 +4737,22 @@ def simple_ui_renderer():
                 animation_active = False
 
             if isinstance(item, dict) and item.get('type') == 'log_message':
-                # Log plain text messages directly
-                plain_message = item.get('message', '')
-                print(plain_message)
+                # Render structured log messages as styled panels
+                log_level = item.get('level', 'INFO').upper()
+                level_color_map = {
+                    "DEBUG": "dim",
+                    "INFO": "bright_white",
+                    "WARNING": "yellow",
+                    "ERROR": "red",
+                    "CRITICAL": "bold red",
+                }
+                panel_color = level_color_map.get(log_level, "bright_white")
+                log_text = item.get('message', '')
+                log_panel = Panel(log_text, title=log_level, border_style=panel_color, width=get_terminal_width() - 4)
+                console.print(log_panel)
+                # Also append to the log file for persistence
                 with open(LOG_FILE, "a", encoding="utf-8") as f:
-                    f.write(plain_message + '\n')
+                    f.write(f"[{log_level}] {log_text}\n")
                 continue
 
             # --- God Panel Handling ---
