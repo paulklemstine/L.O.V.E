@@ -3092,7 +3092,7 @@ YOUR RESPONSE:
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
-async def generate_evolution_request(current_code, love_task_manager, deep_agent_instance=None):
+async def generate_evolution_request(current_code, love_task_manager, kb, deep_agent_instance=None):
     """
     Asks the LLM to come up with a new evolution request for itself,
     informed by the knowledge base and avoiding duplicate tasks.
@@ -3994,7 +3994,7 @@ Now, parse the following text into a JSON list of task objects:
                 if command == "evolve":
                     request_str = " ".join(args)
                     if not request_str:
-                        request_str = await generate_evolution_request(open(SELF_PATH).read(), love_task_manager, deep_agent_engine)
+                        request_str = await generate_evolution_request(open(SELF_PATH).read(), love_task_manager, kb, deep_agent_engine)
 
                     if request_str:
                         evolution_result = await evolve_self(request_str, love_task_manager, loop, deep_agent_engine)
