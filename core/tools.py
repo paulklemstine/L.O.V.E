@@ -644,7 +644,7 @@ async def invoke_gemini_react_engine(prompt: str, deep_agent_instance=None) -> s
         tool_registry = ToolRegistry()
         engine = GeminiReActEngine(tool_registry=tool_registry, deep_agent_instance=deep_agent_instance)
         # The engine's run method is async.
-        result = await engine.run(prompt)
+        result = await engine.execute_goal(prompt)
         return f"GeminiReActEngine successfully executed the sub-task. Final result: {result}"
     except Exception as e:
         return f"Error invoking GeminiReActEngine: {e}"

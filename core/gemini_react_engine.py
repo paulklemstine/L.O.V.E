@@ -37,12 +37,14 @@ class GeminiReActEngine:
             # Assume it's a synchronous queue.Queue
             self.ui_panel_queue.put(item)
 
-    async def execute_goal(self, goal: str) -> str:
+    async def execute_goal(self, goal: str, max_steps: int = 10) -> str:
         """
         Main entry point for the ReAct engine.
-        Continues the loop until the Action is a "Finish" action.
+        Continues the loop until the Action is a "Finish" action or max_steps is reached.
         """
-        while True:
+        step_count = 0
+        while step_count < max_steps:
+            step_count += 1
             # Combine static and dynamic tools for the prompt
             main_metadata = self.tool_registry.get_formatted_tool_metadata()
             session_metadata = self.session_tool_registry.get_formatted_tool_metadata()
@@ -159,6 +161,8 @@ class GeminiReActEngine:
                 width=get_terminal_width()
             )
             self._log_panel_to_ui(panel)
+
+        return f"Goal failed. The reasoning engine exceeded the maximum number of steps ({max_steps})."
 
     def _create_prompt(self, goal: str, tool_metadata: str) -> str:
         """Creates the ReAct prompt template."""
