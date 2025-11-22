@@ -124,7 +124,8 @@ class GeminiReActEngine:
             if tool_name == "Finish":
                 if arguments:
                     return {"success": True, "result": arguments}
-                return {"success": True, "result": f"Goal accomplished. Final thought: {thought}"}
+                # Don't return the internal thought - return empty dict so social_media engine can parse the history
+                return {"success": True, "result": {}}
 
             try:
                 is_dynamic_tool = False
