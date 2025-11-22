@@ -443,7 +443,7 @@ def create_god_panel(insight, width=80):
         padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=[border_style, "dim_cyan"])
+    return Gradient(panel, colors=[border_style, "cyan"])
 
 
 def create_reasoning_panel(caller, raw_response, thought, action, observation, width=80):
