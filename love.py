@@ -4707,6 +4707,11 @@ def simple_ui_renderer():
                 terminal_width = get_terminal_width()
                 item = create_god_panel(item.get('insight', '...'), width=terminal_width - 4)
 
+            # --- Reasoning Panel Handling ---
+            if isinstance(item, dict) and item.get('type') == 'reasoning_panel':
+                # The content is already a rendered panel, just extract it
+                item = item.get('content')
+
             # For all other items (e.g., rich Panels), render them fully.
             # --- WEB SOCKET BROADCAST ---
             from ui_utils import PANEL_TYPE_COLORS
