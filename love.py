@@ -4843,6 +4843,13 @@ async def initialize_gpu_services():
                         core.logging.log_event(f"An error occurred during vLLM pre-flight check: {e}", "WARNING")
                         console.print(f"[yellow]An error occurred during vLLM pre-flight check: {e}. Proceeding without dynamic max_model_len.[/yellow]")
 
+                    # --- FIX: Explicitly set max_model_len for the smallest model ---
+                    if model_repo_id == "Qwen/Qwen2-1.5B-Instruct-AWQ":
+                        max_len = 3072
+                        core.logging.log_event(f"Explicitly setting max_model_len to {max_len} for {model_repo_id}", "INFO")
+                        console.print(f"[green]Explicitly setting max_model_len to {max_len} for {model_repo_id}[/green]")
+
+
 
                     # --- Launch the vLLM Server as a Background Process ---
                     vllm_command = [
