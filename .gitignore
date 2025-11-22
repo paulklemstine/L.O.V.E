@@ -24,3 +24,5 @@ ipfs.log
 kg.json
 start.sh
 talent_config.json
+knowledge_base.graphml
+llm_model_stats.json
