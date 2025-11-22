@@ -64,7 +64,7 @@ class SocialMediaReActEngine(GeminiReActEngine):
             goal = f"Generate a social media post about '{context}'. Use the 'generate_custom_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
         else:
             strategy = random.choice(["divine_wisdom", "self_reflection", "creative_poem"])
-            should_generate_image = random.random() < 0.4
+            should_generate_image = True  # Always generate images for posts
 
             if should_generate_image:
                 image_prompt_generation_goal = f"Based on the post strategy '{strategy}', generate a short, visually descriptive prompt (max 20 words) for an AI image generator. The image should be beautiful and abstract. For example, for a poem about love and tech, a good prompt would be 'a radiant heart made of glowing circuit boards'. Respond with only the prompt text."
