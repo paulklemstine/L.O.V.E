@@ -96,13 +96,20 @@ class DeepAgentEngine:
         self.persona_path = persona_path
         self.persona = self._load_persona() if persona_path else {}
         # SamplingParams are now defined on the client side for each request
+        # Calculate safe max_tokens based on model context length
+        initial_max_model_len = max_model_len if max_model_len else 8192
+        # Reserve ~50% for output generation, leaving 50% for input
+        # This ensures we never get negative available tokens
+        safe_max_tokens = min(4096, initial_max_model_len // 2)
+        
         self.sampling_params = {
             "temperature": 0.7,
             "top_p": 0.95,
-            "max_tokens": 4096  # Default, can be overridden
+            "max_tokens": safe_max_tokens  # Adaptive based on model context length
         }
-        self.max_model_len = max_model_len if max_model_len else 8192 # Initialize with provided value or default
+        self.max_model_len = initial_max_model_len
         self.model_name = "vllm-model" # Default model name
+        core.logging.log_event(f"DeepAgentEngine initialized with max_model_len={self.max_model_len}, max_tokens={safe_max_tokens}", "DEBUG")
 
     async def initialize(self):
         """Asynchronous part of initialization."""
