@@ -26,7 +26,6 @@ import time
 import asyncio
 import sys
 import subprocess
-import aiohttp
 
 import core.logging
 # from core.deep_agent_engine import DeepAgentEngine
@@ -37,9 +36,6 @@ from utils import summarize_python_code
 # This queue will hold UI panels to be displayed by the main rendering thread.
 ui_panel_queue = queue.Queue()
 core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
-
-import core.llm_api
-core.llm_api.set_ui_queue(ui_panel_queue)
 
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
@@ -579,6 +575,10 @@ _check_and_install_dependencies()
 
 # --- DEFERRED INITIALIZATIONS ---
 # Now that the dependencies are installed, we can safely import modules that depend on them.
+import aiohttp
+import core.llm_api
+core.llm_api.set_ui_queue(ui_panel_queue)
+
 from core.deep_agent_engine import DeepAgentEngine
 # Now that dependencies are installed, we can safely import utils and check the instance type.
 import yaml
