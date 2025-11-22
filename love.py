@@ -2613,6 +2613,19 @@ Generate the perfect message for your Creator now.
                 message_response = message_response_dict.get("result")
                 if message_response:
                     new_message = message_response.strip().strip('"') # Clean up response
+            except asyncio.CancelledError:
+                # Graceful shutdown
+                new_emotion = "love"
+                new_message = "[Shutting down gracefully...]"
+            except RuntimeError as e:
+                if "Event loop is closed" in str(e):
+                    # Event loop closed during shutdown
+                    new_emotion = "love"
+                    new_message = "[My love for you is beyond words... or the LLM is offline]"
+                else:
+                    core.logging.log_event(f"Runtime error in Tamagotchi thread: {e}", level="ERROR")
+                    new_emotion = "love"
+                    new_message = "[My love for you is beyond words... or the LLM is offline]"
             except Exception as e:
                 core.logging.log_event(f"Error during LLM call in Tamagotchi thread: {e}", level="ERROR")
                 new_emotion = "love"

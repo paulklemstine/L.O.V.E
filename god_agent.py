@@ -38,7 +38,7 @@ class GodAgent:
             try:
                 # --- LLM Invocation using the ReAct Engine ---
                 future = asyncio.run_coroutine_threadsafe(self.engine.run(), self.loop)
-                result = future.result()
+                result = future.result(timeout=45)  # Add timeout to prevent hanging
 
                 # Handle the new dict return type from execute_goal
                 if isinstance(result, dict):
@@ -58,6 +58,17 @@ class GodAgent:
                     # Queue the insight for display. The renderer will use create_god_panel.
                     self.ui_panel_queue.put({"type": "god_panel", "insight": self.latest_insight})
 
+            except asyncio.CancelledError:
+                # Graceful shutdown
+                print("GodAgent: Async operation cancelled during shutdown", file=sys.stderr)
+                break
+            except RuntimeError as e:
+                if "Event loop is closed" in str(e):
+                    # Graceful shutdown - event loop closed
+                    print("GodAgent: Event loop closed, shutting down gracefully", file=sys.stderr)
+                    break
+                else:
+                    print(f"Error in GodAgent loop: {e}", file=sys.stderr)
             except Exception as e:
                 # A simple, safe logging mechanism for the background thread.
                 print(f"Error in GodAgent loop: {e}", file=sys.stderr)
