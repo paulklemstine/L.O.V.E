@@ -76,15 +76,30 @@ def _recover_json(json_str: str):
              # Just strip the opening tag if no newline found
              json_str = json_str[start_idx+3:].strip()
 
-    while len(json_str) > 0:
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            last_brace = json_str.rfind('}')
-            if last_brace == -1:
-                raise e
-            json_str = json_str[:last_brace+1]
-    raise json.JSONDecodeError("Could not recover JSON object from string", "", 0)
+    # Try to parse with standard json.loads first
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        original_error = e # Store the original error for potential re-raising
+        # If it's an "Extra data" error, use JSONDecoder to get just the first object
+        if "Extra data" in str(e):
+            try:
+                decoder = json.JSONDecoder()
+                obj, idx = decoder.raw_decode(json_str)
+                return obj
+            except:
+                pass  # Fall through to recovery logic below
+        
+        # Recovery logic: progressively trim from the end
+        while len(json_str) > 0:
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                last_brace = json_str.rfind('}')
+                if last_brace == -1:
+                    raise original_error  # Re-raise original error
+                json_str = json_str[:last_brace+1]
+        raise json.JSONDecodeError("Could not recover JSON object from string", "", 0)
 
 class DeepAgentEngine:
     """
