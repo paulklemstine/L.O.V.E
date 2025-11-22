@@ -17,27 +17,16 @@ class TestLLMApi(unittest.IsolatedAsyncioTestCase):
         """Set up test environment before each test."""
         llm_api.PROVIDER_FAILURE_COUNT = {provider: 0 for provider in ["gemini", "horde", "openrouter"]}
         llm_api.LLM_AVAILABILITY = {model: time.time() for model in llm_api.ALL_LLM_MODELS}
-        llm_api._models_initialized = True # Prevent network calls
-
-        # Add test models to the global lists so run_llm recognizes them
-        if "openrouter_model" not in llm_api.OPENROUTER_MODELS:
-            llm_api.OPENROUTER_MODELS.append("openrouter_model")
-        if "gemini_model" not in llm_api.GEMINI_MODELS:
-            llm_api.GEMINI_MODELS.append("gemini_model")
 
     def tearDown(self):
         """Clean up after each test."""
         patch.stopall()
-        if "openrouter_model" in llm_api.OPENROUTER_MODELS:
-            llm_api.OPENROUTER_MODELS.remove("openrouter_model")
-        if "gemini_model" in llm_api.GEMINI_MODELS:
-            llm_api.GEMINI_MODELS.remove("gemini_model")
 
-    @patch('time.sleep', return_value=None)
     @patch('core.llm_api.pin_to_ipfs_sync', MagicMock(return_value="test_cid"))
+    @patch('core.llm_api.run_hypnotic_progress', side_effect=lambda console, msg, func, silent=False: func())
     @patch('requests.post')
     @patch('subprocess.run')
-    async def test_provider_fallback_and_failure_count(self, mock_subprocess_run, mock_requests_post, mock_sleep):
+    async def test_provider_fallback_and_failure_count(self, mock_subprocess_run, mock_requests_post, mock_run_hypnotic_progress):
         """
         Test that a failing provider increments failure count and the system falls back.
         """
@@ -46,69 +35,64 @@ class TestLLMApi(unittest.IsolatedAsyncioTestCase):
         mock_response_fail = MagicMock()
         mock_response_fail.status_code = 500
         mock_response_fail.headers = {}
-        mock_response_fail.json.return_value = {"error": "API Error"}
         http_error = requests.exceptions.HTTPError("API Error")
         http_error.response = mock_response_fail
+
+        # 2. Mock Gemini to fail with a CalledProcessError
+        subprocess_error = subprocess.CalledProcessError(1, "cmd", stderr="Gemini error")
+
+        # 3. Mock Horde to succeed
+        mock_horde_success_response = MagicMock()
+        mock_horde_success_response.status_code = 200
+        mock_horde_success_response.json.return_value = {"id": "horde_job_id"}
 
         # Side effect function to direct mock behavior
         def post_side_effect(*args, **kwargs):
             url = args[0]
             if "openrouter" in url:
                 raise http_error
-            elif "generativelanguage" in url: # Gemini endpoint
-                raise http_error
-            return MagicMock() # Default success
+            elif "horde" in url:
+                return mock_horde_success_response
+            return MagicMock() # Default success for other unexpected calls
         mock_requests_post.side_effect = post_side_effect
+        mock_subprocess_run.side_effect = subprocess_error
 
-        # SMART MOCK for run_hypnotic_progress to avoid deadlock
-        def progress_side_effect(console, msg, func, silent=False):
-            if "Horde" in msg:
-                return "horde_success" # Return success directly, bypassing the deadlock wrapper
-            return func() # Execute normally for failing providers
+        # Mock the GET request for Horde's status check to succeed
+        with patch('requests.get') as mock_requests_get:
+            mock_requests_get.return_value = MagicMock(status_code=200, json=lambda: {"done": True, "generations": [{"text": "horde_success"}]})
 
-        with patch('core.llm_api.run_hypnotic_progress', side_effect=progress_side_effect):
             # --- EXECUTION ---
-            llm_api.MODEL_STATS['openrouter_model']['provider'] = 'openrouter'
-            llm_api.MODEL_STATS['gemini_model']['provider'] = 'gemini'
-            llm_api.MODEL_STATS['horde_model']['provider'] = 'horde'
-
-            # We need to patch rank_models to return our specific test models
-            with patch('core.llm_api.rank_models', return_value=['openrouter_model', 'gemini_model', 'horde_model']):
-                # Reset availability
-                llm_api.LLM_AVAILABILITY['openrouter_model'] = 0
-                llm_api.LLM_AVAILABILITY['gemini_model'] = 0
-                llm_api.LLM_AVAILABILITY['horde_model'] = 0
-
+            # Use a patch to control provider order for predictability
+            with patch('random.shuffle', side_effect=lambda x: x.sort(key=lambda p: ['openrouter', 'gemini', 'horde'].index(p))):
                 result = await llm_api.run_llm("test prompt")
 
         # --- ASSERTIONS ---
         self.assertEqual(result['result'], 'horde_success')
-        # Check individual model failure counts
-        self.assertEqual(llm_api.MODEL_STATS['openrouter_model']['failed_calls'], 1)
-        self.assertEqual(llm_api.MODEL_STATS['gemini_model']['failed_calls'], 1)
+        self.assertEqual(llm_api.PROVIDER_FAILURE_COUNT['openrouter'], 1)
+        self.assertEqual(llm_api.PROVIDER_FAILURE_COUNT['gemini'], 1)
+        self.assertEqual(llm_api.PROVIDER_FAILURE_COUNT['horde'], 0) # Resets on success
 
-    @patch('time.sleep', return_value=None)
     @patch('core.llm_api.pin_to_ipfs_sync', MagicMock(return_value="test_cid"))
     @patch('core.llm_api.run_hypnotic_progress', side_effect=lambda console, msg, func, silent=False: func())
     @patch('requests.post')
-    async def test_successful_call_resets_failure_count(self, mock_requests_post, mock_run_hypnotic_progress, mock_sleep):
+    async def test_successful_call_resets_failure_count(self, mock_requests_post, mock_run_hypnotic_progress):
         """
-        Test that a successful call works as expected.
+        Test that a successful call resets a provider's failure count.
         """
         # --- MOCK SETUP ---
+        # Set a pre-existing failure count for OpenRouter
+        llm_api.PROVIDER_FAILURE_COUNT['openrouter'] = 3
+
         # Mock OpenRouter to succeed this time
         mock_requests_post.return_value = MagicMock(status_code=200, json=lambda: {"choices": [{"message": {"content": "openrouter_success"}}]})
 
-        llm_api.MODEL_STATS['openrouter_model']['provider'] = 'openrouter'
-        llm_api.LLM_AVAILABILITY['openrouter_model'] = time.time()
-
         # --- EXECUTION ---
-        with patch('core.llm_api.rank_models', return_value=['openrouter_model']):
+        with patch('random.shuffle', side_effect=lambda x: x.sort(key=lambda p: p == 'openrouter', reverse=True)):
             result = await llm_api.run_llm("test prompt")
 
         # --- ASSERTIONS ---
         self.assertEqual(result['result'], 'openrouter_success')
-        self.assertEqual(llm_api.PROVIDER_FAILURE_COUNT.get('openrouter', 0), 0)
+        self.assertEqual(llm_api.PROVIDER_FAILURE_COUNT['openrouter'], 0)
 
 class TestHordeModelRanking(unittest.TestCase):
 
