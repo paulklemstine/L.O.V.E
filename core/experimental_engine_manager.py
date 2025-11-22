@@ -68,7 +68,7 @@ def initialize_deep_agent_engine(tool_registry, persona_path, architecture):
                 llm = LLM(model=model_path, gpu_memory_utilization=0.7)
 
         max_len = llm.llm_engine.model_config.max_model_len
-        dynamic_max_tokens = min(max_len // 2, 8192)
+        dynamic_max_tokens = min(max_len // 2, 1024)
 
         sampling_params = SamplingParams(temperature=0.7, top_p=0.95, max_tokens=dynamic_max_tokens)
 
