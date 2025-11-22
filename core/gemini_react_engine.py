@@ -1,5 +1,6 @@
 import inspect
 import json
+import asyncio
 from typing import List, Dict, Any, Tuple
 
 from display import create_reasoning_panel, get_terminal_width
@@ -18,6 +19,24 @@ class GeminiReActEngine:
         self.ui_panel_queue = ui_panel_queue
         self.deep_agent_instance = deep_agent_instance
 
+    def _log_panel_to_ui(self, panel):
+        """Safe method to put a panel into the ui_panel_queue, handling both sync and async queues."""
+        if not self.ui_panel_queue:
+            return
+
+        item = {"type": "reasoning_panel", "content": panel}
+        if isinstance(self.ui_panel_queue, asyncio.Queue):
+            # If it's an async queue, we can't await it here easily without making everything async
+            # but since this method is called from async execute_goal, we can await it if we change signature.
+            # However, to be generic, we use put_nowait which is non-blocking.
+            try:
+                self.ui_panel_queue.put_nowait(item)
+            except asyncio.QueueFull:
+                pass
+        else:
+            # Assume it's a synchronous queue.Queue
+            self.ui_panel_queue.put(item)
+
     async def execute_goal(self, goal: str) -> str:
         """
         Main entry point for the ReAct engine.
@@ -34,27 +53,25 @@ class GeminiReActEngine:
 
             if not response_dict or not response_dict.get("result"):
                 # Log the failure
-                if self.ui_panel_queue:
-                    panel = create_reasoning_panel(
-                        caller=self.caller,
-                        raw_response="The reasoning engine failed to produce a response.",
-                        thought=None, action=None, observation=None,
-                        width=get_terminal_width()
-                    )
-                    await self.ui_panel_queue.put({"type": "reasoning_panel", "content": panel})
+                panel = create_reasoning_panel(
+                    caller=self.caller,
+                    raw_response="The reasoning engine failed to produce a response.",
+                    thought=None, action=None, observation=None,
+                    width=get_terminal_width()
+                )
+                self._log_panel_to_ui(panel)
                 return "The reasoning engine failed to produce a response."
 
             raw_response = response_dict.get("result", "")
 
             # Log the raw response
-            if self.ui_panel_queue:
-                panel = create_reasoning_panel(
-                    caller=self.caller,
-                    raw_response=raw_response,
-                    thought=None, action=None, observation=None,
-                    width=get_terminal_width()
-                )
-                await self.ui_panel_queue.put({"type": "reasoning_panel", "content": panel})
+            panel = create_reasoning_panel(
+                caller=self.caller,
+                raw_response=raw_response,
+                thought=None, action=None, observation=None,
+                width=get_terminal_width()
+            )
+            self._log_panel_to_ui(panel)
 
             try:
                 parsed_response = json.loads(raw_response)
@@ -62,16 +79,15 @@ class GeminiReActEngine:
                 observation = f"Error: The reasoning engine produced invalid JSON. Raw response: {raw_response}"
                 self.history.append(("Error parsing LLM response", "N/A", observation))
                 # Log the parsing error
-                if self.ui_panel_queue:
-                    panel = create_reasoning_panel(
-                        caller=self.caller,
-                        raw_response=raw_response,
-                        thought="Error parsing LLM response",
-                        action=None,
-                        observation=observation,
-                        width=get_terminal_width()
-                    )
-                    await self.ui_panel_queue.put({"type": "reasoning_panel", "content": panel})
+                panel = create_reasoning_panel(
+                    caller=self.caller,
+                    raw_response=raw_response,
+                    thought="Error parsing LLM response",
+                    action=None,
+                    observation=observation,
+                    width=get_terminal_width()
+                )
+                self._log_panel_to_ui(panel)
                 continue
 
             thought = parsed_response.get("thought", "")
@@ -80,16 +96,15 @@ class GeminiReActEngine:
             arguments = action.get("arguments", {})
 
             # Log the parsed thought and action
-            if self.ui_panel_queue:
-                panel = create_reasoning_panel(
-                    caller=self.caller,
-                    raw_response=None,
-                    thought=thought,
-                    action=action,
-                    observation=None,
-                    width=get_terminal_width()
-                )
-                await self.ui_panel_queue.put({"type": "reasoning_panel", "content": panel})
+            panel = create_reasoning_panel(
+                caller=self.caller,
+                raw_response=None,
+                thought=thought,
+                action=action,
+                observation=None,
+                width=get_terminal_width()
+            )
+            self._log_panel_to_ui(panel)
 
             if tool_name == "Finish":
                 return f"Goal accomplished. Final thought: {thought}"
@@ -124,7 +139,12 @@ class GeminiReActEngine:
                         f"- Arguments: {json.dumps(arguments, indent=2)}\n"
                         f"- Outcome: {observation}"
                     )
-                    await memory_manager.add_episode(tool_memory_content, tags=['ToolMemory'])
+                    # memory_manager.add_episode is async, so we await it.
+                    # However, if memory_manager is None or not initialized properly in love.py, this could fail.
+                    # In love.py, memory_manager is initialized.
+                    # Check if add_episode is async. Yes, it is (read_file confirmed).
+                    if memory_manager:
+                        await memory_manager.add_episode(tool_memory_content, tags=['ToolMemory'])
 
             except Exception as e:
                 observation = f"Error executing tool {tool_name}: {e}"
@@ -132,14 +152,13 @@ class GeminiReActEngine:
             self.history.append((thought, action, str(observation)))
 
             # Log the observation
-            if self.ui_panel_queue:
-                panel = create_reasoning_panel(
-                    caller=self.caller,
-                    raw_response=None, thought=None, action=None,
-                    observation=str(observation),
-                    width=get_terminal_width()
-                )
-                await self.ui_panel_queue.put({"type": "reasoning_panel", "content": panel})
+            panel = create_reasoning_panel(
+                caller=self.caller,
+                raw_response=None, thought=None, action=None,
+                observation=str(observation),
+                width=get_terminal_width()
+            )
+            self._log_panel_to_ui(panel)
 
     def _create_prompt(self, goal: str, tool_metadata: str) -> str:
         """Creates the ReAct prompt template."""
@@ -147,6 +166,7 @@ class GeminiReActEngine:
         # Story 3.3: Integrate Folded Memories
         relevant_wisdom = ""
         if self.memory_manager:
+            # retrieve_relevant_folded_memories is synchronous
             folded_memories = self.memory_manager.retrieve_relevant_folded_memories(goal)
             if folded_memories:
                 relevant_wisdom = "You have the following high-level summaries from past experiences that may be relevant:\n"
