@@ -38,7 +38,19 @@ class GodAgent:
             try:
                 # --- LLM Invocation using the ReAct Engine ---
                 future = asyncio.run_coroutine_threadsafe(self.engine.run(), self.loop)
-                insight_text = future.result()
+                result = future.result()
+
+                # Handle the new dict return type from execute_goal
+                if isinstance(result, dict):
+                    if result.get('success', False):
+                        insight_text = result.get('result', '')
+                    else:
+                        # Log failure but don't crash
+                        print(f"God Agent reasoning failed: {result.get('result', 'Unknown error')}", file=sys.stderr)
+                        insight_text = None
+                else:
+                    # Backward compatibility for string returns
+                    insight_text = result
 
                 if insight_text and insight_text.strip():
                     # The ReAct engine's "Finish" action will be the insight.
