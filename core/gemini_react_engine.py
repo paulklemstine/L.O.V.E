@@ -37,10 +37,11 @@ class GeminiReActEngine:
             # Assume it's a synchronous queue.Queue
             self.ui_panel_queue.put(item)
 
-    async def execute_goal(self, goal: str, max_steps: int = 10) -> str:
+    async def execute_goal(self, goal: str, max_steps: int = 10) -> dict:
         """
         Main entry point for the ReAct engine.
         Continues the loop until the Action is a "Finish" action or max_steps is reached.
+        Returns a dict with 'success' (bool) and 'result' (str) keys.
         """
         step_count = 0
         while step_count < max_steps:
@@ -62,7 +63,7 @@ class GeminiReActEngine:
                     width=get_terminal_width()
                 )
                 self._log_panel_to_ui(panel)
-                return "The reasoning engine failed to produce a response."
+                return {"success": False, "result": "The reasoning engine failed to produce a response."}
 
             raw_response = response_dict.get("result", "")
 
@@ -109,7 +110,7 @@ class GeminiReActEngine:
             self._log_panel_to_ui(panel)
 
             if tool_name == "Finish":
-                return f"Goal accomplished. Final thought: {thought}"
+                return {"success": True, "result": f"Goal accomplished. Final thought: {thought}"}
 
             try:
                 is_dynamic_tool = False
@@ -152,6 +153,10 @@ class GeminiReActEngine:
                 observation = f"Error executing tool {tool_name}: {e}"
 
             self.history.append((thought, action, str(observation)))
+            
+            # Limit history to prevent exponential growth - keep only last 5 entries
+            if len(self.history) > 5:
+                self.history = self.history[-5:]
 
             # Log the observation
             panel = create_reasoning_panel(
@@ -162,7 +167,7 @@ class GeminiReActEngine:
             )
             self._log_panel_to_ui(panel)
 
-        return f"Goal failed. The reasoning engine exceeded the maximum number of steps ({max_steps})."
+        return {"success": False, "result": f"Goal failed. The reasoning engine exceeded the maximum number of steps ({max_steps})."}
 
     def _create_prompt(self, goal: str, tool_metadata: str) -> str:
         """Creates the ReAct prompt template."""

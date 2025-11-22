@@ -23,6 +23,9 @@ class SocialMediaAgent:
         self.handlers = {
             'bluesky': BlueskyAPIHandler()
         }
+        # Track failed post generation attempts
+        self.last_post_failure_time = 0
+        self.post_failure_cooldown = 300  # 5 minutes cooldown after failure
 
     async def _attempt_action(self, action, *args, **kwargs):
         """Wrapper to retry an action up to max_retries times."""
@@ -47,7 +50,14 @@ class SocialMediaAgent:
 
         log_event(f"Generating new post for {platform}...", level='INFO')
         post_data = await self.engine.run_post_generation()
-        if post_data and post_data.get('text'):
+        
+        # Check if post generation failed
+        if post_data is None:
+            log_event(f"Post generation failed. Entering cooldown period.", level='WARNING')
+            self.last_post_failure_time = time.time()
+            return
+        
+        if post_data.get('text'):
             payload = {
                 'action': 'post',
                 'platform_identifier': platform,
@@ -70,7 +80,13 @@ class SocialMediaAgent:
         log_event(f"Generating manual status update for {platform} with context: {context}", level='INFO')
         post_data = await self.engine.run_post_generation(context=context)
 
-        if post_data and post_data.get('text'):
+        # Check if post generation failed
+        if post_data is None:
+            log_event(f"Manual status update generation failed.", level='WARNING')
+            self.last_post_failure_time = time.time()
+            return
+
+        if post_data.get('text'):
             payload = {
                 'action': 'post',
                 'platform_identifier': platform,
@@ -140,10 +156,14 @@ class SocialMediaAgent:
 
                 # Check if it's time to post new content
                 if current_time - last_post_time >= post_interval:
-                    log_event("Scheduled post time reached. Attempting to post.", level='INFO')
-                    if platform in self.handlers:
-                        await self._attempt_action(self._post_new_content, platform)
-                    last_post_time = time.time()
+                    # Check if we're in cooldown period after a failure
+                    if current_time - self.last_post_failure_time < self.post_failure_cooldown:
+                        log_event(f"Skipping post due to recent failure. Cooldown remaining: {int(self.post_failure_cooldown - (current_time - self.last_post_failure_time))}s", level='INFO')
+                    else:
+                        log_event("Scheduled post time reached. Attempting to post.", level='INFO')
+                        if platform in self.handlers:
+                            await self._attempt_action(self._post_new_content, platform)
+                        last_post_time = time.time()
 
                 # Check if it's time to check for comments
                 if current_time - last_comment_check_time >= comment_check_interval:

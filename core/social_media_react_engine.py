@@ -82,14 +82,15 @@ class SocialMediaReActEngine(GeminiReActEngine):
 
         result = await self.execute_goal(goal)
 
-        # The result from execute_goal can be a dict (from Finish tool) or a string.
-        # We need to parse it safely.
-        if isinstance(result, dict) and 'result' in result:
-             final_output_str = result.get('result', '{}')
-        elif isinstance(result, str):
-             final_output_str = result
-        else:
-             final_output_str = '{}'
+        # Check if the reasoning engine succeeded
+        if not result.get('success', False):
+            # Log the failure and return None to indicate failure
+            from core.logging import log_event
+            log_event(f"Social media post generation failed: {result.get('result', 'Unknown error')}", level='WARNING')
+            return None
+
+        # Extract the actual result string
+        final_output_str = result.get('result', '{}')
 
         try:
             # The LLM might return a string representation of a JSON object.
