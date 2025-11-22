@@ -233,4 +233,7 @@ PANEL_TYPE_COLORS = {
     "file_op": "bright_cyan",
     "skyvern": "bright_blue",
     "memory": "bright_blue",
+    "god_panel": "white",
+    "jobs": "cyan",
+    "reasoning": "bright_magenta",
 }
