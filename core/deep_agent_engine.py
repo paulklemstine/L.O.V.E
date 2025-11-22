@@ -112,10 +112,16 @@ class DeepAgentEngine:
         self.persona = self._load_persona() if persona_path else {}
         # SamplingParams are now defined on the client side for each request
         # Calculate safe max_tokens based on model context length
-        initial_max_model_len = max_model_len if max_model_len else 8192
-        # Reserve ~50% for output generation, leaving 50% for input
+        # Ensure we have a reasonable minimum context
+        if max_model_len and max_model_len < 1024:
+            core.logging.log_event(f"Received very small max_model_len={max_model_len}, using 1024 minimum", "WARNING")
+            initial_max_model_len = 1024
+        else:
+            initial_max_model_len = max_model_len if max_model_len else 8192
+        
+        # Reserve space: use 25% for generation, 75% for input (more conservative)
         # This ensures we never get negative available tokens
-        safe_max_tokens = min(4096, initial_max_model_len // 2)
+        safe_max_tokens = min(2048, initial_max_model_len // 4)
         
         self.sampling_params = {
             "temperature": 0.7,

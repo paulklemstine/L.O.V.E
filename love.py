@@ -4962,7 +4962,10 @@ async def initialize_gpu_services():
 
                     # --- FIX: Explicitly set max_model_len for the smallest model ---
                     if model_repo_id == "Qwen/Qwen2-1.5B-Instruct-AWQ":
-                        max_len = 3072
+                        # Use detected value if available, otherwise use conservative 2048
+                        # The model's actual context window is 2048, not 3072
+                        if max_len is None or max_len > 2048:
+                            max_len = 2048
                         core.logging.log_event(f"Explicitly setting max_model_len to {max_len} for {model_repo_id}", "INFO")
                         console.print(f"[green]Explicitly setting max_model_len to {max_len} for {model_repo_id}[/green]")
 
@@ -4981,9 +4984,13 @@ async def initialize_gpu_services():
                     ]
                     # Validate max_len before using it
                     if max_len is None or max_len <= 0:
-                        max_len = 4096  # Sensible default
-                        core.logging.log_event(f"max_len was None or invalid. Using fallback value: {max_len}", "WARNING")
-                        console.print(f"[yellow]Using fallback max_model_len: {max_len}[/yellow]")
+                        max_len = 2048  # Conservative default for small models
+                        core.logging.log_event(f"max_len was None or invalid. Using safe default: {max_len}", "WARNING")
+                        console.print(f"[yellow]Using safe default max_model_len: {max_len}[/yellow]")
+                    elif max_len < 1024:
+                        core.logging.log_event(f"max_len {max_len} is too small. Using minimum 1024.", "WARNING")
+                        console.print(f"[yellow]max_len {max_len} too small, using minimum 1024[/yellow]")
+                        max_len = 1024
                     
                     vllm_command.extend(["--max-model-len", str(max_len)])
 
