@@ -93,10 +93,6 @@ class TalentManager:
         Saves a single talent profile to the database and updates the knowledge base graph.
         If a profile with the same anonymized_id already exists, it will be updated.
         """
-        """
-        Saves a single talent profile to the database and updates the knowledge base graph.
-        If a profile with the same anonymized_id already exists, it will be updated.
-        """
         if not self.cipher_suite:
             log_event("Cannot save profile: Encryption is not configured.", level='ERROR')
             return "Error: Encryption not configured."
@@ -137,11 +133,10 @@ class TalentManager:
 
     def get_profile(self, anonymized_id):
         """Retrieves a single talent profile by their anonymized ID."""
-        """Retrieves a single talent profile by their anonymized ID."""
+        self.profiles = self._load_profiles()
         return self.profiles.get(anonymized_id)
 
     def add_interaction(self, anonymized_id: str, interaction_type: str, message: str, new_status: str = None):
-        """Adds a new interaction to a talent's history and optionally updates their status."""
         """Adds a new interaction to a talent's history and optionally updates their status."""
         if anonymized_id not in self.profiles:
             return "Error: Profile not found."
@@ -170,7 +165,6 @@ class TalentManager:
 
     def update_profile_status(self, anonymized_id: str, new_status: str):
         """Updates the status of a specific talent profile."""
-        """Updates the status of a specific talent profile."""
         if anonymized_id in self.profiles:
             self.profiles[anonymized_id]['status'] = new_status
             self._save_profiles()
@@ -183,10 +177,7 @@ class TalentManager:
         Returns a list of summaries for all saved profiles.
         Each summary is a dictionary containing key information.
         """
-        """
-        Returns a list of summaries for all saved profiles.
-        Each summary is a dictionary containing key information.
-        """
+        self.profiles = self._load_profiles()
         profile_list = []
         for profile_id, profile_data in self.profiles.items():
             summary = {
