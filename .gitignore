@@ -26,5 +26,3 @@ start.sh
 talent_config.json
 knowledge_base.graphml
 llm_model_stats.json
-knowledge_base.graphml
-llm_model_stats.json
