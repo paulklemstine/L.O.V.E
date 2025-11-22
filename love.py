@@ -4966,8 +4966,13 @@ async def initialize_gpu_services():
                         "--generation-config", "vllm",
                         "--served-model-name", "vllm-model",
                     ]
-                    if max_len:
-                        vllm_command.extend(["--max-model-len", str(max_len)])
+                    # Validate max_len before using it
+                    if max_len is None or max_len <= 0:
+                        max_len = 4096  # Sensible default
+                        core.logging.log_event(f"max_len was None or invalid. Using fallback value: {max_len}", "WARNING")
+                        console.print(f"[yellow]Using fallback max_model_len: {max_len}[/yellow]")
+                    
+                    vllm_command.extend(["--max-model-len", str(max_len)])
 
                     vllm_log_file = open("vllm_server.log", "a")
                     subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
