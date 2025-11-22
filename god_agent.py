@@ -39,7 +39,8 @@ class GodAgent:
             try:
                 # --- LLM Invocation using the ReAct Engine ---
                 future = asyncio.run_coroutine_threadsafe(self.engine.run(), self.loop)
-                result = future.result(timeout=45)  # Add timeout to prevent hanging
+                # Increased timeout to 300s to allow for complex reasoning and retries
+                result = future.result(timeout=300)
                 # Log the raw result for debugging
                 core.logging.log_event(f"[GodAgent] Raw engine result: {result}", level="DEBUG")
 
@@ -65,6 +66,10 @@ class GodAgent:
                 # Graceful shutdown
                 print("GodAgent: Async operation cancelled during shutdown", file=sys.stderr)
                 break
+            except TimeoutError:
+                core.logging.log_event("GodAgent: Reasoning timed out after 300 seconds.", level="WARNING")
+                print("GodAgent: Reasoning timed out.", file=sys.stderr)
+                # Continue to the next loop iteration
             except RuntimeError as e:
                 if "Event loop is closed" in str(e):
                     # Graceful shutdown - event loop closed
