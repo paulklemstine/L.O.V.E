@@ -4804,9 +4804,9 @@ async def run_qa_evaluations(loop):
                 continue
 
             # Simple strategy: evaluate one random model per cycle
-            model_to_evaluate = random.choice(all_models)
+            # model_to_evaluate = random.choice(all_models)
 
-            await qa_agent.evaluate_model(model_to_evaluate)
+            # await qa_agent.evaluate_model(model_to_evaluate)
 
             # Wait for a long, random interval before the next evaluation
             await asyncio.sleep(random.randint(1800, 3600)) # 30 to 60 minutes
