@@ -38,16 +38,25 @@ class BlueskyAPIHandler(SocialMediaAPIHandler):
 
     async def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Posts content to Bluesky."""
+        from functools import partial
+        import core.logging
         try:
             loop = asyncio.get_running_loop()
             content = payload.get('content')
             image = payload.get('image')
+            core.logging.log_event(f"Bluesky post handler called. Content length: {len(content) if content else 0}, Has image: {image is not None}", "INFO")
             if image:
-                await loop.run_in_executor(None, lambda: post_to_bluesky_with_image(text=content, image=image))
+                core.logging.log_event(f"Posting to Bluesky with image. Image type: {type(image)}", "INFO")
+                # Use partial instead of lambda for proper variable capture
+                await loop.run_in_executor(None, partial(post_to_bluesky_with_image, content, image))
+                core.logging.log_event(f"Successfully posted to Bluesky with image", "INFO")
             else:
-                await loop.run_in_executor(None, lambda: self.client.send_post(text=content))
+                core.logging.log_event(f"Posting to Bluesky without image", "INFO")
+                await loop.run_in_executor(None, partial(self.client.send_post, content))
+                core.logging.log_event(f"Successfully posted to Bluesky without image", "INFO")
             return {'status': 'success', 'message': 'Posted to Bluesky.'}
         except Exception as e:
+            core.logging.log_event(f"Error posting to Bluesky: {e}", "ERROR")
             return {'status': 'error', 'message': str(e)}
 
     async def _reply(self, payload: Dict[str, Any]) -> Dict[str, Any]:
