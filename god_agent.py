@@ -3,6 +3,7 @@ import time
 import json
 import asyncio
 import sys
+import traceback
 
 from core.god_agent_react_engine import GodAgentReActEngine
 
@@ -39,6 +40,8 @@ class GodAgent:
                 # --- LLM Invocation using the ReAct Engine ---
                 future = asyncio.run_coroutine_threadsafe(self.engine.run(), self.loop)
                 result = future.result(timeout=45)  # Add timeout to prevent hanging
+                # Log the raw result for debugging
+                core.logging.log_event(f"[GodAgent] Raw engine result: {result}", level="DEBUG")
 
                 # Handle the new dict return type from execute_goal
                 if isinstance(result, dict):
@@ -70,8 +73,9 @@ class GodAgent:
                 else:
                     print(f"Error in GodAgent loop: {e}", file=sys.stderr)
             except Exception as e:
-                # A simple, safe logging mechanism for the background thread.
-                print(f"Error in GodAgent loop: {e}", file=sys.stderr)
+                # Log full traceback for debugging
+                tb = traceback.format_exc()
+                print(f"Error in GodAgent loop: {e}\n{tb}", file=sys.stderr)
 
             # Wait for approximately 60 seconds before the next cycle.
             time.sleep(60)

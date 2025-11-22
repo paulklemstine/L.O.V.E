@@ -111,3 +111,16 @@ class SocialMediaReActEngine(GeminiReActEngine):
     async def run_reply_generation(self, post_text, comment_text):
         goal = f"A user has commented on our post. First, decide if we should reply using the 'decide_on_reply' tool. Then, if a reply is warranted, generate a thoughtful response with the 'generate_reply' tool and use the 'Finish' tool with the reply text. \nPost: \"{post_text}\"\nComment: \"{comment_text}\""
         return await self.execute_goal(goal)
+class SocialMediaReactEngine(SocialMediaReActEngine):
+    """Convenient wrapper for testing without needing UI panel queue and loop.
+    Instantiates SocialMediaReActEngine with a dummy UI panel queue and an event loop.
+    """
+    def __init__(self):
+        import asyncio
+        ui_panel_queue = asyncio.Queue()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        super().__init__(ui_panel_queue, loop)

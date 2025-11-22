@@ -124,8 +124,8 @@ class GeminiReActEngine:
             if tool_name == "Finish":
                 if arguments:
                     return {"success": True, "result": arguments}
-                # Don't return the internal thought - return empty dict so social_media engine can parse the history
-                return {"success": True, "result": {}}
+                # No arguments: return the thought string so caller can parse JSON from it
+                return {"success": True, "result": thought}
 
             try:
                 is_dynamic_tool = False

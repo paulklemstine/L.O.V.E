@@ -3,31 +3,31 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
     "gemini-2.5-pro": {
-        "total_tokens_generated": 0,
-        "total_time_spent": 0.0,
-        "successful_calls": 0,
-        "failed_calls": 0,
+        "total_tokens_generated": 252,
+        "total_time_spent": 11.207021713256836,
+        "successful_calls": 2,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
     "gemini-2.5-flash": {
-        "total_tokens_generated": 0,
-        "total_time_spent": 0.0,
-        "successful_calls": 0,
-        "failed_calls": 0,
+        "total_tokens_generated": 1019,
+        "total_time_spent": 18.821932077407837,
+        "successful_calls": 7,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
     "gemini-2.5-flash-lite": {
-        "total_tokens_generated": 0,
-        "total_time_spent": 0.0,
-        "successful_calls": 0,
-        "failed_calls": 0,
+        "total_tokens_generated": 2640,
+        "total_time_spent": 21.182952404022217,
+        "successful_calls": 15,
+        "failed_calls": 4,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
@@ -230,5 +230,461 @@
         "failed_calls": 0,
         "reasoning_score": 50.0,
         "provider": "horde"
+    },
+    "vllm-model": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 90.0,
+        "provider": "vllm"
+    },
+    "x-ai/grok-4.1-fast:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "kwaipilot/kat-coder-pro:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "nvidia/nemotron-nano-12b-v2-vl:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "alibaba/tongyi-deepresearch-30b-a3b:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "meituan/longcat-flash-chat:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "nvidia/nemotron-nano-9b-v2:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "openai/gpt-oss-20b:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "z-ai/glm-4.5-air:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "qwen/qwen3-coder:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "moonshotai/kimi-k2:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "google/gemma-3n-e2b-it:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "tngtech/deepseek-r1t2-chimera:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "mistralai/mistral-small-3.2-24b-instruct:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "deepseek/deepseek-r1-0528-qwen3-8b:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "deepseek/deepseek-r1-0528:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "google/gemma-3n-e4b-it:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "qwen/qwen3-4b:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "qwen/qwen3-30b-a3b:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "qwen/qwen3-14b:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "qwen/qwen3-235b-a22b:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "tngtech/deepseek-r1t-chimera:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "microsoft/mai-ds-r1:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "arliai/qwq-32b-arliai-rpr-v1:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "qwen/qwen2.5-vl-32b-instruct:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "deepseek/deepseek-chat-v3-0324:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "mistralai/mistral-small-3.1-24b-instruct:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "google/gemma-3-4b-it:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "google/gemma-3-12b-it:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "google/gemma-3-27b-it:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "mistralai/mistral-small-24b-instruct-2501:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "deepseek/deepseek-r1-distill-llama-70b:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "deepseek/deepseek-r1:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "google/gemini-2.0-flash-exp:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "meta-llama/llama-3.3-70b-instruct:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "qwen/qwen-2.5-coder-32b-instruct:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "meta-llama/llama-3.2-3b-instruct:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "qwen/qwen-2.5-72b-instruct:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "nousresearch/hermes-3-llama-3.1-405b:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "mistralai/mistral-nemo:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "mistralai/mistral-7b-instruct:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
+    },
+    "anthracite-org/magnum-v4-123b": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "aphrodite/TheDrummer/Behemoth-ReduX-123B-v1.1_Compressed-Tensors_W4A16": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "arliai/GLM-4.6": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "deepseek-ai/DeepSeek-V3": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Cydonia-v1.3-Magnum-v4-22B": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/EtherealAurora-12B-v2": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/GodSlayer-12B-ABYSS.Q4_K_S": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Hermes-4-14B-BF16-abliterated.i1-Q4_K_M": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Llama-3-Lumimaid-8B-v0.1-Q4_K_M": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Lumimaid-Magnum-12B.i1-IQ3_XXS": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Lumimaid-v0.2-8B": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Olmo-3-32B-Think-UD-Q6_K_XL": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/TheDrummer_Cydonia-24B-v4.2.0-Q4_K_M": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/The-Omega-Directive-M-8B-v1.0.Q5_K_M": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "deep_agent_vllm": {
+        "total_tokens_generated": 8668,
+        "total_time_spent": 6.381009817123413,
+        "successful_calls": 197,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "deep_agent"
     }
 }
