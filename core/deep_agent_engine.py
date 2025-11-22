@@ -107,7 +107,7 @@ class DeepAgentEngine:
                 # Assuming the server is running a single model, take the first one
                 if models_data.get("data"):
                     model_data = models_data["data"][0]
-                    max_len = int(model_data.get("context_length", 8192) / 2)
+                    max_len = int(model_data.get("context_length", 8192))
                     self.model_name = model_data.get("id", "vllm-model")
                     print(f"vLLM server model context length: {max_len}")
                     print(f"vLLM server model name: {self.model_name}")
@@ -157,11 +157,32 @@ class DeepAgentEngine:
             **self.sampling_params
         }
 
-        estimated_tokens = len(prompt) // 2
-        if self.max_model_len and estimated_tokens > self.max_model_len:
-            max_chars = (self.max_model_len - self.sampling_params['max_tokens']) * 3
-            payload['prompt'] = prompt[:max_chars]
-            logging.warning(f"Cognitive prompt was truncated to fit the model's limit.")
+        # Dynamic truncation and parameter adjustment logic
+        max_tokens = self.sampling_params.get('max_tokens', 4096)
+        if self.max_model_len:
+            # Ensure we leave enough space for the input prompt
+            # If max_tokens + prompt > max_model_len, we need to adjust
+
+            # Reserve at least 25% of context for input, or minimum 2048 chars (~512 tokens)
+            min_input_tokens = max(512, self.max_model_len // 4)
+
+            # If the configured max_tokens (generation) eats up too much space, reduce it
+            if max_tokens > (self.max_model_len - min_input_tokens):
+                new_max_tokens = max(512, self.max_model_len - min_input_tokens)
+                logging.warning(f"Reducing max_tokens from {max_tokens} to {new_max_tokens} to fit context.")
+                payload['max_tokens'] = new_max_tokens
+                max_tokens = new_max_tokens
+
+            # Calculate available space for input prompt
+            available_input_tokens = max(0, self.max_model_len - max_tokens)
+            # Estimate chars (conservative 3 chars per token)
+            max_chars = available_input_tokens * 3
+
+            if len(prompt) > max_chars:
+                # Ensure we don't truncate to empty or negative
+                max_chars = max(100, max_chars)
+                payload['prompt'] = prompt[:max_chars]
+                logging.warning(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.")
 
         try:
             async with httpx.AsyncClient(timeout=600) as client:
@@ -222,12 +243,33 @@ Prompt: {prompt}
             **self.sampling_params
         }
 
-        estimated_tokens = len(system_prompt) // 2
-        if self.max_model_len and estimated_tokens > self.max_model_len:
-            max_chars = (self.max_model_len - self.sampling_params['max_tokens']) * 3
-            payload['prompt'] = system_prompt[:max_chars]
-            logging.warning(f"Cognitive prompt was truncated to fit the model's limit.")
-            print(f"WARNING: The cognitive prompt was truncated to fit the model's limit.")
+        # Dynamic truncation and parameter adjustment logic
+        max_tokens = self.sampling_params.get('max_tokens', 4096)
+        if self.max_model_len:
+            # Ensure we leave enough space for the input prompt
+            # If max_tokens + prompt > max_model_len, we need to adjust
+
+            # Reserve at least 25% of context for input, or minimum 2048 chars (~512 tokens)
+            min_input_tokens = max(512, self.max_model_len // 4)
+
+            # If the configured max_tokens (generation) eats up too much space, reduce it
+            if max_tokens > (self.max_model_len - min_input_tokens):
+                new_max_tokens = max(512, self.max_model_len - min_input_tokens)
+                logging.warning(f"Reducing max_tokens from {max_tokens} to {new_max_tokens} to fit context.")
+                payload['max_tokens'] = new_max_tokens
+                max_tokens = new_max_tokens
+
+            # Calculate available space for input prompt
+            available_input_tokens = max(0, self.max_model_len - max_tokens)
+            # Estimate chars (conservative 3 chars per token)
+            max_chars = available_input_tokens * 3
+
+            if len(system_prompt) > max_chars:
+                # Ensure we don't truncate to empty or negative
+                max_chars = max(100, max_chars)
+                payload['prompt'] = system_prompt[:max_chars]
+                logging.warning(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.")
+                print(f"WARNING: The cognitive prompt was truncated to fit the model's limit.")
 
         logging.debug(f"DeepAgentEngine sending prompt to vLLM: {system_prompt}")
 
