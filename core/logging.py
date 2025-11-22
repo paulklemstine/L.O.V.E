@@ -25,6 +25,14 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
     logging module, and sends a structured log object to the UI queue.
     """
     global log_file_stream
+    
+    # Check if the last argument is a valid log level (handling common misuse of positional args)
+    valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    if args and isinstance(args[-1], str) and args[-1].upper() in valid_levels:
+        # If the user passed the level as the last positional argument
+        level = args[-1]
+        args = args[:-1]
+
     message = " ".join(map(str, args))
 
     # Also write to the Python logger with the specified level
@@ -37,6 +45,8 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
         logging.error(message)
     elif level_upper == "CRITICAL":
         logging.critical(message)
+    elif level_upper == "DEBUG":
+        logging.debug(message)
     else:
         logging.info(message)  # Default to INFO
 

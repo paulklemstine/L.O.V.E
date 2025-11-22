@@ -1481,7 +1481,7 @@ Based on the original directive and Jules's current prompt, formulate the best p
                 return # Only one fix-it task at a time.
 
             if not self.tasks:
-                core.logging.log_event("No active tasks, skipping error queue management.", "DEBUG")
+                # core.logging.log_event("No active tasks, skipping error queue management.", "DEBUG")
                 return
 
             # --- Queue Cleanup ---
@@ -4542,12 +4542,13 @@ Create a large, vibrant, and expressive ANSI art piece representing the pure, be
             # --- BROADCAST DASHBOARD DATA ---
             await broadcast_dashboard_data(websocket_manager, task_manager, kb, talent_manager)
 
-            time.sleep(random.randint(5, 15))
+            # Use asyncio.sleep to avoid blocking the event loop
+            await asyncio.sleep(random.randint(5, 15))
 
         except Exception as e:
             full_traceback = traceback.format_exc()
             log_critical_event(f"CRITICAL: Unhandled exception in cognitive loop: {e}\n{full_traceback}")
-            time.sleep(15)
+            await asyncio.sleep(15)
 
 
 # The initial_bootstrapping_recon function has been removed, as this logic
