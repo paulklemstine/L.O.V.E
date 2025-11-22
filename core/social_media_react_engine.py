@@ -89,8 +89,15 @@ class SocialMediaReActEngine(GeminiReActEngine):
             log_event(f"Social media post generation failed: {result.get('result', 'Unknown error')}", level='WARNING')
             return None
 
-        # Extract the actual result string
-        final_output_str = result.get('result', '{}')
+        # Extract the actual result
+        final_result = result.get('result', {})
+
+        # If the result is already a dictionary (from our new Finish tool logic), return it directly
+        if isinstance(final_result, dict):
+            return final_result
+
+        # Otherwise, try to parse it as a JSON string (backward compatibility)
+        final_output_str = str(final_result)
 
         try:
             # The LLM might return a string representation of a JSON object.

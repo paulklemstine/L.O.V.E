@@ -122,6 +122,8 @@ class GeminiReActEngine:
             self._log_panel_to_ui(panel)
 
             if tool_name == "Finish":
+                if arguments:
+                    return {"success": True, "result": arguments}
                 return {"success": True, "result": f"Goal accomplished. Final thought: {thought}"}
 
             try:
