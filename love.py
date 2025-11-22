@@ -4799,8 +4799,22 @@ async def initialize_gpu_services():
             console.print("[bold yellow]Existing vLLM server detected and healthy. Skipping initialization.[/bold yellow]")
             core.logging.log_event("Existing vLLM server detected. Skipping initialization.", "INFO")
             # If it's already running, we still need to initialize our client engine
-            # --- FIX: Pass tool_registry ---
-            deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry)
+            # --- FIX: Fetch model ID to determine max_model_len for existing server ---
+            max_len = None
+            try:
+                import requests
+                resp = requests.get("http://localhost:8000/v1/models")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("data"):
+                        model_id = data["data"][0].get("id")
+                        if model_id == "Qwen/Qwen2-1.5B-Instruct-AWQ":
+                            max_len = 3072
+                            core.logging.log_event(f"Detected existing server with {model_id}. Enforcing max_model_len={max_len}", "INFO")
+            except Exception as e:
+                core.logging.log_event(f"Failed to inspect existing vLLM server: {e}", "WARNING")
+
+            deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry, max_model_len=max_len)
             core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
         elif vllm_already_running and not is_healthy:
              console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")

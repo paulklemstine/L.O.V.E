@@ -54,8 +54,27 @@ def _select_model(love_state):
 def _recover_json(json_str: str):
     """
     Iteratively tries to parse a JSON string, removing characters from the end
-    until a valid JSON object is found.
+    until a valid JSON object is found. Also handles markdown code blocks.
     """
+    # Strip markdown code blocks if present
+    if "```" in json_str:
+        # Remove the first ``` (and optional language identifier)
+        start_idx = json_str.find("```")
+        # Find the end of the line after ``` to skip language identifier like 'json'
+        newline_idx = json_str.find("\n", start_idx)
+        if newline_idx != -1:
+            # Check if there is a closing ```
+            end_idx = json_str.rfind("```")
+            if end_idx > start_idx:
+                # Extract content between the first newline after ``` and the last ```
+                json_str = json_str[newline_idx+1:end_idx].strip()
+            else:
+                # Just strip the opening tag if no closing tag found (unlikely but possible)
+                json_str = json_str[newline_idx+1:].strip()
+        else:
+             # Just strip the opening tag if no newline found
+             json_str = json_str[start_idx+3:].strip()
+
     while len(json_str) > 0:
         try:
             return json.loads(json_str)
