@@ -3923,6 +3923,10 @@ Now, parse the following text into a JSON list of task objects:
 
             # Use DeepAgent as the primary cognitive engine if it's available, otherwise fallback to the existing reasoning engine.
             if deep_agent_engine:
+                # Show that DeepAgent is processing
+                terminal_width = get_terminal_width()
+                ui_panel_queue.put(create_news_feed_panel("DeepAgent (GPU) is reasoning...", "AI Reasoning", "bright_magenta", width=terminal_width - 4))
+                
                 # Bypass the broken graph wrapper and call the engine directly
                 # The cognitive loop handles the execution, we just need the command string.
                 llm_command_result = await deep_agent_engine.run(cognitive_prompt)

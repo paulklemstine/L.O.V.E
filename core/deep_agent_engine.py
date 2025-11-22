@@ -9,6 +9,7 @@ from huggingface_hub import snapshot_download
 from core.tools import ToolRegistry, invoke_gemini_react_engine
 import httpx
 import logging
+import core.logging
 
 def _select_model(love_state):
     """
@@ -120,7 +121,7 @@ class DeepAgentEngine:
             with open(self.persona_path, 'r') as f:
                 return yaml.safe_load(f)
         except (FileNotFoundError, yaml.YAMLError) as e:
-            print(f"Error loading persona file: {e}")
+            core.logging.log_event(f"Error loading persona file: {e}", level="ERROR")
             return {}
 
     async def _fetch_model_metadata(self):
@@ -135,12 +136,12 @@ class DeepAgentEngine:
                     model_data = models_data["data"][0]
                     max_len = int(model_data.get("context_length", 8192))
                     self.model_name = model_data.get("id", "vllm-model")
-                    print(f"vLLM server model context length: {max_len}")
-                    print(f"vLLM server model name: {self.model_name}")
+                    core.logging.log_event(f"vLLM server model context length: {max_len}", level="INFO")
+                    core.logging.log_event(f"vLLM server model name: {self.model_name}", level="INFO")
                     return max_len
             return 8192 # Default fallback
         except (httpx.RequestError, KeyError, Exception) as e:
-            print(f"Could not fetch model metadata from vLLM server: {e}. Using default context size and model name.")
+            core.logging.log_event(f"Could not fetch model metadata from vLLM server: {e}. Using default context size and model name.", level="WARNING")
             return 8192 # Default fallback
 
     def _adapt_tools_for_deepagent(self):
@@ -208,7 +209,7 @@ class DeepAgentEngine:
                 # Ensure we don't truncate to empty or negative
                 max_chars = max(100, max_chars)
                 payload['prompt'] = prompt[:max_chars]
-                logging.warning(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.")
+                core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
 
         try:
             async with httpx.AsyncClient(timeout=600) as client:
@@ -229,7 +230,7 @@ class DeepAgentEngine:
                 else:
                     return "Error: Empty response from vLLM."
         except Exception as e:
-            logging.error(f"Error generating text with vLLM: {e}")
+            core.logging.log_event(f"Error generating text with vLLM: {e}", level="ERROR")
             return f"Error: {e}"
 
     async def run(self, prompt: str):
@@ -294,11 +295,9 @@ Prompt: {prompt}
                 # Ensure we don't truncate to empty or negative
                 max_chars = max(100, max_chars)
                 payload['prompt'] = system_prompt[:max_chars]
-                logging.warning(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.")
-                print(f"WARNING: The cognitive prompt was truncated to fit the model's limit.")
+                core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
 
-        logging.debug(f"DeepAgentEngine sending prompt to vLLM: {system_prompt}")
-        print(f"[DEBUG] DeepAgentEngine processing request... (Max context: {self.max_model_len})")
+        core.logging.log_event(f"DeepAgentEngine processing request... (Max context: {self.max_model_len})", level="INFO")
 
         try:
             async with httpx.AsyncClient(timeout=600) as client:
@@ -317,7 +316,7 @@ Prompt: {prompt}
 
             if result.get("choices"):
                 response_text = result["choices"][0].get("text", "").strip()
-                logging.debug(f"DeepAgentEngine received raw response from vLLM: {response_text}")
+                core.logging.log_event(f"DeepAgentEngine received response from vLLM", level="INFO")
                 try:
                     parsed_response = _recover_json(response_text)
                     thought = parsed_response.get("thought", "")
@@ -341,13 +340,12 @@ Prompt: {prompt}
                         return f"Error: Tool '{tool_name}' not found."
 
                 except json.JSONDecodeError:
-                    logging.error(f"DeepAgent generated invalid JSON: {response_text}")
+                    core.logging.log_event(f"DeepAgent generated invalid JSON: {response_text}", level="ERROR")
                     return f"Error: DeepAgent generated invalid JSON: {response_text}"
             else:
-                logging.error("The vLLM server returned an empty or invalid response.")
+                core.logging.log_event("The vLLM server returned an empty or invalid response.", level="ERROR")
                 return "Error: The vLLM server returned an empty or invalid response."
         except httpx.RequestError as e:
             error_message = f"Error communicating with vLLM server: {e}"
-            logging.error(error_message)
-            print(error_message)
+            core.logging.log_event(error_message, level="ERROR")
             return error_message
