@@ -737,6 +737,9 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
 
                 # --- DEEP AGENT vLLM LOGIC ---
                 if model_id == "deep_agent_vllm":
+                    if not deep_agent_instance:
+                        log_event(f"DeepAgent vLLM instance is not initialized. Skipping.", level="WARNING")
+                        raise ValueError("DeepAgent instance is None")
                     log_event(f"Attempting LLM call with local DeepAgent vLLM (Purpose: {purpose})")
                     # We await directly here to avoid deadlocks with run_hypnotic_progress
                     # The WaitingAnimation (started at function entry) handles the visual feedback.
