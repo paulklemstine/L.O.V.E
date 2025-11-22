@@ -1016,10 +1016,8 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                 except ImportError:
                     log_event("llama-cpp-python not found. Installing now...", "WARNING")
                     console.print("[yellow]Installing llama-cpp-python dependency for emergency fallback...[/yellow]")
-                    import subprocess
-                    import sys
                     try:
-                        # Install llama-cpp-python
+                        # Install llama-cpp-python (subprocess and sys are already imported at module level)
                         subprocess.check_call([sys.executable, "-m", "pip", "install", "llama-cpp-python"], 
                                             stdout=subprocess.DEVNULL, 
                                             stderr=subprocess.DEVNULL)
