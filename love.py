@@ -4352,11 +4352,42 @@ Your response must be either the word "PROCEED" or a single shell command to exe
                     else:
                         server_name, tool_name, json_params_str = args[0], args[1], " ".join(args[2:])
                         try:
-                            params = json.loads(json_params_str)
-                            request_id = mcp_manager.call_tool(server_name, tool_name, params)
-                            # Now, block and wait for the response.
-                            response = mcp_manager.get_response(server_name, request_id)
-                            output = json.dumps(response, indent=2)
+                            # Auto-start server if not running
+                            running_servers = mcp_manager.list_running_servers()
+                            server_running = any(s['name'] == server_name for s in running_servers)
+                            
+                            if not server_running:
+                                terminal_width = get_terminal_width()
+                                ui_panel_queue.put(create_news_feed_panel(f"MCP server '{server_name}' not running. Auto-starting...", "MCP Auto-Start", "yellow", width=terminal_width - 4))
+                                core.logging.log_event(f"Auto-starting MCP server '{server_name}'", "INFO")
+                                
+                                # Check for missing environment variables
+                                missing_vars = mcp_manager.check_missing_env_vars(server_name)
+                                if missing_vars:
+                                    var_list = ", ".join(missing_vars)
+                                    error = (
+                                        f"Cannot auto-start MCP server '{server_name}'. "
+                                        f"Required environment variables missing: {var_list}. "
+                                        "Please set them and try again."
+                                    )
+                                    ui_panel_queue.put(create_news_feed_panel(error, "MCP Error", "red", width=terminal_width - 4))
+                                else:
+                                    # Start the server
+                                    start_result = mcp_manager.start_server(server_name)
+                                    if "successfully" in start_result:
+                                        ui_panel_queue.put(create_news_feed_panel(f"MCP server '{server_name}' started successfully", "MCP Auto-Start", "green", width=terminal_width - 4))
+                                        core.logging.log_event(start_result, "INFO")
+                                    else:
+                                        error = start_result
+                                        ui_panel_queue.put(create_news_feed_panel(error, "MCP Error", "red", width=terminal_width - 4))
+                            
+                            # Only proceed with tool call if no error occurred during auto-start
+                            if not error:
+                                params = json.loads(json_params_str)
+                                request_id = mcp_manager.call_tool(server_name, tool_name, params)
+                                # Now, block and wait for the response.
+                                response = mcp_manager.get_response(server_name, request_id)
+                                output = json.dumps(response, indent=2)
                         except json.JSONDecodeError:
                             error = "Error: Invalid JSON provided for parameters."
                         except (ValueError, IOError) as e:
