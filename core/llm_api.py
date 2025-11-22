@@ -939,8 +939,18 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                         continue # Retry the inner loop with the new limit, which will trigger truncation.
 
 
+                    # Detect 429/Rate Limit even if e.response is missing/masked
+                    is_rate_limit = False
                     if e.response and e.response.status_code == 429:
-                        retry_after = e.response.headers.get("Retry-After")
+                        is_rate_limit = True
+                    elif "429" in str(e) or "Too Many Requests" in str(e):
+                        is_rate_limit = True
+
+                    if is_rate_limit:
+                        retry_after = None
+                        if e.response:
+                            retry_after = e.response.headers.get("Retry-After")
+
                         retry_seconds = 300
                         if retry_after:
                             try:
@@ -966,7 +976,16 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                             console.print(create_api_error_panel(model_id, str(e), purpose, more_info=error_details))
                         else:
                             # Also enhance the one-liner for non-horde providers
-                            status_code = e.response.status_code if e.response else "N/A"
+                            status_code = "N/A"
+                            if e.response:
+                                status_code = e.response.status_code
+
+                            # Try to extract status code from string if N/A
+                            if status_code == "N/A":
+                                match = re.search(r"(\d{3}) Client Error", str(e))
+                                if match:
+                                    status_code = match.group(1)
+
                             console.print(Text(f"API Error: {model_id} failed ({status_code}). Details: {error_details[:100]}...", style="yellow"))
 
                     continue # Continue to next model (outer loop), inner loop breaks implicitly unless retry_current_model set

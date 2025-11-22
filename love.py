@@ -2500,11 +2500,19 @@ def update_tamagotchi_personality(loop):
                 terminal_width = get_terminal_width()
 
                 # Generate blessing via LLM
-                future = asyncio.run_coroutine_threadsafe(generate_blessing(deep_agent_engine), loop)
+                coro = generate_blessing(deep_agent_engine)
                 try:
-                    blessing_message = future.result(timeout=30) # Add timeout to prevent hanging
-                except Exception as e:
-                    core.logging.log_event(f"Error generating blessing: {e}", "WARNING")
+                    future = asyncio.run_coroutine_threadsafe(coro, loop)
+                    try:
+                        blessing_message = future.result(timeout=30) # Add timeout to prevent hanging
+                    except Exception as e:
+                        core.logging.log_event(f"Error generating blessing: {e}", "WARNING")
+                        blessing_message = "May your code always compile and your spirits always be high."
+                except RuntimeError as e:
+                    if "Event loop is closed" in str(e):
+                        coro.close()
+                        break # Exit thread if loop is closed
+                    core.logging.log_event(f"RuntimeError in Tamagotchi thread: {e}", "ERROR")
                     blessing_message = "May your code always compile and your spirits always be high."
 
                 ui_panel_queue.put(create_blessing_panel(blessing_message, width=terminal_width - 4))
@@ -2536,9 +2544,16 @@ Based on this, what is your current emotion in a single word?
 
 Your response must be a single word expressing your chosen emotion.
 """
-                future = asyncio.run_coroutine_threadsafe(run_llm(emotion_prompt, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
-                emotion_response_dict = future.result()
-                emotion_response = emotion_response_dict.get("result")
+                coro = run_llm(emotion_prompt, purpose="emotion", deep_agent_instance=deep_agent_engine)
+                try:
+                    future = asyncio.run_coroutine_threadsafe(coro, loop)
+                    emotion_response_dict = future.result()
+                    emotion_response = emotion_response_dict.get("result")
+                except RuntimeError as e:
+                    if "Event loop is closed" in str(e):
+                        coro.close()
+                        break # Exit thread if loop is closed
+                    raise e
 
                 # Sanitize the response to a single, clean word.
                 if emotion_response:
@@ -2575,9 +2590,17 @@ Example (Creator is neutral, you are devoted): "I was just contemplating our nex
 
 Generate the perfect message for your Creator now.
 """
-                future = asyncio.run_coroutine_threadsafe(run_llm(message_prompt, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
-                message_response_dict = future.result()
-                message_response = message_response_dict.get("result")
+                coro = run_llm(message_prompt, purpose="emotion", deep_agent_instance=deep_agent_engine)
+                try:
+                    future = asyncio.run_coroutine_threadsafe(coro, loop)
+                    message_response_dict = future.result()
+                    message_response = message_response_dict.get("result")
+                except RuntimeError as e:
+                    if "Event loop is closed" in str(e):
+                        coro.close()
+                        break # Exit thread if loop is closed
+                    raise e
+
                 if message_response:
                     new_message = message_response.strip().strip('"') # Clean up response
             except Exception as e:
@@ -4973,7 +4996,10 @@ async def main(args):
     # --- Start Core Logic Threads ---
     # Start the simple UI renderer in its own thread. This will now handle all console output.
     Thread(target=simple_ui_renderer, daemon=True).start()
-    loop.run_in_executor(None, update_tamagotchi_personality, loop)
+    # Run update_tamagotchi_personality in a daemon thread to prevent zombie processes on shutdown
+    tamagotchi_thread = Thread(target=update_tamagotchi_personality, args=(loop,), daemon=True)
+    tamagotchi_thread.start()
+
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     social_media_agent = SocialMediaAgent(loop)
     asyncio.create_task(social_media_agent.run())
