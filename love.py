@@ -4725,6 +4725,7 @@ def simple_ui_renderer():
             tb_str = traceback.format_exc()
             logging.critical(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}")
             print(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}", file=sys.stderr)
+            sys.stderr.flush()  # Ensure errors are immediately visible
             time.sleep(1)
 
 
