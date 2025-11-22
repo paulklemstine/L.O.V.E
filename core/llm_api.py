@@ -1006,6 +1006,26 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
             log_event("EMERGENCY: All providers failed. Attempting small CPU model.", "CRITICAL")
             console.print(Panel("[bold orange1]EMERGENCY FALLBACK[/bold orange1]\nAll remote and GPU models unresponsive. Attempting to initialize a small, local model on the CPU. This may be slow.", title="[bold red]COGNITIVE CORE FAILURE[/bold red]", border_style="red"))
             try:
+                # Ensure llama-cpp-python is installed before importing
+                try:
+                    import llama_cpp
+                except ImportError:
+                    log_event("llama-cpp-python not found. Installing now...", "WARNING")
+                    console.print("[yellow]Installing llama-cpp-python dependency for emergency fallback...[/yellow]")
+                    import subprocess
+                    import sys
+                    try:
+                        # Install llama-cpp-python
+                        subprocess.check_call([sys.executable, "-m", "pip", "install", "llama-cpp-python"], 
+                                            stdout=subprocess.DEVNULL, 
+                                            stderr=subprocess.DEVNULL)
+                        log_event("llama-cpp-python installed successfully.", "INFO")
+                        console.print("[green]llama-cpp-python installed successfully.[/green]")
+                    except subprocess.CalledProcessError as install_error:
+                        log_event(f"Failed to install llama-cpp-python: {install_error}", "CRITICAL")
+                        raise ImportError(f"Could not install llama-cpp-python: {install_error}")
+                
+                # Now import after ensuring it's installed
                 from llama_cpp import Llama
                 model_config = HARDWARE_TEST_MODEL_CONFIG
                 local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
@@ -1024,7 +1044,7 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                     return final_result
 
             except ImportError as e:
-                log_event(f"EMERGENCY CPU FALLBACK FAILED: {e}. The 'llama_cpp' module is not installed.", "CRITICAL")
+                log_event(f"EMERGENCY CPU FALLBACK FAILED: {e}. The 'llama_cpp' module could not be installed or imported.", "CRITICAL")
                 last_exception = e
             except Exception as emergency_e:
                 log_event(f"EMERGENCY CPU FALLBACK FAILED: {emergency_e}", "CRITICAL")
