@@ -6,11 +6,18 @@ import os
 import sys
 
 # Force unbuffered output to ensure real-time visibility
-# This prevents output from being buffered until Ctrl+C or program exit
-if sys.stdout:
-    sys.stdout.reconfigure(line_buffering=True)
-if sys.stderr:
-    sys.stderr.reconfigure(line_buffering=True)
+# Use environment variable method which is more reliable than reconfigure
+os.environ['PYTHONUNBUFFERED'] = '1'
+
+# Also try to reconfigure streams if they exist
+try:
+    if sys.stdout:
+        sys.stdout.reconfigure(line_buffering=False)
+    if sys.stderr:
+        sys.stderr.reconfigure(line_buffering=False)
+except (AttributeError, ValueError):
+    # Some environments don't support reconfigure
+    pass
 
 import subprocess
 import re
