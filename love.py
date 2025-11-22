@@ -4911,8 +4911,8 @@ async def initialize_gpu_services():
                         raise RuntimeError(error_msg)
 
                     console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
-                    # --- FIX: Pass tool_registry ---
-                    deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry)
+                    # --- FIX: Pass tool_registry and max_model_len ---
+                    deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry, max_model_len=max_len)
                     await deep_agent_engine.initialize()
                     core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
                 else:

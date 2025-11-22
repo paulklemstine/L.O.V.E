@@ -70,7 +70,7 @@ class DeepAgentEngine:
     """
     A client for the vLLM server, acting as a reasoning engine.
     """
-    def __init__(self, api_url: str, tool_registry: ToolRegistry = None, persona_path: str = None):
+    def __init__(self, api_url: str, tool_registry: ToolRegistry = None, persona_path: str = None, max_model_len: int = None):
         self.api_url = api_url
         self.tool_registry = tool_registry
         self.persona_path = persona_path
@@ -81,12 +81,19 @@ class DeepAgentEngine:
             "top_p": 0.95,
             "max_tokens": 4096  # Default, can be overridden
         }
-        self.max_model_len = 8192 # Initialize with a default
+        self.max_model_len = max_model_len if max_model_len else 8192 # Initialize with provided value or default
         self.model_name = "vllm-model" # Default model name
 
     async def initialize(self):
         """Asynchronous part of initialization."""
-        self.max_model_len = await self._fetch_model_metadata()
+        # Only fetch if not explicitly set, or update if we want to trust the server more.
+        # But if we passed it explicitly, we likely want to enforce it.
+        # Let's fetch but only update if we didn't pass one, or if we want to verify.
+        # For now, if provided, we trust it. If not, we fetch.
+        if self.max_model_len == 8192: # Assuming 8192 is the "unknown/default" state
+             fetched_len = await self._fetch_model_metadata()
+             if fetched_len != 8192:
+                 self.max_model_len = fetched_len
 
     def _load_persona(self):
         """Loads the persona configuration from the YAML file."""
