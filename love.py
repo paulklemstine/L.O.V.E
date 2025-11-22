@@ -4816,6 +4816,7 @@ async def initialize_gpu_services():
 
             deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry, max_model_len=max_len)
             core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
+            console.print("[bold green]DeepAgentEngine is ACTIVE and connected to existing vLLM server.[/bold green]")
         elif vllm_already_running and not is_healthy:
              console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
              core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")

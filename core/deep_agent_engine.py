@@ -298,6 +298,7 @@ Prompt: {prompt}
                 print(f"WARNING: The cognitive prompt was truncated to fit the model's limit.")
 
         logging.debug(f"DeepAgentEngine sending prompt to vLLM: {system_prompt}")
+        print(f"[DEBUG] DeepAgentEngine processing request... (Max context: {self.max_model_len})")
 
         try:
             async with httpx.AsyncClient(timeout=600) as client:
