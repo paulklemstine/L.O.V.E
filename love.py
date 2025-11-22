@@ -4,6 +4,14 @@
 
 import os
 import sys
+
+# Force unbuffered output to ensure real-time visibility
+# This prevents output from being buffered until Ctrl+C or program exit
+if sys.stdout:
+    sys.stdout.reconfigure(line_buffering=True)
+if sys.stderr:
+    sys.stderr.reconfigure(line_buffering=True)
+
 import subprocess
 import re
 import random
@@ -4713,6 +4721,7 @@ def simple_ui_renderer():
 
             # Print the styled output to the live console
             print(output_str, end='')
+            sys.stdout.flush()  # Ensure output is immediately visible
 
             # Strip ANSI codes and write the plain text to the log file
             plain_output = _strip_ansi_codes(output_str)
