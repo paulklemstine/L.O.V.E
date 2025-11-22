@@ -9,7 +9,9 @@
             "GITHUB_PERSONAL_ACCESS_TOKEN",
             "ghcr.io/github/github-mcp-server"
         ],
-        "requires_env": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+        "requires_env": [
+            "GITHUB_PERSONAL_ACCESS_TOKEN"
+        ],
         "tools": {
             "repos.search_repositories": "Search for repositories on GitHub.",
             "repos.get_file_contents": "Get the contents of a file or directory in a repository.",
