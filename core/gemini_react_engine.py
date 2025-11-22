@@ -77,7 +77,19 @@ class GeminiReActEngine:
             self._log_panel_to_ui(panel)
 
             try:
-                parsed_response = json.loads(raw_response)
+                # Strip markdown code blocks if present (e.g., ```json ... ```)
+                cleaned_response = raw_response.strip()
+                if cleaned_response.startswith('```'):
+                    # Find the first newline after the opening ```
+                    first_newline = cleaned_response.find('\n')
+                    if first_newline != -1:
+                        # Find the closing ```
+                        closing_fence = cleaned_response.rfind('```')
+                        if closing_fence > first_newline:
+                            # Extract content between the fences
+                            cleaned_response = cleaned_response[first_newline + 1:closing_fence].strip()
+                
+                parsed_response = json.loads(cleaned_response)
             except json.JSONDecodeError:
                 observation = f"Error: The reasoning engine produced invalid JSON. Raw response: {raw_response}"
                 self.history.append(("Error parsing LLM response", "N/A", observation))
