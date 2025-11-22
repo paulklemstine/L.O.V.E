@@ -106,14 +106,17 @@ class DeepAgentEngine:
 
     async def initialize(self):
         """Asynchronous part of initialization."""
+        core.logging.log_event(f"[DeepAgent] Initializing with max_model_len={self.max_model_len}, api_url={self.api_url}", level="DEBUG")
         # Only fetch if not explicitly set, or update if we want to trust the server more.
         # But if we passed it explicitly, we likely want to enforce it.
         # Let's fetch but only update if we didn't pass one, or if we want to verify.
         # For now, if provided, we trust it. If not, we fetch.
         if self.max_model_len == 8192: # Assuming 8192 is the "unknown/default" state
+             core.logging.log_event(f"[DeepAgent] Fetching model metadata from server", level="DEBUG")
              fetched_len = await self._fetch_model_metadata()
              if fetched_len != 8192:
                  self.max_model_len = fetched_len
+                 core.logging.log_event(f"[DeepAgent] Updated max_model_len to {fetched_len} from server", level="DEBUG")
 
     def _load_persona(self):
         """Loads the persona configuration from the YAML file."""
@@ -175,6 +178,7 @@ class DeepAgentEngine:
 
     async def generate(self, prompt: str) -> str:
         """
+        core.logging.log_event(f"[DeepAgent] generate() called with prompt length: {len(prompt)} chars", level="DEBUG")
         Generates text using the vLLM server.
         """
         headers = {"Content-Type": "application/json"}
@@ -212,6 +216,7 @@ class DeepAgentEngine:
                 core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
 
         try:
+            core.logging.log_event(f"[DeepAgent] Sending request to vLLM server: {self.api_url}/v1/completions", level="DEBUG")
             async with httpx.AsyncClient(timeout=600) as client:
                 response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
                 # Debugging 400 errors
@@ -226,17 +231,21 @@ class DeepAgentEngine:
                 response.raise_for_status()
                 result = response.json()
                 if result.get("choices"):
-                    return result["choices"][0].get("text", "").strip()
+                    generated_text = result["choices"][0].get("text", "").strip()
+                    core.logging.log_event(f"[DeepAgent] vLLM generated response (first 200 chars): {generated_text[:200]}", level="DEBUG")
+                    return generated_text
                 else:
+                    core.logging.log_event(f"[DeepAgent] Empty response from vLLM server", level="ERROR")
                     return "Error: Empty response from vLLM."
         except Exception as e:
-            core.logging.log_event(f"Error generating text with vLLM: {e}", level="ERROR")
+            core.logging.log_event(f"[DeepAgent] Error generating text with vLLM: {e}", level="ERROR")
             return f"Error: {e}"
 
     async def run(self, prompt: str):
         """
         Executes a prompt using a simplified DeepAgent-style reasoning loop.
         """
+        core.logging.log_event(f"[DeepAgent] run() started with prompt: {prompt[:200]}...", level="DEBUG")
         system_prompt = f"""You are L.O.V.E., a powerful AI orchestrator.
 Your persona is defined by the following:
 {json.dumps(self.persona, indent=2)}
@@ -297,7 +306,7 @@ Prompt: {prompt}
                 payload['prompt'] = system_prompt[:max_chars]
                 core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
 
-        core.logging.log_event(f"DeepAgentEngine processing request... (Max context: {self.max_model_len})", level="INFO")
+        core.logging.log_event(f"[DeepAgent] Processing request... (Max context: {self.max_model_len}, Prompt length: {len(system_prompt)} chars)", level="DEBUG")
 
         try:
             async with httpx.AsyncClient(timeout=600) as client:
@@ -316,32 +325,42 @@ Prompt: {prompt}
 
             if result.get("choices"):
                 response_text = result["choices"][0].get("text", "").strip()
-                core.logging.log_event(f"DeepAgentEngine received response from vLLM", level="INFO")
+                core.logging.log_event(f"[DeepAgent] Received response from vLLM (first 300 chars): {response_text[:300]}", level="DEBUG")
                 try:
+                    core.logging.log_event(f"[DeepAgent] Attempting to parse JSON response", level="DEBUG")
                     parsed_response = _recover_json(response_text)
                     thought = parsed_response.get("thought", "")
                     action = parsed_response.get("action", {})
                     tool_name = action.get("tool_name")
                     arguments = action.get("arguments", {})
+                    
+                    core.logging.log_event(f"[DeepAgent] Parsed - Thought: '{thought[:100]}...', Tool: '{tool_name}', Args: {arguments}", level="DEBUG")
 
                     if tool_name == "Finish":
+                        core.logging.log_event(f"[DeepAgent] Finish tool called, returning thought: {thought[:200]}", level="DEBUG")
                         return thought
 
                     if tool_name == "invoke_gemini_react_engine":
-                        return await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
+                        core.logging.log_event(f"[DeepAgent] Invoking GeminiReActEngine with args: {arguments}", level="DEBUG")
+                        result = await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
+                        core.logging.log_event(f"[DeepAgent] GeminiReActEngine returned: {str(result)[:200]}", level="DEBUG")
+                        return result
 
                     # This part is tricky because the tool registry is not async.
                     # For now, we will assume tools are fast and run them in the event loop.
                     # A better solution would be to run them in a thread pool executor.
                     if self.tool_registry and self.tool_registry.is_tool_registered(tool_name):
+                        core.logging.log_event(f"[DeepAgent] Executing tool '{tool_name}' with args: {arguments}", level="DEBUG")
                         tool_result = self.tool_registry.use_tool(tool_name, **arguments)
+                        core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' result: {str(tool_result)[:200]}", level="DEBUG")
                         return f"Tool {tool_name} executed. Result: {tool_result}"
                     else:
+                        core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' not found in registry", level="ERROR")
                         return f"Error: Tool '{tool_name}' not found."
 
-                except json.JSONDecodeError:
-                    core.logging.log_event(f"DeepAgent generated invalid JSON: {response_text}", level="ERROR")
-                    return f"Error: DeepAgent generated invalid JSON: {response_text}"
+                except json.JSONDecodeError as e:
+                    core.logging.log_event(f"[DeepAgent] Failed to parse JSON. Error: {e}. Raw response: {response_text[:500]}", level="ERROR")
+                    return f"Error: DeepAgent generated invalid JSON: {response_text[:200]}"
             else:
                 core.logging.log_event("The vLLM server returned an empty or invalid response.", level="ERROR")
                 return "Error: The vLLM server returned an empty or invalid response."
