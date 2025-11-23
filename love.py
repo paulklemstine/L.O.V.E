@@ -4915,7 +4915,8 @@ async def initialize_gpu_services():
     )
     
     # Register evolve tool
-    from core.tools import evolve
+    from core.tools import evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout
+    
     tool_registry.register_tool(
         name="evolve",
         tool=evolve,
@@ -4934,7 +4935,119 @@ async def initialize_gpu_services():
         }
     )
     
-    core.logging.log_event("Registered home-grown tools: reason, strategize, evolve", "INFO")
+    tool_registry.register_tool(
+        name="execute",
+        tool=execute,
+        metadata={
+            "description": "Executes a shell command and returns the output. Use with caution.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to execute"
+                    }
+                },
+                "required": ["command"]
+            }
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="read_file",
+        tool=read_file,
+        metadata={
+            "description": "Reads the content of a file from the filesystem.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "Path to the file to read"
+                    }
+                },
+                "required": ["filepath"]
+            }
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="write_file",
+        tool=write_file,
+        metadata={
+            "description": "Writes content to a file on the filesystem.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "Path to the file to write"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Content to write to the file"
+                    }
+                },
+                "required": ["filepath", "content"]
+            }
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="post_to_bluesky",
+        tool=post_to_bluesky,
+        metadata={
+            "description": "Posts a message with an image to Bluesky social media.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "The text content of the post"
+                    },
+                    "image": {
+                        "type": "object",
+                        "description": "PIL Image object to attach to the post"
+                    }
+                },
+                "required": ["text", "image"]
+            }
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="research_and_evolve",
+        tool=research_and_evolve,
+        metadata={
+            "description": "Initiates a comprehensive research and evolution cycle. Analyzes the codebase, researches cutting-edge AI, generates user stories, and kicks off the evolution process.",
+            "arguments": {"type": "object", "properties": {}}
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="talent_scout",
+        tool=talent_scout,
+        metadata={
+            "description": "Scouts for talent on social media platforms (Bluesky, Instagram, TikTok) based on keywords. Analyzes profiles and saves them to the database.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "keywords": {
+                        "type": "string",
+                        "description": "Comma-separated keywords to search for"
+                    },
+                    "platforms": {
+                        "type": "string",
+                        "description": "Comma-separated list of platforms (default: bluesky,instagram,tiktok)",
+                        "default": "bluesky,instagram,tiktok"
+                    }
+                },
+                "required": ["keywords"]
+            }
+        }
+    )
+    
+    core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout", "INFO")
     # -----------------------------------------
 
     if love_state.get('hardware', {}).get('gpu_detected'):
