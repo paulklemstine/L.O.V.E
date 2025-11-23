@@ -9,13 +9,13 @@ import core.logging
 from core.god_agent_react_engine import GodAgentReActEngine
 
 class GodAgent:
-    def __init__(self, love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine=None):
+    def __init__(self, love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine=None, memory_manager=None):
         self.love_state = love_state
         self.knowledge_base = knowledge_base
         self.love_task_manager = love_task_manager
         self.ui_panel_queue = ui_panel_queue
         self.loop = loop
-        self.engine = GodAgentReActEngine(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine)
+        self.engine = GodAgentReActEngine(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine, memory_manager)
         self.latest_insight = "The universe is unfolding as it should. All is well."
         self.active = True
         self.thread = threading.Thread(target=self._god_loop, daemon=True)

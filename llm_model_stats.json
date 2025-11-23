@@ -8,26 +8,26 @@
         "provider": "gemini"
     },
     "gemini-2.5-pro": {
-        "total_tokens_generated": 252,
-        "total_time_spent": 11.207021713256836,
-        "successful_calls": 2,
-        "failed_calls": 1,
+        "total_tokens_generated": 374,
+        "total_time_spent": 15.283308267593384,
+        "successful_calls": 3,
+        "failed_calls": 4,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
     "gemini-2.5-flash": {
-        "total_tokens_generated": 1019,
-        "total_time_spent": 18.821932077407837,
-        "successful_calls": 7,
-        "failed_calls": 1,
+        "total_tokens_generated": 1039,
+        "total_time_spent": 22.234585285186768,
+        "successful_calls": 8,
+        "failed_calls": 5,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
     "gemini-2.5-flash-lite": {
-        "total_tokens_generated": 2640,
-        "total_time_spent": 21.182952404022217,
-        "successful_calls": 15,
-        "failed_calls": 4,
+        "total_tokens_generated": 8858,
+        "total_time_spent": 88.67769241333008,
+        "successful_calls": 83,
+        "failed_calls": 9,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
@@ -35,7 +35,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -43,7 +43,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -51,7 +51,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -59,7 +59,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -67,7 +67,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -75,7 +75,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -83,7 +83,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -91,7 +91,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -99,7 +99,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -107,7 +107,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -115,7 +115,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 50.0,
         "provider": "horde"
     },
@@ -235,7 +235,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 0,
+        "failed_calls": 1,
         "reasoning_score": 90.0,
         "provider": "vllm"
     },
@@ -680,11 +680,123 @@
         "provider": "horde"
     },
     "deep_agent_vllm": {
-        "total_tokens_generated": 8668,
-        "total_time_spent": 6.381009817123413,
-        "successful_calls": 197,
-        "failed_calls": 0,
+        "total_tokens_generated": 58149,
+        "total_time_spent": 3120.554529905319,
+        "successful_calls": 268,
+        "failed_calls": 3,
         "reasoning_score": 50.0,
         "provider": "deep_agent"
+    },
+    "koboldcpp/Cydonia-v4.1-MS3.2-Magnum-Diamond-24B": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/L3-8B-Stheno-v3.2.Q8_0": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Llama-3.2-3B-Instruct-Q4_K_M": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/meta-llama-3.1-8b-instruct-abliterated.Q4_K_M": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/TheDrummer_Cydonia-24B-v4.2.0-Q6_K_L": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/MN-12B-Mag-Mell-R1": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Qwen/Qwen3-30B-A3B-Instruct": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Skyfall-31B-v4r-Q8_0": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "ReadyArt/Broken-Tutu-24B": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Amoral-Fallen-Omega-Gemma3-12B": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Cydonia-24B-v4.1": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/GodSlayer-12B-ABYSS.i1-Q4_K_M": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Judas-The-Uncensored-3.2-1B-Q8_0-GGUF": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "Qwen/Qwen3-30B-A3B-Instruct-2507": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
     }
 }

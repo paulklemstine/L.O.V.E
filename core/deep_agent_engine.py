@@ -105,11 +105,15 @@ class DeepAgentEngine:
     """
     A client for the vLLM server, acting as a reasoning engine.
     """
-    def __init__(self, api_url: str, tool_registry: ToolRegistry = None, persona_path: str = None, max_model_len: int = None):
+    def __init__(self, api_url: str, tool_registry: ToolRegistry = None, persona_path: str = None, 
+                 max_model_len: int = None, knowledge_base=None, memory_manager=None):
         self.api_url = api_url
         self.tool_registry = tool_registry
         self.persona_path = persona_path
         self.persona = self._load_persona() if persona_path else {}
+        self.knowledge_base = knowledge_base
+        self.memory_manager = memory_manager
+        
         # SamplingParams are now defined on the client side for each request
         # Calculate safe max_tokens based on model context length
         # Ensure we have a reasonable minimum context
@@ -215,6 +219,48 @@ class DeepAgentEngine:
 
         return formatted_tools
 
+    def _get_kb_context(self, prompt: str, max_tokens: int = 400) -> str:
+        """
+        Retrieves relevant context from knowledge base and memories.
+        
+        Args:
+            prompt: The current prompt/goal
+            max_tokens: Maximum tokens to use for context
+            
+        Returns:
+            Formatted context string
+        """
+        context_parts = []
+        
+        # Get KB summary if available
+        if self.knowledge_base:
+            try:
+                from core.kb_tools import get_kb_summary
+                kb_summary = get_kb_summary(self.knowledge_base, max_tokens=max_tokens // 2)
+                if kb_summary and "not available" not in kb_summary.lower():
+                    context_parts.append("📚 Knowledge Base Context:")
+                    context_parts.append(kb_summary)
+            except Exception as e:
+                core.logging.log_event(f"[DeepAgent] Failed to get KB summary: {e}", level="DEBUG")
+        
+        # Get relevant memories if available
+        if self.memory_manager:
+            try:
+                from core.kb_tools import search_memories
+                memories_json = search_memories(prompt, top_k=2, memory_manager=self.memory_manager)
+                memories_data = json.loads(memories_json)
+                if memories_data.get("count", 0) > 0:
+                    context_parts.append("\n🧠 Relevant Past Experiences:")
+                    for memory in memories_data.get("memories", []):
+                        context_parts.append(f"  - {memory}")
+            except Exception as e:
+                core.logging.log_event(f"[DeepAgent] Failed to get memories: {e}", level="DEBUG")
+        
+        if context_parts:
+            return "\n".join(context_parts) + "\n"
+        return ""
+
+
     async def generate(self, prompt: str) -> str:
         """
         core.logging.log_event(f"[DeepAgent] generate() called with prompt length: {len(prompt)} chars", level="DEBUG")
@@ -307,12 +353,22 @@ class DeepAgentEngine:
         Executes a prompt using a simplified DeepAgent-style reasoning loop.
         """
         core.logging.log_event(f"[DeepAgent] run() started with prompt: {prompt[:200]}...", level="DEBUG")
+        
+        # Track recent actions for loop detection
+        recent_actions = []
+        iteration_count = 0
+        
+        # Get Knowledge Base Context
+        kb_context = self._get_kb_context(prompt)
+        
         system_prompt = f"""You are L.O.V.E., a powerful AI orchestrator.
 Your persona is defined by the following:
 {json.dumps(self.persona, indent=2)}
 
 You have access to the following tools:
 {self._adapt_tools_for_deepagent()}
+
+{kb_context}
 
 CRITICAL INSTRUCTIONS:
 1. You MUST respond with ONLY a valid JSON object - no other text before or after

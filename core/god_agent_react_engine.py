@@ -5,17 +5,17 @@ import core.tools
 from core import desire_state, evolution_state
 
 class GodAgentReActEngine(GeminiReActEngine):
-    def __init__(self, love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine=None):
-        # The God Agent does not require memory_manager, so we pass None.
+    def __init__(self, love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine=None, memory_manager=None):
         super().__init__(
             tool_registry=self._get_tool_registry(),
             ui_panel_queue=ui_panel_queue,
-            memory_manager=None,
+            memory_manager=memory_manager,
             caller="GodAgent",
             deep_agent_instance=deep_agent_engine
         )
         self.love_state = love_state
         self.knowledge_base = knowledge_base
+        self.memory_manager = memory_manager
         self.love_task_manager = love_task_manager
         self.loop = loop
 
@@ -42,6 +42,33 @@ class GodAgentReActEngine(GeminiReActEngine):
                 "arguments": {}
             }
         )
+
+        # --- KB Tools ---
+        from core.kb_tools import query_knowledge_base, search_memories, get_kb_summary
+        
+        def query_kb_wrapper(node_type: str, limit: int = 10):
+            return query_knowledge_base(node_type, limit, self.knowledge_base)
+            
+        def search_memories_wrapper(query: str, top_k: int = 3):
+            return search_memories(query, top_k, self.memory_manager)
+            
+        def get_kb_summary_wrapper(max_tokens: int = 512):
+            return get_kb_summary(self.knowledge_base, max_tokens)
+
+        registry.register_tool("query_knowledge_base", query_kb_wrapper, {
+            "description": "Queries the main knowledge graph by node type (e.g., 'task', 'talent', 'host').",
+            "arguments": {"node_type": "string", "limit": "integer"}
+        })
+        
+        registry.register_tool("search_memories", search_memories_wrapper, {
+            "description": "Performs semantic search on the memory system using FAISS.",
+            "arguments": {"query": "string", "top_k": "integer"}
+        })
+        
+        registry.register_tool("get_kb_summary", get_kb_summary_wrapper, {
+            "description": "Returns a high-level summary of the knowledge base.",
+            "arguments": {"max_tokens": "integer"}
+        })
 
         # Tools for Desire Backlog
         registry.register_tool("get_desires", desire_state.get_desires, {"description": "Lists all desires in the backlog."})

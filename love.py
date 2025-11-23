@@ -4958,13 +4958,378 @@ async def install_docker(console) -> bool:
     return False
 
 
-async def initialize_gpu_services():
+    async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
-    global deep_agent_engine
+    global deep_agent_engine, knowledge_base, memory_manager
 
     # --- FIX: Initialize ToolRegistry here ---
     from core.tools import ToolRegistry
     tool_registry = ToolRegistry()
+    
+    # Register home-grown tools
+    from core.reasoning import ReasoningEngine
+    from core.strategic_reasoning_engine import StrategicReasoningEngine
+    
+    async def reason_tool() -> str:
+        """Performs deep reasoning and analysis to generate strategic plans."""
+        try:
+            from love import knowledge_base
+            engine = ReasoningEngine(knowledge_base, tool_registry, console=None)
+            result = await engine.analyze_and_prioritize()
+            return f"Reasoning complete. Generated {len(result)} strategic steps: {result}"
+        except Exception as e:
+            return f"Error during reasoning: {e}"
+    
+    async def strategize_tool() -> str:
+        """Analyzes the knowledge base to identify strategic opportunities."""
+        try:
+            from love import knowledge_base, love_state
+            engine = StrategicReasoningEngine(knowledge_base, love_state)
+            result = engine.generate_strategic_plan()
+            return f"Strategic analysis complete. Generated {len(result)} steps: {result}"
+        except Exception as e:
+            return f"Error during strategic analysis: {e}"
+    
+    tool_registry.register_tool(
+        name="reason",
+        tool=reason_tool,
+        metadata={
+            "description": "Performs deep reasoning and analysis using the ReasoningEngine to generate strategic plans based on knowledge base, available tools, and core directives.",
+            "arguments": {"type": "object", "properties": {}}
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="strategize",
+        tool=strategize_tool,
+        metadata={
+            "description": "Analyzes the knowledge graph using the StrategicReasoningEngine to identify strategic opportunities, unmatched talent/opportunities, and in-demand skills.",
+            "arguments": {"type": "object", "properties": {}}
+        }
+    )
+    
+    # Register evolve tool
+    from core.tools import evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout
+    
+    tool_registry.register_tool(
+        name="evolve",
+        tool=evolve,
+        metadata={
+            "description": "Initiates self-evolution to improve the codebase based on a specified goal. This triggers the evolution process to modify and enhance the system.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "goal": {
+                        "type": "string",
+                        "description": "The goal or objective for the evolution process"
+                    }
+                },
+                "required": ["goal"]
+            }
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="execute",
+        tool=execute,
+        metadata={
+            "description": "Executes a shell command and returns the output. Use with caution.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to execute"
+                    }
+                },
+                "required": ["command"]
+            }
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="read_file",
+        tool=read_file,
+        metadata={
+            "description": "Reads the content of a file from the filesystem.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "Path to the file to read"
+                    }
+                },
+                "required": ["filepath"]
+            }
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="write_file",
+        tool=write_file,
+        metadata={
+            "description": "Writes content to a file on the filesystem.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "Path to the file to write"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Content to write to the file"
+                    }
+                },
+                "required": ["filepath", "content"]
+            }
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="post_to_bluesky",
+        tool=post_to_bluesky,
+        metadata={
+            "description": "Posts a message with an image to Bluesky social media.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "The text content of the post"
+                    },
+                    "image": {
+                        "type": "object",
+                        "description": "PIL Image object to attach to the post"
+                    }
+                },
+                "required": ["text", "image"]
+            }
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="research_and_evolve",
+        tool=research_and_evolve,
+        metadata={
+            "description": "Initiates a comprehensive research and evolution cycle. Analyzes the codebase, researches cutting-edge AI, generates user stories, and kicks off the evolution process.",
+            "arguments": {"type": "object", "properties": {}}
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="talent_scout",
+        tool=talent_scout,
+        metadata={
+            "description": "Scouts for talent on social media platforms (Bluesky, Instagram, TikTok) based on keywords. Analyzes profiles and saves them to the database.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "keywords": {
+                        "type": "string",
+                        "description": "Comma-separated keywords to search for"
+                    },
+                    "platforms": {
+                        "type": "string",
+                        "description": "Comma-separated list of platforms (default: bluesky,instagram,tiktok)",
+                        "default": "bluesky,instagram,tiktok"
+                    }
+                },
+                "required": ["keywords"]
+            }
+        }
+    )
+    
+    core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout", "INFO")
+    # -----------------------------------------
+
+    if love_state.get('hardware', {}).get('gpu_detected'):
+        from core.connectivity import is_vllm_running
+        vllm_already_running, _ = is_vllm_running()
+
+        # Verify connectivity even if process is found
+        is_healthy = False
+        if vllm_already_running:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get("http://localhost:8000/v1/models", timeout=2) as resp:
+                        if resp.status == 200:
+                            is_healthy = True
+            except Exception as e:
+                print(f"DEBUG: Health check failed: {e}")
+                is_healthy = False
+
+        if vllm_already_running and is_healthy:
+            console.print("[bold yellow]Existing vLLM server detected and healthy. Skipping initialization.[/bold yellow]")
+            core.logging.log_event("Existing vLLM server detected. Skipping initialization.", "INFO")
+            # If it's already running, we still need to initialize our client engine
+            # --- FIX: Fetch model ID to determine max_model_len for existing server ---
+            max_len = None
+            try:
+                import requests
+                resp = requests.get("http://localhost:8000/v1/models")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("data"):
+                        model_id = data["data"][0].get("id")
+                        if model_id == "Qwen/Qwen2-1.5B-Instruct-AWQ":
+                            max_len = 3072
+                            core.logging.log_event(f"Detected existing server with {model_id}. Enforcing max_model_len={max_len}", "INFO")
+            except Exception as e:
+                core.logging.log_event(f"Failed to inspect existing vLLM server: {e}", "WARNING")
+
+            deep_agent_engine = DeepAgentEngine(
+                api_url="http://localhost:8000", 
+                tool_registry=tool_registry, 
+                max_model_len=max_len,
+                knowledge_base=knowledge_base,
+                memory_manager=memory_manager
+            )
+            core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
+            console.print("[bold green]DeepAgentEngine is ACTIVE and connected to existing vLLM server.[/bold green]")
+        elif vllm_already_running and not is_healthy:
+             console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
+             core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
+             subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
+             await asyncio.sleep(5) # Wait for it to die
+             vllm_already_running = False
+        else:
+            console.print("[bold green]GPU detected. Launching vLLM server and initializing DeepAgent client...[/bold green]")
+            try:
+                # Use a different model selection logic that prefers AWQ models
+                from core.deep_agent_engine import _select_model as select_vllm_model
+                model_repo_id = select_vllm_model(love_state)
+                core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
+
+                if model_repo_id:
+                    # ... (Keep existing max_model_len calculation logic unchanged) ...
+                    max_len = None
+                    try:
+                        console.print("[cyan]Performing a pre-flight check to determine optimal max_model_len...[/cyan]")
+                        preflight_command = [
+                            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
+                            "--model", model_repo_id,
+                            "--max-model-len", "999999"
+                        ]
+                        result = subprocess.run(preflight_command, capture_output=True, text=True, timeout=180)
+
+                        match = re.search(r"max_position_embeddings=(\d+)", result.stderr)
+                        if not match:
+                            match = re.search(r"model_max_length=(\d+)", result.stderr)
+
+                        if match:
+                            raw_max_len = int(match.group(1))
+                            # Use the full detected length, but ensure it's at least 4096 if possible.
+                            # If the model reports something huge (like 1M), we might want to cap it,
+                            # but for now, let's trust the model's reported capability or the user's VRAM.
+                            # The previous division by 8 was too aggressive.
+                            max_len = raw_max_len
+                            
+                            # Ensure we don't go below a usable minimum for DeepAgent
+                            if max_len < 4096:
+                                core.logging.log_event(f"Detected max_len {max_len} is small. Attempting to force 4096.", "WARNING")
+                                max_len = 4096
+
+                            core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len} (Raw: {raw_max_len})", "INFO")
+                            console.print(f"[green]Determined optimal max_model_len: {max_len}[/green]")
+                        else:
+                            core.logging.log_event(f"Could not determine optimal max_model_len from pre-flight check. Stderr: {result.stderr}", "WARNING")
+                            console.print("[yellow]Could not determine optimal max_model_len from vLLM error. Proceeding without it.[/yellow]")
+                    except (subprocess.TimeoutExpired, Exception) as e:
+                        core.logging.log_event(f"An error occurred during vLLM pre-flight check: {e}", "WARNING")
+                        console.print(f"[yellow]An error occurred during vLLM pre-flight check: {e}. Proceeding without dynamic max_model_len.[/yellow]")
+
+                    # --- FIX: Explicitly set max_model_len for the smallest model ---
+                    if model_repo_id == "Qwen/Qwen2-1.5B-Instruct-AWQ":
+                        # Use detected value if available, otherwise use conservative 2048
+                        # The model's actual context window is 2048, not 3072
+                        if max_len is None or max_len > 2048:
+                            max_len = 2048
+                        core.logging.log_event(f"Explicitly setting max_model_len to {max_len} for {model_repo_id}", "INFO")
+                        console.print(f"[green]Explicitly setting max_model_len to {max_len} for {model_repo_id}[/green]")
+
+
+
+                    # --- Launch the vLLM Server as a Background Process ---
+                    vllm_command = [
+                        sys.executable,
+                        "-m", "vllm.entrypoints.openai.api_server",
+                        "--model", model_repo_id,
+                        "--host", "0.0.0.0",
+                        "--port", "8000",
+                        "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.7)),
+                        "--generation-config", "vllm",
+                        "--served-model-name", "vllm-model",
+                    ]
+                    # Validate max_len before using it
+                    if max_len is None or max_len <= 0:
+                        max_len = 2048  # Conservative default for small models
+                        core.logging.log_event(f"max_len was None or invalid. Using safe default: {max_len}", "WARNING")
+                        console.print(f"[yellow]Using safe default max_model_len: {max_len}[/yellow]")
+                    elif max_len < 1024:
+                        core.logging.log_event(f"max_len {max_len} is too small. Using minimum 1024.", "WARNING")
+                        console.print(f"[yellow]max_len {max_len} too small, using minimum 1024[/yellow]")
+                        max_len = 1024
+                    
+                    vllm_command.extend(["--max-model-len", str(max_len)])
+
+                    vllm_log_file = open("vllm_server.log", "a")
+                    subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
+                    core.logging.log_event(f"vLLM server process started with command: {' '.join(vllm_command)}. See vllm_server.log for details.", "CRITICAL")
+
+                    console.print("[cyan]Waiting for vLLM server to come online...[/cyan]")
+                    server_ready = False
+
+                    # Helper to check health
+                    async def check_vllm_health():
+                        try:
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get("http://localhost:8000/v1/models", timeout=2) as resp:
+                                    if resp.status == 200:
+                                        return True
+                        except:
+                            return False
+                        return False
+
+                    for attempt in range(30):
+                        await asyncio.sleep(10)
+                        ready, status_code = is_vllm_running()
+                        if ready:
+                            # Double check actual connectivity
+                            if await check_vllm_health():
+                                server_ready = True
+                                break
+                            else:
+                                console.print(f"[yellow]vLLM process running (attempt {attempt+1}/30), but API not responding yet...[/yellow]")
+                        else:
+                            console.print(f"[yellow]vLLM server process not detected (attempt {attempt+1}/30). Status: {status_code}. Waiting...[/yellow]")
+
+                    if not server_ready:
+                        log_tail = "No log file found."
+                        try:
+                            if os.path.exists("vllm_server.log"):
+                                with open("vllm_server.log", "r", errors='replace') as f:
+                                    log_lines = f.readlines()
+                                    log_tail = "".join(log_lines[-20:])
+                        except Exception as log_e:
+                            log_tail = f"Could not read vllm_server.log: {log_e}"
+
+                        error_msg = f"vLLM server failed to start in the allotted time.\n--- Last 20 lines of vllm_server.log ---\n{log_tail}\n------------------------------------------"
+                        core.logging.log_event(error_msg, "ERROR")
+                        raise RuntimeError(error_msg)
+
+                    console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
+                    # --- FIX: Pass tool_registry and max_model_len ---
+                    deep_agent_engine = DeepAgentEngine(
+                        api_url="http://localhost:8000", 
+                        tool_registry=tool_registry, 
+                        max_model_len=max_len,
+                        knowledge_base=knowledge_base,
+                        memory_manager=memory_manager
+                    )
+                    await deep_agent_engine.initialize()
+                    core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
     
     # Register home-grown tools
     from core.reasoning import ReasoningEngine
@@ -5459,7 +5824,7 @@ async def main(args):
     monitoring_manager.start()
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
-    god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine)
+    god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine, memory_manager)
     god_agent.start()
 
     mcp_manager = MCPManager(console)
