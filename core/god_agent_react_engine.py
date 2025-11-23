@@ -62,11 +62,22 @@ class GodAgentReActEngine(GeminiReActEngine):
         The main entry point for the God Agent's reasoning loop.
         """
         goal = """
-Analyze the current state of L.O.V.E., including the desire and evolution backlogs.
-Provide a single, concise insight. This insight should be a piece of strategic advice,
-a gentle course correction, a prediction about future opportunities, or a warning about potential risks.
-You have the power to directly manipulate the desire and evolution backlogs.
-If your analysis reveals a need for reprioritization, addition, or removal of goals, use your tools to take action.
-Your final answer should be a single, thoughtful paragraph summarizing your insight and any actions taken, delivered with the "Finish" tool.
+Analyze the current state of L.O.V.E. and provide ONE concise strategic insight.
+
+Your task:
+1. Call 'get_system_state' to see the current state (ONCE)
+2. Call 'get_desires' to see the desire backlog (ONCE)
+3. Based on this information, provide a single insight or recommendation
+4. Use the 'Finish' tool to deliver your insight
+
+Your insight should be ONE of the following:
+- A strategic recommendation for prioritization
+- A warning about a potential risk
+- An opportunity you've identified
+- A suggested course correction
+
+IMPORTANT: After calling get_system_state and get_desires ONCE each, you MUST use the 'Finish' tool.
+Do NOT call the same tools multiple times. Provide your insight in 1-2 sentences and finish.
 """
         return await self.execute_goal(goal)
+

@@ -462,7 +462,14 @@ class MemoryManager:
             Your response MUST be only the raw JSON object.
             """
 
-            response_str = await run_llm(prompt)
+            response_dict = await run_llm(prompt)
+            response_str = response_dict.get("result", '{}')
+            
+            # Pre-process the response string to remove markdown fences
+            match = re.search(r"```json\n(.*?)\n```", response_str, re.DOTALL)
+            if match:
+                response_str = match.group(1)
+            
             updated_attributes = json.loads(response_str)
 
             # Update the existing MemoryNote object

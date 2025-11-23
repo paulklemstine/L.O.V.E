@@ -314,24 +314,31 @@ Your persona is defined by the following:
 You have access to the following tools:
 {self._adapt_tools_for_deepagent()}
 
-Your task is to respond to the following prompt by generating a JSON object with 'thought' and 'action' keys.
-The 'action' should specify the tool to use and its arguments.
-If you have enough information to answer the prompt, use the 'Finish' tool.
+CRITICAL INSTRUCTIONS:
+1. You MUST respond with ONLY a valid JSON object - no other text before or after
+2. The JSON must have exactly two keys: "thought" and "action"
+3. The "action" must contain "tool_name" and "arguments"
+4. After calling 1-2 tools to gather information, you MUST use the "Finish" tool
+5. Do NOT write conversational text - ONLY output the JSON object
 
-Example of the expected JSON format:
+WRONG (conversational text):
+The next thought and action is to call get_system_state...
+
+CORRECT (JSON only):
+{{"thought": "I need to check the system state", "action": {{"tool_name": "get_system_state", "arguments": {{}}}}}}
+
+Example JSON responses:
 ```json
-{{
-  "thought": "I need to find out the creator's latest instructions. I will use the 'read_file' tool to check the 'instructions.txt' file.",
-  "action": {{
-    "tool_name": "read_file",
-    "arguments": {{
-      "filepath": "instructions.txt"
-    }}
-  }}
-}}
+{{"thought": "I need to check the system state first", "action": {{"tool_name": "get_system_state", "arguments": {{}}}}}}
+```
+
+```json
+{{"thought": "I have enough information to provide my insight", "action": {{"tool_name": "Finish", "arguments": {{}}}}}}
 ```
 
 Prompt: {prompt}
+
+RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
 """
         headers = {"Content-Type": "application/json"}
         payload = {
@@ -406,9 +413,24 @@ Prompt: {prompt}
                     core.logging.log_event(f"[DeepAgent] run() response appears incomplete (missing closing brace): {response_text[:100]}", level="WARNING")
                 
                 core.logging.log_event(f"[DeepAgent] Received response from vLLM (first 300 chars): {response_text[:300]}", level="DEBUG")
+                
+                # Try to extract JSON from the response
+                # The model sometimes outputs conversational text before/after the JSON
+                json_text = response_text
+                
+                # Look for JSON object in the response
+                if '{' in response_text and '}' in response_text:
+                    # Find the first { and last }
+                    first_brace = response_text.find('{')
+                    last_brace = response_text.rfind('}')
+                    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                        json_text = response_text[first_brace:last_brace+1]
+                        if json_text != response_text:
+                            core.logging.log_event(f"[DeepAgent] Extracted JSON from conversational text. Original length: {len(response_text)}, JSON length: {len(json_text)}", level="DEBUG")
+                
                 try:
                     core.logging.log_event(f"[DeepAgent] Attempting to parse JSON response", level="DEBUG")
-                    parsed_response = _recover_json(response_text)
+                    parsed_response = _recover_json(json_text)
                     thought = parsed_response.get("thought", "")
                     action = parsed_response.get("action", {})
                     tool_name = action.get("tool_name")

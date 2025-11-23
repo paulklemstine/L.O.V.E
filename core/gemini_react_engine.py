@@ -121,6 +121,22 @@ class GeminiReActEngine:
             )
             self._log_panel_to_ui(panel)
 
+            # VALIDATION: Check if tool_name is None or empty
+            if not tool_name or tool_name == "None":
+                observation = f"Error: Model produced invalid tool_name ('{tool_name}'). This usually indicates the model is confused or stuck. Thought was: {thought[:200]}"
+                self.history.append((thought, action, observation))
+                # Log the error
+                panel = create_reasoning_panel(
+                    caller=self.caller,
+                    raw_response=None,
+                    thought=None,
+                    action=None,
+                    observation=observation,
+                    width=get_terminal_width()
+                )
+                self._log_panel_to_ui(panel)
+                continue
+
             if tool_name == "Finish":
                 if arguments:
                     return {"success": True, "result": arguments}
