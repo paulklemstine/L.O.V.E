@@ -4407,7 +4407,15 @@ Your response must be either the word "PROCEED" or a single shell command to exe
                                     ui_panel_queue.put(create_news_feed_panel(error, "MCP Error", "red", width=terminal_width - 4))
                                 else:
                                     # Start the server
-                                    start_result = mcp_manager.start_server(server_name)
+                                    # Collect required env vars
+                                    env_vars = {}
+                                    server_config = mcp_manager.server_configs.get(server_name)
+                                    if server_config and 'requires_env' in server_config:
+                                        for var_name in server_config['requires_env']:
+                                            if var_name in os.environ:
+                                                env_vars[var_name] = os.environ[var_name]
+                                    
+                                    start_result = mcp_manager.start_server(server_name, env_vars)
                                     if "successfully" in start_result:
                                         ui_panel_queue.put(create_news_feed_panel(f"MCP server '{server_name}' started successfully", "MCP Auto-Start", "green", width=terminal_width - 4))
                                         core.logging.log_event(start_result, "INFO")
@@ -5727,7 +5735,7 @@ async def initialize_gpu_services():
                 console.print("[cyan]Starting GitHub MCP server...[/cyan]")
                 
                 # Start the GitHub MCP server
-                result = mcp_manager.start_server("github")
+                result = mcp_manager.start_server("github", env_vars={"GITHUB_PERSONAL_ACCESS_TOKEN": github_token})
                 if "successfully" in result.lower():
                     core.logging.log_event(f"GitHub MCP server started: {result}", "INFO")
                     console.print(f"[green]✓ {result}[/green]")
