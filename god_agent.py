@@ -5,6 +5,7 @@ import asyncio
 import sys
 import traceback
 
+import core.logging
 from core.god_agent_react_engine import GodAgentReActEngine
 
 class GodAgent:
