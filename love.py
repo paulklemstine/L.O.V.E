@@ -4864,6 +4864,113 @@ async def model_refresh_loop():
             await asyncio.sleep(300) # Wait 5 minutes on error
 
 
+async def install_docker(console) -> bool:
+    """
+    Attempts to install Docker based on the detected OS.
+    Returns True if Docker is installed/available, False otherwise.
+    """
+    import platform
+    
+    # Detect OS
+    is_wsl = False
+    is_linux = False
+    is_windows = False
+    
+    try:
+        # Check for WSL
+        if os.path.exists("/proc/version"):
+            with open("/proc/version", "r") as f:
+                if "microsoft" in f.read().lower():
+                    is_wsl = True
+                    is_linux = True
+        
+        if not is_wsl and platform.system() == "Linux":
+            is_linux = True
+        elif platform.system() == "Windows":
+            is_windows = True
+    except Exception as e:
+        core.logging.log_event(f"Error detecting OS for Docker installation: {e}", "ERROR")
+        return False
+    
+    # Windows: Cannot auto-install Docker Desktop
+    if is_windows:
+        console.print("[yellow]═══════════════════════════════════════════════════════════[/yellow]")
+        console.print("[yellow]Docker Desktop for Windows requires manual installation.[/yellow]")
+        console.print("[cyan]Please download and install Docker Desktop from:[/cyan]")
+        console.print("[bright_blue]https://www.docker.com/products/docker-desktop/[/bright_blue]")
+        console.print("[yellow]═══════════════════════════════════════════════════════════[/yellow]")
+        core.logging.log_event("Docker Desktop installation required for Windows", "INFO")
+        return False
+    
+    # WSL/Linux: Can auto-install
+    if is_linux:
+        console.print("[cyan]═══════════════════════════════════════════════════════════[/cyan]")
+        console.print("[cyan]Docker is not installed. Would you like to install it now?[/cyan]")
+        console.print("[yellow]This will run the following commands:[/yellow]")
+        console.print("[white]  1. curl -fsSL https://get.docker.com | sh[/white]")
+        console.print("[white]  2. sudo usermod -aG docker $USER[/white]")
+        console.print("[yellow]Installation requires sudo privileges.[/yellow]")
+        console.print("[cyan]═══════════════════════════════════════════════════════════[/cyan]")
+        
+        # Prompt for consent
+        console.print("[bright_green]Install Docker? (y/n):[/bright_green] ", end="")
+        
+        # Get user input
+        try:
+            import sys
+            response = input().strip().lower()
+            
+            if response != 'y':
+                console.print("[yellow]Docker installation declined. GitHub MCP server will be unavailable.[/yellow]")
+                core.logging.log_event("User declined Docker installation", "INFO")
+                return False
+            
+            # Install Docker
+            console.print("[cyan]Installing Docker... This may take a few minutes.[/cyan]")
+            core.logging.log_event("Starting Docker installation", "INFO")
+            
+            # Download and run Docker installation script
+            install_cmd = "curl -fsSL https://get.docker.com | sh"
+            result = subprocess.run(install_cmd, shell=True, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode != 0:
+                console.print(f"[red]Docker installation failed: {result.stderr}[/red]")
+                core.logging.log_event(f"Docker installation failed: {result.stderr}", "ERROR")
+                return False
+            
+            console.print("[green]✓ Docker installed successfully[/green]")
+            
+            # Add user to docker group
+            username = os.environ.get("USER", "")
+            if username:
+                console.print(f"[cyan]Adding user '{username}' to docker group...[/cyan]")
+                usermod_cmd = f"sudo usermod -aG docker {username}"
+                subprocess.run(usermod_cmd, shell=True, capture_output=True, text=True)
+                console.print("[green]✓ User added to docker group[/green]")
+                console.print("[yellow]Note: You may need to log out and back in for group changes to take effect.[/yellow]")
+            
+            # Verify installation
+            verify_result = subprocess.run(["docker", "--version"], capture_output=True, text=True, timeout=5)
+            if verify_result.returncode == 0:
+                console.print(f"[green]✓ Docker verified: {verify_result.stdout.strip()}[/green]")
+                core.logging.log_event(f"Docker installation successful: {verify_result.stdout.strip()}", "INFO")
+                return True
+            else:
+                console.print("[yellow]⚠ Docker installed but verification failed. May need system restart.[/yellow]")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            console.print("[red]Docker installation timed out after 5 minutes[/red]")
+            core.logging.log_event("Docker installation timed out", "ERROR")
+            return False
+        except Exception as e:
+            console.print(f"[red]Error during Docker installation: {e}[/red]")
+            core.logging.log_event(f"Docker installation error: {e}", "ERROR")
+            return False
+    
+    return False
+
+
 async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
     global deep_agent_engine
@@ -5241,6 +5348,11 @@ async def initialize_gpu_services():
         # Check if Docker is installed
         docker_check = subprocess.run(["docker", "--version"], capture_output=True, text=True, timeout=5)
         docker_installed = docker_check.returncode == 0
+        
+        if not docker_installed:
+            core.logging.log_event("Docker not detected. Attempting installation...", "INFO")
+            console.print("[yellow]⚠ Docker not detected. Attempting installation...[/yellow]")
+            docker_installed = await install_docker(console)
         
         if docker_installed:
             core.logging.log_event(f"Docker detected: {docker_check.stdout.strip()}", "INFO")
