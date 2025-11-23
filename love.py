@@ -5180,12 +5180,18 @@ async def initialize_gpu_services():
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get("data"):
-                        model_id = data["data"][0].get("id")
-                        if model_id == "Qwen/Qwen2-1.5B-Instruct-AWQ":
+                        # Try to get context_length from the model metadata
+                        context_len = data["data"][0].get("max_model_len") or data["data"][0].get("context_length")
+                        if context_len and context_len > 0:
+                            max_len = int(context_len)
+                            core.logging.log_event(f"Detected existing server with context length: {max_len}", "INFO")
+                        else:
+                            # Fallback: use a safe default
                             max_len = 2048
-                            core.logging.log_event(f"Detected existing server with {model_id}. Enforcing max_model_len={max_len}", "INFO")
+                            core.logging.log_event(f"Existing server reported invalid context length, using default: {max_len}", "WARNING")
             except Exception as e:
-                core.logging.log_event(f"Failed to inspect existing vLLM server: {e}", "WARNING")
+                core.logging.log_event(f"Failed to inspect existing vLLM server: {e}. Using default max_len=2048", "WARNING")
+                max_len = 2048
 
             deep_agent_engine = DeepAgentEngine(
                 api_url="http://localhost:8000", 
@@ -5280,7 +5286,7 @@ async def initialize_gpu_services():
                         console.print(f"[yellow]max_len {max_len} too small, using minimum 1024[/yellow]")
                         max_len = 1024
                     
-                    vllm_command.extend(["--max-model-len", str(max_len)])
+                    vllm_command.extend(["--max-model-len", str(int(max_len))])
 
                     vllm_log_file = open("vllm_server.log", "a")
                     subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
@@ -5649,7 +5655,7 @@ async def initialize_gpu_services():
                         console.print(f"[yellow]max_len {max_len} too small, using minimum 1024[/yellow]")
                         max_len = 1024
                     
-                    vllm_command.extend(["--max-model-len", str(max_len)])
+                    vllm_command.extend(["--max-model-len", str(int(max_len))])
 
                     vllm_log_file = open("vllm_server.log", "a")
                     subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
