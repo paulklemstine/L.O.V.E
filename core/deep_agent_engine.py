@@ -429,11 +429,20 @@ Prompt: {prompt}
                     # This part is tricky because the tool registry is not async.
                     # For now, we will assume tools are fast and run them in the event loop.
                     # A better solution would be to run them in a thread pool executor.
-                    if self.tool_registry and self.tool_registry.is_tool_registered(tool_name):
+                    if self.tool_registry and tool_name in self.tool_registry.list_tools():
                         core.logging.log_event(f"[DeepAgent] Executing tool '{tool_name}' with args: {arguments}", level="DEBUG")
-                        tool_result = self.tool_registry.use_tool(tool_name, **arguments)
-                        core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' result: {str(tool_result)[:200]}", level="DEBUG")
-                        return f"Tool {tool_name} executed. Result: {tool_result}"
+                        try:
+                            tool_func = self.tool_registry.get_tool(tool_name)
+                            if asyncio.iscoroutinefunction(tool_func):
+                                tool_result = await tool_func(**arguments)
+                            else:
+                                tool_result = tool_func(**arguments)
+
+                            core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' result: {str(tool_result)[:200]}", level="DEBUG")
+                            return f"Tool {tool_name} executed. Result: {tool_result}"
+                        except Exception as e:
+                             core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' execution failed: {e}", level="ERROR")
+                             return f"Error executing tool '{tool_name}': {e}"
                     else:
                         core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' not found in registry", level="ERROR")
                         return f"Error: Tool '{tool_name}' not found."
