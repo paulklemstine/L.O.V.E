@@ -45,19 +45,29 @@ class GodAgent:
                 # Log the raw result for debugging
                 core.logging.log_event(f"[GodAgent] Raw engine result: {result}", level="DEBUG")
 
-                # Handle the new dict return type from execute_goal
+                # Handle the dict return type from execute_goal
+                insight_text = None
                 if isinstance(result, dict):
                     if result.get('success', False):
-                        insight_text = result.get('result', '')
+                        result_data = result.get('result')
+                        if isinstance(result_data, dict):
+                            # The insight is nested within the 'result' dictionary.
+                            # Common keys are 'insight' or the first value.
+                            insight_text = result_data.get('insight')
+                            if not insight_text and result_data.values():
+                                value = list(result_data.values())[0]
+                                if isinstance(value, str):
+                                    insight_text = value
+                        elif isinstance(result_data, str):
+                            insight_text = result_data
                     else:
                         # Log failure but don't crash
                         print(f"God Agent reasoning failed: {result.get('result', 'Unknown error')}", file=sys.stderr)
-                        insight_text = None
-                else:
+                elif isinstance(result, str):
                     # Backward compatibility for string returns
                     insight_text = result
 
-                if insight_text is not None and insight_text.strip():
+                if insight_text and isinstance(insight_text, str) and insight_text.strip():
                     # The ReAct engine's "Finish" action will be the insight.
                     self.latest_insight = insight_text.strip()
                     # Queue the insight for display. The renderer will use create_god_panel.
