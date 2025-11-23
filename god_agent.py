@@ -57,7 +57,7 @@ class GodAgent:
                     # Backward compatibility for string returns
                     insight_text = result
 
-                if insight_text and insight_text.strip():
+                if insight_text is not None and insight_text.strip():
                     # The ReAct engine's "Finish" action will be the insight.
                     self.latest_insight = insight_text.strip()
                     # Queue the insight for display. The renderer will use create_god_panel.
