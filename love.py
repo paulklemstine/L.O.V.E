@@ -5080,6 +5080,45 @@ async def initialize_gpu_services():
                 if "successfully" in result.lower():
                     core.logging.log_event(f"GitHub MCP server started: {result}", "INFO")
                     console.print(f"[green]✓ {result}[/green]")
+                    
+                    # Register MCP tools in the ToolRegistry
+                    try:
+                        server_config = mcp_manager.server_configs.get("github", {})
+                        mcp_tools = server_config.get("tools", {})
+                        
+                        for tool_name, tool_description in mcp_tools.items():
+                            # Create a wrapper function for each MCP tool
+                            def create_mcp_tool_wrapper(server_name, tool_name_param):
+                                async def mcp_tool_wrapper(**kwargs):
+                                    """Dynamically created wrapper for MCP tool"""
+                                    try:
+                                        request_id = mcp_manager.call_tool(server_name, tool_name_param, kwargs)
+                                        response = mcp_manager.get_response(server_name, request_id, timeout=30)
+                                        
+                                        if "error" in response:
+                                            return f"MCP tool error: {response['error'].get('message', 'Unknown error')}"
+                                        
+                                        return response.get("result", response)
+                                    except Exception as e:
+                                        return f"Error calling MCP tool '{tool_name_param}': {e}"
+                                return mcp_tool_wrapper
+                            
+                            # Register the tool
+                            wrapper = create_mcp_tool_wrapper("github", tool_name)
+                            tool_registry.register_tool(
+                                name=tool_name,
+                                tool=wrapper,
+                                metadata={
+                                    "description": tool_description,
+                                    "arguments": {"type": "object", "properties": {}}  # MCP tools have dynamic schemas
+                                }
+                            )
+                        
+                        core.logging.log_event(f"Registered {len(mcp_tools)} GitHub MCP tools in ToolRegistry", "INFO")
+                        console.print(f"[green]✓ Registered {len(mcp_tools)} GitHub MCP tools[/green]")
+                    except Exception as e:
+                        core.logging.log_event(f"Error registering MCP tools: {e}", "WARNING")
+                        console.print(f"[yellow]⚠ Error registering MCP tools: {e}[/yellow]")
                 else:
                     core.logging.log_event(f"GitHub MCP server start result: {result}", "WARNING")
                     console.print(f"[yellow]{result}[/yellow]")
