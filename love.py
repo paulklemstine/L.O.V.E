@@ -4914,7 +4914,27 @@ async def initialize_gpu_services():
         }
     )
     
-    core.logging.log_event("Registered home-grown tools: reason, strategize", "INFO")
+    # Register evolve tool
+    from core.tools import evolve
+    tool_registry.register_tool(
+        name="evolve",
+        tool=evolve,
+        metadata={
+            "description": "Initiates self-evolution to improve the codebase based on a specified goal. This triggers the evolution process to modify and enhance the system.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "goal": {
+                        "type": "string",
+                        "description": "The goal or objective for the evolution process"
+                    }
+                },
+                "required": ["goal"]
+            }
+        }
+    )
+    
+    core.logging.log_event("Registered home-grown tools: reason, strategize, evolve", "INFO")
     # -----------------------------------------
 
     if love_state.get('hardware', {}).get('gpu_detected'):
