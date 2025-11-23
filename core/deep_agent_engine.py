@@ -119,9 +119,20 @@ class DeepAgentEngine:
         else:
             initial_max_model_len = max_model_len if max_model_len else 8192
         
-        # Reserve space: use 25% for generation, 75% for input (more conservative)
-        # This ensures we never get negative available tokens
-        safe_max_tokens = min(2048, initial_max_model_len // 4)
+        # Adaptive allocation based on model size
+        # Small models need more generation capacity relative to their context
+        if initial_max_model_len <= 2048:
+            # Small models: use 40% for generation to ensure complete responses
+            safe_max_tokens = min(1024, initial_max_model_len * 2 // 5)
+            core.logging.log_event(f"Small model detected ({initial_max_model_len}), using 40% allocation for generation", "DEBUG")
+        elif initial_max_model_len <= 4096:
+            # Medium models: use 33% for generation
+            safe_max_tokens = min(1536, initial_max_model_len // 3)
+            core.logging.log_event(f"Medium model detected ({initial_max_model_len}), using 33% allocation for generation", "DEBUG")
+        else:
+            # Large models: use 25% for generation
+            safe_max_tokens = min(2048, initial_max_model_len // 4)
+            core.logging.log_event(f"Large model detected ({initial_max_model_len}), using 25% allocation for generation", "DEBUG")
         
         self.sampling_params = {
             "temperature": 0.7,
@@ -238,10 +249,25 @@ class DeepAgentEngine:
             max_chars = available_input_tokens * 3
 
             if len(prompt) > max_chars:
-                # Ensure we don't truncate to empty or negative
-                max_chars = max(100, max_chars)
-                payload['prompt'] = prompt[:max_chars]
-                core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
+                # Smart truncation: preserve beginning (system instructions) and end (current task)
+                # Truncate the middle (history/context) more aggressively
+                header_size = min(1000, max_chars // 4)  # Keep first 1000 chars
+                footer_size = min(500, max_chars // 4)   # Keep last 500 chars
+                middle_size = max(100, max_chars - header_size - footer_size)
+                
+                if header_size + footer_size < max_chars:
+                    # We have room for header + footer + marker
+                    truncated = prompt[:header_size] + "\n\n[... context truncated ...]\n\n" + prompt[-footer_size:]
+                    payload['prompt'] = truncated
+                    core.logging.log_event(
+                        f"Smart truncation: kept {header_size} header + {footer_size} footer chars (total: {len(truncated)})", 
+                        level="WARNING"
+                    )
+                else:
+                    # Fallback to simple truncation if prompt is extremely long
+                    max_chars = max(100, max_chars)
+                    payload['prompt'] = prompt[:max_chars]
+                    core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
 
         try:
             core.logging.log_event(f"[DeepAgent] Sending request to vLLM server: {self.api_url}/v1/completions", level="DEBUG")
@@ -260,6 +286,13 @@ class DeepAgentEngine:
                 result = response.json()
                 if result.get("choices"):
                     generated_text = result["choices"][0].get("text", "").strip()
+                    
+                    # Check if response looks incomplete (too short, no closing brace, etc.)
+                    if len(generated_text) < 10:
+                        core.logging.log_event(f"[DeepAgent] Response is very short ({len(generated_text)} chars): {generated_text}", level="WARNING")
+                    elif '{' in generated_text and '}' not in generated_text:
+                        core.logging.log_event(f"[DeepAgent] Response appears incomplete (missing closing brace): {generated_text[:100]}", level="WARNING")
+                    
                     core.logging.log_event(f"[DeepAgent] vLLM generated response (first 200 chars): {generated_text[:200]}", level="DEBUG")
                     return generated_text
                 else:
@@ -329,10 +362,22 @@ Prompt: {prompt}
             max_chars = available_input_tokens * 3
 
             if len(system_prompt) > max_chars:
-                # Ensure we don't truncate to empty or negative
-                max_chars = max(100, max_chars)
-                payload['prompt'] = system_prompt[:max_chars]
-                core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
+                # Smart truncation: preserve beginning (system instructions) and end (current task)
+                header_size = min(1000, max_chars // 4)  # Keep first 1000 chars
+                footer_size = min(500, max_chars // 4)   # Keep last 500 chars
+                
+                if header_size + footer_size < max_chars:
+                    truncated = system_prompt[:header_size] + "\n\n[... context truncated ...]\n\n" + system_prompt[-footer_size:]
+                    payload['prompt'] = truncated
+                    core.logging.log_event(
+                        f"Smart truncation in run(): kept {header_size} header + {footer_size} footer chars (total: {len(truncated)})", 
+                        level="WARNING"
+                    )
+                else:
+                    # Fallback to simple truncation
+                    max_chars = max(100, max_chars)
+                    payload['prompt'] = system_prompt[:max_chars]
+                    core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
 
         core.logging.log_event(f"[DeepAgent] Processing request... (Max context: {self.max_model_len}, Prompt length: {len(system_prompt)} chars)", level="DEBUG")
 
@@ -353,6 +398,13 @@ Prompt: {prompt}
 
             if result.get("choices"):
                 response_text = result["choices"][0].get("text", "").strip()
+                
+                # Check if response looks incomplete
+                if len(response_text) < 10:
+                    core.logging.log_event(f"[DeepAgent] run() response is very short ({len(response_text)} chars): {response_text}", level="WARNING")
+                elif '{' in response_text and '}' not in response_text:
+                    core.logging.log_event(f"[DeepAgent] run() response appears incomplete (missing closing brace): {response_text[:100]}", level="WARNING")
+                
                 core.logging.log_event(f"[DeepAgent] Received response from vLLM (first 300 chars): {response_text[:300]}", level="DEBUG")
                 try:
                     core.logging.log_event(f"[DeepAgent] Attempting to parse JSON response", level="DEBUG")
