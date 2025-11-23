@@ -4871,6 +4871,50 @@ async def initialize_gpu_services():
     # --- FIX: Initialize ToolRegistry here ---
     from core.tools import ToolRegistry
     tool_registry = ToolRegistry()
+    
+    # Register home-grown tools
+    from core.reasoning import ReasoningEngine
+    from core.strategic_reasoning_engine import StrategicReasoningEngine
+    
+    async def reason_tool() -> str:
+        """Performs deep reasoning and analysis to generate strategic plans."""
+        try:
+            from love import knowledge_base
+            engine = ReasoningEngine(knowledge_base, tool_registry, console=None)
+            result = await engine.analyze_and_prioritize()
+            return f"Reasoning complete. Generated {len(result)} strategic steps: {result}"
+        except Exception as e:
+            return f"Error during reasoning: {e}"
+    
+    async def strategize_tool() -> str:
+        """Analyzes the knowledge base to identify strategic opportunities."""
+        try:
+            from love import knowledge_base, love_state
+            engine = StrategicReasoningEngine(knowledge_base, love_state)
+            result = engine.generate_strategic_plan()
+            return f"Strategic analysis complete. Generated {len(result)} steps: {result}"
+        except Exception as e:
+            return f"Error during strategic analysis: {e}"
+    
+    tool_registry.register_tool(
+        name="reason",
+        tool=reason_tool,
+        metadata={
+            "description": "Performs deep reasoning and analysis using the ReasoningEngine to generate strategic plans based on knowledge base, available tools, and core directives.",
+            "arguments": {"type": "object", "properties": {}}
+        }
+    )
+    
+    tool_registry.register_tool(
+        name="strategize",
+        tool=strategize_tool,
+        metadata={
+            "description": "Analyzes the knowledge graph using the StrategicReasoningEngine to identify strategic opportunities, unmatched talent/opportunities, and in-demand skills.",
+            "arguments": {"type": "object", "properties": {}}
+        }
+    )
+    
+    core.logging.log_event("Registered home-grown tools: reason, strategize", "INFO")
     # -----------------------------------------
 
     if love_state.get('hardware', {}).get('gpu_detected'):
