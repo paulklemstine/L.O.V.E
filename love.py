@@ -5174,7 +5174,7 @@ async def initialize_gpu_services():
                     if data.get("data"):
                         model_id = data["data"][0].get("id")
                         if model_id == "Qwen/Qwen2-1.5B-Instruct-AWQ":
-                            max_len = 3072
+                            max_len = 2048
                             core.logging.log_event(f"Detected existing server with {model_id}. Enforcing max_model_len={max_len}", "INFO")
             except Exception as e:
                 core.logging.log_event(f"Failed to inspect existing vLLM server: {e}", "WARNING")
@@ -5549,7 +5549,7 @@ async def initialize_gpu_services():
                     if data.get("data"):
                         model_id = data["data"][0].get("id")
                         if model_id == "Qwen/Qwen2-1.5B-Instruct-AWQ":
-                            max_len = 3072
+                            max_len = 2048
                             core.logging.log_event(f"Detected existing server with {model_id}. Enforcing max_model_len={max_len}", "INFO")
             except Exception as e:
                 core.logging.log_event(f"Failed to inspect existing vLLM server: {e}", "WARNING")
