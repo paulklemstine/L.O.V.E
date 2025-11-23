@@ -4958,7 +4958,7 @@ async def install_docker(console) -> bool:
     return False
 
 
-    async def initialize_gpu_services():
+async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
     global deep_agent_engine, knowledge_base, memory_manager
 
@@ -5330,6 +5330,16 @@ async def install_docker(console) -> bool:
                     )
                     await deep_agent_engine.initialize()
                     core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
+                else:
+                    core.logging.log_event("DeepAgentEngine initialization failed.", level="CRITICAL")
+            except Exception as e:
+                # Ensure client is None on failure
+                deep_agent_engine = None
+                # Use the wrapper function for safe logging
+                log_critical_event(f"Failed to initialize DeepAgentEngine or vLLM server: {e}", console_override=console)
+    else:
+        console.print("[bold yellow]No GPU detected. Skipping vLLM initialization.[/bold yellow]")
+        core.logging.log_event("No GPU detected. Skipping vLLM initialization.", "INFO")
     
     # Register home-grown tools
     from core.reasoning import ReasoningEngine
