@@ -496,7 +496,7 @@ class MemoryManager:
         """
         Retrieves the most relevant "FoldedMemory" summaries based on a query.
         """
-        query_vector = self.model.encode(query_task)
+        query_vector = self.embedding_model.encode(query_task)
 
         folded_memory_nodes = self.graph_data_manager.query_nodes("tags", "FoldedMemory")
 

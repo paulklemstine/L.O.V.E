@@ -88,5 +88,32 @@ class TestKBIntegration(unittest.TestCase):
             self.assertIn("📚 Knowledge Base Context:", context)
             self.assertIn("🧠 Relevant Past Experiences:", context)
 
+    def test_memory_manager_attribute_fix(self):
+        """Regression test for AttributeError: 'MemoryManager' object has no attribute 'model'"""
+        from core.memory.memory_manager import MemoryManager
+        
+        # Mock dependencies
+        mock_graph_manager = MagicMock()
+        mock_graph_manager.query_nodes.return_value = [] # Return empty to avoid further processing
+        
+        # Instantiate MemoryManager with mocks
+        # We need to patch SentenceTransformer to avoid loading the real model
+        with patch('core.memory.memory_manager.SentenceTransformer') as MockTransformer:
+            mock_model = MagicMock()
+            MockTransformer.return_value = mock_model
+            
+            # We also need to mock os.path.exists to avoid loading FAISS from disk
+            with patch('os.path.exists', return_value=False):
+                manager = MemoryManager(mock_graph_manager)
+                
+                # Verify initialization
+                self.assertEqual(manager.embedding_model, mock_model)
+                
+                # Call the method that was failing
+                manager.retrieve_relevant_folded_memories("test query")
+                
+                # Verify it used embedding_model, not model
+                mock_model.encode.assert_called_with("test query")
+
 if __name__ == '__main__':
     unittest.main()
