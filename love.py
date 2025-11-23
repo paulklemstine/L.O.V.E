@@ -5286,7 +5286,8 @@ async def initialize_gpu_services():
                         console.print(f"[yellow]max_len {max_len} too small, using minimum 1024[/yellow]")
                         max_len = 1024
                     
-                    vllm_command.extend(["--max-model-len", str(int(max_len))])
+                    # Let vLLM auto-detect context length from the model
+                    # vllm_command.extend(["--max-model-len", str(int(max_len))])
 
                     vllm_log_file = open("vllm_server.log", "a")
                     subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
@@ -5655,7 +5656,8 @@ async def initialize_gpu_services():
                         console.print(f"[yellow]max_len {max_len} too small, using minimum 1024[/yellow]")
                         max_len = 1024
                     
-                    vllm_command.extend(["--max-model-len", str(int(max_len))])
+                    # Let vLLM auto-detect context length from the model
+                    # vllm_command.extend(["--max-model-len", str(int(max_len))])
 
                     vllm_log_file = open("vllm_server.log", "a")
                     subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
