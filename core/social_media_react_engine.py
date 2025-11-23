@@ -38,7 +38,8 @@ class SocialMediaReActEngine(GeminiReActEngine):
 
         async def generate_image_for_post(prompt: str):
             """Generates an image for a social media post using a textual prompt."""
-            return await self.loop.run_in_executor(None, generate_image, prompt)
+            from core.image_api import generate_image
+            return await generate_image(prompt)
 
         async def decide_on_reply(post_text: str, comment_text: str):
             """Decides whether to reply to a comment."""

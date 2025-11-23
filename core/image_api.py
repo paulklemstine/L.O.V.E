@@ -15,68 +15,28 @@ def get_top_image_models(count=1):
     except Exception as e:
         return ["stable_diffusion_2.1"]
 
-def generate_image(prompt: str):
+async def generate_image(prompt: str):
     """
-    Generates an image using the AI Horde API.
+    Generates an image using the image generation pool.
+    Tries providers in order: Gemini Imagen3 -> Stability AI -> AI Horde
     """
+    from core.image_generation_pool import generate_image_with_pool
     import core.logging
-    core.logging.log_event(f"Starting AI Horde image generation with prompt: {prompt[:100]}...", "INFO")
     
-    api_key = os.environ.get("STABLE_HORDE", "0000000000")
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-
-    top_models = get_top_image_models()
-    if not top_models:
-        core.logging.log_event("Could not fetch any image models from AI Horde.", "ERROR")
-        raise Exception("Could not fetch any image models from AI Horde.")
-
-    payload = {
-        "prompt": prompt,
-        "params": {"n": 1},
-        "models": top_models
-    }
-
-    # Submit the request
-    api_url = "https://stablehorde.net/api/v2/generate/async"
+    core.logging.log_event(f"Starting image generation via pool: {prompt[:100]}...", "INFO")
+    
     try:
-        response = requests.post(api_url, json=payload, headers=headers, timeout=30)
-        response.raise_for_status()
-        job_id = response.json()["id"]
-        core.logging.log_event(f"AI Horde image generation job submitted. Job ID: {job_id}", "INFO")
+        image = await generate_image_with_pool(prompt)
+        core.logging.log_event("Image generation completed successfully", "INFO")
+        return image
     except Exception as e:
-        core.logging.log_event(f"Failed to submit AI Horde image generation request: {e}", "ERROR")
+        core.logging.log_event(f"Image generation failed: {e}", "ERROR")
         raise
 
-    # Poll for the result
-    check_url = f"https://stablehorde.net/api/v2/generate/status/{job_id}"
-    for attempt in range(60):  # Poll for 10 minutes
-        time.sleep(10)
-        try:
-            check_response = requests.get(check_url, headers=headers, timeout=10)
-            check_response.raise_for_status()
-            status = check_response.json()
-            
-            if attempt % 6 == 0:  # Log every minute
-                core.logging.log_event(f"AI Horde image generation in progress... (attempt {attempt+1}/60)", "INFO")
-            
-            if status["done"]:
-                img_url = status["generations"][0]["img"]
-                img_response = requests.get(img_url, timeout=30)
-                img_response.raise_for_status()
-                core.logging.log_event(f"AI Horde image generation completed successfully.", "INFO")
-                return Image.open(io.BytesIO(img_response.content))
-        except Exception as e:
-            core.logging.log_event(f"Error checking AI Horde status (attempt {attempt+1}): {e}", "WARNING")
-            if attempt >= 5:  # Give up after multiple failures
-                raise
-
-    core.logging.log_event("AI Horde image generation job timed out after 10 minutes.", "ERROR")
-    raise Exception("AI Horde image generation job timed out.")
-
-
-def generate_image_for_post(prompt: str):
+async def generate_image_for_post(prompt: str):
     """
     Generates an image for a social media post using a textual prompt.
-    This is a wrapper around the more generic generate_image function.
+    This is an async wrapper around the generate_image function.
     """
-    return generate_image(prompt)
+    return await generate_image(prompt)
+

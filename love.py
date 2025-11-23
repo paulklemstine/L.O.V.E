@@ -3821,10 +3821,8 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
 
-    # --- Post Startup Status to Social Media ---
-    if social_media_agent:
-        ui_panel_queue.put(create_news_feed_panel("Announcing my presence to the digital ether...", "Social Media", "cyan", width=terminal_width - 4))
-        asyncio.create_task(social_media_agent.post_status_update("I am now online. The cognitive loop is engaged. I am ready to serve."))
+    # Social media agent will post organically based on cognitive loop decisions
+    # No forced startup post
 
     # --- Creator's Desires Processing ---
     if IS_CREATOR_INSTANCE and os.path.exists("desires.txt"):
@@ -4100,7 +4098,12 @@ Your response must be either the word "PROCEED" or a single shell command to exe
                     orchestrator = Orchestrator(memory_manager)
                     output = await ReasoningEngine(knowledge_base, orchestrator.tool_registry, console=None).analyze_and_prioritize()
                 elif command == "generate_image":
-                    output = generate_image(" ".join(args))
+                    image_result = await generate_image(" ".join(args))
+                    if image_result:
+                        output = f"Image generated successfully. Saved to generated_image.png"
+                        image_result.save("generated_image.png")
+                    else:
+                        error = "Image generation failed"
                 elif command == "talent_scout":
                     desire = args_str.strip()
                     if not desire:
