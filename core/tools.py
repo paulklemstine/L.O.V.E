@@ -106,7 +106,12 @@ class ToolRegistry:
         Retrieves a tool's callable function by its name.
         """
         if name not in self._tools:
-            raise KeyError(f"Tool '{name}' not found in registry.")
+            # Provide helpful error message
+            error_msg = f"Tool '{name}' not found in registry."
+            # Check if it might be an MCP tool
+            if '.' in name or 'search_' in name or 'get_' in name or 'list_' in name:
+                error_msg += " This appears to be an MCP server tool. Make sure the corresponding MCP server is running and has registered its tools."
+            raise KeyError(error_msg)
         return self._tools[name]["tool"]
 
     def list_tools(self) -> Dict[str, Dict[str, Any]]:
@@ -160,8 +165,12 @@ class SecureExecutor:
             print(f"Tool '{tool_name}' executed successfully.")
             return result
         except KeyError as e:
-            print(f"Execution Error: {e}")
-            return f"Error: Tool '{tool_name}' is not registered."
+            error_msg = str(e)
+            print(f"Execution Error: {error_msg}")
+            # Provide helpful guidance
+            if "MCP server" in error_msg:
+                return f"Error: {error_msg} Available tools: {', '.join(tool_registry.get_tool_names()[:10])}..."
+            return f"Error: Tool '{tool_name}' is not registered. Available tools: {', '.join(tool_registry.get_tool_names()[:10])}..."
         except Exception as e:
             print(f"Execution Error: An unexpected error occurred while running '{tool_name}': {e}")
             return f"Error: Failed to execute tool '{tool_name}' due to: {e}"
