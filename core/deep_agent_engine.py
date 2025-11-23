@@ -117,11 +117,15 @@ class DeepAgentEngine:
         # SamplingParams are now defined on the client side for each request
         # Calculate safe max_tokens based on model context length
         # Ensure we have a reasonable minimum context
-        if max_model_len and max_model_len < 1024:
+        # Ensure a sensible default if max_model_len is None, zero, or negative
+        if not max_model_len or max_model_len <= 0:
+            core.logging.log_event("max_model_len missing or non-positive; defaulting to 8192", "WARNING")
+            initial_max_model_len = 8192
+        elif max_model_len < 1024:
             core.logging.log_event(f"Received very small max_model_len={max_model_len}, using 1024 minimum", "WARNING")
             initial_max_model_len = 1024
         else:
-            initial_max_model_len = max_model_len if max_model_len else 8192
+            initial_max_model_len = max_model_len
         
         # Adaptive allocation based on model size
         # Small models need more generation capacity relative to their context
@@ -181,6 +185,10 @@ class DeepAgentEngine:
                 if models_data.get("data"):
                     model_data = models_data["data"][0]
                     max_len = int(model_data.get("context_length", 8192))
+                    # Guard against zero or negative context lengths returned by the server
+                    if max_len <= 0:
+                        core.logging.log_event("vLLM reported zero/negative context length; defaulting to 8192", "WARNING")
+                        max_len = 8192
                     self.model_name = model_data.get("id", "vllm-model")
                     core.logging.log_event(f"vLLM server model context length: {max_len}", level="INFO")
                     core.logging.log_event(f"vLLM server model name: {self.model_name}", level="INFO")

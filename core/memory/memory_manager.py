@@ -8,7 +8,10 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import List
 
-import faiss
+try:
+    import faiss
+except ImportError:
+    faiss = None  # FAISS not available; will use fallback/no-op implementations
 from sentence_transformers import SentenceTransformer
 import networkx as nx
 import numpy as np
@@ -91,7 +94,13 @@ class MemoryManager:
         self._load_faiss_data()
 
     def _load_faiss_data(self):
-        """Loads the FAISS index and the ID map from disk."""
+        """Loads the FAISS index and the ID map from disk, if FAISS is available."""
+        if faiss is None:
+            # FAISS not installed; skip loading and start with empty structures
+            print("FAISS library not available; initializing empty index.")
+            self.faiss_index = None
+            self.faiss_id_map = []
+            return
         if os.path.exists(self.faiss_index_path) and os.path.exists(self.faiss_id_map_path):
             print("Loading FAISS index and ID map from disk.")
             self.faiss_index = faiss.read_index(self.faiss_index_path)
@@ -106,7 +115,10 @@ class MemoryManager:
             self._rebuild_faiss_index()
 
     def _save_faiss_data(self):
-        """Saves the FAISS index and the ID map to disk."""
+        """Saves the FAISS index and the ID map to disk, if FAISS is available."""
+        if faiss is None:
+            print("FAISS not available; skipping save.")
+            return
         print(f"Saving FAISS index to {self.faiss_index_path}...")
         faiss.write_index(self.faiss_index, self.faiss_index_path)
         with open(self.faiss_id_map_path, 'w') as f:
@@ -117,7 +129,13 @@ class MemoryManager:
         """
         Rebuilds the FAISS index and ID map from the graph data.
         Includes a data migration step to generate embeddings for old memories.
+        If FAISS is not available, creates a placeholder.
         """
+        if faiss is None:
+            print("FAISS not available; creating empty placeholder index.")
+            self.faiss_index = None
+            self.faiss_id_map = []
+            return
         print("Rebuilding FAISS index from scratch...")
         # Dimension of the embeddings from all-MiniLM-L6-v2 is 384
         self.faiss_index = faiss.IndexFlatL2(384)
