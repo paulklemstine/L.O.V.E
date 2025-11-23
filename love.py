@@ -5048,13 +5048,53 @@ async def initialize_gpu_services():
                     await deep_agent_engine.initialize()
                     core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
                 else:
-                    core.logging.log_event("No suitable vLLM model found for available VRAM. DeepAgentEngine not initialized.", level="WARNING")
-
+                    core.logging.log_event("DeepAgentEngine initialization failed.", level="CRITICAL")
             except Exception as e:
                 # Ensure client is None on failure
                 deep_agent_engine = None
                 # Use the wrapper function for safe logging
                 log_critical_event(f"Failed to initialize DeepAgentEngine or vLLM server: {e}", console_override=console)
+    else:
+        console.print("[bold yellow]No GPU detected. Skipping vLLM initialization.[/bold yellow]")
+        core.logging.log_event("No GPU detected. Skipping vLLM initialization.", "INFO")
+    
+    # --- Auto-start GitHub MCP Server ---
+    global mcp_manager
+    try:
+        # Check if Docker is installed
+        docker_check = subprocess.run(["docker", "--version"], capture_output=True, text=True, timeout=5)
+        docker_installed = docker_check.returncode == 0
+        
+        if docker_installed:
+            core.logging.log_event(f"Docker detected: {docker_check.stdout.strip()}", "INFO")
+            console.print(f"[green]✓ Docker detected: {docker_check.stdout.strip()}[/green]")
+            
+            # Check for GitHub token
+            github_token = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN")
+            if github_token:
+                core.logging.log_event("GITHUB_PERSONAL_ACCESS_TOKEN found. Starting GitHub MCP server...", "INFO")
+                console.print("[cyan]Starting GitHub MCP server...[/cyan]")
+                
+                # Start the GitHub MCP server
+                result = mcp_manager.start_server("github")
+                if "successfully" in result.lower():
+                    core.logging.log_event(f"GitHub MCP server started: {result}", "INFO")
+                    console.print(f"[green]✓ {result}[/green]")
+                else:
+                    core.logging.log_event(f"GitHub MCP server start result: {result}", "WARNING")
+                    console.print(f"[yellow]{result}[/yellow]")
+            else:
+                core.logging.log_event("GITHUB_PERSONAL_ACCESS_TOKEN not set. Skipping GitHub MCP server.", "INFO")
+                console.print("[yellow]⚠ GITHUB_PERSONAL_ACCESS_TOKEN not set. Skipping GitHub MCP server.[/yellow]")
+        else:
+            core.logging.log_event("Docker not installed. Skipping GitHub MCP server.", "INFO")
+            console.print("[yellow]⚠ Docker not installed. Skipping GitHub MCP server.[/yellow]")
+    except FileNotFoundError:
+        core.logging.log_event("Docker command not found. Skipping GitHub MCP server.", "INFO")
+        console.print("[yellow]⚠ Docker not found. Skipping GitHub MCP server.[/yellow]")
+    except Exception as e:
+        core.logging.log_event(f"Error checking Docker or starting GitHub MCP server: {e}", "WARNING")
+        console.print(f"[yellow]⚠ Error with GitHub MCP server setup: {e}[/yellow]")
 
 async def main(args):
     """The main application entry point."""
