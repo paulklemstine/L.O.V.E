@@ -4905,29 +4905,16 @@ async def install_docker(console) -> bool:
     # WSL/Linux: Can auto-install
     if is_linux:
         console.print("[cyan]═══════════════════════════════════════════════════════════[/cyan]")
-        console.print("[cyan]Docker is not installed. Would you like to install it now?[/cyan]")
-        console.print("[yellow]This will run the following commands:[/yellow]")
+        console.print("[cyan]Docker not installed. Installing automatically...[/cyan]")
+        console.print("[yellow]Running commands:[/yellow]")
         console.print("[white]  1. curl -fsSL https://get.docker.com | sh[/white]")
         console.print("[white]  2. sudo usermod -aG docker $USER[/white]")
-        console.print("[yellow]Installation requires sudo privileges.[/yellow]")
         console.print("[cyan]═══════════════════════════════════════════════════════════[/cyan]")
         
-        # Prompt for consent
-        console.print("[bright_green]Install Docker? (y/n):[/bright_green] ", end="")
-        
-        # Get user input
         try:
-            import sys
-            response = input().strip().lower()
-            
-            if response != 'y':
-                console.print("[yellow]Docker installation declined. GitHub MCP server will be unavailable.[/yellow]")
-                core.logging.log_event("User declined Docker installation", "INFO")
-                return False
-            
-            # Install Docker
+            # Install Docker automatically
             console.print("[cyan]Installing Docker... This may take a few minutes.[/cyan]")
-            core.logging.log_event("Starting Docker installation", "INFO")
+            core.logging.log_event("Starting automatic Docker installation", "INFO")
             
             # Download and run Docker installation script
             install_cmd = "curl -fsSL https://get.docker.com | sh"
