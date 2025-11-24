@@ -603,10 +603,21 @@ def rank_models():
             final_score *= 1.05
             log_event(f"Boosting score for preferred model type: {model_id}", "INFO")
 
-        # --- Boost score for Gemini models ---
-        if stats.get("provider") == "gemini":
-            final_score *= 1.5
-            log_event(f"Boosting score for Gemini model: {model_id}", "INFO")
+        # --- Provider Prioritization ---
+        # User requested order: gemini -> openrouter -> vllm -> horde
+        provider = stats.get("provider", "unknown")
+        if provider == "gemini":
+            final_score += 3000
+            log_event(f"Applying priority boost to Gemini model: {model_id}", "INFO")
+        elif provider == "openrouter":
+            final_score += 2000
+            log_event(f"Applying priority boost to OpenRouter model: {model_id}", "INFO")
+        elif provider == "vllm":
+            final_score += 1000
+            log_event(f"Applying priority boost to vLLM model: {model_id}", "INFO")
+        elif provider == "horde":
+            # Horde is lowest priority
+            pass
 
         ranked_models.append({"model_id": model_id, "score": final_score})
 
