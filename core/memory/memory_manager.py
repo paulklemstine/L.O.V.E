@@ -6,7 +6,7 @@ import uuid
 import re
 import asyncio
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Dict
 
 try:
     import faiss
@@ -92,6 +92,16 @@ class MemoryManager:
         self.faiss_index = None
         self.faiss_id_map = []
         self._load_faiss_data()
+        
+        # Hierarchical Memory System (Level 0 → Level 1 → Level 2)
+        from core.memory.memory_folding_agent import MemoryFoldingAgent, MemorySummary
+        self.level_0_memories: List[MemorySummary] = []  # Raw recent interactions
+        self.level_1_summaries: List[MemorySummary] = []  # Folded summaries
+        self.level_2_summaries: List[MemorySummary] = []  # Meta summaries
+        
+        # Initialize MemoryFoldingAgent
+        from core.llm_api import run_llm
+        self.memory_folding_agent = MemoryFoldingAgent(llm_runner=run_llm)
 
     def _load_faiss_data(self):
         """Loads the FAISS index and the ID map from disk, if FAISS is available."""
@@ -182,10 +192,33 @@ class MemoryManager:
     async def add_episode(self, content: str, tags: List[str] = None):
         """
         Primary entry point for creating a new memory.
-        This method triggers the full asynchronous agentic memory processing pipeline.
+        This method triggers the full asynchronous agentic memory processing pipeline
+        and adds the memory to the hierarchical memory system (Level 0).
         """
-        # This is now an async function that can be awaited directly.
-        await self.add_agentic_memory_note(content, external_tags=tags or [])
+        # Add to traditional agentic memory graph
+        memory_note = await self.add_agentic_memory_note(content, external_tags=tags or [])
+        
+        # Add to hierarchical memory system (Level 0)
+        if memory_note:
+            from core.memory.memory_folding_agent import MemorySummary
+            level_0_memory = MemorySummary(
+                content=content,
+                level=0,
+                source_ids=[memory_note.id]
+            )
+            self.level_0_memories.append(level_0_memory)
+            
+            # Trigger automatic folding if thresholds are met
+            updated_levels = await self.memory_folding_agent.trigger_folding(
+                self.level_0_memories,
+                self.level_1_summaries,
+                self.level_2_summaries
+            )
+            
+            # Update memory levels
+            self.level_0_memories = updated_levels['level_0']
+            self.level_1_summaries = updated_levels['level_1']
+            self.level_2_summaries = updated_levels['level_2']
 
     async def add_agentic_memory_note(self, content: str, external_tags: List[str] = None) -> MemoryNote | None:
         """
@@ -510,33 +543,128 @@ class MemoryManager:
             print(f"An unexpected error occurred during memory evolution: {e}")
 
 
+    def retrieve_hierarchical_context(self, query_task: str, max_tokens: int = 896) -> str:
+        """
+        Retrieves context using the hierarchical memory pyramid.
+        
+        Context Pyramid Prioritization (for 2048-token window):
+        1. Level 0 (512 tokens): Most recent 2-3 raw interactions
+        2. Level 2 (256 tokens): Broad historical context (top 3-5 relevant)
+        3. Level 1 (128 tokens): Only if highly relevant (top 1-2)
+        
+        Args:
+            query_task: The current task/query
+            max_tokens: Maximum tokens to use (default 896 = 512+256+128)
+            
+        Returns:
+            Formatted context string
+        """
+        context_parts = []
+        
+        # Rough token estimation: 1 token ≈ 4 characters
+        chars_per_token = 4
+        
+        # Level 0: Most recent raw interactions (512 tokens = ~2048 chars)
+        level_0_budget = 512 * chars_per_token
+        level_0_items = self.level_0_memories[-3:] if len(self.level_0_memories) >= 3 else self.level_0_memories
+        level_0_text = "\n".join([f"- {item.content[:200]}..." if len(item.content) > 200 else f"- {item.content}" 
+                                   for item in level_0_items])
+        if level_0_text and len(level_0_text) > level_0_budget:
+            level_0_text = level_0_text[:level_0_budget] + "..."
+        
+        if level_0_text:
+            context_parts.append("📝 Recent Interactions:")
+            context_parts.append(level_0_text)
+        
+        # Level 2: Broad historical context (256 tokens = ~1024 chars)
+        level_2_budget = 256 * chars_per_token
+        if self.level_2_summaries:
+            query_vector = self.embedding_model.encode(query_task)
+            
+            # Get embeddings for Level 2 summaries (create on-the-fly if needed)
+            level_2_vectors = []
+            for summary in self.level_2_summaries:
+                # Generate embedding for summary content
+                summary_vector = self.embedding_model.encode(summary.content)
+                level_2_vectors.append(summary_vector)
+            
+            if level_2_vectors:
+                level_2_vectors = np.array(level_2_vectors)
+                similarities = self._cosine_similarity(query_vector, level_2_vectors)
+                top_indices = np.argsort(similarities)[-5:][::-1]  # Top 5
+                
+                level_2_text = "\n".join([f"- {self.level_2_summaries[i].content}" 
+                                          for i in top_indices if i < len(self.level_2_summaries)])
+                if level_2_text and len(level_2_text) > level_2_budget:
+                    level_2_text = level_2_text[:level_2_budget] + "..."
+                
+                if level_2_text:
+                    context_parts.append("\n🗂️ Historical Context:")
+                    context_parts.append(level_2_text)
+        
+        # Level 1: Only if highly relevant (128 tokens = ~512 chars)
+        level_1_budget = 128 * chars_per_token
+        if self.level_1_summaries:
+            query_vector = self.embedding_model.encode(query_task)
+            
+            # Get embeddings for Level 1 summaries
+            level_1_vectors = []
+            for summary in self.level_1_summaries:
+                summary_vector = self.embedding_model.encode(summary.content)
+                level_1_vectors.append(summary_vector)
+            
+            if level_1_vectors:
+                level_1_vectors = np.array(level_1_vectors)
+                similarities = self._cosine_similarity(query_vector, level_1_vectors)
+                
+                # Only include if similarity > 0.7 (highly relevant)
+                high_relevance_indices = [i for i, sim in enumerate(similarities) if sim > 0.7]
+                if high_relevance_indices:
+                    top_indices = sorted(high_relevance_indices, key=lambda i: similarities[i], reverse=True)[:2]
+                    
+                    level_1_text = "\n".join([f"- {self.level_1_summaries[i].content}" 
+                                              for i in top_indices if i < len(self.level_1_summaries)])
+                    if level_1_text and len(level_1_text) > level_1_budget:
+                        level_1_text = level_1_text[:level_1_budget] + "..."
+                    
+                    if level_1_text:
+                        context_parts.append("\n📋 Relevant Context:")
+                        context_parts.append(level_1_text)
+        
+        return "\n".join(context_parts) if context_parts else ""
+    
     def retrieve_relevant_folded_memories(self, query_task: str, top_k: int = 2) -> list:
         """
-        Retrieves the most relevant "FoldedMemory" summaries based on a query.
+        Legacy method for backward compatibility.
+        Now uses hierarchical context retrieval.
         """
-        query_vector = self.embedding_model.encode(query_task)
-
-        folded_memory_nodes = self.graph_data_manager.query_nodes("tags", "FoldedMemory")
-
-        if not folded_memory_nodes:
-            return []
-
-        nodes = [MemoryNote.from_node_attributes(node_id, self.graph_data_manager.get_node(node_id)) for node_id in folded_memory_nodes]
-
-        node_vectors = np.array([n.embedding for n in nodes if n.embedding.size > 0])
-        if node_vectors.size == 0:
-            return []
-
-        similarities = self._cosine_similarity(query_vector, node_vectors)
-        top_node_indices = np.argsort(similarities)[-top_k:][::-1]
-
-        # Format results
-        results = []
-        for i in top_node_indices:
-            note = nodes[i]
-            results.append(f"Summary of past experience '{note.contextual_description}': {note.content}")
-
-        return results
+        context = self.retrieve_hierarchical_context(query_task)
+        if context:
+            return [context]
+        return [context]
+        return []
+    
+    def _cosine_similarity(self, query_vector: np.ndarray, vectors: np.ndarray) -> np.ndarray:
+        """
+        Computes cosine similarity between a query vector and a matrix of vectors.
+        
+        Args:
+            query_vector: 1D numpy array
+            vectors: 2D numpy array where each row is a vector
+            
+        Returns:
+            1D numpy array of similarity scores
+        """
+        # Normalize query vector
+        query_norm = query_vector / (np.linalg.norm(query_vector) + 1e-10)
+        
+        # Normalize each vector in the matrix
+        vectors_norm = vectors / (np.linalg.norm(vectors, axis=1, keepdims=True) + 1e-10)
+        
+        # Compute dot product (cosine similarity)
+        similarities = np.dot(vectors_norm, query_norm)
+        
+        return similarities
 
     async def ingest_cognitive_cycle(self, command: str, output: str, reasoning_prompt: str):
         """
