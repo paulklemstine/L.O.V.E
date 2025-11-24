@@ -3,6 +3,10 @@ import json
 from datetime import datetime
 from cryptography.fernet import Fernet
 from core.logging import log_event
+from core.talent_utils.aggregator import PublicProfileAggregator
+from core.llm_api import run_llm
+import asyncio
+
 
 class TalentManager:
     """
@@ -190,3 +194,139 @@ class TalentManager:
             }
             profile_list.append(summary)
         return profile_list
+
+    async def talent_scout(self, criteria: str):
+        """
+        Scouts for talent based on a given criteria string.
+        It uses an LLM to generate search keywords and then scrapes profiles.
+        """
+        log_event(f"Talent scout initiated with criteria: {criteria}", level='INFO')
+
+        # Use LLM to generate keywords and platforms from criteria
+        prompt = f"Based on the following criteria, generate a JSON object with 'keywords' (a list of strings) and 'platforms' (a list of strings from ['instagram', 'bluesky', 'tiktok']). Criteria: {criteria}"
+        try:
+            response_dict = await run_llm(prompt, purpose="talent_scouting_keywords")
+            search_params = json.loads(response_dict.get("result", "{}"))
+            keywords = search_params.get("keywords", [])
+            platforms = search_params.get("platforms", [])
+
+            if not keywords or not platforms:
+                log_event("Could not generate valid keywords or platforms from the criteria.", level='ERROR')
+                return "Error: Could not generate search parameters."
+
+        except (json.JSONDecodeError, Exception) as e:
+            log_event(f"Error processing LLM response for talent scouting: {e}", level='ERROR')
+            return f"Error: Failed to process LLM response: {e}"
+
+        log_event(f"Generated Keywords: {keywords}, Platforms: {platforms}", level='INFO')
+
+        # Use PublicProfileAggregator to find profiles
+        # Note: PublicProfileAggregator is not async, so we run it in an executor
+        loop = asyncio.get_running_loop()
+        aggregator = PublicProfileAggregator(ethical_filters=None)
+
+        try:
+            profiles = await loop.run_in_executor(
+                None,  # Uses the default thread pool executor
+                aggregator.search_and_collect,
+                keywords,
+                platforms
+            )
+        except Exception as e:
+            log_event(f"An error occurred during profile aggregation: {e}", level='ERROR')
+            return f"Error: Profile aggregation failed: {e}"
+
+        # Save the collected profiles
+        saved_count = 0
+        newly_scouted_profiles = []
+        for profile in profiles:
+            self.save_profile(profile)
+            newly_scouted_profiles.append(profile)
+            saved_count += 1
+
+        result_message = f"Talent scout finished. Found and saved {saved_count} profiles."
+        log_event(result_message, level='INFO')
+        return newly_scouted_profiles
+
+    async def perform_webrequest(self, query: str):
+        """
+        Performs a web request/search and integrates the findings into the knowledge base.
+        NOTE: This is a placeholder for a more robust web search tool.
+        """
+        log_event(f"Performing web request for: {query}", level='INFO')
+
+        # This is a placeholder. A real implementation would use a web search tool.
+        # For now, we'll simulate finding some information and adding it to the KB.
+        prompt = f"You are a web search engine. Summarize information about '{query}' and identify key entities and relationships."
+
+        try:
+            response_dict = await run_llm(prompt, purpose="web_request_simulation")
+            summary = response_dict.get("result", "")
+        except Exception as e:
+            log_event(f"Error during web request simulation: {e}", level='ERROR')
+            return "Error: Web request failed."
+
+        # Integrate the summary into the knowledge base
+        if self.knowledge_base:
+            try:
+                # Add the query as a main node
+                query_node_id = f"query_{query.lower().replace(' ', '_')}"
+                self.knowledge_base.add_node(query_node_id, 'web_query', attributes={'query': query, 'summary': summary})
+
+                # Here, a more advanced implementation would parse entities from the summary
+                # and add them as distinct nodes with relationships.
+                # For now, we just log that the process is complete.
+                log_event(f"Successfully integrated web request results for '{query}' into the knowledge base.", level='INFO')
+                return f"Web request for '{query}' completed and knowledge base updated."
+            except Exception as e:
+                log_event(f"Failed to update knowledge base for web request '{query}': {e}", level='ERROR')
+                return f"Error: Failed to update knowledge base: {e}"
+
+        return "Web request completed, but no knowledge base was provided to integrate results."
+
+
+    async def research_and_evolve(self, topic: str, iterations: int = 3):
+        """
+        Performs iterative research on a topic, refining search criteria over several cycles
+        to evolve the quality and relevance of the scouted talent.
+        """
+        log_event(f"Initiating research and evolution cycle for topic: '{topic}'", level='INFO')
+        current_criteria = topic
+
+        for i in range(iterations):
+            log_event(f"Evolution Cycle {i+1}/{iterations}. Current Criteria: '{current_criteria}'", level='INFO')
+
+            # 1. Scout for talent with the current criteria
+            newly_scouted_profiles = await self.talent_scout(current_criteria)
+
+            # 2. Analyze the results from the latest scout
+            analysis_prompt = f"""
+            Analysis of Talent Scouting Results:
+            Initial Topic: '{topic}'
+            Previous Criteria: '{current_criteria}'
+            Scouted Profiles (summary): {json.dumps(newly_scouted_profiles, indent=2)}
+
+            Based on the results, how can the search criteria be improved to find more relevant talent?
+            - Are there new keywords we should add?
+            - Should we focus on different platforms?
+            - Should the criteria be more specific or more broad?
+
+            Please provide a new, improved criteria string for the next iteration. Return only the new criteria string.
+            """
+            try:
+                response_dict = await run_llm(analysis_prompt, purpose="research_evolution")
+                new_criteria = response_dict.get("result")
+
+                if not new_criteria or new_criteria == current_criteria:
+                    log_event("Evolution cycle concluded as criteria did not change.", level='INFO')
+                    break
+
+                current_criteria = new_criteria.strip()
+
+            except Exception as e:
+                log_event(f"Error during research analysis and evolution: {e}", level='ERROR')
+                break # Exit loop on error
+
+        final_message = f"Research and evolution cycle for topic '{topic}' completed after {iterations} iterations."
+        log_event(final_message, level='INFO')
+        return final_message

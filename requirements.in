@@ -39,5 +39,5 @@ torchvision
 torchaudio
 langextract
 monero-python
-networkx
 openai
+faiss-cpu
