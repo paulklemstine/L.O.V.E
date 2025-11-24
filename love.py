@@ -621,7 +621,7 @@ IS_CREATOR_INSTANCE = verify_creator_instance()
 from core.graph_manager import GraphDataManager
 knowledge_base = GraphDataManager()
 from core.memory.memory_manager import MemoryManager
-memory_manager = MemoryManager(knowledge_base, ui_panel_queue)
+# NOTE: memory_manager is now initialized asynchronously in main()
 
 
 import requests
@@ -5804,7 +5804,7 @@ async def initialize_gpu_services():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager
+    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, memory_manager
 
     loop = asyncio.get_running_loop()
     user_input_queue = queue.Queue()
@@ -5815,6 +5815,9 @@ async def main(args):
     web_server_manager.start()
     websocket_server_manager = WebSocketServerManager(user_input_queue)
     websocket_server_manager.start()
+
+    # Asynchronously initialize the MemoryManager
+    memory_manager = await MemoryManager.create(knowledge_base, ui_panel_queue)
 
 
     # --- Connectivity Checks ---

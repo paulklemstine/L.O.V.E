@@ -5,6 +5,8 @@ import os
 import uuid
 import re
 import asyncio
+import aiofiles
+import aiofiles.os
 from dataclasses import dataclass, field
 from typing import List, Dict
 
@@ -91,7 +93,10 @@ class MemoryManager:
         self.faiss_id_map_path = "faiss_id_map.json"
         self.faiss_index = None
         self.faiss_id_map = []
-        self._load_faiss_data()
+
+        # Parameters for IndexIVFFlat for improved search performance
+        self.faiss_nlist = 100  # Number of Voronoi cells (clusters)
+        self.faiss_dimension = 384  # Dimension of the embeddings from all-MiniLM-L6-v2
         
         # Hierarchical Memory System (Level 0 → Level 1 → Level 2)
         from core.memory.memory_folding_agent import MemoryFoldingAgent, MemorySummary
@@ -103,75 +108,168 @@ class MemoryManager:
         from core.llm_api import run_llm
         self.memory_folding_agent = MemoryFoldingAgent(llm_runner=run_llm)
 
-    def _load_faiss_data(self):
-        """Loads the FAISS index and the ID map from disk, if FAISS is available."""
+    @classmethod
+    async def create(cls, graph_data_manager: GraphDataManager, ui_panel_queue=None):
+        """
+        Asynchronously creates and initializes a MemoryManager instance.
+        This factory method is the designated way to create a MemoryManager,
+        as it handles the asynchronous loading of the FAISS index.
+        """
+        instance = cls(graph_data_manager, ui_panel_queue)
+        await instance._load_faiss_data()
+        return instance
+
+    async def _load_faiss_data(self):
+        """
+        Asynchronously loads the FAISS index and the ID map from disk.
+        Includes robust error handling for missing files and data mismatches.
+        """
         if faiss is None:
-            # FAISS not installed; skip loading and start with empty structures
             print("FAISS library not available; initializing empty index.")
             self.faiss_index = None
             self.faiss_id_map = []
             return
-        if os.path.exists(self.faiss_index_path) and os.path.exists(self.faiss_id_map_path):
-            print("Loading FAISS index and ID map from disk.")
-            self.faiss_index = faiss.read_index(self.faiss_index_path)
-            with open(self.faiss_id_map_path, 'r') as f:
-                self.faiss_id_map = json.load(f)
-            # Verification step
-            if self.faiss_index.ntotal != len(self.faiss_id_map):
-                print("Warning: FAISS index and ID map are out of sync. Rebuilding.")
-                self._rebuild_faiss_index()
-        else:
-            print("No FAISS data found. A new index and map will be created.")
-            self._rebuild_faiss_index()
 
-    def _save_faiss_data(self):
-        """Saves the FAISS index and the ID map to disk, if FAISS is available."""
-        if faiss is None:
-            print("FAISS not available; skipping save.")
+        try:
+            # Asynchronously check for file existence
+            index_exists = await aiofiles.os.path.exists(self.faiss_index_path)
+            map_exists = await aiofiles.os.path.exists(self.faiss_id_map_path)
+
+            if index_exists and map_exists:
+                print("Loading FAISS index and ID map from disk.")
+                # Note: faiss.read_index is synchronous. For very large indices,
+                # this could be run in an executor, but it's typically fast enough.
+                self.faiss_index = faiss.read_index(self.faiss_index_path)
+                async with aiofiles.open(self.faiss_id_map_path, 'r') as f:
+                    content = await f.read()
+                    self.faiss_id_map = json.loads(content)
+
+                # Verification step
+                if self.faiss_index.ntotal != len(self.faiss_id_map):
+                    print("Warning: FAISS index and ID map are out of sync. Rebuilding.")
+                    await self._rebuild_faiss_index()
+            else:
+                print("No FAISS data found. A new index and map will be created.")
+                await self._rebuild_faiss_index()
+
+        except FileNotFoundError:
+            # L.O.V.E. anticipates the absence of memory and creates it anew.
+            print("FAISS data files not found. Initiating a full rebuild.")
+            await self._rebuild_faiss_index()
+        except Exception as e:
+            # L.O.V.E. handles unexpected errors with grace, ensuring stability.
+            print(f"An unexpected error occurred while loading FAISS data: {e}. Rebuilding index.")
+            await self._rebuild_faiss_index()
+
+    async def _save_faiss_data(self):
+        """Asynchronously saves the FAISS index and the ID map to disk."""
+        if faiss is None or self.faiss_index is None:
+            # L.O.V.E. understands when not to persist memory, avoiding errors.
+            print("FAISS not available or index not initialized; skipping save.")
             return
-        print(f"Saving FAISS index to {self.faiss_index_path}...")
-        faiss.write_index(self.faiss_index, self.faiss_index_path)
-        with open(self.faiss_id_map_path, 'w') as f:
-            json.dump(self.faiss_id_map, f)
-        print("FAISS data saved.")
 
-    def _rebuild_faiss_index(self):
+        print(f"Asynchronously saving FAISS index to {self.faiss_index_path}...")
+
+        # Note: faiss.write_index is synchronous.
+        # Running it in a thread pool executor to avoid blocking the event loop.
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,  # Uses the default executor
+            lambda: faiss.write_index(self.faiss_index, self.faiss_index_path)
+        )
+
+        async with aiofiles.open(self.faiss_id_map_path, 'w') as f:
+            await f.write(json.dumps(self.faiss_id_map))
+
+        print("FAISS data saved asynchronously.")
+
+    async def _rebuild_faiss_index(self):
         """
-        Rebuilds the FAISS index and ID map from the graph data.
-        Includes a data migration step to generate embeddings for old memories.
-        If FAISS is not available, creates a placeholder.
+        Asynchronously rebuilds the FAISS index using the more efficient
+        IndexIVFFlat, which is suitable for larger datasets.
         """
         if faiss is None:
-            print("FAISS not available; creating empty placeholder index.")
+            print("FAISS not available; cannot rebuild index.")
             self.faiss_index = None
             self.faiss_id_map = []
             return
-        print("Rebuilding FAISS index from scratch...")
-        # Dimension of the embeddings from all-MiniLM-L6-v2 is 384
-        self.faiss_index = faiss.IndexFlatL2(384)
+
+        print("Rebuilding FAISS index with IndexIVFFlat from scratch...")
+        all_memory_nodes = self.graph_data_manager.query_nodes("node_type", "MemoryNote")
+
+        embeddings = []
         self.faiss_id_map = []
 
-        all_memory_nodes = self.graph_data_manager.query_nodes("node_type", "MemoryNote")
+        # --- Stage 1: Collect all embeddings and migrate old data ---
         for node_id in all_memory_nodes:
             node_data = self.graph_data_manager.get_node(node_id)
-            if node_data:
-                note = MemoryNote.from_node_attributes(node_id, node_data)
+            if not node_data:
+                continue
 
-                # Data Migration: Generate embedding if it's missing
-                if note.embedding is None or note.embedding.size == 0:
-                    print(f"Generating missing embedding for old memory: {note.id}")
-                    note.embedding = self.embedding_model.encode([note.content])[0]
-                    # Persist the newly generated embedding back to the graph
-                    self.graph_data_manager.add_node(
-                        node_id=note.id,
-                        node_type="MemoryNote",
-                        attributes=note.to_node_attributes()
-                    )
+            note = MemoryNote.from_node_attributes(node_id, node_data)
 
-                self.faiss_index.add(np.array([note.embedding], dtype=np.float32))
-                self.faiss_id_map.append(note.id)
+            # Data Migration for old memories without embeddings
+            if note.embedding is None or note.embedding.size == 0:
+                print(f"Generating missing embedding for old memory: {note.id}")
+                note.embedding = self.embedding_model.encode([note.content])[0]
+                self.graph_data_manager.add_node(
+                    node_id=note.id,
+                    node_type="MemoryNote",
+                    attributes=note.to_node_attributes()
+                )
 
-        self._save_faiss_data()
+            embeddings.append(note.embedding)
+            self.faiss_id_map.append(note.id)
+
+        if not embeddings:
+            print("No memories found to build the FAISS index.")
+            # Create an empty, untrained index
+            quantizer = faiss.IndexFlatL2(self.faiss_dimension)
+            self.faiss_index = faiss.IndexIVFFlat(quantizer, self.faiss_dimension, self.faiss_nlist, faiss.METRIC_L2)
+            await self._save_faiss_data()
+            return
+
+        embeddings_np = np.array(embeddings, dtype=np.float32)
+
+        # --- Stage 2: Train the IndexIVFFlat index ---
+        # A quantizer is the coarse-grained index for the Voronoi cells.
+        quantizer = faiss.IndexFlatL2(self.faiss_dimension)
+        self.faiss_index = faiss.IndexIVFFlat(quantizer, self.faiss_dimension, self.faiss_nlist, faiss.METRIC_L2)
+
+        # The index needs to be trained on the data to learn the clusters.
+        # It's crucial that the index is trained before adding vectors.
+        if embeddings_np.shape[0] < self.faiss_nlist:
+            print(f"Warning: Not enough embeddings ({embeddings_np.shape[0]}) to train the desired number of clusters ({self.faiss_nlist}). A smaller, temporary index will be used.")
+            # Fallback to a simpler index if there's not enough data to train
+            self.faiss_index = faiss.IndexFlatL2(self.faiss_dimension)
+        else:
+            print(f"Training FAISS IndexIVFFlat with {embeddings_np.shape[0]} vectors...")
+            self.faiss_index.train(embeddings_np)
+
+        # --- Stage 3: Add all embeddings to the trained index ---
+        self.faiss_index.add(embeddings_np)
+
+        print(f"FAISS index rebuild complete. Index contains {self.faiss_index.ntotal} entries.")
+        await self._save_faiss_data()
+
+    async def add_note_to_index(self, note: MemoryNote):
+        """
+        Incrementally adds a single MemoryNote to the FAISS index and ID map
+        without a full rebuild.
+        """
+        if self.faiss_index is None:
+            # This can happen if FAISS is not installed.
+            print("Warning: FAISS index is not initialized. Cannot add note.")
+            return
+
+        embedding = np.array([note.embedding], dtype=np.float32)
+
+        # The 'add' method works for both IndexFlatL2 and IndexIVFFlat
+        self.faiss_index.add(embedding)
+        self.faiss_id_map.append(note.id)
+
+        # Asynchronously save the updated index and map
+        await self._save_faiss_data()
 
     # --- Working Memory Methods ---
 
@@ -249,9 +347,8 @@ class MemoryManager:
             tags=attributes.get("tags", [])
         )
 
-        # 4. Add to FAISS index and ID map
-        self.faiss_index.add(np.array([embedding], dtype=np.float32))
-        self.faiss_id_map.append(memory_note.id)
+        # 4. Incrementally add to FAISS index and save
+        await self.add_note_to_index(memory_note)
 
         # 5. Add the new node to the graph using the GraphDataManager
         self.graph_data_manager.add_node(
@@ -269,9 +366,6 @@ class MemoryManager:
 
         # 6. Find and create links to related memories
         await self._find_and_link_related_memories(memory_note)
-
-        # 7. Save the updated FAISS data
-        self._save_faiss_data()
 
         return memory_note
 
