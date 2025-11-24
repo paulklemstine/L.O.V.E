@@ -76,33 +76,14 @@ class GeminiReActEngine:
             )
             self._log_panel_to_ui(panel)
 
-            try:
-                # Strip markdown code blocks if present (e.g., ```json ... ```)
-                cleaned_response = raw_response.strip()
-                if cleaned_response.startswith('```'):
-                    # Find the first newline after the opening ```
-                    first_newline = cleaned_response.find('\n')
-                    if first_newline != -1:
-                        # Find the closing ```
-                        closing_fence = cleaned_response.rfind('```')
-                        if closing_fence > first_newline:
-                            # Extract content between the fences
-                            cleaned_response = cleaned_response[first_newline + 1:closing_fence].strip()
-                
-                # Try JSON parsing first (proper JSON with double quotes)
-                try:
-                    parsed_response = json.loads(cleaned_response)
-                except json.JSONDecodeError:
-                    # Fallback: Try ast.literal_eval for Python dict format (single quotes)
-                    import ast
-                    try:
-                        parsed_response = ast.literal_eval(cleaned_response)
-                    except (ValueError, SyntaxError):
-                        # If both fail, raise the original JSON error
-                        raise json.JSONDecodeError("Invalid format", cleaned_response, 0)
-                        
-            except json.JSONDecodeError:
-                observation = f"Error: The reasoning engine produced invalid JSON. Raw response: {raw_response}"
+            # Use smart parser to handle multiple LLM output formats
+            from core.llm_parser import smart_parse_llm_response
+            
+            parsed_response = smart_parse_llm_response(raw_response, expected_keys=["thought", "action"])
+            
+            # Check if parsing failed
+            if parsed_response.get('_parse_error'):
+                observation = f"Error: The reasoning engine produced invalid output. {parsed_response['_parse_error']}. Raw response: {parsed_response.get('_raw_response', raw_response[:200])}"
                 self.history.append(("Error parsing LLM response", "N/A", observation))
                 # Log the parsing error
                 panel = create_reasoning_panel(
