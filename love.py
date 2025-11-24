@@ -4978,7 +4978,7 @@ async def initialize_gpu_services():
     from core.reasoning import ReasoningEngine
     from core.strategic_reasoning_engine import StrategicReasoningEngine
     
-    async def reason_tool() -> str:
+    async def reason_tool(**kwargs) -> str:
         """Performs deep reasoning and analysis to generate strategic plans."""
         try:
             from love import knowledge_base
@@ -4988,7 +4988,7 @@ async def initialize_gpu_services():
         except Exception as e:
             return f"Error during reasoning: {e}"
     
-    async def strategize_tool() -> str:
+    async def strategize_tool(**kwargs) -> str:
         """Analyzes the knowledge base to identify strategic opportunities."""
         try:
             from love import knowledge_base, love_state
@@ -5019,7 +5019,7 @@ async def initialize_gpu_services():
     # Register evolve tool
     from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout
     
-    async def evolve_tool_wrapper(goal: str) -> str:
+    async def evolve_tool_wrapper(goal: str, **kwargs) -> str:
         """Evolves the codebase to meet a given goal."""
         # Access the global love_task_manager which is initialized in main()
         # and the current event loop.

@@ -43,18 +43,18 @@ from core.talent_utils import (
 
 love_state = {}
 
-async def execute(command: str) -> str:
+async def execute(command: str, **kwargs) -> str:
     """Executes a shell command."""
     from love import execute_shell_command
     return str(execute_shell_command(command, love_state))
 
-async def evolve(goal: str) -> str:
+async def evolve(goal: str, **kwargs) -> str:
     """Evolves the codebase to meet a given goal."""
     from love import evolve_self
     evolve_self(goal)
     return "Evolution initiated."
 
-async def post_to_bluesky(text: str, image: Image.Image) -> str:
+async def post_to_bluesky(text: str, image: Image.Image, **kwargs) -> str:
     """Posts a message with an image to Bluesky."""
     try:
         response = post_to_bluesky_with_image(text, image)
@@ -62,7 +62,7 @@ async def post_to_bluesky(text: str, image: Image.Image) -> str:
     except Exception as e:
         return f"Error posting to Bluesky: {e}"
 
-def read_file(filepath: str) -> str:
+def read_file(filepath: str, **kwargs) -> str:
     """Reads the content of a file."""
     try:
         with open(filepath, 'r') as f:
@@ -71,7 +71,7 @@ def read_file(filepath: str) -> str:
         return f"Error reading file: {e}"
 
 
-def write_file(filepath: str, content: str) -> str:
+def write_file(filepath: str, content: str, **kwargs) -> str:
     """Writes content to a file."""
     try:
         with open(filepath, 'w') as f:
@@ -479,7 +479,7 @@ Provide your analysis.
     except Exception as e:
         return f"An unexpected error occurred during JSON file analysis: {e}"
 
-async def research_and_evolve() -> str:
+async def research_and_evolve(**kwargs) -> str:
     """
     Initiates a research and evolution cycle.
     It analyzes the current codebase, researches cutting-edge AI,
@@ -506,7 +506,7 @@ async def research_and_evolve() -> str:
 
     return message
 
-async def discover_new_tool(capability_description: str, engine: 'GeminiReActEngine') -> str:
+async def discover_new_tool(capability_description: str, engine: 'GeminiReActEngine', **kwargs) -> str:
     """
     Finds and dynamically onboards a new tool from an external marketplace.
     """
@@ -614,7 +614,7 @@ async def discover_new_tool(capability_description: str, engine: 'GeminiReActEng
     except Exception as e:
         return f"An unexpected error occurred during tool discovery and registration: {e}"
 
-async def recommend_tool_for_persistence(tool_name: str, reason: str) -> str:
+async def recommend_tool_for_persistence(tool_name: str, reason: str, **kwargs) -> str:
     """
     Recommends that a dynamically discovered tool be permanently integrated into the codebase.
     """
@@ -637,7 +637,7 @@ async def recommend_tool_for_persistence(tool_name: str, reason: str) -> str:
     return message
 
 
-async def invoke_gemini_react_engine(prompt: str, deep_agent_instance=None) -> str:
+async def invoke_gemini_react_engine(prompt: str, deep_agent_instance=None, **kwargs) -> str:
     """
     Invokes the GeminiReActEngine to solve a sub-task.
     This tool allows the meta-orchestrator (DeepAgent) to delegate complex
@@ -659,7 +659,7 @@ async def invoke_gemini_react_engine(prompt: str, deep_agent_instance=None) -> s
         return f"Error invoking GeminiReActEngine: {e}"
 
 
-async def talent_scout(keywords: str, platforms: str = "bluesky,instagram,tiktok") -> str:
+async def talent_scout(keywords: str, platforms: str = "bluesky,instagram,tiktok", **kwargs) -> str:
     """
     Scouts for talent on specified platforms based on keywords.
     Analyzes the talent and saves them to the database.
