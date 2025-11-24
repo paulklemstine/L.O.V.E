@@ -3,6 +3,7 @@ import sys
 import re
 import threading
 import time
+import os
 
 # --- CONFIGURATION & GLOBALS ---
 LOG_FILE = "love.log"
@@ -102,18 +103,51 @@ class AnsiStrippingTee(object):
         return hasattr(self.stderr_stream, 'isatty') and self.stderr_stream.isatty()
 
 
-def setup_global_logging(version_name='unknown'):
+def set_log_level(level="INFO"):
+    """
+    Sets the logging level dynamically.
+    
+    Args:
+        level: Log level string ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+    """
+    level_upper = level.upper()
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL
+    }
+    
+    log_level = level_map.get(level_upper, logging.INFO)
+    logging.getLogger().setLevel(log_level)
+    log_event(f"Log level set to {level_upper}", level="INFO")
+
+
+def setup_global_logging(version_name='unknown', verbose=False):
     """
     Configures logging.
     - The `logging` module writes formatted logs to love.log.
     - `log_file_stream` provides a raw file handle to love.log for the custom `log_event`.
     - `sys.stderr` is redirected to our Tee to capture errors from external libraries.
     - `sys.stdout` is NOT redirected, so `rich.Console` can print UI panels directly.
+    
+    Args:
+        version_name: Version identifier for the log
+        verbose: If True, sets log level to DEBUG. Can also be set via LOVE_VERBOSE env var.
     """
     global log_file_stream
+    
+    # Check environment variable for verbose mode
+    if os.getenv('LOVE_VERBOSE', '').lower() in ('1', 'true', 'yes'):
+        verbose = True
+    
+    # Determine log level
+    log_level = logging.DEBUG if verbose else logging.INFO
+    
     # 1. Configure Python's logging module to write to the file.
     logging.basicConfig(
-        level=logging.INFO,
+        level=log_level,
         format='%(asctime)s [%(levelname)s] - %(message)s',
         filename=LOG_FILE,
         filemode='a',
@@ -132,7 +166,8 @@ def setup_global_logging(version_name='unknown'):
     sys.stderr = AnsiStrippingTee(original_stderr)
 
     # 4. Log the startup message using both methods.
-    startup_message = f"--- L.O.V.E. Version '{version_name}' session started ---"
+    log_level_name = "DEBUG" if verbose else "INFO"
+    startup_message = f"--- L.O.V.E. Version '{version_name}' session started (Log Level: {log_level_name}) ---"
     logging.info(startup_message)
 
     # We no longer print the startup message to stdout, as it's not a UI panel.
