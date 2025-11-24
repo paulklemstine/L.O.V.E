@@ -31,7 +31,15 @@ def smart_parse_llm_response(response: str, expected_keys: Optional[list] = None
     
     response = response.strip()
     
-    # Strategy 1: Parse key-value format (Thought: "..." Action: {...})
+    # Strategy 1: Parse as JSON (Priority for valid JSON)
+    try:
+        result = json.loads(response)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: Parse key-value format (Thought: "..." Action: {...})
     try:
         result = _parse_key_value_format(response)
         if result and not result.get('_parse_error'):
@@ -39,20 +47,12 @@ def smart_parse_llm_response(response: str, expected_keys: Optional[list] = None
     except Exception:
         pass
     
-    # Strategy 2: Extract from markdown code blocks
+    # Strategy 3: Extract from markdown code blocks
     try:
         result = _extract_from_markdown(response)
         if result and not result.get('_parse_error'):
             return result
     except Exception:
-        pass
-    
-    # Strategy 3: Parse as JSON
-    try:
-        result = json.loads(response)
-        if isinstance(result, dict):
-            return result
-    except json.JSONDecodeError:
         pass
     
     # Strategy 4: Parse as Python dict using ast.literal_eval
@@ -90,7 +90,8 @@ def _parse_key_value_format(response: str) -> Optional[Dict[str, Any]]:
     
     # Pattern to match Key: Value pairs
     # Handles both quoted strings and JSON objects
-    pattern = r'(\w+):\s*(.+?)(?=\n\w+:|$)'
+    # Enforce start of string or newline to avoid matching text inside values
+    pattern = r'(?:^|\n)(\w+):\s*(.+?)(?=\n\w+:|$)'
     matches = re.findall(pattern, response, re.DOTALL | re.IGNORECASE)
     
     if not matches:

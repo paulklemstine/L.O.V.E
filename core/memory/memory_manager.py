@@ -223,9 +223,8 @@ class MemoryManager:
 
         if not embeddings:
             print("No memories found to build the FAISS index.")
-            # Create an empty, untrained index
-            quantizer = faiss.IndexFlatL2(self.faiss_dimension)
-            self.faiss_index = faiss.IndexIVFFlat(quantizer, self.faiss_dimension, self.faiss_nlist, faiss.METRIC_L2)
+            # Create an empty IndexFlatL2 which doesn't require training
+            self.faiss_index = faiss.IndexFlatL2(self.faiss_dimension)
             await self._save_faiss_data()
             return
 
