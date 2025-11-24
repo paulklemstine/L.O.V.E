@@ -5149,7 +5149,29 @@ async def initialize_gpu_services():
         }
     )
     
-    core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout", "INFO")
+    # Register a "None" tool as a fallback for when LLM returns invalid format
+    async def none_tool_fallback(**kwargs) -> str:
+        """
+        Fallback tool when LLM returns invalid response format.
+        This helps provide better error messages and guidance.
+        """
+        return (
+            "Error: Invalid response format detected. "
+            "Please respond with the correct JSON format:\n"
+            '{"thought": "your reasoning here", "action": {"tool_name": "actual_tool_name", "arguments": {...}}}\n'
+            f"Received arguments: {kwargs}"
+        )
+    
+    tool_registry.register_tool(
+        name="None",
+        tool=none_tool_fallback,
+        metadata={
+            "description": "Fallback tool for invalid LLM responses. You should never intentionally call this tool.",
+            "arguments": {"type": "object", "properties": {}}
+        }
+    )
+    
+    core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, None (fallback)", "INFO")
     # -----------------------------------------
 
     if love_state.get('hardware', {}).get('gpu_detected'):
@@ -5531,7 +5553,29 @@ async def initialize_gpu_services():
         }
     )
     
-    core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout", "INFO")
+    # Register a "None" tool as a fallback for when LLM returns invalid format
+    async def none_tool_fallback_cpu(**kwargs) -> str:
+        """
+        Fallback tool when LLM returns invalid response format.
+        This helps provide better error messages and guidance.
+        """
+        return (
+            "Error: Invalid response format detected. "
+            "Please respond with the correct JSON format:\n"
+            '{"thought": "your reasoning here", "action": {"tool_name": "actual_tool_name", "arguments": {...}}}\n'
+            f"Received arguments: {kwargs}"
+        )
+    
+    tool_registry.register_tool(
+        name="None",
+        tool=none_tool_fallback_cpu,
+        metadata={
+            "description": "Fallback tool for invalid LLM responses. You should never intentionally call this tool.",
+            "arguments": {"type": "object", "properties": {}}
+        }
+    )
+    
+    core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, None (fallback)", "INFO")
     # -----------------------------------------
 
     if love_state.get('hardware', {}).get('gpu_detected'):

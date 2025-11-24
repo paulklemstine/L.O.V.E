@@ -495,10 +495,37 @@ RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
                 try:
                     core.logging.log_event(f"[DeepAgent] Attempting to parse JSON response", level="DEBUG")
                     parsed_response = _recover_json(json_text)
+                    
+                    # Validate response structure
+                    if not isinstance(parsed_response, dict):
+                        core.logging.log_event(f"[DeepAgent] Invalid response: expected dict, got {type(parsed_response)}", level="ERROR")
+                        return f"Error: LLM returned invalid response type: {type(parsed_response)}"
+                    
+                    # Check for required keys
+                    if "thought" not in parsed_response or "action" not in parsed_response:
+                        core.logging.log_event(
+                            f"[DeepAgent] Invalid response structure. Expected {{\"thought\": \"...\", \"action\": {{...}}}}. "
+                            f"Got keys: {list(parsed_response.keys())}. Response: {parsed_response}", 
+                            level="ERROR"
+                        )
+                        return f"Error: LLM returned wrong format. Expected 'thought' and 'action' keys, got: {list(parsed_response.keys())}"
+                    
                     thought = parsed_response.get("thought", "")
                     action = parsed_response.get("action", {})
+                    
+                    if not isinstance(action, dict):
+                        core.logging.log_event(f"[DeepAgent] Invalid action: expected dict, got {type(action)}", level="ERROR")
+                        return f"Error: 'action' must be a dict, got {type(action)}"
+                    
                     tool_name = action.get("tool_name")
                     arguments = action.get("arguments", {})
+                    
+                    if not tool_name:
+                        core.logging.log_event(
+                            f"[DeepAgent] Missing tool_name in action. Action: {action}", 
+                            level="ERROR"
+                        )
+                        return f"Error: 'tool_name' is required in action. Got action: {action}"
                     
                     core.logging.log_event(f"[DeepAgent] Parsed - Thought: '{thought[:100]}...', Tool: '{tool_name}', Args: {arguments}", level="DEBUG")
 
@@ -530,8 +557,8 @@ RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
                              core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' execution failed: {e}", level="ERROR")
                              return f"Error executing tool '{tool_name}': {e}"
                     else:
-                        core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' not found in registry", level="ERROR")
-                        return f"Error: Tool '{tool_name}' not found."
+                        core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' not found in registry. Available tools: {list(self.tool_registry.list_tools().keys()) if self.tool_registry else 'None'}", level="ERROR")
+                        return f"Error: Tool '{tool_name}' not found. Available tools: {', '.join(list(self.tool_registry.list_tools().keys())[:5]) if self.tool_registry else 'None'}"
 
                 except json.JSONDecodeError as e:
                     core.logging.log_event(f"[DeepAgent] Failed to parse JSON. Error: {e}. Raw response: {response_text[:500]}", level="ERROR")
