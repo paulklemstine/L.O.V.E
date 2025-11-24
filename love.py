@@ -5494,6 +5494,7 @@ async def main(args):
     # Asynchronously initialize the MemoryManager
     memory_manager = await MemoryManager.create(knowledge_base, ui_panel_queue)
 
+    mcp_manager = MCPManager(console)
 
     # --- Connectivity Checks ---
     from core.connectivity import check_llm_connectivity, check_network_connectivity
@@ -5530,8 +5531,6 @@ async def main(args):
     proactive_agent.start()
     god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine, memory_manager)
     god_agent.start()
-
-    mcp_manager = MCPManager(console)
 
     # --- Start Core Logic Threads ---
     # Start the simple UI renderer in its own thread. This will now handle all console output.
