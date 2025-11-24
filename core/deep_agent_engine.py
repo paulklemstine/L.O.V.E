@@ -521,12 +521,20 @@ RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
                     
                     # Check for required keys
                     if "thought" not in parsed_response or "action" not in parsed_response:
-                        core.logging.log_event(
-                            f"[DeepAgent] Invalid response structure. Expected {{\"thought\": \"...\", \"action\": {{...}}}}. "
-                            f"Got keys: {list(parsed_response.keys())}. Response: {parsed_response}", 
-                            level="ERROR"
-                        )
-                        return f"Error: LLM returned wrong format. Expected 'thought' and 'action' keys, got: {list(parsed_response.keys())}"
+                        # Fallback for 'command'/'arguments' format (common in some finetunes)
+                        if "command" in parsed_response:
+                            core.logging.log_event("[DeepAgent] Detected 'command'/'arguments' format. converting to thought/action.", level="WARNING")
+                            cmd = parsed_response.get("command")
+                            args = parsed_response.get("arguments", {})
+                            parsed_response["thought"] = f"Decided to execute command: {cmd}"
+                            parsed_response["action"] = {"tool_name": cmd, "arguments": args}
+                        else:
+                            core.logging.log_event(
+                                f"[DeepAgent] Invalid response structure. Expected {{\"thought\": \"...\", \"action\": {{...}}}}. "
+                                f"Got keys: {list(parsed_response.keys())}. Response: {parsed_response}",
+                                level="ERROR"
+                            )
+                            return f"Error: LLM returned wrong format. Expected 'thought' and 'action' keys, got: {list(parsed_response.keys())}"
                     
                     thought = parsed_response.get("thought", "")
                     action = parsed_response.get("action", {})
