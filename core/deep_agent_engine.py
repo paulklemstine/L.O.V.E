@@ -423,13 +423,17 @@ You have access to the following tools:
 {self._adapt_tools_for_deepagent()}
 
 {kb_context}
+NOTE: The above "Knowledge Base Context" and "Relevant Past Experiences" sections are INFORMATIONAL BACKGROUND ONLY.
+They are NOT tools you can call. They provide context to help you make decisions.
 
 CRITICAL INSTRUCTIONS:
 1. You MUST respond with ONLY a valid JSON object - no other text before or after
 2. The JSON must have exactly two keys: "thought" and "action"
 3. The "action" must contain "tool_name" and "arguments"
-4. After calling 1-2 tools to gather information, you MUST use the "Finish" tool
-5. Do NOT write conversational text - ONLY output the JSON object
+4. The "tool_name" MUST be one of the tools listed above in the "You have access to the following tools" section
+5. After calling 1-2 tools to gather information, you MUST use the "Finish" tool
+6. Do NOT write conversational text - ONLY output the JSON object
+7. Do NOT try to call tools that don't exist (like "Knowledge Base" or "Memory")
 
 WRONG (conversational text):
 The next thought and action is to call get_system_state...
@@ -636,8 +640,15 @@ RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
                              core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' execution failed: {e}", level="ERROR")
                              return f"Error executing tool '{tool_name}': {e}"
                     else:
-                        core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' not found in registry. Available tools: {list(self.tool_registry.list_tools().keys()) if self.tool_registry else 'None'}", level="ERROR")
-                        return f"Error: Tool '{tool_name}' not found. Available tools: {', '.join(list(self.tool_registry.list_tools().keys())[:5]) if self.tool_registry else 'None'}"
+                        available_tools_list = list(self.tool_registry.list_tools().keys()) if self.tool_registry else []
+                        error_msg = f"Error: Tool '{tool_name}' not found. Available tools: {', '.join(available_tools_list[:10])}"
+                        
+                        # Provide specific guidance for common mistakes
+                        if tool_name in ["Knowledge Base", "Memory", "knowledge_base", "memory"]:
+                            error_msg += "\n\nNOTE: 'Knowledge Base' and 'Memory' are NOT tools. They are informational context provided in the prompt. Please use one of the actual tools listed above."
+                        
+                        core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
+                        return error_msg
 
                 except json.JSONDecodeError as e:
                     core.logging.log_event(f"[DeepAgent] Failed to parse JSON. Error: {e}. Raw response: {response_text[:500]}", level="ERROR")

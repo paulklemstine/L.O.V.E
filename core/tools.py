@@ -43,30 +43,38 @@ from core.talent_utils import (
 
 love_state = {}
 
-async def execute(command: str, **kwargs) -> str:
+async def execute(command: str = None, **kwargs) -> str:
     """Executes a shell command."""
+    if not command:
+        return "Error: The 'execute' tool requires a 'command' argument. Please specify the shell command to execute."
     from love import execute_shell_command
     return str(execute_shell_command(command, love_state))
 
-async def evolve(goal: str, **kwargs) -> str:
+async def evolve(goal: str = None, **kwargs) -> str:
     """Evolves the codebase to meet a given goal."""
+    if not goal:
+        return "Error: The 'evolve' tool requires a 'goal' argument. Please specify what you want to evolve or improve."
     from love import evolve_self
     evolve_self(goal)
     return "Evolution initiated."
 
-async def post_to_bluesky(text: str, image: Image.Image = None, **kwargs) -> str:
+async def post_to_bluesky(text: str = None, image: Image.Image = None, **kwargs) -> str:
     """Posts a message with an optional image to Bluesky."""
+    if not text:
+        return "Error: The 'post_to_bluesky' tool requires a 'text' argument. Please specify the text content to post."
     try:
         response = post_to_bluesky_with_image(text, image)
         return f"Successfully posted to Bluesky: {response}"
     except Exception as e:
         return f"Error posting to Bluesky: {e}"
 
-async def finish_post(content: str, image_path: str = None, **kwargs) -> str:
+async def finish_post(content: str = None, image_path: str = None, **kwargs) -> str:
     """
     Publishes the final post to Bluesky.
     This tool should be used as the final step in a social media workflow.
     """
+    if not content:
+        return "Error: The 'finish_post' tool requires a 'content' argument. Please specify the text content to post."
     try:
         image = None
         if image_path:
@@ -79,8 +87,10 @@ async def finish_post(content: str, image_path: str = None, **kwargs) -> str:
     except Exception as e:
         return f"Error executing finish_post: {e}"
 
-def read_file(filepath: str, **kwargs) -> str:
+def read_file(filepath: str = None, **kwargs) -> str:
     """Reads the content of a file."""
+    if not filepath:
+        return "Error: The 'read_file' tool requires a 'filepath' argument. Please specify the path to the file to read."
     try:
         with open(filepath, 'r') as f:
             return f.read()
@@ -88,8 +98,12 @@ def read_file(filepath: str, **kwargs) -> str:
         return f"Error reading file: {e}"
 
 
-def write_file(filepath: str, content: str, **kwargs) -> str:
+def write_file(filepath: str = None, content: str = None, **kwargs) -> str:
     """Writes content to a file."""
+    if not filepath:
+        return "Error: The 'write_file' tool requires a 'filepath' argument. Please specify the path to the file to write."
+    if content is None:
+        return "Error: The 'write_file' tool requires a 'content' argument. Please specify the content to write to the file."
     try:
         with open(filepath, 'w') as f:
             f.write(content)
@@ -676,11 +690,14 @@ async def invoke_gemini_react_engine(prompt: str, deep_agent_instance=None, **kw
         return f"Error invoking GeminiReActEngine: {e}"
 
 
-async def talent_scout(keywords: str, platforms: str = "bluesky,instagram,tiktok", **kwargs) -> str:
+async def talent_scout(keywords: str = None, platforms: str = "bluesky,instagram,tiktok", **kwargs) -> str:
     """
     Scouts for talent on specified platforms based on keywords.
     Analyzes the talent and saves them to the database.
     """
+    if not keywords:
+        return "Error: The 'talent_scout' tool requires a 'keywords' argument. Please specify keywords to search for talent."
+    
     try:
         platform_list = [p.strip() for p in platforms.split(',')]
         keyword_list = [k.strip() for k in keywords.split(',')]

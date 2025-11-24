@@ -5019,13 +5019,20 @@ async def initialize_gpu_services():
     # Register evolve tool
     from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, finish_post
     
-    async def evolve_tool_wrapper(goal: str, **kwargs) -> str:
+    async def evolve_tool_wrapper(goal: str = None, **kwargs) -> str:
         """Evolves the codebase to meet a given goal."""
+        # Handle missing goal argument
+        if not goal:
+            return "Error: The 'evolve' tool requires a 'goal' argument. Please specify what you want to evolve or improve."
+        
         # Access the global love_task_manager which is initialized in main()
         # and the current event loop.
-        current_loop = asyncio.get_running_loop()
-        await evolve_self(goal, love_task_manager, current_loop, deep_agent_engine)
-        return "Evolution initiated."
+        try:
+            current_loop = asyncio.get_running_loop()
+            await evolve_self(goal, love_task_manager, current_loop, deep_agent_engine)
+            return "Evolution initiated."
+        except Exception as e:
+            return f"Error during evolution: {e}"
 
     tool_registry.register_tool(
         name="evolve",
