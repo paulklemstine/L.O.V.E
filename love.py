@@ -5017,7 +5017,7 @@ async def initialize_gpu_services():
     )
     
     # Register evolve tool
-    from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout
+    from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, finish_post
     
     async def evolve_tool_wrapper(goal: str, **kwargs) -> str:
         """Evolves the codebase to meet a given goal."""
@@ -5107,7 +5107,7 @@ async def initialize_gpu_services():
         name="post_to_bluesky",
         tool=post_to_bluesky,
         metadata={
-            "description": "Posts a message with an image to Bluesky social media.",
+            "description": "Posts a message with an optional image to Bluesky social media.",
             "arguments": {
                 "type": "object",
                 "properties": {
@@ -5117,10 +5117,32 @@ async def initialize_gpu_services():
                     },
                     "image": {
                         "type": "object",
-                        "description": "PIL Image object to attach to the post"
+                        "description": "PIL Image object to attach to the post (optional)"
                     }
                 },
-                "required": ["text", "image"]
+                "required": ["text"]
+            }
+        }
+    )
+
+    tool_registry.register_tool(
+        name="finish_post",
+        tool=finish_post,
+        metadata={
+            "description": "Publishes the final social media post to Bluesky. Use this tool to PUBLISH the final content. The 'content' argument must ONLY contain the text to be posted, NO reasoning or meta-commentary.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "The final text content to be posted."
+                    },
+                    "image_path": {
+                        "type": "string",
+                        "description": "Optional path to an image file to attach."
+                    }
+                },
+                "required": ["content"]
             }
         }
     )

@@ -54,13 +54,30 @@ async def evolve(goal: str, **kwargs) -> str:
     evolve_self(goal)
     return "Evolution initiated."
 
-async def post_to_bluesky(text: str, image: Image.Image, **kwargs) -> str:
-    """Posts a message with an image to Bluesky."""
+async def post_to_bluesky(text: str, image: Image.Image = None, **kwargs) -> str:
+    """Posts a message with an optional image to Bluesky."""
     try:
         response = post_to_bluesky_with_image(text, image)
         return f"Successfully posted to Bluesky: {response}"
     except Exception as e:
         return f"Error posting to Bluesky: {e}"
+
+async def finish_post(content: str, image_path: str = None, **kwargs) -> str:
+    """
+    Publishes the final post to Bluesky.
+    This tool should be used as the final step in a social media workflow.
+    """
+    try:
+        image = None
+        if image_path:
+            try:
+                image = Image.open(image_path)
+            except Exception as e:
+                return f"Error opening image at {image_path}: {e}"
+        
+        return await post_to_bluesky(content, image)
+    except Exception as e:
+        return f"Error executing finish_post: {e}"
 
 def read_file(filepath: str, **kwargs) -> str:
     """Reads the content of a file."""

@@ -22,21 +22,24 @@ def get_bluesky_client():
     client.login(username, password)
     return client
 
-def post_to_bluesky_with_image(text: str, image: Image.Image):
+def post_to_bluesky_with_image(text: str, image: Image.Image = None):
     """
-    Creates a post on Bluesky with text and an image.
+    Creates a post on Bluesky with text and an optional image.
 
     Args:
         text: The text content of the post.
-        image: A PIL Image object to be attached to the post.
+        image: A PIL Image object to be attached to the post (optional).
     """
     client = get_bluesky_client()
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='PNG')
-    img_byte_arr.seek(0)
+    embed = None
+    
+    if image:
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='PNG')
+        img_byte_arr.seek(0)
 
-    upload = client.com.atproto.repo.upload_blob(img_byte_arr.read())
-    embed = models.AppBskyEmbedImages.Main(images=[models.AppBskyEmbedImages.Image(alt='', image=upload.blob)])
+        upload = client.com.atproto.repo.upload_blob(img_byte_arr.read())
+        embed = models.AppBskyEmbedImages.Main(images=[models.AppBskyEmbedImages.Image(alt='', image=upload.blob)])
 
     return client.com.atproto.repo.create_record(
         repo=client.me.did,
