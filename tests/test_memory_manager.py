@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch, AsyncMock
 import numpy as np
 import os
+import faiss
 
 # Mock the GraphDataManager before importing MemoryManager
 from core.graph_manager import GraphDataManager
@@ -88,7 +89,7 @@ class TestMemoryNote(unittest.TestCase):
 
 class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
 
-    def setUp(self):
+    async def asyncSetUp(self):
         """Set up a new MemoryManager instance for each test."""
         # Reset mocks before each test to ensure isolation
         mock_graph_manager.reset_mock()
@@ -98,7 +99,7 @@ class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
         self.mock_sentence_transformer.encode.return_value = np.random.rand(1, 384)
 
         with patch('sentence_transformers.SentenceTransformer', return_value=self.mock_sentence_transformer):
-            self.memory_manager = MemoryManager(graph_data_manager=mock_graph_manager)
+            self.memory_manager = await MemoryManager.create(graph_data_manager=mock_graph_manager)
 
     async def test_ingest_cognitive_cycle_creates_structured_memory(self):
         """
@@ -139,10 +140,17 @@ class TestMemoryManager(unittest.IsolatedAsyncioTestCase):
 
 class TestMemoryManagerSemanticSearch(unittest.IsolatedAsyncioTestCase):
 
-    def setUp(self):
-        """Set up for semantic search tests, including real FAISS objects."""
+    async def asyncSetUp(self):
+        """
+        Set up for semantic search tests. This now includes pre-populating the
+        mock graph manager so the async `create` method can build a trained index.
+        """
         self.mock_graph_manager = MagicMock(spec=GraphDataManager)
-        self.memory_manager = MemoryManager(graph_data_manager=self.mock_graph_manager)
+        # Now, create the memory manager, which will trigger the async index build
+        self.memory_manager = await MemoryManager.create(graph_data_manager=self.mock_graph_manager)
+
+        # For the test, manually create a simple, trained index
+        self.memory_manager.faiss_index = faiss.IndexFlatL2(self.memory_manager.faiss_dimension)
 
         # Clean up any old index files
         if os.path.exists(self.memory_manager.faiss_index_path):
@@ -162,6 +170,7 @@ class TestMemoryManagerSemanticSearch(unittest.IsolatedAsyncioTestCase):
         Verify that _find_and_link_related_memories uses FAISS to find semantically
         similar notes and passes them as candidates to the LLM.
         """
+        # --- Arrange ---
         # --- Arrange ---
         # 1. Create memory notes with known semantic relationships
         note1 = MemoryNote(content="The cat sat on the mat.", embedding=self.memory_manager.embedding_model.encode(["The cat sat on the mat."])[0], contextual_description="", keywords=[], tags=[])
@@ -186,6 +195,9 @@ class TestMemoryManagerSemanticSearch(unittest.IsolatedAsyncioTestCase):
             embedding=self.memory_manager.embedding_model.encode([new_note_content])[0],
             contextual_description="", keywords=[], tags=[]
         )
+        # Add the new note to the index to ensure ntotal > 1
+        self.memory_manager.faiss_index.add(np.array([new_note.embedding], dtype=np.float32))
+        self.memory_manager.faiss_id_map.append(new_note.id)
 
         # 4. Mock the LLM call to isolate the candidate selection logic
         mock_run_llm = AsyncMock(return_value={"result": "[]"})
