@@ -677,6 +677,11 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
                 ranked_model_list.remove("deep_agent_vllm")
             ranked_model_list.insert(0, "deep_agent_vllm")
             log_event("Local DeepAgent vLLM instance is available and has been prioritized.", "INFO")
+        else:
+            # Ensure deep_agent_vllm is NOT in the list if we don't have an instance
+            # This prevents recursion when DeepAgentEngine calls run_llm
+            if "deep_agent_vllm" in ranked_model_list:
+                ranked_model_list.remove("deep_agent_vllm")
 
         log_event(f"Top 5 models from combined ranked list: {ranked_model_list[:5]}", "INFO")
         models_to_try = [m for m in ranked_model_list if time.time() >= LLM_AVAILABILITY.get(m, 0)]
