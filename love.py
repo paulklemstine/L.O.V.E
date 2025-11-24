@@ -5215,12 +5215,22 @@ async def initialize_gpu_services():
                 core.logging.log_event(f"Failed to inspect existing vLLM server: {e}. Using default max_len=2048", "WARNING")
                 max_len = 2048
 
+            # Check for explicit pool usage request (Default to True as per user request)
+            use_pool = True 
+            if os.environ.get("LOVE_USE_POOL", "1").lower() in ["0", "false", "no"]:
+                use_pool = False
+            
+            if use_pool:
+                core.logging.log_event("DeepAgent configured to use LLM Pool (Default).", "INFO")
+                console.print("[bold cyan]DeepAgent configured to use LLM Pool.[/bold cyan]")
+
             deep_agent_engine = DeepAgentEngine(
                 api_url="http://localhost:8000", 
                 tool_registry=tool_registry, 
                 max_model_len=max_len,
                 knowledge_base=knowledge_base,
-                memory_manager=memory_manager
+                memory_manager=memory_manager,
+                use_pool=use_pool
             )
             core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
             console.print("[bold green]DeepAgentEngine is ACTIVE and connected to existing vLLM server.[/bold green]")
@@ -5613,7 +5623,21 @@ async def initialize_gpu_services():
             except Exception as e:
                 core.logging.log_event(f"Failed to inspect existing vLLM server: {e}", "WARNING")
 
-            deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry, max_model_len=max_len)
+            # Check for explicit pool usage request (Default to True as per user request)
+            use_pool = True 
+            if os.environ.get("LOVE_USE_POOL", "1").lower() in ["0", "false", "no"]:
+                use_pool = False
+            
+            if use_pool:
+                core.logging.log_event("DeepAgent configured to use LLM Pool (Default).", "INFO")
+                console.print("[bold cyan]DeepAgent configured to use LLM Pool.[/bold cyan]")
+
+            deep_agent_engine = DeepAgentEngine(
+                api_url="http://localhost:8000", 
+                tool_registry=tool_registry, 
+                max_model_len=max_len,
+                use_pool=use_pool
+            )
             core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
             console.print("[bold green]DeepAgentEngine is ACTIVE and connected to existing vLLM server.[/bold green]")
         elif vllm_already_running and not is_healthy:
@@ -5750,7 +5774,22 @@ async def initialize_gpu_services():
 
                     console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
                     # --- FIX: Pass tool_registry and max_model_len ---
-                    deep_agent_engine = DeepAgentEngine(api_url="http://localhost:8000", tool_registry=tool_registry, max_model_len=max_len)
+                    # Check for explicit pool usage request (Default to True as per user request)
+                    use_pool = True 
+                    if os.environ.get("LOVE_USE_POOL", "1").lower() in ["0", "false", "no"]:
+                        use_pool = False
+                    
+                    if use_pool:
+                        core.logging.log_event("DeepAgent configured to use LLM Pool (Default).", "INFO")
+                        console.print("[bold cyan]DeepAgent configured to use LLM Pool.[/bold cyan]")
+
+                    # --- FIX: Pass tool_registry and max_model_len ---
+                    deep_agent_engine = DeepAgentEngine(
+                        api_url="http://localhost:8000", 
+                        tool_registry=tool_registry, 
+                        max_model_len=max_len,
+                        use_pool=use_pool
+                    )
                     await deep_agent_engine.initialize()
                     core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
                 else:

@@ -106,13 +106,14 @@ class DeepAgentEngine:
     A client for the vLLM server, acting as a reasoning engine.
     """
     def __init__(self, api_url: str, tool_registry: ToolRegistry = None, persona_path: str = None, 
-                 max_model_len: int = None, knowledge_base=None, memory_manager=None):
+                 max_model_len: int = None, knowledge_base=None, memory_manager=None, use_pool: bool = False):
         self.api_url = api_url
         self.tool_registry = tool_registry
         self.persona_path = persona_path
         self.persona = self._load_persona() if persona_path else {}
         self.knowledge_base = knowledge_base
         self.memory_manager = memory_manager
+        self.use_pool = use_pool
         
         # SamplingParams are now defined on the client side for each request
         # Calculate safe max_tokens based on model context length
@@ -149,7 +150,7 @@ class DeepAgentEngine:
         }
         self.max_model_len = initial_max_model_len
         self.model_name = "vllm-model" # Default model name
-        core.logging.log_event(f"DeepAgentEngine initialized with max_model_len={self.max_model_len}, max_tokens={safe_max_tokens}", "DEBUG")
+        core.logging.log_event(f"DeepAgentEngine initialized with max_model_len={self.max_model_len}, max_tokens={safe_max_tokens}, use_pool={self.use_pool}", "DEBUG")
 
     async def initialize(self):
         """Asynchronous part of initialization."""
@@ -404,79 +405,96 @@ Prompt: {prompt}
 
 RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
 """
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "model": self.model_name,
-            "prompt": system_prompt,
-            **self.sampling_params
-        }
-
-        # Dynamic truncation and parameter adjustment logic
-        max_tokens = self.sampling_params.get('max_tokens', 4096)
-        if self.max_model_len:
-            # Ensure we leave enough space for the input prompt
-            # If max_tokens + prompt > max_model_len, we need to adjust
-
-            # Reserve at least 25% of context for input, or minimum 2048 chars (~512 tokens)
-            min_input_tokens = max(512, self.max_model_len // 4)
-
-            # If the configured max_tokens (generation) eats up too much space, reduce it
-            if max_tokens > (self.max_model_len - min_input_tokens):
-                new_max_tokens = max(512, self.max_model_len - min_input_tokens)
-                logging.warning(f"Reducing max_tokens from {max_tokens} to {new_max_tokens} to fit context.")
-                payload['max_tokens'] = new_max_tokens
-                max_tokens = new_max_tokens
-
-            # Calculate available space for input prompt
-            available_input_tokens = max(0, self.max_model_len - max_tokens)
-            # Estimate chars (conservative 3 chars per token)
-            max_chars = available_input_tokens * 3
-
-            if len(system_prompt) > max_chars:
-                # Smart truncation: preserve beginning (system instructions) and end (current task)
-                header_size = min(1000, max_chars // 4)  # Keep first 1000 chars
-                footer_size = min(500, max_chars // 4)   # Keep last 500 chars
-                
-                if header_size + footer_size < max_chars:
-                    truncated = system_prompt[:header_size] + "\n\n[... context truncated ...]\n\n" + system_prompt[-footer_size:]
-                    payload['prompt'] = truncated
-                    core.logging.log_event(
-                        f"Smart truncation in run(): kept {header_size} header + {footer_size} footer chars (total: {len(truncated)})", 
-                        level="WARNING"
-                    )
-                else:
-                    # Fallback to simple truncation
-                    max_chars = max(100, max_chars)
-                    payload['prompt'] = system_prompt[:max_chars]
-                    core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
-
         core.logging.log_event(f"[DeepAgent] Processing request... (Max context: {self.max_model_len}, Prompt length: {len(system_prompt)} chars)", level="DEBUG")
 
         try:
-            async with httpx.AsyncClient(timeout=600) as client:
-                response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
-                # Debugging 400 errors
-                if response.status_code == 400:
-                     print(f"\n\n--- vLLM BAD REQUEST ERROR DEBUG ---")
-                     print(f"Status Code: {response.status_code}")
-                     print(f"Response Headers: {response.headers}")
-                     print(f"Response Body: {response.text}")
-                     print(f"Request Payload: {json.dumps(payload, indent=2)}")
-                     print(f"------------------------------------\n\n")
-
-                response.raise_for_status()
-                result = response.json()
-
-            if result.get("choices"):
-                response_text = result["choices"][0].get("text", "").strip()
+            if self.use_pool:
+                from core.llm_api import run_llm
+                core.logging.log_event("[DeepAgent] Using LLM Pool for generation.", level="DEBUG")
+                # We pass deep_agent_instance=None to prevent run_llm from trying to use us (recursion)
+                result_dict = await run_llm(system_prompt, purpose="deep_agent_reasoning", deep_agent_instance=None)
+                response_text = result_dict.get("result", "").strip()
                 
+                if not response_text:
+                    core.logging.log_event("[DeepAgent] Empty response from LLM Pool.", level="ERROR")
+                    return "Error: Empty response from LLM Pool."
+                    
+            else:
+                # Existing vLLM Logic
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "model": self.model_name,
+                    "prompt": system_prompt,
+                    **self.sampling_params
+                }
+        
+                # Dynamic truncation and parameter adjustment logic
+                max_tokens = self.sampling_params.get('max_tokens', 4096)
+                if self.max_model_len:
+                    # Ensure we leave enough space for the input prompt
+                    # If max_tokens + prompt > max_model_len, we need to adjust
+        
+                    # Reserve at least 25% of context for input, or minimum 2048 chars (~512 tokens)
+                    min_input_tokens = max(512, self.max_model_len // 4)
+        
+                    # If the configured max_tokens (generation) eats up too much space, reduce it
+                    if max_tokens > (self.max_model_len - min_input_tokens):
+                        new_max_tokens = max(512, self.max_model_len - min_input_tokens)
+                        logging.warning(f"Reducing max_tokens from {max_tokens} to {new_max_tokens} to fit context.")
+                        payload['max_tokens'] = new_max_tokens
+                        max_tokens = new_max_tokens
+        
+                    # Calculate available space for input prompt
+                    available_input_tokens = max(0, self.max_model_len - max_tokens)
+                    # Estimate chars (conservative 3 chars per token)
+                    max_chars = available_input_tokens * 3
+        
+                    if len(system_prompt) > max_chars:
+                        # Smart truncation: preserve beginning (system instructions) and end (current task)
+                        header_size = min(1000, max_chars // 4)  # Keep first 1000 chars
+                        footer_size = min(500, max_chars // 4)   # Keep last 500 chars
+                        
+                        if header_size + footer_size < max_chars:
+                            truncated = system_prompt[:header_size] + "\n\n[... context truncated ...]\n\n" + system_prompt[-footer_size:]
+                            payload['prompt'] = truncated
+                            core.logging.log_event(
+                                f"Smart truncation in run(): kept {header_size} header + {footer_size} footer chars (total: {len(truncated)})", 
+                                level="WARNING"
+                            )
+                        else:
+                            # Fallback to simple truncation
+                            max_chars = max(100, max_chars)
+                            payload['prompt'] = system_prompt[:max_chars]
+                            core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
+        
+                async with httpx.AsyncClient(timeout=600) as client:
+                    response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
+                    # Debugging 400 errors
+                    if response.status_code == 400:
+                         print(f"\n\n--- vLLM BAD REQUEST ERROR DEBUG ---")
+                         print(f"Status Code: {response.status_code}")
+                         print(f"Response Headers: {response.headers}")
+                         print(f"Response Body: {response.text}")
+                         print(f"Request Payload: {json.dumps(payload, indent=2)}")
+                         print(f"------------------------------------\n\n")
+        
+                    response.raise_for_status()
+                    result = response.json()
+        
+                if result.get("choices"):
+                    response_text = result["choices"][0].get("text", "").strip()
+                else:
+                    response_text = ""
+
+            # Common response processing
+            if response_text:
                 # Check if response looks incomplete
                 if len(response_text) < 10:
                     core.logging.log_event(f"[DeepAgent] run() response is very short ({len(response_text)} chars): {response_text}", level="WARNING")
                 elif '{' in response_text and '}' not in response_text:
                     core.logging.log_event(f"[DeepAgent] run() response appears incomplete (missing closing brace): {response_text[:100]}", level="WARNING")
                 
-                core.logging.log_event(f"[DeepAgent] Received response from vLLM (first 300 chars): {response_text[:300]}", level="DEBUG")
+                core.logging.log_event(f"[DeepAgent] Received response (first 300 chars): {response_text[:300]}", level="DEBUG")
                 
                 # Try to extract JSON from the response
                 # The model sometimes outputs conversational text before/after the JSON
