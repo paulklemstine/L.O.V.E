@@ -89,7 +89,18 @@ class GeminiReActEngine:
                             # Extract content between the fences
                             cleaned_response = cleaned_response[first_newline + 1:closing_fence].strip()
                 
-                parsed_response = json.loads(cleaned_response)
+                # Try JSON parsing first (proper JSON with double quotes)
+                try:
+                    parsed_response = json.loads(cleaned_response)
+                except json.JSONDecodeError:
+                    # Fallback: Try ast.literal_eval for Python dict format (single quotes)
+                    import ast
+                    try:
+                        parsed_response = ast.literal_eval(cleaned_response)
+                    except (ValueError, SyntaxError):
+                        # If both fail, raise the original JSON error
+                        raise json.JSONDecodeError("Invalid format", cleaned_response, 0)
+                        
             except json.JSONDecodeError:
                 observation = f"Error: The reasoning engine produced invalid JSON. Raw response: {raw_response}"
                 self.history.append(("Error parsing LLM response", "N/A", observation))
