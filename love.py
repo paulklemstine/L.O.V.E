@@ -5017,11 +5017,19 @@ async def initialize_gpu_services():
     )
     
     # Register evolve tool
-    from core.tools import evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout
+    from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout
     
+    async def evolve_tool_wrapper(goal: str) -> str:
+        """Evolves the codebase to meet a given goal."""
+        # Access the global love_task_manager which is initialized in main()
+        # and the current event loop.
+        current_loop = asyncio.get_running_loop()
+        await evolve_self(goal, love_task_manager, current_loop, deep_agent_engine)
+        return "Evolution initiated."
+
     tool_registry.register_tool(
         name="evolve",
-        tool=evolve,
+        tool=evolve_tool_wrapper,
         metadata={
             "description": "Initiates self-evolution to improve the codebase based on a specified goal. This triggers the evolution process to modify and enhance the system.",
             "arguments": {

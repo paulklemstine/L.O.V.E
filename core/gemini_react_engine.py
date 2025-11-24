@@ -99,6 +99,42 @@ class GeminiReActEngine:
 
             thought = parsed_response.get("thought", "")
             action = parsed_response.get("action", {})
+
+            # SAFETY FIX: Ensure action is a dictionary
+            if isinstance(action, str):
+                try:
+                    import ast
+                    # Try to parse as JSON or Python dict
+                    try:
+                        action = json.loads(action)
+                    except json.JSONDecodeError:
+                        action = ast.literal_eval(action)
+                except (ValueError, SyntaxError, Exception):
+                    # If parsing fails, log error and skip
+                    observation = f"Error: Model produced invalid action format (string that could not be parsed). Action was: {action[:200]}"
+                    self.history.append((thought, action, observation))
+                    panel = create_reasoning_panel(
+                        caller=self.caller,
+                        raw_response=None, thought=thought, action=None,
+                        observation=observation,
+                        width=get_terminal_width()
+                    )
+                    self._log_panel_to_ui(panel)
+                    continue
+
+            if not isinstance(action, dict):
+                 # If it's still not a dict (e.g. parsed into a list or something else), fail gracefully
+                observation = f"Error: Model produced invalid action format (expected dict, got {type(action)}). Action was: {str(action)[:200]}"
+                self.history.append((thought, str(action), observation))
+                panel = create_reasoning_panel(
+                    caller=self.caller,
+                    raw_response=None, thought=thought, action=None,
+                    observation=observation,
+                    width=get_terminal_width()
+                )
+                self._log_panel_to_ui(panel)
+                continue
+
             tool_name = action.get("tool_name")
             arguments = action.get("arguments", {})
 
