@@ -151,8 +151,21 @@ class GeminiReActEngine:
             if tool_name == "Finish":
                 if arguments:
                     return {"success": True, "result": arguments}
-                # No arguments: return the thought string so caller can parse JSON from it
-                return {"success": True, "result": thought}
+                # No arguments: try to parse JSON from thought string
+                try:
+                    # Try to parse the thought as JSON
+                    import ast
+                    # First try json.loads
+                    try:
+                        parsed_result = json.loads(thought)
+                        return {"success": True, "result": parsed_result}
+                    except json.JSONDecodeError:
+                        # Fallback to ast.literal_eval for Python dict format
+                        parsed_result = ast.literal_eval(thought)
+                        return {"success": True, "result": parsed_result}
+                except (json.JSONDecodeError, ValueError, SyntaxError):
+                    # If parsing fails, return the thought string as-is
+                    return {"success": True, "result": thought}
 
             try:
                 is_dynamic_tool = False
