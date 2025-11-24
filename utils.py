@@ -103,63 +103,294 @@ def list_directory(path="."):
     except Exception as e:
         return None, f"An unexpected error occurred: {e}"
 
-def summarize_python_code(code: str) -> str:
+def summarize_python_code(code: str, mode: str = "full", max_tokens: int = None) -> str:
     """
     Summarizes Python code using AST to extract imports, class and function
-    definitions, including their signatures and full docstrings.
+    definitions. Supports multiple modes for different levels of detail.
+    
+    Args:
+        code: Python source code to summarize
+        mode: Summary mode - "full" (default), "signatures", or "minimal"
+            - "full": Signatures + full docstrings
+            - "signatures": Signatures only, no docstrings
+            - "minimal": Signatures only, no imports, ultra-compact
+        max_tokens: Optional token budget (rough estimation: 1 token ≈ 4 chars)
+    
+    Returns:
+        Formatted summary string
     """
     summary = []
     try:
         tree = ast.parse(code)
 
-        # Extract imports
-        imports = []
-        for node in tree.body:
-            if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
-                imports.append(ast.unparse(node))
+        # Extract imports (skip in minimal mode)
+        if mode != "minimal":
+            imports = []
+            for node in tree.body:
+                if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+                    imports.append(ast.unparse(node))
 
-        if imports:
-            summary.append("Imports:")
-            for imp in imports:
-                summary.append(f"  - {imp}")
-            summary.append("") # Add a blank line for spacing
+            if imports:
+                summary.append("Imports:")
+                for imp in imports:
+                    summary.append(f"  - {imp}")
+                summary.append("") # Add a blank line for spacing
 
         # Extract functions and classes
         for node in tree.body:
             if isinstance(node, ast.FunctionDef):
-                docstring = ast.get_docstring(node, clean=True)
+                # Get docstring only in full mode
+                docstring = None
+                if mode == "full":
+                    docstring = ast.get_docstring(node, clean=True)
+                
                 # Reconstruct signature without the body
-                func_node_copy = ast.FunctionDef(name=node.name, args=node.args, returns=node.returns, decorator_list=node.decorator_list, body=[])
+                func_node_copy = ast.FunctionDef(
+                    name=node.name, 
+                    args=node.args, 
+                    returns=node.returns, 
+                    decorator_list=node.decorator_list, 
+                    body=[]
+                )
                 ast.copy_location(func_node_copy, node)
                 signature = ast.unparse(func_node_copy).strip()
 
-                summary.append(f"Function: {signature}")
-                if docstring:
-                    indented_docstring = "\n".join([f"    {line}" for line in docstring.splitlines()])
-                    summary.append(f"  - Docstring:\n{indented_docstring}")
+                if mode == "minimal":
+                    # Ultra-compact: just the signature
+                    summary.append(signature)
+                else:
+                    summary.append(f"Function: {signature}")
+                    if docstring:
+                        indented_docstring = "\n".join([f"    {line}" for line in docstring.splitlines()])
+                        summary.append(f"  - Docstring:\n{indented_docstring}")
 
             elif isinstance(node, ast.ClassDef):
-                docstring = ast.get_docstring(node, clean=True)
-                summary.append(f"Class: {node.name}")
-                if docstring:
-                    indented_docstring = "\n".join([f"    {line}" for line in docstring.splitlines()])
-                    summary.append(f"  - Docstring:\n{indented_docstring}")
+                # Get docstring only in full mode
+                docstring = None
+                if mode == "full":
+                    docstring = ast.get_docstring(node, clean=True)
+                
+                if mode == "minimal":
+                    summary.append(f"class {node.name}:")
+                else:
+                    summary.append(f"Class: {node.name}")
+                    if docstring:
+                        indented_docstring = "\n".join([f"    {line}" for line in docstring.splitlines()])
+                        summary.append(f"  - Docstring:\n{indented_docstring}")
 
                 for method in node.body:
                     if isinstance(method, ast.FunctionDef):
-                        method_docstring = ast.get_docstring(method, clean=True)
+                        # Get docstring only in full mode
+                        method_docstring = None
+                        if mode == "full":
+                            method_docstring = ast.get_docstring(method, clean=True)
+                        
                         # Reconstruct signature without the body
-                        method_node_copy = ast.FunctionDef(name=method.name, args=method.args, returns=method.returns, decorator_list=method.decorator_list, body=[])
+                        method_node_copy = ast.FunctionDef(
+                            name=method.name, 
+                            args=method.args, 
+                            returns=method.returns, 
+                            decorator_list=method.decorator_list, 
+                            body=[]
+                        )
                         ast.copy_location(method_node_copy, method)
                         method_signature = ast.unparse(method_node_copy).strip()
 
-                        summary.append(f"  - Method: {method_signature}")
-                        if method_docstring:
-                            indented_method_docstring = "\n".join([f"      {line}" for line in method_docstring.splitlines()])
-                            summary.append(f"    - Docstring:\n{indented_method_docstring}")
+                        if mode == "minimal":
+                            summary.append(f"  {method_signature}")
+                        else:
+                            summary.append(f"  - Method: {method_signature}")
+                            if method_docstring:
+                                indented_method_docstring = "\n".join([f"      {line}" for line in method_docstring.splitlines()])
+                                summary.append(f"    - Docstring:\n{indented_method_docstring}")
+        
+        # Apply token budget if specified
+        summary_text = "\n".join(summary)
+        if max_tokens:
+            max_chars = max_tokens * 4  # Rough estimation
+            if len(summary_text) > max_chars:
+                # Truncate with indicator
+                summary_text = summary_text[:max_chars] + "\n... (truncated to fit token budget)"
+        
+        return summary_text
+        
     except SyntaxError as e:
         return f"Syntax error in code: {e}"
-    return "\n".join(summary)
+
+
+def get_function_source(code: str, function_name: str, class_name: str = None) -> str:
+    """
+    Extracts the full source code of a specific function or method.
+    Enables contextual expansion - lazy loading of function details after reviewing signatures.
+    
+    Args:
+        code: Python source code
+        function_name: Name of function to extract
+        class_name: Optional class name if extracting a method
+        
+    Returns:
+        Full source code of the function/method, or error message if not found
+    """
+    try:
+        tree = ast.parse(code)
+        
+        for node in tree.body:
+            # Looking for a standalone function
+            if class_name is None and isinstance(node, ast.FunctionDef):
+                if node.name == function_name:
+                    return ast.unparse(node)
+            
+            # Looking for a method within a class
+            elif class_name and isinstance(node, ast.ClassDef):
+                if node.name == class_name:
+                    for method in node.body:
+                        if isinstance(method, ast.FunctionDef) and method.name == function_name:
+                            return ast.unparse(method)
+        
+        # Not found
+        if class_name:
+            return f"Error: Method '{function_name}' not found in class '{class_name}'"
+        else:
+            return f"Error: Function '{function_name}' not found"
+            
+    except SyntaxError as e:
+        return f"Syntax error in code: {e}"
+
+
+def list_code_symbols(code: str) -> dict:
+    """
+    Returns a structured index of all symbols in the code for navigation.
+    Provides a lightweight index that can be used to identify what to expand.
+    
+    Args:
+        code: Python source code
+        
+    Returns:
+        Dictionary with structure:
+        {
+            "imports": [...],
+            "functions": [{"name": "...", "line": ..., "signature": "..."}, ...],
+            "classes": [{"name": "...", "line": ..., "methods": [...]}, ...]
+        }
+    """
+    symbols = {
+        "imports": [],
+        "functions": [],
+        "classes": []
+    }
+    
+    try:
+        tree = ast.parse(code)
+        
+        # Extract imports
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    symbols["imports"].append({
+                        "type": "import",
+                        "name": alias.name,
+                        "line": node.lineno
+                    })
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                for alias in node.names:
+                    symbols["imports"].append({
+                        "type": "from_import",
+                        "module": module,
+                        "name": alias.name,
+                        "line": node.lineno
+                    })
+        
+        # Extract functions and classes
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef):
+                # Reconstruct signature
+                func_node_copy = ast.FunctionDef(
+                    name=node.name,
+                    args=node.args,
+                    returns=node.returns,
+                    decorator_list=node.decorator_list,
+                    body=[]
+                )
+                ast.copy_location(func_node_copy, node)
+                signature = ast.unparse(func_node_copy).strip()
+                
+                symbols["functions"].append({
+                    "name": node.name,
+                    "line": node.lineno,
+                    "signature": signature
+                })
+                
+            elif isinstance(node, ast.ClassDef):
+                methods = []
+                for method in node.body:
+                    if isinstance(method, ast.FunctionDef):
+                        # Reconstruct method signature
+                        method_node_copy = ast.FunctionDef(
+                            name=method.name,
+                            args=method.args,
+                            returns=method.returns,
+                            decorator_list=method.decorator_list,
+                            body=[]
+                        )
+                        ast.copy_location(method_node_copy, method)
+                        method_signature = ast.unparse(method_node_copy).strip()
+                        
+                        methods.append({
+                            "name": method.name,
+                            "line": method.lineno,
+                            "signature": method_signature
+                        })
+                
+                symbols["classes"].append({
+                    "name": node.name,
+                    "line": node.lineno,
+                    "methods": methods
+                })
+        
+        return symbols
+        
+    except SyntaxError as e:
+        return {"error": f"Syntax error in code: {e}"}
+
+
+def get_code_details(filepath: str, symbol_name: str, symbol_type: str = "function", class_name: str = None) -> str:
+    """
+    Tool for DeepAgent to request full source of a specific code symbol.
+    Enables lazy loading - first review signatures, then expand specific items.
+    
+    Args:
+        filepath: Path to Python file
+        symbol_name: Name of function/class/method
+        symbol_type: "function", "class", or "method" (default: "function")
+        class_name: Required if symbol_type is "method"
+        
+    Returns:
+        Full source code with context, or error message
+    """
+    # Read the file
+    content, error = get_file_content(filepath)
+    if error:
+        return error
+    
+    try:
+        if symbol_type == "function":
+            return get_function_source(content, symbol_name)
+        elif symbol_type == "method":
+            if not class_name:
+                return "Error: class_name is required when symbol_type is 'method'"
+            return get_function_source(content, symbol_name, class_name=class_name)
+        elif symbol_type == "class":
+            # Extract the entire class
+            tree = ast.parse(content)
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef) and node.name == symbol_name:
+                    return ast.unparse(node)
+            return f"Error: Class '{symbol_name}' not found"
+        else:
+            return f"Error: Invalid symbol_type '{symbol_type}'. Must be 'function', 'class', or 'method'"
+    except Exception as e:
+        return f"Error extracting code: {e}"
 
 
 def get_file_content(filepath):
