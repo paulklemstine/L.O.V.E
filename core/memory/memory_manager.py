@@ -261,6 +261,14 @@ class MemoryManager:
             print("Warning: FAISS index is not initialized. Cannot add note.")
             return
 
+        # Ensure the index is trained before adding. Some loaded indexes may be untrained.
+        if hasattr(self.faiss_index, "is_trained") and not self.faiss_index.is_trained:
+            print("FAISS index is untrained. Rebuilding index before adding note.")
+            await self._rebuild_faiss_index()
+            if self.faiss_index is None:
+                print("Failed to rebuild FAISS index. Skipping add.")
+                return
+
         embedding = np.array([note.embedding], dtype=np.float32)
 
         # The 'add' method works for both IndexFlatL2 and IndexIVFFlat

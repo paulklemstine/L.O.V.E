@@ -3,7 +3,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 1,
+        "failed_calls": 45,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
@@ -11,7 +11,7 @@
         "total_tokens_generated": 374,
         "total_time_spent": 15.283308267593384,
         "successful_calls": 3,
-        "failed_calls": 4,
+        "failed_calls": 48,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
@@ -19,15 +19,15 @@
         "total_tokens_generated": 1039,
         "total_time_spent": 22.234585285186768,
         "successful_calls": 8,
-        "failed_calls": 5,
+        "failed_calls": 49,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
     "gemini-2.5-flash-lite": {
-        "total_tokens_generated": 8858,
-        "total_time_spent": 88.67769241333008,
-        "successful_calls": 83,
-        "failed_calls": 9,
+        "total_tokens_generated": 9481,
+        "total_time_spent": 96.97660684585571,
+        "successful_calls": 91,
+        "failed_calls": 53,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
@@ -240,9 +240,9 @@
         "provider": "vllm"
     },
     "x-ai/grok-4.1-fast:free": {
-        "total_tokens_generated": 0,
-        "total_time_spent": 0.0,
-        "successful_calls": 0,
+        "total_tokens_generated": 5273,
+        "total_time_spent": 872.2326672077179,
+        "successful_calls": 44,
         "failed_calls": 0,
         "reasoning_score": 50.0,
         "provider": "openrouter"
@@ -680,9 +680,9 @@
         "provider": "horde"
     },
     "deep_agent_vllm": {
-        "total_tokens_generated": 58149,
-        "total_time_spent": 3120.554529905319,
-        "successful_calls": 268,
+        "total_tokens_generated": 234121,
+        "total_time_spent": 6195.161856651306,
+        "successful_calls": 380,
         "failed_calls": 3,
         "reasoning_score": 50.0,
         "provider": "deep_agent"
@@ -792,6 +792,54 @@
         "provider": "horde"
     },
     "Qwen/Qwen3-30B-A3B-Instruct-2507": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "aphrodite/TheDrummer/Precog-123B-v1-nvfp4": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Qwen3-30B-A3B-Instruct-2507": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "aphrodite/SicariusSicariiStuff/Phi-lthy4": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "google/gemma-3-4b-it": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/NeuralDaredevil-8B-abliterated": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Wizard_Vicuna_13B_Q6": {
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
