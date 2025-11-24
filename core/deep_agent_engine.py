@@ -357,6 +357,51 @@ class DeepAgentEngine:
             core.logging.log_event(f"[DeepAgent] Error generating text with vLLM: {e}", level="ERROR")
             return f"Error: {e}"
 
+    async def _repair_json_with_llm(self, malformed_text: str, error_context: str) -> dict:
+        """
+        Uses the LLM to attempt to repair a malformed JSON response.
+        """
+        core.logging.log_event(f"[DeepAgent] Attempting to repair JSON with LLM...", level="WARNING")
+        
+        repair_prompt = f"""You are a JSON repair expert. 
+The following text was intended to be a JSON object with the keys "thought" and "action", but it is malformed or has incorrect keys.
+Error context: {error_context}
+
+Malformed Text:
+{malformed_text}
+
+Please output the CORRECTED JSON object. 
+The format MUST be:
+{{
+  "thought": "The reasoning behind the action",
+  "action": {{
+      "tool_name": "Name of the tool",
+      "arguments": {{ ... }}
+  }}
+}}
+
+Do not add any markdown formatting or extra text. Just the JSON string.
+"""
+        try:
+            if self.use_pool:
+                from core.llm_api import run_llm
+                # Use a fast model for repair if possible, but for now just use the pool default
+                result_dict = await run_llm(repair_prompt, purpose="json_repair", deep_agent_instance=None)
+                repaired_text = result_dict.get("result", "").strip()
+            else:
+                # Use the existing generate method for vLLM
+                # We might want to use a lower temperature for repair
+                original_temp = self.sampling_params.get("temperature")
+                self.sampling_params["temperature"] = 0.1 # Low temp for deterministic repair
+                repaired_text = await self.generate(repair_prompt)
+                self.sampling_params["temperature"] = original_temp # Restore temp
+
+            # Try to parse the repaired text
+            return _recover_json(repaired_text)
+        except Exception as e:
+            core.logging.log_event(f"[DeepAgent] JSON repair failed: {e}", level="ERROR")
+            return None
+
     async def run(self, prompt: str):
         """
         Executes a prompt using a simplified DeepAgent-style reasoning loop.
@@ -529,12 +574,20 @@ RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
                             parsed_response["thought"] = f"Decided to execute command: {cmd}"
                             parsed_response["action"] = {"tool_name": cmd, "arguments": args}
                         else:
-                            core.logging.log_event(
-                                f"[DeepAgent] Invalid response structure. Expected {{\"thought\": \"...\", \"action\": {{...}}}}. "
-                                f"Got keys: {list(parsed_response.keys())}. Response: {parsed_response}",
-                                level="ERROR"
-                            )
-                            return f"Error: LLM returned wrong format. Expected 'thought' and 'action' keys, got: {list(parsed_response.keys())}"
+                            # Attempt LLM repair as a final fallback
+                            core.logging.log_event(f"[DeepAgent] Invalid keys found: {list(parsed_response.keys())}. Attempting LLM repair...", level="WARNING")
+                            repaired_response = await self._repair_json_with_llm(json_text, f"Missing keys. Got: {list(parsed_response.keys())}")
+                            
+                            if repaired_response and isinstance(repaired_response, dict) and "thought" in repaired_response and "action" in repaired_response:
+                                core.logging.log_event("[DeepAgent] JSON successfully repaired by LLM.", level="INFO")
+                                parsed_response = repaired_response
+                            else:
+                                core.logging.log_event(
+                                    f"[DeepAgent] Invalid response structure. Expected {{\"thought\": \"...\", \"action\": {{...}}}}. "
+                                    f"Got keys: {list(parsed_response.keys())}. Response: {parsed_response}",
+                                    level="ERROR"
+                                )
+                                return f"Error: LLM returned wrong format. Expected 'thought' and 'action' keys, got: {list(parsed_response.keys())}"
                     
                     thought = parsed_response.get("thought", "")
                     action = parsed_response.get("action", {})
