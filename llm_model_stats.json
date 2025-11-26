@@ -680,9 +680,9 @@
         "provider": "horde"
     },
     "deep_agent_vllm": {
-        "total_tokens_generated": 261727,
-        "total_time_spent": 6726.154596090317,
-        "successful_calls": 421,
+        "total_tokens_generated": 268960,
+        "total_time_spent": 7088.852484703064,
+        "successful_calls": 432,
         "failed_calls": 3,
         "reasoning_score": 50.0,
         "provider": "deep_agent"
