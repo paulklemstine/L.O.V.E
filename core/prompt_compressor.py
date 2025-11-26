@@ -83,6 +83,10 @@ class PromptCompressor:
         if self.compressor is not None:
             return
         
+        # Check if we've already tried and failed
+        if hasattr(self, '_load_failed') and self._load_failed:
+            return
+        
         try:
             self.log_event("[PromptCompressor] Loading LLMLingua 2 model...", "INFO")
             start_time = time.time()
@@ -100,12 +104,24 @@ class PromptCompressor:
                 "INFO"
             )
         except Exception as e:
-            self.log_event(
-                f"[PromptCompressor] Failed to load compression model: {e}",
-                "ERROR"
-            )
+            error_msg = str(e)
+            
+            # Check for known compatibility issues
+            if "past_key_values" in error_msg or "XLMRoberta" in error_msg:
+                self.log_event(
+                    "[PromptCompressor] LLMLingua is incompatible with current transformers version. "
+                    "Compression will be disabled. To fix: pip install transformers==4.30.0 or disable compression with LLMLINGUA_ENABLED=false",
+                    "WARNING"
+                )
+            else:
+                self.log_event(
+                    f"[PromptCompressor] Failed to load compression model: {e}",
+                    "ERROR"
+                )
+            
             self.compressor = None
-            raise
+            self._load_failed = True  # Mark as permanently failed to avoid repeated attempts
+
     
     def _get_cache_key(self, text: str, rate: float, force_tokens: List[str]) -> str:
         """Generate a cache key for the given compression parameters."""
@@ -161,7 +177,34 @@ class PromptCompressor:
         
         # Load compressor if needed
         if self.compressor is None:
-            self._load_compressor()
+            # Check if we've already tried and failed
+            if hasattr(self, '_load_failed') and self._load_failed:
+                # Return uncompressed result immediately
+                return {
+                    "success": False,
+                    "compressed_text": prompt,
+                    "original_tokens": self._estimate_tokens(prompt),
+                    "compressed_tokens": self._estimate_tokens(prompt),
+                    "ratio": 1.0,
+                    "time_ms": 0.0,
+                    "cached": False,
+                    "error": "Compressor failed to load (compatibility issue)"
+                }
+            
+            try:
+                self._load_compressor()
+            except Exception:
+                # _load_compressor already logged the error
+                return {
+                    "success": False,
+                    "compressed_text": prompt,
+                    "original_tokens": self._estimate_tokens(prompt),
+                    "compressed_tokens": self._estimate_tokens(prompt),
+                    "ratio": 1.0,
+                    "time_ms": 0.0,
+                    "cached": False,
+                    "error": "Failed to load compressor"
+                }
         
         start_time = time.time()
         
