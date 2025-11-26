@@ -447,15 +447,19 @@ CRITICAL INSTRUCTIONS:
 1. You MUST respond with ONLY a valid JSON object - no other text before or after
 2. The JSON must have exactly two keys: "thought" and "action"
 3. The "action" must contain "tool_name" and "arguments"
-4. The "tool_name" MUST be one of the tools listed above in the "You have access to the following tools" section
+4. The "tool_name" MUST be EXACTLY one of the tools listed above - DO NOT invent or hallucinate tool names
 5. After calling 1-2 tools to gather information, you MUST use the "Finish" tool
 6. Do NOT write conversational text - ONLY output the JSON object
-7. Do NOT try to call tools that don't exist (like "Knowledge Base" or "Memory")
+7. Do NOT try to call tools that don't exist (like "Knowledge Base", "Memory", or "JSON Repair Expert")
+8. If you're unsure, use "Finish" to return your response - do NOT invent new tools
 
 WRONG (conversational text):
 The next thought and action is to call get_system_state...
 
-CORRECT (JSON only):
+WRONG (invented tool):
+{{"thought": "I need to repair JSON", "action": {{"tool_name": "JSON Repair Expert", "arguments": {{}}}}}}
+
+CORRECT (JSON only with valid tool):
 {{"thought": "I need to check the system state", "action": {{"tool_name": "get_system_state", "arguments": {{}}}}}}
 
 Example JSON responses:
@@ -687,6 +691,8 @@ RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
                         # Provide specific guidance for common mistakes
                         if tool_name in ["Knowledge Base", "Memory", "knowledge_base", "memory"]:
                             error_msg += "\n\nNOTE: 'Knowledge Base' and 'Memory' are NOT tools. They are informational context provided in the prompt. Please use one of the actual tools listed above."
+                        elif tool_name in ["JSON Repair Expert", "json_repair", "repair_json"]:
+                            error_msg += "\n\nNOTE: 'JSON Repair Expert' is NOT a tool. If you need to fix malformed output, simply use the 'Finish' tool to return your corrected response. Do not try to call non-existent repair tools."
                         
                         core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
                         return error_msg
