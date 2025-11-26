@@ -104,9 +104,37 @@ async def finish_post(content: str = None, image_path: str = None, **kwargs) -> 
     """
     Publishes the final post to Bluesky.
     This tool should be used as the final step in a social media workflow.
+    
+    CRITICAL: The 'content' argument must contain ONLY the final post text that will be visible to users.
+    Do NOT include any internal reasoning, meta-commentary, or explanations about the process.
     """
     if not content:
         return "Error: The 'finish_post' tool requires a 'content' argument. Please specify the text content to post."
+    
+    # Validate that content doesn't contain internal reasoning
+    reasoning_indicators = [
+        "i have attempted",
+        "i attempted",
+        "both attempts have failed",
+        "i cannot",
+        "i need to inform",
+        "since i cannot",
+        "the image generation",
+        "failed due to",
+        "limitation",
+        "providers failed"
+    ]
+    
+    content_lower = content.lower()
+    for indicator in reasoning_indicators:
+        if indicator in content_lower:
+            return (
+                f"Error: The content appears to contain internal reasoning or meta-commentary. "
+                f"The 'finish_post' tool should only receive the FINAL POST CONTENT that users will see. "
+                f"Please provide only the actual post text, without any explanations about the process. "
+                f"Detected phrase: '{indicator}'"
+            )
+    
     try:
         image = None
         if image_path:
