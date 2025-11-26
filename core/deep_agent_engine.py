@@ -275,6 +275,23 @@ class DeepAgentEngine:
         core.logging.log_event(f"[DeepAgent] generate() called with prompt length: {len(prompt)} chars", level="DEBUG")
         Generates text using the vLLM server.
         """
+        # Apply prompt compression if applicable
+        from core.prompt_compressor import compress_prompt, should_compress
+        
+        original_prompt = prompt
+        if should_compress(prompt, purpose="deep_agent_generation"):
+            compression_result = compress_prompt(
+                prompt,
+                purpose="deep_agent_generation"
+            )
+            if compression_result["success"]:
+                prompt = compression_result["compressed_text"]
+                core.logging.log_event(
+                    f"[DeepAgent] generate() compressed: {compression_result['original_tokens']} → "
+                    f"{compression_result['compressed_tokens']} tokens ({compression_result['ratio']:.1%})",
+                    level="DEBUG"
+                )
+        
         headers = {"Content-Type": "application/json"}
         payload = {
             "model": self.model_name,
@@ -455,6 +472,30 @@ Prompt: {prompt}
 RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
 """
         core.logging.log_event(f"[DeepAgent] Processing request... (Max context: {self.max_model_len}, Prompt length: {len(system_prompt)} chars)", level="DEBUG")
+
+        # Apply prompt compression if applicable
+        from core.prompt_compressor import compress_prompt, should_compress
+        
+        if should_compress(system_prompt, purpose="deep_agent_reasoning"):
+            # Collect force tokens: tool names and critical keywords
+            force_tokens = ["tool_name", "arguments", "thought", "action", "Finish", "JSON"]
+            if self.tool_registry:
+                force_tokens.extend(list(self.tool_registry.list_tools().keys()))
+            
+            compression_result = compress_prompt(
+                system_prompt,
+                force_tokens=force_tokens,
+                purpose="deep_agent_reasoning"
+            )
+            
+            if compression_result["success"]:
+                system_prompt = compression_result["compressed_text"]
+                core.logging.log_event(
+                    f"[DeepAgent] Compressed prompt: {compression_result['original_tokens']} → "
+                    f"{compression_result['compressed_tokens']} tokens "
+                    f"({compression_result['ratio']:.1%} compression) in {compression_result['time_ms']:.0f}ms",
+                    level="INFO"
+                )
 
         try:
             if self.use_pool:

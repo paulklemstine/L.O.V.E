@@ -303,4 +303,25 @@ Current History:
 
 Based on the goal and the current history, what is the next thought and action?
 """
+        
+        # Apply prompt compression if applicable
+        from core.prompt_compressor import compress_prompt, should_compress
+        
+        if should_compress(prompt, purpose="react_reasoning"):
+            # Force tokens to preserve critical ReAct structure
+            force_tokens = [
+                "thought", "action", "tool_name", "arguments", "Finish",
+                "decompose_and_solve_subgoal", "talent_scout", "opportunity_scout"
+            ]
+            
+            compression_result = compress_prompt(
+                prompt,
+                force_tokens=force_tokens,
+                purpose="react_reasoning"
+            )
+            
+            if compression_result["success"]:
+                prompt = compression_result["compressed_text"]
+                # Note: We don't log here to avoid cluttering the output during ReAct loops
+        
         return prompt

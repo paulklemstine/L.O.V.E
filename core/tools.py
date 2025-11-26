@@ -51,12 +51,44 @@ async def execute(command: str = None, **kwargs) -> str:
     return str(execute_shell_command(command, love_state))
 
 async def evolve(goal: str = None, **kwargs) -> str:
-    """Evolves the codebase to meet a given goal."""
+    """Evolves the codebase to meet a given goal. If no goal is provided, automatically determines one."""
+    
+    # If no goal provided, automatically determine one
     if not goal:
-        return "Error: The 'evolve' tool requires a 'goal' argument. Please specify what you want to evolve or improve."
+        try:
+            from core.evolution_analyzer import determine_evolution_goal
+            import core.logging
+            
+            core.logging.log_event("[Evolve Tool] No goal provided, analyzing system to determine evolution goal...", "INFO")
+            
+            # Extract context from kwargs if available
+            knowledge_base = kwargs.get('knowledge_base')
+            deep_agent_instance = kwargs.get('deep_agent_instance')
+            
+            # Try to get love_state from the main module
+            try:
+                from love import love_state
+            except:
+                love_state = None
+            
+            # Determine the goal automatically
+            goal = await determine_evolution_goal(
+                knowledge_base=knowledge_base,
+                love_state=love_state,
+                deep_agent_instance=deep_agent_instance
+            )
+            
+            core.logging.log_event(f"[Evolve Tool] Auto-determined goal: {goal}", "INFO")
+            
+        except Exception as e:
+            import core.logging
+            core.logging.log_event(f"[Evolve Tool] Failed to auto-determine goal: {e}", "ERROR")
+            return f"Error: Failed to automatically determine evolution goal: {e}. Please provide a goal explicitly."
+    
     from love import evolve_self
     evolve_self(goal)
-    return "Evolution initiated."
+    return f"Evolution initiated with goal: {goal}"
+
 
 async def post_to_bluesky(text: str = None, image: Image.Image = None, **kwargs) -> str:
     """Posts a message with an optional image to Bluesky."""

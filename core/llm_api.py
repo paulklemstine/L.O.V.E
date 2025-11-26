@@ -668,6 +668,31 @@ async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_age
             log_event(f"Could not count tokens for prompt: {e}", "WARNING")
             token_count = 0 # Assume it's fine if we can't count
 
+        # --- Prompt Compression ---
+        from core.prompt_compressor import compress_prompt, should_compress
+        
+        compression_metadata = None
+        if should_compress(prompt_text, purpose=purpose):
+            compression_result = compress_prompt(
+                prompt_text,
+                purpose=purpose
+            )
+            if compression_result["success"]:
+                prompt_text = compression_result["compressed_text"]
+                compression_metadata = compression_result
+                # Recalculate token count after compression
+                try:
+                    token_count = get_token_count(prompt_text)
+                except:
+                    token_count = compression_result["compressed_tokens"]
+                
+                log_event(
+                    f"[LLM API] Compressed prompt for {purpose}: "
+                    f"{compression_result['original_tokens']} → {compression_result['compressed_tokens']} tokens "
+                    f"({compression_result['ratio']:.1%} compression) in {compression_result['time_ms']:.0f}ms",
+                    "INFO"
+                )
+
         local_model_ids = []
 
         # --- Dynamic Model Ranking ---

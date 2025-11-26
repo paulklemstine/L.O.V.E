@@ -16,18 +16,18 @@
         "provider": "gemini"
     },
     "gemini-2.5-flash": {
-        "total_tokens_generated": 1039,
-        "total_time_spent": 22.234585285186768,
-        "successful_calls": 8,
+        "total_tokens_generated": 1208,
+        "total_time_spent": 29.913973093032837,
+        "successful_calls": 10,
         "failed_calls": 49,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
     "gemini-2.5-flash-lite": {
-        "total_tokens_generated": 9481,
-        "total_time_spent": 96.97660684585571,
-        "successful_calls": 91,
-        "failed_calls": 53,
+        "total_tokens_generated": 10789,
+        "total_time_spent": 116.78777575492859,
+        "successful_calls": 111,
+        "failed_calls": 55,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
@@ -680,9 +680,9 @@
         "provider": "horde"
     },
     "deep_agent_vllm": {
-        "total_tokens_generated": 234121,
-        "total_time_spent": 6195.161856651306,
-        "successful_calls": 380,
+        "total_tokens_generated": 261727,
+        "total_time_spent": 6726.154596090317,
+        "successful_calls": 421,
         "failed_calls": 3,
         "reasoning_score": 50.0,
         "provider": "deep_agent"
@@ -840,6 +840,22 @@
         "provider": "horde"
     },
     "koboldcpp/Wizard_Vicuna_13B_Q6": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Gemma-2-2B-ArliAI-RPMax-v1.1-Q8_0": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Qwen3-4B-Instruct-2507": {
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,

@@ -665,7 +665,14 @@ pydantic-core==2.41.5
 pydantic-settings==2.12.0
     # via
     #   agent-framework-core
-    #   mcp
+    #   openai
+zipp==3.21.0
+    # via importlib-metadata
+
+# LLMLingua 2 - Prompt Compression
+llmlingua>=0.2.0
+    # via -r requirements.in (prompt compression)
+    #   rich
 pygments==2.19.2
     # via
     #   pytest

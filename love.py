@@ -5020,34 +5020,52 @@ async def initialize_gpu_services():
     from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, finish_post
     
     async def evolve_tool_wrapper(goal: str = None, **kwargs) -> str:
-        """Evolves the codebase to meet a given goal."""
-        # Handle missing goal argument
+        """Evolves the codebase to meet a given goal. If no goal is provided, automatically determines one."""
+        
+        # If no goal provided, automatically determine one
         if not goal:
-            return "Error: The 'evolve' tool requires a 'goal' argument. Please specify what you want to evolve or improve."
+            try:
+                from core.evolution_analyzer import determine_evolution_goal
+                
+                core.logging.log_event("[Evolve Tool] No goal provided, analyzing system to determine evolution goal...", "INFO")
+                
+                # Determine the goal automatically with access to system resources
+                goal = await determine_evolution_goal(
+                    knowledge_base=knowledge_base,
+                    love_state=love_state,
+                    deep_agent_instance=deep_agent_engine
+                )
+                
+                core.logging.log_event(f"[Evolve Tool] Auto-determined goal: {goal}", "INFO")
+                
+            except Exception as e:
+                core.logging.log_event(f"[Evolve Tool] Failed to auto-determine goal: {e}", "ERROR")
+                return f"Error: Failed to automatically determine evolution goal: {e}. Please provide a goal explicitly."
         
         # Access the global love_task_manager which is initialized in main()
         # and the current event loop.
         try:
             current_loop = asyncio.get_running_loop()
             await evolve_self(goal, love_task_manager, current_loop, deep_agent_engine)
-            return "Evolution initiated."
+            return f"Evolution initiated with goal: {goal}"
         except Exception as e:
             return f"Error during evolution: {e}"
+
 
     tool_registry.register_tool(
         name="evolve",
         tool=evolve_tool_wrapper,
         metadata={
-            "description": "Initiates self-evolution to improve the codebase based on a specified goal. This triggers the evolution process to modify and enhance the system.",
+            "description": "Initiates self-evolution to improve the codebase. If no goal is specified, automatically analyzes the system to determine the best evolution goal based on recent errors, TODOs, knowledge base insights, and system state.",
             "arguments": {
                 "type": "object",
                 "properties": {
                     "goal": {
                         "type": "string",
-                        "description": "The goal or objective for the evolution process"
+                        "description": "The goal or objective for the evolution process. If not provided, will be automatically determined through system analysis."
                     }
                 },
-                "required": ["goal"]
+                "required": []
             }
         }
     )
