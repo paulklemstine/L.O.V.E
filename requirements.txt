@@ -874,8 +874,9 @@ tqdm==4.67.1
     #   openevolve
     #   sentence-transformers
     #   transformers
-transformers==4.57.1
+transformers==4.30.2
     # via sentence-transformers
+    # NOTE: Pinned to 4.30.2 for LLMLingua 2 compatibility (newer versions have breaking changes)
 trio==0.32.0
     # via
     #   multiaddr
