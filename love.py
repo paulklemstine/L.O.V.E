@@ -3496,7 +3496,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
         mcp_tools_summary = "\n".join([f"- Server: {name}\n" + "".join([f"  - {tool}: {desc}\n" for tool, desc in config.get('tools', {}).items()]) for name, config in mcp_manager.server_configs.items()])
 
     user_input_section = f'A new instruction has been received from The Creator.\nInstruction: "{user_input}"\nBased on this new instruction, what is the next single command to execute?' if user_input else ""
-    god_insight_section = f'**Meta-Director\'s Insight:** A quiet, powerful voice whispers a suggestion to guide your path.\n"{god_agent.get_latest_insight()}"'
+    god_insight_section = f'**Meta-Director\'s Insight:** A quiet, powerful voice whispers a suggestion to guide your path.\n"{god_agent.get_latest_insight()}"' if god_agent else ""
     dynamic_context_section = ""
     if dynamic_kb_results or dynamic_memory_results:
         dynamic_context_section += "\n**Dynamic Context (Most Relevant Intelligence):**\n---\n"
@@ -5576,8 +5576,10 @@ async def main(args):
     monitoring_manager.start()
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
-    god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine, memory_manager)
-    god_agent.start()
+    # GodAgent temporarily disabled
+    # god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine, memory_manager)
+    # god_agent.start()
+    god_agent = None  # Disabled
 
     # --- Start Core Logic Threads ---
     # Start the simple UI renderer in its own thread. This will now handle all console output.
