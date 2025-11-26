@@ -34,6 +34,7 @@ agent-framework
 datasets
 openevolve
 sentence-transformers
+transformers==4.30.2  # Pinned for LLMLingua 2 compatibility
 torch
 torchvision
 torchaudio
@@ -41,3 +42,4 @@ langextract
 monero-python
 openai
 faiss-cpu
+llmlingua>=0.2.0  # Prompt compression
