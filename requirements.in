@@ -33,7 +33,7 @@ parsel
 agent-framework
 datasets
 openevolve
-sentence-transformers
+sentence-transformers<3.0  # Compatible with transformers 4.30.2
 transformers==4.30.2  # Pinned for LLMLingua 2 compatibility
 torch
 torchvision

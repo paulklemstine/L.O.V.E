@@ -800,8 +800,9 @@ scipy==1.16.3
     # via
     #   scikit-learn
     #   sentence-transformers
-sentence-transformers==5.1.2
+sentence-transformers==2.7.0
     # via -r requirements.in
+    # NOTE: Pinned to 2.7.0 for compatibility with transformers 4.30.2
 shellingham==1.5.4
     # via
     #   huggingface-hub
