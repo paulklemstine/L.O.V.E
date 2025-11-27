@@ -39,6 +39,7 @@ from core.talent_utils import (
     public_profile_aggregator,
     intelligence_synthesizer
 )
+from core.system_integrity_monitor import SystemIntegrityMonitor
 
 
 love_state = {}
@@ -51,13 +52,24 @@ async def execute(command: str = None, **kwargs) -> str:
     return str(execute_shell_command(command, love_state))
 
 async def evolve(goal: str = None, **kwargs) -> str:
-    """Evolves the codebase to meet a given goal. If no goal is provided, automatically determines one."""
+    """
+    Evolves the codebase to meet a given goal.
+    
+    If the goal is vague or incomplete, it will be automatically expanded into
+    a detailed user story specification using an LLM.
+    
+    If no goal is provided, the system will automatically determine one.
+    """
+    import core.logging
+    from core.user_story_validator import (
+        UserStoryValidator,
+        expand_to_user_story
+    )
     
     # If no goal provided, automatically determine one
     if not goal:
         try:
             from core.evolution_analyzer import determine_evolution_goal
-            import core.logging
             
             core.logging.log_event("[Evolve Tool] No goal provided, analyzing system to determine evolution goal...", "INFO")
             
@@ -81,13 +93,91 @@ async def evolve(goal: str = None, **kwargs) -> str:
             core.logging.log_event(f"[Evolve Tool] Auto-determined goal: {goal}", "INFO")
             
         except Exception as e:
-            import core.logging
             core.logging.log_event(f"[Evolve Tool] Failed to auto-determine goal: {e}", "ERROR")
             return f"Error: Failed to automatically determine evolution goal: {e}. Please provide a goal explicitly."
     
+    # Store original input for reference
+    original_input = goal
+    
+    # Validate the user story format
+    validator = UserStoryValidator()
+    validation = validator.validate(goal)
+    
+    # If validation fails, auto-expand the vague input into a proper user story
+    if not validation.is_valid:
+        core.logging.log_event(
+            f"[Evolve Tool] Input is not a detailed user story. Auto-expanding...",
+            "INFO"
+        )
+        
+        try:
+            # Use LLM to expand vague input into detailed user story
+            expanded_story = await expand_to_user_story(goal, **kwargs)
+            
+            # Validate the expanded story
+            expanded_validation = validator.validate(expanded_story)
+            
+            if expanded_validation.is_valid:
+                core.logging.log_event(
+                    f"[Evolve Tool] Successfully expanded vague input into detailed user story",
+                    "INFO"
+                )
+                goal = expanded_story
+                
+                # Log the transformation for transparency
+                core.logging.log_event(
+                    f"[Evolve Tool] Transformation:\nOriginal: {original_input[:100]}...\nExpanded: {goal[:200]}...",
+                    "INFO"
+                )
+            else:
+                # Even expansion failed - this is rare
+                core.logging.log_event(
+                    f"[Evolve Tool] Auto-expansion failed validation. Errors: {expanded_validation.errors}",
+                    "ERROR"
+                )
+                return f"""❌ Unable to create a valid user story from the input.
+
+Original input: {original_input}
+
+The system attempted to expand this into a detailed user story but failed.
+
+Please provide more specific information:
+- What file(s) need to be modified?
+- What specific changes are needed?
+- What is the expected outcome?
+
+Example of a good input:
+"Fix the TalentManager import error in core/tools.py by adding the missing import statement"
+"""
+        
+        except Exception as e:
+            core.logging.log_event(f"[Evolve Tool] Failed to expand user story: {e}", "ERROR")
+            return f"Error: Failed to expand vague input into user story: {e}"
+    
+    # Log any warnings even if validation passed
+    if validation.warnings:
+        for warning in validation.warnings:
+            core.logging.log_event(f"[Evolve Tool] Warning: {warning}", "WARNING")
+    
+    # Proceed with evolution
+    core.logging.log_event(f"[Evolve Tool] User story validated successfully. Proceeding with evolution.", "INFO")
+    
     from love import evolve_self
     evolve_self(goal)
-    return f"Evolution initiated with goal: {goal}"
+    
+    # Show both original and expanded if they differ
+    if original_input != goal:
+        return f"""✅ Evolution initiated!
+
+📝 Original request: {original_input[:150]}...
+
+🔍 Expanded to detailed user story:
+{goal[:300]}...
+
+Evolution is now in progress.
+"""
+    else:
+        return f"✅ Evolution initiated with validated user story:\n\n{goal[:200]}..."
 
 
 async def post_to_bluesky(text: str = None, image: Image.Image = None, **kwargs) -> str:
@@ -577,11 +667,21 @@ async def research_and_evolve(**kwargs) -> str:
     generates a book of user stories, and kicks off the evolution process.
     """
     print("🤖 Initiating research and evolution cycle...")
+    system_integrity_monitor = kwargs.get("system_integrity_monitor")
 
     # In case a previous run was interrupted
     clear_evolution_state()
 
     user_stories = await generate_evolution_book()
+
+    current_state = {"name": "research_and_evolve", "user_stories_generated": bool(user_stories)}
+    if system_integrity_monitor:
+        evaluation_report = system_integrity_monitor.evaluate_component_status(current_state)
+        suggestions = system_integrity_monitor.suggest_enhancements(evaluation_report)
+        evolution_report = system_integrity_monitor.track_evolution("research_and_evolve", current_state)
+        print(f"Research and Evolve Evaluation: {evaluation_report}")
+        print(f"Research and Evolve Suggestions: {suggestions}")
+        print(f"Research and Evolve Evolution: {evolution_report}")
 
     if not user_stories:
         message = "Research phase did not yield any user stories. Evolution cycle will not start."
@@ -757,13 +857,26 @@ async def talent_scout(keywords: str = None, platforms: str = "bluesky,instagram
     """
     if not keywords:
         return "Error: The 'talent_scout' tool requires a 'keywords' argument. Please specify keywords to search for talent."
-    
+
+    system_integrity_monitor = kwargs.get("system_integrity_monitor")
+
     try:
         platform_list = [p.strip() for p in platforms.split(',')]
         keyword_list = [k.strip() for k in keywords.split(',')]
 
         aggregator = PublicProfileAggregator(platform_names=platform_list, ethical_filters=None)
         profiles = aggregator.search_and_collect(keyword_list)
+
+        current_state = {"name": "talent_scout", "profiles_found": len(profiles)}
+        if system_integrity_monitor:
+            evaluation_report = system_integrity_monitor.evaluate_component_status(current_state)
+            suggestions = system_integrity_monitor.suggest_enhancements(evaluation_report)
+            evolution_report = system_integrity_monitor.track_evolution("talent_scout", current_state)
+
+            print(f"Talent Scout Evaluation: {evaluation_report}")
+            print(f"Talent Scout Suggestions: {suggestions}")
+            print(f"Talent Scout Evolution: {evolution_report}")
+
 
         if not profiles:
             return "No talent found for the given keywords and platforms."

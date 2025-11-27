@@ -140,6 +140,11 @@ class TalentManager:
         self.profiles = self._load_profiles()
         return self.profiles.get(anonymized_id)
 
+    def get_all_profiles(self):
+        """Retrieves all talent profiles."""
+        self.profiles = self._load_profiles()
+        return list(self.profiles.values())
+
     def add_interaction(self, anonymized_id: str, interaction_type: str, message: str, new_status: str = None):
         """Adds a new interaction to a talent's history and optionally updates their status."""
         if anonymized_id not in self.profiles:
