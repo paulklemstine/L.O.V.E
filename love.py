@@ -486,6 +486,50 @@ def _auto_configure_hardware():
             print(f"No suitable local model found for {vram_mb}MB VRAM. Continuing in CPU-only mode.")
 
 
+        # Install Rust compiler if not present (needed for tokenizers and other Rust-based packages)
+        if not is_dependency_met("rust_installed"):
+            print("Installing Rust compiler (required for building tokenizers)...")
+            try:
+                if platform.system() == "Windows":
+                    # On Windows, download and run rustup-init.exe
+                    import urllib.request
+                    import tempfile
+                    rustup_url = "https://win.rustup.rs/x86_64"
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".exe") as tmp_file:
+                        print("Downloading rustup installer...")
+                        urllib.request.urlretrieve(rustup_url, tmp_file.name)
+                        rustup_path = tmp_file.name
+                    
+                    # Run rustup with -y flag for non-interactive installation
+                    print("Running rustup installer...")
+                    subprocess.check_call([rustup_path, "-y"])
+                    
+                    # Clean up
+                    import os
+                    os.unlink(rustup_path)
+                else:
+                    # On Linux/Mac, use the official rustup script
+                    print("Downloading and running rustup installer...")
+                    subprocess.check_call([
+                        "sh", "-c",
+                        "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+                    ])
+                
+                # Add cargo to PATH for current session
+                import os
+                home = os.path.expanduser("~")
+                cargo_bin = os.path.join(home, ".cargo", "bin")
+                if cargo_bin not in os.environ.get("PATH", ""):
+                    os.environ["PATH"] = f"{cargo_bin}{os.pathsep}{os.environ.get('PATH', '')}"
+                
+                mark_dependency_as_met("rust_installed")
+                print("Successfully installed Rust compiler.")
+                _temp_log_event("Rust compiler installed successfully.", "INFO")
+            except Exception as rust_error:
+                _temp_log_event(f"Failed to install Rust compiler: {rust_error}", "WARNING")
+                print(f"WARNING: Failed to install Rust compiler: {rust_error}")
+                print("Some Python packages may fail to build from source.")
+
         # If GPU is detected, ensure vllm is installed
         if not is_dependency_met("vllm_installed"):
             print("GPU detected. Installing vllm for DeepAgent engine...")
