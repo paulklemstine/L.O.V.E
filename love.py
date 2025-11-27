@@ -5362,6 +5362,7 @@ async def initialize_gpu_services():
                         "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.7)),
                         "--generation-config", "vllm",
                         "--served-model-name", "vllm-model",
+                        "--disable-chat-template",  # Fix for duplicate template name error in vLLM 0.11.0
                     ]
                     # Validate max_len before using it
                     if max_len is None or max_len <= 0:
