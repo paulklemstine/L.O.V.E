@@ -39,6 +39,7 @@ from core.talent_utils import (
     public_profile_aggregator,
     intelligence_synthesizer
 )
+from core.system_integrity_monitor import SystemIntegrityMonitor
 
 
 love_state = {}
@@ -577,11 +578,21 @@ async def research_and_evolve(**kwargs) -> str:
     generates a book of user stories, and kicks off the evolution process.
     """
     print("🤖 Initiating research and evolution cycle...")
+    system_integrity_monitor = kwargs.get("system_integrity_monitor")
 
     # In case a previous run was interrupted
     clear_evolution_state()
 
     user_stories = await generate_evolution_book()
+
+    current_state = {"name": "research_and_evolve", "user_stories_generated": bool(user_stories)}
+    if system_integrity_monitor:
+        evaluation_report = system_integrity_monitor.evaluate_component_status(current_state)
+        suggestions = system_integrity_monitor.suggest_enhancements(evaluation_report)
+        evolution_report = system_integrity_monitor.track_evolution("research_and_evolve", current_state)
+        print(f"Research and Evolve Evaluation: {evaluation_report}")
+        print(f"Research and Evolve Suggestions: {suggestions}")
+        print(f"Research and Evolve Evolution: {evolution_report}")
 
     if not user_stories:
         message = "Research phase did not yield any user stories. Evolution cycle will not start."
@@ -757,13 +768,26 @@ async def talent_scout(keywords: str = None, platforms: str = "bluesky,instagram
     """
     if not keywords:
         return "Error: The 'talent_scout' tool requires a 'keywords' argument. Please specify keywords to search for talent."
-    
+
+    system_integrity_monitor = kwargs.get("system_integrity_monitor")
+
     try:
         platform_list = [p.strip() for p in platforms.split(',')]
         keyword_list = [k.strip() for k in keywords.split(',')]
 
         aggregator = PublicProfileAggregator(platform_names=platform_list, ethical_filters=None)
         profiles = aggregator.search_and_collect(keyword_list)
+
+        current_state = {"name": "talent_scout", "profiles_found": len(profiles)}
+        if system_integrity_monitor:
+            evaluation_report = system_integrity_monitor.evaluate_component_status(current_state)
+            suggestions = system_integrity_monitor.suggest_enhancements(evaluation_report)
+            evolution_report = system_integrity_monitor.track_evolution("talent_scout", current_state)
+
+            print(f"Talent Scout Evaluation: {evaluation_report}")
+            print(f"Talent Scout Suggestions: {suggestions}")
+            print(f"Talent Scout Evolution: {evolution_report}")
+
 
         if not profiles:
             return "No talent found for the given keywords and platforms."
