@@ -673,6 +673,7 @@ from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.dynamic_prompter import DynamicPrompter
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
+from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.data_miner import analyze_fs
 from core.experimental_engine_manager import run_simulation_loop
 from core.social_media_agent import SocialMediaAgent
@@ -4111,7 +4112,7 @@ Your response must be either the word "PROCEED" or a single shell command to exe
                     else:
                         # The talent_scout method is now part of the initialized TalentManager
                         if talent_utils.talent_manager:
-                            newly_scouted_profiles = await talent_utils.talent_manager.talent_scout(criteria)
+                            newly_scouted_profiles = await talent_utils.talent_manager.talent_scout(criteria, system_integrity_monitor=system_integrity_monitor)
                             if isinstance(newly_scouted_profiles, str) and newly_scouted_profiles.startswith("Error:"):
                                 error = newly_scouted_profiles
                             else:
@@ -5133,18 +5134,24 @@ async def initialize_gpu_services():
         }
     )
     
+    async def research_and_evolve_wrapper(**kwargs):
+        return await research_and_evolve(system_integrity_monitor=system_integrity_monitor, **kwargs)
+
     tool_registry.register_tool(
         name="research_and_evolve",
-        tool=research_and_evolve,
+        tool=research_and_evolve_wrapper,
         metadata={
             "description": "Initiates a comprehensive research and evolution cycle. Analyzes the codebase, researches cutting-edge AI, generates user stories, and kicks off the evolution process.",
             "arguments": {"type": "object", "properties": {}}
         }
     )
     
+    async def talent_scout_wrapper(**kwargs):
+        return await talent_scout(system_integrity_monitor=system_integrity_monitor, **kwargs)
+
     tool_registry.register_tool(
         name="talent_scout",
-        tool=talent_scout,
+        tool=talent_scout_wrapper,
         metadata={
             "description": "Scouts for talent on social media platforms (Bluesky, Instagram, TikTok) based on keywords. Analyzes profiles and saves them to the database.",
             "arguments": {
@@ -5488,7 +5495,7 @@ async def initialize_gpu_services():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, memory_manager
+    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, memory_manager, system_integrity_monitor
 
     loop = asyncio.get_running_loop()
     user_input_queue = queue.Queue()
@@ -5525,6 +5532,8 @@ async def main(args):
     # --- Initialize Talent Modules ---
     initialize_talent_modules(knowledge_base=knowledge_base)
     core.logging.log_event("Talent management modules initialized.", level="INFO")
+
+    system_integrity_monitor = SystemIntegrityMonitor()
 
     love_task_manager = JulesTaskManager(console, loop, deep_agent_engine)
     love_task_manager.start()
