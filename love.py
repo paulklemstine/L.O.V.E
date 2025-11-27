@@ -715,6 +715,7 @@ from core.talent_utils import (
 )
 from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.dynamic_prompter import DynamicPrompter
+from core.talent_utils.curator import creators_joy_curator
 from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.data_miner import analyze_fs
@@ -3603,6 +3604,7 @@ My current system state:
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
 - `talent_update <profile_id> --status <new_status> --notes "[notes]"`: Manually update a talent's status and add interaction notes.
+- `joy_curator [limit]`: Run the "Creator's Joy Curator" to get a list of top talent.
 - `strategize`: Analyze the knowledge base and generate a strategic plan.
 - `test_evolution <branch_name>`: Run the test suite in a sandbox for the specified branch.
 - `populate_kb`: Manually repopulate the knowledge base with the latest directives and task statuses.
@@ -4251,6 +4253,30 @@ Your response must be either the word "PROCEED" or a single shell command to exe
                             temp_console = Console(file=io.StringIO())
                             temp_console.print(final_panel)
                             output = temp_console.file.getvalue()
+                elif command == "joy_curator":
+                    limit = int(args[0]) if args else 10
+                    gallery = creators_joy_curator(limit)
+                    if not gallery:
+                        output = "The Creator's Joy Curator found no suitable candidates."
+                    else:
+                        from rich.table import Table
+                        table = Table(title="Creator's Joy Gallery")
+                        table.add_column("Score", style="magenta")
+                        table.add_column("Name", style="cyan")
+                        table.add_column("Intro", style="white")
+                        table.add_column("Proposal", style="green")
+
+                        for item in gallery:
+                            table.add_row(
+                                f"{item['score']:.2f}",
+                                item['display_name'],
+                                item['generated_outputs']['intro_message'],
+                                item['generated_outputs']['collaboration_proposal']
+                            )
+
+                        temp_console = Console(file=io.StringIO())
+                        temp_console.print(table)
+                        output = temp_console.file.getvalue()
 
                 elif command == "talent_engage":
                     if not args:
