@@ -852,8 +852,11 @@ threadpoolctl==3.6.0
     # via scikit-learn
 tiktoken==0.12.0
     # via -r requirements.in
-tokenizers==0.22.1
-    # via transformers
+tokenizers==0.13.3
+    # via
+    #   -r requirements.in
+    #   transformers
+    # NOTE: Pinned to 0.13.3 for prebuilt wheels (no Rust compiler needed)
 toolz==1.1.0
     # via cytoolz
 torch==2.9.1
