@@ -626,16 +626,39 @@ def rank_models():
     return [model["model_id"] for model in sorted_models]
 
 
-async def run_llm(prompt_text, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None):
+async def run_llm(prompt_text: str = None, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None, prompt_key: str = None, prompt_vars: dict = None):
     """
     Executes an LLM call, selecting the model based on the specified purpose.
     It now pins the prompt and response to IPFS and returns a dictionary.
     - 'goal_generation': Prioritizes local, uncensored models.
     - 'review', 'autopilot', 'general', 'analyze_source': Prioritizes powerful, reasoning models.
+    
+    Args:
+        prompt_text: Raw prompt text (optional if prompt_key is provided)
+        purpose: Purpose of the call
+        is_source_code: Whether the prompt contains source code
+        deep_agent_instance: Instance of DeepAgentEngine
+        force_model: Force a specific model ID
+        prompt_key: Key in prompts.yaml to load prompt from
+        prompt_vars: Variables to inject into the prompt template
     """
     global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT, _models_initialized
     if not _models_initialized:
         await refresh_available_models()
+
+    # Resolve prompt from registry if key provided
+    if prompt_key:
+        from core.prompt_registry import get_prompt_registry
+        registry = get_prompt_registry()
+        rendered_prompt = registry.render_prompt(prompt_key, **(prompt_vars or {}))
+        if rendered_prompt:
+            prompt_text = rendered_prompt
+        else:
+            log_event(f"Failed to render prompt for key: {prompt_key}", "ERROR")
+            return {"result": None, "error": f"Invalid prompt key: {prompt_key}"}
+            
+    if not prompt_text:
+        return {"result": None, "error": "No prompt text provided"}
 
 
     console = Console()

@@ -329,10 +329,10 @@ def should_compress(prompt: str, purpose: str = "general") -> bool:
     if estimated_tokens < config["min_tokens"]:
         return False
     
-    # Don't compress certain purposes
-    skip_purposes = ["json_repair", "emotion", "log_squash"]
-    if purpose in skip_purposes:
-        return False
+    # We want to compress EVERYTHING by default now, as per user request.
+    # The previous exclusions are removed to ensure "always compressed".
+    # Only exclude if it breaks functionality (e.g. extremely sensitive exact matching needed).
+    # For now, we assume lingua is safe for all these purposes.
     
     return True
 

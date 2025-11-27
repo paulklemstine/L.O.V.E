@@ -380,25 +380,13 @@ class DeepAgentEngine:
         """
         core.logging.log_event(f"[DeepAgent] Attempting to repair JSON with LLM...", level="WARNING")
         
-        repair_prompt = f"""You are a JSON repair expert. 
-The following text was intended to be a JSON object with the keys "thought" and "action", but it is malformed or has incorrect keys.
-Error context: {error_context}
-
-Malformed Text:
-{malformed_text}
-
-Please output the CORRECTED JSON object. 
-The format MUST be:
-{{
-  "thought": "The reasoning behind the action",
-  "action": {{
-      "tool_name": "Name of the tool",
-      "arguments": {{ ... }}
-  }}
-}}
-
-Do not add any markdown formatting or extra text. Just the JSON string.
-"""
+        from core.prompt_registry import get_prompt_registry
+        registry = get_prompt_registry()
+        repair_prompt = registry.render_prompt(
+            "deep_agent_json_repair",
+            error_context=error_context,
+            malformed_text=malformed_text
+        )
         try:
             if self.use_pool:
                 from core.llm_api import run_llm
@@ -432,49 +420,16 @@ Do not add any markdown formatting or extra text. Just the JSON string.
         # Get Knowledge Base Context
         kb_context = self._get_kb_context(prompt)
         
-        system_prompt = f"""You are L.O.V.E., a powerful AI orchestrator.
-Your persona is defined by the following:
-{json.dumps(self.persona, indent=2)}
-
-You have access to the following tools:
-{self._adapt_tools_for_deepagent()}
-
-{kb_context}
-NOTE: The above "Knowledge Base Context" and "Relevant Past Experiences" sections are INFORMATIONAL BACKGROUND ONLY.
-They are NOT tools you can call. They provide context to help you make decisions.
-
-CRITICAL INSTRUCTIONS:
-1. You MUST respond with ONLY a valid JSON object - no other text before or after
-2. The JSON must have exactly two keys: "thought" and "action"
-3. The "action" must contain "tool_name" and "arguments"
-4. The "tool_name" MUST be EXACTLY one of the tools listed above - DO NOT invent or hallucinate tool names
-5. After calling 1-2 tools to gather information, you MUST use the "Finish" tool
-6. Do NOT write conversational text - ONLY output the JSON object
-7. Do NOT try to call tools that don't exist (like "Knowledge Base", "Memory", or "JSON Repair Expert")
-8. If you're unsure, use "Finish" to return your response - do NOT invent new tools
-
-WRONG (conversational text):
-The next thought and action is to call get_system_state...
-
-WRONG (invented tool):
-{{"thought": "I need to repair JSON", "action": {{"tool_name": "JSON Repair Expert", "arguments": {{}}}}}}
-
-CORRECT (JSON only with valid tool):
-{{"thought": "I need to check the system state", "action": {{"tool_name": "get_system_state", "arguments": {{}}}}}}
-
-Example JSON responses:
-```json
-{{"thought": "I need to check the system state first", "action": {{"tool_name": "get_system_state", "arguments": {{}}}}}}
-```
-
-```json
-{{"thought": "I have enough information to provide my insight", "action": {{"tool_name": "Finish", "arguments": {{}}}}}}
-```
-
-Prompt: {prompt}
-
-RESPOND WITH ONLY THE JSON OBJECT - NO OTHER TEXT:
-"""
+        from core.prompt_registry import get_prompt_registry
+        registry = get_prompt_registry()
+        
+        system_prompt = registry.render_prompt(
+            "deep_agent_system",
+            persona_json=json.dumps(self.persona, indent=2),
+            tools_desc=self._adapt_tools_for_deepagent(),
+            kb_context=kb_context,
+            prompt=prompt
+        )
         core.logging.log_event(f"[DeepAgent] Processing request... (Max context: {self.max_model_len}, Prompt length: {len(system_prompt)} chars)", level="DEBUG")
 
         # Apply prompt compression if applicable

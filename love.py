@@ -5493,10 +5493,22 @@ async def initialize_gpu_services():
                                         return f"Error calling MCP tool '{tool_name_param}': {e}"
                                 return mcp_tool_wrapper
                             
+                            # Define aliases for common GitHub tools to make them friendlier for the agent
+                            mcp_tool_aliases = {
+                                "repos.search_repositories": "search_github_repos",
+                                "repos.get_file_contents": "read_github_file",
+                                "repos.list_commits": "list_github_commits",
+                                "issues.search_issues": "search_github_issues",
+                                "pull_requests.search_pull_requests": "search_github_prs",
+                                "users.search_users": "search_github_users"
+                            }
+
                             # Register the tool
+                            final_tool_name = mcp_tool_aliases.get(tool_name, tool_name)
                             wrapper = create_mcp_tool_wrapper("github", tool_name)
+                            
                             tool_registry.register_tool(
-                                name=tool_name,
+                                name=final_tool_name,
                                 tool=wrapper,
                                 metadata={
                                     "description": tool_description,
