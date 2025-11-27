@@ -182,6 +182,74 @@ def filter_candidates(candidate_profiles, target_preferences, weights=None, top_
     else:
         return scored_candidates
 
+def filter_and_suggest(dataset, preference_criteria):
+    """
+    Filters a dataset based on preference criteria and generates relevant interaction suggestions.
+
+    Args:
+        dataset (list): A list of dictionaries, where each dictionary is an item.
+        preference_criteria (dict): A dictionary of key-value pairs for filtering.
+
+    Returns:
+        tuple: A tuple containing:
+            - list: A filtered subset of the dataset.
+            - list: A list of generated interaction suggestions.
+    """
+    # 1. Filter the dataset using a more Pythonic list comprehension
+    filtered_subset = [
+        item for item in dataset
+        if all(item.get(key) == value for key, value in preference_criteria.items())
+    ]
+
+    # 2. Generate interaction suggestions based on profile characteristics
+    if not filtered_subset:
+        return filtered_subset, ["No talent profiles matched the specified criteria. Consider broadening the preferences."]
+
+    engagement_concepts = []
+
+    # Define suggestion templates with associated triggers
+    suggestion_templates = [
+        {
+            "trigger_key": "interest",
+            "template": "Given {name}'s interest in {interest}, a visit to an avant-garde art gallery could be a stimulating experience."
+        },
+        {
+            "trigger_key": "open_mindedness",
+            "trigger_value": "high",
+            "template": "A conversation about existential philosophy, perhaps referencing a noteworthy philosopher's work, might resonate with {name}, given their high open-mindedness score."
+        },
+        {
+            "trigger_key": "fashion_aptitude",
+            "trigger_value": "strong",
+            "template": "Considering {name}'s strong fashion sense, a curated shopping trip to a district known for its unique boutiques could be a delightful surprise."
+        }
+    ]
+
+    for profile in filtered_subset:
+        generated_concept = False
+        # Iterate through templates to find a match based on profile data
+        for t in suggestion_templates:
+            trigger_key = t.get("trigger_key")
+            trigger_value = t.get("trigger_value")
+            profile_value = profile.get(trigger_key)
+
+            # Check if the trigger condition is met
+            if profile_value and (trigger_value is None or profile_value == trigger_value):
+                try:
+                    concept = t["template"].format(**profile)
+                    engagement_concepts.append(concept)
+                    generated_concept = True
+                    break  # Move to the next profile after generating one suggestion
+                except KeyError:
+                    # This template requires a key that the profile is missing, try the next one
+                    continue
+
+        if not generated_concept:
+            # Fallback for profiles that don't match any specific template
+            engagement_concepts.append(f"A general intellectual discussion with {profile.get('name', 'this individual')} could be a good starting point.")
+
+    return filtered_subset, engagement_concepts
+
 if __name__ == '__main__':
     # 1. Define Candidate Profiles
     candidate_profiles = [
