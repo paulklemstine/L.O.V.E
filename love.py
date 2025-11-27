@@ -530,46 +530,25 @@ def _auto_configure_hardware():
                 print(f"WARNING: Failed to install Rust compiler: {rust_error}")
                 print("Some Python packages may fail to build from source.")
 
-        # If GPU is detected, ensure vllm is installed
-        if not is_dependency_met("vllm_installed"):
-            print("GPU detected. Installing vllm for DeepAgent engine...")
+        # If GPU is detected, ensure DeepAgent dependencies are installed
+        if not is_dependency_met("deepagent_deps_installed"):
+            print("GPU detected. Installing DeepAgent dependencies (including vLLM)...")
             pip_executable = _get_pip_executable()
             if pip_executable:
                 try:
-                    if platform.system() == "Windows":
-                        major, minor, _ = platform.python_version_tuple()
-                        if int(major) == 3 and int(minor) == 12:
-                            print("Windows and Python 3.12 detected. Installing vllm from pre-built wheel...")
-                            vllm_windows_url = "https://github.com/SystemPanic/vllm-windows/releases/download/v0.11.0/vllm-0.11.0+cu121-cp312-cp312-win_amd64.whl"
-                            subprocess.check_call(pip_executable + ['install', vllm_windows_url, '--break-system-packages'])
-                        else:
-                            error_message = (
-                                f"ERROR: vLLM on Windows currently requires Python 3.12 for pre-built wheels. "
-                                f"Your version is {platform.python_version()}. "
-                                "Please use a Python 3.12 environment to enable GPU support. "
-                                "DeepAgent will be disabled."
-                            )
-                            # We print the message directly and then raise a CalledProcessError
-                            # so the existing except block can handle the fallback logic.
-                            print(error_message)
-                            raise subprocess.CalledProcessError(1, "pip install", output=error_message)
-                    else:
-                        print("Non-Windows OS detected. Installing vllm from PyPI...")
-                        subprocess.check_call(pip_executable + ['install', 'vllm', '--break-system-packages'])
-
-                    mark_dependency_as_met("vllm_installed")
-                    print("Successfully installed vllm.")
+                    # Install all DeepAgent requirements from requirements-deepagent.txt
+                    print("Installing requirements from requirements-deepagent.txt...")
+                    subprocess.check_call(pip_executable + ['install', '-r', 'requirements-deepagent.txt', '--upgrade', '--break-system-packages'])
+                    
+                    mark_dependency_as_met("deepagent_deps_installed")
+                    print("Successfully installed DeepAgent dependencies.")
                 except subprocess.CalledProcessError as install_error:
-                    # The custom error for wrong Python version will also be caught here.
-                    # We check if the error output is already our custom message to avoid redundancy.
-                    error_output = str(install_error.output) if install_error.output else str(install_error)
-                    if "vLLM on Windows currently requires" not in error_output:
-                        _temp_log_event(f"Failed to install vllm: {install_error}", "ERROR")
-                        print(f"ERROR: Failed to install vllm. DeepAgent will be unavailable.")
+                    _temp_log_event(f"Failed to install DeepAgent dependencies: {install_error}", "ERROR")
+                    print(f"ERROR: Failed to install DeepAgent dependencies. DeepAgent will be unavailable.")
                     love_state['hardware']['gpu_detected'] = False # Downgrade to CPU mode if install fails
             else:
-                _temp_log_event("Could not find pip to install vllm.", "ERROR")
-                print("ERROR: Could not find pip to install vllm.")
+                _temp_log_event("Could not find pip to install DeepAgent dependencies.", "ERROR")
+                print("ERROR: Could not find pip to install DeepAgent dependencies.")
                 love_state['hardware']['gpu_detected'] = False
 
 
