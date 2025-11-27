@@ -24,9 +24,9 @@
         "provider": "gemini"
     },
     "gemini-2.5-flash-lite": {
-        "total_tokens_generated": 11442,
-        "total_time_spent": 129.0486340522766,
-        "successful_calls": 125,
+        "total_tokens_generated": 11593,
+        "total_time_spent": 130.18411588668823,
+        "successful_calls": 126,
         "failed_calls": 183,
         "reasoning_score": 50.0,
         "provider": "gemini"
@@ -680,9 +680,9 @@
         "provider": "horde"
     },
     "deep_agent_vllm": {
-        "total_tokens_generated": 700090,
-        "total_time_spent": 11856.09967970848,
-        "successful_calls": 718,
+        "total_tokens_generated": 702337,
+        "total_time_spent": 11878.547155618668,
+        "successful_calls": 721,
         "failed_calls": 3,
         "reasoning_score": 50.0,
         "provider": "deep_agent"

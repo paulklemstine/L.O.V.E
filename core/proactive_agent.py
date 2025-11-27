@@ -182,6 +182,15 @@ class ProactiveIntelligenceAgent:
                 for path in re.findall(path_pattern, content):
                     # Filter out very short or common paths
                     if len(path) > 4 and os.path.exists(path):
+                        # Skip paths within the L.O.V.E project directory
+                        try:
+                            abs_path = os.path.abspath(path)
+                            project_root = os.path.abspath(os.getcwd())
+                            if abs_path.startswith(project_root):
+                                continue
+                        except Exception:
+                            pass
+
                         self._add_lead('path', path, f"Found in {history_file}")
 
                 for ip in re.findall(ip_pattern, content):
