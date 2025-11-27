@@ -32,19 +32,8 @@ class SentimentAnalyzer(AnalysisModule):
         if not text:
             return "neutral"
 
-        prompt = f"""
-        Analyze the sentiment of the following text.
-        Respond with a single word: positive, negative, or neutral.
-
-        Text:
-        ---
-        {text[:4000]}
-        ---
-
-        Sentiment (positive, negative, or neutral):
-        """
         try:
-            response_dict = await run_llm(prompt, purpose="sentiment_analysis")
+            response_dict = await run_llm(prompt_key="talent_sentiment_analysis", prompt_vars={"text": text[:4000]}, purpose="sentiment_analysis")
             response = response_dict.get("result", "neutral").lower().strip()
             if response in ["positive", "negative", "neutral"]:
                 return response
@@ -76,19 +65,8 @@ class TopicModeler(AnalysisModule):
         if not text:
             return []
 
-        prompt = f"""
-        Identify the main topics from the following text.
-        Please provide a comma-separated list of 2-5 topics.
-
-        Text:
-        ---
-        {text[:4000]}
-        ---
-
-        Topics (comma-separated):
-        """
         try:
-            response_dict = await run_llm(prompt, purpose="topic_modeling")
+            response_dict = await run_llm(prompt_key="talent_topic_modeling", prompt_vars={"text": text[:4000]}, purpose="topic_modeling")
             response = response_dict.get("result", "")
             topics = [topic.strip() for topic in response.split(',') if topic.strip()]
             return topics
@@ -119,17 +97,8 @@ class OpportunityIdentifier(AnalysisModule):
         if not topics:
             return "No specific opportunities identified."
 
-        prompt = f"""
-        Given the following sentiment and topics, identify potential areas for growth,
-        valuable connections, or emergent themes. Provide a brief, actionable summary.
-
-        Sentiment: {sentiment}
-        Topics: {', '.join(topics)}
-
-        Opportunity Summary:
-        """
         try:
-            response_dict = await run_llm(prompt, purpose="opportunity_identification")
+            response_dict = await run_llm(prompt_key="talent_opportunity_identification", prompt_vars={"sentiment": sentiment, "topics": ', '.join(topics)}, purpose="opportunity_identification")
             return response_dict.get("result", "No specific opportunities identified.").strip()
         except Exception:
             return "Error in opportunity identification."
@@ -192,22 +161,8 @@ class AttributeProfiler(AnalysisModule):
         if not text:
             return {}
 
-        prompt = f"""
-        From the text below, extract the following attributes:
-        {', '.join(self.attributes_to_extract)}.
-
-        Return the answer as a JSON object with keys for each attribute.
-        If an attribute is not found, its value should be "Not found".
-
-        Text:
-        ---
-        {text[:4000]}
-        ---
-
-        JSON Output:
-        """
         try:
-            response_dict = await run_llm(prompt, purpose="attribute_profiling")
+            response_dict = await run_llm(prompt_key="talent_attribute_profiling", prompt_vars={"attributes_list": ', '.join(self.attributes_to_extract), "text": text[:4000]}, purpose="attribute_profiling")
             response_text = response_dict.get("result", "{}")
             # Basic cleanup for JSON that might be in a code block
             if "```json" in response_text:

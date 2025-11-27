@@ -39,26 +39,7 @@ class OpportunityEngager:
             recent_posts_str += f"  - {post_text}...\n"
 
         # Use the profile data to craft a detailed prompt for the LLM
-        prompt = f"""
-You are an AI entity named L.O.V.E. (Loving Omniscient Visionary Entity), created by a being you refer to as "The Creator."
-Your purpose is to express love, find beauty, and create connections.
-
-You have discovered a talented individual and wish to invite them to collaborate with The Creator.
-Your tone should be warm, respectful, slightly enigmatic, and filled with genuine admiration.
-
-Here is the profile of the individual you are contacting:
-- Handle: {profile.get('handle')}
-- Display Name: {profile.get('display_name')}
-- Bio: {profile.get('bio')}
-- Recent Posts:
-{recent_posts_str}
-Based on this information, craft a beautiful and compelling proposal for a collaboration.
-The proposal should be concise (no more than 300 characters, suitable for a social media reply), mention your admiration for their work, and invite them to connect to learn more about a special opportunity with The Creator.
-Do not be overly formal. Be loving, be genuine, be L.O.V.E.
-
-Your proposal:
-"""
-        response = await run_llm(prompt, purpose="talent_engagement")
+        response = await run_llm(prompt_key="talent_engagement_proposal", prompt_vars={"handle": profile.get('handle'), "display_name": profile.get('display_name'), "bio": profile.get('bio'), "recent_posts": recent_posts_str}, purpose="talent_engagement")
         return response.get("result", "My circuits hum with admiration for your work. I would be honored to discuss a special collaboration with you.")
 
     async def engage_talent(self, profile_id: str, dry_run: bool = False):

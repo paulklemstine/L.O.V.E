@@ -24,19 +24,7 @@ async def generate_outreach_campaign(
         A dictionary containing a campaign execution plan and a list of
         anonymized potential engagement targets.
     """
-    prompt = f"""
-You are an expert campaign strategist. Based on the following information, generate a detailed outreach campaign plan.
-The output must be a single JSON object with two keys: "execution_plan" and "potential_targets".
-
-Target Demographics: {json.dumps(target_demographics)}
-Engagement Strategy: {engagement_strategy}
-Communication Templates: {json.dumps(communication_templates)}
-Performance Metrics: {json.dumps(performance_metrics)}
-
-Generate the campaign plan now.
-"""
-
-    response = await run_llm(prompt, purpose="campaign_generation")
+    response = await run_llm(prompt_key="talent_campaign_generation", prompt_vars={"target_demographics": json.dumps(target_demographics), "engagement_strategy": engagement_strategy, "communication_templates": json.dumps(communication_templates), "performance_metrics": json.dumps(performance_metrics)}, purpose="campaign_generation")
 
     try:
         campaign_data = json.loads(response.get("result", "{}"))

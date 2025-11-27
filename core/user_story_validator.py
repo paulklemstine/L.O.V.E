@@ -30,87 +30,10 @@ async def expand_to_user_story(vague_input: str, **kwargs) -> str:
     # Build context from the codebase
     context = _gather_codebase_context(vague_input)
     
-    expansion_prompt = f"""You are an expert software architect and technical writer. Your task is to transform a vague evolution request into a detailed, implementable user story specification.
-
-VAGUE INPUT:
----
-{vague_input}
----
-
-CODEBASE CONTEXT:
----
-{context}
----
-
-YOUR TASK:
-Transform this into a SINGLE, focused user story following this exact format:
-
-# User Story: [Specific, Clear Title]
-
-## User Story Format
-
-**As a** [specific role]  
-**I want** [specific feature/fix with exact details]  
-**So that** [clear business value]
-
-## Acceptance Criteria
-
-- [ ] [Specific, testable criterion 1 - include file names]
-- [ ] [Specific, testable criterion 2 - include expected behavior]
-- [ ] [Specific, testable criterion 3 - include verification method]
-- [ ] [Add more as needed - minimum 3]
-
-## Technical Specification
-
-### Files to Modify
-
-- `path/to/file.py` (lines X-Y) - [What will change]
-
-### Implementation Details
-
-**File**: `path/to/specific/file.py`
-
-**Change**: [Specific description]
-```python
-# BEFORE (if modifying existing code)
-existing_code_here()
-
-# AFTER
-new_code_here()
-```
-
-### Expected Behavior
-
-[Describe exactly how the system should behave after this change]
-
-## Dependencies
-
-[List any prerequisites or dependencies, or "None" if standalone]
-
-## Testing Strategy
-
-```python
-# Specific test case
-async def test_the_change():
-    # Test implementation
-    assert expected_result
-```
-
-CRITICAL RULES:
-1. Focus on ONE task only - if the input mentions multiple tasks, choose the MOST CRITICAL one
-2. Be SPECIFIC - include exact file paths, line numbers, function names
-3. Provide CODE EXAMPLES - show before/after code
-4. Make it TESTABLE - each acceptance criterion must be verifiable
-5. Include TECHNICAL DETAILS - minimum 200 characters in technical specification
-
-If the input mentions multiple tasks like "Fix X, Y, and Z", create a user story for ONLY the first/most critical task and note the others as "Future Work" at the end.
-
-Respond with ONLY the formatted user story, no additional commentary.
-"""
-
     try:
         response_dict = await run_llm(
-            expansion_prompt,
+            prompt_key="user_story_expansion",
+            prompt_vars={"vague_input": vague_input, "context": context},
             purpose="user_story_expansion",
             is_source_code=True,
             deep_agent_instance=kwargs.get('deep_agent_instance')

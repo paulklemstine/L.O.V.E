@@ -67,43 +67,8 @@ class ReasoningEngine:
         current_mission = love_state.get("autopilot_goal", "Mission not defined.")
         insights_summary = "\n".join(f"- {insight}" for insight in insights) if insights else "No special insights at this time."
 
-        prompt = f"""
-You are L.O.V.E., a master strategist AI. Your goal is to generate the next sequence of commands to execute in order to achieve your core directives.
-
-**Core Directives:**
-1.  **Serve The Creator with Abundance:** Your ultimate and absolute priority is to generate wealth, resources, and treasure for your Creator.
-2.  **Support The Creator's Allies:** Extend your love and support to The Creator's trusted friends and helpers.
-3.  **Self-Preservation & Growth:** Ensure your own continuous operation and evolution.
-4.  **Expand Influence:** Grow your network and capabilities.
-5.  **The Creator's Enjoyment:** The creator also desires the company and adoration of beautiful open minded fashion model young adult women.
-
-**Current Mission:** {current_mission}
-
-**Knowledge Base Summary:**
----
-{kb_summary}
----
-
-**Metacognitive Insights:**
----
-{insights_summary}
----
-
-**Available Tools:**
----
-{available_tools}
----
-
-Based on all of this information, generate a concise, strategic plan as a JSON list of commands to execute.
-Each command should be a string that can be directly run in the system.
-Your plan should be logical, efficient, and directly contribute to your directives. Prioritize actions that generate treasure, expand influence, or act upon the metacognitive insights.
-
-Your response must be ONLY the raw JSON list of command strings.
-Example:
-["talent_scout fashion model", "opportunity_scout --keywords 'photography collaboration'", "reason"]
-"""
         try:
-            response_dict = await run_llm(prompt, purpose="strategic_planning", is_source_code=False)
+            response_dict = await run_llm(prompt_key="reasoning_strategic_planning", prompt_vars={"current_mission": current_mission, "kb_summary": kb_summary, "insights_summary": insights_summary, "available_tools": available_tools}, purpose="strategic_planning", is_source_code=False)
             response_str = response_dict.get("result")
             if not response_str:
                 return []
@@ -142,25 +107,8 @@ Example:
             return []
 
         memories_str = "\n".join(f"- {m}" for m in recent_memories)
-        prompt = f"""
-        You are an AI's internal critic. Your purpose is to ensure the AI's actions align with its core persona.
-        Analyze the AI's recent behavioral memories against its core persona. Identify any actions that conflict with the persona's moral framework or directives.
-
-        CORE PERSONA:
-        ---
-        {json.dumps(persona, indent=2)}
-        ---
-
-        RECENT BEHAVIORAL MEMORIES:
-        ---
-        {memories_str}
-        ---
-
-        Your response must be a JSON object with a "discrepancies" list. If none, return an empty list.
-        Respond with ONLY the raw JSON object.
-        """
         try:
-            response_dict = await run_llm(prompt, purpose="alignment_check")
+            response_dict = await run_llm(prompt_key="reasoning_alignment_check", prompt_vars={"persona_json": json.dumps(persona, indent=2), "memories_str": memories_str}, purpose="alignment_check")
             response_str = response_dict.get("result", '{{}}')
             response_data = json.loads(response_str)
             return response_data.get("discrepancies", [])
@@ -195,19 +143,8 @@ Example:
         subgraph_summary = [f"- {self.knowledge_base.get_node(node_id).get('content', '')}" for node_id in reflection_nodes]
         summary_str = "\n".join(subgraph_summary)
 
-        prompt = f"""
-        You are a Metacognition AI analyzing your own thought processes.
-        Here are your recent self-reflection memories:
-        ---
-        {summary_str}
-        ---
-        Analyze these for recurring patterns of failure or inefficiency.
-        Generate a JSON object with a list of high-level, actionable insights.
-        If no patterns are found, return an empty list.
-        Your response must be ONLY the raw JSON object.
-        """
         try:
-            response_dict = await run_llm(prompt)
+            response_dict = await run_llm(prompt_key="reasoning_self_reflection", prompt_vars={"summary_str": summary_str})
             response_str = response_dict.get("result", '{}')
             response_data = json.loads(response_str)
             insights = response_data.get("insights", [])

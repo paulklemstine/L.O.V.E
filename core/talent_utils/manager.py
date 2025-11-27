@@ -213,9 +213,8 @@ class TalentManager:
         log_event(f"Talent scout initiated with criteria: {criteria}", level='INFO')
 
         # Use LLM to generate keywords and platforms from criteria
-        prompt = f"Based on the following criteria, generate a JSON object with 'keywords' (a list of strings) and 'platforms' (a list of strings from ['instagram', 'bluesky', 'tiktok']). Criteria: {criteria}"
         try:
-            response_dict = await run_llm(prompt, purpose="talent_scouting_keywords")
+            response_dict = await run_llm(prompt_key="talent_scouting_keywords", prompt_vars={"criteria": criteria}, purpose="talent_scouting_keywords")
             search_params = json.loads(response_dict.get("result", "{}"))
             keywords = search_params.get("keywords", [])
             platforms = search_params.get("platforms", [])
@@ -267,10 +266,8 @@ class TalentManager:
 
         # This is a placeholder. A real implementation would use a web search tool.
         # For now, we'll simulate finding some information and adding it to the KB.
-        prompt = f"You are a web search engine. Summarize information about '{query}' and identify key entities and relationships."
-
         try:
-            response_dict = await run_llm(prompt, purpose="web_request_simulation")
+            response_dict = await run_llm(prompt_key="talent_web_request_simulation", prompt_vars={"query": query}, purpose="web_request_simulation")
             summary = response_dict.get("result", "")
         except Exception as e:
             log_event(f"Error during web request simulation: {e}", level='ERROR')
@@ -310,21 +307,8 @@ class TalentManager:
             newly_scouted_profiles = await self.talent_scout(current_criteria)
 
             # 2. Analyze the results from the latest scout
-            analysis_prompt = f"""
-            Analysis of Talent Scouting Results:
-            Initial Topic: '{topic}'
-            Previous Criteria: '{current_criteria}'
-            Scouted Profiles (summary): {json.dumps(newly_scouted_profiles, indent=2)}
-
-            Based on the results, how can the search criteria be improved to find more relevant talent?
-            - Are there new keywords we should add?
-            - Should we focus on different platforms?
-            - Should the criteria be more specific or more broad?
-
-            Please provide a new, improved criteria string for the next iteration. Return only the new criteria string.
-            """
             try:
-                response_dict = await run_llm(analysis_prompt, purpose="research_evolution")
+                response_dict = await run_llm(prompt_key="talent_research_evolution", prompt_vars={"topic": topic, "current_criteria": current_criteria, "scouted_profiles_json": json.dumps(newly_scouted_profiles, indent=2)}, purpose="research_evolution")
                 new_criteria = response_dict.get("result")
 
                 if not new_criteria or new_criteria == current_criteria:

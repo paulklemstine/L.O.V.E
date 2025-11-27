@@ -33,21 +33,8 @@ class LLMEnhancedScorer(BaseScorer):
         if not full_text:
             return 0.0
 
-        prompt = f"""
-        {self.evaluation_prompt}
-
-        Analyze the following public posts from a creative professional. Based *only* on the text provided, provide a score from 1 to 10, where 1 is low and 10 is high. Your response must be a single integer.
-
-        Public Posts:
-        ---
-        {full_text[:4000]}
-        ---
-
-        Score (1-10):
-        """
-
         try:
-            response_dict = await run_llm(prompt, purpose="scoring", force_model=None)
+            response_dict = await run_llm(prompt_key="talent_scoring_evaluation", prompt_vars={"evaluation_prompt": self.evaluation_prompt, "full_text": full_text[:4000]}, purpose="scoring", force_model=None)
             response = response_dict.get("result", "")
             score_str = ''.join(filter(str.isdigit, response))
             if score_str:

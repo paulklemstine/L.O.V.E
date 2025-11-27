@@ -213,70 +213,58 @@ async def _synthesize_goal_with_llm(analysis_data: dict, deep_agent_instance=Non
     """Uses an LLM to synthesize all analysis data into a single actionable goal."""
     
     # Build the synthesis prompt
-    prompt = """You are an AI system analyzer. Based on the following analysis of the L.O.V.E. system, determine the SINGLE MOST IMPORTANT evolution goal to pursue.
-
-Analysis Data:
-
-"""
+    # Construct the analysis data string for the prompt
+    analysis_data_str = ""
     
     # Add recent errors
     if analysis_data["recent_errors"]:
-        prompt += "## Recent Errors:\n"
+        analysis_data_str += "## Recent Errors:\n"
         for error in analysis_data["recent_errors"]:
-            prompt += f"- {error['message']} (occurred {error['count']} times)\n"
-        prompt += "\n"
+            analysis_data_str += f"- {error['message']} (occurred {error['count']} times)\n"
+        analysis_data_str += "\n"
     
     # Add TODO items
     if analysis_data["todo_items"]:
-        prompt += "## TODO/FIXME Items:\n"
+        analysis_data_str += "## TODO/FIXME Items:\n"
         for todo in analysis_data["todo_items"][:10]:  # Limit to top 10
-            prompt += f"- {todo['file']}:{todo['line']} - {todo['text']}\n"
-        prompt += "\n"
+            analysis_data_str += f"- {todo['file']}:{todo['line']} - {todo['text']}\n"
+        analysis_data_str += "\n"
     
     # Add KB insights
     if analysis_data["kb_insights"]:
-        prompt += "## Knowledge Base Insights:\n"
+        analysis_data_str += "## Knowledge Base Insights:\n"
         for insight in analysis_data["kb_insights"][:5]:  # Limit to top 5
-            prompt += f"- {insight['content']}\n"
-        prompt += "\n"
+            analysis_data_str += f"- {insight['content']}\n"
+        analysis_data_str += "\n"
     
     # Add performance issues
     if analysis_data["performance_issues"]:
-        prompt += "## System Performance Issues:\n"
+        analysis_data_str += "## System Performance Issues:\n"
         for issue in analysis_data["performance_issues"]:
-            prompt += f"- {issue}\n"
-        prompt += "\n"
+            analysis_data_str += f"- {issue}\n"
+        analysis_data_str += "\n"
     
     # Add system state
     if analysis_data["system_state"]:
-        prompt += f"## System State:\n{json.dumps(analysis_data['system_state'], indent=2)}\n\n"
-    
-    prompt += """
-Based on this analysis, provide a SINGLE, SPECIFIC, ACTIONABLE evolution goal.
-
-Requirements:
-- Be specific and concrete (not vague like "improve performance")
-- Focus on the highest priority issue
-- Make it actionable (something that can be implemented)
-- Keep it concise (one sentence)
-
-Examples of good goals:
-- "Fix the recurring JSON parsing error in DeepAgentEngine by adding robust error recovery"
-- "Implement async file operations in filesystem.py to improve I/O performance"
-- "Add comprehensive error handling to the Bluesky posting mechanism"
-
-Your goal (one sentence only):"""
+        analysis_data_str += f"## System State:\n{json.dumps(analysis_data['system_state'], indent=2)}\n\n"
     
     try:
         # Use the LLM pool if available
+        # Use the LLM pool if available
         if deep_agent_instance and hasattr(deep_agent_instance, 'use_pool') and deep_agent_instance.use_pool:
             from core.llm_api import run_llm
-            result_dict = await run_llm(prompt, purpose="evolution_goal_synthesis", deep_agent_instance=None)
+            result_dict = await run_llm(prompt_key="evolution_goal_synthesis", prompt_vars={"analysis_data_str": analysis_data_str}, purpose="evolution_goal_synthesis", deep_agent_instance=None)
             goal = result_dict.get("result", "").strip()
         elif deep_agent_instance:
             # Use the deep agent's generate method
-            goal = await deep_agent_instance.generate(prompt)
-            goal = goal.strip()
+            # We need to render the prompt manually here since we can't use run_llm with prompt_key easily
+            # without importing PromptRegistry, but let's try to stick to run_llm if possible.
+            # Actually, let's just use run_llm even if use_pool is False, as run_llm handles it.
+            # But wait, the original code had a specific branch for deep_agent_instance.generate.
+            # Let's assume run_llm is the preferred way now.
+            from core.llm_api import run_llm
+            result_dict = await run_llm(prompt_key="evolution_goal_synthesis", prompt_vars={"analysis_data_str": analysis_data_str}, purpose="evolution_goal_synthesis", deep_agent_instance=None)
+            goal = result_dict.get("result", "").strip()
         else:
             # Fallback: use a simple heuristic
             goal = _fallback_goal_determination(analysis_data)

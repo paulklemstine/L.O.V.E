@@ -40,54 +40,8 @@ async def transform_text_to_structured_records(input_text, contextual_metadata):
     if not input_text or not input_text.strip():
         return []
 
-    prompt = f"""
-You are an AI data extraction expert. Your task is to analyze the provided text and extract structured information based on the given schema.
-
-**Extraction Schema:**
-{json.dumps(EXTRACTION_SCHEMA, indent=2)}
-
-**Input Text:**
----
-{input_text}
----
-
-**Instructions:**
-1.  Analyze the "Input Text" and identify all entities and relationships that match the "Extraction Schema".
-2.  For each identified item, create a JSON object.
-3.  The output must be a JSON list of these objects. Each object should have a "type" (e.g., "entity", "relationship"), a "sub_type" (e.g., "ip_address", "CONNECTS_TO"), and a "data" field containing the extracted information.
-4.  For entities, the "data" field should contain the extracted value and any other relevant attributes.
-5.  For relationships, the "data" field must include "from" and "to" identifiers.
-6.  If the text is not relevant or contains no extractable information, return an empty list.
-
-**Example Entity Output:**
-```json
-{{
-  "type": "entity",
-  "sub_type": "ip_address",
-  "data": {{
-    "value": "192.168.1.101"
-  }}
-}}
-```
-
-**Example Relationship Output:**
-```json
-{{
-  "type": "relationship",
-  "sub_type": "RUNS_ON",
-  "data": {{
-    "from": "OpenSSH 8.2p1",
-    "to": "192.168.1.101"
-  }}
-}}
-```
-
-Your response must be only the JSON list of extracted records.
-
-**JSON Output:**
-"""
     try:
-        response_dict = await run_llm(prompt, purpose="knowledge_extraction")
+        response_dict = await run_llm(prompt_key="knowledge_extraction_structured", prompt_vars={"extraction_schema": json.dumps(EXTRACTION_SCHEMA, indent=2), "input_text": input_text}, purpose="knowledge_extraction")
         response_text = response_dict.get("result", "[]")
 
         # Clean the response text

@@ -76,23 +76,8 @@ class MemoryFoldingAgent(SpecialistAgent):
 
         full_interaction = "\n".join(chain_content)
 
-        prompt = f"""
-You are a memory architect for an autonomous AI. Your task is to "fold" a long chain of interaction memories into a single, structured, high-level summary. This process distills wisdom from experience.
-
-Analyze the following sequential interaction history:
-{full_interaction}
-
-Based on this history, generate a structured JSON summary with the following schema:
-{{
-  "Episodic Memory": "A high-level, one-paragraph summary of the key events, decisions, and outcomes of the entire interaction. This is the main narrative.",
-  "Working Memory": "A concise, one-sentence summary of the final state or conclusion of the interaction. What was the ultimate result?",
-  "Tool Memory": "A summary of any tools that were used. Describe what worked, what failed, and any lessons learned about the tools' application. If no tools were used, state 'No tools were used.'"
-}}
-
-Your response MUST be only the raw JSON object.
-"""
         try:
-            response = await run_llm(prompt, is_source_code=False, force_model=None)
+            response = await run_llm(prompt_key="memory_folding_compression", prompt_vars={"full_interaction": full_interaction}, is_source_code=False, force_model=None)
             summary_json = json.loads(response.get("result", "{}"))
             return summary_json
         except (json.JSONDecodeError, TypeError) as e:

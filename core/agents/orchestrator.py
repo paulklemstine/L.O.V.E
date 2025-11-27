@@ -120,19 +120,8 @@ class Orchestrator:
         """
         Uses an LLM to classify the goal into 'Procedural' or 'Open-Ended'.
         """
-        prompt = f"""
-        You are a task classification expert. Your job is to classify a high-level goal as either "Procedural" or "Open-Ended".
-
-        - "Procedural" tasks are well-defined and can be solved by a static, step-by-step plan using a known set of specialist agents. Examples: "Scout for talent", "Analyze system logs for errors", "Summarize recent memory chains".
-        - "Open-Ended" goals are complex, ambiguous, or require novel solutions where the path is not known in advance. These tasks require a dynamic reasoning process that can discover new tools or strategies. Examples: "Find a new revenue stream for The Creator", "Discover new methods for abundance", "Determine the best way to improve my own code".
-
-        Goal: "{goal}"
-
-        Based on this goal, is the task "Procedural" or "Open-Ended"?
-        Respond with ONLY the classification.
-        """
         try:
-            classification = await run_llm(prompt, force_model=None)
+            classification = await run_llm(prompt_key="orchestrator_goal_classification", prompt_vars={"goal": goal}, force_model=None)
             return classification.get("result", "").strip()
         except Exception as e:
             print(f"Error during goal classification: {e}")
@@ -146,35 +135,8 @@ class Orchestrator:
         print(f"Supervisor: Generating plan for goal: {goal}")
 
         available_tools = self.tool_registry.get_formatted_tool_metadata()
-        prompt = f"""
-You are a Supervisor agent. Your task is to decompose a high-level goal into a step-by-step plan for a team of specialist agents and tools.
-{available_tools}
-
-The high-level goal is: "{goal}"
-
-You must respond with ONLY a JSON array of steps. Each step must be an object with two keys:
-1. "tool_name": The name of the tool or specialist agent to use for this step.
-2. "arguments": An object containing the parameters for that tool.
-
-You can pass the result of a previous step to a subsequent step using a placeholder string like `{{{{step_X_result}}}}`, where X is the 1-based index of the step.
-
-Example Goal: "Review and compress the agent's recent memory."
-Example JSON Response:
-[
-  {{
-    "tool_name": "MemoryFoldingAgent",
-    "arguments": {{
-      "task_details": {{
-        "min_length": 5
-      }}
-    }}
-  }}
-]
-
-Now, generate the plan for the given goal.
-"""
         try:
-            response = await run_llm(prompt, is_source_code=False, force_model=None)
+            response = await run_llm(prompt_key="orchestrator_plan_generation", prompt_vars={"available_tools": available_tools, "goal": goal}, is_source_code=False, force_model=None)
             # Clean the response to extract only the JSON part
             json_match = re.search(r'\[.*\]', response.get("result", ""), re.DOTALL)
             if not json_match:

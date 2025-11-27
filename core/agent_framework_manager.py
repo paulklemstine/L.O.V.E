@@ -55,45 +55,7 @@ async def create_and_run_workflow(task: str, tool_registry: ToolRegistry) -> str
     maf_tools = get_maf_tools(tool_registry)
 
     # Step 1: Use LLM to generate the workflow plan
-    planning_prompt = f"""
-You are a master workflow architect. Based on the following complex task, design a multi-agent workflow.
-Your output must be a JSON object with two keys: "agents" and "workflow".
-
-The "agents" key should be a list of agent definitions, each with:
-- "name": A unique name for the agent (e.g., "researcher").
-- "instructions": The system message for the agent.
-
-The "workflow" key should be a list of steps, each with:
-- "from": The name of the agent sending the message.
-- "to": The name of the agent receiving the message.
-The first step should always have "user" as the "from" field. The final step should have "user" as the "to" field.
-
-Task: "{task}"
-
-Example:
-Task: "Research the current price of Bitcoin and write a short summary."
-{{
-  "agents": [
-    {{
-      "name": "researcher",
-      "instructions": "You are a research agent. You find information on the web. Use the 'execute' tool with curl to get data from a crypto API."
-    }},
-    {{
-      "name": "writer",
-      "instructions": "You are a writing agent. You summarize information."
-    }}
-  ],
-  "workflow": [
-    {{ "from": "user", "to": "researcher" }},
-    {{ "from": "researcher", "to": "writer" }},
-    {{ "from": "writer", "to": "user" }}
-  ]
-}}
-
-Now, design the workflow for the given task.
-"""
-
-    plan_dict = await run_llm(planning_prompt, purpose="workflow_planning", force_model=None)
+    plan_dict = await run_llm(prompt_key="agent_framework_workflow_planning", prompt_vars={"task": task}, purpose="workflow_planning", force_model=None)
     try:
         plan = json.loads(plan_dict.get("result", "{}"))
     except json.JSONDecodeError:
@@ -112,19 +74,7 @@ Now, design the workflow for the given task.
                 await ctx.yield_output(f"Error: Agent definition for '{current_agent_name}' not found.")
                 return
 
-            agent_prompt = f"""
-{current_agent_def['instructions']}
-You have received the following message:
----
-{input_msg}
----
-You have access to the following tools:
-{tool_registry.get_formatted_tool_metadata()}
-Based on the message and your instructions, determine the next step.
-You can either call a tool or respond with a message to the next agent.
-Your response should be the tool call in the specified JSON format or a natural language message.
-"""
-            response_dict = await run_llm(agent_prompt, purpose="agent_execution", force_model=None)
+            response_dict = await run_llm(prompt_key="agent_framework_agent_execution", prompt_vars={"instructions": current_agent_def['instructions'], "input_msg": input_msg, "tools_metadata": tool_registry.get_formatted_tool_metadata()}, purpose="agent_execution", force_model=None)
             response_text = response_dict.get("result", "I am unable to proceed.")
 
             is_final_step = any(step for step in plan.get("workflow", []) if step["from"] == current_agent_name and step["to"] == "user")
