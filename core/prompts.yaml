@@ -21,6 +21,7 @@ deep_agent_system: |
   6. Do NOT write conversational text - ONLY output the JSON object
   7. Do NOT try to call tools that don't exist (like "Knowledge Base", "Memory", or "JSON Repair Expert")
   8. If you're unsure, use "Finish" to return your response - do NOT invent new tools
+  9. FOR SOCIAL MEDIA POSTS (post_to_bluesky): The "text" argument MUST be the actual content to be posted (e.g., "Hello world! #AI"). Do NOT include your reasoning, plans, or meta-commentary (e.g., "I will now post this...") in the "text" argument. The "text" should be ready for public viewing.
 
   WRONG (conversational text):
   The next thought and action is to call get_system_state...
