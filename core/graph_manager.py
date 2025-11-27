@@ -212,7 +212,7 @@ class GraphDataManager:
             A string summarizing the most important aspects of the knowledge base.
         """
         if not self.graph:
-            return "The knowledge base is currently empty."
+            return "The knowledge base is currently empty.", {}
 
         priority_order = [
             'mission', 'task', 'opportunity', 'directive',

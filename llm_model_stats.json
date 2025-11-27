@@ -3,7 +3,7 @@
         "total_tokens_generated": 0,
         "total_time_spent": 0.0,
         "successful_calls": 0,
-        "failed_calls": 45,
+        "failed_calls": 164,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
@@ -11,15 +11,15 @@
         "total_tokens_generated": 374,
         "total_time_spent": 15.283308267593384,
         "successful_calls": 3,
-        "failed_calls": 48,
+        "failed_calls": 167,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
     "gemini-2.5-flash": {
-        "total_tokens_generated": 1208,
-        "total_time_spent": 29.913973093032837,
-        "successful_calls": 10,
-        "failed_calls": 49,
+        "total_tokens_generated": 1361,
+        "total_time_spent": 37.24603295326233,
+        "successful_calls": 11,
+        "failed_calls": 168,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
@@ -27,7 +27,7 @@
         "total_tokens_generated": 10789,
         "total_time_spent": 116.78777575492859,
         "successful_calls": 111,
-        "failed_calls": 55,
+        "failed_calls": 175,
         "reasoning_score": 50.0,
         "provider": "gemini"
     },
@@ -240,9 +240,9 @@
         "provider": "vllm"
     },
     "x-ai/grok-4.1-fast:free": {
-        "total_tokens_generated": 5273,
-        "total_time_spent": 872.2326672077179,
-        "successful_calls": 44,
+        "total_tokens_generated": 15733,
+        "total_time_spent": 2277.6429691314697,
+        "successful_calls": 163,
         "failed_calls": 0,
         "reasoning_score": 50.0,
         "provider": "openrouter"
@@ -680,9 +680,9 @@
         "provider": "horde"
     },
     "deep_agent_vllm": {
-        "total_tokens_generated": 268960,
-        "total_time_spent": 7088.852484703064,
-        "successful_calls": 432,
+        "total_tokens_generated": 684442,
+        "total_time_spent": 11653.282801389694,
+        "successful_calls": 697,
         "failed_calls": 3,
         "reasoning_score": 50.0,
         "provider": "deep_agent"
@@ -862,5 +862,29 @@
         "failed_calls": 0,
         "reasoning_score": 50.0,
         "provider": "horde"
+    },
+    "aphrodite/Marcjoni/QuasiStarSynth-12B": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "koboldcpp/Llama-3.2-3B-Instruct-IQ3_M": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "horde"
+    },
+    "tngtech/tng-r1t-chimera:free": {
+        "total_tokens_generated": 0,
+        "total_time_spent": 0.0,
+        "successful_calls": 0,
+        "failed_calls": 0,
+        "reasoning_score": 50.0,
+        "provider": "openrouter"
     }
 }

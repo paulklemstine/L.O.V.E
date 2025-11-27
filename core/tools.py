@@ -180,28 +180,19 @@ Evolution is now in progress.
         return f"✅ Evolution initiated with validated user story:\n\n{goal[:200]}..."
 
 
-async def post_to_bluesky(text: str = None, image: Image.Image = None, **kwargs) -> str:
-    """Posts a message with an optional image to Bluesky."""
+async def post_to_bluesky(text: str = None, image: Image.Image = None, image_path: str = None, **kwargs) -> str:
+    """
+    Posts a message with an optional image to Bluesky.
+    
+    Args:
+        text: The content of the post.
+        image: Optional PIL Image object.
+        image_path: Optional path to an image file.
+    """
     if not text:
         return "Error: The 'post_to_bluesky' tool requires a 'text' argument. Please specify the text content to post."
-    try:
-        response = post_to_bluesky_with_image(text, image)
-        return f"Successfully posted to Bluesky: {response}"
-    except Exception as e:
-        return f"Error posting to Bluesky: {e}"
 
-async def finish_post(content: str = None, image_path: str = None, **kwargs) -> str:
-    """
-    Publishes the final post to Bluesky.
-    This tool should be used as the final step in a social media workflow.
-    
-    CRITICAL: The 'content' argument must contain ONLY the final post text that will be visible to users.
-    Do NOT include any internal reasoning, meta-commentary, or explanations about the process.
-    """
-    if not content:
-        return "Error: The 'finish_post' tool requires a 'content' argument. Please specify the text content to post."
-    
-    # Validate that content doesn't contain internal reasoning
+    # Validate that content doesn't contain internal reasoning (merged from finish_post)
     reasoning_indicators = [
         "i have attempted",
         "i attempted",
@@ -215,27 +206,31 @@ async def finish_post(content: str = None, image_path: str = None, **kwargs) -> 
         "providers failed"
     ]
     
-    content_lower = content.lower()
+    content_lower = text.lower()
     for indicator in reasoning_indicators:
         if indicator in content_lower:
             return (
                 f"Error: The content appears to contain internal reasoning or meta-commentary. "
-                f"The 'finish_post' tool should only receive the FINAL POST CONTENT that users will see. "
+                f"The 'post_to_bluesky' tool should only receive the FINAL POST CONTENT that users will see. "
                 f"Please provide only the actual post text, without any explanations about the process. "
                 f"Detected phrase: '{indicator}'"
             )
-    
+
     try:
-        image = None
-        if image_path:
+        # Handle image path if provided
+        if image_path and not image:
             try:
-                image = Image.open(image_path)
+                if os.path.exists(image_path):
+                    image = Image.open(image_path)
+                else:
+                    return f"Error: Image path does not exist: {image_path}"
             except Exception as e:
                 return f"Error opening image at {image_path}: {e}"
-        
-        return await post_to_bluesky(content, image)
+
+        response = post_to_bluesky_with_image(text, image)
+        return f"Successfully posted to Bluesky: {response}"
     except Exception as e:
-        return f"Error executing finish_post: {e}"
+        return f"Error posting to Bluesky: {e}"
 
 def read_file(filepath: str = None, **kwargs) -> str:
     """Reads the content of a file."""

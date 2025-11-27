@@ -39,14 +39,35 @@ class BlueskyAPIHandler(SocialMediaAPIHandler):
     async def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Posts content to Bluesky."""
         from functools import partial
+        from PIL import Image
         import core.logging
+        import os
         try:
             loop = asyncio.get_running_loop()
             content = payload.get('content')
-            image = payload.get('image')
-            core.logging.log_event(f"Bluesky post handler called. Content length: {len(content) if content else 0}, Has image: {image is not None}", "INFO")
+            image_input = payload.get('image')
+            
+            core.logging.log_event(f"Bluesky post handler called. Content length: {len(content) if content else 0}, Has image: {image_input is not None}", "INFO")
+            
+            # Handle image - could be a PIL Image or a file path
+            image = None
+            if image_input:
+                if isinstance(image_input, str):
+                    # It's a file path - load the image
+                    if os.path.exists(image_input):
+                        core.logging.log_event(f"Loading image from path: {image_input}", "INFO")
+                        image = Image.open(image_input)
+                    else:
+                        core.logging.log_event(f"Image path does not exist: {image_input}", "WARNING")
+                elif hasattr(image_input, 'save'):
+                    # It's already a PIL Image
+                    core.logging.log_event(f"Using PIL Image directly. Image type: {type(image_input)}", "INFO")
+                    image = image_input
+                else:
+                    core.logging.log_event(f"Unknown image type: {type(image_input)}", "WARNING")
+            
             if image:
-                core.logging.log_event(f"Posting to Bluesky with image. Image type: {type(image)}", "INFO")
+                core.logging.log_event(f"Posting to Bluesky with image. Image size: {image.size}", "INFO")
                 # Use partial instead of lambda for proper variable capture
                 await loop.run_in_executor(None, partial(post_to_bluesky_with_image, content, image))
                 core.logging.log_event(f"Successfully posted to Bluesky with image", "INFO")

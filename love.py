@@ -5143,7 +5143,7 @@ async def initialize_gpu_services():
         name="post_to_bluesky",
         tool=post_to_bluesky,
         metadata={
-            "description": "Posts a message with an optional image to Bluesky social media.",
+            "description": "Posts a status update to Bluesky with optional image. Handles content validation.",
             "arguments": {
                 "type": "object",
                 "properties": {
@@ -5151,34 +5151,16 @@ async def initialize_gpu_services():
                         "type": "string",
                         "description": "The text content of the post"
                     },
+                    "image_path": {
+                        "type": "string",
+                        "description": "Optional path to an image file to attach"
+                    },
                     "image": {
                         "type": "object",
-                        "description": "PIL Image object to attach to the post (optional)"
+                        "description": "PIL Image object (internal use)"
                     }
                 },
                 "required": ["text"]
-            }
-        }
-    )
-
-    tool_registry.register_tool(
-        name="finish_post",
-        tool=finish_post,
-        metadata={
-            "description": "Publishes the final social media post to Bluesky. Use this tool to PUBLISH the final content. The 'content' argument must ONLY contain the text to be posted, NO reasoning or meta-commentary.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": "The final text content to be posted."
-                    },
-                    "image_path": {
-                        "type": "string",
-                        "description": "Optional path to an image file to attach."
-                    }
-                },
-                "required": ["content"]
             }
         }
     )

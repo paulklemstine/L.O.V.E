@@ -38,8 +38,30 @@ class SocialMediaReActEngine(GeminiReActEngine):
 
         async def generate_image_for_post(prompt: str):
             """Generates an image for a social media post using a textual prompt."""
+            import os
+            import tempfile
+            from datetime import datetime
             from core.image_api import generate_image
-            return await generate_image(prompt)
+            
+            # Generate the image
+            image = await generate_image(prompt)
+            
+            if image is None:
+                return None
+            
+            # Create images directory if it doesn't exist
+            images_dir = os.path.join(os.getcwd(), "generated_images")
+            os.makedirs(images_dir, exist_ok=True)
+            
+            # Save image with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            image_filename = f"social_post_{timestamp}.png"
+            image_path = os.path.join(images_dir, image_filename)
+            
+            # Save the image
+            image.save(image_path, format='PNG')
+            
+            return image_path
 
         async def decide_on_reply(post_text: str, comment_text: str):
             """Decides whether to reply to a comment."""
