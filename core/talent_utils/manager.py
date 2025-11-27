@@ -113,7 +113,7 @@ class TalentManager:
         # Add a timestamp to track when the profile was last updated
         profile_data['last_saved_at'] = datetime.utcnow().isoformat()
         self.profiles[anonymized_id] = profile_data
-        self._save_profiles()  # This is inefficient, but simple and robust for now.
+        # self._save_profiles()  # This is inefficient, but simple and robust for now.
 
         # --- Knowledge Base Integration ---
         if self.knowledge_base:
@@ -176,6 +176,11 @@ class TalentManager:
             return "Status updated successfully."
         return "Error: Profile not found."
 
+    def save_all_profiles(self):
+        """Saves all profiles currently in memory to the database."""
+        self._save_profiles()
+        log_event(f"Saved {len(self.profiles)} profiles to the talent database.", level='INFO')
+
     def list_profiles(self):
         """
         Returns a list of summaries for all saved profiles.
@@ -237,14 +242,14 @@ class TalentManager:
             return f"Error: Profile aggregation failed: {e}"
 
         # Save the collected profiles
-        saved_count = 0
         newly_scouted_profiles = []
         for profile in profiles:
             self.save_profile(profile)
             newly_scouted_profiles.append(profile)
-            saved_count += 1
 
-        result_message = f"Talent scout finished. Found and saved {saved_count} profiles."
+        self.save_all_profiles() # Save all profiles at once
+
+        result_message = f"Talent scout finished. Found and saved {len(newly_scouted_profiles)} profiles."
         log_event(result_message, level='INFO')
         return newly_scouted_profiles
 
