@@ -28,7 +28,7 @@ def _get_config():
         "enabled": _compression_enabled,
         "rate": float(os.environ.get("LLMLINGUA_RATE", "0.5")),
         "model": os.environ.get("LLMLINGUA_MODEL", "microsoft/llmlingua-2-xlm-roberta-large-meetingbank"),
-        "min_tokens": int(os.environ.get("LLMLINGUA_MIN_TOKENS", "500")),
+        "min_tokens": int(os.environ.get("LLMLINGUA_MIN_TOKENS", "50")),
         "force_tokens": [t.strip() for t in os.environ.get("LLMLINGUA_FORCE_TOKENS", "").split(",") if t.strip()],
         "cache_size": int(os.environ.get("LLMLINGUA_CACHE_SIZE", "100")),
     }

@@ -24,9 +24,9 @@
         "provider": "gemini"
     },
     "gemini-2.5-flash-lite": {
-        "total_tokens_generated": 11179,
-        "total_time_spent": 122.87654566764832,
-        "successful_calls": 119,
+        "total_tokens_generated": 11442,
+        "total_time_spent": 129.0486340522766,
+        "successful_calls": 125,
         "failed_calls": 183,
         "reasoning_score": 50.0,
         "provider": "gemini"
