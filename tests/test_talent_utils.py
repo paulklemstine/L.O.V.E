@@ -128,6 +128,8 @@ class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
         result = manager.save_profile(profile_1)
         self.assertIn("Successfully saved profile", result)
 
+        manager.save_all_profiles()
+
         # 2. Test retrieving the profile
         retrieved_profile = manager.get_profile('anon_123')
         self.assertIsNotNone(retrieved_profile)
@@ -142,6 +144,8 @@ class TestTalentUtils(unittest.IsolatedAsyncioTestCase):
             'display_name': 'Test User Two'
         }
         manager.save_profile(profile_2)
+
+        manager.save_all_profiles()
 
         profile_list = manager.list_profiles()
         self.assertEqual(len(profile_list), 2)

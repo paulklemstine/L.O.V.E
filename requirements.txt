@@ -666,7 +666,7 @@ pydantic-settings==2.12.0
     # via
     #   agent-framework-core
     #   openai
-zipp==3.21.0
+zipp
     # via importlib-metadata
 
 # LLMLingua 2 - Prompt Compression
@@ -800,7 +800,7 @@ scipy==1.16.3
     # via
     #   scikit-learn
     #   sentence-transformers
-sentence-transformers==2.7.0
+sentence-transformers
     # via -r requirements.in
     # NOTE: Pinned to 2.7.0 for compatibility with transformers 4.30.2
 shellingham==1.5.4
@@ -878,7 +878,7 @@ tqdm==4.67.1
     #   openevolve
     #   sentence-transformers
     #   transformers
-transformers==4.30.2
+transformers
     # via sentence-transformers
     # NOTE: Pinned to 4.30.2 for LLMLingua 2 compatibility (newer versions have breaking changes)
 trio==0.32.0
@@ -982,7 +982,7 @@ xxhash==3.6.0
     # via datasets
 yarl==1.22.0
     # via aiohttp
-zipp==3.23.0
+zipp
     # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
