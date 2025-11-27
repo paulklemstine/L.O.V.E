@@ -35,7 +35,7 @@ datasets
 openevolve
 sentence-transformers<3.0  # Compatible with transformers 4.30.2
 transformers==4.30.2  # Pinned for LLMLingua 2 compatibility
-tokenizers>=0.13.0,<0.14.0  # Prebuilt wheels available, no Rust compiler needed
+# tokenizers - using system-installed version
 torch
 torchvision
 torchaudio
