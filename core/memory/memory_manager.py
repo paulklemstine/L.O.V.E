@@ -81,10 +81,11 @@ class MemoryManager:
     Manages the agent's agentic memory system, which is integrated directly
     into the central knowledge graph managed by GraphDataManager.
     """
-    def __init__(self, graph_data_manager: GraphDataManager, ui_panel_queue=None):
+    def __init__(self, graph_data_manager: GraphDataManager, ui_panel_queue=None, kb_file_path: str = None):
         # Working Memory for the current task context
         self.working_memory = {}
         self.ui_panel_queue = ui_panel_queue
+        self.kb_file_path = kb_file_path
 
         # The MemoryManager now uses the central GraphDataManager
         self.graph_data_manager = graph_data_manager
@@ -109,13 +110,13 @@ class MemoryManager:
         self.memory_folding_agent = MemoryFoldingAgent(llm_runner=run_llm)
 
     @classmethod
-    async def create(cls, graph_data_manager: GraphDataManager, ui_panel_queue=None):
+    async def create(cls, graph_data_manager: GraphDataManager, ui_panel_queue=None, kb_file_path: str = None):
         """
         Asynchronously creates and initializes a MemoryManager instance.
         This factory method is the designated way to create a MemoryManager,
         as it handles the asynchronous loading of the FAISS index.
         """
-        instance = cls(graph_data_manager, ui_panel_queue)
+        instance = cls(graph_data_manager, ui_panel_queue, kb_file_path)
         await instance._load_faiss_data()
         return instance
 
@@ -373,6 +374,11 @@ class MemoryManager:
 
         # 6. Find and create links to related memories
         await self._find_and_link_related_memories(memory_note)
+
+        # 7. Autosave the graph if a path is provided
+        if self.kb_file_path:
+            print(f"Autosaving knowledge graph to {self.kb_file_path}...")
+            self.graph_data_manager.save_graph(self.kb_file_path)
 
         return memory_note
 

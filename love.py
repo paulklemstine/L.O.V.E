@@ -5381,7 +5381,7 @@ async def main(args):
     websocket_server_manager.start()
 
     # Asynchronously initialize the MemoryManager
-    memory_manager = await MemoryManager.create(knowledge_base, ui_panel_queue)
+    memory_manager = await MemoryManager.create(knowledge_base, ui_panel_queue, kb_file_path=KNOWLEDGE_BASE_FILE)
 
     mcp_manager = MCPManager(console)
 
