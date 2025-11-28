@@ -19,7 +19,7 @@ def _select_model(vram):
         return "Qwen/Qwen2-32B-Instruct-AWQ"
     elif vram >= 20 * 1024:
         return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
-    elif vram >= 6.5 * 1024:
+    elif vram >= 8.5 * 1024:
         return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
     elif vram >= 4.5 * 1024:
         return "Sreenington/Phi-3-mini-4k-instruct-AWQ"
