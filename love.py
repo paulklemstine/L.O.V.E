@@ -436,6 +436,18 @@ def _auto_configure_hardware():
     _temp_log_event("Performing hardware auto-configuration check...", "INFO")
     print("Performing hardware auto-configuration check...")
 
+    # Add CPU core count detection
+    try:
+        import psutil
+        cpu_count = psutil.cpu_count(logical=True)
+        love_state['hardware']['cpu_count'] = cpu_count
+        _temp_log_event(f"Detected {cpu_count} CPU cores.", "INFO")
+        print(f"Detected {cpu_count} CPU cores.")
+    except Exception as e:
+        love_state['hardware']['cpu_count'] = 0
+        _temp_log_event(f"Could not detect CPU cores: {e}", "WARNING")
+        print(f"WARNING: Could not detect CPU cores: {e}")
+
     # Check for NVIDIA GPU
     try:
         result = subprocess.run(
