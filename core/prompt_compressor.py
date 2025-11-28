@@ -96,6 +96,7 @@ class PromptCompressor:
             self.compressor = LLMLinguaCompressor(
                 model_name=self.config["model"],
                 device_map="cpu",  # Use CPU to avoid GPU memory conflicts
+                use_llmlingua2=True,
             )
             
             load_time = (time.time() - start_time) * 1000

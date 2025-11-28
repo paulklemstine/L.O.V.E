@@ -43,4 +43,4 @@ langextract
 monero-python
 openai
 faiss-cpu
-llmlingua>=0.2.0  # Prompt compression
+llmlingua==0.2.2 # Prompt compression
