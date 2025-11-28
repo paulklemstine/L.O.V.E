@@ -41,7 +41,12 @@ def post_to_bluesky_with_image(text: str, image: Image.Image = None):
         upload = client.com.atproto.repo.upload_blob(img_byte_arr.read())
         embed = models.AppBskyEmbedImages.Main(images=[models.AppBskyEmbedImages.Image(alt='', image=upload.blob)])
 
-    return client.send_post(text=text, embed=embed)
+    # Process text with RichText to detect facets (hashtags, mentions, links)
+    from atproto import RichText
+    rich_text = RichText(text=text)
+    rich_text.detect_facets(client)
+
+    return client.send_post(text=rich_text, embed=embed)
 
 def get_own_posts(limit=20):
     """Fetches the most recent posts for the authenticated user."""
