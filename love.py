@@ -3848,7 +3848,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                     else:
                         # The talent_scout method is now part of the initialized TalentManager
                         if talent_utils.talent_manager:
-                            newly_scouted_profiles = await talent_utils.talent_manager.talent_scout(criteria, system_integrity_monitor=system_integrity_monitor)
+                            newly_scouted_profiles = await talent_utils.talent_manager.talent_scout(criteria)
                             if isinstance(newly_scouted_profiles, str) and newly_scouted_profiles.startswith("Error:"):
                                 error = newly_scouted_profiles
                             else:
