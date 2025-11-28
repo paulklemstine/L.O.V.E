@@ -4937,6 +4937,122 @@ async def initialize_gpu_services():
             "arguments": {"type": "object", "properties": {}}
         }
     )
+
+    # --- MCP Tool Registration ---
+    # We need to access the global mcp_manager. Since it's initialized in main(),
+    # we can access it via the module scope or pass it in.
+    # For now, we'll assume it's available in the global scope of love.py.
+    
+    async def mcp_start_wrapper(server_name: str, **kwargs) -> str:
+        """Starts an MCP server."""
+        try:
+            from love import mcp_manager
+            # Check for required env vars
+            server_config = mcp_manager.server_configs.get(server_name)
+            env_vars = {}
+            if server_config and 'requires_env' in server_config:
+                for var_name in server_config['requires_env']:
+                    if var_name in os.environ:
+                        env_vars[var_name] = os.environ[var_name]
+                    else:
+                        return f"Error: Missing required environment variable '{var_name}' for server '{server_name}'."
+            
+            return mcp_manager.start_server(server_name, env_vars)
+        except Exception as e:
+            return f"Error starting MCP server '{server_name}': {e}"
+
+    tool_registry.register_tool(
+        name="mcp_start",
+        tool=mcp_start_wrapper,
+        metadata={
+            "description": "Starts a specified MCP server (e.g., 'github', 'brave-search').",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "server_name": {"type": "string", "description": "Name of the server to start"}
+                },
+                "required": ["server_name"]
+            }
+        }
+    )
+
+    async def mcp_stop_wrapper(server_name: str, **kwargs) -> str:
+        """Stops an MCP server."""
+        try:
+            from love import mcp_manager
+            return mcp_manager.stop_server(server_name)
+        except Exception as e:
+            return f"Error stopping MCP server '{server_name}': {e}"
+
+    tool_registry.register_tool(
+        name="mcp_stop",
+        tool=mcp_stop_wrapper,
+        metadata={
+            "description": "Stops a running MCP server.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "server_name": {"type": "string", "description": "Name of the server to stop"}
+                },
+                "required": ["server_name"]
+            }
+        }
+    )
+
+    async def mcp_list_wrapper(**kwargs) -> str:
+        """Lists running MCP servers."""
+        try:
+            from love import mcp_manager
+            servers = mcp_manager.list_running_servers()
+            if not servers:
+                return "No MCP servers are currently running."
+            return f"Running MCP servers: {json.dumps(servers, indent=2)}"
+        except Exception as e:
+            return f"Error listing MCP servers: {e}"
+
+    tool_registry.register_tool(
+        name="mcp_list",
+        tool=mcp_list_wrapper,
+        metadata={
+            "description": "Lists all currently running MCP servers.",
+            "arguments": {"type": "object", "properties": {}}
+        }
+    )
+
+    async def mcp_call_wrapper(server_name: str, tool_name: str, arguments: dict = {}, **kwargs) -> str:
+        """Calls a tool on an MCP server."""
+        try:
+            from love import mcp_manager
+            # Auto-start logic
+            running_servers = mcp_manager.list_running_servers()
+            if not any(s['name'] == server_name for s in running_servers):
+                # Try to auto-start
+                start_res = await mcp_start_wrapper(server_name)
+                if "Error" in start_res:
+                    return f"Failed to auto-start server '{server_name}': {start_res}"
+            
+            request_id = mcp_manager.call_tool(server_name, tool_name, arguments)
+            response = mcp_manager.get_response(server_name, request_id)
+            return json.dumps(response, indent=2)
+        except Exception as e:
+            return f"Error calling MCP tool '{tool_name}' on '{server_name}': {e}"
+
+    tool_registry.register_tool(
+        name="mcp_call",
+        tool=mcp_call_wrapper,
+        metadata={
+            "description": "Calls a specific tool on a running MCP server.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "server_name": {"type": "string", "description": "Name of the MCP server"},
+                    "tool_name": {"type": "string", "description": "Name of the tool to call"},
+                    "arguments": {"type": "object", "description": "JSON arguments for the tool"}
+                },
+                "required": ["server_name", "tool_name"]
+            }
+        }
+    )
     
     core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, None (fallback)", "INFO")
     # -----------------------------------------
