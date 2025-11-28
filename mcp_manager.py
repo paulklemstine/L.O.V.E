@@ -164,13 +164,15 @@ class MCPManager:
 
             # MCP uses a specific JSON structure
             # Note: MCP/v1 specifies 'jsonrpc':'2.0', id, method, and params.
-            # However, the core protocol is about stdin/stdout communication. We'll
-            # adapt if a different RPC format is needed, but JSON-RPC is the standard.
+            # To call a tool, the method is 'tools/call' and the tool name is passed in 'params'.
             mcp_request = {
                 "jsonrpc": "2.0",
                 "id": request_id,
-                "method": tool_name,
-                "params": params
+                "method": "tools/call",
+                "params": {
+                    "name": tool_name,
+                    "arguments": params
+                }
             }
 
             try:
