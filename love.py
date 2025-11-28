@@ -719,6 +719,7 @@ from ipfs_manager import IPFSManager
 from sandbox import Sandbox
 from filesystem import analyze_filesystem
 from ipfs import pin_to_ipfs_sync
+from core.multiplayer import MultiplayerManager
 from threading import Thread, Lock, RLock
 import uuid
 import yaml
@@ -3579,7 +3580,7 @@ async def analyze_creator_sentiment(text, deep_agent_instance=None):
         return {{"sentiment": "neutral", "emotions": []}}
 
 
-async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, task_manager, kb, talent_manager, deep_agent_engine=None, social_media_agent=None):
+async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, task_manager, kb, talent_manager, deep_agent_engine=None, social_media_agent=None, multiplayer_manager=None):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
@@ -4078,6 +4079,16 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                 env_vars[var_name] = os.environ[var_name]
                         if not error:
                             output = mcp_manager.start_server(server_name, env_vars)
+                elif command == "publish_knowledge":
+                    if multiplayer_manager:
+                        description = " ".join(args) if args else "Manual export"
+                        cid = await multiplayer_manager.publish_knowledge(description)
+                        if cid:
+                            output = f"Knowledge graph published successfully. CID: {cid}"
+                        else:
+                            error = "Failed to publish knowledge graph."
+                    else:
+                        error = "MultiplayerManager is not initialized."
                 elif command == "mcp_stop":
                     if not args:
                         error = "Usage: mcp_stop <server_name>"
@@ -5229,7 +5240,7 @@ async def initialize_gpu_services():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, memory_manager, system_integrity_monitor
+    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, memory_manager, system_integrity_monitor, multiplayer_manager
 
     loop = asyncio.get_running_loop()
     user_input_queue = queue.Queue()
@@ -5263,6 +5274,10 @@ async def main(args):
         terminal_width = get_terminal_width()
         ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
+    # --- Initialize Multiplayer Manager ---
+    multiplayer_manager = MultiplayerManager(console, knowledge_base, ipfs_manager, love_state)
+    await multiplayer_manager.start()
+
     # --- Initialize Talent Modules ---
     initialize_talent_modules(knowledge_base=knowledge_base)
     core.logging.log_event("Talent management modules initialized.", level="INFO")
@@ -5293,7 +5308,8 @@ async def main(args):
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     social_media_agent = SocialMediaAgent(loop)
     asyncio.create_task(social_media_agent.run())
-    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent))
+    asyncio.create_task(social_media_agent.run())
+    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent, multiplayer_manager))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader())
     asyncio.create_task(run_qa_evaluations(loop))
@@ -5346,6 +5362,7 @@ async def run_safely():
         if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
         if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
         if 'websocket_server_manager' in globals() and websocket_server_manager: websocket_server_manager.stop()
+        if 'multiplayer_manager' in globals() and multiplayer_manager: await multiplayer_manager.stop()
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
         sys.exit(0)
     except Exception as e:
@@ -5380,6 +5397,7 @@ async def run_safely():
         if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
         if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
         if 'websocket_server_manager' in globals() and websocket_server_manager: websocket_server_manager.stop()
+        if 'multiplayer_manager' in globals() and multiplayer_manager: await multiplayer_manager.stop()
         # Use our new, more robust critical event logger
         log_critical_event(f"UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\n{full_traceback}", console)
 
