@@ -41,11 +41,7 @@ def post_to_bluesky_with_image(text: str, image: Image.Image = None):
         upload = client.com.atproto.repo.upload_blob(img_byte_arr.read())
         embed = models.AppBskyEmbedImages.Main(images=[models.AppBskyEmbedImages.Image(alt='', image=upload.blob)])
 
-    return client.com.atproto.repo.create_record(
-        repo=client.me.did,
-        collection=models.ids.AppBskyFeedPost,
-        record=models.AppBskyFeedPost.Main(text=text, embed=embed, created_at=client.get_current_time_iso())
-    )
+    return client.send_post(text=text, embed=embed)
 
 def get_own_posts(limit=20):
     """Fetches the most recent posts for the authenticated user."""
