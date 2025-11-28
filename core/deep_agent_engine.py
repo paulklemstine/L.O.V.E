@@ -617,6 +617,11 @@ class DeepAgentEngine:
                         return thought
 
                     if tool_name == "invoke_gemini_react_engine":
+                        if "prompt" not in arguments:
+                            error_msg = "Error: 'prompt' argument is required for invoke_gemini_react_engine. Please provide the goal or question for the sub-agent."
+                            core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
+                            return error_msg
+
                         core.logging.log_event(f"[DeepAgent] Invoking GeminiReActEngine with args: {arguments}", level="DEBUG")
                         result = await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
                         core.logging.log_event(f"[DeepAgent] GeminiReActEngine returned: {str(result)[:200]}", level="DEBUG")
