@@ -608,13 +608,13 @@ def rank_models():
         provider = stats.get("provider", "unknown")
         if provider == "gemini":
             final_score += 3000
-            log_event(f"Applying priority boost to Gemini model: {model_id}", "INFO")
+            log_event(f"Applying priority boost to Gemini model: {model_id}", "DEBUG")
         elif provider == "openrouter":
             final_score += 2000
-            log_event(f"Applying priority boost to OpenRouter model: {model_id}", "INFO")
+            log_event(f"Applying priority boost to OpenRouter model: {model_id}", "DEBUG")
         elif provider == "vllm":
             final_score += 1000
-            log_event(f"Applying priority boost to vLLM model: {model_id}", "INFO")
+            log_event(f"Applying priority boost to vLLM model: {model_id}", "DEBUG")
         elif provider == "horde":
             # Horde is lowest priority
             pass
@@ -713,7 +713,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     f"[LLM API] Compressed prompt for {purpose}: "
                     f"{compression_result['original_tokens']} → {compression_result['compressed_tokens']} tokens "
                     f"({compression_result['ratio']:.1%} compression) in {compression_result['time_ms']:.0f}ms",
-                    "INFO"
+                    "DEBUG"
                 )
 
         local_model_ids = []

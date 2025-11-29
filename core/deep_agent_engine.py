@@ -665,7 +665,7 @@ class DeepAgentEngine:
                     f"[DeepAgent] Compressed prompt: {compression_result['original_tokens']} → "
                     f"{compression_result['compressed_tokens']} tokens "
                     f"({compression_result['ratio']:.1%} compression) in {compression_result['time_ms']:.0f}ms",
-                    level="INFO"
+                    level="DEBUG"
                 )
 
         try:
