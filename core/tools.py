@@ -22,14 +22,7 @@ import uuid
 from core.researcher import generate_evolution_book
 from core.evolution_state import set_user_stories, clear_evolution_state
 from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterBundle
-from core.talent_utils.intelligence_synthesizer import (
-    IntelligenceSynthesizer,
-    SentimentAnalyzer,
-    TopicModeler,
-    OpportunityIdentifier,
-    NetworkAnalyzer,
-    AttributeProfiler,
-)
+
 import io
 from rich.table import Table
 from datetime import datetime
