@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <title>L.O.V.E. WebVM Full Edition (Multi-Volume)</title>
     <script src="https://cxrtnc.leaningtech.com/1.2.2/cx.js"></script>
+    <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css">
     <style>
         body {
             background-color: #000;
@@ -16,10 +19,9 @@
             flex-direction: column;
         }
 
-        #console {
+        #terminal {
             flex: 1;
             width: 100%;
-            overflow: auto;
         }
 
         #status {
@@ -27,22 +29,36 @@
             border-bottom: 1px solid #333;
             color: #888;
         }
-
-        /* Make console focusable and handle paste */
-        #console {
-            outline: none;
-        }
     </style>
 </head>
 
 <body>
     <div id="status">Initializing WebVM...</div>
-    <div id="console" tabindex="0"></div>
+    <div id="terminal"></div>
     <script>
+        const term = new Terminal({
+            theme: { background: '#000000', foreground: '#00ff00' },
+            cursorBlink: true,
+            fontSize: 14,
+            fontFamily: 'Courier New, monospace',
+            allowProposedApi: true
+        });
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+
+        term.open(document.getElementById('terminal'));
+        fitAddon.fit();
+        window.onresize = () => fitAddon.fit();
+
+        term.write('Welcome to L.O.V.E. WebVM Full Edition (Multi-Volume)\r\n');
+        term.write('Loading system in 3 separate volumes...\r\n');
+        term.write('Paste is enabled - use Ctrl+Shift+V or right-click to paste\r\n\r\n');
+
         async function run() {
             try {
                 // Load base system
                 document.getElementById('status').innerText = "Loading base system...";
+                term.write('Loading base system (OS + Python)...\r\n');
                 const baseDevice = await CheerpX.HttpBytesDevice.create("base.ext2");
                 const baseOverlay = await CheerpX.OverlayDevice.create(
                     baseDevice,
@@ -51,6 +67,7 @@
 
                 // Load packages volume
                 document.getElementById('status').innerText = "Loading Python packages...";
+                term.write('Loading Python packages...\r\n');
                 const packagesDevice = await CheerpX.HttpBytesDevice.create("packages.ext2");
                 const packagesOverlay = await CheerpX.OverlayDevice.create(
                     packagesDevice,
@@ -59,6 +76,7 @@
 
                 // Load app volume
                 document.getElementById('status').innerText = "Loading L.O.V.E application...";
+                term.write('Loading L.O.V.E application code...\r\n');
                 const appDevice = await CheerpX.HttpBytesDevice.create("app.ext2");
                 const appOverlay = await CheerpX.OverlayDevice.create(
                     appDevice,
@@ -66,8 +84,9 @@
                 );
 
                 document.getElementById('status').innerText = "Initializing CheerpX...";
+                term.write('\r\nInitializing virtual machine...\r\n');
 
-                // Initialize CheerpX with all three volumes and CORS proxy for networking
+                // Initialize CheerpX with all three volumes
                 const cx = await CheerpX.Linux.create({
                     mounts: [
                         { type: "ext2", path: "/", dev: baseOverlay },
@@ -75,57 +94,28 @@
                         { type: "ext2", path: "/root/L.O.V.E", dev: appOverlay },
                         { type: "devs", path: "/dev" },
                         { type: "proc", path: "/proc" }
-                    ],
-                    // Enable networking via CORS proxy
-                    networkInterface: {
-                        authKey: "",  // Empty for public CORS proxy
-                        controlUrl: "https://cxrtnc.leaningtech.com/1.2.2/",
-                        loginUrlCb: (url) => {
-                            console.log("Network login URL:", url);
-                        },
-                        stateUpdateCb: (state) => {
-                            console.log('Network state:', state);
-                            if (state === 6) {
-                                document.getElementById('status').innerText = "Network: Connected";
-                            }
-                        }
+                    ]
+                });
+
+                document.getElementById('status').innerText = "System Ready";
+                term.write('System initialized. Starting shell...\r\n\r\n');
+
+                // Set up I/O between xterm and CheerpX
+                term.onData((data) => {
+                    for (let i = 0; i < data.length; i++) {
+                        cx.input(data.charCodeAt(i));
                     }
                 });
 
-                document.getElementById('status').innerText = "CheerpX Initialized. Booting System...";
-
-                // Attach console to the div
-                const consoleDiv = document.getElementById('console');
-                await cx.setConsole(consoleDiv);
-
-                // Enable paste functionality
-                consoleDiv.addEventListener('paste', async (e) => {
-                    e.preventDefault();
-                    const text = e.clipboardData.getData('text');
-                    if (text && cx) {
-                        // Send each character to the console
-                        for (let char of text) {
-                            // Use the internal input method if available
-                            if (cx._consoleInputCallback) {
-                                cx._consoleInputCallback(char.charCodeAt(0));
-                            }
-                        }
-                    }
-                });
-
-                // Focus console on click
-                consoleDiv.addEventListener('click', () => {
-                    consoleDiv.focus();
-                });
-
-                // Auto-focus console
-                consoleDiv.focus();
+                cx.output = (code) => {
+                    term.write(String.fromCharCode(code));
+                };
 
                 // Run bash login shell
                 await cx.run("/bin/bash", ["-l"], {
                     env: [
                         "HOME=/root",
-                        "TERM=xterm",
+                        "TERM=xterm-256color",
                         "PYTHONUNBUFFERED=1",
                         "PYTHONPATH=/opt/python-packages"
                     ]
@@ -135,6 +125,7 @@
             } catch (e) {
                 document.getElementById('status').innerText = "Error: " + e;
                 console.error(e);
+                term.write('\r\nError: ' + e + '\r\n');
             }
         }
 
