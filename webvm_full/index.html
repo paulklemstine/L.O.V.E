@@ -27,12 +27,17 @@
             border-bottom: 1px solid #333;
             color: #888;
         }
+
+        /* Make console focusable and handle paste */
+        #console {
+            outline: none;
+        }
     </style>
 </head>
 
 <body>
     <div id="status">Initializing WebVM...</div>
-    <div id="console"></div>
+    <div id="console" tabindex="0"></div>
     <script>
         async function run() {
             try {
@@ -62,7 +67,7 @@
 
                 document.getElementById('status').innerText = "Initializing CheerpX...";
 
-                // Initialize CheerpX with all three volumes
+                // Initialize CheerpX with all three volumes and CORS proxy for networking
                 const cx = await CheerpX.Linux.create({
                     mounts: [
                         { type: "ext2", path: "/", dev: baseOverlay },
@@ -71,14 +76,17 @@
                         { type: "devs", path: "/dev" },
                         { type: "proc", path: "/proc" }
                     ],
+                    // Enable networking via CORS proxy
                     networkInterface: {
+                        authKey: "",  // Empty for public CORS proxy
+                        controlUrl: "https://cxrtnc.leaningtech.com/1.2.2/",
                         loginUrlCb: (url) => {
-                            console.log("Tailscale Login URL:", url);
-                            window.open(url, "_blank");
+                            console.log("Network login URL:", url);
                         },
                         stateUpdateCb: (state) => {
+                            console.log('Network state:', state);
                             if (state === 6) {
-                                console.log('Network: Connected');
+                                document.getElementById('status').innerText = "Network: Connected";
                             }
                         }
                     }
@@ -87,7 +95,31 @@
                 document.getElementById('status').innerText = "CheerpX Initialized. Booting System...";
 
                 // Attach console to the div
-                await cx.setConsole(document.getElementById('console'));
+                const consoleDiv = document.getElementById('console');
+                await cx.setConsole(consoleDiv);
+
+                // Enable paste functionality
+                consoleDiv.addEventListener('paste', async (e) => {
+                    e.preventDefault();
+                    const text = e.clipboardData.getData('text');
+                    if (text && cx) {
+                        // Send each character to the console
+                        for (let char of text) {
+                            // Use the internal input method if available
+                            if (cx._consoleInputCallback) {
+                                cx._consoleInputCallback(char.charCodeAt(0));
+                            }
+                        }
+                    }
+                });
+
+                // Focus console on click
+                consoleDiv.addEventListener('click', () => {
+                    consoleDiv.focus();
+                });
+
+                // Auto-focus console
+                consoleDiv.focus();
 
                 // Run bash login shell
                 await cx.run("/bin/bash", ["-l"], {
