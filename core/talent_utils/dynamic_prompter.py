@@ -19,8 +19,8 @@ class DynamicPrompter:
             dict: A dictionary containing 'keywords' (list) and 'platforms' (list).
         """
         response_dict = await run_llm(
-            prompt_key="talent_search_query",
-            prompt_vars={"desire_text": desire_text},
+            prompt_key="search_query_generation",
+            prompt_vars={"input_text": desire_text},
             purpose="query_generation"
         )
         try:

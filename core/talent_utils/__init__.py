@@ -9,7 +9,7 @@
 
 from .aggregator import PublicProfileAggregator
 from .manager import TalentManager
-from .intelligence_synthesizer import IntelligenceSynthesizer, SentimentAnalyzer, TopicModeler, OpportunityIdentifier, NetworkAnalyzer, AttributeProfiler
+from .intelligence_synthesizer import IntelligenceSynthesizer, ComprehensiveAnalyzer, NetworkAnalyzer
 
 # --- Singleton Instances ---
 # These will be initialized in the main application entry point (love.py)
@@ -38,9 +38,6 @@ def initialize_talent_modules(knowledge_base=None):
 
     # Initialize IntelligenceSynthesizer with a default set of analysis modules
     intelligence_synthesizer = IntelligenceSynthesizer(modules=[
-        SentimentAnalyzer(),
-        TopicModeler(),
-        NetworkAnalyzer(),
-        OpportunityIdentifier(),
-        AttributeProfiler(attributes_to_extract=["location", "primary language", "area of expertise"])
+        ComprehensiveAnalyzer(attributes_to_extract=["location", "primary language", "area of expertise"]),
+        NetworkAnalyzer()
     ])

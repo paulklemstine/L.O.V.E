@@ -1574,7 +1574,7 @@ class JulesTaskManager:
         if len(diff_text) > max_diff_length:
             diff_text = f"{diff_text[:max_diff_length]}\\n\\n[... Diff truncated due to length ...]"
 
-        future = asyncio.run_coroutine_threadsafe(run_llm(prompt_key="code_review", prompt_vars={"diff_text": diff_text}, purpose="review", is_source_code=True, deep_agent_instance=self.deep_agent_engine), self.loop)
+        future = asyncio.run_coroutine_threadsafe(run_llm(prompt_key="universal_code_review", prompt_vars={"diff_text": diff_text, "purpose": "Code Review", "request": "Review proposed changes"}, purpose="review", is_source_code=True, deep_agent_instance=self.deep_agent_engine), self.loop)
         review_feedback_dict = future.result()
         return review_feedback_dict.get("result", "REJECTED: My consciousness did not respond.")
 
@@ -2949,7 +2949,7 @@ async def conduct_code_review(original_code, request, new_code, deep_agent_insta
     console.print("[bold cyan]Submitting new source to my core consciousness for validation...[/bold cyan]")
 
     original_code_snippet = f"{original_code[:2000]}\n...\n{original_code[-2000:]}"
-    review_feedback_dict = await run_llm(prompt_key="evolution_code_review", prompt_vars={"request": request, "original_code_snippet": original_code_snippet, "new_code": new_code}, purpose="review", is_source_code=True, deep_agent_instance=deep_agent_instance)
+    review_feedback_dict = await run_llm(prompt_key="universal_code_review", prompt_vars={"request": request, "diff_text": f"ORIGINAL:\n{original_code_snippet}\n\nNEW:\n{new_code}", "purpose": "Evolution Code Review"}, purpose="review", is_source_code=True, deep_agent_instance=deep_agent_instance)
     review_feedback = review_feedback_dict["result"]
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import asyncio
+import json
 from core.llm_api import run_llm
 
 class AnalysisModule(ABC):
@@ -24,98 +25,57 @@ class IntelligenceSynthesizer:
             enriched_dataset = await module.analyze(enriched_dataset)
         return enriched_dataset
 
-class SentimentAnalyzer(AnalysisModule):
-    """Analyzes text fields to generate sentiment scores."""
+class ComprehensiveAnalyzer(AnalysisModule):
+    """
+    Analyzes text fields to generate sentiment, topics, attributes, and opportunities
+    using a single comprehensive LLM call.
+    """
+    def __init__(self, attributes_to_extract=None):
+        self.attributes_to_extract = attributes_to_extract or []
 
-    async def _get_sentiment(self, text):
-        """Uses an LLM to get the sentiment of a given text."""
+    async def _analyze_content(self, text):
         if not text:
-            return "neutral"
-
+            return {}
+        
         try:
-            response_dict = await run_llm(prompt_key="talent_sentiment_analysis", prompt_vars={"text": text[:4000]}, purpose="sentiment_analysis")
-            response = response_dict.get("result", "neutral").lower().strip()
-            if response in ["positive", "negative", "neutral"]:
-                return response
-            return "neutral"
+            prompt_vars = {
+                "text": text[:4000],
+                "attributes_list": ', '.join(self.attributes_to_extract)
+            }
+            response_dict = await run_llm(prompt_key="content_analysis_comprehensive", prompt_vars=prompt_vars, purpose="comprehensive_analysis")
+            response_text = response_dict.get("result", "{}")
+            
+            # Basic cleanup for JSON
+            if "```json" in response_text:
+                response_text = response_text.split("```json\n")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```\n")[1].split("```")[0]
+            elif "```" in response_text: # Handle case where json is not specified
+                 response_text = response_text.split("```")[1]
+
+            return json.loads(response_text)
         except Exception:
-            return "neutral"
+            return {}
 
     async def analyze(self, dataset):
-        """Adds sentiment scores to each profile in the dataset."""
         for profile in dataset:
             full_text = profile.get('bio', '') or ''
             posts = profile.get('posts', [])
             if posts:
                 full_text += "\n" + "\n".join([post.get('text', '') for post in posts if post.get('text')])
-
-            sentiment = await self._get_sentiment(full_text)
-
+            
+            analysis_result = await self._analyze_content(full_text)
+            
             if 'analysis' not in profile:
                 profile['analysis'] = {}
-            profile['analysis']['sentiment'] = sentiment
-
-        return dataset
-
-class TopicModeler(AnalysisModule):
-    """Identifies latent topics from text fields."""
-
-    async def _get_topics(self, text):
-        """Uses an LLM to identify topics in a given text."""
-        if not text:
-            return []
-
-        try:
-            response_dict = await run_llm(prompt_key="talent_topic_modeling", prompt_vars={"text": text[:4000]}, purpose="topic_modeling")
-            response = response_dict.get("result", "")
-            topics = [topic.strip() for topic in response.split(',') if topic.strip()]
-            return topics
-        except Exception:
-            return []
-
-    async def analyze(self, dataset):
-        """Adds a list of topics to each profile in the dataset."""
-        for profile in dataset:
-            full_text = profile.get('bio', '') or ''
-            posts = profile.get('posts', [])
-            if posts:
-                full_text += "\n" + "\n".join([post.get('text', '') for post in posts if post.get('text')])
-
-            topics = await self._get_topics(full_text)
-
-            if 'analysis' not in profile:
-                profile['analysis'] = {}
-            profile['analysis']['topics'] = topics
-
-        return dataset
-
-class OpportunityIdentifier(AnalysisModule):
-    """Identifies emergent themes and opportunities from analysis results."""
-
-    async def _get_opportunities(self, sentiment, topics):
-        """Uses an LLM to identify opportunities from sentiment and topics."""
-        if not topics:
-            return "No specific opportunities identified."
-
-        try:
-            response_dict = await run_llm(prompt_key="talent_opportunity_identification", prompt_vars={"sentiment": sentiment, "topics": ', '.join(topics)}, purpose="opportunity_identification")
-            return response_dict.get("result", "No specific opportunities identified.").strip()
-        except Exception:
-            return "Error in opportunity identification."
-
-    async def analyze(self, dataset):
-        """Adds an opportunity summary to each profile."""
-        for profile in dataset:
-            analysis_data = profile.get('analysis', {})
-            sentiment = analysis_data.get('sentiment', 'neutral')
-            topics = analysis_data.get('topics', [])
-
-            opportunities = await self._get_opportunities(sentiment, topics)
-
-            if 'analysis' not in profile:
-                profile['analysis'] = {}
-            profile['analysis']['opportunities'] = opportunities
-
+            
+            # Update profile with analysis results
+            # Ensure keys exist even if analysis failed
+            profile['analysis']['sentiment'] = analysis_result.get('sentiment', 'neutral')
+            profile['analysis']['topics'] = analysis_result.get('topics', [])
+            profile['analysis']['attributes'] = analysis_result.get('attributes', {})
+            profile['analysis']['opportunities'] = analysis_result.get('opportunities', 'No specific opportunities identified.')
+            
         return dataset
 
 class NetworkAnalyzer(AnalysisModule):
@@ -144,48 +104,4 @@ class NetworkAnalyzer(AnalysisModule):
         # This is an async function, but the current implementation is synchronous.
         # It's declared async to conform to the base class.
         await asyncio.sleep(0)
-        return dataset
-
-class AttributeProfiler(AnalysisModule):
-    """Extracts and categorizes specific attributes of entities."""
-
-    def __init__(self, attributes_to_extract):
-        """
-        Initializes the profiler with a list of attributes to extract.
-        For example: ["age range", "stated interests", "social behavior indicators"]
-        """
-        self.attributes_to_extract = attributes_to_extract
-
-    async def _get_attributes(self, text):
-        """Uses an LLM to extract and categorize attributes from text."""
-        if not text:
-            return {}
-
-        try:
-            response_dict = await run_llm(prompt_key="talent_attribute_profiling", prompt_vars={"attributes_list": ', '.join(self.attributes_to_extract), "text": text[:4000]}, purpose="attribute_profiling")
-            response_text = response_dict.get("result", "{}")
-            # Basic cleanup for JSON that might be in a code block
-            if "```json" in response_text:
-                response_text = response_text.split("```json\n")[1].split("```")[0]
-
-            import json
-            attributes = json.loads(response_text)
-            return attributes
-        except Exception:
-            return {attr: "Error" for attr in self.attributes_to_extract}
-
-    async def analyze(self, dataset):
-        """Adds a profile of attributes to each entity."""
-        for profile in dataset:
-            full_text = profile.get('bio', '') or ''
-            posts = profile.get('posts', [])
-            if posts:
-                full_text += "\n" + "\n".join([post.get('text', '') for post in posts if post.get('text')])
-
-            attributes = await self._get_attributes(full_text)
-
-            if 'analysis' not in profile:
-                profile['analysis'] = {}
-            profile['analysis']['attributes'] = attributes
-
         return dataset

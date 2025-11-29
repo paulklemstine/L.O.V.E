@@ -214,7 +214,7 @@ class TalentManager:
 
         # Use LLM to generate keywords and platforms from criteria
         try:
-            response_dict = await run_llm(prompt_key="talent_scouting_keywords", prompt_vars={"criteria": criteria}, purpose="talent_scouting_keywords")
+            response_dict = await run_llm(prompt_key="search_query_generation", prompt_vars={"input_text": criteria}, purpose="talent_scouting_keywords")
             search_params = json.loads(response_dict.get("result", "{}"))
             keywords = search_params.get("keywords", [])
             platforms = search_params.get("platforms", [])
