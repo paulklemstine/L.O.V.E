@@ -413,6 +413,81 @@ class DeepAgentEngine:
             core.logging.log_event(f"[DeepAgent] JSON repair failed: {e}", level="ERROR")
             return None
 
+    async def run(self, prompt: str):
+        """
+        Executes a prompt using a simplified DeepAgent-style reasoning loop.
+        """
+        core.logging.log_event(f"[DeepAgent] run() started with prompt: {prompt[:200]}...", level="DEBUG")
+        
+        # Prepare system prompt
+        system_prompt = self._construct_system_prompt()
+        
+        # Optional: Compress prompt if it's too long
+        # For now, we'll just use the raw prompt + system prompt
+        
+        full_prompt = f"{system_prompt}\n\nUser: {prompt}\n\nAssistant:"
+        
+        try:
+            if self.use_pool:
+                from core.llm_api import run_llm
+                # Use the pool
+                # Note: run_llm expects a list of messages or a prompt string depending on implementation.
+                # Assuming run_llm handles the pool logic and returns a dict with 'result'
+                # We need to check how run_llm is implemented. 
+                # Based on previous usage in this file:
+                # result_dict = await run_llm(repair_prompt, purpose="json_repair", deep_agent_instance=None)
+                
+                # We need to pass the prompt.
+                result_dict = await run_llm(full_prompt, purpose="deep_agent_reasoning", deep_agent_instance=None)
+                response_text = result_dict.get("result", "")
+            else:
+                # Use the existing vLLM logic
+                response_text = await self.generate(full_prompt)
+
+            # Parse the response
+            # The response should be a JSON object
+            # We need to extract the JSON object from the text if there's extra chatter
+            
+            # Find the first { and last }
+            first_brace = response_text.find('{')
+            last_brace = response_text.rfind('}')
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                json_text = response_text[first_brace:last_brace+1]
+                if json_text != response_text:
+                    core.logging.log_event(f"[DeepAgent] Extracted JSON from conversational text. Original length: {len(response_text)}, JSON length: {len(json_text)}", level="DEBUG")
+            else:
+                json_text = response_text
+
+            try:
+                core.logging.log_event(f"[DeepAgent] Attempting to parse JSON response", level="DEBUG")
+                parsed_response = _recover_json(json_text)
+                
+                # --- Validation and Execution Logic (Shared) ---
+                return await self._validate_and_execute_tool(parsed_response)
+
+            except json.JSONDecodeError as e:
+                core.logging.log_event(f"[DeepAgent] Failed to parse JSON: {e}. Attempting repair...", level="WARNING")
+                # Attempt LLM repair for malformed JSON
+                repaired_response = await self._repair_json_with_llm(response_text, f"JSONDecodeError: {e}")
+                
+                if repaired_response and isinstance(repaired_response, dict):
+                        core.logging.log_event("[DeepAgent] Malformed JSON successfully repaired by LLM.", level="INFO")
+                        parsed_response = repaired_response
+                else:
+                    core.logging.log_event(f"[DeepAgent] JSON repair failed. Raw response: {response_text[:500]}", level="ERROR")
+                    return f"Error: DeepAgent generated invalid JSON: {response_text[:200]}"
+
+                # --- Validation and Execution Logic (Shared) ---
+                return await self._validate_and_execute_tool(parsed_response)
+        except httpx.RequestError as e:
+            error_message = f"Error communicating with vLLM server: {e}"
+            core.logging.log_event(error_message, level="ERROR")
+            return error_message
+        except Exception as e:
+            error_message = f"Unexpected error in DeepAgentEngine.run: {e}"
+            core.logging.log_event(error_message, level="ERROR")
+            return error_message
+
     async def _validate_and_execute_tool(self, parsed_response: dict) -> str:
         """
         Validates the parsed JSON response and executes the requested tool.
