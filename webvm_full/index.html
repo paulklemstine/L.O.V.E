@@ -102,34 +102,17 @@
                         },
                         stateUpdateCb: (state) => {
                             if (state === 6) {
-                                term.write('\r\nNetwork: Connected\r\n');
-                            }
-                        }
-                    }
-                });
-
-                document.getElementById('status').innerText = "CheerpX Initialized. Booting System...";
-                term.write('System initialized. Starting shell...\r\n\r\n');
-
-                // Attach terminal to CheerpX console
-                await cx.setConsole(term);
-
-                // Run bash login shell
-                await cx.run("/bin/bash", ["-l"], {
-                    env: [
-                        "HOME=/root",
-                        "TERM=xterm",
-                        "PYTHONUNBUFFERED=1",
-                        "PYTHONPATH=/opt/python-packages"
+                                "PYTHONUNBUFFERED=1",
+                                    "PYTHONPATH=/opt/python-packages"
                     ]
-                });
+            });
 
-                document.getElementById('status').innerText = "Process Finished.";
-            } catch (e) {
-                document.getElementById('status').innerText = "Error: " + e;
-                console.error(e);
-                term.write('\r\nError: ' + e + '\r\n');
-            }
+            document.getElementById('status').innerText = "Process Finished.";
+        } catch (e) {
+            document.getElementById('status').innerText = "Error: " + e;
+            console.error(e);
+            term.write('\r\nError: ' + e + '\r\n');
+        }
         }
 
         run();
