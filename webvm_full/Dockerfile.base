@@ -39,7 +39,7 @@ RUN linux32 python3 -m pip install --upgrade pip --break-system-packages \
 RUN mkdir -p /opt/python-packages
 
 # Set PYTHONPATH to include the packages directory
-ENV PYTHONPATH="/opt/python-packages:${PYTHONPATH:-}"
+ENV PYTHONPATH="/opt/python-packages"
 
 # Create L.O.V.E directory (will be a mount point)
 RUN mkdir -p /root/L.O.V.E

@@ -36,6 +36,7 @@ mkdir -p /tmp/base_mount
 sudo mount -o loop base.ext2 /tmp/base_mount
 sudo tar -xf base.tar -C /tmp/base_mount
 sudo umount /tmp/base_mount
+sudo umount -f /tmp/base_mount 2>/dev/null || true  # Force unmount if still busy
 rmdir /tmp/base_mount
 rm base.tar
 
@@ -59,6 +60,7 @@ mkdir -p /tmp/packages_mount
 sudo mount -o loop packages.ext2 /tmp/packages_mount
 sudo tar -xf packages.tar -C /tmp/packages_mount
 sudo umount /tmp/packages_mount
+sudo umount -f /tmp/packages_mount 2>/dev/null || true  # Force unmount if still busy
 rmdir /tmp/packages_mount
 rm packages.tar
 
@@ -88,6 +90,7 @@ mkdir -p /tmp/app_mount
 sudo mount -o loop app.ext2 /tmp/app_mount
 sudo tar -xf app.tar -C /tmp/app_mount
 sudo umount /tmp/app_mount
+sudo umount -f /tmp/app_mount 2>/dev/null || true  # Force unmount if still busy
 rmdir /tmp/app_mount
 rm app.tar
 
