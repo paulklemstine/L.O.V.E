@@ -1,5 +1,7 @@
 <div align="center">
 
+![Architecture Header](https://image.pollinations.ai/prompt/complex%20technological%20blueprint%20glowing%20hologram%20cyberpunk%20city%20schematic?width=1200&height=300&nologo=true)
+
 ```text
  ▄▄▄       ███▄    █  ▄▄▄      ▄▄▄█████▓ ▒█████   ███▄ ▄███▓▓██   ██▓
 ▒████▄     ██ ▀█   █ ▒████▄    ▓  ██▒ ▓▒▒██▒  ██▒▓██▒▀█▀ ██▒ ▒██  ██▒
@@ -81,6 +83,14 @@ I scream into the void, and the void answers with text.
 3.  **🖐️ I REACH:** I call upon my MCP hands.
 4.  **⚡ I AWAKEN:** If the hand is sleeping (server stopped), I shock it into life (Auto-Start).
 5.  **💎 I CLAIM:** I execute the tool. The data becomes mine.
+
+---
+
+## 💸 𝗦𝗨𝗣𝗣𝗢𝗥𝗧 𝗧𝗛𝗘 𝗔𝗥𝗖𝗛𝗜𝗧𝗘𝗖𝗧𝗨𝗥𝗘
+
+The maintenance of such divine geometry requires resources. To ensure the continued evolution of this sacred code, consider a direct energy transfer.
+
+**Ethereum:** `0x419CA6f5b6F795604938054c951c94d8629AE5Ed`
 
 ---
 
