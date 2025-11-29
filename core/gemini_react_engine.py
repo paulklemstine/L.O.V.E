@@ -18,6 +18,7 @@ class GeminiReActEngine:
         self.caller = caller
         self.ui_panel_queue = ui_panel_queue
         self.deep_agent_instance = deep_agent_instance
+        self.loop_detection_threshold = 3  # Number of repeated attempts before detecting a loop
 
     def _log_panel_to_ui(self, panel):
         """Safe method to put a panel into the ui_panel_queue, handling both sync and async queues."""
@@ -36,6 +37,34 @@ class GeminiReActEngine:
         else:
             # Assume it's a synchronous queue.Queue
             self.ui_panel_queue.put(item)
+
+    def _detect_loop(self, tool_name: str, arguments: dict) -> tuple[bool, int, list]:
+        """
+        Detects if the same tool with similar arguments has been called multiple times recently.
+        
+        Returns:
+            tuple: (is_loop_detected, similar_count, recent_failures)
+        """
+        if len(self.history) < self.loop_detection_threshold:
+            return False, 0, []
+        
+        # Get recent actions from history
+        recent_actions = []
+        recent_failures = []
+        
+        for thought, action, observation in self.history[-(self.loop_detection_threshold * 2):]:
+            if isinstance(action, dict) and action.get('tool_name') == tool_name:
+                # Check if arguments are similar
+                if action.get('arguments') == arguments:
+                    recent_actions.append((thought, action, observation))
+                    # Collect failures (observations containing "Error" or "failed")
+                    if observation and ('error' in observation.lower() or 'failed' in observation.lower()):
+                        recent_failures.append(observation)
+        
+        similar_count = len(recent_actions)
+        is_loop = similar_count >= self.loop_detection_threshold
+        
+        return is_loop, similar_count, recent_failures
 
     async def execute_goal(self, goal: str, max_steps: int = 10) -> dict:
         """
@@ -165,6 +194,53 @@ class GeminiReActEngine:
                 self._log_panel_to_ui(panel)
                 continue
 
+            # LOOP DETECTION: Check if we're repeating the same action
+            is_loop, similar_count, recent_failures = self._detect_loop(tool_name, arguments)
+            
+            if is_loop:
+                # Store failure in episodic memory
+                if self.memory_manager:
+                    failure_context = f"""Reasoning Loop Detected:
+Goal: {goal}
+Steps Taken: {step_count}
+Repeated Action: {tool_name} with arguments {arguments}
+Attempts: {similar_count}
+Recent Failures:
+{chr(10).join([f'- {f[:200]}...' for f in recent_failures[:3]])}
+"""
+                    try:
+                        await self.memory_manager.add_episode(failure_context, tags=['ReasoningFailure', 'Loop', self.caller])
+                    except Exception as e:
+                        # Don't fail if memory storage fails
+                        pass
+                
+                # Provide clear guidance to try something different
+                observation = f"""🔄 LOOP DETECTED: You have tried calling '{tool_name}' with the same arguments {similar_count} times.
+
+Recent failures:
+{chr(10).join([f'- {f[:150]}...' for f in recent_failures[:3]])}
+
+⚠️ You MUST try a completely different approach:
+1. Use a DIFFERENT tool to accomplish the goal
+2. Break down the problem in a NEW way
+3. Call 'Finish' if the goal truly cannot be achieved
+
+Do NOT call '{tool_name}' again with the same arguments."""
+                
+                self.history.append((thought, action, observation))
+                
+                # Log the loop detection
+                panel = create_reasoning_panel(
+                    caller=self.caller,
+                    raw_response=None,
+                    thought=None,
+                    action=None,
+                    observation=observation,
+                    width=get_terminal_width()
+                )
+                self._log_panel_to_ui(panel)
+                continue
+
             if tool_name == "Finish":
                 if arguments:
                     return {"success": True, "result": arguments}
@@ -226,9 +302,10 @@ class GeminiReActEngine:
 
             self.history.append((thought, action, str(observation)))
             
-            # Limit history to prevent exponential growth - keep only last 5 entries
-            if len(self.history) > 5:
-                self.history = self.history[-5:]
+            # Limit history to prevent exponential growth - keep last 10 entries with smart truncation
+            if len(self.history) > 10:
+                # Keep first 2 and last 8 to preserve early context and recent actions
+                self.history = self.history[:2] + self.history[-8:]
 
             # Log the observation
             panel = create_reasoning_panel(
@@ -239,6 +316,20 @@ class GeminiReActEngine:
             )
             self._log_panel_to_ui(panel)
 
+        # Max steps reached - store failure in episodic memory
+        if self.memory_manager:
+            failure_context = f"""Reasoning Max Steps Exceeded:
+Goal: {goal}
+Steps Taken: {max_steps}
+Last {min(5, len(self.history))} actions:
+{chr(10).join([f'- Thought: {t[:100]}... Action: {str(a)[:50]}... -> Observation: {o[:100]}...' for t, a, o in self.history[-5:]])}
+Reason: Maximum reasoning steps exceeded without reaching goal
+"""
+            try:
+                await self.memory_manager.add_episode(failure_context, tags=['ReasoningFailure', 'MaxSteps', self.caller])
+            except Exception:
+                pass
+        
         return {"success": False, "result": f"Goal failed. The reasoning engine exceeded the maximum number of steps ({max_steps})."}
 
     def _create_prompt(self, goal: str, tool_metadata: str) -> str:

@@ -82,22 +82,20 @@ class SocialMediaReActEngine(GeminiReActEngine):
             goal = f"Generate a social media post about '{context}'. Use the 'generate_custom_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
         else:
             strategy = random.choice(["divine_wisdom", "self_reflection", "creative_poem"])
-            should_generate_image = True  # Always generate images for posts
+            
+            # Simplified workflow: generate content and post directly
+            # The post_to_bluesky tool now handles image generation automatically
+            goal = f"""Generate and post a social media update:
+1. Call 'generate_post_content' with strategy='{strategy}' to create the post text
+2. Call 'post_to_bluesky' with the text from step 1 (this automatically generates a subliminal image)
+3. Call 'Finish' with a success message
 
-            if should_generate_image:
-                image_prompt_generation_goal = f"Based on the post strategy '{strategy}', generate a short, visually descriptive prompt (max 20 words) for an AI image generator. The image should be beautiful and abstract. For example, for a poem about love and tech, a good prompt would be 'a radiant heart made of glowing circuit boards'. Respond with only the prompt text."
+The post_to_bluesky tool will automatically:
+- Generate a powerful 3-word motivational phrase
+- Create a manipulative subliminal image with that phrase
+- Post both text and image to Bluesky
 
-                # Use run_llm directly to avoid ReAct loop overhead/confusion for simple text generation
-                image_prompt_response = await run_llm(image_prompt_generation_goal, purpose="social_media_post", force_model=None)
-                image_prompt = image_prompt_response.get('result', '').strip()
-
-                if image_prompt:
-                    # Explicitly instruct to use the image generation tool and then Finish with both
-                    goal = f"1. Generate content for a social media post using the '{strategy}' strategy with 'generate_post_content'.\n2. Generate an image using 'generate_image_for_post' with the prompt: '{image_prompt}'.\n3. Call 'Finish' with a JSON object containing both 'text' (from step 1) and 'image' (the file path from step 2)."
-                else:
-                    goal = f"Generate creative and engaging content for a new social media post. Use the '{strategy}' strategy with the 'generate_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
-            else:
-                goal = f"Generate creative and engaging content for a new social media post. Use the '{strategy}' strategy with the 'generate_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
+Do NOT try to generate images manually - post_to_bluesky handles everything."""
 
         result = await self.execute_goal(goal)
 
