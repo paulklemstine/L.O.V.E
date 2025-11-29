@@ -488,14 +488,14 @@ class DeepAgentEngine:
             core.logging.log_event(error_message, level="ERROR")
             return error_message
 
-    async def _validate_and_execute_tool(self, parsed_response: dict) -> str:
+    async def _validate_and_execute_tool(self, parsed_response: dict) -> dict:
         """
         Validates the parsed JSON response and executes the requested tool.
         """
         # Validate response structure
         if not isinstance(parsed_response, dict):
             core.logging.log_event(f"[DeepAgent] Invalid response: expected dict, got {type(parsed_response)}", level="ERROR")
-            return f"Error: LLM returned invalid response type: {type(parsed_response)}"
+            return {"result": f"Error: LLM returned invalid response type: {type(parsed_response)}", "thought": "Invalid response type"}
         
         # Check for required keys
         if "thought" not in parsed_response or "action" not in parsed_response:
@@ -523,7 +523,7 @@ class DeepAgentEngine:
                         f"Got keys: {list(parsed_response.keys())}. Response: {parsed_response}",
                         level="ERROR"
                     )
-                    return f"Error: LLM returned wrong format. Expected 'thought' and 'action' keys, got: {list(parsed_response.keys())}"
+                    return {"result": f"Error: LLM returned wrong format. Expected 'thought' and 'action' keys, got: {list(parsed_response.keys())}", "thought": "Invalid response structure"}
         
         thought = parsed_response.get("thought", "")
         action = parsed_response.get("action", {})
@@ -560,11 +560,11 @@ class DeepAgentEngine:
                     else:
                         # If we can't figure it out, return a helpful error
                         core.logging.log_event(f"[DeepAgent] Could not convert string action '{action}' to dict.", level="ERROR")
-                        return f"Error: 'action' field was a string ('{action}'), but expected a dictionary like {{'tool_name': '...', 'arguments': {{...}}}}. Please use the correct format."
+                        return {"result": f"Error: 'action' field was a string ('{action}'), but expected a dictionary like {{'tool_name': '...', 'arguments': {{...}}}}. Please use the correct format.", "thought": thought}
 
             if not isinstance(action, dict):
                 core.logging.log_event(f"[DeepAgent] Invalid action: expected dict, got {type(action)}", level="ERROR")
-                return f"Error: 'action' must be a dict, got {type(action)}"
+                return {"result": f"Error: 'action' must be a dict, got {type(action)}", "thought": thought}
         
         tool_name = action.get("tool_name")
         arguments = action.get("arguments", {})
@@ -574,24 +574,24 @@ class DeepAgentEngine:
                 f"[DeepAgent] Missing tool_name in action. Action: {action}", 
                 level="ERROR"
             )
-            return f"Error: 'tool_name' is required in action. Got action: {action}"
+            return {"result": f"Error: 'tool_name' is required in action. Got action: {action}", "thought": thought}
         
         core.logging.log_event(f"[DeepAgent] Parsed - Thought: '{thought[:100]}...', Tool: '{tool_name}', Args: {arguments}", level="DEBUG")
 
         if tool_name == "Finish":
             core.logging.log_event(f"[DeepAgent] Finish tool called, returning thought: {thought[:200]}", level="DEBUG")
-            return thought
+            return {"result": thought, "thought": thought}
 
         if tool_name == "invoke_gemini_react_engine":
             if "prompt" not in arguments:
                 error_msg = "Error: 'prompt' argument is required for invoke_gemini_react_engine. Please provide the goal or question for the sub-agent."
                 core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
-                return error_msg
+                return {"result": error_msg, "thought": thought}
 
             core.logging.log_event(f"[DeepAgent] Invoking GeminiReActEngine with args: {arguments}", level="DEBUG")
             result = await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
             core.logging.log_event(f"[DeepAgent] GeminiReActEngine returned: {str(result)[:200]}", level="DEBUG")
-            return result
+            return {"result": result, "thought": thought}
 
         # Execute tool from registry
         if self.tool_registry and tool_name in self.tool_registry.list_tools():
@@ -604,10 +604,10 @@ class DeepAgentEngine:
                     tool_result = tool_func(**arguments)
 
                 core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' result: {str(tool_result)[:200]}", level="DEBUG")
-                return f"Tool {tool_name} executed. Result: {tool_result}"
+                return {"result": f"Tool {tool_name} executed. Result: {tool_result}", "thought": thought}
             except Exception as e:
                     core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' execution failed: {e}", level="ERROR")
-                    return f"Error executing tool '{tool_name}': {e}"
+                    return {"result": f"Error executing tool '{tool_name}': {e}", "thought": thought}
         else:
             available_tools_list = list(self.tool_registry.list_tools().keys()) if self.tool_registry else []
             error_msg = f"Error: Tool '{tool_name}' not found. Available tools: {', '.join(available_tools_list[:10])}"
@@ -619,7 +619,7 @@ class DeepAgentEngine:
                 error_msg += "\n\nNOTE: 'JSON Repair Expert' is NOT a tool. If you need to fix malformed output, simply use the 'Finish' tool to return your corrected response. Do not try to call non-existent repair tools."
             
             core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
-            return error_msg
+            return {"result": error_msg, "thought": thought}
         """
         Executes a prompt using a simplified DeepAgent-style reasoning loop.
         """

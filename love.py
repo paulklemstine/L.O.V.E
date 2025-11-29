@@ -3739,17 +3739,21 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                 # Bypass the broken graph wrapper and call the engine directly
                 # The cognitive loop handles the execution, we just need the command string.
                 llm_command_result = await deep_agent_engine.run(cognitive_prompt)
-                if isinstance(llm_command_result, dict):
-                    llm_command_result = llm_command_result.get("content") or llm_command_result.get("result")
             else:
                 llm_command_result = await execute_reasoning_task(cognitive_prompt)
-
-
             # The result could be a plain string (from DeepAgent) or a dict (from the old engine)
+            reasoning_context = None
             if isinstance(llm_command_result, dict):
-                llm_command = llm_command_result.get("result")
+                llm_command = llm_command_result.get("result") or llm_command_result.get("content")
+                reasoning_context = llm_command_result.get("thought")
             else:
                 llm_command = llm_command_result
+
+            # Fallback for reasoning_context if not provided by LLM
+            if not reasoning_context:
+                # Use a cleaner version of the prompt, e.g., just the dynamic parts
+                # For now, let's just use the last 2000 chars which likely contains history + dynamic context + instruction
+                reasoning_context = cognitive_prompt[-2000:] if len(cognitive_prompt) > 2000 else cognitive_prompt
 
             if llm_command and ("Error:" in llm_command or "Error communicating" in llm_command):
                 core.logging.log_event(f"DeepAgent returned error (Server likely loading): {llm_command}", "WARNING")
@@ -4253,7 +4257,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                 if not error:
                     # Ingest the successful cycle into agentic memory
                     if memory_manager:
-                        await memory_manager.ingest_cognitive_cycle(llm_command, final_output, cognitive_prompt)
+                        await memory_manager.ingest_cognitive_cycle(llm_command, final_output, reasoning_context)
 
                     # --- Knowledge Extraction ---
                     contextual_metadata = {
