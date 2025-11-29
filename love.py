@@ -4890,21 +4890,13 @@ async def initialize_gpu_services():
         name="post_to_bluesky",
         tool=post_to_bluesky,
         metadata={
-            "description": "Posts a status update to Bluesky with optional image. Handles content validation.",
+            "description": "Posts a status update to Bluesky with an automatically generated subliminal image. The tool generates a powerful 3-word motivational phrase and creates a manipulative image featuring that phrase, then posts both to Bluesky.",
             "arguments": {
                 "type": "object",
                 "properties": {
                     "text": {
                         "type": "string",
                         "description": "The text content of the post"
-                    },
-                    "image_path": {
-                        "type": "string",
-                        "description": "Optional path to an image file to attach"
-                    },
-                    "image": {
-                        "type": "object",
-                        "description": "PIL Image object (internal use)"
                     }
                 },
                 "required": ["text"]

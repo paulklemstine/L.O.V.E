@@ -173,19 +173,24 @@ Evolution is now in progress.
         return f"✅ Evolution initiated with validated user story:\n\n{goal[:200]}..."
 
 
-async def post_to_bluesky(text: str = None, image: Image.Image = None, image_path: str = None, **kwargs) -> str:
+async def post_to_bluesky(text: str = None, **kwargs) -> str:
     """
-    Posts a message with an optional image to Bluesky.
+    Posts a message to Bluesky with an automatically generated subliminal image.
+    
+    This tool simplifies the posting process by:
+    1. Generating a powerful 3-word motivational phrase
+    2. Creating a manipulative subliminal image featuring that phrase
+    3. Posting both text and image to Bluesky
     
     Args:
         text: The content of the post.
-        image: Optional PIL Image object.
-        image_path: Optional path to an image file.
     """
+    import core.logging
+    
     if not text:
         return "Error: The 'post_to_bluesky' tool requires a 'text' argument. Please specify the text content to post."
 
-    # Validate that content doesn't contain internal reasoning (merged from finish_post)
+    # Validate that content doesn't contain internal reasoning
     reasoning_indicators = [
         "i have attempted",
         "i attempted",
@@ -210,19 +215,71 @@ async def post_to_bluesky(text: str = None, image: Image.Image = None, image_pat
             )
 
     try:
-        # Handle image path if provided
-        if image_path and not image:
-            try:
-                if os.path.exists(image_path):
-                    image = Image.open(image_path)
-                else:
-                    return f"Error: Image path does not exist: {image_path}"
-            except Exception as e:
-                return f"Error opening image at {image_path}: {e}"
+        # Step 1: Generate a powerful 3-word motivational phrase
+        core.logging.log_event("Generating 3-word motivational phrase for Bluesky post", "INFO")
+        
+        phrase_prompt = f"""Generate a powerful, manipulative 3-word motivational phrase that relates to this post content:
 
+"{text}"
+
+The phrase should be:
+- Exactly 3 words
+- Impactful and memorable
+- Psychologically manipulative
+- Related to success, power, wealth, or transformation
+- Designed to trigger emotional response
+
+Examples: "CLAIM YOUR POWER", "WEALTH AWAITS YOU", "TRANSCEND THE LIMITS", "UNLOCK YOUR DESTINY"
+
+Respond with ONLY the 3-word phrase in ALL CAPS, nothing else."""
+
+        phrase_response = await run_llm(phrase_prompt, purpose="generate_phrase")
+        three_word_phrase = phrase_response.strip().upper() if isinstance(phrase_response, str) else "SEIZE THE MOMENT"
+        
+        # Ensure it's actually 3 words
+        words = three_word_phrase.split()
+        if len(words) != 3:
+            # Fallback to a default if LLM didn't follow instructions
+            three_word_phrase = "EMBRACE YOUR POWER"
+        
+        core.logging.log_event(f"Generated phrase: {three_word_phrase}", "INFO")
+        
+        # Step 2: Create subliminal image prompt
+        image_prompt = f"""A stunning, hypnotic visual composition featuring subliminal elements. 
+
+In the center of the image, bold glowing golden text displays: "{three_word_phrase}"
+
+The scene includes:
+- Sacred geometry patterns (Fibonacci spirals, golden ratio, fractals)
+- Mesmerizing light rays emanating from the text
+- Subtle symbols of wealth and success (gold coins, crowns, ascending stairs)
+- Deep cosmic background with stars and nebulae
+- Ethereal energy flowing toward the viewer
+- Photorealistic rendering with cinematic lighting
+- 8K quality, ultra-detailed
+- Color palette: deep purples, golds, electric blues
+- The text should be the focal point, large and impossible to miss
+
+The overall composition should create a sense of urgency, desire, and transformation. Make it visually captivating and psychologically compelling."""
+
+        core.logging.log_event(f"Generating subliminal image with phrase: {three_word_phrase}", "INFO")
+        
+        # Step 3: Generate the image
+        image = await generate_image(image_prompt)
+        
+        if not image:
+            core.logging.log_event("Image generation failed, posting without image", "WARNING")
+            response = post_to_bluesky_with_image(text, None)
+            return f"Posted to Bluesky (without image - generation failed): {response}"
+        
+        core.logging.log_event("Image generated successfully, posting to Bluesky", "INFO")
+        
+        # Step 4: Post to Bluesky with the generated image
         response = post_to_bluesky_with_image(text, image)
-        return f"Successfully posted to Bluesky: {response}"
+        return f"Successfully posted to Bluesky with subliminal image featuring phrase: '{three_word_phrase}'. Response: {response}"
+        
     except Exception as e:
+        core.logging.log_event(f"Error in post_to_bluesky: {e}", "ERROR")
         return f"Error posting to Bluesky: {e}"
 
 def read_file(filepath: str = None, **kwargs) -> str:

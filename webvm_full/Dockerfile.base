@@ -44,7 +44,7 @@ RUN mkdir -p /opt/python-packages
 RUN ln -sf /opt/python-packages /usr/local/lib/python3.11/dist-packages/packages
 
 # Set PYTHONPATH to include the packages directory
-ENV PYTHONPATH="/opt/python-packages:${PYTHONPATH}"
+ENV PYTHONPATH="/opt/python-packages:${PYTHONPATH:-}"
 
 # Create L.O.V.E directory (will be a mount point)
 RUN mkdir -p /root/L.O.V.E
