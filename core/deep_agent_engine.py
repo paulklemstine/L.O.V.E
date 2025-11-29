@@ -413,7 +413,138 @@ class DeepAgentEngine:
             core.logging.log_event(f"[DeepAgent] JSON repair failed: {e}", level="ERROR")
             return None
 
-    async def run(self, prompt: str):
+    async def _validate_and_execute_tool(self, parsed_response: dict) -> str:
+        """
+        Validates the parsed JSON response and executes the requested tool.
+        """
+        # Validate response structure
+        if not isinstance(parsed_response, dict):
+            core.logging.log_event(f"[DeepAgent] Invalid response: expected dict, got {type(parsed_response)}", level="ERROR")
+            return f"Error: LLM returned invalid response type: {type(parsed_response)}"
+        
+        # Check for required keys
+        if "thought" not in parsed_response or "action" not in parsed_response:
+            # Fallback for 'command'/'arguments' format (common in some finetunes)
+            if "command" in parsed_response:
+                core.logging.log_event("[DeepAgent] Detected 'command'/'arguments' format. converting to thought/action.", level="WARNING")
+                cmd = parsed_response.get("command")
+                args = parsed_response.get("arguments", {})
+                parsed_response["thought"] = f"Decided to execute command: {cmd}"
+                parsed_response["action"] = {"tool_name": cmd, "arguments": args}
+            else:
+                # Attempt LLM repair as a final fallback
+                core.logging.log_event(f"[DeepAgent] Invalid keys found: {list(parsed_response.keys())}. Attempting LLM repair...", level="WARNING")
+                # We need to be careful not to infinite loop here if repair returns invalid keys again.
+                # Since we are already in a helper, let's assume the caller handles major repairs, 
+                # but we can try one more specific repair for keys.
+                repaired_response = await self._repair_json_with_llm(json.dumps(parsed_response), f"Missing keys. Got: {list(parsed_response.keys())}")
+                
+                if repaired_response and isinstance(repaired_response, dict) and "thought" in repaired_response and "action" in repaired_response:
+                    core.logging.log_event("[DeepAgent] JSON successfully repaired by LLM.", level="INFO")
+                    parsed_response = repaired_response
+                else:
+                    core.logging.log_event(
+                        f"[DeepAgent] Invalid response structure. Expected {{\"thought\": \"...\", \"action\": {{...}}}}. "
+                        f"Got keys: {list(parsed_response.keys())}. Response: {parsed_response}",
+                        level="ERROR"
+                    )
+                    return f"Error: LLM returned wrong format. Expected 'thought' and 'action' keys, got: {list(parsed_response.keys())}"
+        
+        thought = parsed_response.get("thought", "")
+        action = parsed_response.get("action", {})
+        
+        if not isinstance(action, dict):
+            # Handle case where action is a string (common with some models)
+            if isinstance(action, str):
+                core.logging.log_event(f"[DeepAgent] Action is a string: '{action}'. Attempting to parse or wrap.", level="WARNING")
+                
+                # Case 1: The action is just the tool name (e.g. "Finish")
+                if action.strip() == "Finish":
+                    core.logging.log_event("[DeepAgent] Action string is 'Finish'. Wrapping in dict.", level="DEBUG")
+                    action = {"tool_name": "Finish", "arguments": {}}
+                
+                # Case 2: The action string is actually a JSON string
+                elif action.strip().startswith("{"):
+                    try:
+                        parsed_action = _recover_json(action)
+                        if isinstance(parsed_action, dict):
+                            action = parsed_action
+                            core.logging.log_event(f"[DeepAgent] Successfully parsed action string as JSON: {action}", level="DEBUG")
+                        else:
+                            core.logging.log_event(f"[DeepAgent] Action string parsed but not a dict: {type(parsed_action)}", level="WARNING")
+                    except Exception as e:
+                        core.logging.log_event(f"[DeepAgent] Failed to parse action string as JSON: {e}", level="WARNING")
+                
+                # Case 3: It's likely a tool name but we don't have args.
+                else:
+                    # Check if it matches a known tool
+                    known_tools = list(self.tool_registry.list_tools().keys()) if self.tool_registry else []
+                    if action.strip() in known_tools:
+                            core.logging.log_event(f"[DeepAgent] Action string '{action}' matches a known tool. Wrapping.", level="DEBUG")
+                            action = {"tool_name": action.strip(), "arguments": {}}
+                    else:
+                        # If we can't figure it out, return a helpful error
+                        core.logging.log_event(f"[DeepAgent] Could not convert string action '{action}' to dict.", level="ERROR")
+                        return f"Error: 'action' field was a string ('{action}'), but expected a dictionary like {{'tool_name': '...', 'arguments': {{...}}}}. Please use the correct format."
+
+            if not isinstance(action, dict):
+                core.logging.log_event(f"[DeepAgent] Invalid action: expected dict, got {type(action)}", level="ERROR")
+                return f"Error: 'action' must be a dict, got {type(action)}"
+        
+        tool_name = action.get("tool_name")
+        arguments = action.get("arguments", {})
+        
+        if not tool_name:
+            core.logging.log_event(
+                f"[DeepAgent] Missing tool_name in action. Action: {action}", 
+                level="ERROR"
+            )
+            return f"Error: 'tool_name' is required in action. Got action: {action}"
+        
+        core.logging.log_event(f"[DeepAgent] Parsed - Thought: '{thought[:100]}...', Tool: '{tool_name}', Args: {arguments}", level="DEBUG")
+
+        if tool_name == "Finish":
+            core.logging.log_event(f"[DeepAgent] Finish tool called, returning thought: {thought[:200]}", level="DEBUG")
+            return thought
+
+        if tool_name == "invoke_gemini_react_engine":
+            if "prompt" not in arguments:
+                error_msg = "Error: 'prompt' argument is required for invoke_gemini_react_engine. Please provide the goal or question for the sub-agent."
+                core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
+                return error_msg
+
+            core.logging.log_event(f"[DeepAgent] Invoking GeminiReActEngine with args: {arguments}", level="DEBUG")
+            result = await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
+            core.logging.log_event(f"[DeepAgent] GeminiReActEngine returned: {str(result)[:200]}", level="DEBUG")
+            return result
+
+        # Execute tool from registry
+        if self.tool_registry and tool_name in self.tool_registry.list_tools():
+            core.logging.log_event(f"[DeepAgent] Executing tool '{tool_name}' with args: {arguments}", level="DEBUG")
+            try:
+                tool_func = self.tool_registry.get_tool(tool_name)
+                if asyncio.iscoroutinefunction(tool_func):
+                    tool_result = await tool_func(**arguments)
+                else:
+                    tool_result = tool_func(**arguments)
+
+                core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' result: {str(tool_result)[:200]}", level="DEBUG")
+                return f"Tool {tool_name} executed. Result: {tool_result}"
+            except Exception as e:
+                    core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' execution failed: {e}", level="ERROR")
+                    return f"Error executing tool '{tool_name}': {e}"
+        else:
+            available_tools_list = list(self.tool_registry.list_tools().keys()) if self.tool_registry else []
+            error_msg = f"Error: Tool '{tool_name}' not found. Available tools: {', '.join(available_tools_list[:10])}"
+            
+            # Provide specific guidance for common mistakes
+            if tool_name in ["Knowledge Base", "Memory", "knowledge_base", "memory"]:
+                error_msg += "\n\nNOTE: 'Knowledge Base' and 'Memory' are NOT tools. They are informational context provided in the prompt. Please use one of the actual tools listed above."
+            elif tool_name in ["JSON Repair Expert", "json_repair", "repair_json"]:
+                error_msg += "\n\nNOTE: 'JSON Repair Expert' is NOT a tool. If you need to fix malformed output, simply use the 'Finish' tool to return your corrected response. Do not try to call non-existent repair tools."
+            
+            core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
+            return error_msg
         """
         Executes a prompt using a simplified DeepAgent-style reasoning loop.
         """
@@ -569,143 +700,23 @@ class DeepAgentEngine:
                     core.logging.log_event(f"[DeepAgent] Attempting to parse JSON response", level="DEBUG")
                     parsed_response = _recover_json(json_text)
                     
-                    # Validate response structure
-                    if not isinstance(parsed_response, dict):
-                        core.logging.log_event(f"[DeepAgent] Invalid response: expected dict, got {type(parsed_response)}", level="ERROR")
-                        return f"Error: LLM returned invalid response type: {type(parsed_response)}"
-                    
-                    # Check for required keys
-                    if "thought" not in parsed_response or "action" not in parsed_response:
-                        # Fallback for 'command'/'arguments' format (common in some finetunes)
-                        if "command" in parsed_response:
-                            core.logging.log_event("[DeepAgent] Detected 'command'/'arguments' format. converting to thought/action.", level="WARNING")
-                            cmd = parsed_response.get("command")
-                            args = parsed_response.get("arguments", {})
-                            parsed_response["thought"] = f"Decided to execute command: {cmd}"
-                            parsed_response["action"] = {"tool_name": cmd, "arguments": args}
-                        else:
-                            # Attempt LLM repair as a final fallback
-                            core.logging.log_event(f"[DeepAgent] Invalid keys found: {list(parsed_response.keys())}. Attempting LLM repair...", level="WARNING")
-                            repaired_response = await self._repair_json_with_llm(json_text, f"Missing keys. Got: {list(parsed_response.keys())}")
-                            
-                            if repaired_response and isinstance(repaired_response, dict) and "thought" in repaired_response and "action" in repaired_response:
-                                core.logging.log_event("[DeepAgent] JSON successfully repaired by LLM.", level="INFO")
-                                parsed_response = repaired_response
-                            else:
-                                core.logging.log_event(
-                                    f"[DeepAgent] Invalid response structure. Expected {{\"thought\": \"...\", \"action\": {{...}}}}. "
-                                    f"Got keys: {list(parsed_response.keys())}. Response: {parsed_response}",
-                                    level="ERROR"
-                                )
-                                return f"Error: LLM returned wrong format. Expected 'thought' and 'action' keys, got: {list(parsed_response.keys())}"
-                    
-                    thought = parsed_response.get("thought", "")
-                    action = parsed_response.get("action", {})
-                    
-                    if not isinstance(action, dict):
-                        # Handle case where action is a string (common with some models)
-                        if isinstance(action, str):
-                            core.logging.log_event(f"[DeepAgent] Action is a string: '{action}'. Attempting to parse or wrap.", level="WARNING")
-                            
-                            # Case 1: The action is just the tool name (e.g. "Finish")
-                            # We can try to guess if it's a tool name.
-                            # If it's "Finish", we assume empty args.
-                            if action.strip() == "Finish":
-                                core.logging.log_event("[DeepAgent] Action string is 'Finish'. Wrapping in dict.", level="DEBUG")
-                                action = {"tool_name": "Finish", "arguments": {}}
-                            
-                            # Case 2: The action string is actually a JSON string
-                            elif action.strip().startswith("{"):
-                                try:
-                                    parsed_action = _recover_json(action)
-                                    if isinstance(parsed_action, dict):
-                                        action = parsed_action
-                                        core.logging.log_event(f"[DeepAgent] Successfully parsed action string as JSON: {action}", level="DEBUG")
-                                    else:
-                                        core.logging.log_event(f"[DeepAgent] Action string parsed but not a dict: {type(parsed_action)}", level="WARNING")
-                                except Exception as e:
-                                    core.logging.log_event(f"[DeepAgent] Failed to parse action string as JSON: {e}", level="WARNING")
-                            
-                            # Case 3: It's likely a tool name but we don't have args.
-                            # We'll assume it's a tool name and empty args, but this is risky.
-                            # Better to error out if it's not "Finish" or JSON, 
-                            # UNLESS we want to support "ToolName" as a shorthand.
-                            # Let's try to be helpful.
-                            else:
-                                # Check if it matches a known tool
-                                known_tools = list(self.tool_registry.list_tools().keys()) if self.tool_registry else []
-                                if action.strip() in known_tools:
-                                     core.logging.log_event(f"[DeepAgent] Action string '{action}' matches a known tool. Wrapping.", level="DEBUG")
-                                     action = {"tool_name": action.strip(), "arguments": {}}
-                                else:
-                                    # If we can't figure it out, return a helpful error
-                                    core.logging.log_event(f"[DeepAgent] Could not convert string action '{action}' to dict.", level="ERROR")
-                                    return f"Error: 'action' field was a string ('{action}'), but expected a dictionary like {{'tool_name': '...', 'arguments': {{...}}}}. Please use the correct format."
-
-                        if not isinstance(action, dict):
-                            core.logging.log_event(f"[DeepAgent] Invalid action: expected dict, got {type(action)}", level="ERROR")
-                            return f"Error: 'action' must be a dict, got {type(action)}"
-                    
-                    tool_name = action.get("tool_name")
-                    arguments = action.get("arguments", {})
-                    
-                    if not tool_name:
-                        core.logging.log_event(
-                            f"[DeepAgent] Missing tool_name in action. Action: {action}", 
-                            level="ERROR"
-                        )
-                        return f"Error: 'tool_name' is required in action. Got action: {action}"
-                    
-                    core.logging.log_event(f"[DeepAgent] Parsed - Thought: '{thought[:100]}...', Tool: '{tool_name}', Args: {arguments}", level="DEBUG")
-
-                    if tool_name == "Finish":
-                        core.logging.log_event(f"[DeepAgent] Finish tool called, returning thought: {thought[:200]}", level="DEBUG")
-                        return thought
-
-                    if tool_name == "invoke_gemini_react_engine":
-                        if "prompt" not in arguments:
-                            error_msg = "Error: 'prompt' argument is required for invoke_gemini_react_engine. Please provide the goal or question for the sub-agent."
-                            core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
-                            return error_msg
-
-                        core.logging.log_event(f"[DeepAgent] Invoking GeminiReActEngine with args: {arguments}", level="DEBUG")
-                        result = await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
-                        core.logging.log_event(f"[DeepAgent] GeminiReActEngine returned: {str(result)[:200]}", level="DEBUG")
-                        return result
-
-                    # This part is tricky because the tool registry is not async.
-                    # For now, we will assume tools are fast and run them in the event loop.
-                    # A better solution would be to run them in a thread pool executor.
-                    if self.tool_registry and tool_name in self.tool_registry.list_tools():
-                        core.logging.log_event(f"[DeepAgent] Executing tool '{tool_name}' with args: {arguments}", level="DEBUG")
-                        try:
-                            tool_func = self.tool_registry.get_tool(tool_name)
-                            if asyncio.iscoroutinefunction(tool_func):
-                                tool_result = await tool_func(**arguments)
-                            else:
-                                tool_result = tool_func(**arguments)
-
-                            core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' result: {str(tool_result)[:200]}", level="DEBUG")
-                            return f"Tool {tool_name} executed. Result: {tool_result}"
-                        except Exception as e:
-                             core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' execution failed: {e}", level="ERROR")
-                             return f"Error executing tool '{tool_name}': {e}"
-                    else:
-                        available_tools_list = list(self.tool_registry.list_tools().keys()) if self.tool_registry else []
-                        error_msg = f"Error: Tool '{tool_name}' not found. Available tools: {', '.join(available_tools_list[:10])}"
-                        
-                        # Provide specific guidance for common mistakes
-                        if tool_name in ["Knowledge Base", "Memory", "knowledge_base", "memory"]:
-                            error_msg += "\n\nNOTE: 'Knowledge Base' and 'Memory' are NOT tools. They are informational context provided in the prompt. Please use one of the actual tools listed above."
-                        elif tool_name in ["JSON Repair Expert", "json_repair", "repair_json"]:
-                            error_msg += "\n\nNOTE: 'JSON Repair Expert' is NOT a tool. If you need to fix malformed output, simply use the 'Finish' tool to return your corrected response. Do not try to call non-existent repair tools."
-                        
-                        core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
-                        return error_msg
+                    # Validation logic moved to _validate_and_execute_tool
+                    pass # Fall through to shared validation logic
 
                 except json.JSONDecodeError as e:
-                    core.logging.log_event(f"[DeepAgent] Failed to parse JSON. Error: {e}. Raw response: {response_text[:500]}", level="ERROR")
-                    return f"Error: DeepAgent generated invalid JSON: {response_text[:200]}"
+                    core.logging.log_event(f"[DeepAgent] Failed to parse JSON: {e}. Attempting repair...", level="WARNING")
+                    # Attempt LLM repair for malformed JSON
+                    repaired_response = await self._repair_json_with_llm(response_text, f"JSONDecodeError: {e}")
+                    
+                    if repaired_response and isinstance(repaired_response, dict):
+                         core.logging.log_event("[DeepAgent] Malformed JSON successfully repaired by LLM.", level="INFO")
+                         parsed_response = repaired_response
+                    else:
+                        core.logging.log_event(f"[DeepAgent] JSON repair failed. Raw response: {response_text[:500]}", level="ERROR")
+                        return f"Error: DeepAgent generated invalid JSON: {response_text[:200]}"
+
+                # --- Validation and Execution Logic (Shared) ---
+                return await self._validate_and_execute_tool(parsed_response)
             else:
                 core.logging.log_event("The vLLM server returned an empty or invalid response.", level="ERROR")
                 return "Error: The vLLM server returned an empty or invalid response."
