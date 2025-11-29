@@ -343,6 +343,9 @@ def get_top_horde_models(count=10, get_all=False):
 
             # Deprioritize AI Horde models as requested
             score -= 5000
+            
+            # Add the scored model to the list
+            scored_models.append({'name': model_name, 'score': score})
 
         sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
         model_names = [model['name'] for model in sorted_models]
