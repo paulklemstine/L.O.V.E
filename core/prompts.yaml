@@ -459,7 +459,7 @@ orchestrator_plan_generation: |
   1. "tool_name": The name of the tool or specialist agent to use for this step.
   2. "arguments": An object containing the parameters for that tool.
 
-  You can pass the result of a previous step to a subsequent step using a placeholder string like {{step_X_result}}, where X is the 1-based index of the step.
+  You can pass the result of a previous step to a subsequent step using a placeholder string like {{ '{{' }}step_X_result{{ '}}' }}, where X is the 1-based index of the step.
 
   Example Goal: "Review and compress the agent's recent memory."
   Example JSON Response:
