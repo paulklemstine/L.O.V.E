@@ -44,3 +44,6 @@ monero-python
 openai
 faiss-cpu
 llmlingua==0.2.2 # Prompt compression
+langgraph
+langchain
+langchain-community
