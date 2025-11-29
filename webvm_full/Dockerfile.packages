@@ -1,0 +1,56 @@
+# Packages volume - contains all Python dependencies
+# This will be built separately and mounted at /opt/python-packages
+
+# Start from the base image to have the same architecture and tools
+FROM i386/debian:bookworm as builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install minimal build dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
+    build-essential \
+    curl \
+    libffi-dev \
+    libjpeg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust for building Python packages that need it
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-host i686-unknown-linux-gnu
+ENV PATH="/root/.cargo/bin:${PATH}"
+ENV CARGO_BUILD_TARGET=i686-unknown-linux-gnu
+ENV PYO3_CROSS="1"
+
+# Upgrade pip
+RUN linux32 python3 -m pip install --upgrade pip --break-system-packages
+
+# Install PyTorch (CPU only) to a specific directory
+RUN mkdir -p /packages
+RUN linux32 python3 -m pip install \
+    --target=/packages \
+    --break-system-packages \
+    torch torchvision torchaudio \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    || echo "WARNING: Torch install failed, continuing..."
+
+# Install transformers
+RUN linux32 python3 -m pip install \
+    --target=/packages \
+    --break-system-packages \
+    transformers
+
+# Copy requirements.txt and install remaining packages
+COPY requirements.txt /tmp/requirements.txt
+
+# Install all other requirements (excluding torch and transformers which we already installed)
+RUN linux32 python3 -m pip install \
+    --target=/packages \
+    --break-system-packages \
+    -r /tmp/requirements.txt \
+    || echo "WARNING: Some packages may have failed to install"
+
+# Final stage - just the packages
+FROM scratch
+COPY --from=builder /packages /

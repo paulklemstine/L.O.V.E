@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>L.O.V.E. WebVM Full Edition</title>
+    <title>L.O.V.E. WebVM Full Edition (Multi-Volume)</title>
     <script src="https://cxrtnc.leaningtech.com/1.2.2/cx.js"></script>
     <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
     <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
@@ -49,62 +49,88 @@
         fitAddon.fit();
         window.onresize = () => fitAddon.fit();
 
-        term.write('Welcome to L.O.V.E. WebVM Full Edition\r\n');
-        term.write('This environment attempts to run the FULL L.O.V.E script.\r\n');
-        term.write('Please wait while the system boots (this may take a while)...\r\n');
+        term.write('Welcome to L.O.V.E. WebVM Full Edition (Multi-Volume)\r\n');
+        term.write('Loading system in 3 separate volumes...\r\n');
+        term.write('Please wait while the system boots (this may take a while)...\r\n\r\n');
 
         async function run() {
             try {
-                // Initialize CheerpX with Tailscale support
+                // Load base system
+                document.getElementById('status').innerText = "Loading base system...";
+                term.write('Loading base system (OS + Python)...\r\n');
+                const baseDevice = await CheerpX.HttpBytesDevice.create("base.ext2");
+                const baseOverlay = await CheerpX.OverlayDevice.create(
+                    baseDevice,
+                    await CheerpX.IDBDevice.create("base_cache")
+                );
+
+                // Load packages volume
+                document.getElementById('status').innerText = "Loading Python packages...";
+                term.write('Loading Python packages (PyTorch, transformers, etc.)...\r\n');
+                const packagesDevice = await CheerpX.HttpBytesDevice.create("packages.ext2");
+
+                // Load app volume
+                document.getElementById('status').innerText = "Loading L.O.V.E application...";
+                term.write('Loading L.O.V.E application code...\r\n');
+                const appDevice = await CheerpX.HttpBytesDevice.create("app.ext2");
+
+                document.getElementById('status').innerText = "Initializing CheerpX...";
+                term.write('\r\nInitializing virtual machine...\r\n');
+
+                // Initialize CheerpX with all three volumes
                 const cx = await CheerpX.Linux.create({
                     mounts: [
-                        { type: "ext2", url: "love.ext2", mountPoint: "/" },
-                        { type: "devs", mountPoint: "/dev" },
-                        { type: "proc", mountPoint: "/proc" }
+                        { type: "ext2", path: "/", dev: baseOverlay },
+                        { type: "ext2", path: "/opt/python-packages", dev: packagesDevice },
+                        { type: "ext2", path: "/root/L.O.V.E", dev: appDevice },
+                        { type: "devs", path: "/dev" },
+                        { type: "proc", path: "/proc" }
                     ],
-                    networkInterface: "tailscale"
+                    networkInterface: {
+                        loginUrlCb: (url) => {
+                            console.log("Tailscale Login URL:", url);
+                            term.write(`\r\n\r\nTailscale Login Required:\r\n${url}\r\n\r\n`);
+                            window.open(url, "_blank");
+                        },
+                        stateUpdateCb: (state) => {
+                            if (state === 6) {
+                                term.write('\r\nNetwork: Connected\r\n');
+                            }
+                        }
+                    }
                 });
 
                 document.getElementById('status').innerText = "CheerpX Initialized. Booting System...";
+                term.write('System initialized. Starting shell...\r\n\r\n');
+
+                // Set up console for interactive terminal
+                cx.setCustomConsole(term.write.bind(term), term.write.bind(term), () => {
+                    return new Promise((resolve) => {
+                        const handler = (data) => {
+                            term.off('data', handler);
+                            resolve(data.charCodeAt(0));
+                        };
+                        term.on('data', handler);
+                    });
+                });
 
                 // Run bash login shell
                 await cx.run("/bin/bash", ["-l"], {
                     env: [
                         "HOME=/root",
                         "TERM=xterm",
-                        "PYTHONUNBUFFERED=1"
-                    ],
-                    stdout: (char) => term.write(String.fromCharCode(char)),
-                    stderr: (char) => term.write(String.fromCharCode(char)),
-                    stdin: (char) => cx.sendStdin(char)
+                        "PYTHONUNBUFFERED=1",
+                        "PYTHONPATH=/opt/python-packages:${PYTHONPATH}"
+                    ]
                 });
 
                 document.getElementById('status').innerText = "Process Finished.";
             } catch (e) {
                 document.getElementById('status').innerText = "Error: " + e;
                 console.error(e);
-                term.write('\r\nError: ' + e);
+                term.write('\r\nError: ' + e + '\r\n');
             }
         }
-
-        // Handle terminal input
-        term.onData((data) => {
-            // We can't easily send input to the specific process instance here without capturing it from run()
-            // But CheerpX's cx.run doesn't return the process handle in a way that allows external input easily 
-            // unless we use the stdin callback or cx.setCustomConsole.
-            // However, for this POC, the `stdin` callback in `cx.run` is not for *receiving* input from us, 
-            // it's for the process to *read* input.
-            // Wait, the documentation says `stdin` option is a function that returns a promise for a character?
-            // No, usually `stdin` option is for providing input.
-            // Actually, `cx.sendStdin` is a method on the *CheerpX instance* (cx) that sends input to the *currently running* process?
-            // Or maybe we need to use `cx.setConsole(term)`.
-            // Let's assume `cx.sendStdin` works if the process is running.
-            // The previous code had `stdin: (char) => cx.sendStdin(char)` which is recursive and wrong.
-            // The `stdin` option in `cx.run` is for *providing* input when the process asks for it (blocking read).
-            // If we want async input from xterm, we usually don't use the `stdin` option like that.
-            // We use `cx.setCustomConsole` or similar.
-            // But let's try to just use `cx.sendStdin` from the event handler.
-        });
 
         run();
     </script>
