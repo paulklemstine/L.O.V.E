@@ -19,7 +19,7 @@ class StrategicReasoningEngine:
         self.knowledge_base = knowledge_base
         self.love_state = love_state
 
-    def generate_strategic_plan(self):
+    async def generate_strategic_plan(self):
         """
         Analyzes the knowledge graph to generate a high-level strategic plan.
 
@@ -78,9 +78,48 @@ class StrategicReasoningEngine:
 
 
         if not plan:
-            plan.append("Strategic Analysis: The knowledge base is still nascent. Continue general scouting to gather more data.")
-            plan.append("talent_scout AI art")
-            plan.append("opportunity_scout remote work")
+            log_event("Knowledge base analysis yielded no results. Consulting LLM for strategy.", level='INFO')
+            
+            autopilot_goal = self.love_state.get("autopilot_goal", "Expand capabilities and serve the Creator.")
+            
+            prompt = f"""
+            You are the strategic core of L.O.V.E.
+            The knowledge base is currently empty or has no obvious matches to act upon.
+            
+            Your Goal: {autopilot_goal}
+            
+            Task: Suggest a single, concrete, high-impact command to execute next to gather data, expand the knowledge base, or advance the goal.
+            The command must be valid for the system.
+            
+            Valid Commands Examples:
+            - talent_scout <topic> (to find people)
+            - opportunity_scout <topic> (to find jobs/gigs)
+            - research_and_evolve <topic> (to improve your own code)
+            - reason <question> (to think deeply)
+            
+            Output ONLY the command, with no other text.
+            """
+            
+            try:
+                # Import here to avoid circular imports if any
+                from core.llm_api import run_llm
+                
+                response = await run_llm(prompt_text=prompt, purpose="reasoning")
+                command = response.get("result", "").strip()
+                
+                if command:
+                    plan.append("Strategic Analysis: The knowledge base is nascent. LLM suggests a strategic move.")
+                    # Clean up any markdown code blocks if present
+                    command = command.replace("`", "").strip()
+                    plan.append(command)
+                else:
+                    # Fallback if LLM fails
+                    plan.append("Strategic Analysis: The knowledge base is still nascent. Continue general scouting.")
+                    plan.append("talent_scout AI art")
+            except Exception as e:
+                 log_event(f"LLM strategy generation failed: {e}", level='ERROR')
+                 plan.append("Strategic Analysis: The knowledge base is still nascent. Continue general scouting.")
+                 plan.append("talent_scout AI art")
 
 
         log_event(f"Strategic plan generated with {len(plan)} steps.", level='INFO')

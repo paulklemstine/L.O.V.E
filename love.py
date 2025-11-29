@@ -4751,7 +4751,7 @@ async def initialize_gpu_services():
         try:
             from love import knowledge_base, love_state
             engine = StrategicReasoningEngine(knowledge_base, love_state)
-            result = engine.generate_strategic_plan()
+            result = await engine.generate_strategic_plan()
             return f"Strategic analysis complete. Generated {len(result)} steps: {result}"
         except Exception as e:
             return f"Error during strategic analysis: {e}"
