@@ -17,6 +17,7 @@ echo "Cleaning up previous builds..."
 rm -f base.tar base.ext2
 rm -f packages.tar packages.ext2
 rm -f app.tar app.ext2
+rm -f requirements.txt
 rm -rf src/
 
 # === BUILD BASE SYSTEM ===
@@ -46,6 +47,10 @@ echo "✓ Base system created: $BASE_SIZE"
 # === BUILD PACKAGES VOLUME ===
 echo ""
 echo "=== Building Packages Volume ==="
+
+# Copy requirements.txt to current directory for Docker build context
+cp "$REPO_ROOT/requirements.txt" .
+
 docker build --platform linux/386 -f Dockerfile.packages -t love-webvm-packages .
 
 echo "Exporting packages filesystem..."
