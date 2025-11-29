@@ -398,6 +398,29 @@ def _install_python_requirements():
     # --- End setuptools pre-installation ---
     _install_requirements_file('requirements.txt', 'core_pkg_')
 
+    # --- Install torch-c-dlpack-ext for performance optimization ---
+    # This is recommended by vLLM for better tensor allocation
+    if platform.system() == "Linux":
+        print("Checking for torch-c-dlpack-ext optimization...")
+        if not is_dependency_met("torch_c_dlpack_ext_installed"):
+            if not _is_package_installed("torch-c-dlpack-ext"):
+                print("Installing torch-c-dlpack-ext for performance...")
+                pip_executable = _get_pip_executable()
+                if pip_executable:
+                    try:
+                        subprocess.check_call(pip_executable + ['install', 'torch-c-dlpack-ext', '--break-system-packages'])
+                        print("Successfully installed torch-c-dlpack-ext.")
+                        mark_dependency_as_met("torch_c_dlpack_ext_installed")
+                    except subprocess.CalledProcessError as e:
+                        print(f"WARN: Failed to install torch-c-dlpack-ext. Performance might be suboptimal. Reason: {e}")
+                        logging.warning(f"Failed to install torch-c-dlpack-ext: {e}")
+                else:
+                    print("ERROR: Could not find pip to install torch-c-dlpack-ext.")
+            else:
+                print("torch-c-dlpack-ext is already installed.")
+                mark_dependency_as_met("torch_c_dlpack_ext_installed")
+
+
     # --- Install Windows-specific dependencies ---
     if platform.system() == "Windows":
         print("Windows detected. Checking for pywin32 dependency...")
