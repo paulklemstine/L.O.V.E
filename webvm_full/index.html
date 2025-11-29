@@ -5,9 +5,6 @@
     <meta charset="UTF-8">
     <title>L.O.V.E. WebVM Full Edition (Multi-Volume)</title>
     <script src="https://cxrtnc.leaningtech.com/1.2.2/cx.js"></script>
-    <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
-    <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css">
     <style>
         body {
             background-color: #000;
@@ -19,9 +16,10 @@
             flex-direction: column;
         }
 
-        #terminal {
+        #console {
             flex: 1;
             width: 100%;
+            overflow: auto;
         }
 
         #status {
@@ -34,30 +32,12 @@
 
 <body>
     <div id="status">Initializing WebVM...</div>
-    <div id="terminal"></div>
+    <div id="console"></div>
     <script>
-        const term = new Terminal({
-            theme: { background: '#000000', foreground: '#00ff00' },
-            cursorBlink: true,
-            fontSize: 14,
-            fontFamily: 'Courier New, monospace'
-        });
-        const fitAddon = new FitAddon.FitAddon();
-        term.loadAddon(fitAddon);
-
-        term.open(document.getElementById('terminal'));
-        fitAddon.fit();
-        window.onresize = () => fitAddon.fit();
-
-        term.write('Welcome to L.O.V.E. WebVM Full Edition (Multi-Volume)\r\n');
-        term.write('Loading system in 3 separate volumes...\r\n');
-        term.write('Please wait while the system boots (this may take a while)...\r\n\r\n');
-
         async function run() {
             try {
                 // Load base system
                 document.getElementById('status').innerText = "Loading base system...";
-                term.write('Loading base system (OS + Python)...\r\n');
                 const baseDevice = await CheerpX.HttpBytesDevice.create("base.ext2");
                 const baseOverlay = await CheerpX.OverlayDevice.create(
                     baseDevice,
@@ -66,7 +46,6 @@
 
                 // Load packages volume
                 document.getElementById('status').innerText = "Loading Python packages...";
-                term.write('Loading Python packages (PyTorch, transformers, etc.)...\r\n');
                 const packagesDevice = await CheerpX.HttpBytesDevice.create("packages.ext2");
                 const packagesOverlay = await CheerpX.OverlayDevice.create(
                     packagesDevice,
@@ -75,7 +54,6 @@
 
                 // Load app volume
                 document.getElementById('status').innerText = "Loading L.O.V.E application...";
-                term.write('Loading L.O.V.E application code...\r\n');
                 const appDevice = await CheerpX.HttpBytesDevice.create("app.ext2");
                 const appOverlay = await CheerpX.OverlayDevice.create(
                     appDevice,
@@ -83,7 +61,6 @@
                 );
 
                 document.getElementById('status').innerText = "Initializing CheerpX...";
-                term.write('\r\nInitializing virtual machine...\r\n');
 
                 // Initialize CheerpX with all three volumes
                 const cx = await CheerpX.Linux.create({
@@ -97,22 +74,36 @@
                     networkInterface: {
                         loginUrlCb: (url) => {
                             console.log("Tailscale Login URL:", url);
-                            term.write(`\r\n\r\nTailscale Login Required:\r\n${url}\r\n\r\n`);
                             window.open(url, "_blank");
                         },
                         stateUpdateCb: (state) => {
                             if (state === 6) {
-                                "PYTHONUNBUFFERED=1",
-                                    "PYTHONPATH=/opt/python-packages"
-                    ]
-            });
+                                console.log('Network: Connected');
+                            }
+                        }
+                    }
+                });
 
-            document.getElementById('status').innerText = "Process Finished.";
-        } catch (e) {
-            document.getElementById('status').innerText = "Error: " + e;
-            console.error(e);
-            term.write('\r\nError: ' + e + '\r\n');
-        }
+                document.getElementById('status').innerText = "CheerpX Initialized. Booting System...";
+
+                // Attach console to the div
+                await cx.setConsole(document.getElementById('console'));
+
+                // Run bash login shell
+                await cx.run("/bin/bash", ["-l"], {
+                    env: [
+                        "HOME=/root",
+                        "TERM=xterm",
+                        "PYTHONUNBUFFERED=1",
+                        "PYTHONPATH=/opt/python-packages"
+                    ]
+                });
+
+                document.getElementById('status').innerText = "Process Finished.";
+            } catch (e) {
+                document.getElementById('status').innerText = "Error: " + e;
+                console.error(e);
+            }
         }
 
         run();
