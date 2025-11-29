@@ -3,9 +3,9 @@ set -e
 
 echo "=== Multi-Volume WebVM Build Script ==="
 echo "This will create 3 separate ext2 images:"
-echo "  1. base.ext2 (OS + Python + tools)"
-echo "  2. packages.ext2 (Python packages)"
-echo "  3. app.ext2 (L.O.V.E code)"
+echo "  1. base.ext2 (2GB - minimal OS + Python)"
+echo "  2. packages.ext2 (2GB - Python packages)"
+echo "  3. app.ext2 (512MB - L.O.V.E code)"
 echo ""
 
 # Get the repository root

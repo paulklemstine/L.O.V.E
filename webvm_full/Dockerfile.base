@@ -1,25 +1,29 @@
 # Base image for CheerpX (must be i386/debian:bookworm)
+# OPTIMIZED FOR 2GB SIZE LIMIT - minimal packages only
 FROM i386/debian:bookworm
 
 # Set environment variables to avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install base system packages
-# We include git, curl, nmap, sudo as requested by the script's "system packages" check
-RUN apt-get update && apt-get install -y \
+# Install ONLY essential base system packages
+# Removed: nmap, docker.io, Rust (too large, not needed at runtime)
+# Using --no-install-recommends to minimize size
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-dev \
     build-essential \
     git \
     curl \
-    nmap \
     sudo \
     locales \
     libffi-dev \
     libjpeg-dev \
-    docker.io \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/share/doc/* \
+    && rm -rf /usr/share/man/* \
+    && rm -rf /var/cache/apt/*
 
 # Generate locale
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
@@ -27,21 +31,12 @@ ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
 
-# Install Rust via rustup (explicitly targeting i686 to avoid detection errors)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-host i686-unknown-linux-gnu
-ENV PATH="/root/.cargo/bin:${PATH}"
-ENV CARGO_BUILD_TARGET=i686-unknown-linux-gnu
-ENV PYO3_CROSS="1"
-
 # Upgrade pip
-RUN linux32 python3 -m pip install --upgrade pip --break-system-packages
+RUN linux32 python3 -m pip install --upgrade pip --break-system-packages \
+    && rm -rf /root/.cache/pip
 
 # Create directory for Python packages mount point
 RUN mkdir -p /opt/python-packages
-
-# Create symlink so Python can find packages in the mounted volume
-# This will point to where we mount the packages volume
-RUN ln -sf /opt/python-packages /usr/local/lib/python3.11/dist-packages/packages
 
 # Set PYTHONPATH to include the packages directory
 ENV PYTHONPATH="/opt/python-packages:${PYTHONPATH:-}"
