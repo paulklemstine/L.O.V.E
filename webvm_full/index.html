@@ -105,17 +105,43 @@
                                 term.write('\\r\\nNetwork: Connected\\r\\n');
                             }
                         }
+                    }
+                });
+
+                document.getElementById('status').innerText = "CheerpX Initialized. Booting System...";
+                term.write('System initialized. Starting shell...\\r\\n\\r\\n');
+
+                // Set up console for interactive terminal
+                cx.setCustomConsole(
+                    (data) => term.write(data),
+                    (data) => term.write(data),
+                    () => {
+                        return new Promise((resolve) => {
+                            const handler = (data) => {
+                                term.off('data', handler);
+                                resolve(data.charCodeAt(0));
+                            };
+                            term.on('data', handler);
+                        });
+                    }
+                );
+
+                // Run bash login shell
+                await cx.run("/bin/bash", ["-l"], {
+                    env: [
+                        "HOME=/root",
+                        "TERM=xterm",
                         "PYTHONUNBUFFERED=1",
                         "PYTHONPATH=/opt/python-packages:${PYTHONPATH}"
                     ]
-            });
+                });
 
-            document.getElementById('status').innerText = "Process Finished.";
-        } catch (e) {
-            document.getElementById('status').innerText = "Error: " + e;
-            console.error(e);
-            term.write('\\r\\nError: ' + e + '\\r\\n');
-        }
+                document.getElementById('status').innerText = "Process Finished.";
+            } catch (e) {
+                document.getElementById('status').innerText = "Error: " + e;
+                console.error(e);
+                term.write('\\r\\nError: ' + e + '\\r\\n');
+            }
         }
 
         run();
