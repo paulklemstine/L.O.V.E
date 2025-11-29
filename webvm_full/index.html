@@ -106,33 +106,18 @@
                             if (state === 6) {
                                 document.getElementById('network-notice').style.display = 'none';
                                 document.getElementById('status').innerText = "✓ Network Connected";
-                                console.log("Network connected successfully!");
-                            }
-                        }
-                    }
-                });
-
-                document.getElementById('status').innerText = "System Ready";
-
-                // Attach console to the div
-                await cx.setConsole(document.getElementById('console'));
-
-                // Run bash login shell
-                await cx.run("/bin/bash", ["-l"], {
-                    env: [
-                        "HOME=/root",
-                        "TERM=xterm",
-                        "PYTHONUNBUFFERED=1",
-                        "PYTHONPATH=/opt/python-packages"
+                                "TERM=xterm",
+                                    "PYTHONUNBUFFERED=1",
+                                    "PYTHONPATH=/opt/python-packages"
                     ],
-                    cwd: "/root"
-                });
+                cwd: "/root"
+            });
 
-                document.getElementById('status').innerText = "Process Finished.";
-            } catch (e) {
-                document.getElementById('status').innerText = "Error: " + e;
-                console.error(e);
-            }
+            document.getElementById('status').innerText = "Process Finished.";
+        } catch (e) {
+            document.getElementById('status').innerText = "Error: " + e;
+            console.error(e);
+        }
         }
 
         run();
