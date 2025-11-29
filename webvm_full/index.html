@@ -45,7 +45,11 @@
 </head>
 
 <body>
-    <div id="status">Initializing WebVM...</div>
+    <div id="status">
+        Initializing WebVM...
+        <button id="paste-btn" style="float: right; margin-left: 10px; padding: 2px 8px; cursor: pointer;">📋
+            Paste</button>
+    </div>
     <div id="network-notice">⚠️ Click here to enable networking (Tailscale authentication required)</div>
     <div id="console"></div>
     <script>
@@ -106,53 +110,18 @@
                             if (state === 6) {
                                 document.getElementById('network-notice').style.display = 'none';
                                 document.getElementById('status').innerText = "✓ Network Connected";
-                                console.log("Network connected successfully!");
-                            }
-                        }
-                    }
-                });
-
-                document.getElementById('status').innerText = "System Ready";
-
-                // Expose CheerpX instance globally for command injection
-                window.cx = cx;
-
-                // Helper function to inject commands (paste alternative)
-                window.injectCommand = function (command) {
-                    if (!window.cx) {
-                        console.error("CheerpX not ready");
-                        return;
-                    }
-                    for (let i = 0; i < command.length; i++) {
-                        window.cx.input(command.charCodeAt(i));
-                    }
-                    window.cx.input(10); // Enter key
-                    console.log("✓ Injected:", command);
-                };
-
-                console.log("%c✓ CheerpX ready!", "color: #0f0; font-weight: bold");
-                console.log("%cPaste commands using: injectCommand('your command here')", "color: #ff0");
-                console.log("%cExample: injectCommand('ls -la /root/L.O.V.E')", "color: #888");
-
-                // Attach console to the div
-                await cx.setConsole(document.getElementById('console'));
-
-                // Run bash login shell
-                await cx.run("/bin/bash", ["-l"], {
-                    env: [
-                        "HOME=/root",
-                        "TERM=xterm",
-                        "PYTHONUNBUFFERED=1",
-                        "PYTHONPATH=/opt/python-packages"
+                                "TERM=xterm",
+                                    "PYTHONUNBUFFERED=1",
+                                    "PYTHONPATH=/opt/python-packages"
                     ],
-                    cwd: "/root"
-                });
+                cwd: "/root"
+            });
 
-                document.getElementById('status').innerText = "Process Finished.";
-            } catch (e) {
-                document.getElementById('status').innerText = "Error: " + e;
-                console.error(e);
-            }
+            document.getElementById('status').innerText = "Process Finished.";
+        } catch (e) {
+            document.getElementById('status').innerText = "Error: " + e;
+            console.error(e);
+        }
         }
 
         run();
