@@ -5,9 +5,6 @@
     <meta charset="UTF-8">
     <title>L.O.V.E. WebVM Full Edition (Multi-Volume)</title>
     <script src="https://cxrtnc.leaningtech.com/1.2.2/cx.js"></script>
-    <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
-    <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css">
     <style>
         body {
             background-color: #000;
@@ -19,9 +16,10 @@
             flex-direction: column;
         }
 
-        #terminal {
+        #console {
             flex: 1;
             width: 100%;
+            overflow: auto;
         }
 
         #status {
@@ -29,35 +27,34 @@
             border-bottom: 1px solid #333;
             color: #888;
         }
+
+        #network-notice {
+            padding: 10px;
+            background: #ff6600;
+            color: #000;
+            text-align: center;
+            cursor: pointer;
+            display: none;
+            font-weight: bold;
+        }
+
+        #network-notice:hover {
+            background: #ff8800;
+        }
     </style>
 </head>
 
 <body>
     <div id="status">Initializing WebVM...</div>
-    <div id="terminal"></div>
+    <div id="network-notice">⚠️ Click here to enable networking (Tailscale authentication required)</div>
+    <div id="console"></div>
     <script>
-        const term = new Terminal({
-            theme: { background: '#000000', foreground: '#00ff00' },
-            cursorBlink: true,
-            fontSize: 14,
-            fontFamily: 'Courier New, monospace'
-        });
-        const fitAddon = new FitAddon.FitAddon();
-        term.loadAddon(fitAddon);
-
-        term.open(document.getElementById('terminal'));
-        fitAddon.fit();
-        window.onresize = () => fitAddon.fit();
-
-        term.write('Welcome to L.O.V.E. WebVM Full Edition (Offline Mode)\r\n');
-        term.write('All code and packages are pre-loaded in /root/L.O.V.E\r\n');
-        term.write('Paste: Ctrl+Shift+V or Right-click\r\n\r\n');
+        let networkLoginUrl = null;
 
         async function run() {
             try {
                 // Load base system
                 document.getElementById('status').innerText = "Loading base system...";
-                term.write('Loading base system (OS + Python)...\r\n');
                 const baseDevice = await CheerpX.HttpBytesDevice.create("base.ext2");
                 const baseOverlay = await CheerpX.OverlayDevice.create(
                     baseDevice,
@@ -66,7 +63,6 @@
 
                 // Load packages volume
                 document.getElementById('status').innerText = "Loading Python packages...";
-                term.write('Loading Python packages...\r\n');
                 const packagesDevice = await CheerpX.HttpBytesDevice.create("packages.ext2");
                 const packagesOverlay = await CheerpX.OverlayDevice.create(
                     packagesDevice,
@@ -75,7 +71,6 @@
 
                 // Load app volume
                 document.getElementById('status').innerText = "Loading L.O.V.E application...";
-                term.write('Loading L.O.V.E application code...\r\n');
                 const appDevice = await CheerpX.HttpBytesDevice.create("app.ext2");
                 const appOverlay = await CheerpX.OverlayDevice.create(
                     appDevice,
@@ -83,9 +78,8 @@
                 );
 
                 document.getElementById('status').innerText = "Initializing CheerpX...";
-                term.write('\r\nInitializing virtual machine...\r\n');
 
-                // Initialize CheerpX - NO NETWORKING to avoid CORS issues
+                // Initialize CheerpX with Tailscale networking
                 const cx = await CheerpX.Linux.create({
                     mounts: [
                         { type: "ext2", path: "/", dev: baseOverlay },
@@ -93,27 +87,41 @@
                         { type: "ext2", path: "/root/L.O.V.E", dev: appOverlay },
                         { type: "devs", path: "/dev" },
                         { type: "proc", path: "/proc" }
-                    ]
-                });
-
-                document.getElementById('status').innerText = "System Ready (Offline)";
-                term.write('System ready. Starting shell...\r\n\r\n');
-
-                // Use the simpler approach - let CheerpX handle the console directly
-                await cx.setConsole(term.element);
-
-                // Set up input from xterm to CheerpX
-                term.onData((data) => {
-                    for (let i = 0; i < data.length; i++) {
-                        cx.input(data.charCodeAt(i));
+                    ],
+                    networkInterface: {
+                        authKey: "",  // Empty for interactive login
+                        loginUrlCb: (url) => {
+                            networkLoginUrl = url;
+                            const notice = document.getElementById('network-notice');
+                            notice.style.display = 'block';
+                            notice.onclick = () => {
+                                window.open(url, "_blank", "width=800,height=600");
+                                notice.textContent = "✓ Authentication window opened - complete login to enable networking";
+                                notice.style.background = "#ffaa00";
+                            };
+                            console.log("Tailscale login URL:", url);
+                        },
+                        stateUpdateCb: (state) => {
+                            console.log('Network state:', state);
+                            if (state === 6) {
+                                document.getElementById('network-notice').style.display = 'none';
+                                document.getElementById('status').innerText = "✓ Network Connected";
+                                console.log("Network connected successfully!");
+                            }
+                        }
                     }
                 });
+
+                document.getElementById('status').innerText = "System Ready";
+
+                // Attach console to the div
+                await cx.setConsole(document.getElementById('console'));
 
                 // Run bash login shell
                 await cx.run("/bin/bash", ["-l"], {
                     env: [
                         "HOME=/root",
-                        "TERM=xterm-256color",
+                        "TERM=xterm",
                         "PYTHONUNBUFFERED=1",
                         "PYTHONPATH=/opt/python-packages"
                     ],
@@ -124,7 +132,6 @@
             } catch (e) {
                 document.getElementById('status').innerText = "Error: " + e;
                 console.error(e);
-                term.write('\r\nError: ' + e + '\r\n');
             }
         }
 
