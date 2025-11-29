@@ -4259,6 +4259,13 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                 relationship_data = record.get('data', {})
                                 source = relationship_data.get('from')
                                 target = relationship_data.get('to')
+
+                                # Normalize source/target if they are dictionaries (LLM output artifact)
+                                if isinstance(source, dict):
+                                    source = source.get('value') or source.get('id') or source.get('name')
+                                if isinstance(target, dict):
+                                    target = target.get('value') or target.get('id') or target.get('name')
+
                                 if source and target:
                                     # Ensure both source and target nodes exist before adding an edge
                                     if not knowledge_base.get_node(source):
