@@ -5434,9 +5434,10 @@ async def main(args):
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
-    social_media_agent = SocialMediaAgent(loop)
+    social_media_agent = SocialMediaAgent(loop, love_state)
     asyncio.create_task(social_media_agent.run())
-    asyncio.create_task(social_media_agent.run())
+    # Duplicate line removed
+
     asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent, multiplayer_manager))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader())

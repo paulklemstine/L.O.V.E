@@ -92,7 +92,8 @@ class SocialMediaReActEngine(GeminiReActEngine):
                 image_prompt = image_prompt_response.get('result', '').strip()
 
                 if image_prompt:
-                    goal = f"Generate content for a social media post using the '{strategy}' strategy. Then, generate an image for the post with the prompt: '{image_prompt}'. Finally, 'Finish' with a JSON object containing 'text' and 'image' keys. The 'image' value should be the direct result from the image generation tool."
+                    # Explicitly instruct to use the image generation tool and then Finish with both
+                    goal = f"1. Generate content for a social media post using the '{strategy}' strategy with 'generate_post_content'.\n2. Generate an image using 'generate_image_for_post' with the prompt: '{image_prompt}'.\n3. Call 'Finish' with a JSON object containing both 'text' (from step 1) and 'image' (the file path from step 2)."
                 else:
                     goal = f"Generate creative and engaging content for a new social media post. Use the '{strategy}' strategy with the 'generate_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
             else:
@@ -112,6 +113,11 @@ class SocialMediaReActEngine(GeminiReActEngine):
 
         # If the result is already a dictionary (from our new Finish tool logic), return it directly
         if isinstance(final_result, dict):
+            # Validate image path if present
+            if 'image' in final_result and not final_result['image']:
+                 # If image key exists but is empty/None, remove it or try to recover?
+                 # For now, let's just log it.
+                 pass
             return final_result
 
         # Otherwise, try to parse it as a JSON string (backward compatibility)

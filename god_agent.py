@@ -88,10 +88,21 @@ class GodAgent:
                     break
                 else:
                     print(f"Error in GodAgent loop: {e}", file=sys.stderr)
+            except SystemExit:
+                 # Catch SystemExit to prevent the thread from killing the whole process if possible
+                 core.logging.log_event("GodAgent: Caught SystemExit. Restarting loop...", level="CRITICAL")
+                 time.sleep(5)
             except Exception as e:
                 # Log full traceback for debugging
                 tb = traceback.format_exc()
                 print(f"Error in GodAgent loop: {e}\n{tb}", file=sys.stderr)
+                core.logging.log_event(f"Critical error in GodAgent loop: {e}", level="CRITICAL")
+                time.sleep(10) # Wait a bit before retrying
 
-            # Wait for approximately 60 seconds before the next cycle.
-            time.sleep(60)
+            # Wait for approximately 120 seconds before the next cycle.
+            time.sleep(120)
+            # Heartbeat
+            try:
+                self.love_state['god_agent_last_heartbeat'] = time.time()
+            except:
+                pass

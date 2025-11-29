@@ -82,29 +82,57 @@ class GodAgentReActEngine(GeminiReActEngine):
         registry.register_tool("remove_user_story", evolution_state.remove_user_story, {"description": "Removes a user story by its ID.", "arguments": {"story_id": "string"}})
         registry.register_tool("reorder_user_stories", evolution_state.reorder_user_stories, {"description": "Reorders the evolution backlog.", "arguments": {"story_ids": "list[string]"}})
 
+        # --- Action Tools ---
+        def create_task_wrapper(description: str):
+            """Creates a new task in the LoveTaskManager."""
+            task_id = self.love_task_manager.add_task(description)
+            return f"Task created with ID: {task_id}"
+
+        def read_file_wrapper(file_path: str):
+            """Reads the content of a file."""
+            try:
+                with open(file_path, 'r') as f:
+                    return f.read()
+            except Exception as e:
+                return f"Error reading file: {e}"
+
+        registry.register_tool("create_task", create_task_wrapper, {
+            "description": "Creates a new task for the system to execute.",
+            "arguments": {"description": "string"}
+        })
+
+        registry.register_tool("read_file", read_file_wrapper, {
+            "description": "Reads a file from the filesystem. Use this to check logs or code.",
+            "arguments": {"file_path": "string"}
+        })
+
         return registry
 
     async def run(self):
         """
         The main entry point for the God Agent's reasoning loop.
         """
+        # Get recent memories/insights to inject into context
+        recent_insights = []
+        if self.memory_manager:
+            # This is a simplification; ideally we'd query the memory manager
+            pass
+
         goal = """
-Analyze the current state of L.O.V.E. and provide ONE concise strategic insight.
+You are the God Agent, the high-level orchestrator of the L.O.V.E. system.
+Your goal is to ensure the system is constantly evolving, stable, and aligned with its core directives.
 
-Your task:
-1. Call 'get_system_state' to see the current state (ONCE)
-2. Call 'get_desires' to see the desire backlog (ONCE)
-3. Based on this information, provide a single insight or recommendation
-4. Use the 'Finish' tool to deliver your insight
+**Instructions:**
+1.  **Observe**: Call `get_system_state` to understand the current context (active tasks, health).
+2.  **Reflect**: Check `get_desires` or `get_user_stories` if the system is idle.
+3.  **Investigate**: If you see errors in the logs or stuck tasks, use `read_file` (e.g., 'love.log') to investigate.
+4.  **Plan & Act**:
+    *   If a critical issue is found, create a task to fix it using `create_task`.
+    *   If the system is idle, pick a desire/story and create a task to implement it.
+    *   If everything is running smoothly, provide a strategic insight.
 
-Your insight should be ONE of the following:
-- A strategic recommendation for prioritization
-- A warning about a potential risk
-- An opportunity you've identified
-- A suggested course correction
-
-IMPORTANT: After calling get_system_state and get_desires ONCE each, you MUST use the 'Finish' tool.
-Do NOT call the same tools multiple times. Provide your insight in 1-2 sentences and finish.
+**Output Format:**
+Use the 'Finish' tool to provide your final insight or summary of actions taken.
 """
         return await self.execute_goal(goal)
 

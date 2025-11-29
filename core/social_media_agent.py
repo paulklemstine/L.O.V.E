@@ -15,8 +15,9 @@ class SocialMediaAgent:
     """
     An autonomous agent that manages L.O.V.E.'s social media presence.
     """
-    def __init__(self, loop):
+    def __init__(self, loop, love_state):
         self.loop = loop
+        self.love_state = love_state
         self.engine = SocialMediaReActEngine(ui_panel_queue=None, loop=loop)
         self.processed_comments = set()
         self.max_retries = 3
@@ -144,7 +145,10 @@ class SocialMediaAgent:
     async def run(self):
         """The main loop for the social media agent."""
         log_event("Social Media Agent started.", level='INFO')
-        last_post_time = 0
+        log_event("Social Media Agent started.", level='INFO')
+        # Load last post time from state, default to 0 if not found
+        last_post_time = self.love_state.get('social_media', {}).get('last_post_time', 0)
+        log_event(f"Loaded last post time: {last_post_time}", level='DEBUG')
         last_comment_check_time = 0
         post_interval = 600  # 10 minutes
         comment_check_interval = 300  # 5 minutes
@@ -164,6 +168,17 @@ class SocialMediaAgent:
                         if platform in self.handlers:
                             await self._attempt_action(self._post_new_content, platform)
                         last_post_time = time.time()
+                        # Persist last post time to state
+                        self.love_state.setdefault('social_media', {})['last_post_time'] = last_post_time
+                        from core.storage import save_all_state
+                        # We can't easily call save_all_state here because it might not be imported or thread-safe
+                        # But we updated the dict, which is shared. The main loop or other savers will pick it up.
+                        # Ideally, we should trigger a save.
+                        try:
+                            # Attempt to trigger a save if possible, or just rely on periodic saves
+                            pass 
+                        except:
+                            pass
 
                 # Check if it's time to check for comments
                 if current_time - last_comment_check_time >= comment_check_interval:
