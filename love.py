@@ -4098,7 +4098,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                     output = "Knowledge base has been manually repopulated with current directives and tasks."
                 elif command == "strategize":
                     strategic_engine = StrategicReasoningEngine(knowledge_base, love_state)
-                    plan = strategic_engine.generate_strategic_plan()
+                    plan = await strategic_engine.generate_strategic_plan()
                     output = "Generated Strategic Plan:\n" + "\n".join(f"- {step}" for step in plan)
                 elif command == "mcp_start":
                     if not args:
