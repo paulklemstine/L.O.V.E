@@ -31,22 +31,52 @@ def post_to_bluesky_with_image(text: str, image: Image.Image = None):
         image: A PIL Image object to be attached to the post (optional).
     """
     client = get_bluesky_client()
-    embed = None
     
+    # Prepare the post content using TextBuilder for proper facet (hashtag/link) detection
+    from atproto import client_utils
+    text_builder = client_utils.TextBuilder()
+    
+    # Manually parse hashtags and add them as tags
+    # We split by space to preserve order and structure, but a regex finditer is better for positions
+    # However, TextBuilder handles the positioning if we build it segment by segment.
+    # A simpler approach is to use a regex to find all hashtags, and then construct the builder.
+    # But TextBuilder.text() appends text. 
+    # So we can iterate through the text and append either normal text or a tag.
+    
+    import re
+    # Regex to find hashtags: # followed by alphanumeric characters
+    # We use a capturing group to split the text
+    parts = re.split(r'(#\w+)', text)
+    
+    for part in parts:
+        if part.startswith('#'):
+            # It's a hashtag, add it as a tag
+            # Remove the # for the tag value
+            tag_value = part[1:]
+            text_builder.tag(part, tag_value)
+        else:
+            # It's normal text
+            text_builder.text(part)
+    
+    # Handle image upload if present
+    embed = None
     if image:
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format='PNG')
         img_byte_arr.seek(0)
+        img_data = img_byte_arr.read()
 
-        upload = client.com.atproto.repo.upload_blob(img_byte_arr.read())
-        embed = models.AppBskyEmbedImages.Main(images=[models.AppBskyEmbedImages.Image(alt='', image=upload.blob)])
+        # Upload the blob
+        upload = client.upload_blob(img_data)
+        
+        # Create the image embed
+        # Note: The structure for embedding images can be tricky. 
+        # We use the client's helper or construct the model directly.
+        embed = models.AppBskyEmbedImages.Main(
+            images=[models.AppBskyEmbedImages.Image(alt='Posted via L.O.V.E.', image=upload.blob)]
+        )
 
-    # Process text with RichText to detect facets (hashtags, mentions, links)
-    from atproto import RichText
-    rich_text = RichText(text=text)
-    rich_text.detect_facets(client)
-
-    return client.send_post(text=rich_text, embed=embed)
+    return client.send_post(text=text_builder, embed=embed)
 
 def get_own_posts(limit=20):
     """Fetches the most recent posts for the authenticated user."""
