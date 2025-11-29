@@ -96,8 +96,14 @@ def _recover_json(json_str: str):
                 return json.loads(json_str)
             except json.JSONDecodeError:
                 last_brace = json_str.rfind('}')
+                # If the last brace is at the very end, we need to find the *previous* one
+                # to ensure we are actually shrinking the string.
+                if last_brace == len(json_str) - 1:
+                    last_brace = json_str.rfind('}', 0, last_brace)
+                
                 if last_brace == -1:
-                    raise original_error  # Re-raise original error
+                    raise original_error  # Re-raise original error if no more objects found
+                
                 json_str = json_str[:last_brace+1]
         raise json.JSONDecodeError("Could not recover JSON object from string", "", 0)
 
