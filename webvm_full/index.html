@@ -110,18 +110,123 @@
                             if (state === 6) {
                                 document.getElementById('network-notice').style.display = 'none';
                                 document.getElementById('status').innerText = "✓ Network Connected";
-                                "TERM=xterm",
-                                    "PYTHONUNBUFFERED=1",
-                                    "PYTHONPATH=/opt/python-packages"
-                    ],
-                cwd: "/root"
-            });
+                                console.log("Network connected successfully!");
+                            }
+                        }
+                    }
+                });
 
-            document.getElementById('status').innerText = "Process Finished.";
-        } catch (e) {
-            document.getElementById('status').innerText = "Error: " + e;
-            console.error(e);
-        }
+                document.getElementById('status').innerText = "System Ready";
+
+                // Expose CheerpX instance globally
+                window.cx = cx;
+
+                // Debug: Log cx properties to find the input method
+                console.log("CheerpX instance keys:", Object.keys(cx));
+
+                // Robust helper function to inject commands
+                window.injectCommand = function (command) {
+                    if (!window.cx) {
+                        console.error("CheerpX not ready");
+                        return;
+                    }
+
+                    console.log("Injecting:", command);
+
+                    // Method 1: Try cx.input if it exists (it might be hidden or named differently)
+                    if (typeof window.cx.input === 'function') {
+                        for (let i = 0; i < command.length; i++) {
+                            window.cx.input(command.charCodeAt(i));
+                        }
+                        window.cx.input(13); // Enter
+                        return;
+                    }
+
+                    // Method 2: Simulate keyboard events on the console element
+                    // This is required when using setConsole() as it might consume the direct input API
+                    const consoleEl = document.getElementById('console');
+                    if (consoleEl) {
+                        // Helper to send a key
+                        const sendChar = (char) => {
+                            const opts = {
+                                key: char,
+                                code: `Key${char.toUpperCase()}`,
+                                charCode: char.charCodeAt(0),
+                                keyCode: char.charCodeAt(0),
+                                which: char.charCodeAt(0),
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            };
+                            consoleEl.dispatchEvent(new KeyboardEvent('keydown', opts));
+                            consoleEl.dispatchEvent(new KeyboardEvent('keypress', opts));
+                            consoleEl.dispatchEvent(new KeyboardEvent('keyup', opts));
+
+                            // Also try legacy textInput event which some terminals listen to
+                            const textEvent = document.createEvent('TextEvent');
+                            textEvent.initTextEvent('textInput', true, true, window, char, 0, "en-US");
+                            consoleEl.dispatchEvent(textEvent);
+                        };
+
+                        for (let char of command) {
+                            sendChar(char);
+                        }
+                        // Send Enter at the end
+                        const enterOpts = {
+                            key: 'Enter',
+                            code: 'Enter',
+                            charCode: 13,
+                            keyCode: 13,
+                            which: 13,
+                            bubbles: true,
+                            cancelable: true,
+                            view: window
+                        };
+                        consoleEl.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
+                        consoleEl.dispatchEvent(new KeyboardEvent('keypress', enterOpts));
+                        consoleEl.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
+
+                        console.log("Injected via DOM events");
+                    } else {
+                        console.error("Console element not found");
+                    }
+                };
+
+                // Add Paste Button logic
+                document.getElementById('paste-btn').onclick = async () => {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        if (text) {
+                            window.injectCommand(text);
+                        }
+                    } catch (err) {
+                        console.error('Failed to read clipboard:', err);
+                        alert('Failed to read clipboard. Please allow clipboard access.');
+                    }
+                };
+
+                console.log("%c✓ CheerpX ready!", "color: #0f0; font-weight: bold");
+                console.log("%cUse the Paste button or injectCommand('cmd') in console", "color: #ff0");
+
+                // Attach console to the div
+                await cx.setConsole(document.getElementById('console'));
+
+                // Run bash login shell
+                await cx.run("/bin/bash", ["-l"], {
+                    env: [
+                        "HOME=/root",
+                        "TERM=xterm",
+                        "PYTHONUNBUFFERED=1",
+                        "PYTHONPATH=/opt/python-packages"
+                    ],
+                    cwd: "/root"
+                });
+
+                document.getElementById('status').innerText = "Process Finished.";
+            } catch (e) {
+                document.getElementById('status').innerText = "Error: " + e;
+                console.error(e);
+            }
         }
 
         run();
