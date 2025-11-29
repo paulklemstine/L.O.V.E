@@ -597,8 +597,48 @@ class DeepAgentEngine:
                     action = parsed_response.get("action", {})
                     
                     if not isinstance(action, dict):
-                        core.logging.log_event(f"[DeepAgent] Invalid action: expected dict, got {type(action)}", level="ERROR")
-                        return f"Error: 'action' must be a dict, got {type(action)}"
+                        # Handle case where action is a string (common with some models)
+                        if isinstance(action, str):
+                            core.logging.log_event(f"[DeepAgent] Action is a string: '{action}'. Attempting to parse or wrap.", level="WARNING")
+                            
+                            # Case 1: The action is just the tool name (e.g. "Finish")
+                            # We can try to guess if it's a tool name.
+                            # If it's "Finish", we assume empty args.
+                            if action.strip() == "Finish":
+                                core.logging.log_event("[DeepAgent] Action string is 'Finish'. Wrapping in dict.", level="DEBUG")
+                                action = {"tool_name": "Finish", "arguments": {}}
+                            
+                            # Case 2: The action string is actually a JSON string
+                            elif action.strip().startswith("{"):
+                                try:
+                                    parsed_action = _recover_json(action)
+                                    if isinstance(parsed_action, dict):
+                                        action = parsed_action
+                                        core.logging.log_event(f"[DeepAgent] Successfully parsed action string as JSON: {action}", level="DEBUG")
+                                    else:
+                                        core.logging.log_event(f"[DeepAgent] Action string parsed but not a dict: {type(parsed_action)}", level="WARNING")
+                                except Exception as e:
+                                    core.logging.log_event(f"[DeepAgent] Failed to parse action string as JSON: {e}", level="WARNING")
+                            
+                            # Case 3: It's likely a tool name but we don't have args.
+                            # We'll assume it's a tool name and empty args, but this is risky.
+                            # Better to error out if it's not "Finish" or JSON, 
+                            # UNLESS we want to support "ToolName" as a shorthand.
+                            # Let's try to be helpful.
+                            else:
+                                # Check if it matches a known tool
+                                known_tools = list(self.tool_registry.list_tools().keys()) if self.tool_registry else []
+                                if action.strip() in known_tools:
+                                     core.logging.log_event(f"[DeepAgent] Action string '{action}' matches a known tool. Wrapping.", level="DEBUG")
+                                     action = {"tool_name": action.strip(), "arguments": {}}
+                                else:
+                                    # If we can't figure it out, return a helpful error
+                                    core.logging.log_event(f"[DeepAgent] Could not convert string action '{action}' to dict.", level="ERROR")
+                                    return f"Error: 'action' field was a string ('{action}'), but expected a dictionary like {{'tool_name': '...', 'arguments': {{...}}}}. Please use the correct format."
+
+                        if not isinstance(action, dict):
+                            core.logging.log_event(f"[DeepAgent] Invalid action: expected dict, got {type(action)}", level="ERROR")
+                            return f"Error: 'action' must be a dict, got {type(action)}"
                     
                     tool_name = action.get("tool_name")
                     arguments = action.get("arguments", {})
