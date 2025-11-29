@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>L.O.V.E. Browser Edition</title>
+    <script src="https://cheerpx.io/resources/cx.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #000; color: #0f0; font-family: monospace; margin: 0; height: 100vh; display: flex; flex-direction: column; }
+        #terminal { flex: 1; width: 100%; }
+        #status { padding: 10px; border-bottom: 1px solid #333; color: #888; }
+    </style>
+</head>
+<body>
+    <div id="status">Initializing CheerpX...</div>
+    <div id="terminal"></div>
+    <script>
+        const term = new Terminal({
+            theme: { background: '#000000', foreground: '#00ff00' },
+            cursorBlink: true,
+            fontSize: 14,
+            fontFamily: 'Courier New, monospace'
+        });
+        const fitAddon = { fit: () => {
+            const dims = { cols: Math.floor(window.innerWidth / 9), rows: Math.floor((window.innerHeight - 40) / 17) };
+            term.resize(dims.cols, dims.rows);
+        }};
+        
+        term.open(document.getElementById('terminal'));
+        fitAddon.fit();
+        window.onresize = () => fitAddon.fit();
+
+        term.write('Welcome to L.O.V.E. Browser Edition\r\n');
+
+        async function run() {
+            try {
+                const cx = await CheerpX.Linux.create({
+                    mounts: [
+                        { type: "ext2", url: "love.ext2", mountPoint: "/" },
+                        { type: "devs", mountPoint: "/dev" },
+                        { type: "proc", mountPoint: "/proc" }
+                    ]
+                });
+                
+                document.getElementById('status').innerText = "CheerpX Initialized. Booting L.O.V.E...";
+                
+                // Run the python script
+                // We use -u for unbuffered output
+                await cx.run("/usr/bin/python3", ["-u", "/love_browser.py"], {
+                    stdout: (char) => term.write(String.fromCharCode(char)),
+                    stderr: (char) => term.write(String.fromCharCode(char))
+                });
+                
+                document.getElementById('status').innerText = "Process Finished.";
+            } catch (e) {
+                document.getElementById('status').innerText = "Error: " + e;
+                console.error(e);
+                term.write('\r\nError: ' + e);
+            }
+        }
+        
+        run();
+    </script>
+</body>
+</html>

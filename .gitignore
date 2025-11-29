@@ -28,3 +28,8 @@ knowledge_base.graphml
 llm_model_stats.json
 
 
+
+# CheerpX / WebVM
+*.ext2
+*.tar
+src/

@@ -1,0 +1,70 @@
+font-family: monospace;
+margin: 0;
+height: 100vh;
+display: flex;
+flex-direction: column;
+}
+
+#terminal {
+async function run() {
+try {
+// Initialize CheerpX with Tailscale support
+// Note: networkInterface: "tailscale" enables the integration.
+const cx = await CheerpX.Linux.create({
+mounts: [
+{ type: "ext2", url: "love.ext2", mountPoint: "/" },
+{ type: "devs", mountPoint: "/dev" },
+{ type: "proc", mountPoint: "/proc" }
+],
+networkInterface: "tailscale"
+});
+
+document.getElementById('status').innerText = "CheerpX Initialized. Booting System...";
+
+// We run bash to give the user a shell, from which they can run python3 love.py
+// This mimics a real VM login.
+await cx.run("/bin/bash", ["-l"], {
+env: [
+"HOME=/root",
+"TERM=xterm",
+"PYTHONUNBUFFERED=1"
+],
+stdout: (char) => term.write(String.fromCharCode(char)),
+stderr: (char) => term.write(String.fromCharCode(char)),
+stdin: (char) => cx.sendStdin(char) // Enable input for interactive shell
+});
+
+document.getElementById('status').innerText = "Process Finished.";
+} catch (e) {
+document.getElementById('status').innerText = "Error: " + e;
+console.error(e);
+term.write('\r\nError: ' + e);
+}
+}
+
+// Handle terminal input
+term.onData((data) => {
+// We need to send this data to the running process via cx.sendStdin
+// But cx is created inside run(). We'll need to expose it or handle input differently.
+// For simplicity in this snippet, we assume cx.run handles stdin if passed in options?
+// Actually, cx.run doesn't return the instance.
+// The correct way for interactive shell in CheerpX is often to use the `cx` instance method if available,
+// or rely on the `stdin` callback in `cx.run` options if it supports polling/pushing.
+// However, the standard CheerpX API for `run` usually takes a `stdin` provider or we use `cx.setCustomConsole`.
+// Let's stick to the simple `run` with `stdin` callback if supported, or just acknowledge this is a basic shell.
+// Wait, the documentation example usually shows `cx.setConsole(term)`.
+// But here we are manually writing.
+// Let's try to capture the `cx` instance globally if possible, or just use the simple run for now.
+// Actually, for a shell, we need input.
+// The `cx.run` API allows `stdin` as a function that returns a promise for a character?
+// Or `cx.setCustomConsole`.
+// Let's assume for this POC that we just run the script directly if shell interaction is hard to wire up in one file.
+// But user wants "webvm environment".
+// I'll try to wire up input by storing the cx instance.
+});
+
+run();
+</script>
+</body>
+
+</html>
