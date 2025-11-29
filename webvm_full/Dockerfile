@@ -16,9 +16,16 @@ RUN apt-get update && apt-get install -y \
     curl \
     nmap \
     sudo \
+    locales \
     libffi-dev \
     libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Generate locale
+RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
 
 # Install Rust via rustup (explicitly targeting i686 to avoid detection errors)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-host i686-unknown-linux-gnu
