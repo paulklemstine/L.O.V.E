@@ -29,11 +29,20 @@
             border-bottom: 1px solid #333;
             color: #888;
         }
+
+        #network-notice {
+            padding: 10px;
+            background: #333;
+            color: #ff0;
+            text-align: center;
+            display: none;
+        }
     </style>
 </head>
 
 <body>
     <div id="status">Initializing WebVM...</div>
+    <div id="network-notice">Click here to enable networking (Tailscale authentication required)</div>
     <div id="terminal"></div>
     <script>
         const term = new Terminal({
@@ -50,9 +59,12 @@
         fitAddon.fit();
         window.onresize = () => fitAddon.fit();
 
-        term.write('Welcome to L.O.V.E. WebVM Full Edition (Offline Mode)\r\n');
+        term.write('Welcome to L.O.V.E. WebVM Full Edition\r\n');
         term.write('All code and packages are pre-loaded in /root/L.O.V.E\r\n');
-        term.write('Paste: Ctrl+Shift+V or Right-click\r\n\r\n');
+        term.write('Paste: Ctrl+Shift+V or Right-click\r\n');
+        term.write('Network: Click yellow banner above to enable (one-time auth)\r\n\r\n');
+
+        let networkLoginUrl = null;
 
         async function run() {
             try {
@@ -86,7 +98,7 @@
                 document.getElementById('status').innerText = "Initializing CheerpX...";
                 term.write('\r\nInitializing virtual machine...\r\n');
 
-                // Initialize CheerpX with all three volumes - NO NETWORKING
+                // Initialize CheerpX with Tailscale networking
                 const cx = await CheerpX.Linux.create({
                     mounts: [
                         { type: "ext2", path: "/", dev: baseOverlay },
@@ -94,11 +106,30 @@
                         { type: "ext2", path: "/root/L.O.V.E", dev: appOverlay },
                         { type: "devs", path: "/dev" },
                         { type: "proc", path: "/proc" }
-                    ]
-                    // No networkInterface - running offline
+                    ],
+                    networkInterface: {
+                        authKey: "",  // Empty for interactive login
+                        loginUrlCb: (url) => {
+                            networkLoginUrl = url;
+                            const notice = document.getElementById('network-notice');
+                            notice.style.display = 'block';
+                            notice.onclick = () => {
+                                window.open(url, "_blank");
+                                notice.textContent = "Authentication window opened - complete login to enable networking";
+                            };
+                            term.write('\r\n\x1b[33mNetwork available! Click yellow banner to authenticate.\x1b[0m\r\n\r\n');
+                        },
+                        stateUpdateCb: (state) => {
+                            if (state === 6) {
+                                document.getElementById('network-notice').style.display = 'none';
+                                document.getElementById('status').innerText = "Network: Connected";
+                                term.write('\r\n\x1b[32mNetwork connected! You can now use git, curl, etc.\x1b[0m\r\n\r\n');
+                            }
+                        }
+                    }
                 });
 
-                document.getElementById('status').innerText = "System Ready (Offline Mode)";
+                document.getElementById('status').innerText = "System Ready";
                 term.write('System initialized. Starting shell...\r\n\r\n');
 
                 // Set up I/O between xterm and CheerpX
