@@ -54,7 +54,7 @@ cp "$REPO_ROOT/requirements.txt" .
 docker build --platform linux/386 -f Dockerfile.packages -t love-webvm-packages .
 
 echo "Exporting packages filesystem..."
-id=$(docker create --platform linux/386 love-webvm-packages)
+id=$(docker create --platform linux/386 love-webvm-packages true)
 docker export $id > packages.tar
 docker rm $id
 
@@ -84,7 +84,7 @@ rsync -av --exclude 'webvm_full' --exclude '.git' --exclude '*.ext2' --exclude '
 docker build --platform linux/386 -f Dockerfile.app -t love-webvm-app src/
 
 echo "Exporting app filesystem..."
-id=$(docker create --platform linux/386 love-webvm-app)
+id=$(docker create --platform linux/386 love-webvm-app true)
 docker export $id > app.tar
 docker rm $id
 
