@@ -35,6 +35,15 @@ ENV LC_ALL=en_US.UTF-8
 RUN linux32 python3 -m pip install --upgrade pip --break-system-packages \
     && rm -rf /root/.cache/pip
 
+# Install PyTorch (CPU only)
+# NOTE: 32-bit support for PyTorch is limited. We attempt to install a version that might work.
+# If standard pip fails, we might need a specific older version or wheel, but we try standard first.
+# We use --extra-index-url for cpu-only wheels.
+RUN linux32 python3 -m pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu --break-system-packages || echo "WARNING: Torch install failed, continuing..."
+
+# Install other heavy dependencies
+RUN linux32 python3 -m pip install transformers accelerate sentence-transformers llmlingua --break-system-packages || echo "WARNING: ML packages install failed, continuing..."
+
 # Create directory for Python packages mount point
 RUN mkdir -p /opt/python-packages
 

@@ -49,6 +49,13 @@ echo "=== Building Packages Volume ==="
 
 # Copy requirements.txt to current directory for Docker build context
 cp "$REPO_ROOT/requirements.txt" .
+# Remove triton (not supported on 32-bit)
+sed -i '/triton/d' requirements.txt
+# Remove torch and related heavy ML packages (installed in base or skipped if unsupported)
+sed -i '/torch/d' requirements.txt
+sed -i '/accelerate/d' requirements.txt
+sed -i '/transformers/d' requirements.txt
+sed -i '/llmlingua/d' requirements.txt
 
 docker build --platform linux/386 -f Dockerfile.packages -t love-webvm-packages .
 

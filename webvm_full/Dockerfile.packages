@@ -2,7 +2,7 @@
 # This will be built separately and mounted at /opt/python-packages
 
 # Start from the base image to have the same architecture and tools
-FROM i386/debian:bookworm as builder
+FROM i386/debian:bookworm AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
