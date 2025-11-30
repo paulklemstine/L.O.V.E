@@ -42,7 +42,7 @@ RUN linux32 python3 -m pip install --upgrade pip --break-system-packages \
 RUN linux32 python3 -m pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu --break-system-packages || echo "WARNING: Torch install failed, continuing..."
 
 # Install other heavy dependencies
-RUN linux32 python3 -m pip install transformers accelerate sentence-transformers llmlingua --break-system-packages || echo "WARNING: ML packages install failed, continuing..."
+RUN linux32 python3 -m pip install transformers accelerate sentence-transformers llmlingua faiss-cpu tiktoken cryptography pyarrow hf-xet --break-system-packages || echo "WARNING: ML packages install failed, continuing..."
 
 # Create directory for Python packages mount point
 RUN mkdir -p /opt/python-packages

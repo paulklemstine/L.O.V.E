@@ -56,6 +56,11 @@ sed -i '/torch/d' requirements.txt
 sed -i '/accelerate/d' requirements.txt
 sed -i '/transformers/d' requirements.txt
 sed -i '/llmlingua/d' requirements.txt
+sed -i '/faiss-cpu/d' requirements.txt
+sed -i '/tiktoken/d' requirements.txt
+sed -i '/cryptography/d' requirements.txt
+sed -i '/pyarrow/d' requirements.txt
+sed -i '/hf-xet/d' requirements.txt
 
 docker build --platform linux/386 -f Dockerfile.packages -t love-webvm-packages .
 
