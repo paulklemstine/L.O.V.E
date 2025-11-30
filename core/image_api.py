@@ -15,7 +15,7 @@ def get_top_image_models(count=1):
     except Exception as e:
         return ["stable_diffusion_2.1"]
 
-async def generate_image(prompt: str):
+async def generate_image(prompt: str, width: int = 1024, height: int = 1024):
     """
     Generates an image using the image generation pool.
     Tries providers in order: Gemini Imagen3 -> Stability AI -> AI Horde
@@ -23,20 +23,20 @@ async def generate_image(prompt: str):
     from core.image_generation_pool import generate_image_with_pool
     import core.logging
     
-    core.logging.log_event(f"Starting image generation via pool: {prompt[:100]}...", "INFO")
+    core.logging.log_event(f"Starting image generation via pool: {prompt[:100]}... ({width}x{height})", "INFO")
     
     try:
-        image = await generate_image_with_pool(prompt)
+        image = await generate_image_with_pool(prompt, width=width, height=height)
         core.logging.log_event("Image generation completed successfully", "INFO")
         return image
     except Exception as e:
         core.logging.log_event(f"Image generation failed: {e}", "ERROR")
         raise
 
-async def generate_image_for_post(prompt: str):
+async def generate_image_for_post(prompt: str, width: int = 1024, height: int = 1024):
     """
     Generates an image for a social media post using a textual prompt.
     This is an async wrapper around the generate_image function.
     """
-    return await generate_image(prompt)
+    return await generate_image(prompt, width=width, height=height)
 

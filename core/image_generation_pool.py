@@ -86,7 +86,7 @@ def rank_image_models():
     return [model["model_id"] for model in sorted_models]
 
 
-async def _generate_with_gemini_imagen(prompt: str) -> Image.Image:
+async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
     """Generate image using Gemini Imagen3 via Gemini API"""
     model_id = "gemini-3-pro-image-preview"
     start_time = time.time()
@@ -102,13 +102,20 @@ async def _generate_with_gemini_imagen(prompt: str) -> Image.Image:
         # Using the text generation endpoint as a base, but for images
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateImage"
         
+        # Determine aspect ratio from width/height
+        aspect_ratio = "1:1"
+        if width > height:
+            aspect_ratio = "16:9"
+        elif height > width:
+            aspect_ratio = "9:16"
+
         headers = {"Content-Type": "application/json"}
         params = {"key": api_key}
         payload = {
             "prompt": {"text": prompt},
             "generationConfig": {
                 "numberOfImages": 1,
-                "aspectRatio": "1:1"
+                "aspectRatio": aspect_ratio
             }
         }
         
@@ -165,7 +172,7 @@ async def _generate_with_gemini_imagen(prompt: str) -> Image.Image:
         raise
 
 
-async def _generate_with_stability(prompt: str) -> Image.Image:
+async def _generate_with_stability(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
     """Generate image using Stability AI API"""
     model_id = "stable-diffusion-xl-1024-v1-0"
     start_time = time.time()
@@ -187,8 +194,8 @@ async def _generate_with_stability(prompt: str) -> Image.Image:
         payload = {
             "text_prompts": [{"text": prompt, "weight": 1}],
             "cfg_scale": 7,
-            "height": 1024,
-            "width": 1024,
+            "height": height,
+            "width": width,
             "samples": 1,
             "steps": 30
         }
@@ -234,7 +241,7 @@ async def _generate_with_stability(prompt: str) -> Image.Image:
         raise
 
 
-async def _generate_with_horde(prompt: str) -> Image.Image:
+async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
     """Generate image using AI Horde (existing logic from image_api.py)"""
     from core.image_api import get_top_image_models
     
@@ -253,7 +260,11 @@ async def _generate_with_horde(prompt: str) -> Image.Image:
         
         payload = {
             "prompt": prompt,
-            "params": {"n": 1},
+            "params": {
+                "n": 1,
+                "width": width,
+                "height": height
+            },
             "models": top_models
         }
         
@@ -311,7 +322,7 @@ async def _generate_with_horde(prompt: str) -> Image.Image:
         raise
 
 
-async def _generate_with_pollinations(prompt: str) -> Image.Image:
+async def _generate_with_pollinations(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
     """Generate image using Pollinations.ai"""
     model_id = "pollinations"
     start_time = time.time()
@@ -326,8 +337,8 @@ async def _generate_with_pollinations(prompt: str) -> Image.Image:
         seed = random.randint(0, 100000)
         
         # Construct URL
-        # Format: https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=200&seed={seed}&nologo=true&safe=false
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=200&seed={seed}&nologo=true&safe=false"
+        # Format: https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&seed={seed}&nologo=true&safe=false
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&seed={seed}&nologo=true&safe=false"
         
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=60) as response:
@@ -362,19 +373,21 @@ async def _generate_with_pollinations(prompt: str) -> Image.Image:
         core.logging.log_event(f"Pollinations failed: {e}. Cooldown: {cooldown}s", "WARNING")
         raise
 
-async def generate_image_with_pool(prompt: str, force_provider=None) -> Image.Image:
+async def generate_image_with_pool(prompt: str, width: int = 1024, height: int = 1024, force_provider=None) -> Image.Image:
     """
     Main entry point for image generation using the pool.
     Tries providers in order based on ranking, with automatic fallback.
     
     Args:
         prompt: Text description of the image to generate
+        width: Image width (default 1024)
+        height: Image height (default 1024)
         force_provider: Optional provider to force ("gemini", "stability", "horde")
     
     Returns:
         PIL Image object
     """
-    core.logging.log_event(f"Starting image generation with pool: {prompt[:100]}...", "INFO")
+    core.logging.log_event(f"Starting image generation with pool: {prompt[:100]}... ({width}x{height})", "INFO")
     
     # Define provider functions
     providers = {
@@ -405,7 +418,7 @@ async def generate_image_with_pool(prompt: str, force_provider=None) -> Image.Im
         
         try:
             core.logging.log_event(f"Trying image generation with provider: {provider_name}", "INFO")
-            image = await providers[provider_name](prompt)
+            image = await providers[provider_name](prompt, width=width, height=height)
             core.logging.log_event(f"Image generation successful with provider: {provider_name}", "INFO")
             return image
             
