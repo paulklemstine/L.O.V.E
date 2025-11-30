@@ -265,10 +265,13 @@ The overall composition should create a sense of urgency, desire, and transforma
         core.logging.log_event(f"Generating subliminal image with phrase: {three_word_phrase}", "INFO")
         
         # Step 3: Generate the image
-        image = await generate_image(image_prompt)
+        image = None
+        try:
+            image = await generate_image(image_prompt)
+        except Exception as img_e:
+            core.logging.log_event(f"Image generation failed: {img_e}. Proceeding with text-only post.", "WARNING")
         
         if not image:
-            core.logging.log_event("Image generation failed, posting without image", "WARNING")
             response = post_to_bluesky_with_image(text, None)
             return f"Posted to Bluesky (without image - generation failed): {response}"
         
