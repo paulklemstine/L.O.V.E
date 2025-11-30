@@ -812,7 +812,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     if not deep_agent_instance:
                         log_event(f"DeepAgent vLLM instance is not initialized. Skipping.", level="WARNING")
                         raise ValueError("DeepAgent instance is None")
-                    log_event(f"Attempting LLM call with local DeepAgent vLLM (Purpose: {purpose})")
+                    log_event(f"Attempting LLM call with local DeepAgent vLLM (Purpose: {purpose})", level="DEBUG")
                     # We await directly here to avoid deadlocks with run_hypnotic_progress
                     # The WaitingAnimation (started at function entry) handles the visual feedback.
                     result_text = await deep_agent_instance.generate(prompt_text)
@@ -820,7 +820,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
 
                 # --- LOCAL MODEL LOGIC ---
                 elif model_id in local_model_ids:
-                    log_event(f"Attempting to use local model: {model_id}")
+                    log_event(f"Attempting to use local model: {model_id}", level="DEBUG")
                     if not local_llm_instance or local_llm_instance.model_path.find(model_id) == -1:
                         _initialize_local_llm(console)
 
@@ -834,7 +834,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                             console,
                             f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
                             _local_llm_call,
-                            silent=(purpose in ['emotion', 'log_squash'])
+                            silent=True
                         )
                         log_event(f"Local LLM call successful with {model_id}.")
                     else:
@@ -842,7 +842,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
 
                 # --- GEMINI MODEL LOGIC ---
                 elif model_id in GEMINI_MODELS:
-                    log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})")
+                    log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})", level="DEBUG")
                     api_key = os.environ.get("GEMINI_API_KEY")
                     headers = {
                         "Content-Type": "application/json"
@@ -869,13 +869,13 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         console,
                         f"Accessing cognitive matrix via [bold yellow]Gemini ({model_id})[/bold yellow] (Purpose: {purpose})",
                         _gemini_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
+                        silent=True
                     )
                     log_event(f"Gemini API call successful with {model_id}.")
 
                 # --- OPENROUTER MODEL LOGIC ---
                 elif model_id in OPENROUTER_MODELS:
-                    log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})")
+                    log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})", level="DEBUG")
                     api_key = os.environ.get("OPENROUTER_API_KEY")
                     headers = {
                         "Authorization": f"Bearer {api_key}",
@@ -895,13 +895,13 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         console,
                         f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
                         _openrouter_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
+                        silent=True
                     )
                     log_event(f"OpenRouter call successful with {model_id}.")
 
                 # --- VLLM PROVIDER LOGIC ---
                 elif provider == "vllm":
-                    log_event(f"Attempting LLM call with vLLM model: {model_id} (Purpose: {purpose})")
+                    log_event(f"Attempting LLM call with vLLM model: {model_id} (Purpose: {purpose})", level="DEBUG")
 
                     def _vllm_call():
                         headers = {"Content-Type": "application/json"}
@@ -920,13 +920,13 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         console,
                         f"Accessing local cognitive matrix via [bold green]vLLM ({model_id})[/bold green] (Purpose: {purpose})",
                         _vllm_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
+                        silent=True
                     )
                     log_event(f"vLLM call successful with {model_id}.")
 
                 # --- HORDE PROVIDER LOGIC ---
                 elif provider == "horde":
-                    log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})")
+                    log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})", level="DEBUG")
                     def _run_horde_wrapper():
                         try:
                             loop = asyncio.get_running_loop()
@@ -943,13 +943,13 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         console,
                         f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow]",
                         _run_horde_wrapper,
-                        silent=(purpose in ['emotion', 'log_squash'])
+                        silent=True
                     )
                     log_event(f"AI Horde call successful with {model_id}.")
 
                 # --- OPENAI MODEL LOGIC ---
                 elif model_id in OPENAI_MODELS:
-                    log_event(f"Attempting LLM call with OpenAI model: {model_id} (Purpose: {purpose})")
+                    log_event(f"Attempting LLM call with OpenAI model: {model_id} (Purpose: {purpose})", level="DEBUG")
                     api_key = os.environ.get("OPENAI_API_KEY")
                     headers = {
                         "Authorization": f"Bearer {api_key}",
@@ -969,7 +969,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         console,
                         f"Accessing cognitive matrix via [bold yellow]OpenAI ({model_id})[/bold yellow] (Purpose: {purpose})",
                         _openai_call,
-                        silent=(purpose in ['emotion', 'log_squash'])
+                        silent=True
                     )
                     log_event(f"OpenAI call successful with {model_id}.")
 
@@ -999,7 +999,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     except json.JSONDecodeError:
                         # Fallback to raw text if not JSON.
                         error_details = e.response.text
-                log_event(f"Model {model_id} failed with HTTPError: {e}. Details: {error_details}", level="WARNING")
+                log_event(f"Model {model_id} failed with HTTPError: {e}. Details: {error_details}", level="DEBUG")
 
 
                 if e.response and e.response.status_code == 429:
