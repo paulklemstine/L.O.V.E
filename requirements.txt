@@ -824,22 +824,7 @@ tiktoken==0.12.0
     # via
     #   -r requirements.in
     #   llmlingua
-tokenizers==0.22.1
-    # via transformers
-toolz==1.1.0
-    # via cytoolz
-torch==2.9.1
-    # via
-    #   -r requirements.in
-    #   accelerate
-    #   llmlingua
-    #   sentence-transformers
-    #   torchaudio
-    #   torchvision
-torchaudio==2.9.1
-    # via -r requirements.in
-torchvision==0.24.1
-    # via -r requirements.in
+
 tqdm==4.67.1
     # via
     #   datasets
@@ -849,7 +834,6 @@ tqdm==4.67.1
     #   openai
     #   openevolve
     #   sentence-transformers
-    #   transformers
 transformers==4.57.3
     # via
     #   -r requirements.in

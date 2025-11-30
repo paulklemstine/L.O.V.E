@@ -33,6 +33,7 @@ from core.talent_utils import (
     intelligence_synthesizer
 )
 from core.system_integrity_monitor import SystemIntegrityMonitor
+from dynamic_caller import dynamic_arg_caller
 
 
 love_state = {}
@@ -389,8 +390,8 @@ class SecureExecutor:
         print(f"Executing tool '{tool_name}' with arguments: {kwargs}")
         try:
             tool = tool_registry.get_tool(tool_name)
-            # Await the asynchronous tool execution
-            result = await tool(**kwargs)
+            # Await the asynchronous tool execution using dynamic_arg_caller to filter invalid args
+            result = await dynamic_arg_caller(tool, **kwargs)
             print(f"Tool '{tool_name}' executed successfully.")
             return result
         except KeyError as e:

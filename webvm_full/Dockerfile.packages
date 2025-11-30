@@ -31,20 +31,7 @@ ENV PYO3_CROSS="1"
 # Upgrade pip
 RUN linux32 python3 -m pip install --upgrade pip --break-system-packages
 
-# Install PyTorch (CPU only) to a specific directory
-RUN mkdir -p /packages
-RUN linux32 python3 -m pip install \
-    --target=/packages \
-    --break-system-packages \
-    torch torchvision torchaudio \
-    --extra-index-url https://download.pytorch.org/whl/cpu \
-    || echo "WARNING: Torch install failed, continuing..."
 
-# Install transformers
-RUN linux32 python3 -m pip install \
-    --target=/packages \
-    --break-system-packages \
-    transformers
 
 # Copy requirements.txt and install remaining packages
 COPY requirements.txt /tmp/requirements.txt
