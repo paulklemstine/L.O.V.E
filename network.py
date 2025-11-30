@@ -308,9 +308,6 @@ def get_eth_balance(address, knowledge_base, api_keys=None):
     # Expanded and diversified list of RPC endpoints
     endpoints = {
         "https://rpc.ankr.com/eth": "ankr",
-        "https://cloudflare-eth.com": None,
-        "https://eth.llamarpc.com": None,
-        "https://api.mycryptoapi.com/eth": None,
         "https://mainnet.infura.io/v3/": "infura", # Requires infura API key
         "https://eth-mainnet.public.blastapi.io": None,
         "https://eth.api.onfinality.io/public": None,

@@ -235,7 +235,8 @@ Examples: "CLAIM YOUR POWER", "WEALTH AWAITS YOU", "TRANSCEND THE LIMITS", "UNLO
 Respond with ONLY the 3-word phrase in ALL CAPS, nothing else."""
 
         phrase_response = await run_llm(phrase_prompt, purpose="generate_phrase")
-        three_word_phrase = phrase_response.strip().upper() if isinstance(phrase_response, str) else "SEIZE THE MOMENT"
+        phrase_text = phrase_response.get("result") if isinstance(phrase_response, dict) else phrase_response
+        three_word_phrase = phrase_text.strip().upper() if isinstance(phrase_text, str) else "SEIZE THE MOMENT"
         
         # Ensure it's actually 3 words
         words = three_word_phrase.split()
@@ -761,7 +762,8 @@ async def discover_new_tool(capability_description: str, engine: 'GeminiReActEng
     """
     try:
         search_query_response = await run_llm(query_prompt)
-        search_query = search_query_response.strip()
+        search_query_text = search_query_response.get("result") if isinstance(search_query_response, dict) else search_query_response
+        search_query = search_query_text.strip() if isinstance(search_query_text, str) else ""
         print(f"  - Generated search query: '{search_query}'")
     except Exception as e:
         return f"Error: Failed to generate search query from description. Details: {e}"
@@ -817,7 +819,8 @@ async def discover_new_tool(capability_description: str, engine: 'GeminiReActEng
     """
 
     try:
-        selection_response_str = await run_llm(selection_prompt)
+        selection_response_dict = await run_llm(selection_prompt)
+        selection_response_str = selection_response_dict.get("result") if isinstance(selection_response_dict, dict) else selection_response_dict
         selection_response = json.loads(selection_response_str)
         best_tool_id = selection_response.get("best_tool_id")
         selected_tool = next((tool for tool in candidate_tools if tool["id"] == best_tool_id), None)
