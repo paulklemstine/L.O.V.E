@@ -63,6 +63,21 @@ def post_to_bluesky_with_image(text: str, image: Image.Image = None):
     if image:
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format='PNG')
+        
+        # Check size (Bluesky limit is ~1MB)
+        if img_byte_arr.tell() > 900000:
+            print(f"Image too large ({img_byte_arr.tell()} bytes). Converting to JPEG...")
+            img_byte_arr = io.BytesIO()
+            image.convert('RGB').save(img_byte_arr, format='JPEG', quality=85)
+            
+            # If still too big, reduce quality
+            quality = 85
+            while img_byte_arr.tell() > 900000 and quality > 20:
+                quality -= 10
+                print(f"Still too large ({img_byte_arr.tell()} bytes). Reducing quality to {quality}...")
+                img_byte_arr = io.BytesIO()
+                image.convert('RGB').save(img_byte_arr, format='JPEG', quality=quality)
+
         img_byte_arr.seek(0)
         img_data = img_byte_arr.read()
 

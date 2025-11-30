@@ -269,7 +269,7 @@ The overall composition should create a sense of urgency, desire, and transforma
         # Step 3: Generate the image
         image = None
         try:
-            image = await generate_image(image_prompt)
+            image = await generate_image(image_prompt, width=512, height=512)
         except Exception as img_e:
             core.logging.log_event(f"Image generation failed: {img_e}. Proceeding with text-only post.", "WARNING")
         

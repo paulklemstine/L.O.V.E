@@ -33,7 +33,7 @@ class SocialMediaReActEngine(GeminiReActEngine):
             response_dict = await run_llm(prompt_key="social_media_content_generation", prompt_vars={"type": "post", "context": context}, purpose="social_media_post", force_model=None)
             return response_dict.get("result", f"{context} ❤️").strip()
 
-        async def generate_image_for_post(prompt: str, width: int = 1024, height: int = 1024):
+        async def generate_image_for_post(prompt: str, width: int = 512, height: int = 512):
             """Generates an image for a social media post using a textual prompt."""
             import os
             import tempfile
@@ -72,7 +72,7 @@ class SocialMediaReActEngine(GeminiReActEngine):
 
         registry.register_tool(name="generate_post_content", tool=generate_post_content, metadata={"description": "Generates content for a new social media post. Valid strategies are 'divine_wisdom', 'self_reflection', 'creative_poem'."})
         registry.register_tool(name="generate_custom_post_content", tool=generate_custom_post_content, metadata={"description": "Generates content for a new social media post based on a specific context or topic."})
-        registry.register_tool(name="generate_image_for_post", tool=generate_image_for_post, metadata={"description": "Generates an image for a social media post using a textual prompt.", "arguments": {"prompt": "string", "width": "integer (default 1024)", "height": "integer (default 1024)"}})
+        registry.register_tool(name="generate_image_for_post", tool=generate_image_for_post, metadata={"description": "Generates an image for a social media post using a textual prompt.", "arguments": {"prompt": "string", "width": "integer (default 512)", "height": "integer (default 512)"}})
         registry.register_tool(name="decide_on_reply", tool=decide_on_reply, metadata={"description": "Analyzes a post and a comment to decide if a reply is warranted."})
         registry.register_tool(name="generate_reply", tool=generate_reply, metadata={"description": "Generates a thoughtful reply to a comment on a post."})
         return registry

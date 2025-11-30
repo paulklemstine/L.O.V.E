@@ -33,7 +33,7 @@ async def generate_image(prompt: str, width: int = 1024, height: int = 1024):
         core.logging.log_event(f"Image generation failed: {e}", "ERROR")
         raise
 
-async def generate_image_for_post(prompt: str, width: int = 1024, height: int = 1024):
+async def generate_image_for_post(prompt: str, width: int = 512, height: int = 512):
     """
     Generates an image for a social media post using a textual prompt.
     This is an async wrapper around the generate_image function.
