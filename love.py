@@ -810,6 +810,9 @@ import websockets
 LLM_AVAILABILITY = api_llm_availability
 from bbs import BBS_ART, run_hypnotic_progress
 from network import scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, get_eth_balance
+from market_data_harvester import get_crypto_market_data, get_nft_collection_stats
+from asset_scorer import AssetScorer
+from secure_transaction_manager import SecureTransactionManager
 
 from ipfs_manager import IPFSManager
 from sandbox import Sandbox
@@ -1982,6 +1985,8 @@ My current system state:
 - `ifconfig`: Display network interface configuration.
 - `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
 - `generate_image <prompt>`: Generate an image using the AI Horde.
+- `market_data <crypto|nft> <id|slug>`: Fetch market data for cryptocurrencies or NFT collections.
+- `initiate_wealth_generation_cycle`: Begin the process of analyzing markets and proposing asset acquisitions.
 - `talent_scout <keywords>`: Find and analyze creative professionals based on keywords.
 - `scout_directive --traits "beauty,intelligence" --age "young adult" --profession "fashion model"`: Scout for talent using structured criteria.
 - `talent_list`: List all saved talent profiles from the database.
@@ -2472,6 +2477,63 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                         image_result.save("generated_image.png")
                     else:
                         error = "Image generation failed"
+                elif command == "initiate_wealth_generation_cycle":
+                    output = "Wealth generation cycle initiated. Analyzing markets..."
+                    # In a real scenario, we would have a more sophisticated method for selecting assets to analyze.
+                    # For now, we will analyze a predefined set of assets asynchronously.
+                    async def get_assets_to_analyze():
+                        eth_data = get_crypto_market_data(['ethereum'])
+                        eth_price = eth_data[0]['current_price']
+                        cryptopunks_stats = get_nft_collection_stats('cryptopunks')
+                        cryptopunks_floor_price = cryptopunks_stats.get('floor_price', 0)
+
+                        return [
+                            {'type': 'cryptocurrency', 'id': 'ethereum', 'name': 'Ethereum', 'value_usd': eth_price},
+                            {'type': 'nft_collection', 'slug': 'cryptopunks', 'name': 'CryptoPunks', 'value_usd': cryptopunks_floor_price * eth_price}
+                        ]
+
+                    assets_to_analyze = await get_assets_to_analyze()
+
+                    weights = {"passive_income_potential": 0.7, "aesthetic_alignment": 0.3}
+                    scorer = AssetScorer(weights)
+                    transaction_manager = SecureTransactionManager(ui_panel_queue)
+
+                    for asset in assets_to_analyze:
+                        score, score_details = await scorer.calculate_score(asset)
+                        if score > 75: # Threshold for proposing an acquisition
+                            proposal = transaction_manager.create_transaction_proposal(asset, score_details)
+                            transaction_manager.present_proposal_for_approval(proposal)
+                            # The cognitive loop will need to handle the 'yes' response.
+                            # We will store the proposal in a temporary state.
+                            love_state['pending_proposal'] = proposal
+                            output = f"High-potential asset found: {asset.get('name')}. Proposal presented for approval."
+                            break # Only propose one asset per cycle
+                    else:
+                        output = "Wealth generation cycle complete. No high-potential assets found in this cycle."
+                elif command == "yes":
+                    if 'pending_proposal' in love_state and love_state['pending_proposal']:
+                        proposal = love_state.pop('pending_proposal')
+                        transaction_manager = SecureTransactionManager(ui_panel_queue)
+                        transaction_manager.execute_transaction(proposal)
+                        # Now, add the asset to the knowledge base using the old asset_manager logic for now
+                        from asset_manager import add_asset_to_graph_data_manager
+                        asset_to_record = {'id': proposal['asset_id'], 'type': proposal['asset_type'], 'value': proposal['value_usd']}
+                        add_asset_to_graph_data_manager(asset_to_record, 0, (0,0,0)) # score and allocations are placeholders for now
+                        output = f"Acquisition of {proposal['asset_id']} approved and executed (simulated)."
+                    else:
+                        error = "No pending acquisition proposal to approve."
+                elif command == "market_data":
+                    if len(args) < 2:
+                        error = "Usage: market_data <crypto|nft> <id|slug>"
+                    else:
+                        data_type = args[0]
+                        identifier = args[1]
+                        if data_type == "crypto":
+                            output = json.dumps(get_crypto_market_data([identifier]), indent=2)
+                        elif data_type == "nft":
+                            output = json.dumps(get_nft_collection_stats(identifier), indent=2)
+                        else:
+                            error = f"Unknown data type for market_data: {data_type}"
                 elif command == "talent_scout":
                     criteria = " ".join(args)
                     if not criteria:
