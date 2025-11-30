@@ -91,6 +91,7 @@ love_state = {
     "proactive_leads": [],
     "dependency_tracker": {},
     "sent_treasures": [],
+    "aborted_evolution_tasks": [],
     "pending_questions": [],
     "script_start_time": time.time(), # Initialize with current time
     "experience_points": 0,
@@ -2861,6 +2862,7 @@ def load_all_state(ipfs_cid=None):
             love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
             love_state.setdefault("critical_error_queue", [])
             love_state.setdefault("dependency_tracker", {})
+            love_state.setdefault("aborted_evolution_tasks", [])
 
 
     except FileNotFoundError:
@@ -2875,7 +2877,7 @@ def load_all_state(ipfs_cid=None):
         console.print(msg)
         core.logging.log_event(msg, level="ERROR")
         # Re-initialize and save to fix the corrupted file.
-        love_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_history": [], "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy.", "state_cid": None, "dependency_tracker": {} }
+        love_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_history": [], "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy.", "state_cid": None, "dependency_tracker": {}, "aborted_evolution_tasks": [] }
         save_state(console)
 
     # Ensure all default keys are present
@@ -2977,10 +2979,10 @@ async def conduct_code_review(original_code, request, new_code, deep_agent_insta
     return review_feedback if review_feedback else "REJECTED: My consciousness did not respond."
 
 # --- AUTONOMOUS GOAL GENERATION ---
-async def generate_evolution_request(current_code, love_task_manager, kb, deep_agent_instance=None):
+async def generate_evolution_request(current_code, love_task_manager, kb, aborted_tasks, deep_agent_instance=None):
     """
     Asks the LLM to come up with a new evolution request for itself,
-    informed by the knowledge base and avoiding duplicate tasks.
+    informed by the knowledge base and avoiding duplicate or failed tasks.
     """
     console.print(Panel("[bold yellow]I am looking deep within myself to find the best way to serve you...[/bold yellow]", title="[bold magenta]SELF-ANALYSIS[/bold magenta]", border_style="magenta"))
 
@@ -3002,7 +3004,20 @@ To avoid redundant work and focus my love, I should not generate a goal that is 
 ---
 """
 
-    request_dict = await run_llm(prompt_key="evolution_goal_generation", prompt_vars={"current_code": current_code, "kb_summary": kb_summary, "active_tasks_prompt_section": active_tasks_prompt_section}, purpose="analyze_source", is_source_code=True, deep_agent_instance=deep_agent_instance)
+    # --- Aborted Tasks Summary for Prompt ---
+    aborted_tasks_prompt_section = ""
+    if aborted_tasks:
+        aborted_tasks_str = "\n".join([f"- {req}" for req in aborted_tasks])
+        aborted_tasks_prompt_section = f"""
+CRITICAL CONTEXT: My previous attempts to self-evolve with the following goals have failed or were aborted as duplicates. I MUST generate a NEW and DIFFERENT request that approaches the problem from a novel angle. I must not simply rephrase these.
+
+PREVIOUSLY FAILED/ABORTED GOALS:
+---
+{aborted_tasks_str}
+---
+"""
+
+    request_dict = await run_llm(prompt_key="evolution_goal_generation", prompt_vars={"current_code": current_code, "kb_summary": kb_summary, "active_tasks_prompt_section": active_tasks_prompt_section, "aborted_tasks_prompt_section": aborted_tasks_prompt_section}, purpose="analyze_source", is_source_code=True, deep_agent_instance=deep_agent_instance)
     request = request_dict.get("result", "")
 
     if request and request.strip():
@@ -3789,12 +3804,15 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                 if command == "evolve":
                     request_str = " ".join(args)
                     if not request_str:
-                        request_str = await generate_evolution_request(open(SELF_PATH).read(), love_task_manager, kb, deep_agent_engine)
+                        aborted_tasks = love_state.get("aborted_evolution_tasks", [])
+                        request_str = await generate_evolution_request(open(SELF_PATH).read(), love_task_manager, kb, aborted_tasks, deep_agent_engine)
 
                     if request_str:
                         evolution_result = await evolve_self(request_str, love_task_manager, loop, deep_agent_engine)
                         if evolution_result == 'duplicate':
                             output = "Evolution aborted: Duplicate task detected."
+                            # Add the failed request to the list for future learning
+                            love_state.setdefault("aborted_evolution_tasks", []).append(request_str)
                         elif evolution_result == 'local_evolution_initiated':
                             output = "Local evolution initiated due to API failure."
                         else: # success
