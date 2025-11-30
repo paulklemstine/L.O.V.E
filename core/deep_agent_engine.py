@@ -431,8 +431,33 @@ class DeepAgentEngine:
                 core.logging.log_event("[DeepAgent] Detected 'command'/'arguments' format. converting to thought/action.", level="WARNING")
                 cmd = parsed_response.get("command")
                 args = parsed_response.get("arguments", {})
+                
+                tool_name = cmd
+                
+                # Attempt to handle "tool_name argument" format if the full cmd is not a known tool
+                if self.tool_registry and tool_name not in self.tool_registry.list_tools():
+                    parts = cmd.split(maxsplit=1)
+                    if len(parts) == 2:
+                        potential_tool = parts[0]
+                        potential_arg = parts[1]
+                        
+                        if potential_tool in self.tool_registry.list_tools():
+                            tool_name = potential_tool
+                            core.logging.log_event(f"[DeepAgent] Inferred tool '{tool_name}' and arg '{potential_arg}' from command string.", level="DEBUG")
+                            
+                            # If no args provided, try to map the string to the first argument
+                            if not args:
+                                tool_data = self.tool_registry.list_tools().get(tool_name)
+                                if tool_data:
+                                    props = tool_data['metadata'].get('arguments', {}).get('properties', {})
+                                    if props:
+                                        # Take the first property key
+                                        first_arg = list(props.keys())[0]
+                                        args[first_arg] = potential_arg
+                                        core.logging.log_event(f"[DeepAgent] Auto-mapped argument '{potential_arg}' to '{first_arg}'", level="DEBUG")
+
                 parsed_response["thought"] = f"Decided to execute command: {cmd}"
-                parsed_response["action"] = {"tool_name": cmd, "arguments": args}
+                parsed_response["action"] = {"tool_name": tool_name, "arguments": args}
             else:
                 # Attempt LLM repair as a final fallback
                 core.logging.log_event(f"[DeepAgent] Invalid keys found: {list(parsed_response.keys())}. Attempting LLM repair...", level="WARNING")
