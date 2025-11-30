@@ -434,9 +434,27 @@ class DeepAgentEngine:
                 
                 tool_name = cmd
                 
+                # Handle case where command is a dict (nested structure)
+                if isinstance(cmd, dict):
+                    core.logging.log_event(f"[DeepAgent] Command is a dict: {cmd}. Attempting to extract tool name.", level="DEBUG")
+                    if "tool_name" in cmd:
+                        tool_name = cmd["tool_name"]
+                        if "arguments" in cmd and not args:
+                            args = cmd["arguments"]
+                    elif "name" in cmd:
+                        tool_name = cmd["name"]
+                    else:
+                        # Fallback: convert to string representation or take first key?
+                        # Let's try to stringify it for now, or maybe it's invalid.
+                        tool_name = str(cmd)
+                
+                # Ensure tool_name is a string before proceeding
+                if not isinstance(tool_name, str):
+                    tool_name = str(tool_name)
+
                 # Attempt to handle "tool_name argument" format if the full cmd is not a known tool
                 if self.tool_registry and tool_name not in self.tool_registry.list_tools():
-                    parts = cmd.split(maxsplit=1)
+                    parts = tool_name.split(maxsplit=1)
                     if len(parts) == 2:
                         potential_tool = parts[0]
                         potential_arg = parts[1]
