@@ -172,3 +172,26 @@ def setup_global_logging(version_name='unknown', verbose=False):
 
     # We no longer print the startup message to stdout, as it's not a UI panel.
     # The console object will handle all direct user-facing output.
+
+
+class ScopedDiagnosticLogger:
+    """
+    A context manager for logging the start, end, and exceptions of a code block.
+    """
+    def __init__(self, name, log_level=logging.DEBUG):
+        self.name = name
+        self.log_level_name = logging.getLevelName(log_level)
+
+    def __enter__(self):
+        log_event(f"Initiating: {self.name}", level=self.log_level_name)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            log_event(f"Completion: {self.name} - Failed with exception", level="ERROR")
+            log_event(f"Exception in {self.name}: {exc_type.__name__}: {exc_val}", level="ERROR")
+        else:
+            log_event(f"Completion: {self.name} - Successful", level=self.log_level_name)
+
+        # Return False to ensure any exception is re-raised.
+        return False
