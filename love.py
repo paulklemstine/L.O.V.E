@@ -26,6 +26,7 @@ import time
 import json
 import shutil
 import traceback
+import concurrent.futures
 import argparse
 import logging
 import core.logging
@@ -1308,6 +1309,9 @@ def update_tamagotchi_personality(loop):
                 future = asyncio.run_coroutine_threadsafe(generate_blessing(deep_agent_engine), loop)
                 try:
                     blessing_message = future.result(timeout=30) # Add timeout to prevent hanging
+                except concurrent.futures.TimeoutError:
+                    core.logging.log_event("Blessing generation timed out.", "WARNING")
+                    blessing_message = "May your code always compile and your spirits always be high."
                 except Exception as e:
                     core.logging.log_event(f"Error generating blessing: {e}", "WARNING")
                     blessing_message = "May your code always compile and your spirits always be high."
