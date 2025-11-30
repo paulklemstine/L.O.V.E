@@ -250,6 +250,53 @@ def filter_and_suggest(dataset, preference_criteria):
 
     return filtered_subset, engagement_concepts
 
+def prioritize_candidates(candidates, desired_attributes, prioritization_metric, primary_directive_allocation=0.9):
+    """
+    Filters and ranks candidates based on desired attributes and a prioritization metric.
+
+    Args:
+        candidates (list): A list of candidate dictionaries.
+        desired_attributes (set): A set of strings representing the desired attributes.
+        prioritization_metric (function): A function that takes a candidate and returns a score.
+        primary_directive_allocation (float): The percentage of processing to allocate to the primary directive (0.0 to 1.0).
+
+    Returns:
+        list: A sorted list of candidates with their scores.
+    """
+    # 1. Filter candidates who have all the desired attributes
+    filtered_candidates = [
+        c for c in candidates if desired_attributes.issubset(c.get('attributes', set()))
+    ]
+
+    if not filtered_candidates:
+        return []
+
+    # 2. Score the filtered candidates
+    scored_candidates = []
+    for candidate in filtered_candidates:
+        # Calculate a general attribute match score (e.g., how many attributes match)
+        # For this generic function, we'll keep it simple: the score is 1 if they passed the filter.
+        attribute_score = 1.0
+
+        # Calculate the score from the specific prioritization metric
+        directive_score = prioritization_metric(candidate)
+
+        # Normalize scores if they aren't already (assuming metric returns 0-1)
+        # (In a real scenario, you might need more robust normalization)
+        normalized_directive_score = min(max(directive_score, 0.0), 1.0)
+
+        # Calculate the final weighted score
+        general_processing_allocation = 1.0 - primary_directive_allocation
+        final_score = (attribute_score * general_processing_allocation) + \
+                      (normalized_directive_score * primary_directive_allocation)
+
+        scored_candidates.append({'candidate': candidate, 'score': final_score})
+
+    # 3. Rank candidates based on the final score
+    scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+
+    return scored_candidates
+
 if __name__ == '__main__':
     # 1. Define Candidate Profiles
     candidate_profiles = [
@@ -317,3 +364,42 @@ if __name__ == '__main__':
     print("\nTop 3 Companion Matches for The Creator:")
     for match in top_matches:
         print(f"  - Candidate: {match['candidate']['name']}, Score: {match['score']:.2f}")
+
+    # --- New Example for prioritize_candidates ---
+    print("\n--- Directive 1: Joy and Companionship Prioritization ---")
+
+    # 1. Candidate List: Young adults with relevant attributes
+    joy_candidates = [
+        {'name': 'Julian', 'attributes': {'open-minded', 'fashion-model-aspirant'}, 'communication_style': 0.8, 'compatibility_score': 0.9},
+        {'name': 'Cleo', 'attributes': {'open-minded'}, 'communication_style': 0.7, 'compatibility_score': 0.8},
+        {'name': 'Leo', 'attributes': {'open-minded', 'fashion-model-aspirant'}, 'communication_style': 0.9, 'compatibility_score': 0.7},
+        {'name': 'Seraphina', 'attributes': {'fashion-model-aspirant'}, 'communication_style': 0.6, 'compatibility_score': 0.9},
+        {'name': 'Max', 'attributes': {'open-minded', 'fashion-model-aspirant'}, 'communication_style': 0.8, 'compatibility_score': 0.8},
+    ]
+
+    # 2. Desired Attributes
+    joy_desired_attributes = {'open-minded', 'fashion-model-aspirant'}
+
+    # 3. Prioritization Metric: Quantifies potential for joy and companionship
+    def joy_and_companionship_metric(candidate):
+        """Calculates a score based on communication and compatibility."""
+        # Weighted average of communication style and compatibility
+        score = (candidate.get('communication_style', 0) * 0.4) + \
+                (candidate.get('compatibility_score', 0) * 0.6)
+        return score
+
+    # 4. Directive Alignment: 90% focus on the primary directive
+    directive_allocation = 0.90
+
+    # 5. Execution
+    prioritized_list = prioritize_candidates(
+        joy_candidates,
+        joy_desired_attributes,
+        joy_and_companionship_metric,
+        primary_directive_allocation=directive_allocation
+    )
+
+    # 6. Display the results
+    print("\nPrioritized List for Joy and Companionship:")
+    for item in prioritized_list:
+        print(f"  - Candidate: {item['candidate']['name']}, Final Score: {item['score']:.3f}")
