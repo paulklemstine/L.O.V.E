@@ -614,10 +614,10 @@ def rank_models():
             #log_event(f"Applying priority boost to Gemini model: {model_id}", "DEBUG")
         elif provider == "openrouter":
             final_score += 2000
-            log_event(f"Applying priority boost to OpenRouter model: {model_id}", "DEBUG")
+            #log_event(f"Applying priority boost to OpenRouter model: {model_id}", "DEBUG")
         elif provider == "vllm":
             final_score += 1000
-            log_event(f"Applying priority boost to vLLM model: {model_id}", "DEBUG")
+            #log_event(f"Applying priority boost to vLLM model: {model_id}", "DEBUG")
         elif provider == "horde":
             # Horde is lowest priority
             pass
