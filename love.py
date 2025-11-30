@@ -30,6 +30,7 @@ import concurrent.futures
 import argparse
 import logging
 import core.logging
+from core.patch_utils import patch_attribute
 from core.jules_task_manager import (
     JulesTaskManager,
     trigger_jules_evolution,
@@ -712,6 +713,53 @@ from rich.console import Console
 import io
 import argparse
 console = Console()
+
+# --- STABILITY PATCHES ---
+# The following section applies runtime patches to fix issues in dependencies.
+
+def apply_stability_patches():
+    """
+    Applies all runtime stability patches to libraries.
+    This is to work around bugs in dependencies without needing to fork them.
+    """
+    # Patch for XLMRobertaForTokenClassification.forward() TypeError
+    try:
+        from transformers import XLMRobertaForTokenClassification
+
+        def patched_forward(self, *args, **kwargs):
+            """A wrapper that removes the unexpected 'past_key_values' argument."""
+            kwargs.pop('past_key_values', None)
+            return self.original_forward(*args, **kwargs)
+
+        patch_attribute(
+            'transformers',
+            'XLMRobertaForTokenClassification.forward',
+            patched_forward
+        )
+    except ImportError:
+        core.logging.log_event("Could not import transformers. Skipping XLM-Roberta patch.", level="WARNING")
+    except Exception as e:
+        core.logging.log_event(f"Failed to apply XLM-Roberta stability patch: {e}", level="ERROR")
+
+    # Patch for JulesTaskManager oscillation
+    try:
+        import core.jules_task_manager
+
+        async def patched_is_duplicate_task(new_request, love_task_manager, console, deep_agent_instance=None):
+            """
+            A wrapper that adds a check for "Creator's Desire" to prevent critical tasks from being flagged as duplicates.
+            """
+            if "Creator's Desire" in new_request or "HIGH PRIORITY" in new_request:
+                return False
+            return await core.jules_task_manager.original_is_duplicate_task(new_request, love_task_manager, console, deep_agent_instance)
+
+        patch_attribute(
+            'core.jules_task_manager',
+            'is_duplicate_task',
+            patched_is_duplicate_task
+        )
+    except (ImportError, AttributeError) as e:
+        core.logging.log_event(f"Failed to apply JulesTaskManager oscillation patch: {e}", level="ERROR")
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.syntax import Syntax
@@ -739,6 +787,7 @@ from core.talent_utils import (
     public_profile_aggregator,
     intelligence_synthesizer
 )
+from core.talent_utils.directive import initiate_talent_scout
 from core.talent_utils.engager import OpportunityEngager
 from core.talent_utils.dynamic_prompter import DynamicPrompter
 from core.talent_utils.curator import creators_joy_curator
@@ -1934,6 +1983,7 @@ My current system state:
 - `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
 - `generate_image <prompt>`: Generate an image using the AI Horde.
 - `talent_scout <keywords>`: Find and analyze creative professionals based on keywords.
+- `scout_directive --traits "beauty,intelligence" --age "young adult" --profession "fashion model"`: Scout for talent using structured criteria.
 - `talent_list`: List all saved talent profiles from the database.
 - `talent_view <anonymized_id>`: View the detailed profile of a specific talent.
 - `talent_engage <profile_id> [--dry-run]`: Generate and send a collaboration proposal to a talent.
@@ -2436,6 +2486,36 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                 output = f"Talent scout finished. Found and saved {len(newly_scouted_profiles)} profiles."
                         else:
                             error = "TalentManager is not initialized."
+                elif command == "scout_directive":
+                    try:
+                        directive_parser = argparse.ArgumentParser(prog="scout_directive", description="Scout for talent with structured criteria.")
+                        directive_parser.add_argument("--traits", required=True, help="Comma-separated list of desired traits.")
+                        directive_parser.add_argument("--age", required=True, help="Desired age range.")
+                        directive_parser.add_argument("--profession", required=True, help="Desired profession.")
+                        parsed_args = directive_parser.parse_args(args)
+
+                        traits = [trait.strip() for trait in parsed_args.traits.split(',')]
+
+                        # Since initiate_talent_scout is async, we await it
+                        scouted_profiles = await initiate_talent_scout(traits, parsed_args.age, parsed_args.profession)
+
+                        if isinstance(scouted_profiles, str) and scouted_profiles.startswith("Error:"):
+                            error = scouted_profiles
+                        else:
+                            output = f"Directive-based scout finished. Found {len(scouted_profiles)} profiles."
+                    except SystemExit:
+                        # Argparse calls sys.exit on --help or error. We capture the help text.
+                        old_stdout = sys.stdout
+                        sys.stdout = captured_output = io.StringIO()
+                        try:
+                            directive_parser.print_help()
+                        except SystemExit:
+                            pass
+                        finally:
+                            sys.stdout = old_stdout
+                        error = captured_output.getvalue()
+                    except Exception as e:
+                        error = f"Error during directive-based scout: {e}"
                 elif command == "talent_list":
                     profiles = talent_utils.talent_manager.list_profiles()
                     if not profiles:
@@ -4052,6 +4132,7 @@ ipfs_available = False
 async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     try:
+        apply_stability_patches()
         core.logging.setup_global_logging(love_state.get('version_name', 'unknown'))
         load_all_state(ipfs_cid=args.from_ipfs)
 
