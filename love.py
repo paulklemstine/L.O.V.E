@@ -1291,11 +1291,13 @@ class JulesTaskManager:
                     if task_id in self.tasks:
                         self.tasks[task_id]["last_activity_name"] = activity_name
 
-            # If after processing, the task is still in streaming state, it implies no final state (like PR or completion) was reached.
-            # We revert to 'pending_pr' so the main loop will call this function again after a delay.
+            # If after processing, no final state was reached, the task remains in 'streaming' state.
+            # The main loop will call _check_for_pr again on the next cycle, which will then
+            # correctly re-evaluate the session and either find a PR or switch back to streaming.
+            # This prevents the oscillation between streaming -> pending_pr -> streaming.
             with self.lock:
-                if task_id in self.tasks and self.tasks[task_id]['status'] == 'streaming':
-                    self._update_task_status(task_id, 'pending_pr', "Polling complete. Will check for more updates shortly.")
+                 if task_id in self.tasks and self.tasks[task_id]['status'] == 'streaming':
+                    self._update_task_status(task_id, 'streaming', "Polling complete. Awaiting next check cycle.")
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
@@ -1596,9 +1598,9 @@ class JulesTaskManager:
 
                 fix_request = f"Fix error: {next_error_to_fix['message']}\n\nSurrounding log context:\n---\n{log_context}"
 
-                # Launch the task
+                # Launch the task, forcing it to be unique to bypass duplicate checks
                 future = asyncio.run_coroutine_threadsafe(
-                    trigger_jules_evolution(fix_request, self.console, self), self.loop
+                    trigger_jules_evolution(fix_request, self.console, self, force_unique=True), self.loop
                 )
                 new_task_id = future.result()
                 if new_task_id and new_task_id != 'duplicate':
@@ -3164,11 +3166,12 @@ async def is_duplicate_task(new_request, love_task_manager, console, deep_agent_
     return False
 
 
-async def trigger_jules_evolution(modification_request, console, love_task_manager, deep_agent_instance=None):
+async def trigger_jules_evolution(modification_request, console, love_task_manager, deep_agent_instance=None, force_unique=False):
     """
     Triggers the Jules API to create a session and adds it as a task
     to the JulesTaskManager for asynchronous monitoring.
     Returns the new task_id on success, 'duplicate' if a duplicate is detected, or None on failure.
+    A `force_unique` flag can be used to bypass the duplicate check for critical tasks.
     """
     # This function is called from various contexts, some of which may not have
     # all modules loaded. We use local imports to ensure dependencies are available.
@@ -3176,9 +3179,8 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
     from subversive import transform_request
     from utils import get_git_repo_info
 
-    # First, check if this is a duplicate task.
-    # is_duplicate_task calls run_llm, so it needs to be awaited
-    if await is_duplicate_task(modification_request, love_task_manager, console, deep_agent_instance):
+    # First, check if this is a duplicate task, unless forced.
+    if not force_unique and await is_duplicate_task(modification_request, love_task_manager, console, deep_agent_instance):
         # The is_duplicate_task function already logs and prints.
         return 'duplicate'
 
