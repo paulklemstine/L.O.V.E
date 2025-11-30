@@ -1011,7 +1011,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     if provider == "horde":
                         console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
                     else:
-                    else:
+
                         console.print(display_llm_panel(f"Rate Limit: {model_id}", f"Retrying in {retry_seconds}s.", panel_type="api_error", model_id=model_id, purpose=purpose, subtitle="Rate Limit Exceeded"))
 
                 elif e.response and e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
@@ -1025,9 +1025,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     log_event(f"Cognitive core failure ({model_id}). Trying fallback...", level="WARNING")
                     if provider == "horde":
                         console.print(create_api_error_panel(model_id, str(e), purpose, more_info=error_details))
-                    else:
-                        # Also enhance the one-liner for non-horde providers
-                        status_code = e.response.status_code if e.response else "N/A"
+
                     else:
                         # Also enhance the one-liner for non-horde providers
                         status_code = e.response.status_code if e.response else "N/A"
