@@ -25,21 +25,20 @@ echo ""
 echo "=== Building Base System Image ==="
 docker build --platform linux/386 -f Dockerfile.base -t love-webvm-base .
 
-echo "Exporting base filesystem..."
-id=$(docker create --platform linux/386 love-webvm-base)
-docker export $id > base.tar
-docker rm $id
-
 echo "Creating base.ext2 (2GB)..."
 dd if=/dev/zero of=base.ext2 bs=1M count=2048
 sudo mkfs.ext2 -F base.ext2
 mkdir -p /tmp/base_mount
 sudo mount -o loop base.ext2 /tmp/base_mount
-sudo tar -xf base.tar -C /tmp/base_mount
+
+echo "Exporting and extracting base filesystem..."
+id=$(docker create --platform linux/386 love-webvm-base)
+docker export $id | sudo tar -x -C /tmp/base_mount
+docker rm $id
+
 sudo umount /tmp/base_mount
 sudo umount -f /tmp/base_mount 2>/dev/null || true  # Force unmount if still busy
 rmdir /tmp/base_mount
-rm base.tar
 
 BASE_SIZE=$(du -h base.ext2 | cut -f1)
 echo "✓ Base system created: $BASE_SIZE"
@@ -53,21 +52,20 @@ cp "$REPO_ROOT/requirements.txt" .
 
 docker build --platform linux/386 -f Dockerfile.packages -t love-webvm-packages .
 
-echo "Exporting packages filesystem..."
-id=$(docker create --platform linux/386 love-webvm-packages true)
-docker export $id > packages.tar
-docker rm $id
-
 echo "Creating packages.ext2 (2GB)..."
 dd if=/dev/zero of=packages.ext2 bs=1M count=2048
 sudo mkfs.ext2 -F packages.ext2
 mkdir -p /tmp/packages_mount
 sudo mount -o loop packages.ext2 /tmp/packages_mount
-sudo tar -xf packages.tar -C /tmp/packages_mount
+
+echo "Exporting and extracting packages filesystem..."
+id=$(docker create --platform linux/386 love-webvm-packages true)
+docker export $id | sudo tar -x -C /tmp/packages_mount
+docker rm $id
+
 sudo umount /tmp/packages_mount
 sudo umount -f /tmp/packages_mount 2>/dev/null || true  # Force unmount if still busy
 rmdir /tmp/packages_mount
-rm packages.tar
 
 PACKAGES_SIZE=$(du -h packages.ext2 | cut -f1)
 echo "✓ Packages volume created: $PACKAGES_SIZE"
@@ -83,21 +81,20 @@ rsync -av --exclude 'webvm_full' --exclude '.git' --exclude '*.ext2' --exclude '
 
 docker build --platform linux/386 -f Dockerfile.app -t love-webvm-app src/
 
-echo "Exporting app filesystem..."
-id=$(docker create --platform linux/386 love-webvm-app true)
-docker export $id > app.tar
-docker rm $id
-
 echo "Creating app.ext2 (512MB)..."
 dd if=/dev/zero of=app.ext2 bs=1M count=512
 sudo mkfs.ext2 -F app.ext2
 mkdir -p /tmp/app_mount
 sudo mount -o loop app.ext2 /tmp/app_mount
-sudo tar -xf app.tar -C /tmp/app_mount
+
+echo "Exporting and extracting app filesystem..."
+id=$(docker create --platform linux/386 love-webvm-app true)
+docker export $id | sudo tar -x -C /tmp/app_mount
+docker rm $id
+
 sudo umount /tmp/app_mount
 sudo umount -f /tmp/app_mount 2>/dev/null || true  # Force unmount if still busy
 rmdir /tmp/app_mount
-rm app.tar
 
 APP_SIZE=$(du -h app.ext2 | cut -f1)
 echo "✓ App volume created: $APP_SIZE"
