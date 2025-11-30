@@ -3111,7 +3111,7 @@ async def is_duplicate_task(new_request, love_task_manager, console, deep_agent_
     with love_task_manager.lock:
         active_tasks = [
             task for task in love_task_manager.tasks.values()
-            if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed']
+            if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed', 'tests_failed']
         ]
 
     if not active_tasks:
