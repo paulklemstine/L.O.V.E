@@ -238,67 +238,53 @@ PANEL_TYPE_COLORS = {
     "reasoning": "bright_magenta",
 }
 
-def display_llm_interaction(title, prompt, response, panel_type="llm", model_id=None, token_count=None, purpose=None, elapsed_time=None):
+def display_llm_panel(title, content, panel_type="llm", subtitle=None, model_id=None, token_count=None, purpose=None, elapsed_time=None):
     """
-    Creates a combined panel for LLM interactions (Prompt + Response).
-    Uses a "Green for Good" theme by default for successful interactions.
+    Creates a pretty little panel for LLM calls using the kawaii raver matrix theme.
+    Uses a table layout for compact metadata display.
     """
     from rich.panel import Panel
-    from rich.box import ROUNDED
+    from rich.box import DOUBLE_EDGE, ROUNDED
     from rich.table import Table
     from rich.text import Text
     from rich.console import Group
-    from rich.rule import Rule
 
-    # Default to bright green for success/standard LLM calls
-    if panel_type == "llm":
-        color = "bright_green"
-        emoji1 = "🌿"
-        emoji2 = "✨"
-    elif panel_type == "api_error":
-        color = "red"
-        emoji1 = "⚠️"
-        emoji2 = "🔥"
-    else:
-        color = PANEL_TYPE_COLORS.get(panel_type, "bright_cyan")
-        emoji1 = get_rave_emoji()
-        emoji2 = get_rave_emoji()
-
-    # Create the metadata table (Compact Footer)
-    meta_table = Table(show_header=False, box=None, padding=(0, 2), collapse_padding=True)
-    meta_table.add_column("Key", style=f"dim {color}")
+    color = PANEL_TYPE_COLORS.get(panel_type, "bright_cyan")
+    
+    # Create the metadata table
+    meta_table = Table(show_header=False, box=None, padding=(0, 1), collapse_padding=True)
+    meta_table.add_column("Key", style=f"bold {color}")
     meta_table.add_column("Value", style="white")
     
-    # Build metadata row
-    row_items = []
-    if model_id: row_items.append(f"🧠 {model_id}")
-    if purpose: row_items.append(f"🎯 {purpose}")
-    if token_count: row_items.append(f"🔢 {token_count}")
-    if elapsed_time: row_items.append(f"⏱️ {elapsed_time:.2f}s")
-    
-    # Add all items in a single row for compactness if they fit, or split them
-    meta_table.add_row(*[Text(" | ").join([Text(item) for item in row_items])])
+    if model_id:
+        meta_table.add_row("🧠 Model", model_id)
+    if purpose:
+        meta_table.add_row("🎯 Purpose", purpose)
+    if token_count:
+        meta_table.add_row("🔢 Tokens", str(token_count))
+    if elapsed_time:
+        meta_table.add_row("⏱️ Time", f"{elapsed_time:.2f}s")
 
-    # Create gradient title
-    styled_title = get_gradient_text(f"{emoji1} {title} {emoji2}", color, "white" if color == "bright_green" else "yellow", emojis=False)
+    # Add some rave emojis to the title
+    emoji1 = get_rave_emoji()
+    emoji2 = get_rave_emoji()
     
-    # Content Construction
+    # Create gradient title
+    styled_title = get_gradient_text(f"{emoji1} {title} {emoji2}", color, get_random_rave_color(), emojis=False)
+    
+    # Combine content and metadata
     panel_content = Group(
-        Text("Prompt:", style=f"dim {color}"),
-        Text(prompt, style="dim white"),
-        Rule(style=f"dim {color}"),
-        Text("Response:", style=f"bold {color}"),
-        Text(response, style="bright_white"),
-        Text("\n"), # Spacer
+        content,
+        Text("\n"),
         meta_table
     )
     
     return Panel(
         panel_content,
         title=styled_title,
+        subtitle=subtitle,
         border_style=color,
         box=ROUNDED,
         padding=(1, 2)
     )
-
 

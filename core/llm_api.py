@@ -29,7 +29,7 @@ from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
 from core.logging import log_event
 from display import WaitingAnimation
-from ui_utils import display_llm_interaction
+from ui_utils import display_llm_panel
 import signal
 def graceful_shutdown(signum, frame):
     Console().print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
@@ -803,9 +803,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 # --- User Feedback: Request Logging ---
                 # --- User Feedback: Request Logging ---
                 # --- User Feedback: Request Logging ---
-                # --- User Feedback: Request Logging ---
-                # Request logging is now handled in the combined panel at the end.
-                pass
+                console.print(display_llm_panel(f"Request to {model_id}", truncate_for_log(prompt_text, length=500), panel_type="llm", model_id=model_id, purpose=purpose, token_count=get_token_count(prompt_text)))
 
                 # --- DEEP AGENT vLLM LOGIC ---
                 if model_id == "deep_agent_vllm":
@@ -978,8 +976,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     # --- User Feedback: Response Logging ---
                     # --- User Feedback: Response Logging ---
                     # --- User Feedback: Response Logging ---
-                    # --- User Feedback: Response Logging ---
-                    console.print(display_llm_interaction(f"Interaction with {model_id}", truncate_for_log(prompt_text, length=200), truncate_for_log(result_text, length=500), panel_type="llm", model_id=model_id, token_count=get_token_count(result_text), purpose=purpose, elapsed_time=time.time() - start_time))
+                    console.print(display_llm_panel(f"Response from {model_id}", truncate_for_log(result_text, length=500), panel_type="llm", model_id=model_id, token_count=get_token_count(result_text), elapsed_time=time.time() - start_time))
 
                     PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
                     LLM_AVAILABILITY[model_id] = time.time()
@@ -1015,8 +1012,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
                     else:
 
-                    else:
-                        console.print(display_llm_interaction(f"Rate Limit: {model_id}", truncate_for_log(prompt_text, length=100), f"Retrying in {retry_seconds}s.", panel_type="api_error", model_id=model_id, purpose=purpose))
+                        console.print(display_llm_panel(f"Rate Limit: {model_id}", f"Retrying in {retry_seconds}s.", panel_type="api_error", model_id=model_id, purpose=purpose, subtitle="Rate Limit Exceeded"))
 
                 elif e.response and e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
                     failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1
@@ -1033,10 +1029,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     else:
                         # Also enhance the one-liner for non-horde providers
                         status_code = e.response.status_code if e.response else "N/A"
-                    else:
-                        # Also enhance the one-liner for non-horde providers
-                        status_code = e.response.status_code if e.response else "N/A"
-                        console.print(display_llm_interaction(f"API Error: {model_id}", truncate_for_log(prompt_text, length=100), f"Status: {status_code}\nDetails: {error_details[:200]}...", panel_type="api_error", model_id=model_id, purpose=purpose))
+                        console.print(display_llm_panel(f"API Error: {model_id}", f"Status: {status_code}\nDetails: {error_details[:200]}...", panel_type="api_error", model_id=model_id, purpose=purpose, subtitle="API Failure"))
 
                 continue
             except Exception as e:
@@ -1044,7 +1037,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 last_exception = e
                 log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
                 if isinstance(e, FileNotFoundError):
-                    console.print(display_llm_interaction("CONNECTION FAILED", truncate_for_log(prompt_text, length=100), "Error: 'llm' command not found.", panel_type="critical_error"))
+                    console.print(display_llm_panel("CONNECTION FAILED", "Error: 'llm' command not found.", panel_type="critical_error"))
                     return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
                 elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
@@ -1059,14 +1052,14 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         console.print(create_api_error_panel(model_id, error_message, purpose))
                     else:
                         reason = "Quota Exceeded" if "quota" in error_message.lower() else "API Error"
-                        console.print(display_llm_interaction(f"API Error: {model_id}", truncate_for_log(prompt_text, length=100), f"Reason: {reason}\nRetrying in {retry_seconds:.2f}s.", panel_type="api_error"))
+                        console.print(display_llm_panel(f"API Error: {model_id}", f"Reason: {reason}\nRetrying in {retry_seconds:.2f}s.", panel_type="api_error"))
                 else:
                     LLM_AVAILABILITY[model_id] = time.time() + 60
                     # For any other generic exception, show the full panel for Horde, one-liner for others.
                     if provider == "horde":
                         console.print(create_api_error_panel(model_id, str(e), purpose))
                     else:
-                        console.print(display_llm_interaction(f"API Error: {model_id}", truncate_for_log(prompt_text, length=100), "Check love.log for details.", panel_type="api_error"))
+                        console.print(display_llm_panel(f"API Error: {model_id}", "Check love.log for details.", panel_type="api_error"))
 
             if final_result:
                 break
