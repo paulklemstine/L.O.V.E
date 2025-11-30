@@ -237,3 +237,28 @@ PANEL_TYPE_COLORS = {
     "jobs": "cyan",
     "reasoning": "bright_magenta",
 }
+
+def display_llm_panel(title, content, panel_type="llm", subtitle=None):
+    """
+    Creates a pretty little panel for LLM calls using the kawaii raver matrix theme.
+    """
+    from rich.panel import Panel
+    from rich.box import DOUBLE_EDGE
+
+    color = PANEL_TYPE_COLORS.get(panel_type, "bright_cyan")
+    
+    # Add some rave emojis to the title
+    emoji1 = get_rave_emoji()
+    emoji2 = get_rave_emoji()
+    styled_title = f"[bold {color}]{emoji1} {title} {emoji2}[/bold {color}]"
+    
+    border_style = f"{color}"
+    
+    return Panel(
+        content,
+        title=styled_title,
+        subtitle=subtitle,
+        border_style=border_style,
+        box=DOUBLE_EDGE,
+        padding=(1, 2)
+    )

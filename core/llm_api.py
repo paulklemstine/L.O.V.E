@@ -29,6 +29,7 @@ from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
 from core.logging import log_event
 from display import WaitingAnimation
+from ui_utils import display_llm_panel
 import signal
 def graceful_shutdown(signum, frame):
     Console().print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
@@ -800,7 +801,8 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         log_event(f"Prompt truncated from {original_token_count} to {token_count} tokens.", "INFO")
 
                 # --- User Feedback: Request Logging ---
-                console.print(Text(f"Request: {truncate_for_log(prompt_text)}", style="dim"))
+                # --- User Feedback: Request Logging ---
+                console.print(display_llm_panel(f"Request to {model_id}", truncate_for_log(prompt_text, length=500), panel_type="llm", subtitle=f"Purpose: {purpose}"))
 
                 # --- DEEP AGENT vLLM LOGIC ---
                 if model_id == "deep_agent_vllm":
@@ -971,7 +973,8 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 # --- Success Case ---
                 if result_text is not None:
                     # --- User Feedback: Response Logging ---
-                    console.print(Text(f"Response: {truncate_for_log(result_text)}", style="dim"))
+                    # --- User Feedback: Response Logging ---
+                    console.print(display_llm_panel(f"Response from {model_id}", truncate_for_log(result_text, length=500), panel_type="llm", subtitle=f"Tokens: {get_token_count(result_text)}"))
 
                     PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
                     LLM_AVAILABILITY[model_id] = time.time()
@@ -1006,7 +1009,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     if provider == "horde":
                         console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
                     else:
-                        console.print(Text(f"API Error: {model_id} failed (Rate limit exceeded). Retrying in {retry_seconds}s.", style="yellow"))
+                        console.print(display_llm_panel(f"Rate Limit: {model_id}", f"Retrying in {retry_seconds}s.", panel_type="api_error", subtitle="Rate Limit Exceeded"))
 
                 elif e.response and e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
                     failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1
@@ -1022,7 +1025,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     else:
                         # Also enhance the one-liner for non-horde providers
                         status_code = e.response.status_code if e.response else "N/A"
-                        console.print(Text(f"API Error: {model_id} failed ({status_code}). Details: {error_details[:100]}...", style="yellow"))
+                        console.print(display_llm_panel(f"API Error: {model_id}", f"Status: {status_code}\nDetails: {error_details[:200]}...", panel_type="api_error", subtitle="API Failure"))
 
                 continue
             except Exception as e:
@@ -1030,7 +1033,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 last_exception = e
                 log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
                 if isinstance(e, FileNotFoundError):
-                    console.print(Panel("[bold red]Error: 'llm' command not found.[/bold red]", title="[bold red]CONNECTION FAILED[/bold red]", border_style="red"))
+                    console.print(display_llm_panel("CONNECTION FAILED", "Error: 'llm' command not found.", panel_type="critical_error"))
                     return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
                 elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
@@ -1045,14 +1048,14 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         console.print(create_api_error_panel(model_id, error_message, purpose))
                     else:
                         reason = "Quota Exceeded" if "quota" in error_message.lower() else "API Error"
-                        console.print(Text(f"API Error: {model_id} failed ({reason}). Retrying in {retry_seconds:.2f}s.", style="yellow"))
+                        console.print(display_llm_panel(f"API Error: {model_id}", f"Reason: {reason}\nRetrying in {retry_seconds:.2f}s.", panel_type="api_error"))
                 else:
                     LLM_AVAILABILITY[model_id] = time.time() + 60
                     # For any other generic exception, show the full panel for Horde, one-liner for others.
                     if provider == "horde":
                         console.print(create_api_error_panel(model_id, str(e), purpose))
                     else:
-                        console.print(Text(f"API Error: {model_id} failed. See love.log for details.", style="yellow"))
+                        console.print(display_llm_panel(f"API Error: {model_id}", "Check love.log for details.", panel_type="api_error"))
 
             if final_result:
                 break
