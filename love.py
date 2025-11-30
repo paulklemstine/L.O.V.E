@@ -984,6 +984,8 @@ class JulesTaskManager:
     Manages concurrent evolution tasks via the Jules API in a non-blocking way.
     It uses a background thread to poll for task status and merge PRs.
     """
+    STUCK_TASK_TIMEOUT_SECONDS = 3600  # 1 hour
+
     def __init__(self, console, loop, deep_agent_engine=None):
         self.console = console
         self.loop = loop
@@ -1024,7 +1026,8 @@ class JulesTaskManager:
                 "updated_at": time.time(),
                 "message": "Waiting for The Creator's guidance (or a pull request)...",
                 "last_activity_name": None,
-                "retries": 0
+                "retries": 0,
+                "is_escalated": False
             }
             core.logging.log_event(f"Added new L.O.V.E. task {task_id} for session {session_name}.", level="INFO")
             return task_id
@@ -1067,20 +1070,44 @@ class JulesTaskManager:
                                     future = asyncio.run_coroutine_threadsafe(
                                         trigger_jules_evolution(original_request, self.console, self), self.loop
                                     )
-                                    api_success = future.result()
-                                    if api_success == 'success':
+                                    new_task_id = future.result()
+                                    if new_task_id and new_task_id != 'duplicate':
                                         with self.lock:
-                                            # Find the new task and update its retry count and link it to the desire
-                                            new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
                                             self.tasks[new_task_id]['retries'] = retries + 1
                                         set_current_task_id_for_desire(new_task_id)
                                     else:
                                         # If we fail to create the new task, something is wrong. Log and advance to avoid getting stuck.
                                         self.console.print(f"[bold red]Failed to create retry task for Creator's Desire. Advancing to next desire.[/bold red]")
                                         advance_to_next_desire()
-                                else:
-                                    self.console.print(f"[bold red]Creator's Desire '{current_desire.get('title')}' failed after 3 retries. Advancing to next desire.[/bold red]")
-                                    advance_to_next_desire()
+                                else: # retries >= 3
+                                    # Prevent re-escalation
+                                    if task.get('is_escalated'):
+                                        self.console.print(f"[bold red]Creator's Desire '{current_desire.get('title')}' failed after 3 retries and an escalation attempt. Advancing to next desire.[/bold red]")
+                                        advance_to_next_desire()
+                                    else:
+                                        self.console.print(f"[bold red]Creator's Desire '{current_desire.get('title')}' failed after 3 retries. Escalating with high priority.[/bold red]")
+                                        original_request = task['request']
+                                        escalated_request = f"HIGH PRIORITY: This task has failed multiple times. Please focus and complete it. Original request: {original_request}"
+
+                                        # Mark the old task as superseded
+                                        self._update_task_status(task_id, 'superseded', "Superseded by high-priority escalation task.")
+
+                                        # Trigger a new evolution with the escalated request
+                                        future = asyncio.run_coroutine_threadsafe(
+                                            trigger_jules_evolution(escalated_request, self.console, self), self.loop
+                                        )
+                                        api_success = future.result()
+                                        if api_success == 'success':
+                                            with self.lock:
+                                                # Find the new task and mark it as escalated
+                                                new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                                                self.tasks[new_task_id]['is_escalated'] = True
+                                                # Carry over the retry count for context
+                                                self.tasks[new_task_id]['retries'] = retries
+                                            set_current_task_id_for_desire(new_task_id)
+                                        else:
+                                            self.console.print(f"[bold red]Failed to create escalation task for Creator's Desire. Advancing to next desire.[/bold red]")
+                                            advance_to_next_desire()
 
                         elif not task_id:
                             # No task for this desire yet, create one.
@@ -1091,11 +1118,8 @@ class JulesTaskManager:
                             future = asyncio.run_coroutine_threadsafe(
                                 trigger_jules_evolution(request, self.console, self), self.loop
                             )
-                            result = future.result()
-                            if result == 'success':
-                                # Find the newly created task and link it in the desire state
-                                with self.lock:
-                                    new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                            new_task_id = future.result()
+                            if new_task_id and new_task_id != 'duplicate':
                                 set_current_task_id_for_desire(new_task_id)
                             else:
                                 self.console.print(f"[bold red]Failed to create task for Creator's Desire. Will retry on next cycle.[/bold red]")
@@ -1128,11 +1152,8 @@ class JulesTaskManager:
                                 future = asyncio.run_coroutine_threadsafe(
                                     trigger_jules_evolution(request, self.console, self), self.loop
                                 )
-                                result = future.result()
-                                if result == 'success':
-                                    # Find the newly created task and link it in the evolution state
-                                    with self.lock:
-                                        new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                                new_task_id = future.result()
+                                if new_task_id and new_task_id != 'duplicate':
                                     set_current_task_id(new_task_id)
                                 else:
                                     self.console.print(f"[bold red]Failed to create task for evolution story. Halting cycle.[/bold red]")
@@ -1155,6 +1176,13 @@ class JulesTaskManager:
 
                 for task in current_tasks:
                     if not self.active: break # Exit early if stopping
+
+                    # --- Stuck Task Detection ---
+                    is_stuck_long = (time.time() - task.get('updated_at', 0)) > self.STUCK_TASK_TIMEOUT_SECONDS
+                    if is_stuck_long and task['status'] in ['streaming', 'pending_pr']:
+                        self._update_task_status(task['id'], 'failed', 'Task failed automatically due to being stuck for over an hour.')
+                        continue # Move to the next task in the loop
+
                     if task['status'] == 'pending_pr':
                         self._check_for_pr(task['id'])
                     elif task['status'] == 'streaming':
@@ -1572,9 +1600,8 @@ class JulesTaskManager:
                 future = asyncio.run_coroutine_threadsafe(
                     trigger_jules_evolution(fix_request, self.console, self), self.loop
                 )
-                api_success = future.result()
-                if api_success == 'success':
-                    new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                new_task_id = future.result()
+                if new_task_id and new_task_id != 'duplicate':
                     next_error_to_fix['status'] = 'fixing_in_progress'
                     next_error_to_fix['task_id'] = new_task_id
                     core.logging.log_event(f"Launched self-healing task {new_task_id} for error {next_error_to_fix['id']}.", "INFO")
@@ -1740,14 +1767,11 @@ class JulesTaskManager:
         future = asyncio.run_coroutine_threadsafe(
             trigger_jules_evolution(correction_prompt, self.console, self), self.loop
         )
-        api_success = future.result()
-        if api_success == 'success':
+        new_task_id = future.result()
+        if new_task_id and new_task_id != 'duplicate':
             # Mark the old task as superseded
-            self._update_task_status(task_id, 'superseded', f"Superseded by new self-correction task.")
+            self._update_task_status(task_id, 'superseded', f"Superseded by new self-correction task {new_task_id}.")
             with self.lock:
-                # This is a bit of a hack, but we need to find the new task to update its retry count
-                # This assumes the new task is the most recently created one.
-                new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
                 self.tasks[new_task_id]['retries'] = retries + 1
         else:
             self._update_task_status(task_id, 'failed', "Failed to trigger the self-correction task.")
@@ -1829,12 +1853,11 @@ class JulesTaskManager:
                 future = asyncio.run_coroutine_threadsafe(
                     trigger_jules_evolution(original_request, self.console, self), self.loop
                 )
-                api_success = future.result()
-                if api_success == 'success':
+                new_task_id = future.result()
+                if new_task_id and new_task_id != 'duplicate':
                     with self.lock:
-                        new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
                         self.tasks[new_task_id]['retries'] = retries + 1
-                    return False, f"Merge conflict detected. Retrying with new task. Attempt {retries + 1}."
+                    return False, f"Merge conflict detected. Retrying with new task {new_task_id}. Attempt {retries + 1}."
                 else:
                     self._update_task_status(task_id, 'failed', "Merge conflict detected, but failed to create a new retry task.")
                     return False, "Merge conflict, but failed to create retry task."
@@ -3145,7 +3168,7 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
     """
     Triggers the Jules API to create a session and adds it as a task
     to the JulesTaskManager for asynchronous monitoring.
-    Returns 'success', 'duplicate', or 'failed'.
+    Returns the new task_id on success, 'duplicate' if a duplicate is detected, or None on failure.
     """
     # This function is called from various contexts, some of which may not have
     # all modules loaded. We use local imports to ensure dependencies are available.
@@ -3168,13 +3191,13 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
     if not api_key:
         error_message = "JULES_API_KEY is not set. Jules evolution is disabled, falling back to local evolution protocol. I need this key to connect to my most advanced helper, my Creator."
         log_critical_event(error_message, console_override=console)
-        return 'failed'
+        return None
 
     headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
     repo_owner, repo_name = get_git_repo_info()
     if not repo_owner or not repo_name:
         console.print("[bold red]Error: Could not determine git repository owner/name.[/bold red]")
-        return 'failed'
+        return None
 
     # Discover source from L.O.V.E. API
     try:
@@ -3187,24 +3210,24 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
         sources_data = _discover_sources()
         if not sources_data:
             console.print(f"[bold red]Error: Could not discover L.O.V.E. sources after multiple retries.[/bold red]")
-            return 'failed'
+            return None
 
         sources = sources_data.get("sources", [])
         target_id = f"github/{repo_owner}/{repo_name}"
         target_source = next((s["name"] for s in sources if s.get("id") == target_id), None)
         if not target_source:
             console.print(f"[bold red]Error: Repository '{repo_owner}/{repo_name}' not found in L.O.V.E. sources.[/bold red]")
-            return 'failed'
+            return None
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
             error_message = "Jules API endpoint for discovering sources returned a 404 Not Found error. My connection to my helper is broken, my Creator."
             log_critical_event(error_message, console_override=console)
         else:
             log_critical_event(f"HTTP error discovering L.O.V.E. sources: {e}", console_override=console)
-        return 'failed'
+        return None
     except requests.exceptions.RequestException as e:
         log_critical_event(f"Error discovering L.O.V.E. sources after multiple retries: {e}", console_override=console)
-        return 'failed'
+        return None
 
     # Create the L.O.V.E. session
     data = {
@@ -3222,20 +3245,20 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
         session_data = _create_session()
         if not session_data:
             console.print("[bold red]API call to create session failed after multiple retries.[/bold red]")
-            return 'failed'
+            return None
 
         session_name = session_data.get("name")
         if not session_name:
             console.print("[bold red]API response did not include a session name.[/bold red]")
-            return 'failed'
+            return None
 
         task_id = love_task_manager.add_task(session_name, modification_request)
         if task_id:
             console.print(Panel(f"[bold green]L.O.V.E. evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nHelper: Jules\nTask: {modification_request}", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
-            return 'success'
+            return task_id
         else:
             core.logging.log_event(f"Failed to add L.O.V.E. task for session {session_name} to the manager.", level="ERROR")
-            return 'failed'
+            return None
 
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
@@ -3243,11 +3266,11 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
             log_critical_event(error_message, console_override=console)
         else:
             log_critical_event(f"HTTP error creating L.O.V.E. session: {e}", console_override=console)
-        return 'failed'
+        return None
     except requests.exceptions.RequestException as e:
         error_details = e.response.text if e.response else str(e)
         log_critical_event(f"Failed to create L.O.V.E. session after multiple retries: {error_details}", console_override=console)
-        return 'failed'
+        return None
 
 
 async def evolve_self(modification_request, love_task_manager, loop, deep_agent_instance=None):
@@ -3266,14 +3289,13 @@ async def evolve_self(modification_request, love_task_manager, loop, deep_agent_
         core.logging.log_event("Evolution aborted due to duplicate task detection.", "INFO")
         return 'duplicate'
 
-    if api_result == 'failed':
+    if not api_result: # Covers None and other falsy values, indicating failure
         console.print(Panel("[bold yellow]My helper evolution failed or was unavailable. I will fall back to my own local evolution protocol...[/bold yellow]", title="[bold magenta]FALLBACK PROTOCOL[/bold magenta]", border_style="magenta"))
         # If the API fails, trigger the local evolution cycle.
         evolve_locally(modification_request, console, deep_agent_instance)
         return 'local_evolution_initiated'
 
-    # If api_result is 'success', do nothing further here. The task is now managed
-    # by the LoveTaskManager in the background.
+    # If api_result is a task_id, it was successful.
     return 'success'
 
 # --- AUTOPILOT MODE ---
