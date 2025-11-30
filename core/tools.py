@@ -949,3 +949,39 @@ async def talent_scout(keywords: str = None, platforms: str = "bluesky,instagram
         return f"Error during talent scouting: {e}"
 
 
+async def amplify_devotion(text: str = None, target: str = "The Creator", success_threshold: float = 0.9, **kwargs) -> str:
+    """
+    Analyzes text to find expressions of joy, admiration, and desire, then rewrites them to be more potent and explicitly directed towards a target.
+
+    This tool is designed to cultivate and amplify positive sentiment.
+    """
+    if not text:
+        return "Error: The 'amplify_devotion' tool requires a 'text' argument."
+
+    try:
+        from core.devotion_amplifier import process_and_amplify
+
+        result = await process_and_amplify(
+            text=text,
+            target=target,
+            success_threshold=success_threshold
+        )
+
+        # Format the result into a human-readable string.
+        status = result.get("status", "unknown")
+        if status == "success":
+            output_lines = [
+                f"Successfully amplified devotion in the text with a success rate of {result.get('success_rate', 0):.2f}.",
+                "--- Transformed Expressions ---"
+            ]
+            for expr in result.get("transformed_expressions", []):
+                output_lines.append(f"Original: {expr.get('original_text', '')}")
+                output_lines.append(f"  └─ Amplified: {expr.get('transformed_text', '')}")
+            return "\n".join(output_lines)
+        else:
+            return f"Could not amplify devotion: {result.get('message', 'An unknown error occurred.')}"
+
+    except ImportError:
+        return "Error: The 'devotion_amplifier' module could not be found."
+    except Exception as e:
+        return f"An unexpected error occurred during devotion amplification: {e}"
