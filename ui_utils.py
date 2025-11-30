@@ -238,27 +238,53 @@ PANEL_TYPE_COLORS = {
     "reasoning": "bright_magenta",
 }
 
-def display_llm_panel(title, content, panel_type="llm", subtitle=None):
+def display_llm_panel(title, content, panel_type="llm", subtitle=None, model_id=None, token_count=None, purpose=None, elapsed_time=None):
     """
     Creates a pretty little panel for LLM calls using the kawaii raver matrix theme.
+    Uses a table layout for compact metadata display.
     """
     from rich.panel import Panel
-    from rich.box import DOUBLE_EDGE
+    from rich.box import DOUBLE_EDGE, ROUNDED
+    from rich.table import Table
+    from rich.text import Text
+    from rich.console import Group
 
     color = PANEL_TYPE_COLORS.get(panel_type, "bright_cyan")
     
+    # Create the metadata table
+    meta_table = Table(show_header=False, box=None, padding=(0, 1), collapse_padding=True)
+    meta_table.add_column("Key", style=f"bold {color}")
+    meta_table.add_column("Value", style="white")
+    
+    if model_id:
+        meta_table.add_row("🧠 Model", model_id)
+    if purpose:
+        meta_table.add_row("🎯 Purpose", purpose)
+    if token_count:
+        meta_table.add_row("🔢 Tokens", str(token_count))
+    if elapsed_time:
+        meta_table.add_row("⏱️ Time", f"{elapsed_time:.2f}s")
+
     # Add some rave emojis to the title
     emoji1 = get_rave_emoji()
     emoji2 = get_rave_emoji()
-    styled_title = f"[bold {color}]{emoji1} {title} {emoji2}[/bold {color}]"
     
-    border_style = f"{color}"
+    # Create gradient title
+    styled_title = get_gradient_text(f"{emoji1} {title} {emoji2}", color, get_random_rave_color(), emojis=False)
+    
+    # Combine content and metadata
+    panel_content = Group(
+        content,
+        Text("\n"),
+        meta_table
+    )
     
     return Panel(
-        content,
+        panel_content,
         title=styled_title,
         subtitle=subtitle,
-        border_style=border_style,
-        box=DOUBLE_EDGE,
+        border_style=color,
+        box=ROUNDED,
         padding=(1, 2)
     )
+
