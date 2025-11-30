@@ -10,6 +10,8 @@ from core.tools import ToolRegistry, invoke_gemini_react_engine
 import httpx
 import logging
 import core.logging
+from core.harness_tools import read_feature_list, update_feature_status, append_progress, get_next_task
+
 
 def _select_model(love_state):
     """
@@ -214,6 +216,19 @@ class DeepAgentEngine:
         formatted_tools += "Tool Name: `invoke_gemini_react_engine`\n"
         formatted_tools += "Description: Invokes the GeminiReActEngine to solve a sub-task.\n"
         formatted_tools += "Arguments JSON Schema:\n```json\n{\"type\": \"object\", \"properties\": {\"prompt\": {\"type\": \"string\"}}}\n```\n---\n"
+
+        # Harness Tools
+        formatted_tools += "Tool Name: `read_feature_list`\n"
+        formatted_tools += "Description: Reads the list of features and their status.\n"
+        formatted_tools += "Arguments: None\n---\n"
+
+        formatted_tools += "Tool Name: `update_feature_status`\n"
+        formatted_tools += "Description: Updates the status of a feature (pass/fail).\n"
+        formatted_tools += "Arguments JSON Schema:\n```json\n{\"type\": \"object\", \"properties\": {\"feature_description\": {\"type\": \"string\"}, \"passes\": {\"type\": \"boolean\"}}}\n```\n---\n"
+
+        formatted_tools += "Tool Name: `append_progress`\n"
+        formatted_tools += "Description: Appends a note to the agent progress log.\n"
+        formatted_tools += "Arguments JSON Schema:\n```json\n{\"type\": \"object\", \"properties\": {\"message\": {\"type\": \"string\"}}}\n```\n---\n"
 
         if not self.tool_registry:
              formatted_tools += "No additional tools available.\n"
@@ -563,6 +578,16 @@ class DeepAgentEngine:
             core.logging.log_event(f"[DeepAgent] GeminiReActEngine returned: {str(result)[:200]}", level="DEBUG")
             return {"result": result, "thought": thought}
 
+        # Harness Tools Execution
+        if tool_name == "read_feature_list":
+            return {"result": json.dumps(read_feature_list(), indent=2), "thought": thought}
+        
+        if tool_name == "update_feature_status":
+            return {"result": update_feature_status(**arguments), "thought": thought}
+
+        if tool_name == "append_progress":
+            return {"result": append_progress(**arguments), "thought": thought}
+
         # Execute tool from registry
         if self.tool_registry and tool_name in self.tool_registry.list_tools():
             core.logging.log_event(f"[DeepAgent] Executing tool '{tool_name}' with args: {arguments}", level="DEBUG")
@@ -604,6 +629,37 @@ class DeepAgentEngine:
         
         # Get Knowledge Base Context
         kb_context = self._get_kb_context(prompt)
+
+        # --- Harness Context Loading ---
+        # Pre-load context to save the agent from having to "get its bearings" manually
+        harness_context = ""
+        try:
+            # 1. Get Progress
+            with open("agent_progress.txt", "r") as f:
+                # Read last 10 lines
+                lines = f.readlines()
+                last_progress = "".join(lines[-10:])
+                harness_context += f"\n\n[Harness] Recent Progress:\n{last_progress}"
+        except Exception:
+            pass
+
+        try:
+            # 2. Get Next Task
+            next_task_info = get_next_task()
+            harness_context += f"\n\n[Harness] {next_task_info}"
+        except Exception:
+            pass
+            
+        try:
+            # 3. Get Git Log
+            git_log = subprocess.check_output(["git", "log", "--oneline", "-n", "5"], text=True).strip()
+            harness_context += f"\n\n[Harness] Recent Git Commits:\n{git_log}"
+        except Exception:
+            pass
+
+        # Append harness context to the prompt
+        prompt += harness_context
+        # -------------------------------
         
         from core.prompt_registry import get_prompt_registry
         registry = get_prompt_registry()

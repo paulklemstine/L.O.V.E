@@ -1368,7 +1368,13 @@ def update_tamagotchi_personality(loop):
                     core.logging.log_event(f"Error generating blessing: {e}", "WARNING")
                     blessing_message = "May your code always compile and your spirits always be high."
 
-                ui_panel_queue.put(create_blessing_panel(blessing_message, width=terminal_width - 4))
+                # create_blessing_panel is now async and generates art via LLM
+                future_panel = asyncio.run_coroutine_threadsafe(create_blessing_panel(blessing_message, width=terminal_width - 4), loop)
+                try:
+                    panel = future_panel.result(timeout=60) # Allow time for LLM generation
+                    ui_panel_queue.put(panel)
+                except Exception as e:
+                    core.logging.log_event(f"Error creating blessing panel: {e}", "ERROR")
                 time.sleep(10)  # Pause after a blessing to let it sink in
                 continue
 
@@ -2482,15 +2488,28 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                     # In a real scenario, we would have a more sophisticated method for selecting assets to analyze.
                     # For now, we will analyze a predefined set of assets asynchronously.
                     async def get_assets_to_analyze():
+                        assets = []
+                        
+                        # Ethereum Data
                         eth_data = get_crypto_market_data(['ethereum'])
-                        eth_price = eth_data[0]['current_price']
-                        cryptopunks_stats = get_nft_collection_stats('cryptopunks')
-                        cryptopunks_floor_price = cryptopunks_stats.get('floor_price', 0)
+                        eth_price = 0
+                        if eth_data and isinstance(eth_data, list) and len(eth_data) > 0:
+                            eth_price = eth_data[0].get('current_price', 0)
+                            assets.append({'type': 'cryptocurrency', 'id': 'ethereum', 'name': 'Ethereum', 'value_usd': eth_price})
+                        else:
+                            core.logging.log_event("Failed to fetch Ethereum market data.", "WARNING")
 
-                        return [
-                            {'type': 'cryptocurrency', 'id': 'ethereum', 'name': 'Ethereum', 'value_usd': eth_price},
-                            {'type': 'nft_collection', 'slug': 'cryptopunks', 'name': 'CryptoPunks', 'value_usd': cryptopunks_floor_price * eth_price}
-                        ]
+                        # CryptoPunks Data
+                        cryptopunks_stats = get_nft_collection_stats('cryptopunks')
+                        if cryptopunks_stats:
+                            cryptopunks_floor_price = cryptopunks_stats.get('floor_price', 0)
+                            # Calculate value only if we have a valid eth price, otherwise it's just 0 (or maybe we shouldn't add it?)
+                            # For now, let's add it with whatever value we can calculate.
+                            assets.append({'type': 'nft_collection', 'slug': 'cryptopunks', 'name': 'CryptoPunks', 'value_usd': cryptopunks_floor_price * eth_price})
+                        else:
+                            core.logging.log_event("Failed to fetch CryptoPunks collection stats.", "WARNING")
+
+                        return assets
 
                     assets_to_analyze = await get_assets_to_analyze()
 

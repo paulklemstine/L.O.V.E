@@ -12,7 +12,11 @@ import time
 import ipaddress
 import requests
 from xml.etree import ElementTree as ET
-from pycvesearch import CVESearch
+try:
+    from pycvesearch import CVESearch
+except ImportError:
+    CVESearch = None
+
 from core.retry import retry
 from ipfs import pin_to_ipfs_sync
 from core.image_api import generate_image

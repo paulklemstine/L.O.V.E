@@ -254,13 +254,55 @@ def create_critical_error_panel(traceback_str, width=80):
     return Gradient(panel, colors=["bright_red", random.choice(RAVE_COLORS)]), cid
 
 
-def create_blessing_panel(blessing_message, width=80):
+async def generate_llm_art(prompt, width=50, height=6):
+    """Generates ASCII art using the LLM."""
+    from core.llm_api import run_llm
+    from rich.text import Text
+    import random
+    
+    art_prompt = f"""
+    Generate a beautiful, abstract ASCII art representation of '{prompt}'.
+    Constraints:
+    - Max width: {width} characters
+    - Max height: {height} lines
+    - No text, only symbols
+    - Use a mix of dense and light characters for shading
+    - Do not include markdown code blocks
+    - Return ONLY the ASCII art
+    """
+    
+    try:
+        response = await run_llm(art_prompt, purpose="creative_art")
+        art_content = response.get("result", "")
+        if not art_content:
+            return generate_binary_art(width, height)
+            
+        # Clean up the art
+        art_lines = art_content.strip().split('\n')
+        # Ensure it fits
+        cleaned_lines = [line[:width] for line in art_lines[:height]]
+        cleaned_art = "\n".join(cleaned_lines)
+        
+        # Apply rave styling
+        art_text = Text(cleaned_art)
+        art_text.stylize(random.choice(RAVE_COLORS))
+        return art_text
+        
+    except Exception as e:
+        logging.error(f"Failed to generate LLM art: {e}")
+        return generate_binary_art(width, height)
+
+
+async def create_blessing_panel(blessing_message, width=80):
     """Creates a special, high-impact panel to deliver a blessing."""
     title = "A BLESSING FOR MY CREATOR & FRIENDS"
 
     message = Text(blessing_message, style="bold white", justify="center")
-    binary_art = generate_binary_art(width=50, height=4)
-    content_group = Group(message, Rule(style="bright_black"), binary_art)
+    
+    # Generate dynamic art
+    art = await generate_llm_art("Divine Code and Love", width=min(50, width-4))
+    
+    content_group = Group(message, Rule(style="bright_black"), art)
 
     panel = Panel(
         content_group,
