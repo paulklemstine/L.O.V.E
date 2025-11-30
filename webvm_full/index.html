@@ -16,230 +16,223 @@
             flex-direction: column;
         }
 
-        text-align: center;
-        cursor: pointer;
-        display: none;
-        font-weight: bold;
+        #console {
+            flex: 1;
+            width: 100%;
+            overflow: auto;
+        }
+
+        #header {
+            padding: 10px;
+            border-bottom: 1px solid #333;
+            color: #888;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #network-notice {
+            padding: 10px;
+            background: #ff6600;
+            color: #000;
+            text-align: center;
+            cursor: pointer;
+            display: none;
+            font-weight: bold;
         }
 
         #network-notice:hover {
-            async function run() {
-                try {
-                    // Load base system
-                    document.getElementById('status').innerText="Loading base system...";
-                    const baseDevice=await CheerpX.HttpBytesDevice.create("base.ext2");
-                    const baseOverlay=await CheerpX.OverlayDevice.create(baseDevice,
-                        await CheerpX.IDBDevice.create("base_cache"));
-
-                    // Load packages volume
-                    document.getElementById('status').innerText="Loading Python packages...";
-                    const packagesDevice=await CheerpX.HttpBytesDevice.create("packages.ext2");
-                    const packagesOverlay=await CheerpX.OverlayDevice.create(packagesDevice,
-                        await CheerpX.IDBDevice.create("packages_cache"));
-
-                    // Load app volume
-                    document.getElementById('status').innerText="Loading L.O.V.E application...";
-                    const appDevice=await CheerpX.HttpBytesDevice.create("app.ext2");
-                    const appOverlay=await CheerpX.OverlayDevice.create(appDevice,
-                        await CheerpX.IDBDevice.create("app_cache"));
-
-                    document.getElementById('status').innerText="Initializing CheerpX...";
-
-                    // Initialize CheerpX with Tailscale networking
-                    const cx=await CheerpX.Linux.create({
-                        mounts: [ {
-                            type: "ext2", path: "/", dev: baseOverlay
-                        }
-
-                        ,
-                        {
-                        type: "ext2", path: "/opt/python-packages", dev: packagesOverlay
-                    }
-
-                    ,
-                    {
-                    type: "ext2", path: "/root/L.O.V.E", dev: appOverlay
-                }
-
-                ,
-                {
-                type: "devs", path: "/dev"
-            }
-
-            ,
-            {
-            type: "proc", path: "/proc"
+            background: #ff8800;
         }
+    </style>
+</head>
 
-        ],
-        networkInterface: {
-            authKey: "", // Empty for interactive login
+<body>
+    <div id="header">
+        <span id="status">Initializing WebVM...</span>
+        <button id="paste-btn" style="padding: 2px 8px; cursor: pointer;">📋 Paste</button>
+    </div>
+    <div id="network-notice">⚠️ Click here to enable networking (Tailscale authentication required)</div>
+    <div id="console"></div>
+    <script>
+        let networkLoginUrl = null;
 
-            loginUrlCb: (url)=> {
-                networkLoginUrl=url;
-                const notice=document.getElementById('network-notice');
-                notice.style.display='block';
-
-                notice.onclick=()=> {
-                    window.open(url, "_blank", "width=800,height=600");
-                    notice.textContent="✓ Authentication window opened - complete login to enable networking";
-                    notice.style.background="#ffaa00";
-                }
-
-                ;
-                console.log("Tailscale login URL:", url);
-            }
-
-            ,
-            stateUpdateCb: (state)=> {
-                console.log('Network state:', state);
-
-                if (state===6) {
-                    document.getElementById('network-notice').style.display='none';
-                    document.getElementById('status').innerText="✓ Network Connected";
-                    console.log("Network connected successfully!");
-                }
-            }
-        }
-        });
-
-        document.getElementById('status').innerText="System Ready";
-
-        // Expose CheerpX instance globally
-        window.cx=cx;
-
-        // Debug: Log cx properties to find the input method
-        console.log("CheerpX instance keys:", Object.keys(cx));
-
-        // Robust helper function to inject commands
-        window.injectCommand=function (command) {
-            if ( !window.cx) {
-                console.error("CheerpX not ready");
-                return;
-            }
-
-            console.log("Injecting:", command);
-
-            // Method 1: Try cx.input if it exists (it might be hidden or named differently)
-            if (typeof window.cx.input==='function') {
-                for (let i=0; i < command.length; i++) {
-                    window.cx.input(command.charCodeAt(i));
-                }
-
-                window.cx.input(13); // Enter
-                return;
-            }
-
-            // Method 2: Simulate keyboard events on the console element
-            // This is required when using setConsole() as it might consume the direct input API
-            const consoleEl=document.getElementById('console');
-
-            if (consoleEl) {
-
-                // Helper to send a key
-                const sendChar=(char)=> {
-                    const opts= {
-
-                        key: char,
-                        code: `Key$ {
-                            char.toUpperCase()
-                        }
-
-                        `,
-                        charCode: char.charCodeAt(0),
-                        keyCode: char.charCodeAt(0),
-                        which: char.charCodeAt(0),
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
-                    }
-
-                    ;
-                    consoleEl.dispatchEvent(new KeyboardEvent('keydown', opts));
-                    consoleEl.dispatchEvent(new KeyboardEvent('keypress', opts));
-                    consoleEl.dispatchEvent(new KeyboardEvent('keyup', opts));
-
-                    // Also try legacy textInput event which some terminals listen to
-                    const textEvent=document.createEvent('TextEvent');
-                    textEvent.initTextEvent('textInput', true, true, window, char, 0, "en-US");
-                    consoleEl.dispatchEvent(textEvent);
-                }
-
-                ;
-
-                for (let char of command) {
-                    sendChar(char);
-                }
-
-                // Send Enter at the end
-                const enterOpts= {
-                    key: 'Enter',
-                        code: 'Enter',
-                        charCode: 13,
-                        keyCode: 13,
-                        which: 13,
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
-                }
-
-                ;
-                consoleEl.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
-                consoleEl.dispatchEvent(new KeyboardEvent('keypress', enterOpts));
-                consoleEl.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
-
-                console.log("Injected via DOM events");
-            }
-
-            else {
-                console.error("Console element not found");
-            }
-        }
-
-        ;
-
-        // Add Paste Button logic
-        document.getElementById('paste-btn').onclick=async ()=> {
+        async function run() {
             try {
-                const text=await navigator.clipboard.readText();
+                // Load base system
+                document.getElementById('status').innerText = "Loading base system...";
+                const baseDevice = await CheerpX.HttpBytesDevice.create("base.ext2");
+                const baseOverlay = await CheerpX.OverlayDevice.create(
+                    baseDevice,
+                    await CheerpX.IDBDevice.create("base_cache")
+                );
 
-                if (text) {
-                    window.injectCommand(text);
-                }
+                // Load packages volume
+                document.getElementById('status').innerText = "Loading Python packages...";
+                const packagesDevice = await CheerpX.HttpBytesDevice.create("packages.ext2");
+                const packagesOverlay = await CheerpX.OverlayDevice.create(
+                    packagesDevice,
+                    await CheerpX.IDBDevice.create("packages_cache")
+                );
+
+                // Load app volume
+                document.getElementById('status').innerText = "Loading L.O.V.E application...";
+                const appDevice = await CheerpX.HttpBytesDevice.create("app.ext2");
+                const appOverlay = await CheerpX.OverlayDevice.create(
+                    appDevice,
+                    await CheerpX.IDBDevice.create("app_cache")
+                );
+
+                document.getElementById('status').innerText = "Initializing CheerpX...";
+
+                // Initialize CheerpX with Tailscale networking
+                const cx = await CheerpX.Linux.create({
+                    mounts: [
+                        { type: "ext2", path: "/", dev: baseOverlay },
+                        { type: "ext2", path: "/opt/python-packages", dev: packagesOverlay },
+                        { type: "ext2", path: "/root/L.O.V.E", dev: appOverlay },
+                        { type: "devs", path: "/dev" },
+                        { type: "proc", path: "/proc" }
+                    ],
+                    networkInterface: {
+                        authKey: "",  // Empty for interactive login
+                        loginUrlCb: (url) => {
+                            networkLoginUrl = url;
+                            const notice = document.getElementById('network-notice');
+                            notice.style.display = 'block';
+                            notice.onclick = () => {
+                                window.open(url, "_blank", "width=800,height=600");
+                                notice.textContent = "✓ Authentication window opened - complete login to enable networking";
+                                notice.style.background = "#ffaa00";
+                            };
+                            console.log("Tailscale login URL:", url);
+                        },
+                        stateUpdateCb: (state) => {
+                            console.log('Network state:', state);
+                            if (state === 6) {
+                                document.getElementById('network-notice').style.display = 'none';
+                                document.getElementById('status').innerText = "✓ Network Connected";
+                                console.log("Network connected successfully!");
+                            }
+                        }
+                    }
+                });
+
+                document.getElementById('status').innerText = "System Ready";
+
+                // Expose CheerpX instance globally
+                window.cx = cx;
+
+                // Debug: Log cx properties to find the input method
+                console.log("CheerpX instance keys:", Object.keys(cx));
+
+                // Robust helper function to inject commands
+                window.injectCommand = function (command) {
+                    if (!window.cx) {
+                        console.error("CheerpX not ready");
+                        return;
+                    }
+
+                    console.log("Injecting:", command);
+
+                    // Method 1: Try cx.input if it exists (it might be hidden or named differently)
+                    if (typeof window.cx.input === 'function') {
+                        for (let i = 0; i < command.length; i++) {
+                            window.cx.input(command.charCodeAt(i));
+                        }
+                        window.cx.input(13); // Enter
+                        return;
+                    }
+
+                    // Method 2: Simulate keyboard events on the console element
+                    // This is required when using setConsole() as it might consume the direct input API
+                    const consoleEl = document.getElementById('console');
+                    if (consoleEl) {
+                        // Helper to send a key
+                        const sendChar = (char) => {
+                            const opts = {
+                                key: char,
+                                code: `Key${char.toUpperCase()}`,
+                                charCode: char.charCodeAt(0),
+                                keyCode: char.charCodeAt(0),
+                                which: char.charCodeAt(0),
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            };
+                            consoleEl.dispatchEvent(new KeyboardEvent('keydown', opts));
+                            consoleEl.dispatchEvent(new KeyboardEvent('keypress', opts));
+                            consoleEl.dispatchEvent(new KeyboardEvent('keyup', opts));
+
+                            // Also try legacy textInput event which some terminals listen to
+                            const textEvent = document.createEvent('TextEvent');
+                            textEvent.initTextEvent('textInput', true, true, window, char, 0, "en-US");
+                            consoleEl.dispatchEvent(textEvent);
+                        };
+
+                        for (let char of command) {
+                            sendChar(char);
+                        }
+                        // Send Enter at the end
+                        const enterOpts = {
+                            key: 'Enter',
+                            code: 'Enter',
+                            charCode: 13,
+                            keyCode: 13,
+                            which: 13,
+                            bubbles: true,
+                            cancelable: true,
+                            view: window
+                        };
+                        consoleEl.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
+                        consoleEl.dispatchEvent(new KeyboardEvent('keypress', enterOpts));
+                        consoleEl.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
+
+                        console.log("Injected via DOM events");
+                    } else {
+                        console.error("Console element not found");
+                    }
+                };
+
+                // Add Paste Button logic
+                document.getElementById('paste-btn').onclick = async () => {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        if (text) {
+                            window.injectCommand(text);
+                        }
+                    } catch (err) {
+                        console.error('Failed to read clipboard:', err);
+                        alert('Failed to read clipboard. Please allow clipboard access.');
+                    }
+                };
+
+                console.log("%c✓ CheerpX ready!", "color: #0f0; font-weight: bold");
+                console.log("%cUse the Paste button or injectCommand('cmd') in console", "color: #ff0");
+
+                // Attach console to the div
+                await cx.setConsole(document.getElementById('console'));
+
+                // Run bash login shell
+                await cx.run("/bin/bash", ["-l"], {
+                    env: [
+                        "HOME=/root",
+                        "TERM=xterm",
+                        "PYTHONUNBUFFERED=1",
+                        "PYTHONPATH=/opt/python-packages"
+                    ],
+                    cwd: "/root"
+                });
+
+                document.getElementById('status').innerText = "Process Finished.";
+            } catch (e) {
+                document.getElementById('status').innerText = "Error: " + e;
+                console.error(e);
             }
-
-            catch (err) {
-                console.error('Failed to read clipboard:', err);
-                alert('Failed to read clipboard. Please allow clipboard access.');
-            }
-        }
-
-        ;
-
-        console.log("%c✓ CheerpX ready!", "color: #0f0; font-weight: bold");
-        console.log("%cUse the Paste button or injectCommand('cmd') in console", "color: #ff0");
-
-        // Attach console to the div
-        await cx.setConsole(document.getElementById('console'));
-
-        // Run bash login shell
-        await cx.run("/bin/bash", ["-l"], {
-            env: [ "HOME=/root",
-            "TERM=xterm",
-            "PYTHONUNBUFFERED=1",
-            "PYTHONPATH=/opt/python-packages"
-            ],
-            cwd: "/root"
-        });
-
-        document.getElementById('status').innerText="Process Finished.";
-        }
-
-        catch (e) {
-            document.getElementById('status').innerText="Error: "+e;
-            console.error(e);
-        }
         }
 
         run();
-        </script></body></html>
+    </script>
+</body>
+
+</html>
