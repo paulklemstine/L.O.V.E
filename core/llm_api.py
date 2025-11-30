@@ -604,14 +604,14 @@ def rank_models():
         model_name_lower = model_id.lower()
         if 'uncensored' in model_name_lower or 'ablated' in model_name_lower or 'ablitterated' in model_name_lower:
             final_score *= 1.05
-            log_event(f"Boosting score for preferred model type: {model_id}", "INFO")
+            #log_event(f"Boosting score for preferred model type: {model_id}", "INFO")
 
         # --- Provider Prioritization ---
         # User requested order: gemini -> openrouter -> vllm -> horde
         provider = stats.get("provider", "unknown")
         if provider == "gemini":
             final_score += 3000
-            log_event(f"Applying priority boost to Gemini model: {model_id}", "DEBUG")
+            #log_event(f"Applying priority boost to Gemini model: {model_id}", "DEBUG")
         elif provider == "openrouter":
             final_score += 2000
             log_event(f"Applying priority boost to OpenRouter model: {model_id}", "DEBUG")
