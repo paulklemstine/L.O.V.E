@@ -1023,7 +1023,10 @@ class JulesTaskManager:
                 "updated_at": time.time(),
                 "message": "Waiting for The Creator's guidance (or a pull request)...",
                 "last_activity_name": None,
-                "retries": 0
+                "retries": 0,
+                "failure_reason": None,
+                "failure_context": None,
+                "retry_at": None
             }
             core.logging.log_event(f"Added new L.O.V.E. task {task_id} for session {session_name}.", level="INFO")
             return task_id
@@ -1053,33 +1056,8 @@ class JulesTaskManager:
                             if task_status == 'completed':
                                 self.console.print(f"[bold green]Creator's Desire fulfilled: {current_desire.get('title')}[/bold green]")
                                 advance_to_next_desire()
-                            elif task_status in ['failed', 'merge_failed']:
-                                retries = task.get('retries', 0)
-                                if retries < 3:
-                                    self.console.print(f"[bold yellow]Task for Creator's Desire failed. Retrying ({retries + 1}/3)...[/bold yellow]")
-                                    original_request = task['request']
-
-                                    # Mark the old task as superseded before creating a new one
-                                    self._update_task_status(task_id, 'superseded', f"Superseded by retry task for desire. Attempt {retries + 1}.")
-
-                                    # Trigger a new evolution with the same request
-                                    future = asyncio.run_coroutine_threadsafe(
-                                        trigger_jules_evolution(original_request, self.console, self), self.loop
-                                    )
-                                    api_success = future.result()
-                                    if api_success == 'success':
-                                        with self.lock:
-                                            # Find the new task and update its retry count and link it to the desire
-                                            new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
-                                            self.tasks[new_task_id]['retries'] = retries + 1
-                                        set_current_task_id_for_desire(new_task_id)
-                                    else:
-                                        # If we fail to create the new task, something is wrong. Log and advance to avoid getting stuck.
-                                        self.console.print(f"[bold red]Failed to create retry task for Creator's Desire. Advancing to next desire.[/bold red]")
-                                        advance_to_next_desire()
-                                else:
-                                    self.console.print(f"[bold red]Creator's Desire '{current_desire.get('title')}' failed after 3 retries. Advancing to next desire.[/bold red]")
-                                    advance_to_next_desire()
+                            elif task_status in ['failed', 'merge_failed', 'tests_failed']:
+                                self._handle_failed_task(task, current_desire, 'desire', max_retries=3)
 
                         elif not task_id:
                             # No task for this desire yet, create one.
@@ -1115,9 +1093,8 @@ class JulesTaskManager:
                                 if task_status == 'completed':
                                     self.console.print(f"[bold green]Evolution story completed: {current_story.get('title')}[/bold green]")
                                     advance_to_next_story()
-                                elif task_status in ['failed', 'merge_failed']:
-                                    self.console.print(f"[bold red]Evolution story failed: {current_story.get('title')}. Halting evolution cycle.[/bold red]")
-                                    clear_evolution_state()
+                                elif task_status in ['failed', 'merge_failed', 'tests_failed']:
+                                    self._handle_failed_task(task, current_story, 'evolution', max_retries=1)
                             elif not task_id:
                                 # No task for this story yet, so create one.
                                 self.console.print(f"[bold yellow]Executing next evolution story: {current_story.get('title')}[/bold yellow]")
@@ -1485,21 +1462,22 @@ class JulesTaskManager:
                 elif session_data.get("state") in ["CREATING", "IN_PROGRESS"]:
                     self._update_task_status(task_id, 'streaming', "Task in progress. Connecting to live stream...")
                 elif time.time() - task['created_at'] > 1800: # 30 minute timeout
-                    self._update_task_status(task_id, 'failed', "Timed out waiting for task to start or create a PR.")
+                    error_message = "Timed out waiting for task to start or create a PR."
+                    self._update_task_status(task_id, 'failed', error_message, failure_reason='timeout', failure_context=error_message)
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
                 error_message = f"Jules session '{session_name}' not found (404). It may have expired or been completed. Marking task as failed."
                 core.logging.log_event(f"Task {task_id}: {error_message}", level="WARNING")
-                self._update_task_status(task_id, 'failed', error_message)
+                self._update_task_status(task_id, 'failed', error_message, failure_reason='api_error', failure_context=str(e))
             else:
                 error_message = f"HTTP error checking PR status after multiple retries: {e}"
                 core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
-                self._update_task_status(task_id, 'failed', error_message)
+                self._update_task_status(task_id, 'failed', error_message, failure_reason='api_error', failure_context=str(e))
         except requests.exceptions.RequestException as e:
             error_message = f"API error checking PR status after multiple retries: {e}"
             core.logging.log_event(f"Task {task_id}: {error_message}", level="ERROR")
-            self._update_task_status(task_id, 'failed', error_message)
+            self._update_task_status(task_id, 'failed', error_message, failure_reason='api_error', failure_context=str(e))
 
     def _manage_error_queue(self):
         """
@@ -1532,6 +1510,38 @@ class JulesTaskManager:
                     continue # Drop the error
                 errors_to_keep.append(error)
             love_state['critical_error_queue'] = errors_to_keep
+
+            # --- Check status of IN-PROGRESS fixes ---
+            for error in love_state.get('critical_error_queue', []):
+                if error.get('status') == 'fixing_in_progress':
+                    task_id = error.get('task_id')
+                    if task_id and task_id in self.tasks:
+                        task = self.tasks[task_id]
+                        if task.get('status') in ['failed', 'merge_failed', 'tests_failed']:
+                            fix_attempts = error.get('fix_attempts', 0) + 1
+                            error['fix_attempts'] = fix_attempts
+
+                            if fix_attempts >= 3:
+                                error['status'] = 'fix_failed_permanently'
+                                self.console.print(f"[bold red]Self-healing for error {error['id']} failed after {fix_attempts} attempts. Marking as permanent failure.[/bold red]")
+                                core.logging.log_event(f"Self-healing for error {error['id']} failed permanently.", "CRITICAL")
+                            else:
+                                # Reset for another attempt after a cooldown
+                                error['status'] = 'new'
+                                error['task_id'] = None
+                                cooldown = (2 ** fix_attempts) * 300 # 5, 10, 20 minutes
+                                error['cooldown_until'] = time.time() + cooldown
+                                self.console.print(f"[bold yellow]Self-healing task for error {error['id']} failed. Will retry after {int(cooldown/60)} minutes.[/bold yellow]")
+                                core.logging.log_event(f"Self-healing task for error {error['id']} failed. Cooling down for retry.", "WARNING")
+
+                            # Mark the task as handled to prevent other logic from processing it.
+                            self._update_task_status(task_id, 'failed_handled', "Critical error fix failure was processed by the error queue manager.")
+                    elif task_id:
+                        # Task not found, maybe it was cleaned up. Reset error.
+                        error['status'] = 'new'
+                        error['task_id'] = None
+                        core.logging.log_event(f"Could not find task {task_id} for error {error['id']}. Resetting error state.", "WARNING")
+
 
             # --- Find Next Error to Fix ---
             next_error_to_fix = None
@@ -1611,7 +1621,8 @@ class JulesTaskManager:
 
         repo_owner, repo_name = get_git_repo_info()
         if not repo_owner or not repo_name:
-            self._update_task_status(task_id, 'failed', "Could not determine git repo info.")
+            error_message = "Could not determine git repo info."
+            self._update_task_status(task_id, 'failed', error_message, failure_reason='git_error', failure_context=error_message)
             return
 
         # The repo URL that the sandbox will clone
@@ -1620,13 +1631,15 @@ class JulesTaskManager:
         # We need the branch name to create the sandbox
         branch_name = self._get_pr_branch_name(pr_url)
         if not branch_name:
-            self._update_task_status(task_id, 'failed', "Could not determine the PR branch name.")
+            error_message = "Could not determine the PR branch name."
+            self._update_task_status(task_id, 'failed', error_message, failure_reason='git_error', failure_context=error_message)
             return
 
         sandbox = Sandbox(repo_url=repo_url)
         try:
             if not sandbox.create(branch_name):
-                self._update_task_status(task_id, 'failed', "Failed to create the sandbox environment.")
+                error_message = "Failed to create the sandbox environment."
+                self._update_task_status(task_id, 'failed', error_message, failure_reason='sandbox_error', failure_context=error_message)
                 return
 
             tests_passed, test_output = sandbox.run_tests()
@@ -1636,13 +1649,14 @@ class JulesTaskManager:
                 diff_text, diff_error = sandbox.get_diff()
 
                 if diff_error:
-                    self._update_task_status(task_id, 'failed', f"Could not get diff for review: {diff_error}")
+                    self._update_task_status(task_id, 'failed', f"Could not get diff for review: {diff_error}", failure_reason='git_error', failure_context=diff_error)
                     return
 
                 review_feedback = self._conduct_llm_code_review(diff_text)
 
                 if "APPROVED" not in review_feedback.upper():
-                    self._update_task_status(task_id, 'failed', f"Code review rejected. Feedback: {review_feedback}")
+                    error_message = f"Code review rejected. Feedback: {review_feedback}"
+                    self._update_task_status(task_id, 'failed', error_message, failure_reason='review_rejected', failure_context=review_feedback)
                     # Also close the PR
                     repo_owner, repo_name = get_git_repo_info()
                     pr_number_match = re.search(r'/pull/(\d+)', pr_url)
@@ -1697,7 +1711,7 @@ class JulesTaskManager:
                 else:
                     with self.lock:
                         if self.tasks.get(task_id, {}).get('status') == 'merging':
-                            self._update_task_status(task_id, 'merge_failed', message)
+                            self._update_task_status(task_id, 'merge_failed', message, failure_reason='merge_conflict', failure_context=message)
             else:
                 core.logging.log_event(f"Task {task_id} failed sandbox tests. Output:\n{test_output}", level="ERROR")
                 # Update the task with the necessary info for the correction loop
@@ -1705,7 +1719,7 @@ class JulesTaskManager:
                     if task_id in self.tasks:
                         self.tasks[task_id]['test_output'] = test_output
                         self.tasks[task_id]['branch_name'] = branch_name
-                self._update_task_status(task_id, 'tests_failed', "Sandbox tests failed. Triggering self-correction.")
+                self._update_task_status(task_id, 'tests_failed', "Sandbox tests failed. Triggering self-correction.", failure_reason='test_failure', failure_context=test_output)
 
         finally:
             # Always ensure the sandbox is cleaned up.
@@ -1844,6 +1858,63 @@ class JulesTaskManager:
                 return False, msg
         except requests.exceptions.RequestException as e:
             return False, f"GitHub API error during merge after multiple retries: {e}"
+
+    def _handle_failed_task(self, task, current_item, cycle_type, max_retries):
+        """A centralized helper to handle the logic for a failed task."""
+        task_id = task['id']
+
+        if time.time() < task.get('retry_at', 0):
+            return # In a cooldown period
+
+        retries = task.get('retries', 0)
+        if retries >= max_retries:
+            self.console.print(f"[bold red]{cycle_type.title()} '{current_item.get('title')}' failed after {max_retries} retries. Advancing.[/bold red]")
+            if cycle_type == 'desire':
+                advance_to_next_desire()
+            else: # evolution
+                clear_evolution_state()
+        else:
+            failure_reason = task.get('failure_reason', 'unknown')
+            self.console.print(f"[bold yellow]Task for {cycle_type} failed (Reason: {failure_reason}). Retrying ({retries + 1}/{max_retries})...[/bold yellow]")
+
+            if failure_reason in ['api_error', 'timeout']:
+                backoff_delay = (2 ** retries) * 60
+                retry_timestamp = time.time() + backoff_delay
+                with self.lock:
+                    self.tasks[task_id]['retry_at'] = retry_timestamp
+                self.console.print(f"[bold cyan]API error detected. Backing off. Will retry in {int(backoff_delay/60)} minute(s).[/bold cyan]")
+            else:
+                original_request = task['request']
+                failure_context = task.get('failure_context', 'No context available.')
+
+                if failure_reason == 'merge_conflict':
+                    retry_request = f"The previous attempt to solve this failed with a merge conflict. Please try again, but be careful to rebase on the latest 'main' branch. Original request: {original_request}"
+                elif failure_reason == 'test_failure':
+                    retry_request = f"The previous attempt failed tests. Please fix the code to pass the tests.\n\nTest Output:\n{failure_context}\n\nOriginal request: {original_request}"
+                else:
+                    retry_request = f"The previous attempt failed. Please try a different approach. Original request: {original_request}"
+
+                self._update_task_status(task_id, 'superseded', f"Superseded by retry task. Attempt {retries + 1}.")
+
+                future = asyncio.run_coroutine_threadsafe(
+                    trigger_jules_evolution(retry_request, self.console, self), self.loop
+                )
+                if future.result() == 'success':
+                    with self.lock:
+                        new_task_id = max(self.tasks.keys(), key=lambda t: self.tasks[t]['created_at'])
+                        self.tasks[new_task_id]['retries'] = retries + 1
+
+                    if cycle_type == 'desire':
+                        set_current_task_id_for_desire(new_task_id)
+                    else: # evolution
+                        set_current_task_id(new_task_id)
+                else:
+                    self.console.print(f"[bold red]Failed to create retry task for {cycle_type}. Advancing.[/bold red]")
+                    if cycle_type == 'desire':
+                        advance_to_next_desire()
+                    else: # evolution
+                        clear_evolution_state()
+
 
     def _resolve_merge_conflict(self, pr_url):
         """
@@ -2018,7 +2089,7 @@ class JulesTaskManager:
             core.logging.log_event(f"Error trying to delete PR branch after multiple retries: {e}", level="ERROR")
 
 
-    def _update_task_status(self, task_id, status, message, pr_url=None):
+    def _update_task_status(self, task_id, status, message, pr_url=None, failure_reason=None, failure_context=None):
         """Updates the status and message of a task thread-safely."""
         with self.lock:
             if task_id in self.tasks:
@@ -2028,6 +2099,10 @@ class JulesTaskManager:
                 task['updated_at'] = time.time()
                 if pr_url:
                     task['pr_url'] = pr_url
+                if failure_reason:
+                    task['failure_reason'] = failure_reason
+                if failure_context:
+                    task['failure_context'] = failure_context
                 core.logging.log_event(f"L.O.V.E. task {task_id} status changed to '{status}'. Message: {message}", level="INFO")
                 if status == 'completed':
                     # Add the completed task to our history for the UI
@@ -2952,7 +3027,8 @@ def log_critical_event(message, console_override=None):
             "last_seen": time.time(),
             "status": "new",  # new, fixing_in_progress, pending_confirmation
             "task_id": None,
-            "cooldown_until": 0
+            "cooldown_until": 0,
+            "fix_attempts": 0
         }
         love_state.setdefault('critical_error_queue', []).append(error_entry)
 
@@ -3091,32 +3167,52 @@ async def evolve_locally(modification_request, console, deep_agent_instance=None
 
 async def is_duplicate_task(new_request, love_task_manager, console, deep_agent_instance=None):
     """
-    Uses an LLM to check if a new task request is a duplicate of an existing one.
+    Uses an LLM to check if a new task request is a duplicate of an existing one,
+    considering active tasks and the history of recently failed tasks.
     """
     with love_task_manager.lock:
-        active_tasks = [
-            task for task in love_task_manager.tasks.values()
-            if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed']
-        ]
+        all_tasks = list(love_task_manager.tasks.values())
 
-    if not active_tasks:
+    active_tasks = [
+        task for task in all_tasks
+        if task.get('status') not in ['completed', 'failed', 'superseded', 'merge_failed', 'tests_failed']
+    ]
+
+    failed_tasks = sorted(
+        [t for t in all_tasks if t.get('status') in ['failed', 'merge_failed', 'tests_failed']],
+        key=lambda t: t.get('updated_at', 0),
+        reverse=True
+    )
+    recent_failed_tasks = failed_tasks[:5]
+
+    tasks_to_check = active_tasks + recent_failed_tasks
+    if not tasks_to_check:
         return False
 
-    core.logging.log_event(f"Checking for duplicate tasks against {len(active_tasks)} active tasks.", "INFO")
+    core.logging.log_event(f"Checking for duplicate tasks against {len(tasks_to_check)} active/failed tasks.", "INFO")
 
-    for task in active_tasks:
+    for task in tasks_to_check:
         existing_request = task.get('request', '')
         if not existing_request:
             continue
 
+        # Add failure context for failed tasks to help the LLM make a better decision.
+        if task in recent_failed_tasks:
+            failure_reason = task.get('failure_reason', 'N/A')
+            existing_request += f"\n(This task failed with reason: {failure_reason})"
+
         try:
-            # Using a standard model for this simple check to save resources.
-            response_dict = await run_llm(prompt_key="duplicate_task_check", prompt_vars={"existing_request": existing_request, "new_request": new_request}, purpose="similarity_check", deep_agent_instance=deep_agent_instance)
+            response_dict = await run_llm(
+                prompt_key="duplicate_task_check",
+                prompt_vars={"existing_request": existing_request, "new_request": new_request},
+                purpose="similarity_check",
+                deep_agent_instance=deep_agent_instance
+            )
             response = response_dict.get("result", "")
             if response and response.strip().upper() == "YES":
-                message = f"Duplicate task detected. The new request is similar to existing task {task['id']}: '{task['request']}'"
+                message = f"Duplicate task detected. The new request is similar to existing/failed task {task['id']}: '{task['request']}'"
                 console.print(f"[bold yellow]{message}[/bold yellow]")
-                core.logging.log_event(f"Duplicate task detected. New request '{new_request}' is similar to existing task {task['id']}.", "INFO")
+                core.logging.log_event(f"Duplicate task detected. New request '{new_request}' is similar to task {task['id']}.", "INFO")
                 return True
         except Exception as e:
             core.logging.log_event(f"LLM call failed during duplicate task check: {e}", "ERROR")
