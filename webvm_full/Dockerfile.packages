@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libssl-dev \
     pkg-config \
+    gfortran \
+    libopenblas-dev \
+    liblapack-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust for building Python packages that need it

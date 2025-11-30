@@ -8,10 +8,13 @@ from collections import defaultdict
 from PIL import Image
 import io
 import core.logging
+import urllib.parse
+import random
 
 # --- Provider Configurations ---
 GEMINI_IMAGE_MODELS = ["gemini-3-pro-image-preview"]  # Imagen 3
 STABILITY_MODELS = ["stable-diffusion-xl-1024-v1-0"]
+POLLINATIONS_MODELS = ["pollinations"]
 
 # --- Statistics Tracking ---
 def _create_default_image_model_stats():
@@ -36,6 +39,10 @@ for model in GEMINI_IMAGE_MODELS:
 for model in STABILITY_MODELS:
     IMAGE_MODEL_STATS[model]["provider"] = "stability"
     IMAGE_MODEL_STATS[model]["quality_score"] = 85.0
+
+for model in POLLINATIONS_MODELS:
+    IMAGE_MODEL_STATS[model]["provider"] = "pollinations"
+    IMAGE_MODEL_STATS[model]["quality_score"] = 80.0
 
 
 def rank_image_models():
@@ -304,6 +311,57 @@ async def _generate_with_horde(prompt: str) -> Image.Image:
         raise
 
 
+async def _generate_with_pollinations(prompt: str) -> Image.Image:
+    """Generate image using Pollinations.ai"""
+    model_id = "pollinations"
+    start_time = time.time()
+    
+    try:
+        core.logging.log_event(f"Attempting image generation with Pollinations: {prompt[:100]}...", "INFO")
+        
+        # URL Encode the prompt
+        encoded_prompt = urllib.parse.quote(prompt)
+        
+        # Generate a random seed
+        seed = random.randint(0, 100000)
+        
+        # Construct URL
+        # Format: https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=200&seed={seed}&nologo=true&safe=false
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=200&seed={seed}&nologo=true&safe=false"
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=60) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"Pollinations API error {response.status}: {error_text}")
+                
+                image_bytes = await response.read()
+                image = Image.open(io.BytesIO(image_bytes))
+                
+                # Update stats
+                elapsed = time.time() - start_time
+                IMAGE_MODEL_STATS[model_id]["successful_generations"] += 1
+                IMAGE_MODEL_STATS[model_id]["total_generations"] += 1
+                IMAGE_MODEL_STATS[model_id]["total_time_spent"] += elapsed
+                IMAGE_MODEL_FAILURE_COUNT[model_id] = 0
+                
+                core.logging.log_event(f"Pollinations generation successful in {elapsed:.2f}s", "INFO")
+                return image
+                
+    except Exception as e:
+        elapsed = time.time() - start_time
+        IMAGE_MODEL_STATS[model_id]["failed_generations"] += 1
+        IMAGE_MODEL_STATS[model_id]["total_generations"] += 1
+        
+        failure_count = IMAGE_MODEL_FAILURE_COUNT.get(model_id, 0) + 1
+        IMAGE_MODEL_FAILURE_COUNT[model_id] = failure_count
+        
+        cooldown = 60 * (2 ** (failure_count - 1))
+        IMAGE_MODEL_AVAILABILITY[model_id] = time.time() + cooldown
+        
+        core.logging.log_event(f"Pollinations failed: {e}. Cooldown: {cooldown}s", "WARNING")
+        raise
+
 async def generate_image_with_pool(prompt: str, force_provider=None) -> Image.Image:
     """
     Main entry point for image generation using the pool.
@@ -322,7 +380,8 @@ async def generate_image_with_pool(prompt: str, force_provider=None) -> Image.Im
     providers = {
         "gemini": _generate_with_gemini_imagen,
         "stability": _generate_with_stability,
-        "horde": _generate_with_horde
+        "horde": _generate_with_horde,
+        "pollinations": _generate_with_pollinations
     }
     
     if force_provider:
@@ -331,8 +390,8 @@ async def generate_image_with_pool(prompt: str, force_provider=None) -> Image.Im
         provider_order = [force_provider]
         core.logging.log_event(f"Forcing image generation with provider: {force_provider}", "INFO")
     else:
-        # Try providers in order: Gemini -> Stability -> Horde
-        provider_order = ["gemini", "stability", "horde"]
+        # Try providers in order: Gemini -> Stability -> Pollinations -> Horde
+        provider_order = ["gemini", "stability", "pollinations", "horde"]
     
     last_exception = None
     
