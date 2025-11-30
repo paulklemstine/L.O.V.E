@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     libffi-dev \
     libjpeg-dev \
+    libssl-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust for building Python packages that need it
@@ -48,8 +50,7 @@ COPY requirements.txt /tmp/requirements.txt
 RUN linux32 python3 -m pip install \
     --target=/packages \
     --break-system-packages \
-    -r /tmp/requirements.txt \
-    || echo "WARNING: Some packages may have failed to install"
+    -r /tmp/requirements.txt
 
 # Final stage - just the packages
 FROM scratch
