@@ -562,7 +562,9 @@ class DeepAgentEngine:
                     return {"result": f"Error executing tool '{tool_name}': {e}", "thought": thought}
         else:
             available_tools_list = list(self.tool_registry.list_tools().keys()) if self.tool_registry else []
-            error_msg = f"Error: Tool '{tool_name}' not found. Available tools: {', '.join(available_tools_list[:10])}"
+            error_msg = f"Error: Tool '{tool_name}' not found. Available tools: {', '.join(available_tools_list[:50])}"
+            
+            core.logging.log_event(f"[DeepAgent] Tool lookup failed. Tool '{tool_name}' not in registry. Registry keys: {available_tools_list}", level="DEBUG")
             
             # Provide specific guidance for common mistakes
             if tool_name in ["Knowledge Base", "Memory", "knowledge_base", "memory"]:
