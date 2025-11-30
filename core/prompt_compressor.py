@@ -11,6 +11,7 @@ import hashlib
 from typing import Dict, List, Optional, Any
 from functools import lru_cache
 import logging
+from .dynamic_compress_prompt import dynamic_compress_prompt
 
 # Lazy imports to avoid loading heavy dependencies unless needed
 _compressor_instance = None
@@ -210,11 +211,12 @@ class PromptCompressor:
         start_time = time.time()
         
         try:
-            # Perform compression
-            compressed_result = self.compressor.compress_prompt(
+            # Perform compression using the dynamic wrapper
+            compressed_result = dynamic_compress_prompt(
+                self.compressor,
                 prompt,
                 rate=rate,
-                force_tokens=force_tokens,
+                force_tokens=force_tokens
             )
             
             compressed_text = compressed_result["compressed_prompt"]
