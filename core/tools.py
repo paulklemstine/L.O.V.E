@@ -33,7 +33,7 @@ from core.talent_utils import (
     intelligence_synthesizer
 )
 from core.system_integrity_monitor import SystemIntegrityMonitor
-from dynamic_caller import dynamic_arg_caller
+from core.dynamic_compress_prompt import dynamic_arg_caller
 
 
 love_state = {}
