@@ -62,7 +62,6 @@ aiohttp==3.13.2
     #   agent-framework-azure-ai
     #   aiobotocore
     #   aioipfs
-    #   fsspec
     #   langchain-community
     #   langextract
     #   web3
@@ -200,12 +199,6 @@ darkdetect==0.8.0
     # via customtkinter
 dataclasses-json==0.6.7
     # via langchain-community
-datasets==4.4.1
-    # via -r requirements.in
-dill==0.4.0
-    # via
-    #   datasets
-    #   multiprocess
 distro==1.9.0
     # via
     #   anthropic
@@ -261,7 +254,6 @@ fastapi==0.121.3
     #   agent-framework-devui
 filelock==3.20.0
     # via
-    #   datasets
     #   huggingface-hub
     #   torch
     #   transformers
@@ -271,9 +263,8 @@ frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-fsspec[http]==2025.10.0
+fsspec==2025.10.0
     # via
-    #   datasets
     #   huggingface-hub
     #   torch
 gitignore-parser==0.1.9
@@ -335,7 +326,6 @@ httpx[http2]==0.28.1
     #   agent-framework-purview
     #   anthropic
     #   atproto
-    #   datasets
     #   google-genai
     #   langgraph-sdk
     #   langsmith
@@ -351,7 +341,6 @@ huggingface-hub==0.36.0
     # via
     #   -r requirements.in
     #   accelerate
-    #   datasets
     #   sentence-transformers
     #   tokenizers
     #   transformers
@@ -508,8 +497,6 @@ multidict==6.7.0
     #   aiobotocore
     #   aiohttp
     #   yarl
-multiprocess==0.70.18
-    # via datasets
 mypy-extensions==1.1.0
     # via
     #   trio-typing
@@ -529,7 +516,6 @@ numpy==2.3.5
     #   -r requirements.in
     #   accelerate
     #   agent-framework-redis
-    #   datasets
     #   faiss-cpu
     #   langchain-community
     #   langextract
@@ -587,7 +573,6 @@ packaging==25.0
     #   accelerate
     #   agent-framework-core
     #   customtkinter
-    #   datasets
     #   faiss-cpu
     #   huggingface-hub
     #   langchain-core
@@ -598,9 +583,7 @@ packaging==25.0
     #   transformers
     #   trio-typing
 pandas==2.3.3
-    # via
-    #   datasets
-    #   langextract
+    # via langextract
 parsel==1.10.0
     # via -r requirements.in
 parsimonious==0.10.0
@@ -663,8 +646,6 @@ py-multihash==2.0.1
     # via
     #   multiaddr
     #   py-multiformats-cid
-pyarrow==22.0.0
-    # via datasets
 pyasn1==0.6.1
     # via
     #   pyasn1-modules
@@ -775,7 +756,6 @@ pywin32==311
 pyyaml==6.0.3
     # via
     #   accelerate
-    #   datasets
     #   huggingface-hub
     #   langchain-classic
     #   langchain-community
@@ -809,7 +789,6 @@ requests==2.32.5
     # via
     #   -r requirements.in
     #   azure-core
-    #   datasets
     #   google-api-core
     #   google-cloud-storage
     #   google-genai
@@ -935,7 +914,6 @@ torchvision==0.24.1
     # via -r requirements.in
 tqdm==4.67.1
     # via
-    #   datasets
     #   huggingface-hub
     #   langextract
     #   nltk
@@ -1041,9 +1019,7 @@ win32-setctime==1.2.0
 wrapt==1.17.3
     # via aiobotocore
 xxhash==3.6.0
-    # via
-    #   datasets
-    #   langgraph
+    # via langgraph
 yarl==1.22.0
     # via aiohttp
 zipp==3.23.0
