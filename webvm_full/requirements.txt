@@ -10,8 +10,6 @@ absl-py==2.3.1
     # via
     #   langextract
     #   ml-collections
-accelerate==1.12.0
-    # via llmlingua
 ag-ui-protocol==0.1.10
     # via agent-framework-ag-ui
 agent-framework==1.0.0b251120
@@ -246,7 +244,6 @@ eth-utils==5.3.1
     #   web3
 exceptiongroup==1.3.1
     # via langextract
-faiss-cpu==1.12.0
     # via -r requirements.in
 fastapi==0.121.3
     # via
@@ -255,8 +252,6 @@ fastapi==0.121.3
 filelock==3.20.0
     # via
     #   huggingface-hub
-    #   torch
-    #   transformers
 flask==3.1.2
     # via openevolve
 frozenlist==1.8.0
@@ -266,7 +261,6 @@ frozenlist==1.8.0
 fsspec==2025.10.0
     # via
     #   huggingface-hub
-    #   torch
 gitignore-parser==0.1.9
     # via aioipfs
 google-api-core==2.28.1
@@ -340,10 +334,7 @@ httpx-sse==0.4.3
 huggingface-hub==0.36.0
     # via
     #   -r requirements.in
-    #   accelerate
-    #   sentence-transformers
     #   tokenizers
-    #   transformers
 hyperframe==6.1.0
     # via h2
 idna==3.11
@@ -371,7 +362,6 @@ itsdangerous==2.2.0
 jinja2==3.1.6
     # via
     #   flask
-    #   torch
 jiter==0.12.0
     # via
     #   anthropic
@@ -438,7 +428,6 @@ libipld==3.2.0
     # via atproto
 llm==0.27.1
     # via -r requirements.in
-llmlingua==0.2.2
     # via -r requirements.in
 loguru==0.7.3
     # via
@@ -508,18 +497,13 @@ netifaces==0.11.0
 networkx==3.6
     # via
     #   -r requirements.in
-    #   torch
 nltk==3.9.2
-    # via llmlingua
 numpy==2.3.5
     # via
     #   -r requirements.in
-    #   accelerate
     #   agent-framework-redis
-    #   faiss-cpu
     #   langchain-community
     #   langextract
-    #   llmlingua
     #   ml-dtypes
     #   openevolve
     #   pandas
@@ -527,8 +511,6 @@ numpy==2.3.5
     #   redisvl
     #   scikit-learn
     #   scipy
-    #   torchvision
-    #   transformers
 openai==2.8.1
     # via
     #   -r requirements.in
@@ -570,17 +552,14 @@ outcome==1.3.0.post0
     # via trio
 packaging==25.0
     # via
-    #   accelerate
     #   agent-framework-core
     #   customtkinter
-    #   faiss-cpu
     #   huggingface-hub
     #   langchain-core
     #   langsmith
     #   marshmallow
     #   parsel
     #   pytest
-    #   transformers
     #   trio-typing
 pandas==2.3.3
     # via langextract
@@ -591,8 +570,6 @@ parsimonious==0.10.0
 pillow==12.0.0
     # via
     #   -r requirements.in
-    #   sentence-transformers
-    #   torchvision
 pluggy==1.6.0
     # via
     #   llm
@@ -623,7 +600,6 @@ protobuf==5.29.5
     #   qdrant-client
 psutil==7.1.3
     # via
-    #   accelerate
     #   multiaddr
 puremagic==1.30
     # via llm
@@ -635,7 +611,6 @@ py-multibase==1.0.3
     #   multiaddr
     #   py-cid
     #   py-multiformats-cid
-    #   py-multihash
 py-multicodec==0.2.1
     # via
     #   multiaddr
@@ -707,8 +682,7 @@ pyjwt[crypto]==2.10.1
     #   msal
 pymultihash==0.8.2
     # via py-cid
-pyreadline3==3.5.4
-    # via llm
+
 pytest==9.0.1
     # via
     #   -r requirements.in
@@ -749,14 +723,9 @@ pytz==2025.2
     #   pandas
 pyunormalize==17.0.0
     # via web3
-pywin32==311
-    # via
-    #   mcp
-    #   portalocker
-    #   web3
+
 pyyaml==6.0.3
     # via
-    #   accelerate
     #   huggingface-hub
     #   langchain-classic
     #   langchain-community
@@ -766,7 +735,6 @@ pyyaml==6.0.3
     #   ml-collections
     #   openevolve
     #   redisvl
-    #   transformers
     #   uvicorn
 qdrant-client==1.16.0
     # via mem0ai
@@ -785,7 +753,6 @@ regex==2025.11.3
     #   nltk
     #   parsimonious
     #   tiktoken
-    #   transformers
 requests==2.32.5
     # via
     #   -r requirements.in
@@ -803,7 +770,6 @@ requests==2.32.5
     #   pycvesearch
     #   requests-toolbelt
     #   tiktoken
-    #   transformers
     #   web3
 requests-toolbelt==1.0.0
     # via langsmith
@@ -831,17 +797,12 @@ s3transfer==0.14.0
     # via boto3
 safetensors==0.7.0
     # via
-    #   accelerate
-    #   transformers
 scapy==2.6.1
     # via -r requirements.in
 scikit-learn==1.7.2
-    # via sentence-transformers
 scipy==1.16.3
     # via
     #   scikit-learn
-    #   sentence-transformers
-sentence-transformers==5.1.2
     # via -r requirements.in
 shellingham==1.5.4
     # via typer
@@ -882,7 +843,6 @@ starlette==0.50.0
     #   fastapi
     #   mcp
 sympy==1.14.0
-    # via torch
 tabulate==0.9.0
     # via sqlite-utils
 tenacity==9.1.2
@@ -896,22 +856,12 @@ threadpoolctl==3.6.0
 tiktoken==0.12.0
     # via
     #   -r requirements.in
-    #   llmlingua
 tokenizers==0.22.1
-    # via transformers
 toolz==1.1.0
     # via cytoolz
-torch==2.9.1
     # via
     #   -r requirements.in
-    #   accelerate
-    #   llmlingua
-    #   sentence-transformers
-    #   torchaudio
-    #   torchvision
-torchaudio==2.9.1
     # via -r requirements.in
-torchvision==0.24.1
     # via -r requirements.in
 tqdm==4.67.1
     # via
@@ -920,13 +870,8 @@ tqdm==4.67.1
     #   nltk
     #   openai
     #   openevolve
-    #   sentence-transformers
-    #   transformers
-transformers==4.57.3
     # via
     #   -r requirements.in
-    #   llmlingua
-    #   sentence-transformers
 trio==0.32.0
     # via
     #   multiaddr
@@ -964,9 +909,7 @@ typing-extensions==4.15.0
     #   posthog
     #   pydantic
     #   pydantic-core
-    #   sentence-transformers
     #   sqlalchemy
-    #   torch
     #   trio-typing
     #   typer
     #   typing-inspect
@@ -1015,8 +958,7 @@ websockets==15.0.1
     #   web3
 werkzeug==3.1.3
     # via flask
-win32-setctime==1.2.0
-    # via loguru
+
 wrapt==1.17.3
     # via aiobotocore
 xxhash==3.6.0
