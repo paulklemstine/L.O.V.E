@@ -89,7 +89,24 @@ echo "=== Building App Volume ==="
 # Prepare source directory for app
 echo "Preparing L.O.V.E source..."
 mkdir -p src
-rsync -av --exclude 'webvm_full' --exclude '.git' --exclude '*.ext2' --exclude '*.tar' "$REPO_ROOT/" src/
+rsync -av \
+    --exclude 'webvm_full' \
+    --exclude '.git' \
+    --exclude '*.ext2' \
+    --exclude '*.tar' \
+    --exclude '__pycache__' \
+    --exclude '*.pyc' \
+    --exclude '.ipfs_repo' \
+    --exclude 'generated_images' \
+    --exclude '*.log' \
+    --exclude 'vllm_server.log' \
+    --exclude 'love.log' \
+    --exclude 'ipfs.log' \
+    --exclude '.pytest_cache' \
+    --exclude 'build' \
+    --exclude 'dist' \
+    --exclude '*.egg-info' \
+    "$REPO_ROOT/" src/
 
 docker build --platform linux/386 -f Dockerfile.app -t love-webvm-app src/
 
