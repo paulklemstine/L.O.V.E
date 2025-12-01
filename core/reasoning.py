@@ -4,7 +4,7 @@ from rich.console import Console
 import yaml
 import json
 from typing import List
-from core.tools import ToolRegistry
+from core.tools_legacy import ToolRegistry
 from core.llm_api import run_llm
 
 class ReasoningEngine:

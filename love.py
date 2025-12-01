@@ -2593,7 +2593,7 @@ async def initialize_gpu_services():
     global deep_agent_engine, knowledge_base, memory_manager
 
     # --- FIX: Initialize ToolRegistry here ---
-    from core.tools import ToolRegistry
+    from core.tools_legacy import ToolRegistry
     from core.prompt_registry import PromptRegistry
     tool_registry = ToolRegistry()
     

@@ -2,7 +2,7 @@ import asyncio
 import json
 from unittest.mock import MagicMock, patch, AsyncMock
 from core.deep_agent_engine import DeepAgentEngine
-from core.tools import ToolRegistry
+from core.tools_legacy import ToolRegistry
 
 async def test_repair():
     print("Starting JSON repair test...")

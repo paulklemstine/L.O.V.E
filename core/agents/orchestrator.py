@@ -12,7 +12,7 @@ from core.agents.web_automation_agent import WebAutomationAgent
 from core.agents.memory_folding_agent import MemoryFoldingAgent
 from core.agents.unified_reasoning_agent import UnifiedReasoningAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
-from core.tools import ToolRegistry, SecureExecutor, talent_scout
+from core.tools_legacy import ToolRegistry, SecureExecutor, talent_scout
 from core.image_api import generate_image
 
 # Keep the old function for fallback compatibility as requested

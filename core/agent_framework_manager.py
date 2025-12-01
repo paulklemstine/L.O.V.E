@@ -3,7 +3,7 @@ import inspect
 import json
 from typing import Callable, List, Dict, Any
 from agent_framework import ai_function, WorkflowBuilder, executor, WorkflowContext
-from core.tools import ToolRegistry
+from core.tools_legacy import ToolRegistry
 from core.llm_api import run_llm
 import asyncio
 
