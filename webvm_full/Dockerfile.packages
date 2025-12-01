@@ -33,13 +33,16 @@ RUN linux32 python3 -m pip install --upgrade pip --break-system-packages
 
 
 
-# Copy requirements.txt and install remaining packages
+# Copy requirements.txt and constraints.txt
 COPY requirements.txt /tmp/requirements.txt
+COPY constraints.txt /tmp/constraints.txt
 
 # Install all other requirements (excluding torch and transformers which we already installed)
+# Use constraints to exclude pyarrow which requires Apache Arrow C++ libraries
 RUN linux32 python3 -m pip install \
     --target=/packages \
     --break-system-packages \
+    --constraint /tmp/constraints.txt \
     -r /tmp/requirements.txt
 
 # Final stage - just the packages
