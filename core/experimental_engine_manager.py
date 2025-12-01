@@ -8,25 +8,24 @@ from core.simulation_datasets import generate_randomized_dataset
 def _select_model(vram):
     """
     Selects the best vLLM-compatible model based on available VRAM.
+    Uses DeepAgent-recommended models with AWQ quantization where available.
+    
+    Matches the model selection in core/deep_agent_engine.py
     """
-    if vram >= 148 * 1024:
-        return "hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4"
-    elif vram >= 44 * 1024:
-        return "TheBloke/deepseek-llm-67b-base-AWQ"
-    elif vram >= 42 * 1024:
-        return "hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4"
-    elif vram >= 22 * 1024:
-        return "Qwen/Qwen2-32B-Instruct-AWQ"
+    if vram >= 120 * 1024:
+        return "Qwen/Qwen3-235B-A22B-Thinking-2507"
     elif vram >= 20 * 1024:
-        return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
-    elif vram >= 8.5 * 1024:
-        return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
-    elif vram >= 4.5 * 1024:
-        return "Sreenington/Phi-3-mini-4k-instruct-AWQ"
-    elif vram >= 2.5 * 1024:
-        return "elysiantech/gemma-2b-awq-4bit"
+        return "Qwen/QwQ-32B-AWQ"
+    elif vram >= 12 * 1024:
+        return "Qwen/Qwen3-30B-A3B-Thinking-2507"
+    elif vram >= 6 * 1024:
+        return "Qwen/Qwen3-8B-AWQ"
+    elif vram >= 3 * 1024:
+        return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit"
+    elif vram >= 2 * 1024:
+        return "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
     else:
-        return "Qwen/Qwen2-1.5B-Instruct-AWQ"
+        return "Qwen/Qwen2.5-0.5B-Instruct-AWQ"
 
 def _download_model_snapshot(repo_id):
     """
@@ -62,7 +61,7 @@ def initialize_deep_agent_engine(tool_registry, persona_path, architecture):
         if vram >= 6.5 * 1024:
             llm = LLM(model=model_path, gpu_memory_utilization=0.9)
         else:
-            if model_repo == "Qwen/Qwen2-1.5B-Instruct-AWQ":
+            if model_repo in ["Qwen/Qwen2.5-1.5B-Instruct-AWQ", "Qwen/Qwen2.5-0.5B-Instruct-AWQ"]:
                 llm = LLM(model=model_path, gpu_memory_utilization=0.7, max_model_len=3072)
             else:
                 llm = LLM(model=model_path, gpu_memory_utilization=0.7)

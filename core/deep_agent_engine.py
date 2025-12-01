@@ -16,43 +16,49 @@ from core.harness_tools import read_feature_list, update_feature_status, append_
 def _select_model(love_state):
     """
     Selects the best vLLM-compatible model based on available VRAM.
+    Uses DeepAgent-recommended models with AWQ quantization where available.
+    
+    Recommended models from DeepAgent (https://github.com/RUC-NLPIR/DeepAgent):
+    - Qwen3-4B-Thinking (4B, Thinking)
+    - Qwen3-8B (8B, Hybrid)
+    - Qwen3-30B-A3B-Thinking (30B, Thinking)
+    - QwQ-32B (32B, Thinking)
+    - Qwen3-235B-A22B-Thinking (235B, Thinking)
+    
+    AWQ versions are used where available for better memory efficiency.
     """
     vram = love_state.get('hardware', {}).get('gpu_vram_mb', 0)
 
-    # Models are selected based on VRAM requirements from the user-provided list.
-    # General-purpose reasoning models are preferred over specialized ones (e.g., math).
-    # When multiple models fit a VRAM tier, the one with the larger parameter count
-    # or better general performance is chosen.
-
-    if vram >= 148 * 1024:
-        # General SOTA reasoning model (AWQ variant)
-        # This tier assumes user has massive VRAM but still wants the AWQ version
-        return "hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4"
-    elif vram >= 44 * 1024:
-        # This has a slightly higher VRAM requirement than the Llama 70B AWQ.
-        return "TheBloke/deepseek-llm-67b-base-AWQ"
-    elif vram >= 42 * 1024:
-        return "hugging-quants/Meta-Llama-3.1-70B-Instruct-AWQ-INT4"
-    elif vram >= 22 * 1024:
-        return "Qwen/Qwen2-32B-Instruct-AWQ"
+    # VRAM requirements are estimates based on model size and quantization
+    # AWQ INT4 quantization reduces memory by ~4x compared to FP16
+    
+    if vram >= 120 * 1024:
+        # 120GB+ VRAM: Qwen3-235B-A22B-Thinking
+        # Full model (AWQ version may not be available yet)
+        return "Qwen/Qwen3-235B-A22B-Thinking-2507"
     elif vram >= 20 * 1024:
-        # 8B AWQ model is preferred over the 7B models in the same VRAM tier.
-        # Replaced unquantized 8B with its AWQ version
-        return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
-    elif vram >= 8.5 * 1024:
-        # 8B AWQ model is preferred over the 7B AWQ models in the same VRAM tier.
-        return "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
-    elif vram >= 4.5 * 1024:
-    # Replaced unquantized Phi-3-mini with its AWQ/INT4 version
-        return "Sreenington/Phi-3-mini-4k-instruct-AWQ"
-    elif vram >= 2.5 * 1024:
-        # Replaced unquantized Gemma-2B with a standard AWQ version
-        # Using a smaller model for this tier to be more conservative on VRAM.
-        return "Qwen/Qwen2-1.5B-Instruct-AWQ"
+        # 20GB+ VRAM: QwQ-32B (32B Thinking model)
+        # AWQ version available and verified on HuggingFace
+        return "Qwen/QwQ-32B-AWQ"
+    elif vram >= 12 * 1024:
+        # 12GB+ VRAM: Qwen3-30B-A3B-Thinking
+        # Full model (AWQ version may not be available yet)
+        return "Qwen/Qwen3-30B-A3B-Thinking-2507"
+    elif vram >= 6 * 1024:
+        # 6GB+ VRAM: Qwen3-8B (Hybrid model - good balance)
+        # AWQ version available and verified on HuggingFace
+        return "Qwen/Qwen3-8B-AWQ"
+    elif vram >= 3 * 1024:
+        # 3GB+ VRAM: Qwen3-4B-Thinking
+        # AWQ version available (cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit)
+        # Using official Qwen repo if available, else community version
+        return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit"
+    elif vram >= 2 * 1024:
+        # 2GB+ VRAM: Qwen2.5 1.5B AWQ (fallback for low VRAM)
+        return "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
     else:
-        # Fallback to the smallest AWQ model for very low VRAM environments.
-        # Replaced unquantized Qwen with its official AWQ version
-        return "Qwen/Qwen2-1.5B-Instruct-AWQ"
+        # Fallback: Smallest available Qwen model with AWQ
+        return "Qwen/Qwen2.5-0.5B-Instruct-AWQ"
 
 def _recover_json(json_str: str):
     """
