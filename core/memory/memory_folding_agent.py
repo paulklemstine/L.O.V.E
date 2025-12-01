@@ -1,15 +1,27 @@
 import json
 from typing import List, Dict, Any
 from core.llm_api import run_llm
-from core.memory.schemas import EpisodicMemory, WorkingMemory, ToolMemory, KeyEvent, ToolUsage
+from core.memory.schemas import EpisodicMemory, WorkingMemory, ToolMemory, KeyEvent, ToolUsage, MemorySummary
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 
 class MemoryFoldingAgent:
     """
     Autonomous agent responsible for folding raw interaction logs into structured memory.
     """
-    def __init__(self):
-        pass
+    def __init__(self, llm_runner=None):
+        self.run_llm = llm_runner if llm_runner else run_llm
+
+    async def trigger_folding(self, level_0: List[MemorySummary], level_1: List[MemorySummary], level_2: List[MemorySummary]) -> Dict[str, List[MemorySummary]]:
+        """
+        Orchestrates the folding process across memory levels.
+        """
+        # Simple implementation: just return current levels for now to fix the crash
+        # Real logic would involve summarizing level_0 into level_1, etc.
+        return {
+            "level_0": level_0,
+            "level_1": level_1,
+            "level_2": level_2
+        }
 
     async def fold_episodic(self, messages: List[BaseMessage], current_memory: EpisodicMemory) -> EpisodicMemory:
         """

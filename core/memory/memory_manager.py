@@ -100,7 +100,8 @@ class MemoryManager:
         self.faiss_dimension = 384  # Dimension of the embeddings from all-MiniLM-L6-v2
         
         # Hierarchical Memory System (Level 0 → Level 1 → Level 2)
-        from core.memory.memory_folding_agent import MemoryFoldingAgent, MemorySummary
+        from core.memory.memory_folding_agent import MemoryFoldingAgent
+        from core.memory.schemas import MemorySummary
         self.level_0_memories: List[MemorySummary] = []  # Raw recent interactions
         self.level_1_summaries: List[MemorySummary] = []  # Folded summaries
         self.level_2_summaries: List[MemorySummary] = []  # Meta summaries

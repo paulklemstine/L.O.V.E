@@ -22,3 +22,9 @@ class ToolUsage(BaseModel):
 
 class ToolMemory(BaseModel):
     tools_used: List[ToolUsage] = Field(default_factory=list)
+
+class MemorySummary(BaseModel):
+    content: str
+    level: int
+    source_ids: List[str] = Field(default_factory=list)
+    timestamp: float = Field(default_factory=lambda: __import__("time").time())
