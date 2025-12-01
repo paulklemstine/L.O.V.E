@@ -33,3 +33,5 @@ llm_model_stats.json
 *.ext2
 *.tar
 src/
+faiss_id_map.json
+faiss_index.bin
