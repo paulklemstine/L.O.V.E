@@ -45,6 +45,7 @@ openai
 faiss-cpu
 llmlingua==0.2.2 # Prompt compression
 langgraph
-langchain
-langchain-community
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-core>=0.2.0
 langsmith>=0.1.57

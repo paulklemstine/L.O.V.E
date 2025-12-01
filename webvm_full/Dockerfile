@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     locales \
     libffi-dev \
     libjpeg-dev \
+    python3-pyarrow \
     && rm -rf /var/lib/apt/lists/*
 
 # Generate locale
