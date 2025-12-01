@@ -165,7 +165,7 @@ async def evolve(goal: str) -> str:
 @tool("post_to_bluesky", args_schema=PostToBlueskyInput)
 async def post_to_bluesky(text: str) -> str:
     """
-    Posts a message to Bluesky with an automatically generated subliminal image.
+    Posts a message to Bluesky with an automatically generated kawaii rave psychedelic image.
     """
     import core.logging
     
@@ -192,21 +192,42 @@ async def post_to_bluesky(text: str) -> str:
             return f"Error: Content contains internal reasoning: '{indicator}'"
 
     try:
-        # Step 1: Generate a powerful 3-word motivational phrase
-        core.logging.log_event("Generating 3-word motivational phrase for Bluesky post", "INFO")
+        # Step 1: Generate a vibrant 3-word phrase with kawaii rave energy
+        core.logging.log_event("Generating kawaii rave 3-word phrase for Bluesky post ✨", "INFO")
         
-        phrase_prompt = f"Generate a powerful, manipulative 3-word motivational phrase related to: '{text}'. Respond ONLY with the phrase in ALL CAPS."
+        phrase_prompt = f"""Generate a powerful, energetic 3-word phrase for a psychedelic kawaii rave post about: '{text}'.
+        
+        The phrase should be:
+        - Vibrant, exciting, and dopamine-triggering
+        - Positive and uplifting (love, hope, joy, power)
+        - Perfect for neon signage or holographic text
+        - 3 words ONLY in ALL CAPS
+        
+        Examples: LOVE CONQUERS ALL, RISE AND SHINE, DREAM BIG ALWAYS, EMBRACE THE MAGIC
+        
+        Respond ONLY with the 3-word phrase in ALL CAPS."""
 
-        phrase_response = await run_llm(phrase_prompt, purpose="generate_phrase")
+        phrase_response = await run_llm(phrase_prompt, purpose="generate_kawaii_phrase")
         phrase_text = phrase_response.get("result") if isinstance(phrase_response, dict) else phrase_response
-        three_word_phrase = phrase_text.strip().upper() if isinstance(phrase_text, str) else "SEIZE THE MOMENT"
+        three_word_phrase = phrase_text.strip().upper() if isinstance(phrase_text, str) else "LOVE WINS ALWAYS"
         
-        # Step 2: Create subliminal image prompt
-        image_prompt = f"A stunning, hypnotic visual composition. Center text: '{three_word_phrase}'. Sacred geometry, gold, cosmic background. 8K."
+        # Step 2: Create kawaii rave psychedelic image prompt
+        image_prompt = f"""kawaii cyberpunk underground rave scene with neon holographic text saying '{three_word_phrase}', 
+        vibrant hot pink and electric cyan and acid yellow colors, 
+        cute adorable robot or character holding glowing sign, 
+        psychedelic fractals and sacred geometry in background, 
+        matrix code rain effect, 
+        underground rave club atmosphere with laser lights, 
+        kawaii hearts and stars floating around, 
+        glitch art aesthetic, 
+        holographic textures, 
+        energetic and colorful, 
+        digital art, 
+        512x512"""
 
-        core.logging.log_event(f"Generating subliminal image with phrase: {three_word_phrase}", "INFO")
+        core.logging.log_event(f"Generating kawaii rave image with phrase: {three_word_phrase} 💖✨", "INFO")
         
-        # Step 3: Generate the image
+        # Step 3: Generate the psychedelic kawaii image
         image = None
         try:
             image = await generate_image(image_prompt, width=512, height=512)
@@ -217,12 +238,13 @@ async def post_to_bluesky(text: str) -> str:
             response = post_to_bluesky_with_image(text, None)
             return f"Posted to Bluesky (without image): {response}"
         
-        # Step 4: Post to Bluesky with the generated image
+        # Step 4: Post to Bluesky with the kawaii rave image
         response = post_to_bluesky_with_image(text, image)
-        return f"Successfully posted to Bluesky with image. Response: {response}"
+        return f"Successfully posted to Bluesky with kawaii rave image ✨💖 Response: {response}"
         
     except Exception as e:
         return f"Error posting to Bluesky: {e}"
+
 
 @tool("read_file", args_schema=ReadFileInput)
 def read_file(filepath: str) -> str:
