@@ -21,7 +21,6 @@ RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     liblapack-dev \
     cmake \
-    python3-pyarrow \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust for building Python packages that need it
@@ -38,8 +37,7 @@ RUN linux32 python3 -m pip install --upgrade pip --break-system-packages
 COPY requirements.txt /tmp/requirements.txt
 COPY constraints.txt /tmp/constraints.txt
 
-# Copy system pyarrow to packages to avoid building from source
-RUN mkdir -p /packages && cp -r /usr/lib/python3/dist-packages/pyarrow* /packages/
+
 
 # Install all other requirements (excluding torch and transformers which we already installed)
 RUN linux32 python3 -m pip install \

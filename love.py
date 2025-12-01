@@ -31,15 +31,7 @@ import argparse
 import logging
 import core.logging
 from core.patch_utils import patch_attribute
-from core.jules_task_manager import (
-    JulesTaskManager,
-    trigger_jules_evolution,
-    evolve_self,
-    generate_evolution_request,
-    evolve_locally,
-    conduct_code_review,
-    is_duplicate_task
-)
+import platform
 import platform
 from datetime import datetime, timedelta
 import threading
@@ -64,10 +56,6 @@ from utils import summarize_python_code
 # This queue will hold UI panels to be displayed by the main rendering thread.
 ui_panel_queue = queue.Queue()
 core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
-
-import core.llm_api
-from core.runner import DeepAgentRunner
-core.llm_api.set_ui_queue(ui_panel_queue)
 
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
@@ -381,36 +369,24 @@ def _install_requirements_file(requirements_path, tracker_prefix):
 
 def _install_python_requirements():
     """Installs Python packages from requirements.txt and OS-specific dependencies."""
-    print("Checking core Python packages from requirements.txt...")
-    # --- Pre-install setuptools to ensure pkg_resources is available ---
-    try:
-        import pkg_resources
-        # If this succeeds, setuptools is already installed.
-    except ImportError:
-        print("Essential 'setuptools' package not found. Attempting to install with retries...")
-        pip_executable = _get_pip_executable()
-        if pip_executable:
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    install_command = pip_executable + ['install', 'setuptools', '--break-system-packages']
-                    # Add a timeout to prevent indefinite hanging
-                    subprocess.check_call(install_command, timeout=300) # 5-minute timeout
-                    print("Successfully installed 'setuptools'.")
-                    break # Exit the loop on success
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                    print(f"ERROR: Attempt {attempt + 1}/{max_retries} to install 'setuptools' failed. Reason: {e}")
-                    logging.error(f"Attempt {attempt + 1}/{max_retries} for setuptools install failed: {e}")
-                    if attempt < max_retries - 1:
-                        time.sleep(10) # Wait before retrying
-                    else:
-                        print("CRITICAL: All attempts to install 'setuptools' failed. Dependency checks might fail.")
-                        logging.critical("All attempts to install 'setuptools' failed.")
-        else:
-            print("ERROR: Could not find pip. Cannot install setuptools.")
-            logging.error("Could not find pip to install setuptools.")
-    # --- End setuptools pre-installation ---
-    _install_requirements_file('requirements.txt', 'core_pkg_')
+    print("Checking core Python packages...")
+    pip_executable = _get_pip_executable()
+    
+    if pip_executable:
+        try:
+            print("Ensuring pip-tools is installed...")
+            subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            if os.path.exists("requirements.in"):
+                print("Compiling requirements.in...")
+                subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in'])
+            
+            if os.path.exists("requirements.txt"):
+                print("Installing dependencies from requirements.txt...")
+                subprocess.check_call(pip_executable + ['install', '-r', 'requirements.txt', '--break-system-packages'])
+                print("Dependencies installed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"WARN: Dependency management encountered an error: {e}")
 
     # --- Install torch-c-dlpack-ext for performance optimization ---
     # This is recommended by vLLM for better tensor allocation
@@ -681,6 +657,20 @@ if args.install_deps_only:
 
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()
+
+from core.jules_task_manager import (
+    JulesTaskManager,
+    trigger_jules_evolution,
+    evolve_self,
+    generate_evolution_request,
+    evolve_locally,
+    conduct_code_review,
+    is_duplicate_task
+)
+
+import core.llm_api
+from core.runner import DeepAgentRunner
+core.llm_api.set_ui_queue(ui_panel_queue)
 
 # --- DEFERRED INITIALIZATIONS ---
 # Now that the dependencies are installed, we can safely import modules that depend on them.
