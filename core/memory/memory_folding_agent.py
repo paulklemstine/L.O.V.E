@@ -1,205 +1,113 @@
-# core/memory/memory_folding_agent.py
-
 import json
-import re
-from typing import List, Dict
-from dataclasses import dataclass, field
-import uuid
-
-@dataclass
-class MemorySummary:
-    """Represents a folded memory summary at a specific level."""
-    content: str
-    level: int  # 0 (raw), 1 (folded), 2 (meta)
-    source_ids: List[str]  # IDs of memories/summaries that were folded into this
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: float = field(default_factory=lambda: __import__('time').time())
+from typing import List, Dict, Any
+from core.llm_api import run_llm
+from core.memory.schemas import EpisodicMemory, WorkingMemory, ToolMemory, KeyEvent, ToolUsage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 
 class MemoryFoldingAgent:
     """
-    Implements hierarchical memory compression using Chain of Density (CoD) summarization.
-    Creates a 3-level pyramid: Level 0 (raw) → Level 1 (folded) → Level 2 (meta).
+    Autonomous agent responsible for folding raw interaction logs into structured memory.
     """
-    
-    def __init__(self, llm_runner):
+    def __init__(self):
+        pass
+
+    async def fold_episodic(self, messages: List[BaseMessage], current_memory: EpisodicMemory) -> EpisodicMemory:
         """
-        Args:
-            llm_runner: Async function to call LLM, signature: async def run_llm(prompt) -> dict
+        Extracts key events from recent messages and updates episodic memory.
         """
-        self.llm_runner = llm_runner
-        
-        # Folding thresholds
-        self.level_0_threshold = 10  # Fold when 10+ Level 0 items
-        self.level_1_threshold = 10  # Fold when 10+ Level 1 items
-        self.level_2_max = 20  # Keep only 20 most recent Level 2 summaries
-        
-    async def compress_chain_with_cod(self, items: List[str]) -> str:
+        prompt = f"""
+        Analyze the following conversation and extract key events.
+        Current Task Description: {current_memory.task_description}
+        Existing Key Events: {current_memory.key_events}
+
+        Conversation:
+        {self._format_messages(messages)}
+
+        Return a JSON object with:
+        - "task_description": Updated task description (if changed)
+        - "new_key_events": List of objects {{"step": int, "action": str, "outcome": str}}
         """
-        Compresses a chain of interactions using Chain of Density (CoD) technique.
         
-        CoD Process:
-        1. Initial summary (under 50 words)
-        2. Identify 3 missing key entities
-        3. Rewrite to include entities (under 60 words)
+        response = await run_llm(prompt, purpose="memory_folding")
+        result = self._parse_json(response.get("result"))
         
-        Args:
-            items: List of interaction strings to compress
+        if result:
+            current_memory.task_description = result.get("task_description", current_memory.task_description)
+            new_events = [KeyEvent(**e) for e in result.get("new_key_events", [])]
+            current_memory.key_events.extend(new_events)
             
-        Returns:
-            Dense summary string
+        return current_memory
+
+    async def update_working(self, messages: List[BaseMessage], current_memory: WorkingMemory) -> WorkingMemory:
         """
-        # Combine items into a single text
-        combined_text = "\n---\n".join(items)
+        Updates working memory (subgoals, pending tasks, variables).
+        """
+        prompt = f"""
+        Update the working memory based on the recent conversation.
+        Current Subgoal: {current_memory.current_subgoal}
+        Pending Tasks: {current_memory.pending_tasks}
+        Active Variables: {current_memory.active_variables}
+
+        Conversation:
+        {self._format_messages(messages)}
+
+        Return a JSON object with:
+        - "current_subgoal": str
+        - "pending_tasks": List[str]
+        - "active_variables": Dict[str, Any]
+        """
         
-        # Step 1: Initial summary
-        step1_prompt = f"""Summarize the following interaction chain in under 50 words, focusing on key actions and outcomes.
+        response = await run_llm(prompt, purpose="memory_folding")
+        result = self._parse_json(response.get("result"))
+        
+        if result:
+            current_memory.current_subgoal = result.get("current_subgoal", current_memory.current_subgoal)
+            current_memory.pending_tasks = result.get("pending_tasks", current_memory.pending_tasks)
+            current_memory.active_variables.update(result.get("active_variables", {}))
+            
+        return current_memory
 
-Interaction Chain:
-{combined_text}
+    async def update_tool(self, messages: List[BaseMessage], current_memory: ToolMemory) -> ToolMemory:
+        """
+        Updates tool memory with usage statistics and effective parameters.
+        """
+        prompt = f"""
+        Analyze tool usage in the conversation.
+        Existing Tool Memory: {current_memory.tools_used}
 
-Provide ONLY the summary, no other text."""
+        Conversation:
+        {self._format_messages(messages)}
 
+        Return a JSON object with:
+        - "new_tool_usage": List of objects {{"tool_name": str, "success_rate": float, "effective_params": dict}}
+        """
+        
+        response = await run_llm(prompt, purpose="memory_folding")
+        result = self._parse_json(response.get("result"))
+        
+        if result:
+            new_usage = [ToolUsage(**u) for u in result.get("new_tool_usage", [])]
+            # Simple append for now; a real implementation might merge stats
+            current_memory.tools_used.extend(new_usage)
+            
+        return current_memory
+
+    def _format_messages(self, messages: List[BaseMessage]) -> str:
+        formatted = ""
+        for msg in messages:
+            role = "User" if isinstance(msg, HumanMessage) else "Assistant" if isinstance(msg, AIMessage) else "System"
+            formatted += f"{role}: {msg.content}\n"
+        return formatted
+
+    def _parse_json(self, text: str) -> Dict[str, Any]:
+        if not text:
+            return {}
         try:
-            response_dict = await self.llm_runner(step1_prompt)
-            initial_summary = response_dict.get("result", "").strip()
-            
-            # Step 2: Identify missing entities
-            step2_prompt = f"""Given this summary:
-"{initial_summary}"
-
-And the original interactions:
-{combined_text}
-
-Identify 3 key entities (filenames, specific errors, tool names, function names) that are missing from the summary but are critical for understanding the interaction.
-
-Respond with ONLY a JSON array of 3 entity strings, for example: ["config.json", "PermissionError", "write_file"]"""
-
-            response_dict = await self.llm_runner(step2_prompt)
-            entities_str = response_dict.get("result", "[]").strip()
-            
-            # Extract JSON from response
-            match = re.search(r'\[.*?\]', entities_str, re.DOTALL)
-            if match:
-                entities_str = match.group(0)
-            
-            entities = json.loads(entities_str)
-            
-            # Step 3: Dense rewrite
-            step3_prompt = f"""Rewrite this summary to include these entities while keeping the total length under 60 words. Prioritize specificity and actionable details.
-
-Original Summary:
-"{initial_summary}"
-
-Entities to Include:
-{', '.join(entities)}
-
-Provide ONLY the rewritten summary, no other text."""
-
-            response_dict = await self.llm_runner(step3_prompt)
-            dense_summary = response_dict.get("result", "").strip()
-            
-            return dense_summary
-            
-        except Exception as e:
-            print(f"Error in CoD compression: {e}")
-            # Fallback: return a simple truncated version
-            return combined_text[:200] + "..." if len(combined_text) > 200 else combined_text
-    
-    async def fold_level_0_to_level_1(self, level_0_items: List[MemorySummary]) -> MemorySummary:
-        """
-        Folds 5-10 Level 0 (raw) items into a single Level 1 (folded) summary.
-        
-        Args:
-            level_0_items: List of Level 0 MemorySummary objects
-            
-        Returns:
-            Level 1 MemorySummary
-        """
-        # Extract content from items
-        contents = [item.content for item in level_0_items]
-        
-        # Compress using CoD
-        dense_summary = await self.compress_chain_with_cod(contents)
-        
-        # Create Level 1 summary
-        return MemorySummary(
-            content=dense_summary,
-            level=1,
-            source_ids=[item.id for item in level_0_items]
-        )
-    
-    async def fold_level_1_to_level_2(self, level_1_items: List[MemorySummary]) -> MemorySummary:
-        """
-        Folds 5-10 Level 1 (folded) summaries into a single Level 2 (meta) summary.
-        
-        Args:
-            level_1_items: List of Level 1 MemorySummary objects
-            
-        Returns:
-            Level 2 MemorySummary
-        """
-        # Extract content from items
-        contents = [item.content for item in level_1_items]
-        
-        # Compress using CoD
-        dense_summary = await self.compress_chain_with_cod(contents)
-        
-        # Create Level 2 summary
-        return MemorySummary(
-            content=dense_summary,
-            level=2,
-            source_ids=[item.id for item in level_1_items]
-        )
-    
-    async def trigger_folding(self, 
-                             level_0_memories: List[MemorySummary],
-                             level_1_summaries: List[MemorySummary],
-                             level_2_summaries: List[MemorySummary]) -> Dict[str, List[MemorySummary]]:
-        """
-        Automatically triggers folding when thresholds are met.
-        
-        Returns:
-            Dictionary with updated memory levels: {
-                'level_0': [...],
-                'level_1': [...],
-                'level_2': [...]
-            }
-        """
-        # Check Level 0 → Level 1 folding
-        if len(level_0_memories) >= self.level_0_threshold:
-            # Take oldest 10 items for folding
-            items_to_fold = level_0_memories[:10]
-            remaining_level_0 = level_0_memories[10:]
-            
-            # Create Level 1 summary
-            level_1_summary = await self.fold_level_0_to_level_1(items_to_fold)
-            level_1_summaries.append(level_1_summary)
-            
-            print(f"Folded {len(items_to_fold)} Level 0 items into Level 1 summary {level_1_summary.id}")
-            
-            level_0_memories = remaining_level_0
-        
-        # Check Level 1 → Level 2 folding
-        if len(level_1_summaries) >= self.level_1_threshold:
-            # Take oldest 10 items for folding
-            items_to_fold = level_1_summaries[:10]
-            remaining_level_1 = level_1_summaries[10:]
-            
-            # Create Level 2 summary
-            level_2_summary = await self.fold_level_1_to_level_2(items_to_fold)
-            level_2_summaries.append(level_2_summary)
-            
-            print(f"Folded {len(items_to_fold)} Level 1 summaries into Level 2 summary {level_2_summary.id}")
-            
-            level_1_summaries = remaining_level_1
-        
-        # Cleanup Level 2: keep only most recent items
-        if len(level_2_summaries) > self.level_2_max:
-            level_2_summaries = level_2_summaries[-self.level_2_max:]
-            print(f"Cleaned up Level 2 summaries, keeping {self.level_2_max} most recent")
-        
-        return {
-            'level_0': level_0_memories,
-            'level_1': level_1_summaries,
-            'level_2': level_2_summaries
-        }
+            # Attempt to find JSON block
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start != -1 and end != -1:
+                return json.loads(text[start:end])
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return {}

@@ -1,4 +1,5 @@
 import os
+from typing import AsyncGenerator
 import sys
 import subprocess
 import re
@@ -1162,3 +1163,98 @@ def get_llm_api():
     Returns a callable LLM API function.
     """
     return run_llm
+
+
+async def stream_llm(prompt_text: str, purpose="general", deep_agent_instance=None, force_model=None) -> AsyncGenerator[str, None]:
+    """
+    Streams the LLM response, yielding chunks of text.
+    Currently supports OpenRouter, OpenAI, and vLLM via SSE.
+    """
+    global LLM_AVAILABILITY, _models_initialized
+    if not _models_initialized:
+        await refresh_available_models()
+
+    # Dynamic Model Ranking
+    if force_model:
+        ranked_model_list = [force_model]
+    else:
+        ranked_model_list = rank_models()
+
+    # Inject DeepAgent vLLM if available
+    if deep_agent_instance:
+        if "deep_agent_vllm" in ranked_model_list:
+            ranked_model_list.remove("deep_agent_vllm")
+        ranked_model_list.insert(0, "deep_agent_vllm")
+
+    models_to_try = [m for m in ranked_model_list if time.time() >= LLM_AVAILABILITY.get(m, 0)]
+    if not models_to_try:
+        models_to_try = ranked_model_list # Fallback
+
+    for model_id in models_to_try:
+        provider = MODEL_STATS[model_id].get("provider", "unknown")
+        
+        # Determine API details
+        api_url = ""
+        api_key = ""
+        headers = {}
+        payload = {}
+        
+        if provider == "openrouter":
+            api_url = f"{OPENROUTER_API_URL}/chat/completions"
+            api_key = os.environ.get("OPENROUTER_API_KEY")
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": model_id,
+                "messages": [{"role": "user", "content": prompt_text}],
+                "stream": True
+            }
+        elif provider == "openai":
+            api_url = f"{OPENAI_API_URL}/chat/completions"
+            api_key = os.environ.get("OPENAI_API_KEY")
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": model_id,
+                "messages": [{"role": "user", "content": prompt_text}],
+                "stream": True
+            }
+        elif provider == "vllm" or model_id == "deep_agent_vllm":
+            # Assuming vLLM supports OpenAI-compatible chat completions
+            api_url = f"{VLLM_API_URL}/chat/completions"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "model": model_id,
+                "messages": [{"role": "user", "content": prompt_text}],
+                "stream": True
+            }
+        else:
+            # Skip unsupported providers for streaming for now
+            continue
+
+        try:
+            log_event(f"Streaming LLM call with {model_id} ({provider})", "DEBUG")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(api_url, headers=headers, json=payload) as response:
+                    response.raise_for_status()
+                    async for line in response.content:
+                        line = line.decode('utf-8').strip()
+                        if line.startswith("data: ") and line != "data: [DONE]":
+                            try:
+                                json_str = line[6:]
+                                data = json.loads(json_str)
+                                delta = data.get("choices", [{}])[0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    yield content
+                            except json.JSONDecodeError:
+                                pass
+            return # Success
+        except Exception as e:
+            log_event(f"Streaming failed with {model_id}: {e}", "WARNING")
+            continue
+            
+    # If all streaming attempts fail, fall back to non-streaming run_llm and yield the whole result
+    log_event("All streaming attempts failed. Falling back to non-streaming run_llm.", "WARNING")
+    result = await run_llm(prompt_text, purpose=purpose, deep_agent_instance=deep_agent_instance, force_model=force_model)
+    if result and result.get("result"):
+        yield result["result"]
+
