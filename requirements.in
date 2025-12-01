@@ -47,3 +47,4 @@ llmlingua==0.2.2 # Prompt compression
 langgraph
 langchain
 langchain-community
+langsmith>=0.1.57
