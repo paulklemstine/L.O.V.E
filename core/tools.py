@@ -49,6 +49,66 @@ async def execute(command: str = None, **kwargs) -> str:
     from love import execute_shell_command
     return str(execute_shell_command(command, love_state))
 
+async def decompose_and_solve_subgoal(sub_goal: str = None, engine: 'GeminiReActEngine' = None, **kwargs) -> str:
+    """
+    Decomposes a complex goal into a smaller, manageable sub-goal and solves it.
+    
+    This tool allows the reasoning engine to break down complex problems hierarchically
+    by recursively invoking the GeminiReActEngine to solve sub-goals.
+    
+    Args:
+        sub_goal: The sub-goal to solve
+        engine: The parent GeminiReActEngine instance (injected automatically)
+    
+    Returns:
+        The result of solving the sub-goal
+    """
+    import core.logging
+    
+    if not sub_goal:
+        return "Error: The 'decompose_and_solve_subgoal' tool requires a 'sub_goal' argument. Please specify the sub-goal to solve."
+    
+    if not engine:
+        return "Error: The 'decompose_and_solve_subgoal' tool requires access to the parent engine instance."
+    
+    try:
+        core.logging.log_event(f"[Decompose & Solve] Starting sub-goal: {sub_goal[:100]}...", "INFO")
+        
+        # Create a new GeminiReActEngine instance for the sub-goal
+        # This allows for hierarchical reasoning
+        from core.gemini_react_engine import GeminiReActEngine
+        
+        # Use the same tool registry and memory manager as the parent
+        sub_engine = GeminiReActEngine(
+            tool_registry=engine.tool_registry,
+            ui_panel_queue=engine.ui_panel_queue,
+            memory_manager=engine.memory_manager,
+            caller=f"{engine.caller} > SubGoal",
+            deep_agent_instance=engine.deep_agent_instance
+        )
+        
+        # Execute the sub-goal with a reduced max_steps to prevent infinite recursion
+        # Parent typically has max_steps=10, so we use 7 for sub-goals
+        result = await sub_engine.execute_goal(sub_goal, max_steps=7)
+        
+        if result.get("success"):
+            core.logging.log_event(f"[Decompose & Solve] Sub-goal completed successfully", "INFO")
+            result_str = result.get("result", "")
+            
+            # Format the result nicely
+            if isinstance(result_str, dict):
+                import json
+                return f"Sub-goal completed successfully. Result: {json.dumps(result_str, indent=2)}"
+            else:
+                return f"Sub-goal completed successfully. Result: {result_str}"
+        else:
+            core.logging.log_event(f"[Decompose & Solve] Sub-goal failed: {result.get('result')}", "WARNING")
+            return f"Sub-goal failed: {result.get('result', 'Unknown error')}"
+            
+    except Exception as e:
+        core.logging.log_event(f"[Decompose & Solve] Error: {e}", "ERROR")
+        return f"Error while solving sub-goal: {e}"
+
 async def evolve(goal: str = None, **kwargs) -> str:
     """
     Evolves the codebase to meet a given goal.

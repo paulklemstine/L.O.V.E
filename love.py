@@ -3490,7 +3490,7 @@ async def initialize_gpu_services():
     )
     
     # Register evolve tool
-    from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout
+    from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, decompose_and_solve_subgoal
     
     async def evolve_tool_wrapper(goal: str = None, **kwargs) -> str:
         """Evolves the codebase to meet a given goal. If no goal is provided, automatically determines one."""
@@ -3657,6 +3657,24 @@ async def initialize_gpu_services():
         }
     )
     
+    tool_registry.register_tool(
+        name="decompose_and_solve_subgoal",
+        tool=decompose_and_solve_subgoal,
+        metadata={
+            "description": "Decomposes a complex goal into a smaller, manageable sub-goal and solves it hierarchically. This tool allows breaking down complex problems by recursively invoking the reasoning engine to solve sub-goals. Use this when a goal is too complex to be solved by a single tool call.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "sub_goal": {
+                        "type": "string",
+                        "description": "The sub-goal to solve. Should be a clear, specific objective that is simpler than the overall goal."
+                    }
+                },
+                "required": ["sub_goal"]
+            }
+        }
+    )
+    
     # Register a "None" tool as a fallback for when LLM returns invalid format
     async def none_tool_fallback(**kwargs) -> str:
         """
@@ -3795,7 +3813,7 @@ async def initialize_gpu_services():
         }
     )
     
-    core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, None (fallback)", "INFO")
+    core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, decompose_and_solve_subgoal, None (fallback)", "INFO")
     # -----------------------------------------
 
     if love_state.get('hardware', {}).get('gpu_detected'):
