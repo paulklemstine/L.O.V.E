@@ -2640,7 +2640,8 @@ async def initialize_gpu_services():
     )
     
     # Register evolve tool
-    from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, decompose_and_solve_subgoal
+    from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, decompose_and_solve_subgoal
+    from core.tools_legacy import talent_scout
     
     async def evolve_tool_wrapper(goal: str = None, **kwargs) -> str:
         """Evolves the codebase to meet a given goal. If no goal is provided, automatically determines one."""
