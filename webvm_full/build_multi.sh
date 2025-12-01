@@ -59,6 +59,8 @@ sed -i '/llmlingua/d' requirements.txt
 sed -i '/faiss-cpu/d' requirements.txt
 sed -i '/pyarrow/d' requirements.txt
 sed -i '/hf-xet/d' requirements.txt
+sed -i '/pywin32/d' requirements.txt
+sed -i '/pyreadline3/d' requirements.txt
 
 docker build --platform linux/386 -f Dockerfile.packages -t love-webvm-packages .
 
