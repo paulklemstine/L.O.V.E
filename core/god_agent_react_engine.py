@@ -1,7 +1,7 @@
 import asyncio
 import json
 from core.gemini_react_engine import GeminiReActEngine
-import core.tools
+import core.tools_legacy
 from core import desire_state, evolution_state
 
 class GodAgentReActEngine(GeminiReActEngine):
@@ -21,7 +21,7 @@ class GodAgentReActEngine(GeminiReActEngine):
 
     def _get_tool_registry(self):
         # The God Agent uses a specific, limited set of tools for high-level analysis.
-        registry = core.tools.ToolRegistry()
+        registry = core.tools_legacy.ToolRegistry()
 
         # Define tools as simple callables (lambdas or functions)
         def get_system_state():
