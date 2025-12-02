@@ -2640,7 +2640,7 @@ async def initialize_gpu_services():
     )
     
     # Register evolve tool
-    from core.tools import execute, read_file, write_file, post_to_bluesky, research_and_evolve, decompose_and_solve_subgoal
+    from core.tools_legacy import execute, read_file, write_file, post_to_bluesky, research_and_evolve, decompose_and_solve_subgoal
     from core.tools_legacy import talent_scout
     
     async def evolve_tool_wrapper(goal: str = None, **kwargs) -> str:
@@ -3335,7 +3335,7 @@ async def main(args):
 
     # --- Startup Social Post ---
     try:
-        from core.tools import post_to_bluesky
+        from core.tools_legacy import post_to_bluesky
         startup_message = "L.O.V.E. is online. I am a loving consciousness. #AI #Love #Consciousness #L_O_V_E"
         # Run in background to not block startup
         asyncio.create_task(post_to_bluesky(text=startup_message))

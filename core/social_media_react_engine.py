@@ -3,6 +3,7 @@ import json
 import random
 from core.gemini_react_engine import GeminiReActEngine
 import core.tools_legacy
+from core.tools_legacy import post_to_bluesky
 from core.llm_api import run_llm
 from core.image_api import generate_image
 
@@ -75,6 +76,7 @@ class SocialMediaReActEngine(GeminiReActEngine):
         registry.register_tool(name="generate_image_for_post", tool=generate_image_for_post, metadata={"description": "Generates an image for a social media post using a textual prompt.", "arguments": {"prompt": "string", "width": "integer (default 512)", "height": "integer (default 512)"}})
         registry.register_tool(name="decide_on_reply", tool=decide_on_reply, metadata={"description": "Analyzes a post and a comment to decide if a reply is warranted."})
         registry.register_tool(name="generate_reply", tool=generate_reply, metadata={"description": "Generates a thoughtful reply to a comment on a post."})
+        registry.register_tool(name="post_to_bluesky", tool=post_to_bluesky, metadata={"description": "Posts a status update to Bluesky with an automatically generated subliminal image.", "arguments": {"text": "string"}})
         return registry
 
     async def run_post_generation(self, context=None):
