@@ -377,9 +377,9 @@ def _install_python_requirements():
             print("Ensuring pip-tools is installed...")
             subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
-            if os.path.exists("requirements.in"):
-                print("Compiling requirements.in...")
-                subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in'])
+            # if os.path.exists("requirements.in"):
+            #     print("Compiling requirements.in...")
+            #     subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in'])
             
             if os.path.exists("requirements.txt"):
                 print("Installing dependencies from requirements.txt...")
