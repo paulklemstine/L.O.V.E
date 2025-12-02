@@ -102,6 +102,11 @@ rsync -av \
     --exclude 'vllm_server.log' \
     --exclude 'love.log' \
     --exclude 'ipfs.log' \
+    --exclude 'love_state.json' \
+    --exclude '*.tmp' \
+    --exclude 'tmp/' \
+    --exclude 'temp/' \
+    --exclude '.cache/' \
     --exclude '.pytest_cache' \
     --exclude 'build' \
     --exclude 'dist' \
