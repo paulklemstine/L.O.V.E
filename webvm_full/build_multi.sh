@@ -108,6 +108,11 @@ rsync -av \
     --exclude '*.egg-info' \
     "$REPO_ROOT/" src/
 
+# Copy the run_love.sh script into the app source
+echo "Adding run_love.sh startup script..."
+cp run_love.sh src/root/L.O.V.E/run_love.sh
+chmod +x src/root/L.O.V.E/run_love.sh
+
 docker build --platform linux/386 -f Dockerfile.app -t love-webvm-app src/
 
 echo "Creating app.ext2 (512MB)..."
