@@ -111,6 +111,7 @@ rsync -av \
     --exclude 'build' \
     --exclude 'dist' \
     --exclude '*.egg-info' \
+    --exclude 'requirements.in' \
     "$REPO_ROOT/" src/
 
 # Copy the run_love.sh script into the app source
