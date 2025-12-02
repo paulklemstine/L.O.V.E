@@ -2,7 +2,7 @@ import asyncio
 import json
 import random
 from core.gemini_react_engine import GeminiReActEngine
-import core.tools
+import core.tools_legacy
 from core.llm_api import run_llm
 from core.image_api import generate_image
 
@@ -12,7 +12,7 @@ class SocialMediaReActEngine(GeminiReActEngine):
         self.loop = loop
 
     def _get_tool_registry(self):
-        registry = core.tools.ToolRegistry()
+        registry = core.tools_legacy.ToolRegistry()
 
         async def generate_post_content(strategy: str):
             """Generates content for a new social media post based on a given strategy."""
