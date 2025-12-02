@@ -219,9 +219,11 @@
                         "HOME=/root",
                         "TERM=xterm",
                         "PYTHONUNBUFFERED=1",
-                        "PYTHONPATH=/opt/python-packages"
+                        "PYTHONDONTWRITEBYTECODE=1",
+                        "PYTHONPATH=/opt/python-packages",
+                        "PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
                     ],
-                    cwd: "/root/L.O.V.E"
+                    cwd: "/root"
                 });
 
                 document.getElementById('status').innerText = "Process Finished.";
