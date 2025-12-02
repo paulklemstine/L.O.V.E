@@ -37,7 +37,8 @@ RUN linux32 python3 -m pip install --upgrade pip --break-system-packages
 COPY requirements.txt /tmp/requirements.txt
 COPY constraints.txt /tmp/constraints.txt
 
-
+# Change to /tmp to avoid any conflicts with source directories
+WORKDIR /tmp
 
 # Install all other requirements (excluding torch and transformers which we already installed)
 RUN linux32 python3 -m pip install \
