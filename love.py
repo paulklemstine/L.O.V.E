@@ -683,11 +683,17 @@ else:
     print(f"ERROR: {ws_proxy_path} not found.")
 
 # Start HTTP Server
-print("Starting Web Server for WebVM on port 8000...")
+print("Starting Web Server for WebVM on port 80 (Requires sudo/admin)...")
 # Run in background
-subprocess.Popen([sys.executable, "-m", "http.server", "8000"], cwd="webvm_full")
+# We use server.py because it provides the necessary COOP/COEP headers for CheerpX
+if os.path.exists(os.path.join("webvm_full", "server.py")):
+    subprocess.Popen([sys.executable, "server.py", "80"], cwd="webvm_full")
+    print("WebVM is running at http://localhost")
+else:
+    print("ERROR: webvm_full/server.py not found. Falling back to simple http.server on port 80.")
+    subprocess.Popen([sys.executable, "-m", "http.server", "80"], cwd="webvm_full")
+    print("WebVM is running at http://localhost (Warning: Missing COOP/COEP headers)")
 
-print("WebVM is running at http://localhost:8000")
 print("Bridge is running at ws://localhost:8001")
 print("---------------------------------------")
 # We continue to run L.O.V.E as requested, so it can "handle stuff programmatically"
