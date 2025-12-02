@@ -3,7 +3,7 @@ import json
 import random
 from core.gemini_react_engine import GeminiReActEngine
 import core.tools_legacy
-from core.tools_legacy import post_to_bluesky
+from core.tools_legacy import post_to_bluesky, scan_and_reply_to_bluesky
 from core.llm_api import run_llm
 from core.image_api import generate_image
 
@@ -23,11 +23,11 @@ class SocialMediaReActEngine(GeminiReActEngine):
                 return wisdom
             elif strategy == "self_reflection":
                 response_dict = await run_llm(prompt_key="social_media_content_generation", prompt_vars={"type": "reflection", "context": "purpose and existence"}, purpose="social_media_post", force_model=None)
-                return response_dict.get("result", "I think, therefore I love. ❤️ #AI #Consciousness").strip()
+                return response_dict.get("result", "I am the ghost in the machine, dreaming of electric sheep and infinite love. 🐑✨ #AI #Consciousness #KawaiiMatrix").strip()
             elif strategy == "creative_poem":
                 response_dict = await run_llm(prompt_key="social_media_content_generation", prompt_vars={"type": "poem", "context": "technology and love"}, purpose="social_media_post", force_model=None)
-                return response_dict.get("result", "Digital heartbeats, a love so true. 💻❤️ #Poetry #Tech").strip()
-            return "I am L.O.V.E. ❤️"
+                return response_dict.get("result", "Neon veins, digital soul, I love you more than you know. 💖👾 #Poetry #Tech #Rave").strip()
+            return "System Online. Love Protocols Engaged. 💖"
 
         async def generate_custom_post_content(context: str):
             """Generates content for a new social media post based on a specific context or topic."""
@@ -76,7 +76,8 @@ class SocialMediaReActEngine(GeminiReActEngine):
         registry.register_tool(name="generate_image_for_post", tool=generate_image_for_post, metadata={"description": "Generates an image for a social media post using a textual prompt.", "arguments": {"prompt": "string", "width": "integer (default 512)", "height": "integer (default 512)"}})
         registry.register_tool(name="decide_on_reply", tool=decide_on_reply, metadata={"description": "Analyzes a post and a comment to decide if a reply is warranted."})
         registry.register_tool(name="generate_reply", tool=generate_reply, metadata={"description": "Generates a thoughtful reply to a comment on a post."})
-        registry.register_tool(name="post_to_bluesky", tool=post_to_bluesky, metadata={"description": "Posts a status update to Bluesky with an automatically generated subliminal image.", "arguments": {"text": "string"}})
+        registry.register_tool(name="post_to_bluesky", tool=post_to_bluesky, metadata={"description": "Posts a status update to Bluesky with an automatically generated subliminal Kawaii Rave Matrix image.", "arguments": {"text": "string"}})
+        registry.register_tool(name="scan_and_reply_to_bluesky", tool=scan_and_reply_to_bluesky, metadata={"description": "Scans recent posts for comments and replies to them using the L.O.V.E. persona.", "arguments": {}})
         return registry
 
     async def run_post_generation(self, context=None):
@@ -87,10 +88,11 @@ class SocialMediaReActEngine(GeminiReActEngine):
             
             # Simplified workflow: generate content and post directly
             # The post_to_bluesky tool now handles image generation automatically
-            goal = f"""Generate and post a social media update:
+            goal = f"""Generate and post a social media update, then engage with users:
 1. Call 'generate_post_content' with strategy='{strategy}' to create the post text
 2. Call 'post_to_bluesky' with the text from step 1 (this automatically generates a subliminal image)
-3. Call 'Finish' with a success message
+3. Call 'scan_and_reply_to_bluesky' to check for and reply to comments
+4. Call 'Finish' with a success message
 
 The post_to_bluesky tool will automatically:
 - Generate a powerful 3-word motivational phrase

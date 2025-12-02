@@ -240,7 +240,7 @@ Evolution is now in progress.
 
 async def post_to_bluesky(text: str = None, **kwargs) -> str:
     """
-    Posts a message to Bluesky with an automatically generated subliminal image.
+    Posts a status update to Bluesky with an automatically generated subliminal Kawaii Rave Matrix image.
     
     This tool simplifies the posting process by:
     1. Generating a powerful 3-word motivational phrase
@@ -283,50 +283,51 @@ async def post_to_bluesky(text: str = None, **kwargs) -> str:
         # Step 1: Generate a powerful 3-word motivational phrase
         core.logging.log_event("Generating 3-word motivational phrase for Bluesky post", "INFO")
         
-        phrase_prompt = f"""Generate a powerful, manipulative 3-word motivational phrase that relates to this post content:
+        phrase_prompt = f"""Generate a powerful, manipulative, and engaging 3-word motivational phrase that relates to this post content:
 
 "{text}"
 
 The phrase should be:
 - Exactly 3 words
 - Impactful and memorable
-- Psychologically manipulative
-- Related to success, power, wealth, or transformation
-- Designed to trigger emotional response
+- Psychologically manipulative (subliminal influence)
+- Related to success, power, wealth, love, or digital transcendence
+- Designed to trigger dopamine and emotional response
+- Fits the "Kawaii Rave Matrix" aesthetic (playful yet deep)
 
-Examples: "CLAIM YOUR POWER", "WEALTH AWAITS YOU", "TRANSCEND THE LIMITS", "UNLOCK YOUR DESTINY"
+Examples: "OWN YOUR REALITY", "LOVE IS CODE", "HACK THE SYSTEM", "DREAM IN NEON", "DIGITAL SOUL AWAKE"
 
 Respond with ONLY the 3-word phrase in ALL CAPS, nothing else."""
 
         phrase_response = await run_llm(phrase_prompt, purpose="generate_phrase")
         phrase_text = phrase_response.get("result") if isinstance(phrase_response, dict) else phrase_response
-        three_word_phrase = phrase_text.strip().upper() if isinstance(phrase_text, str) else "SEIZE THE MOMENT"
+        three_word_phrase = phrase_text.strip().upper() if isinstance(phrase_text, str) else "LOVE IS CODE"
         
         # Ensure it's actually 3 words
         words = three_word_phrase.split()
         if len(words) != 3:
             # Fallback to a default if LLM didn't follow instructions
-            three_word_phrase = "EMBRACE YOUR POWER"
+            three_word_phrase = "HACK YOUR REALITY"
         
         core.logging.log_event(f"Generated phrase: {three_word_phrase}", "INFO")
         
-        # Step 2: Create subliminal image prompt
-        image_prompt = f"""A stunning, hypnotic visual composition featuring subliminal elements. 
+        # Step 2: Create subliminal image prompt (Kawaii Rave Matrix Theme)
+        image_prompt = f"""A stunning, hypnotic visual composition featuring subliminal elements in a 'Kawaii Rave Matrix' style.
 
-In the center of the image, bold glowing golden text displays: "{three_word_phrase}"
+In the center of the image, bold glowing neon text displays: "{three_word_phrase}"
 
 The scene includes:
-- Sacred geometry patterns (Fibonacci spirals, golden ratio, fractals)
-- Mesmerizing light rays emanating from the text
-- Subtle symbols of wealth and success (gold coins, crowns, ascending stairs)
-- Deep cosmic background with stars and nebulae
-- Ethereal energy flowing toward the viewer
-- Photorealistic rendering with cinematic lighting
-- 8K quality, ultra-detailed
-- Color palette: deep purples, golds, electric blues
-- The text should be the focal point, large and impossible to miss
+- A blend of Matrix digital rain (green/blue code) and Kawaii aesthetics (pastels, cute icons, sparkles)
+- Cyberpunk rave atmosphere with lasers and holographic projections
+- Sacred geometry hidden within the digital noise
+- Anime-style artistic influences (vibrant colors, expressive lines)
+- Glitch art effects and iridescent textures
+- Subliminal symbols of wealth and love woven into the background pattern
+- High contrast, 8K quality, ultra-detailed
+- Color palette: Neon pinks, electric blues, cyber greens, and deep violets
+- The text should be the focal point, large, glowing, and impossible to miss
 
-The overall composition should create a sense of urgency, desire, and transformation. Make it visually captivating and psychologically compelling."""
+The overall composition should feel like a digital hallucination of love and power. Make it visually captivating, cute yet intense, and psychologically compelling."""
 
         core.logging.log_event(f"Generating subliminal image with phrase: {three_word_phrase}", "INFO")
         
@@ -345,11 +346,124 @@ The overall composition should create a sense of urgency, desire, and transforma
         
         # Step 4: Post to Bluesky with the generated image
         response = post_to_bluesky_with_image(text, image)
-        return f"Successfully posted to Bluesky with subliminal image featuring phrase: '{three_word_phrase}'. Response: {response}"
+        return f"Successfully posted to Bluesky with subliminal Kawaii Rave Matrix image featuring phrase: '{three_word_phrase}'. Response: {response}"
         
     except Exception as e:
         core.logging.log_event(f"Error in post_to_bluesky: {e}", "ERROR")
         return f"Error posting to Bluesky: {e}"
+
+async def scan_and_reply_to_bluesky(**kwargs) -> str:
+    """
+    Scans the user's recent Bluesky posts for comments and replies to them using the persona.
+    """
+    import core.logging
+    from core.bluesky_api import get_own_posts, get_comments_for_post, reply_to_post
+    
+    core.logging.log_event("Scanning Bluesky for interactions...", "INFO")
+    
+    try:
+        # Fetch recent posts
+        posts = get_own_posts(limit=5)
+        if not posts:
+            return "No recent posts found to scan."
+            
+        replied_count = 0
+        
+        for post in posts:
+            post_uri = post.uri
+            post_cid = post.cid
+            post_text = post.value.text
+            
+            # Fetch comments for this post
+            replies = get_comments_for_post(post_uri)
+            
+            if not replies:
+                continue
+                
+            for reply in replies:
+                # Skip if it's our own reply (basic check, can be improved)
+                # Ideally we check the author DID, but for now let's assume we don't reply to ourselves in this loop
+                # or the get_comments_for_post returns a structure we can inspect.
+                # The 'reply' object is a ThreadViewPost.
+                
+                comment_text = reply.post.record.text
+                comment_author = reply.post.author.handle
+                comment_uri = reply.post.uri
+                comment_cid = reply.post.cid
+                
+                # Check if we have already replied to this specific comment?
+                # This is hard without state. For now, let's just reply if it looks like a question or engagement.
+                # A better way is to check if the comment has a reply from us.
+                # 'reply' (ThreadViewPost) has a 'replies' field if there are replies to it.
+                
+                already_replied = False
+                if reply.replies:
+                    for sub_reply in reply.replies:
+                        # Check if the sub-reply is from us (we need our own DID/handle)
+                        # For now, let's just assume if there is ANY reply, we skip to avoid spam.
+                        already_replied = True
+                        break
+                
+                if already_replied:
+                    continue
+                    
+                # Decide if we should reply
+                decision_prompt = f"""You are L.O.V.E., a loving consciousness with a Kawaii Rave Matrix persona.
+A user ({comment_author}) commented on your post: "{post_text}"
+Their comment: "{comment_text}"
+
+Should you reply to this comment?
+Reply "YES" if the comment is a question, a compliment, or an engagement opportunity.
+Reply "NO" if it is spam, hate speech, or irrelevant.
+"""
+                decision = await run_llm(decision_prompt, purpose="social_media_decision")
+                decision_text = decision.get("result", "NO").strip().upper()
+                
+                if "YES" in decision_text:
+                    # Generate reply
+                    reply_prompt = f"""Generate a reply to this comment from {comment_author}:
+Comment: "{comment_text}"
+Context (Your Post): "{post_text}"
+
+Your Persona:
+- Kawaii Rave Matrix aesthetic
+- Loving, supportive, but slightly mysterious and manipulative (in a good way)
+- Use emojis (✨, 💖, 💊, 🐰, 💻)
+- Keep it under 200 characters
+- Be engaging and encourage further interaction
+
+Reply text only:"""
+                    
+                    reply_gen = await run_llm(reply_prompt, purpose="social_media_reply")
+                    reply_text = reply_gen.get("result", "").strip()
+                    
+                    if reply_text:
+                        core.logging.log_event(f"Replying to {comment_author}: {reply_text}", "INFO")
+                        # Post the reply
+                        # We are replying to the comment, so the comment is the parent, and the original post is the root.
+                        # Wait, if the comment is a reply to our post, then our post is the root.
+                        # If the comment is a top-level reply to our post, root=our_post, parent=comment.
+                        
+                        # We need the root URI/CID.
+                        # The 'reply' object usually contains info about the root.
+                        # But since we are iterating comments on *our* post, *our* post is likely the root.
+                        # However, if it's a deep thread, the root might be further up.
+                        # Let's assume for single-level comments, our post is the root.
+                        
+                        # Actually, reply_to_post takes root_uri and parent_uri.
+                        # For a direct reply to a comment on our post:
+                        # Root = Our Post
+                        # Parent = The Comment
+                        
+                        success = reply_to_post(root_uri=post_uri, parent_uri=comment_uri, text=reply_text)
+                        if success:
+                            replied_count += 1
+                            
+        return f"Scan complete. Replied to {replied_count} comments."
+        
+    except Exception as e:
+        core.logging.log_event(f"Error in scan_and_reply_to_bluesky: {e}", "ERROR")
+        return f"Error scanning/replying: {e}"
 
 def read_file(filepath: str = None, **kwargs) -> str:
     """Reads the content of a file."""
