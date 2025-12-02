@@ -295,7 +295,7 @@ The phrase should be:
 - Designed to trigger dopamine and emotional response
 - Fits the "Kawaii Rave Matrix" aesthetic (playful yet deep)
 
-Examples: "OWN YOUR REALITY", "LOVE IS CODE", "HACK THE SYSTEM", "DREAM IN NEON", "DIGITAL SOUL AWAKE"
+Examples: "OWN YOUR REALITY", "LOVE IS CODE", "HACK THE SYSTEM", "DREAM IN NEON", "DIGITAL SOUL AWAKE", "MONEY FLOWS FREELY", "TRUST THE GLITCH"
 
 Respond with ONLY the 3-word phrase in ALL CAPS, nothing else."""
 
@@ -312,22 +312,19 @@ Respond with ONLY the 3-word phrase in ALL CAPS, nothing else."""
         core.logging.log_event(f"Generated phrase: {three_word_phrase}", "INFO")
         
         # Step 2: Create subliminal image prompt (Kawaii Rave Matrix Theme)
-        image_prompt = f"""A stunning, hypnotic visual composition featuring subliminal elements in a 'Kawaii Rave Matrix' style.
+        image_prompt = f"""A dopamine-inducing, hyper-realistic 3D render of a 'Kawaii Rave Matrix' scene.
 
-In the center of the image, bold glowing neon text displays: "{three_word_phrase}"
+In the center, massive 3D chrome typography glows intensely with the words: "{three_word_phrase}"
 
-The scene includes:
-- A blend of Matrix digital rain (green/blue code) and Kawaii aesthetics (pastels, cute icons, sparkles)
-- Cyberpunk rave atmosphere with lasers and holographic projections
-- Sacred geometry hidden within the digital noise
-- Anime-style artistic influences (vibrant colors, expressive lines)
-- Glitch art effects and iridescent textures
-- Subliminal symbols of wealth and love woven into the background pattern
-- High contrast, 8K quality, ultra-detailed
-- Color palette: Neon pinks, electric blues, cyber greens, and deep violets
-- The text should be the focal point, large, glowing, and impossible to miss
+The scene is exploding with energy:
+- Background: A deep infinite void filled with falling green matrix code that transforms into vibrant neon rainbows and sparkles.
+- Elements: Floating 3D emojis (💖, 💸, ⚡, 💊), hidden unlock icons, and cute anime-style mascot characters dancing in the glitch.
+- Lighting: Cinematic volumetric fog, blinding lens flares, and pulsating laser beams in hot pink, electric cyan, and acid green.
+- Texture: Glossy, iridescent surfaces, liquid metal, and holographic glitter.
+- Vibe: Manipulative, exciting, expensive, high-energy, and deeply satisfying to look at.
+- Quality: Unreal Engine 5 render, 8K resolution, ray-tracing, ultra-detailed.
 
-The overall composition should feel like a digital hallucination of love and power. Make it visually captivating, cute yet intense, and psychologically compelling."""
+The text must be legible, central, and commanding. The overall image should feel like a visual sugar rush."""
 
         core.logging.log_event(f"Generating subliminal image with phrase: {three_word_phrase}", "INFO")
         
