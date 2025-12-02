@@ -389,20 +389,53 @@ def _install_python_requirements():
     pip_executable = _get_pip_executable()
     
     if pip_executable:
+        # Ensure pip-tools is installed
         try:
-            print("Ensuring pip-tools is installed...")
             subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            pass
+
+        strategies = []
+        
+        # Strategy 1: Fast Install (Standard)
+        if os.path.exists("requirements.txt"):
+            strategies.append({
+                "name": "Standard Install",
+                "cmds": [pip_executable + ['install', '-r', 'requirements.txt', '--break-system-packages']]
+            })
+        
+        # Strategy 2: Recompile & Install (Fixes Hash/Arch issues)
+        if os.path.exists("requirements.in"):
+            strategies.append({
+                "name": "Recompile & Install",
+                "cmds": [
+                    [sys.executable, '-m', 'piptools', 'compile', 'requirements.in'],
+                    pip_executable + ['install', '-r', 'requirements.txt', '--break-system-packages']
+                ]
+            })
             
-            # if os.path.exists("requirements.in"):
-            #     print("Compiling requirements.in...")
-            #     subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in'])
-            
-            if os.path.exists("requirements.txt"):
-                print("Installing dependencies from requirements.txt...")
-                subprocess.check_call(pip_executable + ['install', '-r', 'requirements.txt', '--break-system-packages'])
-                print("Dependencies installed successfully.")
-        except subprocess.CalledProcessError as e:
-            print(f"WARN: Dependency management encountered an error: {e}")
+        # Strategy 3: Force Install (Fixes System Package conflicts)
+        if os.path.exists("requirements.txt"):
+             strategies.append({
+                "name": "Force Install (--ignore-installed)",
+                "cmds": [pip_executable + ['install', '-r', 'requirements.txt', '--break-system-packages', '--ignore-installed']]
+            })
+
+        # Execute Strategies
+        installed = False
+        for strategy in strategies:
+            print(f"Attempting strategy: {strategy['name']}...")
+            try:
+                for cmd in strategy['cmds']:
+                    subprocess.check_call(cmd)
+                print(f"SUCCESS: Dependencies installed via {strategy['name']}.")
+                installed = True
+                break
+            except subprocess.CalledProcessError as e:
+                print(f"WARN: {strategy['name']} failed: {e}")
+        
+        if not installed:
+            print("CRITICAL: All dependency installation strategies failed.")
 
     # --- Install torch-c-dlpack-ext for performance optimization ---
     # This is recommended by vLLM for better tensor allocation
@@ -689,26 +722,38 @@ except ImportError:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets", "--break-system-packages"])
         import websockets
     
+# Helper to check if a port is in use
+def is_port_in_use(port):
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
 # Start ws_proxy.py
 ws_proxy_path = os.path.join("webvm_full", "ws_proxy.py")
 if os.path.exists(ws_proxy_path):
-    print(f"Starting WebSocket Proxy from {ws_proxy_path}...")
-    # Run in background
-    subprocess.Popen([sys.executable, "ws_proxy.py"], cwd="webvm_full")
+    if not is_port_in_use(8001):
+        print(f"Starting WebSocket Proxy from {ws_proxy_path}...")
+        # Run in background
+        subprocess.Popen([sys.executable, "ws_proxy.py"], cwd="webvm_full")
+    else:
+        print("WebSocket Proxy (port 8001) appears to be already running. Skipping start.")
 else:
     print(f"ERROR: {ws_proxy_path} not found.")
 
 # Start HTTP Server
-print("Starting Web Server for WebVM on port 80 (Requires sudo/admin)...")
+print("Starting Web Server for WebVM on port 8000...")
 # Run in background
 # We use server.py because it provides the necessary COOP/COEP headers for CheerpX
-if os.path.exists(os.path.join("webvm_full", "server.py")):
-    subprocess.Popen([sys.executable, "server.py", "80"], cwd="webvm_full")
-    print("WebVM is running at http://localhost")
+if is_port_in_use(8000):
+    print("Web Server (port 8000) appears to be already running. Skipping start.")
 else:
-    print("ERROR: webvm_full/server.py not found. Falling back to simple http.server on port 80.")
-    subprocess.Popen([sys.executable, "-m", "http.server", "80"], cwd="webvm_full")
-    print("WebVM is running at http://localhost (Warning: Missing COOP/COEP headers)")
+    if os.path.exists(os.path.join("webvm_full", "server.py")):
+        subprocess.Popen([sys.executable, "server.py", "8000"], cwd="webvm_full")
+        print("WebVM is running at http://localhost:8000")
+    else:
+        print("ERROR: webvm_full/server.py not found. Falling back to simple http.server on port 8000.")
+        subprocess.Popen([sys.executable, "-m", "http.server", "8000"], cwd="webvm_full")
+        print("WebVM is running at http://localhost:8000 (Warning: Missing COOP/COEP headers)")
 
 print("Bridge is running at ws://localhost:8001")
 print("---------------------------------------")
