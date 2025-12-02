@@ -650,7 +650,7 @@ def _configure_llm_api_key():
 parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
 parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
 parser.add_argument("--install-deps-only", action="store_true", help="Install all dependencies and exit.")
-parser.add_argument("--install-deps-only", action="store_true", help="Install all dependencies and exit.")
+
 # Use parse_known_args to avoid errors with args meant for the script later
 args, unknown = parser.parse_known_args()
 
