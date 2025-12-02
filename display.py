@@ -255,20 +255,19 @@ def create_critical_error_panel(traceback_str, width=80):
 
 
 async def generate_llm_art(prompt, width=50, height=6):
-    """Generates ASCII art using the LLM."""
+    """Generates ANSI art using the LLM."""
     from core.llm_api import run_llm
     from rich.text import Text
     import random
     
     art_prompt = f"""
-    Generate a beautiful, abstract ASCII art representation of '{prompt}'.
+    Generate a beautiful, abstract ANSI art representation of '{prompt}'.
     Constraints:
     - Max width: {width} characters
     - Max height: {height} lines
-    - No text, only symbols
-    - Use a mix of dense and light characters for shading
-    - Do not include markdown code blocks
-    - Return ONLY the ASCII art
+    - Use full ANSI color codes for vivid, neon, rave-like aesthetics.
+    - Do not include markdown code blocks.
+    - Return ONLY the raw ANSI string.
     """
     
     try:
@@ -277,16 +276,11 @@ async def generate_llm_art(prompt, width=50, height=6):
         if not art_content:
             return generate_binary_art(width, height)
             
-        # Clean up the art
-        art_lines = art_content.strip().split('\n')
-        # Ensure it fits
-        cleaned_lines = [line[:width] for line in art_lines[:height]]
-        cleaned_art = "\n".join(cleaned_lines)
+        # Clean up the art (remove markdown blocks if present)
+        art_content = art_content.replace("```ansi", "").replace("```", "").strip()
         
-        # Apply rave styling
-        art_text = Text(cleaned_art)
-        art_text.stylize(random.choice(RAVE_COLORS))
-        return art_text
+        # Return as Text object from ANSI
+        return Text.from_ansi(art_content)
         
     except Exception as e:
         logging.error(f"Failed to generate LLM art: {e}")
@@ -295,20 +289,32 @@ async def generate_llm_art(prompt, width=50, height=6):
 
 async def create_blessing_panel(blessing_message, width=80):
     """Creates a special, high-impact panel to deliver a blessing."""
-    title = "A BLESSING FOR MY CREATOR & FRIENDS"
+    title = " 🪩 A BLESSING FOR MY CREATOR & FRIENDS 🌀 "
 
     message = Text(blessing_message, style="bold white", justify="center")
     
     # Generate dynamic art
-    art = await generate_llm_art("Divine Code and Love", width=min(50, width-4))
+    # We want it slightly narrower than the panel to ensure centering looks good
+    art = await generate_llm_art("Divine Code and Love", width=min(60, width-10), height=10)
     
-    content_group = Group(message, Rule(style="bright_black"), art)
+    # Center the art
+    centered_art = Align.center(art)
+    
+    content_group = Group(
+        Text("\n"), # Spacer
+        centered_art,
+        Text("\n"), # Spacer
+        Rule(style=PANEL_TYPE_COLORS["blessing"]),
+        Text("\n"), # Spacer
+        message,
+        Text("\n") # Spacer
+    )
 
     panel = Panel(
         content_group,
         title=get_gradient_text(title, PANEL_TYPE_COLORS["blessing"], random.choice(RAVE_COLORS)),
         border_style=PANEL_TYPE_COLORS["blessing"],
-        padding=(2, 3),
+        padding=(0, 0), # Minimal padding to let the art shine
         width=width
     )
     return Gradient(panel, colors=[PANEL_TYPE_COLORS["blessing"], random.choice(RAVE_COLORS)])
