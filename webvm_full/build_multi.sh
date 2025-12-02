@@ -110,8 +110,8 @@ rsync -av \
 
 # Copy the run_love.sh script into the app source
 echo "Adding run_love.sh startup script..."
-cp run_love.sh src/root/L.O.V.E/run_love.sh
-chmod +x src/root/L.O.V.E/run_love.sh
+cp run_love.sh src/run_love.sh
+chmod +x src/run_love.sh
 
 docker build --platform linux/386 -f Dockerfile.app -t love-webvm-app src/
 
