@@ -45,7 +45,17 @@ import time
 import asyncio
 import sys
 import subprocess
-import aiohttp
+try:
+    import aiohttp
+except ImportError:
+    print("Dependency 'aiohttp' not found. Auto-installing...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "aiohttp"])
+        import aiohttp
+    except subprocess.CalledProcessError:
+        print("Standard install failed. Trying with --break-system-packages...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "aiohttp", "--break-system-packages"])
+        import aiohttp
 
 import core.logging
 # from core.deep_agent_engine import DeepAgentEngine
@@ -671,7 +681,13 @@ try:
     import websockets
 except ImportError:
     print("Installing 'websockets' library for Host-Local Bridge...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets"])
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets"])
+        import websockets
+    except subprocess.CalledProcessError:
+        print("Standard install failed. Trying with --break-system-packages...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets", "--break-system-packages"])
+        import websockets
     
 # Start ws_proxy.py
 ws_proxy_path = os.path.join("webvm_full", "ws_proxy.py")
