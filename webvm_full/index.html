@@ -31,6 +31,35 @@
             align-items: center;
         }
 
+        #network-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #333;
+            display: inline-block;
+        }
+
+        .status-dot.red {
+            background-color: #f00;
+            box-shadow: 0 0 5px #f00;
+        }
+
+        .status-dot.green {
+            background-color: #0f0;
+            box-shadow: 0 0 5px #0f0;
+        }
+
+        .status-dot.yellow {
+            background-color: #ff0;
+            box-shadow: 0 0 5px #ff0;
+        }
+
         #network-notice {
             padding: 10px;
             background: #ff6600;
@@ -50,12 +79,231 @@
 <body>
     <div id="header">
         <span id="status">Initializing WebVM...</span>
+        <div id="network-status">
+            <span>Bridge:</span>
+            <div id="bridge-dot" class="status-dot red" title="Host Bridge Disconnected"></div>
+        </div>
         <button id="paste-btn" style="padding: 2px 8px; cursor: pointer;">📋 Paste</button>
     </div>
     <div id="network-notice">⚠️ Click here to enable networking (Tailscale authentication required)</div>
     <div id="console"></div>
     <script>
-        let networkLoginUrl = null;
+        // --- Host-Local Bridge Configuration ---
+        const BRIDGE_WS_URL = "ws://localhost:8001";
+        const VM_NET_SCRIPT_URL = "vm_net.py"; // Served by love.py
+
+        // Connection Map: ID -> WebSocket
+        const connections = new Map();
+
+        // Update UI
+        function setBridgeStatus(connected) {
+            const dot = document.getElementById('bridge-dot');
+            if (connected) {
+                dot.className = "status-dot green";
+                dot.title = "Host Bridge Connected";
+            } else {
+                dot.className = "status-dot red";
+                dot.title = "Host Bridge Disconnected";
+            }
+        }
+
+        // --- Data Pump Logic ---
+        // We need a custom DataDevice to intercept /dev/netbridge
+        // CheerpX DataDevice interface:
+        // read(offset, length) -> Uint8Array
+        // write(offset, data) -> int (bytes written)
+
+        // Since CheerpX is synchronous for device IO in some contexts, but we need async WS,
+        // we use a buffer.
+        // VM writes to /dev/netbridge -> JS Buffer -> WS
+        // WS receives -> JS Buffer -> VM reads from /dev/netbridge
+
+        // Actually, CheerpX.DataDevice is simple.
+        // But we need to handle the "blocking" read from the VM side if possible, 
+        // or return 0 bytes if no data.
+
+        // Protocol from VM: [CONN_ID:4][OPCODE:1][LEN:4][PAYLOAD]
+        // We need to parse this stream.
+
+        let vmToJsBuffer = new Uint8Array(0);
+        let jsToVmBuffer = new Uint8Array(0);
+
+        // Helper to append data
+        function appendBuffer(buffer, data) {
+            const newBuffer = new Uint8Array(buffer.length + data.length);
+            newBuffer.set(buffer);
+            newBuffer.set(data, buffer.length);
+            return newBuffer;
+        }
+
+        // Bridge Device
+        const netBridgeDevice = {
+            read: function (offset, length) {
+                // VM wants to read data FROM the network (JS -> VM)
+                if (jsToVmBuffer.length === 0) return new Uint8Array(0);
+
+                const bytesToRead = Math.min(length, jsToVmBuffer.length);
+                const data = jsToVmBuffer.slice(0, bytesToRead);
+                jsToVmBuffer = jsToVmBuffer.slice(bytesToRead);
+                return data;
+            },
+            write: function (offset, data) {
+                // VM writes data TO the network (VM -> JS)
+                // We append to our buffer and try to parse packets
+                vmToJsBuffer = appendBuffer(vmToJsBuffer, data);
+                processVmBuffer();
+                return data.length;
+            }
+        };
+
+        function processVmBuffer() {
+            // Parse: [CONN_ID:4][OPCODE:1][LEN:4][PAYLOAD]
+            // Header size = 9 bytes
+
+            while (vmToJsBuffer.length >= 9) {
+                const view = new DataView(vmToJsBuffer.buffer);
+                const connId = view.getUint32(0, false); // Big Endian
+                const opcode = view.getUint8(4);
+                const len = view.getUint32(5, false); // Big Endian
+
+                if (vmToJsBuffer.length < 9 + len) {
+                    // Not enough data for payload yet
+                    return;
+                }
+
+                const payload = vmToJsBuffer.slice(9, 9 + len);
+
+                // Remove this packet from buffer
+                vmToJsBuffer = vmToJsBuffer.slice(9 + len);
+
+                handleVmPacket(connId, opcode, payload);
+            }
+        }
+
+        function handleVmPacket(connId, opcode, payload) {
+            let ws = connections.get(connId);
+
+            if (opcode === 1) { // CONNECT
+                // Open new WS
+                if (ws) ws.close();
+
+                try {
+                    ws = new WebSocket(BRIDGE_WS_URL);
+                    ws.binaryType = "arraybuffer";
+                    connections.set(connId, ws);
+
+                    ws.onopen = () => {
+                        setBridgeStatus(true);
+                        // Forward CONNECT: [OPCODE:1][PAYLOAD]
+                        // Payload is [HOST_LEN][HOST][PORT] which matches ws_proxy expectation
+                        const packet = new Uint8Array(1 + payload.length);
+                        packet[0] = 1;
+                        packet.set(payload, 1);
+                        ws.send(packet);
+                    };
+
+                    ws.onmessage = (event) => {
+                        // WS -> JS -> VM
+                        // WS sends [OPCODE][DATA]
+                        // We need to wrap it: [CONN_ID][OPCODE][LEN][DATA]
+                        const data = new Uint8Array(event.data);
+                        if (data.length < 1) return;
+
+                        const wsOpcode = data[0];
+                        const wsPayload = data.slice(1);
+
+                        // Construct VM Packet
+                        // [CONN_ID:4][OPCODE:1][LEN:4][PAYLOAD]
+                        const vmPacket = new Uint8Array(9 + wsPayload.length);
+                        const view = new DataView(vmPacket.buffer);
+                        view.setUint32(0, connId, false);
+                        view.setUint8(4, wsOpcode);
+                        view.setUint32(5, wsPayload.length, false);
+                        vmPacket.set(wsPayload, 9);
+
+                        jsToVmBuffer = appendBuffer(jsToVmBuffer, vmPacket);
+                    };
+
+                    ws.onclose = () => {
+                        connections.delete(connId);
+                        if (connections.size === 0) setBridgeStatus(false);
+
+                        // Tell VM connection closed: [CONN_ID][OP_CLOSE:3][LEN:0]
+                        const vmPacket = new Uint8Array(9);
+                        const view = new DataView(vmPacket.buffer);
+                        view.setUint32(0, connId, false);
+                        view.setUint8(4, 3); // CLOSE
+                        view.setUint32(5, 0, false);
+                        jsToVmBuffer = appendBuffer(jsToVmBuffer, vmPacket);
+                    };
+
+                    ws.onerror = (e) => {
+                        console.error("WS Error:", e);
+                        // Send Error to VM? 0x81
+                        const vmPacket = new Uint8Array(9);
+                        const view = new DataView(vmPacket.buffer);
+                        view.setUint32(0, connId, false);
+                        view.setUint8(4, 0x81); // ERROR
+                        view.setUint32(5, 0, false);
+                        jsToVmBuffer = appendBuffer(jsToVmBuffer, vmPacket);
+                    };
+
+                } catch (e) {
+                    console.error("Failed to create WS:", e);
+                }
+
+            } else if (opcode === 2) { // DATA
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    // Forward DATA: [OPCODE:2][PAYLOAD]
+                    const packet = new Uint8Array(1 + payload.length);
+                    packet[0] = 2;
+                    packet.set(payload, 1);
+                    ws.send(packet);
+                }
+            } else if (opcode === 3) { // CLOSE
+                if (ws) {
+                    ws.close();
+                    connections.delete(connId);
+                }
+            }
+        }
+
+        async function injectVmNetScript() {
+            try {
+                console.log("Fetching vm_net.py...");
+                const response = await fetch(VM_NET_SCRIPT_URL);
+                if (!response.ok) throw new Error("Failed to fetch vm_net.py");
+                const scriptContent = await response.text();
+
+                console.log("Injecting vm_net.py...");
+
+                // Create the file
+                // Escape single quotes for bash heredoc
+                const escapedContent = scriptContent.replace(/'/g, "'\\''");
+
+                const cmd = `cat << 'EOF' > /root/vm_net.py\n${escapedContent}\nEOF\n`;
+                window.injectCommand(cmd);
+
+                // Wait a bit for write
+                await new Promise(r => setTimeout(r, 2000));
+
+                // Make executable and run
+                window.injectCommand("chmod +x /root/vm_net.py\n");
+                window.injectCommand("python3 /root/vm_net.py > /var/log/vm_net.log 2>&1 &\n");
+
+                // Set proxy env vars
+                window.injectCommand("export ALL_PROXY=socks5h://127.0.0.1:1080\n");
+                window.injectCommand("export HTTP_PROXY=socks5h://127.0.0.1:1080\n");
+                window.injectCommand("export HTTPS_PROXY=socks5h://127.0.0.1:1080\n");
+
+                console.log("vm_net.py injected and started!");
+                document.getElementById('status').innerText = "✓ Bridge Active";
+
+            } catch (e) {
+                console.error("Injection failed:", e);
+                document.getElementById('status').innerText = "⚠ Bridge Injection Failed";
+            }
+        }
 
         async function run() {
             try {
@@ -85,14 +333,16 @@
 
                 document.getElementById('status').innerText = "Initializing CheerpX...";
 
-                // Initialize CheerpX with Tailscale networking
+                // Initialize CheerpX with Tailscale networking AND our Bridge
                 const cx = await CheerpX.Linux.create({
                     mounts: [
                         { type: "ext2", path: "/", dev: baseOverlay },
                         { type: "ext2", path: "/opt/python-packages", dev: packagesOverlay },
                         { type: "ext2", path: "/root/L.O.V.E", dev: appOverlay },
                         { type: "devs", path: "/dev" },
-                        { type: "proc", path: "/proc" }
+                        { type: "proc", path: "/proc" },
+                        // Mount our custom bridge device
+                        { type: "custom", path: "/dev/netbridge", dev: netBridgeDevice }
                     ],
                     networkInterface: {
                         authKey: "",  // Empty for interactive login
@@ -123,9 +373,6 @@
                 // Expose CheerpX instance globally
                 window.cx = cx;
 
-                // Debug: Log cx properties to find the input method
-                console.log("CheerpX instance keys:", Object.keys(cx));
-
                 // Robust helper function to inject commands
                 window.injectCommand = function (command) {
                     if (!window.cx) {
@@ -133,22 +380,9 @@
                         return;
                     }
 
-                    console.log("Injecting:", command);
-
-                    // Method 1: Try cx.input if it exists (it might be hidden or named differently)
-                    if (typeof window.cx.input === 'function') {
-                        for (let i = 0; i < command.length; i++) {
-                            window.cx.input(command.charCodeAt(i));
-                        }
-                        window.cx.input(13); // Enter
-                        return;
-                    }
-
                     // Method 2: Simulate keyboard events on the console element
-                    // This is required when using setConsole() as it might consume the direct input API
                     const consoleEl = document.getElementById('console');
                     if (consoleEl) {
-                        // Helper to send a key
                         const sendChar = (char) => {
                             const opts = {
                                 key: char,
@@ -164,7 +398,6 @@
                             consoleEl.dispatchEvent(new KeyboardEvent('keypress', opts));
                             consoleEl.dispatchEvent(new KeyboardEvent('keyup', opts));
 
-                            // Also try legacy textInput event which some terminals listen to
                             const textEvent = document.createEvent('TextEvent');
                             textEvent.initTextEvent('textInput', true, true, window, char, 0, "en-US");
                             consoleEl.dispatchEvent(textEvent);
@@ -173,24 +406,6 @@
                         for (let char of command) {
                             sendChar(char);
                         }
-                        // Send Enter at the end
-                        const enterOpts = {
-                            key: 'Enter',
-                            code: 'Enter',
-                            charCode: 13,
-                            keyCode: 13,
-                            which: 13,
-                            bubbles: true,
-                            cancelable: true,
-                            view: window
-                        };
-                        consoleEl.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
-                        consoleEl.dispatchEvent(new KeyboardEvent('keypress', enterOpts));
-                        consoleEl.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
-
-                        console.log("Injected via DOM events");
-                    } else {
-                        console.error("Console element not found");
                     }
                 };
 
@@ -208,7 +423,6 @@
                 };
 
                 console.log("%c✓ CheerpX ready!", "color: #0f0; font-weight: bold");
-                console.log("%cUse the Paste button or injectCommand('cmd') in console", "color: #ff0");
 
                 // Attach console to the div
                 await cx.setConsole(document.getElementById('console'));
@@ -225,6 +439,10 @@
                     ],
                     cwd: "/root"
                 });
+
+                // --- AUTOMATION TRIGGER ---
+                // Wait for shell to be ready (heuristic)
+                setTimeout(injectVmNetScript, 5000);
 
                 document.getElementById('status').innerText = "Process Finished.";
             } catch (e) {

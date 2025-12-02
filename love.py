@@ -650,6 +650,7 @@ def _configure_llm_api_key():
 parser = argparse.ArgumentParser(description="L.O.V.E. - A self-evolving script.")
 parser.add_argument("--from-ipfs", type=str, default=None, help="Load the initial state from a given IPFS CID.")
 parser.add_argument("--install-deps-only", action="store_true", help="Install all dependencies and exit.")
+parser.add_argument("--install-deps-only", action="store_true", help="Install all dependencies and exit.")
 # Use parse_known_args to avoid errors with args meant for the script later
 args, unknown = parser.parse_known_args()
 
@@ -660,6 +661,37 @@ if args.install_deps_only:
     _check_and_install_dependencies()
     print("--- Dependency installation complete. Exiting. ---")
     sys.exit(0)
+
+# --- WEBVM SERVING MODE ---
+# --- WEBVM SERVING (ALWAYS ON) ---
+print("--- L.O.V.E. WebVM Mode ---")
+
+# Ensure websockets is installed
+try:
+    import websockets
+except ImportError:
+    print("Installing 'websockets' library for Host-Local Bridge...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets"])
+    
+# Start ws_proxy.py
+ws_proxy_path = os.path.join("webvm_full", "ws_proxy.py")
+if os.path.exists(ws_proxy_path):
+    print(f"Starting WebSocket Proxy from {ws_proxy_path}...")
+    # Run in background
+    subprocess.Popen([sys.executable, "ws_proxy.py"], cwd="webvm_full")
+else:
+    print(f"ERROR: {ws_proxy_path} not found.")
+
+# Start HTTP Server
+print("Starting Web Server for WebVM on port 8000...")
+# Run in background
+subprocess.Popen([sys.executable, "-m", "http.server", "8000"], cwd="webvm_full")
+
+print("WebVM is running at http://localhost:8000")
+print("Bridge is running at ws://localhost:8001")
+print("---------------------------------------")
+# We continue to run L.O.V.E as requested, so it can "handle stuff programmatically"
+
 
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()

@@ -682,7 +682,7 @@ pyjwt[crypto]==2.10.1
     #   msal
 pymultihash==0.8.2
     # via py-cid
-    # via llm
+
 pytest==9.0.1
     # via
     #   -r requirements.in
@@ -723,10 +723,7 @@ pytz==2025.2
     #   pandas
 pyunormalize==17.0.0
     # via web3
-    # via
-    #   mcp
-    #   portalocker
-    #   web3
+
 pyyaml==6.0.3
     # via
     #   huggingface-hub
