@@ -6,7 +6,6 @@ FROM i386/debian:bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install ONLY essential base system packages
-# Removed: nmap, docker.io, Rust (too large, not needed at runtime)
 # Using --no-install-recommends to minimize size
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
@@ -15,6 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
     curl \
+    nmap \
+    docker.io \
     sudo \
     locales \
     libffi-dev \

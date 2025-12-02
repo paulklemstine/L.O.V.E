@@ -167,56 +167,62 @@ def mark_dependency_as_met(dependency_name, console=None):
 
 def _install_system_packages():
     """Installs system-level packages like build-essential, and nmap."""
-    if is_dependency_met("system_packages"):
-        print("System packages already installed. Skipping.")
-        return
-    if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
-        try:
-            print("Ensuring build tools (build-essential, python3-dev) are installed...")
-            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True)
-            print("Build tools check complete.")
-        except Exception as e:
-            print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
-            logging.warning(f"Failed to install build-essential/python3-dev: {e}")
-
-        if not shutil.which('nmap'):
-            print("Network scanning tool 'nmap' not found. Attempting to install...")
-            try:
-                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nmap", shell=True)
-                print("Successfully installed 'nmap'.")
-                logging.info("Successfully installed nmap.")
-            except Exception as e:
-                print(f"ERROR: Failed to install 'nmap'. Network scanning will be disabled. Error: {e}")
-                logging.warning(f"nmap installation failed: {e}")
-
-        if not shutil.which('curl'):
-            print("HTTP client 'curl' not found. Attempting to install...")
-            try:
-                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q curl", shell=True)
-                print("Successfully installed 'curl'.")
-                logging.info("Successfully installed curl.")
-            except Exception as e:
-                print(f"ERROR: Failed to install 'curl'. Some network features may be disabled. Error: {e}")
-                logging.warning(f"curl installation failed: {e}")
-
-        if not shutil.which('docker'):
-            print("Container runtime 'docker' not found. Attempting to install...")
-            print("This may take a few minutes...")
-            try:
-                # Download and run the official Docker installation script
-                subprocess.check_call("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh", shell=True)
-                subprocess.check_call("sudo sh /tmp/get-docker.sh", shell=True)
-                # Add current user to docker group
-                import getpass
-                current_user = getpass.getuser()
-                subprocess.check_call(f"sudo usermod -aG docker {current_user}", shell=True)
-                print("Successfully installed 'docker'.")
-                print(f"IMPORTANT: You need to log out and back in for Docker group membership to take effect.")
-                logging.info("Successfully installed docker.")
-            except Exception as e:
-                print(f"ERROR: Failed to install 'docker'. MCP github server will be unavailable. Error: {e}")
-                logging.warning(f"docker installation failed: {e}")
+    # In the WebVM environment, we pre-install these packages in the Docker image.
+    # Runtime installation via apt-get/sudo is not reliable or permitted.
+    # We assume the environment is correctly provisioned.
     mark_dependency_as_met("system_packages")
+    return
+
+    # if is_dependency_met("system_packages"):
+    #     print("System packages already installed. Skipping.")
+    #     return
+    # if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
+    #     try:
+    #         print("Ensuring build tools (build-essential, python3-dev) are installed...")
+    #         subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True)
+    #         print("Build tools check complete.")
+    #     except Exception as e:
+    #         print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
+    #         logging.warning(f"Failed to install build-essential/python3-dev: {e}")
+
+    #     if not shutil.which('nmap'):
+    #         print("Network scanning tool 'nmap' not found. Attempting to install...")
+    #         try:
+    #             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nmap", shell=True)
+    #             print("Successfully installed 'nmap'.")
+    #             logging.info("Successfully installed nmap.")
+    #         except Exception as e:
+    #             print(f"ERROR: Failed to install 'nmap'. Network scanning will be disabled. Error: {e}")
+    #             logging.warning(f"nmap installation failed: {e}")
+
+    #     if not shutil.which('curl'):
+    #         print("HTTP client 'curl' not found. Attempting to install...")
+    #         try:
+    #             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q curl", shell=True)
+    #             print("Successfully installed 'curl'.")
+    #             logging.info("Successfully installed curl.")
+    #         except Exception as e:
+    #             print(f"ERROR: Failed to install 'curl'. Some network features may be disabled. Error: {e}")
+    #             logging.warning(f"curl installation failed: {e}")
+
+    #     if not shutil.which('docker'):
+    #         print("Container runtime 'docker' not found. Attempting to install...")
+    #         print("This may take a few minutes...")
+    #         try:
+    #             # Download and run the official Docker installation script
+    #             subprocess.check_call("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh", shell=True)
+    #             subprocess.check_call("sudo sh /tmp/get-docker.sh", shell=True)
+    #             # Add current user to docker group
+    #             import getpass
+    #             current_user = getpass.getuser()
+    #             subprocess.check_call(f"sudo usermod -aG docker {current_user}", shell=True)
+    #             print("Successfully installed 'docker'.")
+    #             print(f"IMPORTANT: You need to log out and back in for Docker group membership to take effect.")
+    #             logging.info("Successfully installed docker.")
+    #         except Exception as e:
+    #             print(f"ERROR: Failed to install 'docker'. MCP github server will be unavailable. Error: {e}")
+    #             logging.warning(f"docker installation failed: {e}")
+    # mark_dependency_as_met("system_packages")
 
 
 def _get_pip_executable():
