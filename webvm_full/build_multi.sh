@@ -61,6 +61,9 @@ sed -i '/pyarrow/d' requirements.txt
 sed -i '/hf-xet/d' requirements.txt
 sed -i '/pywin32/d' requirements.txt
 sed -i '/pyreadline3/d' requirements.txt
+sed -i '/sentence-transformers/d' requirements.txt
+sed -i '/openevolve/d' requirements.txt
+sed -i '/langextract/d' requirements.txt
 
 docker build --platform linux/386 -f Dockerfile.packages -t love-webvm-packages .
 

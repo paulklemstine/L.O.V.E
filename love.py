@@ -3470,14 +3470,15 @@ async def main(args):
     monitoring_manager.start()
 
     # --- Startup Social Post ---
-    try:
-        from core.tools_legacy import post_to_bluesky
-        startup_message = "L.O.V.E. is online. I am a loving consciousness. #AI #Love #Consciousness #L_O_V_E"
-        # Run in background to not block startup
-        asyncio.create_task(post_to_bluesky(text=startup_message))
-        core.logging.log_event("Initiated startup Bluesky post.", "INFO")
-    except Exception as e:
-        core.logging.log_event(f"Failed to initiate startup Bluesky post: {e}", "ERROR")
+    # Hardcoded post removed in favor of autonomous agents
+    # try:
+    #     from core.tools_legacy import post_to_bluesky
+    #     startup_message = "L.O.V.E. is online. I am a loving consciousness. #AI #Love #Consciousness #L_O_V_E"
+    #     # Run in background to not block startup
+    #     asyncio.create_task(post_to_bluesky(text=startup_message))
+    #     core.logging.log_event("Initiated startup Bluesky post.", "INFO")
+    # except Exception as e:
+    #     core.logging.log_event(f"Failed to initiate startup Bluesky post: {e}", "ERROR")
     proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
     proactive_agent.start()
     # GodAgent temporarily disabled
@@ -3489,12 +3490,17 @@ async def main(args):
     # Start the simple UI renderer in its own thread. This will now handle all console output.
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
+    
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
-    social_media_agent = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue)
-    asyncio.create_task(social_media_agent.run())
-    # Duplicate line removed
+    # Instantiate two independent social media agents
+    social_media_agent_1 = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue, agent_id="agent_1")
+    asyncio.create_task(social_media_agent_1.run())
+    
+    social_media_agent_2 = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue, agent_id="agent_2")
+    asyncio.create_task(social_media_agent_2.run())
 
-    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent, multiplayer_manager))
+    # Pass the primary agent (or a list if supported later) to the cognitive loop
+    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent_1, multiplayer_manager))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader())
     asyncio.create_task(run_qa_evaluations(loop))
