@@ -16,7 +16,7 @@ pytest-asyncio
 pytest-mock
 pycvesearch
 pycryptodome
-numpy
+numpy<2.3
 tiktoken
 scapy
 aioboto3

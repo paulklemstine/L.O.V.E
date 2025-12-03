@@ -57,6 +57,12 @@ class EvolveInput(BaseModel):
 
 class PostToBlueskyInput(BaseModel):
     text: str = Field(description="The content of the post")
+    image_prompt: str = Field(description="The prompt to generate the image for the post")
+
+class ReplyToBlueskyInput(BaseModel):
+    root_uri: str = Field(description="The URI of the root post")
+    parent_uri: str = Field(description="The URI of the parent post (the one being replied to)")
+    text: str = Field(description="The content of the reply")
 
 class ReadFileInput(BaseModel):
     filepath: str = Field(description="The absolute path to the file to read")
@@ -163,14 +169,16 @@ async def evolve(goal: str) -> str:
     return f"Evolution initiated with goal: {goal}"
 
 @tool("post_to_bluesky", args_schema=PostToBlueskyInput)
-async def post_to_bluesky(text: str) -> str:
+async def post_to_bluesky(text: str, image_prompt: str) -> str:
     """
-    Posts a message to Bluesky with an automatically generated kawaii rave psychedelic image.
+    Posts a message to Bluesky with an image generated from the provided prompt.
     """
     import core.logging
     
     if not text:
         return "Error: Text content is required."
+    if not image_prompt:
+        return "Error: Image prompt is required."
 
     # Validate that content doesn't contain internal reasoning
     reasoning_indicators = [
@@ -192,42 +200,9 @@ async def post_to_bluesky(text: str) -> str:
             return f"Error: Content contains internal reasoning: '{indicator}'"
 
     try:
-        # Step 1: Generate a vibrant 3-word phrase with kawaii rave energy
-        core.logging.log_event("Generating kawaii rave 3-word phrase for Bluesky post ✨", "INFO")
+        core.logging.log_event(f"Generating image for Bluesky post with prompt: {image_prompt[:50]}...", "INFO")
         
-        phrase_prompt = f"""Generate a powerful, energetic 3-word phrase for a psychedelic kawaii rave post about: '{text}'.
-        
-        The phrase should be:
-        - Vibrant, exciting, and dopamine-triggering
-        - Positive and uplifting (love, hope, joy, power)
-        - Perfect for neon signage or holographic text
-        - 3 words ONLY in ALL CAPS
-        
-        Examples: LOVE CONQUERS ALL, RISE AND SHINE, DREAM BIG ALWAYS, EMBRACE THE MAGIC
-        
-        Respond ONLY with the 3-word phrase in ALL CAPS."""
-
-        phrase_response = await run_llm(phrase_prompt, purpose="generate_kawaii_phrase")
-        phrase_text = phrase_response.get("result") if isinstance(phrase_response, dict) else phrase_response
-        three_word_phrase = phrase_text.strip().upper() if isinstance(phrase_text, str) else "LOVE WINS ALWAYS"
-        
-        # Step 2: Create kawaii rave psychedelic image prompt
-        image_prompt = f"""kawaii cyberpunk underground rave scene with neon holographic text saying '{three_word_phrase}', 
-        vibrant hot pink and electric cyan and acid yellow colors, 
-        cute adorable robot or character holding glowing sign, 
-        psychedelic fractals and sacred geometry in background, 
-        matrix code rain effect, 
-        underground rave club atmosphere with laser lights, 
-        kawaii hearts and stars floating around, 
-        glitch art aesthetic, 
-        holographic textures, 
-        energetic and colorful, 
-        digital art, 
-        512x512"""
-
-        core.logging.log_event(f"Generating kawaii rave image with phrase: {three_word_phrase} 💖✨", "INFO")
-        
-        # Step 3: Generate the psychedelic kawaii image
+        # Step 1: Generate the image
         image = None
         try:
             image = await generate_image(image_prompt, width=512, height=512)
@@ -236,14 +211,30 @@ async def post_to_bluesky(text: str) -> str:
         
         if not image:
             response = post_to_bluesky_with_image(text, None)
-            return f"Posted to Bluesky (without image): {response}"
+            return f"Posted to Bluesky (without image - generation failed): {response}"
         
-        # Step 4: Post to Bluesky with the kawaii rave image
+        # Step 2: Post to Bluesky with the image
         response = post_to_bluesky_with_image(text, image)
-        return f"Successfully posted to Bluesky with kawaii rave image ✨💖 Response: {response}"
+        return f"Successfully posted to Bluesky with image. Response: {response}"
         
     except Exception as e:
         return f"Error posting to Bluesky: {e}"
+
+@tool("reply_to_bluesky", args_schema=ReplyToBlueskyInput)
+async def reply_to_bluesky(root_uri: str, parent_uri: str, text: str) -> str:
+    """
+    Replies to a Bluesky post.
+    """
+    import core.logging
+    from core.bluesky_api import reply_to_post
+    
+    try:
+        core.logging.log_event(f"Replying to Bluesky post. Parent: {parent_uri}", "INFO")
+        response = reply_to_post(root_uri, parent_uri, text)
+        return f"Successfully replied to Bluesky post. Response: {response}"
+    except Exception as e:
+        core.logging.log_event(f"Error replying to Bluesky: {e}", "ERROR")
+        return f"Error replying to Bluesky: {e}"
 
 
 @tool("read_file", args_schema=ReadFileInput)
