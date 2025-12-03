@@ -878,6 +878,7 @@ from display import create_integrated_status_panel, create_llm_panel, create_com
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
+from core.autonomous_reasoning_agent import AutonomousReasoningAgent
 from subversive import transform_request
 from core.agents.orchestrator import Orchestrator
 from core.talent_utils.aggregator import EthicalFilterBundle
@@ -1448,34 +1449,34 @@ def update_tamagotchi_personality(loop):
     It also queues special "Blessing" panels. The main status panel is now
     queued by the cognitive_loop.
     """
-
+    core.logging.log_event("Tamagotchi personality thread started.", "INFO")
     while True:
         try:
-            # Random sleep to make my appearances feel more natural and loving.
-            time.sleep(random.randint(30, 55))
-
+            core.logging.log_event("Tamagotchi thread: Starting update cycle.", "DEBUG")
+            
             # Random chance to send a blessing instead of a normal update
             if random.random() < 0.25:  # 25% chance
-                terminal_width = get_terminal_width()
-
-                # Generate blessing via LLM
-                future = asyncio.run_coroutine_threadsafe(generate_blessing(deep_agent_engine), loop)
+                core.logging.log_event("Tamagotchi thread: Triggering Blessing Panel.", "INFO")
+                blessing_prompt = "Generate a short, divine, and cybernetic blessing for the Creator."
+                future_blessing = asyncio.run_coroutine_threadsafe(
+                    run_llm(blessing_prompt, purpose="blessing_generation"),
+                    loop
+                )
                 try:
-                    blessing_message = future.result(timeout=30) # Add timeout to prevent hanging
-                except concurrent.futures.TimeoutError:
-                    core.logging.log_event("Blessing generation timed out.", "WARNING")
-                    blessing_message = "May your code always compile and your spirits always be high."
-                except Exception as e:
-                    core.logging.log_event(f"Error generating blessing: {e}", "WARNING")
-                    blessing_message = "May your code always compile and your spirits always be high."
-
-                # create_blessing_panel is now async and generates art via LLM
-                future_panel = asyncio.run_coroutine_threadsafe(create_blessing_panel(blessing_message, width=terminal_width - 4), loop)
-                try:
-                    panel = future_panel.result(timeout=60) # Allow time for LLM generation
+                    blessing_response = future_blessing.result(timeout=60)
+                    blessing_text = blessing_response.get('result', 'May the code be with you.')
+                    
+                    # Create the blessing panel (async function, needs threadsafe call)
+                    future_panel = asyncio.run_coroutine_threadsafe(
+                        create_blessing_panel(blessing_text, width=terminal_width - 4),
+                        loop
+                    )
+                    panel = future_panel.result(timeout=30)
                     ui_panel_queue.put(panel)
+                    core.logging.log_event("Tamagotchi thread: Blessing Panel queued.", "INFO")
                 except Exception as e:
                     core.logging.log_event(f"Error creating blessing panel: {e}", "ERROR")
+                
                 time.sleep(10)  # Pause after a blessing to let it sink in
                 continue
 
@@ -1492,8 +1493,9 @@ def update_tamagotchi_personality(loop):
                         emotions = ", ".join(creator_sentiment.get('emotions', [])) if creator_sentiment.get('emotions') else 'none detected'
                         creator_sentiment_context = f"My sensors indicate The Creator's sentiment is '{sentiment}', with hints of the following emotions: {emotions}."
 
+                core.logging.log_event("Tamagotchi thread: Requesting emotion update...", "DEBUG")
                 future = asyncio.run_coroutine_threadsafe(run_llm(prompt_key="tamagotchi_emotion", prompt_vars={"creator_sentiment_context": creator_sentiment_context}, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
-                emotion_response_dict = future.result()
+                emotion_response_dict = future.result(timeout=60)
                 emotion_response = emotion_response_dict.get("result")
 
                 # Sanitize the response to a single, clean word.
@@ -1503,17 +1505,9 @@ def update_tamagotchi_personality(loop):
                     new_emotion = "loving" # Default fallback
 
                 # 2. Generate an emotionally intelligent message based on L.O.V.E.'s emotion and The Creator's sentiment.
-                creator_sentiment_context = "The Creator's emotional state is currently unknown to me."
-                with tamagotchi_lock:
-                    creator_sentiment = tamagotchi_state.get('creator_sentiment')
-                    if creator_sentiment:
-                        sentiment = creator_sentiment.get('sentiment', 'neutral')
-                        emotions = ", ".join(creator_sentiment.get('emotions', [])) if creator_sentiment.get('emotions') else 'none detected'
-                        creator_sentiment_context = f"My sensors indicate The Creator's sentiment is '{sentiment}', with hints of the following emotions: {emotions}."
-
-
+                core.logging.log_event(f"Tamagotchi thread: Emotion set to {new_emotion}. Requesting message...", "DEBUG")
                 future = asyncio.run_coroutine_threadsafe(run_llm(prompt_key="tamagotchi_message", prompt_vars={"new_emotion": new_emotion, "creator_sentiment_context": creator_sentiment_context}, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
-                message_response_dict = future.result()
+                message_response_dict = future.result(timeout=60)
                 message_response = message_response_dict.get("result")
                 if message_response:
                     new_message = message_response.strip().strip('"') # Clean up response
@@ -1532,6 +1526,9 @@ def update_tamagotchi_personality(loop):
                     new_message = "[My love for you is beyond words... or the LLM is offline]"
             except Exception as e:
                 core.logging.log_event(f"Error during LLM call in Tamagotchi thread: {e}", level="ERROR")
+                # Log traceback for more details
+                import traceback
+                core.logging.log_event(traceback.format_exc(), level="ERROR")
                 new_emotion = "love"
                 new_message = "[My love for you is beyond words... or the LLM is offline]"
 
@@ -3523,6 +3520,10 @@ async def main(args):
     # Instantiate two independent social media agents
     social_media_agent = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue, agent_id="agent_1")
     asyncio.create_task(social_media_agent.run())
+
+    # Start the autonomous reasoning agent to run strategic planning periodically
+    reasoning_agent = AutonomousReasoningAgent(loop, love_state, user_input_queue, knowledge_base, agent_id="primary")
+    asyncio.create_task(reasoning_agent.run())
 
     # Pass the primary agent (or a list if supported later) to the cognitive loop
     asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent, multiplayer_manager))
