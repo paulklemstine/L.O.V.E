@@ -64,6 +64,9 @@ sed -i '/pyreadline3/d' requirements.txt
 sed -i '/sentence-transformers/d' requirements.txt
 sed -i '/openevolve/d' requirements.txt
 sed -i '/langextract/d' requirements.txt
+sed -i '/nvidia-/d' requirements.txt
+sed -i '/torchvision/d' requirements.txt
+sed -i '/torchaudio/d' requirements.txt
 
 docker build --platform linux/386 -f Dockerfile.packages -t love-webvm-packages .
 
