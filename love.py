@@ -390,9 +390,13 @@ def _install_python_requirements():
     
     if pip_executable:
         # Ensure pip-tools is installed
-        try:
-            subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except subprocess.CalledProcessError:
+        if not _is_package_installed("pip-tools"):
+            try:
+                subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except subprocess.CalledProcessError:
+                pass
+        else:
+            # Optional: Log that it's already installed if you want, or just pass
             pass
 
         strategies = []
@@ -3493,14 +3497,11 @@ async def main(args):
     
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     # Instantiate two independent social media agents
-    social_media_agent_1 = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue, agent_id="agent_1")
-    asyncio.create_task(social_media_agent_1.run())
-    
-    social_media_agent_2 = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue, agent_id="agent_2")
-    asyncio.create_task(social_media_agent_2.run())
+    social_media_agent = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue, agent_id="agent_1")
+    asyncio.create_task(social_media_agent.run())
 
     # Pass the primary agent (or a list if supported later) to the cognitive loop
-    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent_1, multiplayer_manager))
+    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent, multiplayer_manager))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader())
     asyncio.create_task(run_qa_evaluations(loop))
