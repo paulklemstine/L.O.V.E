@@ -13,6 +13,9 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Suppress websockets.server error logs (handshake failures during port checks)
+logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
+
 # Maximum connections
 MAX_CONNECTIONS = 100
 active_connections = {}

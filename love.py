@@ -1542,6 +1542,30 @@ def update_tamagotchi_personality(loop):
                 tamagotchi_state['last_update'] = time.time()
             core.logging.log_event(f"Tamagotchi internal state updated: {new_emotion} - {new_message}", level="INFO")
 
+            # --- UI UPDATE ---
+            # Create and queue the integrated status panel
+            try:
+                terminal_width = get_terminal_width()
+                
+                # Gather data for the panel
+                monitoring_state = monitoring_manager.get_status() if 'monitoring_manager' in globals() and monitoring_manager else None
+                treasures = _get_treasures_of_the_kingdom(love_task_manager) if 'love_task_manager' in globals() and love_task_manager else None
+                git_info = get_git_repo_info()
+                
+                panel = create_integrated_status_panel(
+                    emotion=new_emotion,
+                    message=new_message,
+                    love_state=love_state,
+                    monitoring_state=monitoring_state,
+                    treasures=treasures,
+                    git_info=git_info,
+                    width=terminal_width - 4
+                )
+                ui_panel_queue.put(panel)
+                core.logging.log_event("Queued integrated status panel for display.", level="DEBUG")
+            except Exception as e:
+                core.logging.log_event(f"Failed to create/queue status panel: {e}", level="ERROR")
+
         except Exception as e:
             core.logging.log_event(f"Error in Tamagotchi thread: {e}\n{traceback.format_exc()}", level="ERROR")
             # Avoid a tight loop if there's a persistent error
