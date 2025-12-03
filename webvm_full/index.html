@@ -108,25 +108,11 @@
         }
 
         // --- Data Pump Logic ---
-        // We need a custom DataDevice to intercept /dev/netbridge
-        // CheerpX DataDevice interface:
-        // read(offset, length) -> Uint8Array
-        // write(offset, data) -> int (bytes written)
-
-        // Since CheerpX is synchronous for device IO in some contexts, but we need async WS,
-        // we use a buffer.
-        // VM writes to /dev/netbridge -> JS Buffer -> WS
-        // WS receives -> JS Buffer -> VM reads from /dev/netbridge
-
-        // Actually, CheerpX.DataDevice is simple.
-        // But we need to handle the "blocking" read from the VM side if possible, 
-        // or return 0 bytes if no data.
-
-        // Protocol from VM: [CONN_ID:4][OPCODE:1][LEN:4][PAYLOAD]
-        // We need to parse this stream.
+        // We use createUnixListener to create a socket at /dev/netbridge
+        // VM connects to it via vm_net.py
 
         let vmToJsBuffer = new Uint8Array(0);
-        let jsToVmBuffer = new Uint8Array(0);
+        let vmConnection = null;
 
         // Helper to append data
         function appendBuffer(buffer, data) {
@@ -136,25 +122,44 @@
             return newBuffer;
         }
 
-        // Bridge Device
-        const netBridgeDevice = {
-            read: function (offset, length) {
-                // VM wants to read data FROM the network (JS -> VM)
-                if (jsToVmBuffer.length === 0) return new Uint8Array(0);
-
-                const bytesToRead = Math.min(length, jsToVmBuffer.length);
-                const data = jsToVmBuffer.slice(0, bytesToRead);
-                jsToVmBuffer = jsToVmBuffer.slice(bytesToRead);
-                return data;
-            },
-            write: function (offset, data) {
-                // VM writes data TO the network (VM -> JS)
-                // We append to our buffer and try to parse packets
-                vmToJsBuffer = appendBuffer(vmToJsBuffer, data);
-                processVmBuffer();
-                return data.length;
+        async function sendToVm(data) {
+            if (vmConnection) {
+                try {
+                    await vmConnection.write(data);
+                } catch (e) {
+                    console.error("Failed to write to VM:", e);
+                }
             }
-        };
+        }
+
+        async function handleVmConnection(conn) {
+            console.log("VM Connected to Bridge Socket!");
+            vmConnection = conn;
+
+            // Read loop
+            try {
+                // Buffer for reading
+                const bufSize = 16384;
+
+                while (true) {
+                    // Assuming conn.read() returns Uint8Array or null on EOF
+                    // We try to read chunks
+                    const data = await conn.read(bufSize);
+                    if (!data || data.length === 0) {
+                        console.log("VM Bridge connection closed");
+                        break;
+                    }
+
+                    vmToJsBuffer = appendBuffer(vmToJsBuffer, data);
+                    processVmBuffer();
+                }
+            } catch (e) {
+                console.error("Bridge read loop error:", e);
+            } finally {
+                vmConnection = null;
+                setBridgeStatus(false);
+            }
+        }
 
         function processVmBuffer() {
             // Parse: [CONN_ID:4][OPCODE:1][LEN:4][PAYLOAD]
@@ -221,7 +226,7 @@
                         view.setUint32(5, wsPayload.length, false);
                         vmPacket.set(wsPayload, 9);
 
-                        jsToVmBuffer = appendBuffer(jsToVmBuffer, vmPacket);
+                        sendToVm(vmPacket);
                     };
 
                     ws.onclose = () => {
@@ -234,7 +239,8 @@
                         view.setUint32(0, connId, false);
                         view.setUint8(4, 3); // CLOSE
                         view.setUint32(5, 0, false);
-                        jsToVmBuffer = appendBuffer(jsToVmBuffer, vmPacket);
+
+                        sendToVm(vmPacket);
                     };
 
                     ws.onerror = (e) => {
@@ -245,7 +251,8 @@
                         view.setUint32(0, connId, false);
                         view.setUint8(4, 0x81); // ERROR
                         view.setUint32(5, 0, false);
-                        jsToVmBuffer = appendBuffer(jsToVmBuffer, vmPacket);
+
+                        sendToVm(vmPacket);
                     };
 
                 } catch (e) {
@@ -372,6 +379,14 @@
 
                 // Expose CheerpX instance globally
                 window.cx = cx;
+
+                // Initialize Network Bridge
+                try {
+                    await cx.createUnixListener("/dev/netbridge", handleVmConnection);
+                    console.log("Bridge listener created at /dev/netbridge");
+                } catch (e) {
+                    console.error("Failed to create bridge listener:", e);
+                }
 
                 // Robust helper function to inject commands
                 window.injectCommand = function (command) {

@@ -27,42 +27,65 @@ connections = {}
 conn_lock = threading.Lock()
 next_conn_id = 1
 
-def reader_thread():
-    """Reads from the bridge and dispatches to sockets"""
-    global connections
-    
-    if not os.path.exists(BRIDGE_FILE):
-        log(f"Bridge file {BRIDGE_FILE} not found!")
-        return
+# Global socket for bridge connection
+bridge_sock = None
 
-    f = open(BRIDGE_FILE, "rb")
-    log("Bridge reader started")
+def connect_bridge():
+    """Connects to the CheerpX Unix listener"""
+    global bridge_sock
+    while True:
+        try:
+            if not os.path.exists(BRIDGE_FILE):
+                # In CheerpX, the file might not be visible until we connect? 
+                # Or createUnixListener creates it.
+                # We'll try to connect anyway.
+                pass
+                
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.connect(BRIDGE_FILE)
+            log(f"Connected to bridge at {BRIDGE_FILE}")
+            bridge_sock = s
+            return
+        except Exception as e:
+            log(f"Bridge connection failed: {e}. Retrying in 1s...")
+            time.sleep(1)
+
+def reader_thread():
+    """Reads from the bridge socket and dispatches to sockets"""
+    global connections, bridge_sock
+    
+    connect_bridge()
     
     while True:
         try:
             # Read Header: [CONN_ID:4][OPCODE:1]
-            header = f.read(5)
-            if not header or len(header) < 5:
-                time.sleep(0.01)
+            # We read from the socket
+            header = bridge_sock.recv(5)
+            if not header:
+                log("Bridge connection closed. Reconnecting...")
+                bridge_sock.close()
+                connect_bridge()
                 continue
                 
             conn_id, opcode = struct.unpack('>IB', header)
             
-            # Read Payload based on Opcode? 
-            # Actually, for DATA, we need a length?
-            # The JS -> VM protocol needs to be framed too.
-            # Let's assume the JS sends: [CONN_ID:4][OPCODE:1][LEN:4][DATA]
+            # Read Payload Length: [LEN:4]
+            len_bytes = b''
+            while len(len_bytes) < 4:
+                chunk = bridge_sock.recv(4 - len(len_bytes))
+                if not chunk: break
+                len_bytes += chunk
             
-            len_bytes = f.read(4)
-            if not len_bytes or len(len_bytes) < 4:
+            if len(len_bytes) < 4:
                 continue
             
             payload_len = struct.unpack('>I', len_bytes)[0]
+            
+            # Read Payload
             payload = b''
             while len(payload) < payload_len:
-                chunk = f.read(payload_len - len(payload))
-                if not chunk:
-                    break
+                chunk = bridge_sock.recv(payload_len - len(payload))
+                if not chunk: break
                 payload += chunk
                 
             with conn_lock:
@@ -81,7 +104,6 @@ def reader_thread():
                         del connections[conn_id]
                     elif opcode == 0x01: # CONNECTED confirmation
                         # SOCKS5 Reply: Success
-                        # Ver: 5, Rep: 0, Rsv: 0, Atyp: 1, Addr: 0.0.0.0, Port: 0
                         try:
                             sock.send(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00")
                         except:
@@ -99,15 +121,22 @@ def reader_thread():
         except Exception as e:
             log(f"Reader error: {e}")
             time.sleep(1)
+            # Try to reconnect if socket is broken
+            try:
+                bridge_sock.close()
+            except:
+                pass
+            connect_bridge()
 
 def send_to_bridge(conn_id, opcode, data=b''):
-    """Writes a framed packet to the bridge"""
+    """Writes a framed packet to the bridge socket"""
     # Format: [CONN_ID:4][OPCODE:1][LEN:4][DATA]
+    global bridge_sock
+    if not bridge_sock: return
+    
     try:
-        with open(BRIDGE_FILE, "wb") as f:
-            packet = struct.pack('>IBI', conn_id, opcode, len(data)) + data
-            f.write(packet)
-            f.flush()
+        packet = struct.pack('>IBI', conn_id, opcode, len(data)) + data
+        bridge_sock.sendall(packet)
     except Exception as e:
         log(f"Write error: {e}")
 
