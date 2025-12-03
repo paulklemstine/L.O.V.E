@@ -147,6 +147,6 @@ echo "  base.ext2:     $BASE_SIZE"
 echo "  packages.ext2: $PACKAGES_SIZE"
 echo "  app.ext2:      $APP_SIZE"
 echo ""
-echo "Starting local server on port 8000..."
-echo "Open http://localhost:8000 in your browser."
-python3 server.py 8000
+echo "Starting local server on port 8080..."
+echo "Open http://localhost:8080 in your browser."
+python3 server.py 8080

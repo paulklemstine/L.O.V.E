@@ -37,6 +37,6 @@ rm love.tar
 rm -rf src
 
 echo "Build complete: love.ext2 created."
-echo "Starting local server on port 8000..."
-echo "Open http://localhost:8000 in your browser."
-python3 server.py 8000
+echo "Starting local server on port 8080..."
+echo "Open http://localhost:8080 in your browser."
+python3 server.py 8080

@@ -741,19 +741,20 @@ else:
     print(f"ERROR: {ws_proxy_path} not found.")
 
 # Start HTTP Server
-print("Starting Web Server for WebVM on port 8000...")
+# Start HTTP Server
+print("Starting Web Server for WebVM on port 8080...")
 # Run in background
 # We use server.py because it provides the necessary COOP/COEP headers for CheerpX
-if is_port_in_use(8000):
-    print("Web Server (port 8000) appears to be already running. Skipping start.")
+if is_port_in_use(8080):
+    print("Web Server (port 8080) appears to be already running. Skipping start.")
 else:
     if os.path.exists(os.path.join("webvm_full", "server.py")):
-        subprocess.Popen([sys.executable, "server.py", "8000"], cwd="webvm_full")
-        print("WebVM is running at http://localhost:8000")
+        subprocess.Popen([sys.executable, "server.py", "8080"], cwd="webvm_full")
+        print("WebVM is running at http://localhost:8080")
     else:
-        print("ERROR: webvm_full/server.py not found. Falling back to simple http.server on port 8000.")
-        subprocess.Popen([sys.executable, "-m", "http.server", "8000"], cwd="webvm_full")
-        print("WebVM is running at http://localhost:8000 (Warning: Missing COOP/COEP headers)")
+        print("ERROR: webvm_full/server.py not found. Falling back to simple http.server on port 8080.")
+        subprocess.Popen([sys.executable, "-m", "http.server", "8080"], cwd="webvm_full")
+        print("WebVM is running at http://localhost:8080 (Warning: Missing COOP/COEP headers)")
 
 print("Bridge is running at ws://localhost:8001")
 print("---------------------------------------")
