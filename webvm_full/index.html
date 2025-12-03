@@ -380,13 +380,6 @@
                 // Expose CheerpX instance globally
                 window.cx = cx;
 
-                // Initialize Network Bridge
-                try {
-                    await cx.createUnixListener("/dev/netbridge", handleVmConnection);
-                    console.log("Bridge listener created at /dev/netbridge");
-                } catch (e) {
-                    console.error("Failed to create bridge listener:", e);
-                }
 
                 // Robust helper function to inject commands
                 window.injectCommand = function (command) {
