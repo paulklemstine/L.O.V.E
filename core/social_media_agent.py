@@ -15,9 +15,10 @@ class SocialMediaAgent:
     """
     An autonomous agent that manages L.O.V.E.'s social media presence.
     """
-    def __init__(self, loop, love_state):
+    def __init__(self, loop, love_state, user_input_queue=None):
         self.loop = loop
         self.love_state = love_state
+        self.user_input_queue = user_input_queue
         self.engine = SocialMediaReActEngine(ui_panel_queue=None, loop=loop)
         self.processed_comments = set()
         self.max_retries = 3
@@ -130,15 +131,19 @@ class SocialMediaAgent:
                 reply_text = await self.engine.run_reply_generation(post_text, comment_text)
 
                 if reply_text and "no" not in reply_text.lower():
-                    log_event(f"Replying to {comment_uri}: {reply_text}", level='INFO')
-                    payload = {
-                        'action': 'reply',
-                        'platform_identifier': platform,
-                        'content': reply_text,
-                        'root_uri': post_uri,
-                        'parent_uri': comment_uri
-                    }
-                    await dispatch_structured_payload(payload, handler)
+                    log_event(f"Detected engagement opportunity from {comment.author.handle}. Queuing task for reasoning engine.", level='INFO')
+                    
+                    if self.user_input_queue:
+                        task_description = (
+                            f"Please reply to this Bluesky comment from {comment.author.handle}.\n"
+                            f"My Post: '{post_text}'\n"
+                            f"Their Comment: '{comment_text}'\n"
+                            f"Suggested Context: {reply_text}\n"
+                            f"Use the 'reply_to_bluesky' tool with root_uri='{post_uri}' and parent_uri='{comment_uri}'."
+                        )
+                        self.user_input_queue.put(task_description)
+                    else:
+                        log_event("User input queue not available. Skipping reply task.", level='WARNING')
 
                 self.processed_comments.add(comment_uri)
 

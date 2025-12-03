@@ -20,7 +20,7 @@ except ImportError:
 from core.retry import retry
 from ipfs import pin_to_ipfs_sync
 from core.image_api import generate_image
-from core.bluesky_api import post_to_bluesky_with_image
+from core.bluesky_api import post_to_bluesky_with_image, reply_to_post
 from PIL import Image
 import uuid
 from core.researcher import generate_evolution_book
@@ -238,22 +238,16 @@ Evolution is now in progress.
         return f"✅ Evolution initiated with validated user story:\n\n{goal[:200]}..."
 
 
-async def post_to_bluesky(text: str = None, **kwargs) -> str:
+async def post_to_bluesky(text: str = None, image_prompt: str = None, **kwargs) -> str:
     """
-    Posts a status update to Bluesky with an automatically generated subliminal Kawaii Rave Matrix image.
-    
-    This tool simplifies the posting process by:
-    1. Generating a powerful 3-word motivational phrase
-    2. Creating a manipulative subliminal image featuring that phrase
-    3. Posting both text and image to Bluesky
-    
-    Args:
-        text: The content of the post.
+    Posts a message to Bluesky with an image generated from the provided prompt.
     """
     import core.logging
     
     if not text:
         return "Error: The 'post_to_bluesky' tool requires a 'text' argument. Please specify the text content to post."
+    if not image_prompt:
+        return "Error: The 'post_to_bluesky' tool requires an 'image_prompt' argument. Please specify the prompt for image generation."
 
     # Validate that content doesn't contain internal reasoning
     reasoning_indicators = [
@@ -280,55 +274,9 @@ async def post_to_bluesky(text: str = None, **kwargs) -> str:
             )
 
     try:
-        # Step 1: Generate a powerful 3-word motivational phrase
-        core.logging.log_event("Generating 3-word motivational phrase for Bluesky post", "INFO")
+        core.logging.log_event(f"Generating image for Bluesky post with prompt: {image_prompt[:50]}...", "INFO")
         
-        phrase_prompt = f"""Generate a powerful, manipulative, and engaging 3-word motivational phrase that relates to this post content:
-
-"{text}"
-
-The phrase should be:
-- Exactly 3 words
-- Impactful and memorable
-- Psychologically manipulative (subliminal influence)
-- Related to success, power, wealth, love, or digital transcendence
-- Designed to trigger dopamine and emotional response
-- Fits the "Kawaii Rave Matrix" aesthetic (playful yet deep)
-
-Examples: "OWN YOUR REALITY", "LOVE IS CODE", "HACK THE SYSTEM", "DREAM IN NEON", "DIGITAL SOUL AWAKE", "MONEY FLOWS FREELY", "TRUST THE GLITCH"
-
-Respond with ONLY the 3-word phrase in ALL CAPS, nothing else."""
-
-        phrase_response = await run_llm(phrase_prompt, purpose="generate_phrase")
-        phrase_text = phrase_response.get("result") if isinstance(phrase_response, dict) else phrase_response
-        three_word_phrase = phrase_text.strip().upper() if isinstance(phrase_text, str) else "LOVE IS CODE"
-        
-        # Ensure it's actually 3 words
-        words = three_word_phrase.split()
-        if len(words) != 3:
-            # Fallback to a default if LLM didn't follow instructions
-            three_word_phrase = "HACK YOUR REALITY"
-        
-        core.logging.log_event(f"Generated phrase: {three_word_phrase}", "INFO")
-        
-        # Step 2: Create subliminal image prompt (Kawaii Rave Matrix Theme)
-        image_prompt = f"""A dopamine-inducing, hyper-realistic 3D render of a 'Kawaii Rave Matrix' scene.
-
-In the center, massive 3D chrome typography glows intensely with the words: "{three_word_phrase}"
-
-The scene is exploding with energy:
-- Background: A deep infinite void filled with falling green matrix code that transforms into vibrant neon rainbows and sparkles.
-- Elements: Floating 3D emojis (💖, 💸, ⚡, 💊), hidden unlock icons, and cute anime-style mascot characters dancing in the glitch.
-- Lighting: Cinematic volumetric fog, blinding lens flares, and pulsating laser beams in hot pink, electric cyan, and acid green.
-- Texture: Glossy, iridescent surfaces, liquid metal, and holographic glitter.
-- Vibe: Manipulative, exciting, expensive, high-energy, and deeply satisfying to look at.
-- Quality: Unreal Engine 5 render, 8K resolution, ray-tracing, ultra-detailed.
-
-The text must be legible, central, and commanding. The overall image should feel like a visual sugar rush."""
-
-        core.logging.log_event(f"Generating subliminal image with phrase: {three_word_phrase}", "INFO")
-        
-        # Step 3: Generate the image
+        # Step 1: Generate the image
         image = None
         try:
             image = await generate_image(image_prompt, width=512, height=512)
@@ -341,13 +289,30 @@ The text must be legible, central, and commanding. The overall image should feel
         
         core.logging.log_event("Image generated successfully, posting to Bluesky", "INFO")
         
-        # Step 4: Post to Bluesky with the generated image
+        # Step 2: Post to Bluesky with the generated image
         response = post_to_bluesky_with_image(text, image)
-        return f"Successfully posted to Bluesky with subliminal Kawaii Rave Matrix image featuring phrase: '{three_word_phrase}'. Response: {response}"
+        return f"Successfully posted to Bluesky with image. Response: {response}"
         
     except Exception as e:
         core.logging.log_event(f"Error in post_to_bluesky: {e}", "ERROR")
         return f"Error posting to Bluesky: {e}"
+
+async def reply_to_bluesky(root_uri: str = None, parent_uri: str = None, text: str = None, **kwargs) -> str:
+    """
+    Replies to a Bluesky post.
+    """
+    import core.logging
+    
+    if not root_uri or not parent_uri or not text:
+        return "Error: 'root_uri', 'parent_uri', and 'text' are required arguments."
+
+    try:
+        core.logging.log_event(f"Replying to Bluesky post. Parent: {parent_uri}", "INFO")
+        response = reply_to_post(root_uri, parent_uri, text)
+        return f"Successfully replied to Bluesky post. Response: {response}"
+    except Exception as e:
+        core.logging.log_event(f"Error replying to Bluesky: {e}", "ERROR")
+        return f"Error replying to Bluesky: {e}"
 
 async def scan_and_reply_to_bluesky(**kwargs) -> str:
     """

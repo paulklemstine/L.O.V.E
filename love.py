@@ -2746,7 +2746,7 @@ async def initialize_gpu_services():
     )
     
     # Register evolve tool
-    from core.tools_legacy import execute, read_file, write_file, post_to_bluesky, research_and_evolve, decompose_and_solve_subgoal
+    from core.tools_legacy import execute, read_file, write_file, post_to_bluesky, reply_to_bluesky, research_and_evolve, decompose_and_solve_subgoal
     from core.tools_legacy import talent_scout
     
     async def evolve_tool_wrapper(goal: str = None, **kwargs) -> str:
@@ -2862,16 +2862,46 @@ async def initialize_gpu_services():
         name="post_to_bluesky",
         tool=post_to_bluesky,
         metadata={
-            "description": "Posts a status update to Bluesky with an automatically generated subliminal image. The tool generates a powerful 3-word motivational phrase and creates a manipulative image featuring that phrase, then posts both to Bluesky.",
+            "description": "Posts a status update to Bluesky with an image generated from the provided prompt.",
             "arguments": {
                 "type": "object",
                 "properties": {
                     "text": {
                         "type": "string",
                         "description": "The text content of the post"
+                    },
+                    "image_prompt": {
+                        "type": "string",
+                        "description": "The prompt to generate the image for the post"
                     }
                 },
-                "required": ["text"]
+                "required": ["text", "image_prompt"]
+            }
+        }
+    )
+
+    tool_registry.register_tool(
+        name="reply_to_bluesky",
+        tool=reply_to_bluesky,
+        metadata={
+            "description": "Replies to a Bluesky post.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "root_uri": {
+                        "type": "string",
+                        "description": "The URI of the root post"
+                    },
+                    "parent_uri": {
+                        "type": "string",
+                        "description": "The URI of the parent post (the one being replied to)"
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "The content of the reply"
+                    }
+                },
+                "required": ["root_uri", "parent_uri", "text"]
             }
         }
     )
@@ -3460,7 +3490,7 @@ async def main(args):
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
-    social_media_agent = SocialMediaAgent(loop, love_state)
+    social_media_agent = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue)
     asyncio.create_task(social_media_agent.run())
     # Duplicate line removed
 
