@@ -108,11 +108,12 @@
         }
 
         // --- Data Pump Logic ---
-        // We use createUnixListener to create a socket at /dev/netbridge
-        // VM connects to it via vm_net.py
+        // We use DataDevice to create /dev/netbridge as a file
+        // VM reads/writes to it, we poll for changes
 
         let vmToJsBuffer = new Uint8Array(0);
-        let vmConnection = null;
+        let bridgeDevice = null;
+        const BRIDGE_PATH = "/dev/netbridge";
 
         // Helper to append data
         function appendBuffer(buffer, data) {
@@ -123,42 +124,41 @@
         }
 
         async function sendToVm(data) {
-            if (vmConnection) {
+            if (bridgeDevice && window.cx) {
                 try {
-                    await vmConnection.write(data);
+                    // Write data to the bridge file
+                    await bridgeDevice.writeFile(BRIDGE_PATH, data);
                 } catch (e) {
-                    console.error("Failed to write to VM:", e);
+                    console.error("Failed to write to bridge:", e);
                 }
             }
         }
 
-        async function handleVmConnection(conn) {
-            console.log("VM Connected to Bridge Socket!");
-            vmConnection = conn;
+        async function pollBridgeForReads() {
+            // Poll the bridge file for VM writes
+            if (!bridgeDevice || !window.cx) return;
 
-            // Read loop
             try {
-                // Buffer for reading
-                const bufSize = 16384;
+                // Read from the bridge file
+                const data = await bridgeDevice.readFileAsBlob(BRIDGE_PATH);
+                if (data && data.size > 0) {
+                    const arrayBuffer = await data.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
 
-                while (true) {
-                    // Assuming conn.read() returns Uint8Array or null on EOF
-                    // We try to read chunks
-                    const data = await conn.read(bufSize);
-                    if (!data || data.length === 0) {
-                        console.log("VM Bridge connection closed");
-                        break;
+                    if (uint8Array.length > 0) {
+                        vmToJsBuffer = appendBuffer(vmToJsBuffer, uint8Array);
+                        processVmBuffer();
+
+                        // Clear the file after reading
+                        await bridgeDevice.writeFile(BRIDGE_PATH, new Uint8Array(0));
                     }
-
-                    vmToJsBuffer = appendBuffer(vmToJsBuffer, data);
-                    processVmBuffer();
                 }
             } catch (e) {
-                console.error("Bridge read loop error:", e);
-            } finally {
-                vmConnection = null;
-                setBridgeStatus(false);
+                // File might not exist yet or other error
             }
+
+            // Continue polling
+            setTimeout(pollBridgeForReads, 50); // Poll every 50ms
         }
 
         function processVmBuffer() {
@@ -380,7 +380,18 @@
                 // Expose CheerpX instance globally
                 window.cx = cx;
 
+                // Initialize Network Bridge with DataDevice
+                try {
+                    bridgeDevice = await CheerpX.DataDevice.create();
+                    // Initialize the bridge file as empty
+                    await bridgeDevice.writeFile(BRIDGE_PATH, new Uint8Array(0));
+                    console.log("Bridge device created at", BRIDGE_PATH);
 
+                    // Start polling for VM writes
+                    pollBridgeForReads();
+                } catch (e) {
+                    console.error("Failed to create bridge device:", e);
+                }
                 // Robust helper function to inject commands
                 window.injectCommand = function (command) {
                     if (!window.cx) {
