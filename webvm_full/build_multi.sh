@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 echo "=== Multi-Volume WebVM Build Script ==="
 echo "This will create 3 separate ext2 images:"
@@ -35,6 +36,12 @@ echo "Exporting and extracting base filesystem..."
 id=$(docker create --platform linux/386 love-webvm-base)
 docker export $id | sudo tar -x -C /tmp/base_mount
 docker rm $id
+
+# Verify base content
+if [ -z "$(ls -A /tmp/base_mount)" ]; then
+    echo "Error: Base filesystem is empty!"
+    exit 1
+fi
 
 sudo umount /tmp/base_mount
 sudo umount -f /tmp/base_mount 2>/dev/null || true  # Force unmount if still busy
@@ -80,6 +87,12 @@ echo "Exporting and extracting packages filesystem..."
 id=$(docker create --platform linux/386 love-webvm-packages true)
 docker export $id | sudo tar -x -C /tmp/packages_mount
 docker rm $id
+
+# Verify packages content
+if [ -z "$(ls -A /tmp/packages_mount)" ]; then
+    echo "Error: Packages filesystem is empty!"
+    exit 1
+fi
 
 sudo umount /tmp/packages_mount
 sudo umount -f /tmp/packages_mount 2>/dev/null || true  # Force unmount if still busy
@@ -137,6 +150,12 @@ echo "Exporting and extracting app filesystem..."
 id=$(docker create --platform linux/386 love-webvm-app true)
 docker export $id | sudo tar -x -C /tmp/app_mount
 docker rm $id
+
+# Verify app content
+if [ -z "$(ls -A /tmp/app_mount)" ]; then
+    echo "Error: App filesystem is empty!"
+    exit 1
+fi
 
 sudo umount /tmp/app_mount
 sudo umount -f /tmp/app_mount 2>/dev/null || true  # Force unmount if still busy
