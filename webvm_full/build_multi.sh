@@ -28,7 +28,7 @@ docker build --platform linux/386 -f Dockerfile.base -t love-webvm-base .
 
 echo "Creating base.ext2 (2GB)..."
 dd if=/dev/zero of=base.ext2 bs=1M count=2048
-sudo mkfs.ext2 -F base.ext2
+sudo mkfs.ext2 -F -O none base.ext2
 mkdir -p /tmp/base_mount
 sudo mount -o loop base.ext2 /tmp/base_mount
 
@@ -79,7 +79,7 @@ docker build --platform linux/386 -f Dockerfile.packages -t love-webvm-packages 
 
 echo "Creating packages.ext2 (2GB)..."
 dd if=/dev/zero of=packages.ext2 bs=1M count=2048
-sudo mkfs.ext2 -F packages.ext2
+sudo mkfs.ext2 -F -O none packages.ext2
 mkdir -p /tmp/packages_mount
 sudo mount -o loop packages.ext2 /tmp/packages_mount
 
@@ -142,7 +142,7 @@ docker build --platform linux/386 -f Dockerfile.app -t love-webvm-app src/
 
 echo "Creating app.ext2 (512MB)..."
 dd if=/dev/zero of=app.ext2 bs=1M count=512
-sudo mkfs.ext2 -F app.ext2
+sudo mkfs.ext2 -F -O none app.ext2
 mkdir -p /tmp/app_mount
 sudo mount -o loop app.ext2 /tmp/app_mount
 
