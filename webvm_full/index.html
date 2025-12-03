@@ -113,7 +113,7 @@
 
         let vmToJsBuffer = new Uint8Array(0);
         let bridgeDevice = null;
-        const BRIDGE_PATH = "/dev/netbridge";
+        const BRIDGE_PATH = "netbridge"; // DataDevice doesn't support paths with /
 
         // Helper to append data
         function appendBuffer(buffer, data) {
@@ -340,6 +340,11 @@
 
                 document.getElementById('status').innerText = "Initializing CheerpX...";
 
+                // Create bridge device before CheerpX
+                bridgeDevice = await CheerpX.DataDevice.create();
+                await bridgeDevice.writeFile(BRIDGE_PATH, new Uint8Array(0));
+                console.log("Bridge device created");
+
                 // Initialize CheerpX with Tailscale networking AND our Bridge
                 const cx = await CheerpX.Linux.create({
                     mounts: [
@@ -348,8 +353,8 @@
                         { type: "ext2", path: "/root/L.O.V.E", dev: appOverlay },
                         { type: "devs", path: "/dev" },
                         { type: "proc", path: "/proc" },
-                        // Mount our custom bridge device
-                        // { type: "custom", path: "/dev/netbridge", dev: netBridgeDevice }
+                        // Mount bridge DataDevice
+                        { type: "dir", path: "/mnt/bridge", dev: bridgeDevice }
                     ],
                     networkInterface: {
                         authKey: "",  // Empty for interactive login
@@ -380,18 +385,8 @@
                 // Expose CheerpX instance globally
                 window.cx = cx;
 
-                // Initialize Network Bridge with DataDevice
-                try {
-                    bridgeDevice = await CheerpX.DataDevice.create();
-                    // Initialize the bridge file as empty
-                    await bridgeDevice.writeFile(BRIDGE_PATH, new Uint8Array(0));
-                    console.log("Bridge device created at", BRIDGE_PATH);
-
-                    // Start polling for VM writes
-                    pollBridgeForReads();
-                } catch (e) {
-                    console.error("Failed to create bridge device:", e);
-                }
+                // Start polling for VM writes to bridge
+                pollBridgeForReads();
                 // Robust helper function to inject commands
                 window.injectCommand = function (command) {
                     if (!window.cx) {

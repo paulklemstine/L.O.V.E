@@ -9,7 +9,7 @@ import os
 import time
 
 # Config
-BRIDGE_FILE = "/dev/netbridge" # The magic file connected to JS
+BRIDGE_FILE = "/mnt/bridge/netbridge" # Mounted DataDevice
 SOCKS_HOST = "127.0.0.1"
 SOCKS_PORT = 1080
 
