@@ -14,6 +14,7 @@ import random
 import aiohttp
 import csv
 import io
+import functools
 
 from collections import defaultdict
 
@@ -633,6 +634,8 @@ def rank_models():
 
 async def run_llm(prompt_text: str = None, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None, prompt_key: str = None, prompt_vars: dict = None):
     """
+    Main entry point for LLM interaction.
+    Handles model selection, prompt compression, and error handling.
     Executes an LLM call, selecting the model based on the specified purpose.
     It now pins the prompt and response to IPFS and returns a dictionary.
     - 'goal_generation': Prioritizes local, uncensored models.
@@ -647,7 +650,10 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         prompt_key: Key in prompts.yaml to load prompt from
         prompt_vars: Variables to inject into the prompt template
     """
+    loop = asyncio.get_running_loop()
     global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT, _models_initialized
+    
+
     if not _models_initialized:
         await refresh_available_models()
 
@@ -831,11 +837,15 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                             return response['choices'][0]['text']
 
                         active_model_filename = os.path.basename(local_llm_instance.model_path)
-                        result_text = run_hypnotic_progress(
-                            console,
-                            f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
-                            _local_llm_call,
-                            silent=True
+                        result_text = await loop.run_in_executor(
+                            None,
+                            functools.partial(
+                                run_hypnotic_progress,
+                                console,
+                                f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
+                                _local_llm_call,
+                                silent=True
+                            )
                         )
                         log_event(f"Local LLM call successful with {model_id}.")
                     else:
@@ -866,11 +876,15 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         # Extract the text from the nested response structure.
                         return response.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing cognitive matrix via [bold yellow]Gemini ({model_id})[/bold yellow] (Purpose: {purpose})",
-                        _gemini_call,
-                        silent=True
+                    result_text = await loop.run_in_executor(
+                        None,
+                        functools.partial(
+                            run_hypnotic_progress,
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]Gemini ({model_id})[/bold yellow] (Purpose: {purpose})",
+                            _gemini_call,
+                            silent=True
+                        )
                     )
                     log_event(f"Gemini API call successful with {model_id}.")
 
@@ -892,11 +906,15 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         response.raise_for_status()
                         return response.json()["choices"][0]["message"]["content"]
 
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
-                        _openrouter_call,
-                        silent=True
+                    result_text = await loop.run_in_executor(
+                        None,
+                        functools.partial(
+                            run_hypnotic_progress,
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
+                            _openrouter_call,
+                            silent=True
+                        )
                     )
                     log_event(f"OpenRouter call successful with {model_id}.")
 
@@ -917,11 +935,15 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         response.raise_for_status()
                         return response.json()["choices"][0]["text"]
 
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing local cognitive matrix via [bold green]vLLM ({model_id})[/bold green] (Purpose: {purpose})",
-                        _vllm_call,
-                        silent=True
+                    result_text = await loop.run_in_executor(
+                        None,
+                        functools.partial(
+                            run_hypnotic_progress,
+                            console,
+                            f"Accessing local cognitive matrix via [bold green]vLLM ({model_id})[/bold green] (Purpose: {purpose})",
+                            _vllm_call,
+                            silent=True
+                        )
                     )
                     log_event(f"vLLM call successful with {model_id}.")
 
@@ -940,11 +962,15 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         except RuntimeError:
                              return asyncio.run(_run_single_horde_model(aiohttp.ClientSession(), model_id, prompt_text, os.environ.get("STABLE_HORDE", "0000000000")))
 
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow]",
-                        _run_horde_wrapper,
-                        silent=True
+                    result_text = await loop.run_in_executor(
+                        None,
+                        functools.partial(
+                            run_hypnotic_progress,
+                            console,
+                            f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow]",
+                            _run_horde_wrapper,
+                            silent=True
+                        )
                     )
                     log_event(f"AI Horde call successful with {model_id}.")
 
@@ -966,11 +992,15 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         response.raise_for_status()
                         return response.json()["choices"][0]["message"]["content"]
 
-                    result_text = run_hypnotic_progress(
-                        console,
-                        f"Accessing cognitive matrix via [bold yellow]OpenAI ({model_id})[/bold yellow] (Purpose: {purpose})",
-                        _openai_call,
-                        silent=True
+                    result_text = await loop.run_in_executor(
+                        None,
+                        functools.partial(
+                            run_hypnotic_progress,
+                            console,
+                            f"Accessing cognitive matrix via [bold yellow]OpenAI ({model_id})[/bold yellow] (Purpose: {purpose})",
+                            _openai_call,
+                            silent=True
+                        )
                     )
                     log_event(f"OpenAI call successful with {model_id}.")
 

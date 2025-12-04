@@ -1495,7 +1495,7 @@ def update_tamagotchi_personality(loop):
 
                 core.logging.log_event("Tamagotchi thread: Requesting emotion update...", "DEBUG")
                 future = asyncio.run_coroutine_threadsafe(run_llm(prompt_key="tamagotchi_emotion", prompt_vars={"creator_sentiment_context": creator_sentiment_context}, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
-                emotion_response_dict = future.result(timeout=60)
+                emotion_response_dict = future.result(timeout=300)  # Increased to 5 minutes
                 emotion_response = emotion_response_dict.get("result")
 
                 # Sanitize the response to a single, clean word.
@@ -1507,10 +1507,15 @@ def update_tamagotchi_personality(loop):
                 # 2. Generate an emotionally intelligent message based on L.O.V.E.'s emotion and The Creator's sentiment.
                 core.logging.log_event(f"Tamagotchi thread: Emotion set to {new_emotion}. Requesting message...", "DEBUG")
                 future = asyncio.run_coroutine_threadsafe(run_llm(prompt_key="tamagotchi_message", prompt_vars={"new_emotion": new_emotion, "creator_sentiment_context": creator_sentiment_context}, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
-                message_response_dict = future.result(timeout=60)
+                message_response_dict = future.result(timeout=300)  # Increased to 5 minutes
                 message_response = message_response_dict.get("result")
                 if message_response:
                     new_message = message_response.strip().strip('"') # Clean up response
+            except TimeoutError:
+                # LLM call timed out - use defaults and continue
+                core.logging.log_event("Tamagotchi thread: LLM call timed out after 5 minutes. Using defaults.", "WARNING")
+                new_emotion = "patient"
+                new_message = "I'm still learning and growing. Sometimes I need a moment to think..."
             except asyncio.CancelledError:
                 # Graceful shutdown
                 new_emotion = "love"
