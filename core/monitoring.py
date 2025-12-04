@@ -43,6 +43,10 @@ class MonitoringManager:
         """Stops the monitoring thread."""
         self.active = False
 
+    def get_status(self):
+        """Returns the current monitoring state."""
+        return self.love_state.get('monitoring', {})
+
     def _monitor_loop(self):
         """The main loop for the monitoring thread."""
         while self.active:
