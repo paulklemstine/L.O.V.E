@@ -362,8 +362,8 @@ async def create_blessing_panel(blessing_message, width=80):
         width=width
     )
     
-    # Apply multi-color gradient effect to the entire panel
-    return Gradient(panel, colors=rainbow_colors)
+    # Return panel directly to preserve all the beautiful rainbow colors!
+    return panel
 
 
 def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=80):
