@@ -2892,13 +2892,21 @@ async def initialize_gpu_services():
         name="post_to_bluesky",
         tool=post_to_bluesky,
         metadata={
-            "description": "Posts a status update to Bluesky with an autonomously generated image. L.O.V.E determines the scene, visuals, and subliminal text based on the post content.",
+            "description": "Posts a status update to Bluesky. You can optionally provide a specific image prompt or aesthetic style. If neither is provided, L.O.V.E will autonomously generate an image based on the text.",
             "arguments": {
                 "type": "object",
                 "properties": {
                     "text": {
                         "type": "string",
                         "description": "The text content of the post"
+                    },
+                    "image_prompt": {
+                        "type": "string",
+                        "description": "Optional. Specific instructions for the image generation (e.g., 'A cyberpunk city with neon rain'). If provided, this overrides autonomous generation."
+                    },
+                    "aesthetic": {
+                        "type": "string",
+                        "description": "Optional. A specific aesthetic style to apply (e.g., 'Vaporwave', 'Gothic'). Used as a base if image_prompt is not provided."
                     }
                 },
                 "required": ["text"]
