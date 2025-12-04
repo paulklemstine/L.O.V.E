@@ -21,9 +21,10 @@ def _get_pr_branch_name(pr_url):
     if not github_token:
         return None
 
-    repo_owner, repo_name = get_git_repo_info()
-    if not repo_owner or not repo_name:
+    git_info = get_git_repo_info()
+    if not git_info:
         return None
+    repo_owner, repo_name = git_info['owner'], git_info['repo']
 
     pr_number_match = re.search(r'/pull/(\d+)', pr_url)
     if not pr_number_match:
@@ -150,7 +151,8 @@ async def test_jules_happy_path_lifecycle(task_manager, console):
     branch_name = None
 
     # We need the branch name for cleanup, so we get it from the PR URL
-    repo_owner, repo_name = get_git_repo_info()
+    git_info = get_git_repo_info()
+    repo_owner, repo_name = git_info['owner'], git_info['repo']
     pr_number_match = re.search(r'/pull/(\d+)', pr_url)
     assert pr_number_match, f"Could not extract PR number from URL: {pr_url}"
     pr_number = pr_number_match.group(1)
@@ -254,7 +256,8 @@ async def test_jules_merge_conflict_resolution_lifecycle(task_manager, console):
     # --- 5. Wait for Merge Completion ---
     start_time = time.time()
     final_status = None
-    repo_owner, repo_name = get_git_repo_info()
+    git_info = get_git_repo_info()
+    repo_owner, repo_name = git_info['owner'], git_info['repo']
     pr_number_match = re.search(r'/pull/(\d+)', pr_url)
     pr_number = pr_number_match.group(1)
     branch_name = _get_pr_branch_name(pr_url)

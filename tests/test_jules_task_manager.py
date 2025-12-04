@@ -26,9 +26,10 @@ def _get_pr_branch_name(pr_url):
     if not github_token:
         return None
 
-    repo_owner, repo_name = get_git_repo_info()
-    if not repo_owner or not repo_name:
+    git_info = get_git_repo_info()
+    if not git_info:
         return None
+    repo_owner, repo_name = git_info['owner'], git_info['repo']
 
     pr_number_match = re.search(r'/pull/(\d+)', pr_url)
     if not pr_number_match:
@@ -114,8 +115,9 @@ async def test_jules_increment_counter_lifecycle(task_manager, console):
     4. Verifies that the file on the main branch has been updated with the incremented value.
     """
     counter_file = "jules_build_counter.txt"
-    repo_owner, repo_name = get_git_repo_info()
-    assert repo_owner and repo_name, "Could not determine repository info."
+    git_info = get_git_repo_info()
+    assert git_info, "Could not determine repository info."
+    repo_owner, repo_name = git_info['owner'], git_info['repo']
 
     # --- 1. Read Initial State ---
     subprocess.check_call(["git", "checkout", "main"])

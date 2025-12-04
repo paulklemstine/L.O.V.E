@@ -597,9 +597,10 @@ class JulesTaskManager:
         if not github_token:
             return None
 
-        repo_owner, repo_name = get_git_repo_info()
-        if not repo_owner or not repo_name:
+        git_info = get_git_repo_info()
+        if not git_info:
             return None
+        repo_owner, repo_name = git_info['owner'], git_info['repo']
 
         # Extract PR number
         match = re.search(r'/pull/(\d+)', pr_url)
@@ -726,10 +727,11 @@ class JulesTaskManager:
             core.logging.log_event("Cannot reconcile orphans: JULES_API_KEY not set.", level="WARNING")
             return
 
-        repo_owner, repo_name = get_git_repo_info()
-        if not repo_owner or not repo_name:
+        git_info = get_git_repo_info()
+        if not git_info:
             core.logging.log_event("Cannot reconcile orphans: Could not determine git repo info.", level="WARNING")
             return
+        repo_owner, repo_name = git_info['owner'], git_info['repo']
 
         headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
         # Fetch all sessions and filter locally, which is more robust than relying on a complex API filter.
@@ -1024,10 +1026,11 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
         return None
 
     headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
-    repo_owner, repo_name = get_git_repo_info()
-    if not repo_owner or not repo_name:
+    git_info = get_git_repo_info()
+    if not git_info:
         console.print("[bold red]Error: Could not determine git repository owner/name.[/bold red]")
         return None
+    repo_owner, repo_name = git_info['owner'], git_info['repo']
 
     # Discover source from L.O.V.E. API
     try:
