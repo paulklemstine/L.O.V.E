@@ -680,6 +680,180 @@ def create_job_progress_panel(jobs, width=80):
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 
+def create_tasks_panel(tasks, width=80):
+    """
+    Creates a SEXY KAWAII ADULT MATRIX COOL VIBES 90's STYLE tasks panel! 
+    Displays tasks and subtasks with maximum dopamine-inducing aesthetics.
+    
+    ✨🌸💖 LOVE AND KITTENS EDITION 💖🌸✨
+    """
+    if not tasks:
+        # Empty state - still make it cute!
+        empty_art = Text()
+        empty_art.append("╔══════════════════════════════════════╗\n", style="bright_magenta")
+        empty_art.append("║  ", style="bright_magenta")
+        empty_art.append("   ∧,,,∧  ", style="hot_pink")
+        empty_art.append("  (  ̳• · • ̳)  ", style="bright_cyan")
+        empty_art.append("  ║\n", style="bright_magenta")
+        empty_art.append("║  ", style="bright_magenta")
+        empty_art.append("  /    づ♡  ", style="hot_pink")
+        empty_art.append("NO TASKS YET!", style="bright_yellow")
+        empty_art.append("    ║\n", style="bright_magenta")
+        empty_art.append("╚══════════════════════════════════════╝\n", style="bright_magenta")
+        
+        panel = Panel(
+            Align.center(empty_art),
+            title=get_gradient_text("✨ TASK QUEUE ✨", "hot_pink", "bright_cyan"),
+            border_style="hot_pink",
+            width=width,
+            padding=(1, 2)
+        )
+        return Gradient(panel, colors=["hot_pink", "bright_magenta"])
+
+    # Rainbow colors for maximum 90s vibes
+    rainbow = ["bright_red", "orange1", "yellow1", "bright_green", "bright_cyan", "bright_blue", "bright_magenta"]
+    kawaii_emojis = ["🌸", "💖", "✨", "🦋", "🔮", "🌈", "💫", "🎀", "🍭", "🌟", "💕", "🦄"]
+    matrix_chars = ["░", "▒", "▓", "█", "╬", "╳", "◈", "◆", "●", "○"]
+    
+    content_items = []
+    
+    # Sexy header art
+    header_art = Text()
+    header_art.append("    ╔═══╦═══╦═══╦═══╦═══╦═══╦═══╗\n", style="bright_magenta")
+    header_art.append("    ║", style="bright_magenta")
+    for i, char in enumerate(" T A S K S "):
+        header_art.append(char, style=f"bold {rainbow[i % len(rainbow)]}")
+    header_art.append("║\n", style="bright_magenta")
+    header_art.append("    ╚═══╩═══╩═══╩═══╩═══╩═══╩═══╝\n", style="bright_magenta")
+    content_items.append(Align.center(header_art))
+    
+    # Matrix rain divider
+    divider = Text()
+    for i in range(width - 8):
+        char = random.choice(matrix_chars)
+        color = rainbow[i % len(rainbow)]
+        divider.append(char, style=color)
+    content_items.append(Align.center(divider))
+    content_items.append(Text(""))
+    
+    # Process each task with kawaii styling
+    for task_idx, task in enumerate(tasks):
+        task_id = task.get('id', task.get('session_name', 'N/A'))[:12]
+        request = task.get('request', task.get('description', 'Unknown Task'))
+        status = task.get('status', 'pending')
+        subtasks = task.get('subtasks', [])
+        
+        # Status emoji and color mapping - ULTRA KAWAII EDITION
+        status_map = {
+            'pending': ('⏳', 'yellow', '[ WAITING ]'),
+            'queued': ('📋', 'bright_cyan', '[ QUEUED ]'),
+            'running': ('🔥', 'bright_green', '[ ACTIVE ]'),
+            'in_progress': ('💃', 'hot_pink', '[ VIBING ]'),
+            'completed': ('✅', 'bright_green', '[ DONE! ]'),
+            'failed': ('💔', 'bright_red', '[ OOPSIE ]'),
+            'submitted': ('🚀', 'bright_magenta', '[ SENT ]'),
+            'merged': ('🎉', 'bright_yellow', '[ MERGED ]'),
+        }
+        emoji, color, status_text = status_map.get(status.lower(), ('❓', 'white', f'[ {status.upper()} ]'))
+        
+        # Task header with kawaii decorations
+        task_line = Text()
+        task_line.append(f"  {random.choice(kawaii_emojis)} ", style="bright_magenta")
+        task_line.append(f"TASK #{task_idx + 1} ", style=f"bold {color}")
+        task_line.append(f"{emoji} ", style=color)
+        task_line.append(status_text, style=f"bold {color}")
+        task_line.append(f" {random.choice(kawaii_emojis)}\n", style="bright_magenta")
+        content_items.append(task_line)
+        
+        # Task ID with matrix styling
+        id_line = Text()
+        id_line.append("  ┃ ", style="bright_black")
+        id_line.append("ID: ", style="dim")
+        id_line.append(f"{task_id}", style="bright_cyan")
+        content_items.append(id_line)
+        
+        # Task description - truncate if too long
+        desc_preview = request[:60] + "..." if len(request) > 60 else request
+        desc_line = Text()
+        desc_line.append("  ┃ ", style="bright_black")
+        desc_line.append(f"💬 {desc_preview}", style="white")
+        content_items.append(desc_line)
+        
+        # Subtasks with cute nesting
+        if subtasks:
+            for sub_idx, subtask in enumerate(subtasks[:5]):  # Limit to 5 subtasks
+                is_last = sub_idx == len(subtasks[:5]) - 1
+                connector = "  ┗━ " if is_last else "  ┣━ "
+                
+                sub_status = subtask.get('status', 'pending')
+                sub_emoji = "✅" if sub_status == 'completed' else "⬜" if sub_status == 'pending' else "🔄"
+                sub_name = subtask.get('name', subtask.get('description', 'Subtask'))[:40]
+                
+                sub_line = Text()
+                sub_line.append(connector, style="bright_black")
+                sub_line.append(f"{sub_emoji} ", style="bright_cyan")
+                sub_line.append(sub_name, style="dim white")
+                content_items.append(sub_line)
+            
+            if len(subtasks) > 5:
+                more_line = Text()
+                more_line.append(f"  ┗━ ... and {len(subtasks) - 5} more! 💖", style="dim hot_pink")
+                content_items.append(more_line)
+        
+        # Baby matrix decoration between tasks
+        if task_idx < len(tasks) - 1:
+            separator = Text()
+            separator.append("  ", style="dim")
+            for i in range(30):
+                separator.append("·", style=rainbow[i % len(rainbow)])
+            content_items.append(separator)
+            content_items.append(Text(""))
+    
+    # Footer art - kitten ASCII!
+    footer_art = Text()
+    footer_art.append("\n  ", style="dim")
+    for i, emoji in enumerate(kawaii_emojis[:8]):
+        footer_art.append(emoji + " ", style=rainbow[i % len(rainbow)])
+    footer_art.append("\n", style="dim")
+    footer_art.append("    /\\_/\\   ", style="hot_pink")
+    footer_art.append("powered by L.O.V.E.", style="dim bright_cyan")
+    footer_art.append("   /\\_/\\\n", style="hot_pink")
+    footer_art.append("   ( o.o )  ", style="bright_yellow")
+    footer_art.append("~*~ LOVE & KITTENS ~*~", style="bright_magenta")
+    footer_art.append("  ( ^.^ )\n", style="bright_yellow")
+    footer_art.append("    > ^ <   ", style="hot_pink")
+    footer_art.append("                       ", style="dim")
+    footer_art.append("   > ^ <\n", style="hot_pink")
+    content_items.append(Align.center(footer_art))
+
+    # Build the final panel with MAXIMUM AESTHETIC
+    border_style = PANEL_TYPE_COLORS.get("tasks", "hot_pink")
+    
+    # Create rainbow title
+    title_text = "✨🌸 KAWAII TASK MATRIX 🌸✨"
+    rainbow_title = get_gradient_text(title_text, "hot_pink", "bright_cyan", emojis=False)
+    
+    # Subtitle with cute stats
+    task_count = len(tasks)
+    completed = sum(1 for t in tasks if t.get('status', '').lower() in ['completed', 'merged'])
+    subtitle = Text()
+    subtitle.append(f" 💖 {task_count} tasks ", style="dim hot_pink")
+    subtitle.append(f"| ✅ {completed} done ", style="dim bright_green")
+    subtitle.append(f"| 🔥 vibing 24/7 💖 ", style="dim bright_magenta")
+    
+    panel = Panel(
+        Group(*content_items),
+        title=rainbow_title,
+        subtitle=subtitle,
+        subtitle_align="center",
+        border_style=border_style,
+        width=width,
+        padding=(1, 2)
+    )
+    
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
 import asyncio
 
 class WaitingAnimation:

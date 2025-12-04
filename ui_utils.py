@@ -236,6 +236,7 @@ PANEL_TYPE_COLORS = {
     "god_panel": "white",
     "jobs": "cyan",
     "reasoning": "bright_magenta",
+    "tasks": "hot_pink",
 }
 
 def display_llm_interaction(title, prompt, response, panel_type="llm", model_id=None, token_count=None, purpose=None, elapsed_time=None):

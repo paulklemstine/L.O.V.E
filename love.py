@@ -874,7 +874,7 @@ from rich.rule import Rule
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, get_llm_api, execute_reasoning_task, MODEL_STATS, refresh_available_models
 from core.perception.config_scanner import scan_directory
-from display import create_integrated_status_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_job_progress_panel, create_connectivity_panel, create_god_panel
+from display import create_integrated_status_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_job_progress_panel, create_connectivity_panel, create_god_panel, create_tasks_panel
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -1565,6 +1565,16 @@ def update_tamagotchi_personality(loop):
                 )
                 ui_panel_queue.put(panel)
                 core.logging.log_event("Queued integrated status panel for display.", level="DEBUG")
+                
+                # --- TASKS PANEL ---
+                # Also queue a kawaii tasks panel if we have tasks
+                if 'love_task_manager' in globals() and love_task_manager:
+                    tasks = love_task_manager.get_status()
+                    if tasks:
+                        tasks_panel = create_tasks_panel(tasks, width=terminal_width - 4)
+                        ui_panel_queue.put(tasks_panel)
+                        core.logging.log_event("Queued kawaii tasks panel for display.", level="DEBUG")
+                        
             except Exception as e:
                 core.logging.log_event(f"Failed to create/queue status panel: {e}", level="ERROR")
 
