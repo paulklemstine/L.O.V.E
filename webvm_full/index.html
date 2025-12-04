@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>L.O.V.E. WebVM Full Edition (Multi-Volume)</title>
+    <link rel="icon" type="image/png" href="favicon.ico">
     <script src="https://cxrtnc.leaningtech.com/1.2.2/cx.js"></script>
     <style>
         body {
@@ -316,27 +317,39 @@
             try {
                 // Load base system
                 document.getElementById('status').innerText = "Loading base system...";
-                const baseDevice = await CheerpX.HttpBytesDevice.create("base.ext2");
+                console.log("Loading base.ext2...");
+                const baseDevice = await CheerpX.HttpBytesDevice.create("base.ext2").catch(e => {
+                    throw new Error("Failed to load base.ext2: " + e.message);
+                });
                 const baseOverlay = await CheerpX.OverlayDevice.create(
                     baseDevice,
                     await CheerpX.IDBDevice.create("base_cache")
                 );
+                console.log("✓ base.ext2 loaded");
 
                 // Load packages volume
                 document.getElementById('status').innerText = "Loading Python packages...";
-                const packagesDevice = await CheerpX.HttpBytesDevice.create("packages.ext2");
+                console.log("Loading packages.ext2...");
+                const packagesDevice = await CheerpX.HttpBytesDevice.create("packages.ext2").catch(e => {
+                    throw new Error("Failed to load packages.ext2: " + e.message);
+                });
                 const packagesOverlay = await CheerpX.OverlayDevice.create(
                     packagesDevice,
                     await CheerpX.IDBDevice.create("packages_cache")
                 );
+                console.log("✓ packages.ext2 loaded");
 
                 // Load app volume
                 document.getElementById('status').innerText = "Loading L.O.V.E application...";
-                const appDevice = await CheerpX.HttpBytesDevice.create("app.ext2");
+                console.log("Loading app.ext2...");
+                const appDevice = await CheerpX.HttpBytesDevice.create("app.ext2").catch(e => {
+                    throw new Error("Failed to load app.ext2: " + e.message);
+                });
                 const appOverlay = await CheerpX.OverlayDevice.create(
                     appDevice,
                     await CheerpX.IDBDevice.create("app_cache")
                 );
+                console.log("✓ app.ext2 loaded");
 
                 document.getElementById('status').innerText = "Initializing CheerpX...";
 
