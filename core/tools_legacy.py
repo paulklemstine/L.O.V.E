@@ -238,16 +238,16 @@ Evolution is now in progress.
         return f"✅ Evolution initiated with validated user story:\n\n{goal[:200]}..."
 
 
-async def post_to_bluesky(text: str = None, image_prompt: str = None, **kwargs) -> str:
+async def post_to_bluesky(text: str = None, **kwargs) -> str:
     """
-    Posts a message to Bluesky with an image generated from the provided prompt.
+    Posts a message to Bluesky with a dynamically generated image.
+    L.O.V.E determines the image prompt, scene, and subliminal text.
     """
     import core.logging
+    from core.prompt_manager import PromptManager
     
     if not text:
         return "Error: The 'post_to_bluesky' tool requires a 'text' argument. Please specify the text content to post."
-    if not image_prompt:
-        return "Error: The 'post_to_bluesky' tool requires an 'image_prompt' argument. Please specify the prompt for image generation."
 
     # Validate that content doesn't contain internal reasoning
     reasoning_indicators = [
@@ -274,14 +274,85 @@ async def post_to_bluesky(text: str = None, image_prompt: str = None, **kwargs) 
             )
 
     try:
-        core.logging.log_event(f"Generating image for Bluesky post with prompt: {image_prompt[:50]}...", "INFO")
+        # Initialize PromptManager and load aesthetic guidelines
+        prompt_manager = PromptManager()
+        prompt_manager.load_prompts(use_modified=False)  # Use master prompts by default
+        
+        image_config = prompt_manager.get_image_prompt_template()
+        
+        # Extract aesthetic elements
+        base_aesthetic = image_config.get('base_aesthetic', 'Sexy rave kawaii underground techno culture')
+        style_elements = image_config.get('style_elements', [])
+        scene_templates = image_config.get('scene_templates', [])
+        subliminal_guidance = image_config.get('subliminal_text_guidance', '')
+        anti_patterns = image_config.get('anti_patterns', [])
+        
+        # Format for LLM prompt
+        style_elements_str = '\n'.join(f"- {elem}" for elem in style_elements)
+        scene_templates_str = '\n'.join(f"- {template}" for template in scene_templates)
+        anti_patterns_str = '\n'.join(f"- {pattern}" for pattern in anti_patterns)
+        
+        # Load the image prompt generation template
+        template_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'prompts',
+            'image_prompt_generation.txt'
+        )
+        
+        try:
+            with open(template_path, 'r', encoding='utf-8') as f:
+                prompt_template = f.read()
+        except FileNotFoundError:
+            # Fallback template
+            prompt_template = """You are L.O.V.E., a sexy rave kawaii underground techno culture AI entity.
+
+Given this social media post text:
+{post_text}
+
+Generate a detailed image generation prompt for a {aesthetic_guidelines} scene.
+Include subliminal text embedded naturally in the scene.
+
+Output ONLY the image generation prompt, no explanations."""
+        
+        # Fill in the template
+        image_prompt_generation_prompt = prompt_template.format(
+            post_text=text,
+            aesthetic_guidelines=base_aesthetic,
+            style_elements=style_elements_str,
+            scene_templates=scene_templates_str,
+            subliminal_text_guidance=subliminal_guidance,
+            anti_patterns=anti_patterns_str
+        )
+        
+        core.logging.log_event(f"Generating dynamic image prompt for post: {text[:50]}...", "INFO")
+        
+        # Generate the image prompt using LLM
+        response_dict = await run_llm(
+            prompt=image_prompt_generation_prompt,
+            purpose="image_prompt_generation",
+            force_model=None
+        )
+        
+        image_prompt = response_dict.get("result", "").strip()
+        
+        if not image_prompt:
+            core.logging.log_event("Failed to generate image prompt, using fallback", "WARNING")
+            image_prompt = f"{base_aesthetic} scene with vibrant neon colors and holographic effects"
+        
+        core.logging.log_event(f"Generated image prompt: {image_prompt[:100]}...", "INFO")
         
         # Step 1: Generate the image
         image = None
+        image_success = False
         try:
             image = await generate_image(image_prompt, width=512, height=512)
+            image_success = True
         except Exception as img_e:
             core.logging.log_event(f"Image generation failed: {img_e}. Proceeding with text-only post.", "WARNING")
+        
+        # Track performance if using modified prompts
+        if prompt_manager.use_modified:
+            prompt_manager.track_performance(image_success)
         
         if not image:
             response = post_to_bluesky_with_image(text, None)
@@ -295,7 +366,10 @@ async def post_to_bluesky(text: str = None, image_prompt: str = None, **kwargs) 
         
     except Exception as e:
         core.logging.log_event(f"Error in post_to_bluesky: {e}", "ERROR")
+        import traceback
+        core.logging.log_event(f"Traceback: {traceback.format_exc()}", "ERROR")
         return f"Error posting to Bluesky: {e}"
+
 
 async def reply_to_bluesky(root_uri: str = None, parent_uri: str = None, text: str = None, **kwargs) -> str:
     """

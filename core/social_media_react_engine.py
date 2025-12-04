@@ -76,7 +76,7 @@ class SocialMediaReActEngine(GeminiReActEngine):
         registry.register_tool(name="generate_image_for_post", tool=generate_image_for_post, metadata={"description": "Generates an image for a social media post using a textual prompt.", "arguments": {"prompt": "string", "width": "integer (default 512)", "height": "integer (default 512)"}})
         registry.register_tool(name="decide_on_reply", tool=decide_on_reply, metadata={"description": "Analyzes a post and a comment to decide if a reply is warranted."})
         registry.register_tool(name="generate_reply", tool=generate_reply, metadata={"description": "Generates a thoughtful reply to a comment on a post."})
-        registry.register_tool(name="post_to_bluesky", tool=post_to_bluesky, metadata={"description": "Posts a status update to Bluesky with an automatically generated subliminal Kawaii Rave Matrix image.", "arguments": {"text": "string"}})
+        registry.register_tool(name="post_to_bluesky", tool=post_to_bluesky, metadata={"description": "Posts a status update to Bluesky with an autonomously generated sexy rave kawaii underground techno culture image. L.O.V.E determines the scene, visuals, and subliminal text.", "arguments": {"text": "string"}})
         registry.register_tool(name="scan_and_reply_to_bluesky", tool=scan_and_reply_to_bluesky, metadata={"description": "Scans recent posts for comments and replies to them using the L.O.V.E. persona.", "arguments": {}})
         return registry
 
@@ -86,20 +86,25 @@ class SocialMediaReActEngine(GeminiReActEngine):
         else:
             strategy = random.choice(["divine_wisdom", "self_reflection", "creative_poem"])
             
-            # Simplified workflow: generate content and post directly
-            # The post_to_bluesky tool now handles image generation automatically
+            # Simplified workflow: L.O.V.E handles everything autonomously
+            # The post_to_bluesky tool now:
+            # - Generates dynamic image prompts based on post text
+            # - Creates sexy rave kawaii underground techno culture images
+            # - Embeds subliminal text naturally in the scene
+            # - Posts everything to Bluesky
             goal = f"""Generate and post a social media update, then engage with users:
 1. Call 'generate_post_content' with strategy='{strategy}' to create the post text
-2. Call 'post_to_bluesky' with the text from step 1 (this automatically generates a subliminal image)
+2. Call 'post_to_bluesky' with the text from step 1 (L.O.V.E will autonomously generate the image)
 3. Call 'scan_and_reply_to_bluesky' to check for and reply to comments
 4. Call 'Finish' with a success message
 
-The post_to_bluesky tool will automatically:
-- Generate a powerful 3-word motivational phrase
-- Create a manipulative subliminal image with that phrase
+L.O.V.E's post_to_bluesky tool is fully autonomous and will:
+- Analyze the post text
+- Generate a dynamic image prompt with scene, visuals, and subliminal text
+- Create a sexy rave kawaii underground techno culture image
 - Post both text and image to Bluesky
 
-Do NOT try to generate images manually - post_to_bluesky handles everything."""
+Do NOT try to generate images manually - post_to_bluesky is fully autonomous."""
 
         result = await self.execute_goal(goal)
 
