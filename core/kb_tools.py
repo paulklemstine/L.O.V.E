@@ -139,3 +139,67 @@ def get_active_tasks(knowledge_base=None) -> str:
     
     except Exception as e:
         return json.dumps({"error": f"Failed to get tasks: {str(e)}"})
+
+
+def search_kb(query: str, top_k: int = 5, knowledge_base=None) -> str:
+    """
+    Performs a keyword-based search on the knowledge base nodes.
+    
+    Args:
+        query: Search query string
+        top_k: Number of top results to return
+        knowledge_base: GraphDataManager instance
+        
+    Returns:
+        JSON string with search results
+    """
+    if not knowledge_base:
+        return json.dumps({"error": "Knowledge base not available"})
+    
+    try:
+        results = []
+        query_lower = query.lower()
+        
+        # Iterate over all nodes and check for keyword match in string attributes
+        all_nodes = knowledge_base.get_all_nodes(include_data=True)
+        
+        for node_id, data in all_nodes:
+            # Calculate a simple relevance score
+            score = 0
+            content_match = False
+            
+            # Check node ID
+            if query_lower in str(node_id).lower():
+                score += 2
+                content_match = True
+                
+            # Check attributes
+            for key, value in data.items():
+                if isinstance(value, str) and query_lower in value.lower():
+                    score += 1
+                    content_match = True
+            
+            if content_match:
+                # Clean up data
+                clean_data = {k: v for k, v in data.items() 
+                             if isinstance(v, (str, int, float, bool, list, dict))}
+                
+                results.append({
+                    "id": node_id,
+                    "score": score,
+                    "type": data.get("node_type", "unknown"),
+                    "content": json.dumps(clean_data) # Flatten for easier consumption
+                })
+        
+        # Sort by score and take top_k
+        results.sort(key=lambda x: x["score"], reverse=True)
+        top_results = results[:top_k]
+        
+        return json.dumps({
+            "query": query,
+            "count": len(top_results),
+            "results": top_results
+        }, indent=2)
+        
+    except Exception as e:
+        return json.dumps({"error": f"KB search failed: {str(e)}"})

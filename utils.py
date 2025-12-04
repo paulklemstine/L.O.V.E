@@ -37,8 +37,17 @@ def get_network_interfaces(autopilot_mode=False):
 
 
 def get_git_repo_info():
-    """Retrieves the GitHub repository owner and name from any available remote URL."""
+    """Retrieves the GitHub repository owner, name, and current commit hash."""
     try:
+        # Get current commit hash
+        hash_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        commit_hash = hash_result.stdout.strip()
+
         # Get all remotes
         remotes_result = subprocess.run(
             ["git", "remote"],
@@ -49,7 +58,7 @@ def get_git_repo_info():
         remotes = remotes_result.stdout.strip().splitlines()
 
         if not remotes:
-            return None, None
+            return None
 
         # Try each remote until we find a valid GitHub URL
         for remote_name in remotes:
@@ -63,23 +72,30 @@ def get_git_repo_info():
 
             # Extract owner and repo name
             if "github.com" in url:
+                owner = None
+                repo = None
                 if url.startswith("git@"):
                     # SSH format: git@github.com:owner/repo.git
                     parts = url.split(":")[1].split("/")
                     owner = parts[0]
                     repo = parts[1].replace(".git", "")
-                    return owner, repo
                 elif url.startswith("https://"):
                     # HTTPS format: https://github.com/owner/repo.git
                     parts = url.split("/")
                     owner = parts[-2]
                     repo = parts[-1].replace(".git", "")
-                    return owner, repo
+                
+                if owner and repo:
+                    return {
+                        "owner": owner,
+                        "repo": repo,
+                        "hash": commit_hash
+                    }
 
-        return None, None  # No GitHub URL found in any remote
+        return None  # No GitHub URL found in any remote
 
     except (subprocess.CalledProcessError, IndexError):
-        return None, None
+        return None
 
 
 def list_directory(path="."):

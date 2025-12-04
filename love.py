@@ -2510,7 +2510,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                 last_msg = messages[-1]
                                 # Display output if it's an AIMessage or has content
                                 content = getattr(last_msg, "content", str(last_msg))
-                                ui_panel_queue.put(create_llm_panel(content, title=f"Node: {node}"))
+                                ui_panel_queue.put(create_llm_panel(content))
             
             # Allow some idle time or autonomous processing
             await asyncio.sleep(1)
