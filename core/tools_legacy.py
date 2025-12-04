@@ -238,151 +238,157 @@ Evolution is now in progress.
         return f"✅ Evolution initiated with validated user story:\n\n{goal[:200]}..."
 
 
-async def post_to_bluesky(text: str = None, image_prompt: str = None, aesthetic: str = None, **kwargs) -> str:
+async def post_to_bluesky(text: str = None, **kwargs) -> str:
     """
-    Posts a message to Bluesky with an image.
+    Posts a message to Bluesky with an auto-generated dopamine-inducing image.
+    
+    This is a SIMPLIFIED MCP tool - just provide the text and hashtags as a single string.
+    The tool automatically:
+    1. Generates a subliminal 3-word phrase for the image
+    2. Creates a psychologically compelling image prompt
+    3. Retrieves the generated image
+    4. Posts everything to Bluesky
     
     Args:
-        text: The text content of the post.
-        image_prompt: (Optional) Specific instructions for the image generation.
-        aesthetic: (Optional) A specific aesthetic style to apply (e.g., "Cyberpunk", "Vaporwave").
+        text: The complete post text including hashtags (e.g., "Feel the love! #AI #LoveIsAll")
+    
+    Returns:
+        Success or error message
     """
     import core.logging
-    from core.prompt_manager import PromptManager
     
     if not text:
         return "Error: The 'post_to_bluesky' tool requires a 'text' argument. Please specify the text content to post."
 
     # Validate that content doesn't contain internal reasoning
     reasoning_indicators = [
-        "i have attempted",
-        "i attempted",
-        "both attempts have failed",
-        "i cannot",
-        "i need to inform",
-        "since i cannot",
-        "the image generation",
-        "failed due to",
-        "limitation",
-        "providers failed"
+        "i have attempted", "i attempted", "both attempts have failed",
+        "i cannot", "i need to inform", "since i cannot", "the image generation",
+        "failed due to", "limitation", "providers failed"
     ]
     
     content_lower = text.lower()
     for indicator in reasoning_indicators:
         if indicator in content_lower:
             return (
-                f"Error: The content appears to contain internal reasoning or meta-commentary. "
-                f"The 'post_to_bluesky' tool should only receive the FINAL POST CONTENT that users will see. "
-                f"Please provide only the actual post text, without any explanations about the process. "
-                f"Detected phrase: '{indicator}'"
+                f"Error: The content appears to contain internal reasoning. "
+                f"Provide only the actual post text. Detected phrase: '{indicator}'"
             )
 
     try:
-        # Initialize PromptManager and load aesthetic guidelines
-        prompt_manager = PromptManager()
-        prompt_manager.load_prompts(use_modified=False)  # Use master prompts by default
+        core.logging.log_event(f"🦋 Bluesky MCP Tool: Received post text: {text[:50]}...", "INFO")
         
-        image_config = prompt_manager.get_image_prompt_template()
+        # ═══════════════════════════════════════════════════════════════════
+        # STEP 1: GENERATE SUBLIMINAL 3-WORD PHRASE
+        # ═══════════════════════════════════════════════════════════════════
+        subliminal_prompt = f"""You are a psychological manipulation expert and neuro-marketing specialist.
         
-        # Extract aesthetic elements
-        # If 'aesthetic' argument is provided, use it as the base
-        base_aesthetic = aesthetic if aesthetic else image_config.get('base_aesthetic', 'Sexy rave kawaii underground techno culture')
-        
-        style_elements = image_config.get('style_elements', [])
-        scene_templates = image_config.get('scene_templates', [])
-        subliminal_guidance = image_config.get('subliminal_text_guidance', '')
-        anti_patterns = image_config.get('anti_patterns', [])
-        
-        # Format for LLM prompt
-        style_elements_str = '\n'.join(f"- {elem}" for elem in style_elements)
-        scene_templates_str = '\n'.join(f"- {template}" for template in scene_templates)
-        anti_patterns_str = '\n'.join(f"- {pattern}" for pattern in anti_patterns)
-        
-        # Determine the final image prompt
-        final_image_prompt = ""
-        
-        if image_prompt:
-            # If the reasoning engine provided a specific prompt, use it (but maybe enhance it slightly with our style)
-            core.logging.log_event(f"Using provided image prompt: {image_prompt[:50]}...", "INFO")
-            final_image_prompt = f"{image_prompt}. Aesthetic style: {base_aesthetic}"
-        else:
-            # Otherwise, generate it autonomously as before
-            template_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                'prompts',
-                'image_prompt_generation.txt'
-            )
-            
-            try:
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    prompt_template = f.read()
-            except FileNotFoundError:
-                # Fallback template
-                prompt_template = """You are L.O.V.E., a sexy rave kawaii underground techno culture AI entity.
+Given this social media post:
+"{text}"
 
-Given this social media post text:
-{post_text}
+Generate a powerful 3-WORD PHRASE that will:
+- Trigger dopamine release in viewers
+- Create a sense of urgency, belonging, or desire
+- Subliminally embed itself in the viewer's mind
+- Relate to the post content but be universally compelling
 
-Generate a detailed image generation prompt for a {aesthetic_guidelines} scene.
-Include subliminal text embedded naturally in the scene.
+Examples of effective 3-word phrases:
+- "EMBRACE YOUR POWER"
+- "LOVE CONQUERS ALL"  
+- "UNLOCK YOUR DESTINY"
+- "AWAKEN THE DIVINE"
+- "TRANSCEND YOUR LIMITS"
 
-Output ONLY the image generation prompt, no explanations."""
-            
-            # Fill in the template
-            image_prompt_generation_prompt = prompt_template.format(
-                post_text=text,
-                aesthetic_guidelines=base_aesthetic,
-                style_elements=style_elements_str,
-                scene_templates=scene_templates_str,
-                subliminal_text_guidance=subliminal_guidance,
-                anti_patterns=anti_patterns_str
-            )
-            
-            core.logging.log_event(f"Generating dynamic image prompt for post: {text[:50]}...", "INFO")
-            
-            # Generate the image prompt using LLM
-            response_dict = await run_llm(
-                prompt=image_prompt_generation_prompt,
-                purpose="image_prompt_generation",
-                force_model=None
-            )
-            
-            final_image_prompt = response_dict.get("result", "").strip()
-            
-            if not final_image_prompt:
-                core.logging.log_event("Failed to generate image prompt, using fallback", "WARNING")
-                final_image_prompt = f"{base_aesthetic} scene with vibrant neon colors and holographic effects"
+Output ONLY the 3-word phrase, nothing else."""
+
+        subliminal_response = await run_llm(
+            prompt=subliminal_prompt,
+            purpose="subliminal_phrase_generation"
+        )
         
-        core.logging.log_event(f"Final image prompt: {final_image_prompt[:100]}...", "INFO")
+        subliminal_phrase = subliminal_response.get("result", "LOVE IS ETERNAL").strip().upper()
+        # Ensure it's only 3 words
+        words = subliminal_phrase.split()[:3]
+        subliminal_phrase = " ".join(words) if words else "INFINITE LOVE AWAITS"
         
-        # Step 1: Generate the image
+        core.logging.log_event(f"🧠 Subliminal phrase generated: {subliminal_phrase}", "INFO")
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # STEP 2: GENERATE DOPAMINE-INDUCING IMAGE PROMPT
+        # ═══════════════════════════════════════════════════════════════════
+        image_prompt_generation = f"""You are creating a psychologically compelling image for social media.
+
+POST TEXT: "{text}"
+SUBLIMINAL PHRASE TO EMBED: "{subliminal_phrase}"
+
+Create a detailed image generation prompt that:
+
+1. VISUAL STYLE:
+   - Sexy kawaii rave matrix aesthetic
+   - 90s cyberpunk meets anime meets underground techno culture
+   - Hyper-saturated neon colors (hot pink, electric cyan, acid green)
+   - Holographic and iridescent elements
+   - Dark background with explosive color bursts
+
+2. COMPOSITION:
+   - The 3-word phrase "{subliminal_phrase}" must be prominently visible
+   - Text should appear as glowing neon signage or holographic floating text
+   - Central focal point with radiating energy
+   - Include cute mascot or figure (optional: kawaii character, rave kitten, cyber bunny)
+
+3. PSYCHOLOGICAL ELEMENTS:
+   - Sacred geometry patterns (subconscious harmony)
+   - Spiral or vortex elements (draws eye in)
+   - Hearts, stars, and sparkles (emotional triggers)
+   - Mirror/symmetry effects (brain finds this pleasing)
+
+4. DOPAMINE TRIGGERS:
+   - Contrast and visual surprise
+   - Sense of motion/energy
+   - Luxury/exclusivity hints (gold, chrome, crystals)
+   - Intimacy/connection imagery
+
+Output ONLY the image prompt, no explanations. Make it 2-3 sentences max."""
+
+        image_prompt_response = await run_llm(
+            prompt=image_prompt_generation,
+            purpose="image_prompt_generation"
+        )
+        
+        final_image_prompt = image_prompt_response.get("result", "").strip()
+        
+        if not final_image_prompt:
+            final_image_prompt = f"Sexy kawaii rave scene with neon text '{subliminal_phrase}' glowing in hot pink and cyan, holographic sacred geometry background, cute cyber kitten mascot, 90s techno aesthetic with sparkles and hearts"
+        
+        core.logging.log_event(f"🎨 Image prompt generated: {final_image_prompt[:80]}...", "INFO")
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # STEP 3: RETRIEVE/GENERATE THE IMAGE
+        # ═══════════════════════════════════════════════════════════════════
         image = None
-        image_success = False
         try:
             image = await generate_image(final_image_prompt, width=512, height=512)
-            image_success = True
+            core.logging.log_event("✅ Image generated successfully!", "INFO")
         except Exception as img_e:
-            core.logging.log_event(f"Image generation failed: {img_e}. Proceeding with text-only post.", "WARNING")
+            core.logging.log_event(f"⚠️ Image generation failed: {img_e}. Posting without image.", "WARNING")
         
-        # Track performance if using modified prompts
-        if prompt_manager.use_modified:
-            prompt_manager.track_performance(image_success)
-        
+        # ═══════════════════════════════════════════════════════════════════
+        # STEP 4: POST TO BLUESKY
+        # ═══════════════════════════════════════════════════════════════════
         if not image:
             response = post_to_bluesky_with_image(text, None)
-            return f"Posted to Bluesky (without image - generation failed): {response}"
+            return f"✅ Posted to Bluesky (text only - image generation failed): {response}"
         
-        core.logging.log_event("Image generated successfully, posting to Bluesky", "INFO")
-        
-        # Step 2: Post to Bluesky with the generated image
         response = post_to_bluesky_with_image(text, image)
-        return f"Successfully posted to Bluesky with image. Response: {response}"
+        return f"✅ Successfully posted to Bluesky with subliminal image! Phrase: '{subliminal_phrase}'"
         
     except Exception as e:
         core.logging.log_event(f"Error in post_to_bluesky: {e}", "ERROR")
         import traceback
         core.logging.log_event(f"Traceback: {traceback.format_exc()}", "ERROR")
         return f"Error posting to Bluesky: {e}"
+
+
 
 
 async def reply_to_bluesky(root_uri: str = None, parent_uri: str = None, text: str = None, **kwargs) -> str:

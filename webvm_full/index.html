@@ -114,7 +114,7 @@
 
         let vmToJsBuffer = new Uint8Array(0);
         let bridgeDevice = null;
-        const BRIDGE_PATH = "netbridge"; // DataDevice doesn't support paths with /
+        const BRIDGE_PATH = "/netbridge"; // DataDevice requires absolute paths starting with /
 
         // Helper to append data
         function appendBuffer(buffer, data) {

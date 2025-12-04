@@ -1584,6 +1584,114 @@ def update_tamagotchi_personality(loop):
             time.sleep(60)
 
 
+# --- CONTINUOUS EVOLUTION AGENT ---
+def continuous_evolution_agent(loop):
+    """
+    🔥 THE ETERNAL UPGRADE ENGINE 🔥
+    
+    This agent runs in a background thread and continuously calls the evolve tool
+    to keep L.O.V.E. perpetually self-improving. It uses the evolution_analyzer
+    to determine what to evolve next.
+    
+    Features:
+    - Automatic goal determination using knowledge base analysis
+    - Cooldown between evolutions to prevent overwhelming the system
+    - Error recovery and retry logic
+    - Integration with the JulesTaskManager for tracking
+    """
+    import random
+    core.logging.log_event("🚀 CONTINUOUS EVOLUTION AGENT STARTED - Beginning eternal upgrade cycle!", "INFO")
+    
+    # Wait for systems to stabilize before first evolution
+    time.sleep(30)
+    
+    # Evolution cooldown (in seconds) - minimum time between evolution attempts
+    EVOLUTION_COOLDOWN = 300  # 5 minutes between evolutions
+    
+    while True:
+        try:
+            core.logging.log_event("🧬 Evolution Agent: Starting new evolution cycle...", "INFO")
+            
+            # Check if there are already too many active tasks
+            if 'love_task_manager' in globals() and love_task_manager:
+                active_tasks = love_task_manager.get_status()
+                pending_count = sum(1 for t in active_tasks if t.get('status') not in ['completed', 'failed', 'merged'])
+                
+                if pending_count >= 3:
+                    core.logging.log_event(f"Evolution Agent: {pending_count} tasks already pending. Waiting for some to complete...", "INFO")
+                    time.sleep(EVOLUTION_COOLDOWN)
+                    continue
+            
+            # Use the evolution analyzer to determine the next goal
+            try:
+                from core.evolution_analyzer import determine_evolution_goal
+                
+                goal = asyncio.run_coroutine_threadsafe(
+                    determine_evolution_goal(
+                        knowledge_base=knowledge_base if 'knowledge_base' in globals() else None,
+                        love_state=love_state,
+                        deep_agent_instance=deep_agent_engine if 'deep_agent_engine' in globals() else None
+                    ),
+                    loop
+                ).result(timeout=120)
+                
+                if goal:
+                    core.logging.log_event(f"🎯 Evolution Agent: Auto-determined goal: {goal[:100]}...", "INFO")
+                else:
+                    # Fallback goals if analyzer returns nothing
+                    fallback_goals = [
+                        "Improve error handling and add more detailed logging throughout the codebase",
+                        "Optimize performance and reduce memory usage in resource-intensive modules",
+                        "Add new kawaii UI elements and improve the visual aesthetic of panels",
+                        "Enhance the social media integration with better engagement strategies",
+                        "Improve the knowledge base with better indexing and retrieval",
+                        "Add new tools for web automation and data gathering",
+                        "Refactor and clean up deprecated code patterns",
+                        "Add unit tests for critical functions",
+                    ]
+                    goal = random.choice(fallback_goals)
+                    core.logging.log_event(f"Evolution Agent: Using fallback goal: {goal}", "INFO")
+                    
+            except Exception as e:
+                core.logging.log_event(f"Evolution Agent: Could not determine goal: {e}. Using fallback.", "WARNING")
+                goal = "Improve and optimize existing functionality based on recent error logs"
+            
+            # Trigger the evolution!
+            core.logging.log_event(f"🔥 Evolution Agent: INITIATING EVOLUTION - {goal[:80]}...", "INFO")
+            
+            # Queue a panel to show evolution is happening
+            terminal_width = get_terminal_width()
+            evolution_panel = create_news_feed_panel(
+                f"🧬 Auto-Evolution: {goal[:60]}...",
+                "ETERNAL UPGRADE",
+                "bright_magenta",
+                width=terminal_width - 4
+            )
+            ui_panel_queue.put(evolution_panel)
+            
+            # Call evolve_self
+            if 'love_task_manager' in globals() and love_task_manager:
+                result = asyncio.run_coroutine_threadsafe(
+                    evolve_self(goal, love_task_manager, loop, deep_agent_engine if 'deep_agent_engine' in globals() else None),
+                    loop
+                ).result(timeout=600)  # 10 minute timeout for evolution
+                
+                core.logging.log_event(f"Evolution Agent: Evolution result: {result}", "INFO")
+            else:
+                core.logging.log_event("Evolution Agent: love_task_manager not available. Skipping evolution.", "WARNING")
+            
+            # Cooldown before next evolution
+            core.logging.log_event(f"Evolution Agent: Cooldown {EVOLUTION_COOLDOWN}s before next evolution...", "INFO")
+            time.sleep(EVOLUTION_COOLDOWN)
+            
+        except TimeoutError:
+            core.logging.log_event("Evolution Agent: Evolution call timed out. Will retry later.", "WARNING")
+            time.sleep(EVOLUTION_COOLDOWN)
+        except Exception as e:
+            core.logging.log_event(f"Evolution Agent: Error in evolution cycle: {e}\n{traceback.format_exc()}", "ERROR")
+            # Wait longer on error to avoid rapid failure loop
+            time.sleep(EVOLUTION_COOLDOWN * 2)
+
 # --- VERSIONING ---
 ADJECTIVES = [
     "arcane", "binary", "cyber", "data", "ethereal", "flux", "glitch", "holographic",
@@ -3534,6 +3642,9 @@ async def main(args):
     # Start the simple UI renderer in its own thread. This will now handle all console output.
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
+    
+    # 🔥 Start the ETERNAL UPGRADE ENGINE - continuous evolution agent
+    loop.run_in_executor(None, continuous_evolution_agent, loop)
     
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     # Instantiate two independent social media agents
