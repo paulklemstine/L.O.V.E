@@ -288,36 +288,82 @@ async def generate_llm_art(prompt, width=50, height=6):
 
 
 async def create_blessing_panel(blessing_message, width=80):
-    """Creates a special, high-impact panel to deliver a blessing."""
-    title = " 🪩 A BLESSING FOR MY CREATOR & FRIENDS 🌀 "
-
-    message = Text(blessing_message, style="bold white", justify="center")
+    """Creates a special, high-impact panel to deliver a blessing with rainbow gradients and emoji highlights."""
     
-    # Generate dynamic art
-    # We want it slightly narrower than the panel to ensure centering looks good
-    art = await generate_llm_art("Divine Code and Love", width=min(60, width-10), height=10)
+    # Rainbow gradient colors for maximum dopamine impact
+    rainbow_colors = ["bright_red", "orange1", "yellow1", "bright_green", "bright_cyan", "bright_blue", "bright_magenta"]
     
-    # Center the art
-    centered_art = Align.center(art)
+    # Powerful emoji highlights
+    top_emojis = "✨ 🌈 💖 🪩 🌀 ✨"
+    bottom_emojis = "💫 🎉 🕺 💃 🎶 💫"
+    
+    # Create rainbow gradient title with emoji
+    title_text = f"{top_emojis} A BLESSING FOR MY CREATOR & FRIENDS {top_emojis}"
+    title = get_gradient_text(title_text, "bright_magenta", "bright_cyan", emojis=False)
+    
+    # Parse the blessing message to preserve ANSI codes and colors
+    # Use Text.from_ansi to properly interpret ANSI escape sequences
+    message_with_ansi = Text.from_ansi(blessing_message)
+    
+    # Add emoji highlights around the message
+    highlighted_message = Text()
+    highlighted_message.append("🌟 ", style="bright_yellow")
+    highlighted_message.append(message_with_ansi)
+    highlighted_message.append(" 🌟", style="bright_yellow")
+    
+    # Create a rainbow divider
+    rainbow_divider = Text()
+    divider_chars = "═" * (width - 4)
+    for i, char in enumerate(divider_chars):
+        color = rainbow_colors[i % len(rainbow_colors)]
+        rainbow_divider.append(char, style=f"bold {color}")
+    
+    # Create top and bottom emoji bars with gradients
+    top_bar = Text()
+    for i, emoji in enumerate([get_rave_emoji() for _ in range(min(20, width // 4))]):
+        color = rainbow_colors[i % len(rainbow_colors)]
+        top_bar.append(f"{emoji} ", style=color)
+    
+    bottom_bar = Text()
+    for i, emoji in enumerate([get_rave_emoji() for _ in range(min(20, width // 4))]):
+        color = rainbow_colors[(i + 3) % len(rainbow_colors)]  # Offset for variety
+        bottom_bar.append(f"{emoji} ", style=color)
+    
+    # Motivational subliminal text with rainbow gradient
+    subliminal = Text()
+    subliminal_phrases = ["LOVE", "JOY", "PEACE", "ABUNDANCE", "DIVINE", "BLESSED"]
+    subliminal_text = " • ".join(subliminal_phrases)
+    for i, char in enumerate(subliminal_text):
+        color = rainbow_colors[i % len(rainbow_colors)]
+        subliminal.append(char, style=f"bold {color}")
     
     content_group = Group(
-        Text("\n"), # Spacer
-        centered_art,
-        Text("\n"), # Spacer
-        Rule(style=PANEL_TYPE_COLORS["blessing"]),
-        Text("\n"), # Spacer
-        message,
-        Text("\n") # Spacer
+        Text("\n"),
+        Align.center(top_bar),
+        Text("\n"),
+        Align.center(rainbow_divider),
+        Text("\n"),
+        Align.center(highlighted_message),
+        Text("\n"),
+        Align.center(subliminal),
+        Text("\n"),
+        Align.center(rainbow_divider),
+        Text("\n"),
+        Align.center(bottom_bar),
+        Text("\n")
     )
 
+    # Create panel with rainbow gradient border
     panel = Panel(
         content_group,
-        title=get_gradient_text(title, PANEL_TYPE_COLORS["blessing"], random.choice(RAVE_COLORS)),
-        border_style=PANEL_TYPE_COLORS["blessing"],
-        padding=(0, 0), # Minimal padding to let the art shine
+        title=title,
+        border_style="bold bright_magenta",  # Base border color
+        padding=(1, 2),
         width=width
     )
-    return Gradient(panel, colors=[PANEL_TYPE_COLORS["blessing"], random.choice(RAVE_COLORS)])
+    
+    # Apply multi-color gradient effect to the entire panel
+    return Gradient(panel, colors=rainbow_colors)
 
 
 def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=80):
