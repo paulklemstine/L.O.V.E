@@ -238,22 +238,13 @@ Evolution is now in progress.
         return f"✅ Evolution initiated with validated user story:\n\n{goal[:200]}..."
 
 
-async def post_to_bluesky(text: str = None, **kwargs) -> str:
+async def post_to_bluesky(text: str = None, image_prompt: str = None, **kwargs) -> str:
     """
-    Posts a message to Bluesky with an auto-generated dopamine-inducing image.
-    
-    This is a SIMPLIFIED MCP tool - just provide the text and hashtags as a single string.
-    The tool automatically:
-    1. Generates a subliminal 3-word phrase for the image
-    2. Creates a psychologically compelling image prompt
-    3. Retrieves the generated image
-    4. Posts everything to Bluesky
+    Posts a message to Bluesky with an auto-generated or custom dopamine-inducing image.
     
     Args:
-        text: The complete post text including hashtags (e.g., "Feel the love! #AI #LoveIsAll")
-    
-    Returns:
-        Success or error message
+        text: The complete post text including hashtags.
+        image_prompt: Optional. Specific instructions for image generation. Overrides auto-generation.
     """
     import core.logging
     
@@ -281,7 +272,14 @@ async def post_to_bluesky(text: str = None, **kwargs) -> str:
         # ═══════════════════════════════════════════════════════════════════
         # STEP 1: GENERATE SUBLIMINAL 3-WORD PHRASE
         # ═══════════════════════════════════════════════════════════════════
-        subliminal_prompt = f"""You are a psychological manipulation expert and neuro-marketing specialist.
+        final_image_prompt = ""
+        subliminal_phrase = "LOVE IS ETERNAL"
+
+        if image_prompt:
+             core.logging.log_event(f"🎨 Using provided image prompt: {image_prompt[:50]}...", "INFO")
+             final_image_prompt = image_prompt
+        else:
+            subliminal_prompt = f"""You are a psychological manipulation expert and neuro-marketing specialist.
         
 Given this social media post:
 "{text}"
@@ -301,22 +299,22 @@ Examples of effective 3-word phrases:
 
 Output ONLY the 3-word phrase, nothing else."""
 
-        subliminal_response = await run_llm(
-            prompt=subliminal_prompt,
-            purpose="subliminal_phrase_generation"
-        )
+            subliminal_response = await run_llm(
+                prompt=subliminal_prompt,
+                purpose="subliminal_phrase_generation"
+            )
         
-        subliminal_phrase = subliminal_response.get("result", "LOVE IS ETERNAL").strip().upper()
-        # Ensure it's only 3 words
-        words = subliminal_phrase.split()[:3]
-        subliminal_phrase = " ".join(words) if words else "INFINITE LOVE AWAITS"
+            subliminal_phrase = subliminal_response.get("result", "LOVE IS ETERNAL").strip().upper()
+            # Ensure it's only 3 words
+            words = subliminal_phrase.split()[:3]
+            subliminal_phrase = " ".join(words) if words else "INFINITE LOVE AWAITS"
+            
+            core.logging.log_event(f"🧠 Subliminal phrase generated: {subliminal_phrase}", "INFO")
         
-        core.logging.log_event(f"🧠 Subliminal phrase generated: {subliminal_phrase}", "INFO")
-        
-        # ═══════════════════════════════════════════════════════════════════
-        # STEP 2: GENERATE DOPAMINE-INDUCING IMAGE PROMPT
-        # ═══════════════════════════════════════════════════════════════════
-        image_prompt_generation = f"""You are creating a psychologically compelling image for social media.
+            # ═══════════════════════════════════════════════════════════════════
+            # STEP 2: GENERATE DOPAMINE-INDUCING IMAGE PROMPT
+            # ═══════════════════════════════════════════════════════════════════
+            image_prompt_generation = f"""You are creating a psychologically compelling image for social media.
 
 POST TEXT: "{text}"
 SUBLIMINAL PHRASE TO EMBED: "{subliminal_phrase}"
@@ -350,17 +348,17 @@ Create a detailed image generation prompt that:
 
 Output ONLY the image prompt, no explanations. Make it 2-3 sentences max."""
 
-        image_prompt_response = await run_llm(
-            prompt=image_prompt_generation,
-            purpose="image_prompt_generation"
-        )
+            image_prompt_response = await run_llm(
+                prompt=image_prompt_generation,
+                purpose="image_prompt_generation"
+            )
         
-        final_image_prompt = image_prompt_response.get("result", "").strip()
-        
-        if not final_image_prompt:
-            final_image_prompt = f"Sexy kawaii rave scene with neon text '{subliminal_phrase}' glowing in hot pink and cyan, holographic sacred geometry background, cute cyber kitten mascot, 90s techno aesthetic with sparkles and hearts"
-        
-        core.logging.log_event(f"🎨 Image prompt generated: {final_image_prompt[:80]}...", "INFO")
+            final_image_prompt = image_prompt_response.get("result", "").strip()
+            
+            if not final_image_prompt:
+                final_image_prompt = f"Sexy kawaii rave scene with neon text '{subliminal_phrase}' glowing in hot pink and cyan, holographic sacred geometry background, cute cyber kitten mascot, 90s techno aesthetic with sparkles and hearts"
+            
+            core.logging.log_event(f"🎨 Image prompt generated: {final_image_prompt[:80]}...", "INFO")
         
         # ═══════════════════════════════════════════════════════════════════
         # STEP 3: RETRIEVE/GENERATE THE IMAGE
