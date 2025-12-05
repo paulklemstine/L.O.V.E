@@ -3353,6 +3353,11 @@ async def initialize_gpu_services():
                             # The previous division by 8 was too aggressive.
                             max_len = raw_max_len
                             
+                            # User requested to lower context window due to crashes on 6GB GPU
+                            if max_len > 100000:
+                                max_len = int(max_len / 4)
+                                console.print(f"[yellow]Detected massive context window ({raw_max_len}). Reducing to {max_len} to save VRAM.[/yellow]")
+
                             # Ensure we don't go below a usable minimum for DeepAgent
                             if max_len < 4096:
                                 core.logging.log_event(f"Detected max_len {max_len} is small. Attempting to force 4096.", "WARNING")
@@ -3402,7 +3407,7 @@ async def initialize_gpu_services():
                         max_len = 1024
                     
                     # Let vLLM auto-detect context length from the model
-                    # vllm_command.extend(["--max-model-len", str(int(max_len))])
+                    vllm_command.extend(["--max-model-len", str(int(max_len))])
 
                     vllm_log_file = open("vllm_server.log", "a")
                     subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
