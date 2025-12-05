@@ -3354,8 +3354,8 @@ async def initialize_gpu_services():
                             max_len = raw_max_len
                             
                             # User requested to lower context window due to crashes on 6GB GPU
-                            if max_len > 100000:
-                                max_len = int(max_len / 4)
+                            if max_len > 200000:
+                                max_len = 4096
                                 console.print(f"[yellow]Detected massive context window ({raw_max_len}). Reducing to {max_len} to save VRAM.[/yellow]")
 
                             # Ensure we don't go below a usable minimum for DeepAgent
