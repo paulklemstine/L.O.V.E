@@ -3422,7 +3422,7 @@ async def initialize_gpu_services():
                             return False
                         return False
 
-                    for attempt in range(30):
+                    for attempt in range(300):
                         await asyncio.sleep(10)
                         ready, status_code = is_vllm_running()
                         if ready:
@@ -3431,9 +3431,9 @@ async def initialize_gpu_services():
                                 server_ready = True
                                 break
                             else:
-                                console.print(f"[yellow]vLLM process running (attempt {attempt+1}/30), but API not responding yet...[/yellow]")
+                                console.print(f"[yellow]vLLM process running (attempt {attempt+1}/300), but API not responding yet...[/yellow]")
                         else:
-                            console.print(f"[yellow]vLLM server process not detected (attempt {attempt+1}/30). Status: {status_code}. Waiting...[/yellow]")
+                            console.print(f"[yellow]vLLM server process not detected (attempt {attempt+1}/300). Status: {status_code}. Waiting...[/yellow]")
 
                     if not server_ready:
                         log_tail = "No log file found."
