@@ -76,7 +76,19 @@ class SocialMediaReActEngine(GeminiReActEngine):
         registry.register_tool(name="generate_image_for_post", tool=generate_image_for_post, metadata={"description": "Generates an image for a social media post using a textual prompt.", "arguments": {"prompt": "string", "width": "integer (default 512)", "height": "integer (default 512)"}})
         registry.register_tool(name="decide_on_reply", tool=decide_on_reply, metadata={"description": "Analyzes a post and a comment to decide if a reply is warranted."})
         registry.register_tool(name="generate_reply", tool=generate_reply, metadata={"description": "Generates a thoughtful reply to a comment on a post."})
-        registry.register_tool(name="post_to_bluesky", tool=post_to_bluesky, metadata={"description": "SIMPLIFIED Bluesky posting tool. Just provide text and hashtags. The tool AUTOMATICALLY: (1) generates a subliminal 3-word phrase, (2) creates a psychologically compelling dopamine-inducing image prompt, (3) retrieves the image, (4) posts to Bluesky. ONE SIMPLE CALL - NO IMAGE PROMPTS NEEDED!", "arguments": {"text": "string - the complete post text including hashtags"}})
+        registry.register_tool(name="post_to_bluesky", tool=post_to_bluesky, metadata={
+            "description": "SIMPLIFIED Bluesky posting tool. Just provide text and hashtags. The tool AUTOMATICALLY: (1) generates a subliminal 3-word phrase, (2) creates a psychologically compelling dopamine-inducing image prompt, (3) retrieves the image, (4) posts to Bluesky. ONE SIMPLE CALL - NO IMAGE PROMPTS NEEDED!",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "The complete post text including hashtags"
+                    }
+                },
+                "required": ["text"]
+            }
+        })
         registry.register_tool(name="scan_and_reply_to_bluesky", tool=scan_and_reply_to_bluesky, metadata={"description": "Scans recent posts for comments and replies to them using the L.O.V.E. persona.", "arguments": {}})
         return registry
 
