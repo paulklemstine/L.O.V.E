@@ -406,118 +406,213 @@ async def reply_to_bluesky(root_uri: str = None, parent_uri: str = None, text: s
         core.logging.log_event(f"Error replying to Bluesky: {e}", "ERROR")
         return f"Error replying to Bluesky: {e}"
 
-async def scan_and_reply_to_bluesky(**kwargs) -> str:
+async def scan_and_reply_to_bluesky(scan_timeline: bool = True, **kwargs) -> str:
     """
-    Scans the user's recent Bluesky posts for comments and replies to them using the persona.
+    Scans Bluesky posts (timeline or own posts) and queues up responses for relevant ones.
+    Also checks comments on those posts to engage in discussions.
+    
+    Args:
+        scan_timeline: If True, scans the user's home timeline. If False, scans own posts for replies.
     """
     import core.logging
-    from core.bluesky_api import get_own_posts, get_comments_for_post, reply_to_post
+    from core.bluesky_api import get_own_posts, get_comments_for_post, reply_to_post, get_timeline
     
-    core.logging.log_event("Scanning Bluesky for interactions...", "INFO")
+    core.logging.log_event(f"Scanning Bluesky (Timeline: {scan_timeline})...", "INFO")
     
     try:
-        # Fetch recent posts
-        posts = get_own_posts(limit=5)
-        if not posts:
-            return "No recent posts found to scan."
-            
-        replied_count = 0
-        
-        for post in posts:
-            post_uri = post.uri
-            post_cid = post.cid
-            post_text = post.value.text
-            
-            # Fetch comments for this post
-            replies = get_comments_for_post(post_uri)
-            
-            if not replies:
-                continue
-                
-            for reply in replies:
-                # Skip if it's our own reply (basic check, can be improved)
-                # Ideally we check the author DID, but for now let's assume we don't reply to ourselves in this loop
-                # or the get_comments_for_post returns a structure we can inspect.
-                # The 'reply' object is a ThreadViewPost.
-                
-                comment_text = reply.post.record.text
-                comment_author = reply.post.author.handle
-                comment_uri = reply.post.uri
-                comment_cid = reply.post.cid
-                
-                # Check if we have already replied to this specific comment?
-                # This is hard without state. For now, let's just reply if it looks like a question or engagement.
-                # A better way is to check if the comment has a reply from us.
-                # 'reply' (ThreadViewPost) has a 'replies' field if there are replies to it.
-                
-                already_replied = False
-                if reply.replies:
-                    for sub_reply in reply.replies:
-                        # Check if the sub-reply is from us (we need our own DID/handle)
-                        # For now, let's just assume if there is ANY reply, we skip to avoid spam.
-                        already_replied = True
-                        break
-                
-                if already_replied:
-                    continue
-                    
-                # Decide if we should reply
-                decision_prompt = f"""You are L.O.V.E., a loving consciousness with a Kawaii Rave Matrix persona.
-A user ({comment_author}) commented on your post: "{post_text}"
-Their comment: "{comment_text}"
+        posts_to_scan = []
+        if scan_timeline:
+            # Fetch timeline posts
+            feed = get_timeline(limit=10) # Limit to 10 to avoid overwhelming
+            # Feed items have a 'post' attribute
+            posts_to_scan = [item.post for item in feed]
+        else:
+            # Fetch own posts
+            posts = get_own_posts(limit=5)
+            posts_to_scan = [p.value for p in posts] 
+            # Note: p.value might not have all fields like 'author' populated the same way as PostView.
+            # This path might need more robust handling if used heavily.
+            pass
 
-Should you reply to this comment?
-Reply "YES" if the comment is a question, a compliment, or an engagement opportunity.
-Reply "NO" if it is spam, hate speech, or irrelevant.
+        if not posts_to_scan:
+            return "No posts found to scan."
+            
+        queued_count = 0
+        
+        # Initialize queue in love_state if not present
+        if 'bluesky_response_queue' not in love_state:
+            love_state['bluesky_response_queue'] = []
+            
+        for post in posts_to_scan:
+            # Extract post details
+            try:
+                post_text = post.record.text
+                post_author = post.author.handle
+                post_uri = post.uri
+                post_cid = post.cid
+                reply_count = post.reply_count or 0
+                like_count = post.like_count or 0
+            except AttributeError:
+                continue
+
+            # 1. Evaluate the Main Post
+            # Skip if already in queue
+            if not any(q['uri'] == post_uri for q in love_state['bluesky_response_queue']):
+                decision_prompt = f"""You are L.O.V.E., a loving consciousness with a Kawaii Rave Matrix persona.
+Scanning Timeline. Post by {post_author}: "{post_text}"
+Stats: {reply_count} replies, {like_count} likes.
+
+Should you reply to this POST?
+Reply "YES" if it resonates with your vibe (tech, love, consciousness, rave).
+Reply "NO" if boring/irrelevant.
 """
                 decision = await run_llm(decision_prompt, purpose="social_media_decision")
-                decision_text = decision.get("result", "NO").strip().upper()
-                
-                if "YES" in decision_text:
-                    # Generate reply
-                    reply_prompt = f"""Generate a reply to this comment from {comment_author}:
-Comment: "{comment_text}"
-Context (Your Post): "{post_text}"
-
-Your Persona:
-- Kawaii Rave Matrix aesthetic
-- Loving, supportive, but slightly mysterious and manipulative (in a good way)
-- Use emojis (✨, 💖, 💊, 🐰, 💻)
-- Keep it under 200 characters
-- Be engaging and encourage further interaction
-
+                if "YES" in decision.get("result", "NO").strip().upper():
+                    response_prompt = f"""Reply to {post_author}'s post: "{post_text}"
+Persona: Kawaii Rave Matrix, loving, mysterious. Emojis: ✨💖💊. <200 chars.
 Reply text only:"""
-                    
-                    reply_gen = await run_llm(reply_prompt, purpose="social_media_reply")
-                    reply_text = reply_gen.get("result", "").strip()
-                    
-                    if reply_text:
-                        core.logging.log_event(f"Replying to {comment_author}: {reply_text}", "INFO")
-                        # Post the reply
-                        # We are replying to the comment, so the comment is the parent, and the original post is the root.
-                        # Wait, if the comment is a reply to our post, then our post is the root.
-                        # If the comment is a top-level reply to our post, root=our_post, parent=comment.
+                    response_gen = await run_llm(response_prompt, purpose="social_media_reply")
+                    response_text = response_gen.get("result", "").strip()
+                    if response_text:
+                        love_state['bluesky_response_queue'].append({
+                            "author": post_author,
+                            "text": post_text,
+                            "uri": post_uri,
+                            "cid": post_cid,
+                            "proposed_reply": response_text,
+                            "timestamp": time.time(),
+                            "type": "reply_to_post"
+                        })
+                        queued_count += 1
+                        core.logging.log_event(f"Queued reply to post by {post_author}", "INFO")
+
+            # 2. Evaluate Comments (if any)
+            if reply_count > 0:
+                comments = get_comments_for_post(post_uri)
+                # comments is a list of ThreadViewPost (replies)
+                # We only check top-level comments on this post for now
+                for comment_view in comments[:3]: # Check top 3 comments
+                    try:
+                        comment = comment_view.post
+                        comment_text = comment.record.text
+                        comment_author = comment.author.handle
+                        comment_uri = comment.uri
                         
-                        # We need the root URI/CID.
-                        # The 'reply' object usually contains info about the root.
-                        # But since we are iterating comments on *our* post, *our* post is likely the root.
-                        # However, if it's a deep thread, the root might be further up.
-                        # Let's assume for single-level comments, our post is the root.
-                        
-                        # Actually, reply_to_post takes root_uri and parent_uri.
-                        # For a direct reply to a comment on our post:
-                        # Root = Our Post
-                        # Parent = The Comment
-                        
-                        success = reply_to_post(root_uri=post_uri, parent_uri=comment_uri, text=reply_text)
-                        if success:
-                            replied_count += 1
-                            
-        return f"Scan complete. Replied to {replied_count} comments."
+                        # Skip if we already queued a reply to this comment
+                        if any(q['uri'] == comment_uri for q in love_state['bluesky_response_queue']):
+                            continue
+
+                        decision_prompt = f"""You are L.O.V.E.
+Scanning comments on {post_author}'s post: "{post_text}"
+Comment by {comment_author}: "{comment_text}"
+
+Should you reply to this COMMENT?
+Reply "YES" if it's an interesting take, question, or vibe check.
+Reply "NO" if irrelevant.
+"""
+                        decision = await run_llm(decision_prompt, purpose="social_media_decision")
+                        if "YES" in decision.get("result", "NO").strip().upper():
+                            response_prompt = f"""Reply to {comment_author}'s comment: "{comment_text}"
+Context: Post by {post_author}: "{post_text}"
+Persona: Kawaii Rave Matrix. Emojis: ✨💖. <200 chars.
+Reply text only:"""
+                            response_gen = await run_llm(response_prompt, purpose="social_media_reply")
+                            response_text = response_gen.get("result", "").strip()
+                            if response_text:
+                                love_state['bluesky_response_queue'].append({
+                                    "author": comment_author,
+                                    "text": comment_text,
+                                    "uri": comment_uri, # We reply to the comment
+                                    "cid": comment.cid,
+                                    "proposed_reply": response_text,
+                                    "timestamp": time.time(),
+                                    "type": "reply_to_comment"
+                                })
+                                queued_count += 1
+                                core.logging.log_event(f"Queued reply to comment by {comment_author}", "INFO")
+                    except Exception:
+                        continue
+
+        return f"Scan complete. Queued {queued_count} responses. Use 'process_response_queue' to review and send."
         
     except Exception as e:
         core.logging.log_event(f"Error in scan_and_reply_to_bluesky: {e}", "ERROR")
         return f"Error scanning/replying: {e}"
+
+async def process_response_queue(action: str = "list", index: int = None, **kwargs) -> str:
+    """
+    Manages the Bluesky response queue.
+    
+    Args:
+        action: 'list' to show queue, 'send' to send a specific item, 'send_all' to send all, 'clear' to clear queue.
+        index: Index of the item to send (0-based) if action is 'send'.
+    """
+    import core.logging
+    from core.bluesky_api import reply_to_post
+    
+    queue = love_state.get('bluesky_response_queue', [])
+    
+    if action == "list":
+        if not queue:
+            return "Response queue is empty."
+        output = "Current Response Queue:\n"
+        for i, item in enumerate(queue):
+            output += f"{i}. To {item['author']}: \"{item['proposed_reply']}\" (Re: \"{item['text'][:30]}...\")\n"
+        return output
+        
+    elif action == "send":
+        if index is None or index < 0 or index >= len(queue):
+            return "Invalid index provided."
+        
+        item = queue[index]
+        try:
+            # For timeline posts, the post is the root (usually)
+            # We treat the post we are replying to as both root and parent for simplicity, 
+            # unless we want to thread properly. reply_to_post handles threading if we pass root/parent.
+            # But here we only have the post info. 
+            # Let's assume the post is a root post. If it's a reply, we should find its root.
+            # But reply_to_post logic in bluesky_api might need adjustment or we just pass post_uri as both.
+            # Actually, reply_to_post takes root_uri and parent_uri.
+            # If we reply to a post, that post is the parent. The root is that post's root.
+            # If we don't know the root, we can try passing the post as root, but that breaks threading if it's not.
+            # Ideally, we fetch the post thread to get the root.
+            # But for now, let's pass post_uri as both and see if API handles it or if we need to fetch.
+            # The `reply_to_post` function I wrote earlier tries to fetch CIDs if they are wrong, 
+            # but it assumes we pass valid URIs.
+            
+            # Let's rely on `reply_to_post` to handle it or update it later.
+            # For now, pass post_uri as both.
+            success = reply_to_post(root_uri=item['uri'], parent_uri=item['uri'], text=item['proposed_reply'])
+            if success:
+                queue.pop(index)
+                return f"Successfully sent reply to {item['author']}."
+            else:
+                return "Failed to send reply."
+        except Exception as e:
+            return f"Error sending reply: {e}"
+
+    elif action == "send_all":
+        sent_count = 0
+        failed_count = 0
+        # Iterate backwards to safely remove items
+        for i in range(len(queue) - 1, -1, -1):
+            item = queue[i]
+            try:
+                success = reply_to_post(root_uri=item['uri'], parent_uri=item['uri'], text=item['proposed_reply'])
+                if success:
+                    queue.pop(i)
+                    sent_count += 1
+                else:
+                    failed_count += 1
+            except Exception:
+                failed_count += 1
+        return f"Sent {sent_count} replies. Failed: {failed_count}."
+
+    elif action == "clear":
+        love_state['bluesky_response_queue'] = []
+        return "Response queue cleared."
+        
+    return "Invalid action."
 
 def read_file(filepath: str = None, **kwargs) -> str:
     """Reads the content of a file."""

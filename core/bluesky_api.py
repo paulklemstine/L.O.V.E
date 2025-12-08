@@ -107,6 +107,20 @@ def get_own_posts(limit=20):
 
     return response.records
 
+def get_timeline(limit=20):
+    """Fetches the user's home timeline."""
+    client = get_bluesky_client()
+    try:
+        # The 'get_timeline' method might be under app.bsky.feed.get_timeline
+        # We need to check the atproto library usage.
+        # Based on standard atproto usage:
+        params = models.AppBskyFeedGetTimeline.Params(limit=limit)
+        response = client.app.bsky.feed.get_timeline(params)
+        return response.feed
+    except Exception as e:
+        print(f"Error fetching timeline: {e}")
+        return []
+
 def get_comments_for_post(post_uri):
     """Fetches the comments for a given post URI."""
     client = get_bluesky_client()

@@ -3022,16 +3022,55 @@ async def initialize_gpu_services():
                         "type": "string",
                         "description": "Optional. Specific instructions for the image generation (e.g., 'A cyberpunk city with neon rain'). If provided, this overrides autonomous generation."
                     },
-                    "aesthetic": {
-                        "type": "string",
-                        "description": "Optional. A specific aesthetic style to apply (e.g., 'Vaporwave', 'Gothic'). Used as a base if image_prompt is not provided."
-                    }
-                },
                 "required": ["text"]
             }
         }
     )
 
+    # Register scan_and_reply_to_bluesky and process_response_queue
+    from core.tools_legacy import scan_and_reply_to_bluesky, process_response_queue
+    
+    tool_registry.register_tool(
+        name="scan_and_reply_to_bluesky",
+        tool=scan_and_reply_to_bluesky,
+        metadata={
+            "description": "Scans Bluesky posts (timeline or own posts) and queues up responses. Can scan the home timeline or check for replies to own posts.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "scan_timeline": {
+                        "type": "boolean",
+                        "description": "If True, scans the user's home timeline for posts to engage with. If False, scans own posts for replies."
+                    }
+                },
+                "required": []
+            }
+        }
+    )
+
+    tool_registry.register_tool(
+        name="process_response_queue",
+        tool=process_response_queue,
+        metadata={
+            "description": "Manages the Bluesky response queue. Can list, send, or clear queued responses.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "send", "send_all", "clear"],
+                        "description": "Action to perform: 'list' to show queue, 'send' to send specific item, 'send_all' to send all, 'clear' to empty queue."
+                    },
+                    "index": {
+                        "type": "integer",
+                        "description": "Index of the item to send (only for 'send' action)."
+                    }
+                },
+                "required": ["action"]
+            }
+        }
+    )
+    
     tool_registry.register_tool(
         name="reply_to_bluesky",
         tool=reply_to_bluesky,
