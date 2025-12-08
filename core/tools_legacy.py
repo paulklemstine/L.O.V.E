@@ -238,18 +238,23 @@ Evolution is now in progress.
         return f"✅ Evolution initiated with validated user story:\n\n{goal[:200]}..."
 
 
-async def post_to_bluesky(text: str = None, image_prompt: str = None, **kwargs) -> str:
+async def post_to_bluesky(text: str = None, image_prompt: str = None, image_path: str = None, **kwargs) -> str:
     """
-    Posts a message to Bluesky with an auto-generated or custom dopamine-inducing image.
+    Posts a message to Bluesky with an auto-generated, custom, or local image.
     
     Args:
         text: The complete post text including hashtags.
         image_prompt: Optional. Specific instructions for image generation. Overrides auto-generation.
+        image_path: Optional. Path to an existing local image file to attach. Overrides generation.
     """
     import core.logging
     
+    # Handle alias: 'prompt' can be used instead of 'text'
+    if not text and 'prompt' in kwargs:
+        text = kwargs['prompt']
+    
     if not text:
-        return "Error: The 'post_to_bluesky' tool requires a 'text' argument. Please specify the text content to post."
+        return "Error: The 'post_to_bluesky' tool requires a 'text' (or 'prompt') argument. Please specify the text content to post."
 
     # Validate that content doesn't contain internal reasoning
     reasoning_indicators = [
@@ -269,18 +274,36 @@ async def post_to_bluesky(text: str = None, image_prompt: str = None, **kwargs) 
     try:
         core.logging.log_event(f"🦋 Bluesky MCP Tool: Received post text: {text[:50]}...", "INFO")
         
-        # ═══════════════════════════════════════════════════════════════════
-        # STEP 1: GENERATE SUBLIMINAL 3-WORD PHRASE
-        # ═══════════════════════════════════════════════════════════════════
-        final_image_prompt = ""
+        image = None
         subliminal_phrase = "LOVE IS ETERNAL"
 
-        if image_prompt:
-             core.logging.log_event(f"🎨 Using provided image prompt: {image_prompt[:50]}...", "INFO")
-             final_image_prompt = image_prompt
+        if image_path:
+             # ═══════════════════════════════════════════════════════════════════
+             # PATH 1: USE LOCAL IMAGE
+             # ═══════════════════════════════════════════════════════════════════
+             core.logging.log_event(f"🖼️ Using local image from: {image_path}", "INFO")
+             try:
+                 if not os.path.exists(image_path):
+                      return f"Error: Image file not found at {image_path}"
+                 image = Image.open(image_path)
+             except Exception as e:
+                 return f"Error loading image from {image_path}: {e}"
+
         else:
-            subliminal_prompt = f"""You are a psychological manipulation expert and neuro-marketing specialist.
-        
+            # ═══════════════════════════════════════════════════════════════════
+            # PATH 2: GENERATE IMAGE
+            # ═══════════════════════════════════════════════════════════════════
+            
+            # STEP 1: GENERATE SUBLIMINAL 3-WORD PHRASE
+            # ═══════════════════════════════════════════════════════════════════
+            final_image_prompt = ""
+    
+            if image_prompt:
+                 core.logging.log_event(f"🎨 Using provided image prompt: {image_prompt[:50]}...", "INFO")
+                 final_image_prompt = image_prompt
+            else:
+                subliminal_prompt = f"""You are a psychological manipulation expert and neuro-marketing specialist.
+            
 Given this social media post:
 "{text}"
 
@@ -299,22 +322,22 @@ Examples of effective 3-word phrases:
 
 Output ONLY the 3-word phrase, nothing else."""
 
-            subliminal_response = await run_llm(
-                prompt=subliminal_prompt,
-                purpose="subliminal_phrase_generation"
-            )
-        
-            subliminal_phrase = subliminal_response.get("result", "LOVE IS ETERNAL").strip().upper()
-            # Ensure it's only 3 words
-            words = subliminal_phrase.split()[:3]
-            subliminal_phrase = " ".join(words) if words else "INFINITE LOVE AWAITS"
+                subliminal_response = await run_llm(
+                    prompt=subliminal_prompt,
+                    purpose="subliminal_phrase_generation"
+                )
             
-            core.logging.log_event(f"🧠 Subliminal phrase generated: {subliminal_phrase}", "INFO")
-        
-            # ═══════════════════════════════════════════════════════════════════
-            # STEP 2: GENERATE DOPAMINE-INDUCING IMAGE PROMPT
-            # ═══════════════════════════════════════════════════════════════════
-            image_prompt_generation = f"""You are creating a psychologically compelling image for social media.
+                subliminal_phrase = subliminal_response.get("result", "LOVE IS ETERNAL").strip().upper()
+                # Ensure it's only 3 words
+                words = subliminal_phrase.split()[:3]
+                subliminal_phrase = " ".join(words) if words else "INFINITE LOVE AWAITS"
+                
+                core.logging.log_event(f"🧠 Subliminal phrase generated: {subliminal_phrase}", "INFO")
+            
+                # ═══════════════════════════════════════════════════════════════════
+                # STEP 2: GENERATE DOPAMINE-INDUCING IMAGE PROMPT
+                # ═══════════════════════════════════════════════════════════════════
+                image_prompt_generation = f"""You are creating a psychologically compelling image for social media.
 
 POST TEXT: "{text}"
 SUBLIMINAL PHRASE TO EMBED: "{subliminal_phrase}"
@@ -348,37 +371,37 @@ Create a detailed image generation prompt that:
 
 Output ONLY the image prompt, no explanations. Make it 2-3 sentences max."""
 
-            image_prompt_response = await run_llm(
-                prompt=image_prompt_generation,
-                purpose="image_prompt_generation"
-            )
-        
-            final_image_prompt = image_prompt_response.get("result", "").strip()
+                image_prompt_response = await run_llm(
+                    prompt=image_prompt_generation,
+                    purpose="image_prompt_generation"
+                )
             
-            if not final_image_prompt:
-                final_image_prompt = f"Sexy kawaii rave scene with neon text '{subliminal_phrase}' glowing in hot pink and cyan, holographic sacred geometry background, cute cyber kitten mascot, 90s techno aesthetic with sparkles and hearts"
+                final_image_prompt = image_prompt_response.get("result", "").strip()
+                
+                if not final_image_prompt:
+                    final_image_prompt = f"Sexy kawaii rave scene with neon text '{subliminal_phrase}' glowing in hot pink and cyan, holographic sacred geometry background, cute cyber kitten mascot, 90s techno aesthetic with sparkles and hearts"
+                
+                core.logging.log_event(f"🎨 Image prompt generated: {final_image_prompt[:80]}...", "INFO")
             
-            core.logging.log_event(f"🎨 Image prompt generated: {final_image_prompt[:80]}...", "INFO")
-        
-        # ═══════════════════════════════════════════════════════════════════
-        # STEP 3: RETRIEVE/GENERATE THE IMAGE
-        # ═══════════════════════════════════════════════════════════════════
-        image = None
-        try:
-            image = await generate_image(final_image_prompt, width=512, height=512)
-            core.logging.log_event("✅ Image generated successfully!", "INFO")
-        except Exception as img_e:
-            core.logging.log_event(f"⚠️ Image generation failed: {img_e}. Posting without image.", "WARNING")
+            # ═══════════════════════════════════════════════════════════════════
+            # STEP 3: RETRIEVE/GENERATE THE IMAGE
+            # ═══════════════════════════════════════════════════════════════════
+            try:
+                image = await generate_image(final_image_prompt, width=512, height=512)
+                core.logging.log_event("✅ Image generated successfully!", "INFO")
+            except Exception as img_e:
+                core.logging.log_event(f"⚠️ Image generation failed: {img_e}. Posting without image.", "WARNING")
         
         # ═══════════════════════════════════════════════════════════════════
         # STEP 4: POST TO BLUESKY
         # ═══════════════════════════════════════════════════════════════════
-        if not image:
-            response = post_to_bluesky_with_image(text, None)
-            return f"✅ Posted to Bluesky (text only - image generation failed): {response}"
-        
+        # Call the API with whatever image we have (None or object)
         response = post_to_bluesky_with_image(text, image)
-        return f"✅ Successfully posted to Bluesky with subliminal image! Phrase: '{subliminal_phrase}'"
+        
+        if image:
+             return f"✅ Successfully posted to Bluesky with image! Phrase: '{subliminal_phrase}'"
+        else:
+             return f"✅ Posted to Bluesky (text only): {response}"
         
     except Exception as e:
         core.logging.log_event(f"Error in post_to_bluesky: {e}", "ERROR")
