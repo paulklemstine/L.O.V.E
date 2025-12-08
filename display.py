@@ -303,7 +303,10 @@ async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
     
     # Parse the blessing message to preserve ANSI codes and colors
     # Use Text.from_ansi to properly interpret ANSI escape sequences
-    message_with_ansi = Text.from_ansi(blessing_message)
+    if isinstance(blessing_message, Text):
+        message_with_ansi = blessing_message
+    else:
+        message_with_ansi = Text.from_ansi(str(blessing_message))
     
     # Add emoji highlights around the message
     highlighted_message = Text()
@@ -350,7 +353,10 @@ async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
     if ansi_art:
         # Render ANSI art to a temporary console to handle it correctly
         temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-        temp_console.print(Text.from_ansi(ansi_art))
+        if isinstance(ansi_art, Text):
+            temp_console.print(ansi_art)
+        else:
+            temp_console.print(Text.from_ansi(str(ansi_art)))
         art_renderable = Text.from_ansi(temp_console.file.getvalue())
         content_items.extend([
             Align.center(art_renderable),
