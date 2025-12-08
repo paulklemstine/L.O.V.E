@@ -190,7 +190,7 @@ def _analyze_system_state(love_state: dict) -> list:
         hardware = love_state.get("hardware", {})
         
         # Check GPU availability
-        if not hardware.get("gpu_available", False):
+        if not hardware.get("gpu_detected", False):
             issues.append("No GPU available - consider optimizing for CPU-only operation")
         
         # Check VRAM
