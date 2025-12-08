@@ -131,13 +131,13 @@ async def _scan_codebase_todos() -> list:
                                 "text": line.strip()
                             })
                             
-                            # Limit to 20 TODOs to avoid overwhelming the LLM
-                            if len(todos) >= 20:
+                            # Limit to 50 TODOs to avoid overwhelming the LLM
+                            if len(todos) >= 50:
                                 break
             except Exception:
                 continue
             
-            if len(todos) >= 20:
+            if len(todos) >= 50:
                 break
                 
     except Exception as e:
