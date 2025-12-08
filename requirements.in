@@ -51,3 +51,6 @@ langchain-community>=0.2.0
 langchain-core>=0.2.0
 langsmith>=0.1.57
 cairosvg
+ruff>=0.1.0
+bandit>=1.7.0
+radon>=6.0.0

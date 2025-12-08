@@ -61,6 +61,7 @@ import core.logging
 # from core.deep_agent_engine import DeepAgentEngine
 from utils import summarize_python_code
 # import yaml
+# import display
 
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
@@ -874,7 +875,7 @@ from rich.rule import Rule
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, get_llm_api, execute_reasoning_task, MODEL_STATS, refresh_available_models
 from core.perception.config_scanner import scan_directory
-from display import create_integrated_status_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_job_progress_panel, create_connectivity_panel, create_god_panel, create_tasks_panel
+from display import create_integrated_status_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_job_progress_panel, create_connectivity_panel, create_god_panel, create_tasks_panel, generate_llm_art
 from ui_utils import rainbow_text
 from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -1470,7 +1471,7 @@ def update_tamagotchi_personality(loop):
                     # Generate Blessing Art
                     blessing_art_prompt = f"A divine, cybernetic blessing: {blessing_text}"
                     future_art = asyncio.run_coroutine_threadsafe(
-                        display.generate_llm_art(blessing_art_prompt, width=50, height=15),
+                        generate_llm_art(blessing_art_prompt, width=50, height=15),
                         loop
                     )
                     ansi_art = future_art.result(timeout=60)
@@ -1561,7 +1562,7 @@ def update_tamagotchi_personality(loop):
             try:
                 art_prompt = f"Tamagotchi emotion: {new_emotion}. {new_message}"
                 future_art = asyncio.run_coroutine_threadsafe(
-                    display.generate_llm_art(art_prompt, width=40, height=10),
+                    generate_llm_art(art_prompt, width=40, height=10),
                     loop
                 )
                 ansi_art = future_art.result(timeout=60)
