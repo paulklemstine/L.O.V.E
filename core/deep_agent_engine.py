@@ -580,7 +580,7 @@ class DeepAgentEngine:
                 return {"result": error_msg, "thought": thought}
 
             core.logging.log_event(f"[DeepAgent] Invoking GeminiReActEngine with args: {arguments}", level="DEBUG")
-            result = await invoke_gemini_react_engine(**arguments, deep_agent_instance=self)
+            result = await invoke_gemini_react_engine(**arguments, tool_registry=self.tool_registry, deep_agent_instance=self)
             core.logging.log_event(f"[DeepAgent] GeminiReActEngine returned: {str(result)[:200]}", level="DEBUG")
             return {"result": result, "thought": thought}
 
