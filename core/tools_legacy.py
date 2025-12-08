@@ -979,7 +979,7 @@ async def recommend_tool_for_persistence(tool_name: str, reason: str, **kwargs) 
     return message
 
 
-async def invoke_gemini_react_engine(prompt: str, deep_agent_instance=None, **kwargs) -> str:
+async def invoke_gemini_react_engine(prompt: str, tool_registry: 'ToolRegistry' = None, **kwargs) -> str:
     """
     Invokes the GeminiReActEngine to solve a sub-task.
     This tool allows the meta-orchestrator (DeepAgent) to delegate complex
@@ -988,14 +988,15 @@ async def invoke_gemini_react_engine(prompt: str, deep_agent_instance=None, **kw
     from core.gemini_react_engine import GeminiReActEngine
     print(f"--- Invoking GeminiReActEngine for sub-task: '{prompt[:100]}...' ---")
     try:
-        # We need a ToolRegistry for the GeminiReActEngine to use.
-        # For now, we'll create a temporary one. This will be improved
-        # when we properly integrate the tool registration.
-        # TODO: Pass the main ToolRegistry to this function.
-        if not deep_agent_instance or not hasattr(deep_agent_instance, 'tool_registry'):
-            raise ValueError("The 'deep_agent_instance' with a valid 'tool_registry' is required for this tool.")
-        tool_registry = deep_agent_instance.tool_registry
+        if not tool_registry:
+            raise ValueError("A valid 'tool_registry' is required for this tool.")
+
+        # We need access to the deep_agent_instance if it's available, but it's not strictly required
+        # for the engine to function if it's just solving a sub-task.
+        deep_agent_instance = kwargs.get('deep_agent_instance')
+
         engine = GeminiReActEngine(tool_registry=tool_registry, deep_agent_instance=deep_agent_instance)
+
         # The engine's run method is async.
         result = await engine.execute_goal(prompt)
         return f"GeminiReActEngine successfully executed the sub-task. Final result: {result}"
