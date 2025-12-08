@@ -3040,7 +3040,7 @@ async def initialize_gpu_services():
         name="post_to_bluesky",
         tool=post_to_bluesky,
         metadata={
-            "description": "Posts a status update to Bluesky. You can optionally provide a specific image prompt or aesthetic style. If neither is provided, L.O.V.E will autonomously generate an image based on the text.",
+            "description": "Posts a status update to Bluesky. Requires 'text' or 'prompt'. You can optionally provide a local image path or a specific image generation prompt.",
             "arguments": {
                 "type": "object",
                 "properties": {
@@ -3048,12 +3048,20 @@ async def initialize_gpu_services():
                         "type": "string",
                         "description": "The text content of the post"
                     },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Alias for 'text'. The content of the post."
+                    },
+                    "image_path": {
+                        "type": "string",
+                        "description": "Optional. Absolute local file path to an image to upload. If provided, disables image generation."
+                    },
                     "image_prompt": {
                         "type": "string",
-                        "description": "Optional. Specific instructions for the image generation (e.g., 'A cyberpunk city with neon rain'). If provided, this overrides autonomous generation."
+                        "description": "Optional. Specific instructions for the image generation. If provided, overrides autonomous generation. Ignored if image_path is provided."
                     }
                 },
-                "required": ["text"]
+                "required": []
             }
         }
     )
