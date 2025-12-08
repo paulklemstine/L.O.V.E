@@ -1588,8 +1588,6 @@ def update_tamagotchi_personality(loop):
                     love_state=love_state,
                     monitoring_state=monitoring_state,
                     treasures=treasures,
-                    monitoring_state=monitoring_state,
-                    treasures=treasures,
                     git_info=git_info,
                     ansi_art=ansi_art,
                     width=terminal_width - 4
