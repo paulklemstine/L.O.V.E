@@ -1216,11 +1216,7 @@ async def invoke_gemini_react_engine(prompt: str, deep_agent_instance=None, **kw
     from core.gemini_react_engine import GeminiReActEngine
     print(f"--- Invoking GeminiReActEngine for sub-task: '{prompt[:100]}...' ---")
     try:
-        # We need a ToolRegistry for the GeminiReActEngine to use.
-        # For now, we'll create a temporary one. This will be improved
-        # when we properly integrate the tool registration.
-        # TODO: Pass the main ToolRegistry to this function.
-        tool_registry = ToolRegistry()
+        tool_registry = deep_agent_instance.tool_registry
         engine = GeminiReActEngine(tool_registry=tool_registry, deep_agent_instance=deep_agent_instance)
         # The engine's run method is async.
         result = await engine.execute_goal(prompt)
