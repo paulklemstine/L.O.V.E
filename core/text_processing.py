@@ -135,4 +135,33 @@ async def process_and_structure_text(raw_text: str, source_identifier: Optional[
         elif extraction.extraction_class == "sentiment":
             output["sentiment"] = extraction.extraction_text
 
+
     return output
+
+def smart_truncate(text: str, max_length: int = 300) -> str:
+    """
+    Truncates text to a maximum length, respecting word boundaries if possible.
+    
+    Args:
+        text: The text to truncate.
+        max_length: The maximum allowed length (default 300 for Bluesky).
+        
+    Returns:
+        The truncated text.
+    """
+    if len(text) <= max_length:
+        return text
+    
+    # Check if we can just cut off the end
+    target_length = max_length - 3 # Allow space for "..."
+    if target_length <= 0:
+        return text[:max_length]
+        
+    truncated = text[:target_length]
+    
+    # Try to find the last space to avoid cutting a word in half
+    last_space = truncated.rfind(' ')
+    if last_space != -1:
+        truncated = truncated[:last_space]
+    
+    return truncated + "..."

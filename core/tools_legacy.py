@@ -38,6 +38,7 @@ from core.talent_utils import (
 )
 from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.dynamic_compress_prompt import dynamic_arg_caller
+from core.text_processing import smart_truncate
 
 
 love_state = {}
@@ -255,6 +256,9 @@ async def post_to_bluesky(text: str = None, image_prompt: str = None, image_path
     
     if not text:
         return "Error: The 'post_to_bluesky' tool requires a 'text' (or 'prompt') argument. Please specify the text content to post."
+
+    # Smart truncate the text to 300 characters to avoid API errors
+    text = smart_truncate(text, max_length=300)
 
     # Validate that content doesn't contain internal reasoning
     reasoning_indicators = [
