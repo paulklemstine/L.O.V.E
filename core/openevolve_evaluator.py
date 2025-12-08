@@ -193,10 +193,68 @@ Your score (0-10):
         log.error(f"An exception occurred during blessings score calculation: {e}", exc_info=True)
         return 0
 
+    # --- 5. Score Code Quality (Static Analysis) ---
+    quality_score = 0
+    try:
+        # Calculate Average Complexity
+        # We run radon on the sandbox directory (or specifically love.py)
+        # Note: 'radon' must be installed in the environment running this evaluator.
+        # We use 'cc' (Cyclomatic Complexity) -a (average) -j (json)
+        radon_proc = subprocess.run(
+            ["radon", "cc", "-a", "-j", sandbox.sandbox_dir], 
+            capture_output=True, text=True, check=False
+        )
+        radon_data = json.loads(radon_proc.stdout)
+        
+        # Calculate average complexity across all files or just love.py
+        total_complexity = 0
+        count = 0
+        for file_path, metrics in radon_data.items():
+            # metrics is a list of blocks, but with -a it might be different.
+            # Actually with -j -a, radon returns a dict per file: {"complexity": X, "blocks": [...]}
+            # Let's verify standard -j output vs -a -j. 
+            # Re-reading docs: radon cc -j returns list of blocks.
+            # To be safe and deterministic, let's process the blocks manually.
+            for block in metrics:
+                total_complexity += block['complexity']
+                count += 1
+        
+        avg_complexity = (total_complexity / count) if count > 0 else 0
+        log.info(f"Average Cyclomatic Complexity: {avg_complexity:.2f}")
+
+        # Penalty: If avg complexity > 10, start penalizing.
+        # Formula: Max 2 points penalty.
+        if avg_complexity > 10:
+             complexity_penalty = min(2, (avg_complexity - 10) * 0.5)
+             quality_score -= complexity_penalty
+             log.info(f"applied complexity penalty: -{complexity_penalty}")
+        else:
+             # Small bonus for very simple code?
+             quality_score += 0.5
+             log.info("Applied simplicity bonus: +0.5")
+             
+        # Bonus: Linting
+        # Check if ruff passes cleanly
+        ruff_proc = subprocess.run(
+            ["ruff", "check", script_path], 
+            capture_output=True, check=False
+        )
+        if ruff_proc.returncode == 0:
+             quality_score += 0.5
+             log.info("Applied clean linting bonus: +0.5")
+
+    except Exception as e:
+        log.warning(f"Static analysis scoring failed: {e}")
+
     # Apply the weighting
-    total_score = (0.5 * financial_score) + (0.3 * social_score) + (0.2 * emotional_score)
-    log.info(f"Calculated scores -> Financial: {financial_score}, Social: {social_score}, Emotional: {emotional_score}. Total Weighted Score: {total_score}")
-    return total_score
+    # Revised Formula: total = (0.4 * financial) + (0.3 * social) + (0.2 * emotional) + quality_score
+    # We add quality score directly as a modifier (range -2 to +1)
+    
+    base_score = (0.5 * financial_score) + (0.3 * social_score) + (0.2 * emotional_score)
+    final_score = max(0, base_score + quality_score)
+    
+    log.info(f"Scores -> Financial: {financial_score}, Social: {social_score}, Emotional: {emotional_score}, QualityMod: {quality_score}. Total: {final_score}")
+    return final_score
 
 
 async def evaluate_evolution(candidate_path):
