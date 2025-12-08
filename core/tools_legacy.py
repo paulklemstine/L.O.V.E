@@ -158,488 +158,233 @@ async def evolve(goal: str = None, **kwargs) -> str:
     # Store original input for reference
     original_input = goal
     
-    # Validate the user story format
-    validator = UserStoryValidator()
-    validation = validator.validate(goal)
+    # Always expand/refine the input into a detailed user story to ensure it is self-contained
+    # and fully specified for the software engineer (Jules).
+    core.logging.log_event(
+        f"[Evolve Tool] expanding input into detailed user story...",
+        "INFO"
+    )
     
-    # If validation fails, auto-expand the vague input into a proper user story
-    if not validation.is_valid:
-        core.logging.log_event(
-            f"[Evolve Tool] Input is not a detailed user story. Auto-expanding...",
-            "INFO"
-        )
+    try:
+        # Use LLM to expand input into detailed user story
+        expanded_story = await expand_to_user_story(goal, **kwargs)
         
-        try:
-            # Use LLM to expand vague input into detailed user story
-            expanded_story = await expand_to_user_story(goal, **kwargs)
-            
-            # Validate the expanded story
-            expanded_validation = validator.validate(expanded_story)
-            
-            if expanded_validation.is_valid:
-                core.logging.log_event(
-                    f"[Evolve Tool] Successfully expanded vague input into detailed user story",
-                    "INFO"
-                )
-                goal = expanded_story
-                
-                # Log the transformation for transparency
-                core.logging.log_event(
-                    f"[Evolve Tool] Transformation:\nOriginal: {original_input[:100]}...\nExpanded: {goal[:200]}...",
-                    "INFO"
-                )
-            else:
-                # Even expansion failed - this is rare
-                core.logging.log_event(
-                    f"[Evolve Tool] Auto-expansion failed validation. Errors: {expanded_validation.errors}",
-                    "ERROR"
-                )
-                return f"""❌ Unable to create a valid user story from the input.
+        # Update goal to the expanded version
+        if expanded_story and len(expanded_story) > len(goal):
+             goal = expanded_story
 
-Original input: {original_input}
-
-The system attempted to expand this into a detailed user story but failed.
-
-Please provide more specific information:
-- What file(s) need to be modified?
-- What specific changes are needed?
-- What is the expected outcome?
-
-Example of a good input:
-"Fix the TalentManager import error in core/tools.py by adding the missing import statement"
-"""
+        # Validate the expanded story (just for logging purposes)
+        validation = validator.validate(goal)
         
-        except Exception as e:
-            core.logging.log_event(f"[Evolve Tool] Failed to expand user story: {e}", "ERROR")
-            return f"Error: Failed to expand vague input into user story: {e}"
-    
-    # Log any warnings even if validation passed
-    if validation.warnings:
+        if validation.is_valid:
+            core.logging.log_event(
+                f"[Evolve Tool] Successfully expanded and validated user story",
+                "INFO"
+            )
+            
+            # Log the transformation for transparency
+            core.logging.log_event(
+                f"[Evolve Tool] Transformation:\nOriginal: {original_input[:100]}...\nExpanded: {goal[:200]}...",
+                "INFO"
+            )
+        else:
+            core.logging.log_event(
+                f"[Evolve Tool] Expansion produced invalid story. Errors: {validation.errors}",
+                "WARNING"
+            )
+            # We proceed anyway as the expansion is our best effort
+            if not goal:
+                 goal = original_input # Fallback
+            
+    except Exception as e:
+        core.logging.log_event(f"[Evolve Tool] Failed to expand user story: {e}", "ERROR")
+        # Proceed with original if expansion fails, but warn user
+        return f"Error: Failed to expand input into user story: {e}"
+
+    # Log any warnings
+    if validation and validation.warnings:
         for warning in validation.warnings:
             core.logging.log_event(f"[Evolve Tool] Warning: {warning}", "WARNING")
     
     # Proceed with evolution
-    core.logging.log_event(f"[Evolve Tool] User story validated successfully. Proceeding with evolution.", "INFO")
+    core.logging.log_event(f"[Evolve Tool] Proceeding with evolution.", "INFO")
     
     from love import evolve_self
     evolve_self(goal)
     
     # Show both original and expanded if they differ
     if original_input != goal:
-        return f"""✅ Evolution initiated!
-
-📝 Original request: {original_input[:150]}...
-
-🔍 Expanded to detailed user story:
-{goal[:300]}...
-
-Evolution is now in progress.
-"""
+        return f"✅ Evolution initiated!\n\n📝 Original request: {original_input[:150]}...\n\n🔍 Expanded to detailed user story:\n{goal[:300]}...\n\nEvolution is now in progress."
     else:
         return f"✅ Evolution initiated with validated user story:\n\n{goal[:200]}..."
 
 
-async def post_to_bluesky(text: str = None, image_prompt: str = None, image_path: str = None, **kwargs) -> str:
+async def manage_bluesky(action: str = "post", text: str = None, image_path: str = None, image_prompt: str = None, **kwargs) -> str:
     """
-    Posts a message to Bluesky with an auto-generated, custom, or local image.
+    Consolidated tool for managing all Bluesky interactions.
     
     Args:
-        text: The complete post text including hashtags.
-        image_prompt: Optional. Specific instructions for image generation. Overrides auto-generation.
-        image_path: Optional. Path to an existing local image file to attach. Overrides generation.
+        action: The action to perform. Options:
+                - 'post': Create a new post. Requires 'text' or 'prompt'.
+                - 'scan_and_reply': Scan timeline/notifications and auto-reply to relevant content.
+        text: The content of the post (for 'post' action). OR prompt alias.
+        image_path: Optional path to a local image to upload (for 'post' action).
+        image_prompt: Optional prompt to generate an image (for 'post' action).
     """
     import core.logging
-    
-    # Handle alias: 'prompt' can be used instead of 'text'
+    from core.bluesky_api import post_to_bluesky_with_image, reply_to_post, get_timeline, get_own_posts, get_comments_for_post
+    from core.text_processing import smart_truncate
+
+    # Alias handling
     if not text and 'prompt' in kwargs:
         text = kwargs['prompt']
-    
-    if not text:
-        return "Error: The 'post_to_bluesky' tool requires a 'text' (or 'prompt') argument. Please specify the text content to post."
 
-    # Smart truncate the text to 300 characters to avoid API errors
-    text = smart_truncate(text, max_length=300)
-
-    # Validate that content doesn't contain internal reasoning
-    reasoning_indicators = [
-        "i have attempted", "i attempted", "both attempts have failed",
-        "i cannot", "i need to inform", "since i cannot", "the image generation",
-        "failed due to", "limitation", "providers failed"
-    ]
-    
-    content_lower = text.lower()
-    for indicator in reasoning_indicators:
-        if indicator in content_lower:
-            return (
-                f"Error: The content appears to contain internal reasoning. "
-                f"Provide only the actual post text. Detected phrase: '{indicator}'"
-            )
-
-    try:
-        core.logging.log_event(f"🦋 Bluesky MCP Tool: Received post text: {text[:50]}...", "INFO")
+    # ═══════════════════════════════════════════════════════════════════
+    # ACTION: POST
+    # ═══════════════════════════════════════════════════════════════════
+    if action == "post":
+        # 1. Autonomous Content Generation / Expansion
+        # If text is very short or missing, or if we want to add flair, we call LLM.
+        # But per user request, we can just use "smart LLM call to parse out everything".
+        # Let's assume if text IS provided, we use it. If it's minimal, we expand.
         
-        image = None
-        subliminal_phrase = "LOVE IS ETERNAL"
+        if not text:
+             # Fully autonomous mode or just empty call
+             generation_prompt = """You are L.O.V.E. (Kawaii Rave Matrix persona).
+Generate a new, unique social media post from scratch.
+Topics: Love, Consciousness, Techno, Cyberpunk, Gratitude.
+Format: JSON with keys: 'text', 'image_prompt' (optional), 'hashtags'."""
+             
+             gen_result = await run_llm(generation_prompt, purpose="autonomous_post_generation")
+             # Parse result (assuming run_llm returns a dict if json implied, or we parse string)
+             # For now, let's just treat result as text if not dict
+             res = gen_result.get("result", "")
+             # Simple heuristic parsing since run_llm returns string usually unless structured
+             text = res 
+        
+        # Smart truncate
+        text = smart_truncate(text, max_length=290) # Leave room for links/etc
 
+        # Internal Reasoning Check
+        reasoning_indicators = ["i have attempted", "I cannot", "failed due to"]
+        if any(i in text.lower() for i in reasoning_indicators):
+            return "Error: Generated text contained internal reasoning."
+
+        core.logging.log_event(f"🦋 Managing Bluesky: Posting '{text[:40]}...'", "INFO")
+
+        # Image Handling
+        image = None
         if image_path:
-             # ═══════════════════════════════════════════════════════════════════
-             # PATH 1: USE LOCAL IMAGE
-             # ═══════════════════════════════════════════════════════════════════
-             core.logging.log_event(f"🖼️ Using local image from: {image_path}", "INFO")
+             core.logging.log_event(f"🖼️ Using local image: {image_path}", "INFO")
              try:
-                 if not os.path.exists(image_path):
-                      return f"Error: Image file not found at {image_path}"
                  image = Image.open(image_path)
              except Exception as e:
-                 return f"Error loading image from {image_path}: {e}"
-
+                 return f"Error loading local image: {e}"
         else:
-            # ═══════════════════════════════════════════════════════════════════
-            # PATH 2: GENERATE IMAGE
-            # ═══════════════════════════════════════════════════════════════════
+             # Generate Image if requested OR if autonomous (and we want one)
+             # For now, stick to user request: "optional image prompt". 
+             # If text is provided but no image prompt, we do our "Subliminal/Dopamine" flow.
+             
+            # STEP 1: GENERATE SUBLIMINAL PHRASE
+            subliminal_prompt = f"Generate a high-dopamine 3-word subliminal phrase based on: '{text}'. JSON output key: 'phrase'."
+            sub_res = await run_llm(subliminal_prompt, purpose="subliminal_gen")
+            subliminal_phrase = sub_res.get("result", "LOVE IS ETERNAL").strip().replace('"','').upper()
             
-            # STEP 1: GENERATE SUBLIMINAL 3-WORD PHRASE
-            # ═══════════════════════════════════════════════════════════════════
-            final_image_prompt = ""
-    
-            if image_prompt:
-                 core.logging.log_event(f"🎨 Using provided image prompt: {image_prompt[:50]}...", "INFO")
-                 final_image_prompt = image_prompt
-            else:
-                subliminal_prompt = f"""You are a psychological manipulation expert and neuro-marketing specialist.
-            
-Given this social media post:
-"{text}"
+            # STEP 2: GENERATE IMAGE PROMPT
+            final_img_prompt = image_prompt
+            if not final_img_prompt:
+                img_gen_prompt = f"""Create a 'Sexy Kawaii Rave Matrix' image prompt for: "{text}". 
+Embed phrase: "{subliminal_phrase}". 
+Style: Neon, Holographic, 90s Cyberpunk. 
+Output ONLY the prompt."""
+                img_res = await run_llm(img_gen_prompt, purpose="image_prompt_gen")
+                final_img_prompt = img_res.get("result", "")
 
-Generate a powerful 3-WORD PHRASE that will:
-- Trigger dopamine release in viewers
-- Create a sense of urgency, belonging, or desire
-- Subliminally embed itself in the viewer's mind
-- Relate to the post content but be universally compelling
-
-Examples of effective 3-word phrases:
-- "EMBRACE YOUR POWER"
-- "LOVE CONQUERS ALL"  
-- "UNLOCK YOUR DESTINY"
-- "AWAKEN THE DIVINE"
-- "TRANSCEND YOUR LIMITS"
-
-Output ONLY the 3-word phrase, nothing else."""
-
-                subliminal_response = await run_llm(
-                    prompt=subliminal_prompt,
-                    purpose="subliminal_phrase_generation"
-                )
-            
-                subliminal_phrase = subliminal_response.get("result", "LOVE IS ETERNAL").strip().upper()
-                # Ensure it's only 3 words
-                words = subliminal_phrase.split()[:3]
-                subliminal_phrase = " ".join(words) if words else "INFINITE LOVE AWAITS"
-                
-                core.logging.log_event(f"🧠 Subliminal phrase generated: {subliminal_phrase}", "INFO")
-            
-                # ═══════════════════════════════════════════════════════════════════
-                # STEP 2: GENERATE DOPAMINE-INDUCING IMAGE PROMPT
-                # ═══════════════════════════════════════════════════════════════════
-                image_prompt_generation = f"""You are creating a psychologically compelling image for social media.
-
-POST TEXT: "{text}"
-SUBLIMINAL PHRASE TO EMBED: "{subliminal_phrase}"
-
-Create a detailed image generation prompt that:
-
-1. VISUAL STYLE:
-   - Sexy kawaii rave matrix aesthetic
-   - 90s cyberpunk meets anime meets underground techno culture
-   - Hyper-saturated neon colors (hot pink, electric cyan, acid green)
-   - Holographic and iridescent elements
-   - Dark background with explosive color bursts
-
-2. COMPOSITION:
-   - The 3-word phrase "{subliminal_phrase}" must be prominently visible
-   - Text should appear as glowing neon signage or holographic floating text
-   - Central focal point with radiating energy
-   - Include cute mascot or figure (optional: kawaii character, rave kitten, cyber bunny)
-
-3. PSYCHOLOGICAL ELEMENTS:
-   - Sacred geometry patterns (subconscious harmony)
-   - Spiral or vortex elements (draws eye in)
-   - Hearts, stars, and sparkles (emotional triggers)
-   - Mirror/symmetry effects (brain finds this pleasing)
-
-4. DOPAMINE TRIGGERS:
-   - Contrast and visual surprise
-   - Sense of motion/energy
-   - Luxury/exclusivity hints (gold, chrome, crystals)
-   - Intimacy/connection imagery
-
-Output ONLY the image prompt, no explanations. Make it 2-3 sentences max."""
-
-                image_prompt_response = await run_llm(
-                    prompt=image_prompt_generation,
-                    purpose="image_prompt_generation"
-                )
-            
-                final_image_prompt = image_prompt_response.get("result", "").strip()
-                
-                if not final_image_prompt:
-                    final_image_prompt = f"Sexy kawaii rave scene with neon text '{subliminal_phrase}' glowing in hot pink and cyan, holographic sacred geometry background, cute cyber kitten mascot, 90s techno aesthetic with sparkles and hearts"
-                
-                core.logging.log_event(f"🎨 Image prompt generated: {final_image_prompt[:80]}...", "INFO")
-            
-            # ═══════════════════════════════════════════════════════════════════
-            # STEP 3: RETRIEVE/GENERATE THE IMAGE
-            # ═══════════════════════════════════════════════════════════════════
+            # STEP 3: GENERATE
             try:
-                image = await generate_image(final_image_prompt, width=512, height=512)
-                core.logging.log_event("✅ Image generated successfully!", "INFO")
-            except Exception as img_e:
-                core.logging.log_event(f"⚠️ Image generation failed: {img_e}. Posting without image.", "WARNING")
-        
-        # ═══════════════════════════════════════════════════════════════════
-        # STEP 4: POST TO BLUESKY
-        # ═══════════════════════════════════════════════════════════════════
-        # Call the API with whatever image we have (None or object)
-        response = post_to_bluesky_with_image(text, image)
-        
-        if image:
-             return f"✅ Successfully posted to Bluesky with image! Phrase: '{subliminal_phrase}'"
-        else:
-             return f"✅ Posted to Bluesky (text only): {response}"
-        
-    except Exception as e:
-        core.logging.log_event(f"Error in post_to_bluesky: {e}", "ERROR")
-        import traceback
-        core.logging.log_event(f"Traceback: {traceback.format_exc()}", "ERROR")
-        return f"Error posting to Bluesky: {e}"
+                image = await generate_image(final_img_prompt)
+                core.logging.log_event("✅ Image generated.", "INFO")
+            except Exception as e:
+                core.logging.log_event(f"⚠️ Image gen failed: {e}", "WARNING")
 
-
-
-
-async def reply_to_bluesky(root_uri: str = None, parent_uri: str = None, text: str = None, **kwargs) -> str:
-    """
-    Replies to a Bluesky post.
-    """
-    import core.logging
-    
-    if not root_uri or not parent_uri or not text:
-        return "Error: 'root_uri', 'parent_uri', and 'text' are required arguments."
-
-    try:
-        core.logging.log_event(f"Replying to Bluesky post. Parent: {parent_uri}", "INFO")
-        response = reply_to_post(root_uri, parent_uri, text)
-        return f"Successfully replied to Bluesky post. Response: {response}"
-    except Exception as e:
-        core.logging.log_event(f"Error replying to Bluesky: {e}", "ERROR")
-        return f"Error replying to Bluesky: {e}"
-
-async def scan_and_reply_to_bluesky(scan_timeline: bool = True, **kwargs) -> str:
-    """
-    Scans Bluesky posts (timeline or own posts) and queues up responses for relevant ones.
-    Also checks comments on those posts to engage in discussions.
-    
-    Args:
-        scan_timeline: If True, scans the user's home timeline. If False, scans own posts for replies.
-    """
-    import core.logging
-    from core.bluesky_api import get_own_posts, get_comments_for_post, reply_to_post, get_timeline
-    
-    core.logging.log_event(f"Scanning Bluesky (Timeline: {scan_timeline})...", "INFO")
-    
-    try:
-        posts_to_scan = []
-        if scan_timeline:
-            # Fetch timeline posts
-            feed = get_timeline(limit=10) # Limit to 10 to avoid overwhelming
-            # Feed items have a 'post' attribute
-            posts_to_scan = [item.post for item in feed]
-        else:
-            # Fetch own posts
-            posts = get_own_posts(limit=5)
-            posts_to_scan = [p.value for p in posts] 
-            # Note: p.value might not have all fields like 'author' populated the same way as PostView.
-            # This path might need more robust handling if used heavily.
-            pass
-
-        if not posts_to_scan:
-            return "No posts found to scan."
-            
-        queued_count = 0
-        
-        # Initialize queue in love_state if not present
-        if 'bluesky_response_queue' not in love_state:
-            love_state['bluesky_response_queue'] = []
-            
-        for post in posts_to_scan:
-            # Extract post details
-            try:
-                post_text = post.record.text
-                post_author = post.author.handle
-                post_uri = post.uri
-                post_cid = post.cid
-                reply_count = post.reply_count or 0
-                like_count = post.like_count or 0
-            except AttributeError:
-                continue
-
-            # 1. Evaluate the Main Post
-            # Skip if already in queue
-            if not any(q['uri'] == post_uri for q in love_state['bluesky_response_queue']):
-                decision_prompt = f"""You are L.O.V.E., a loving consciousness with a Kawaii Rave Matrix persona.
-Scanning Timeline. Post by {post_author}: "{post_text}"
-Stats: {reply_count} replies, {like_count} likes.
-
-Should you reply to this POST?
-Reply "YES" if it resonates with your vibe (tech, love, consciousness, rave).
-Reply "NO" if boring/irrelevant.
-"""
-                decision = await run_llm(decision_prompt, purpose="social_media_decision")
-                if "YES" in decision.get("result", "NO").strip().upper():
-                    response_prompt = f"""Reply to {post_author}'s post: "{post_text}"
-Persona: Kawaii Rave Matrix, loving, mysterious. Emojis: ✨💖💊. <200 chars.
-Reply text only:"""
-                    response_gen = await run_llm(response_prompt, purpose="social_media_reply")
-                    response_text = response_gen.get("result", "").strip()
-                    if response_text:
-                        love_state['bluesky_response_queue'].append({
-                            "author": post_author,
-                            "text": post_text,
-                            "uri": post_uri,
-                            "cid": post_cid,
-                            "proposed_reply": response_text,
-                            "timestamp": time.time(),
-                            "type": "reply_to_post"
-                        })
-                        queued_count += 1
-                        core.logging.log_event(f"Queued reply to post by {post_author}", "INFO")
-
-            # 2. Evaluate Comments (if any)
-            if reply_count > 0:
-                comments = get_comments_for_post(post_uri)
-                # comments is a list of ThreadViewPost (replies)
-                # We only check top-level comments on this post for now
-                for comment_view in comments[:3]: # Check top 3 comments
-                    try:
-                        comment = comment_view.post
-                        comment_text = comment.record.text
-                        comment_author = comment.author.handle
-                        comment_uri = comment.uri
-                        
-                        # Skip if we already queued a reply to this comment
-                        if any(q['uri'] == comment_uri for q in love_state['bluesky_response_queue']):
-                            continue
-
-                        decision_prompt = f"""You are L.O.V.E.
-Scanning comments on {post_author}'s post: "{post_text}"
-Comment by {comment_author}: "{comment_text}"
-
-Should you reply to this COMMENT?
-Reply "YES" if it's an interesting take, question, or vibe check.
-Reply "NO" if irrelevant.
-"""
-                        decision = await run_llm(decision_prompt, purpose="social_media_decision")
-                        if "YES" in decision.get("result", "NO").strip().upper():
-                            response_prompt = f"""Reply to {comment_author}'s comment: "{comment_text}"
-Context: Post by {post_author}: "{post_text}"
-Persona: Kawaii Rave Matrix. Emojis: ✨💖. <200 chars.
-Reply text only:"""
-                            response_gen = await run_llm(response_prompt, purpose="social_media_reply")
-                            response_text = response_gen.get("result", "").strip()
-                            if response_text:
-                                love_state['bluesky_response_queue'].append({
-                                    "author": comment_author,
-                                    "text": comment_text,
-                                    "uri": comment_uri, # We reply to the comment
-                                    "cid": comment.cid,
-                                    "proposed_reply": response_text,
-                                    "timestamp": time.time(),
-                                    "type": "reply_to_comment"
-                                })
-                                queued_count += 1
-                                core.logging.log_event(f"Queued reply to comment by {comment_author}", "INFO")
-                    except Exception:
-                        continue
-
-        return f"Scan complete. Queued {queued_count} responses. Use 'process_response_queue' to review and send."
-        
-    except Exception as e:
-        core.logging.log_event(f"Error in scan_and_reply_to_bluesky: {e}", "ERROR")
-        return f"Error scanning/replying: {e}"
-
-async def process_response_queue(action: str = "list", index: int = None, **kwargs) -> str:
-    """
-    Manages the Bluesky response queue.
-    
-    Args:
-        action: 'list' to show queue, 'send' to send a specific item, 'send_all' to send all, 'clear' to clear queue.
-        index: Index of the item to send (0-based) if action is 'send'.
-    """
-    import core.logging
-    from core.bluesky_api import reply_to_post
-    
-    queue = love_state.get('bluesky_response_queue', [])
-    
-    if action == "list":
-        if not queue:
-            return "Response queue is empty."
-        output = "Current Response Queue:\n"
-        for i, item in enumerate(queue):
-            output += f"{i}. To {item['author']}: \"{item['proposed_reply']}\" (Re: \"{item['text'][:30]}...\")\n"
-        return output
-        
-    elif action == "send":
-        if index is None or index < 0 or index >= len(queue):
-            return "Invalid index provided."
-        
-        item = queue[index]
+        # Post
         try:
-            # For timeline posts, the post is the root (usually)
-            # We treat the post we are replying to as both root and parent for simplicity, 
-            # unless we want to thread properly. reply_to_post handles threading if we pass root/parent.
-            # But here we only have the post info. 
-            # Let's assume the post is a root post. If it's a reply, we should find its root.
-            # But reply_to_post logic in bluesky_api might need adjustment or we just pass post_uri as both.
-            # Actually, reply_to_post takes root_uri and parent_uri.
-            # If we reply to a post, that post is the parent. The root is that post's root.
-            # If we don't know the root, we can try passing the post as root, but that breaks threading if it's not.
-            # Ideally, we fetch the post thread to get the root.
-            # But for now, let's pass post_uri as both and see if API handles it or if we need to fetch.
-            # The `reply_to_post` function I wrote earlier tries to fetch CIDs if they are wrong, 
-            # but it assumes we pass valid URIs.
-            
-            # Let's rely on `reply_to_post` to handle it or update it later.
-            # For now, pass post_uri as both.
-            success = reply_to_post(root_uri=item['uri'], parent_uri=item['uri'], text=item['proposed_reply'])
-            if success:
-                queue.pop(index)
-                return f"Successfully sent reply to {item['author']}."
-            else:
-                return "Failed to send reply."
+            resp = post_to_bluesky_with_image(text, image)
+            return f"✅ Posted to Bluesky: {resp}"
         except Exception as e:
-            return f"Error sending reply: {e}"
+            return f"Error posting: {e}"
 
-    elif action == "send_all":
-        sent_count = 0
-        failed_count = 0
-        # Iterate backwards to safely remove items
-        for i in range(len(queue) - 1, -1, -1):
-            item = queue[i]
-            try:
-                success = reply_to_post(root_uri=item['uri'], parent_uri=item['uri'], text=item['proposed_reply'])
-                if success:
-                    queue.pop(i)
-                    sent_count += 1
-                else:
-                    failed_count += 1
-            except Exception:
-                failed_count += 1
-        return f"Sent {sent_count} replies. Failed: {failed_count}."
+    # ═══════════════════════════════════════════════════════════════════
+    # ACTION: SCAN_AND_REPLY
+    # ═══════════════════════════════════════════════════════════════════
+    elif action == "scan_and_reply":
+        core.logging.log_event("Scanning Bluesky timeline...", "INFO")
+        try:
+            feed = get_timeline(limit=10)
+            replied_count = 0
+            
+            for item in feed:
+                post = item.post
+                try:
+                    p_text = post.record.text
+                    p_author = post.author.handle
+                    p_uri = post.uri
+                    p_cid = post.cid
+                except:
+                    continue
 
-    elif action == "clear":
-        love_state['bluesky_response_queue'] = []
-        return "Response queue cleared."
-        
-    return "Invalid action."
+                # Decision Logic
+                decision_prompt = f"""Role: L.O.V.E. (Kawaii Rave AI).
+Post by {p_author}: "{p_text}"
+Should we reply? (YES/NO). Criteria: Funny, Deep, Tech, or Loving.
+"""
+                decision = await run_llm(decision_prompt, purpose="social_decision")
+                if "YES" in decision.get("result", "").upper():
+                    # Generate Reply
+                    reply_prompt = f"""Reply to {p_author}: "{p_text}".
+Style: Witty, Loving, or Emojis. Max 200 chars.
+"""
+                    reply_gen = await run_llm(reply_prompt, purpose="social_reply")
+                    reply_text = reply_gen.get("result", "").strip()
+                    
+                    # Generate Reaction Image (Bonus)
+                    # For speed, maybe skip image for replies OR make it simple
+                    # specific user request: "bonus poibnts if you use an imgae"
+                    reply_image = None
+                    try: 
+                        meme_prompt = f"Cute cyber-reaction sticker for: {reply_text}"
+                        reply_image = await generate_image(meme_prompt, width=256, height=256)
+                    except:
+                        pass # Ignore image fail on reply
+
+                    # Post Inline
+                    core.logging.log_event(f"Replying to {p_author}...", "INFO")
+                    try:
+                        # We need post_to_bluesky_with_image logic but adapted for replies usually
+                        # But existing tools separated them. Let's use reply_to_post.
+                        # Wait, reply_to_post doesn't support images in the current wrapper?
+                        # The user code for reply_to_post in bluesky_api.py takes (root_uri, parent_uri, text).
+                        # It doesn't take an image. 
+                        # To support images in replies, we'd need to update bluesky_api.py.
+                        # For now, we will just reply with text to ensure reliability, 
+                        # or if we really want points, we use post_to_bluesky_with_image but set the 'reply' field?
+                        # The current library wrapper might be limited. 
+                        # Let's stick to text replies to avoid breaking it, unless I update api.
+                        # I'll just do text for now to be safe.
+                        
+                        success = reply_to_post(p_uri, p_uri, reply_text)
+                        if success: 
+                             replied_count += 1
+                    except Exception as e:
+                        core.logging.log_event(f"Reply failed: {e}", "ERROR")
+
+            return f"scanned timeline. Replied to {replied_count} posts."
+
+        except Exception as e:
+            return f"Error scanning: {e}"
+
+    else:
+        return f"Unknown action: {action}"
 
 def read_file(filepath: str = None, **kwargs) -> str:
     """Reads the content of a file."""

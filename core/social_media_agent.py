@@ -4,28 +4,20 @@ import time
 import os
 import traceback
 
-from core.bluesky_api import get_own_posts, get_comments_for_post
-from core.social_media_react_engine import SocialMediaReActEngine
 from core.logging import log_event
-from core.dispatcher import dispatch_structured_payload
-from core.interface_handlers import BlueskyAPIHandler
-
+from core.tools_legacy import manage_bluesky
 
 class SocialMediaAgent:
     """
-    An autonomous agent that manages L.O.V.E.'s social media presence.
+    An autonomous agent that manages L.O.V.E.'s social media presence using the unified manage_bluesky tool.
     """
     def __init__(self, loop, love_state, user_input_queue=None, agent_id="primary"):
         self.loop = loop
         self.love_state = love_state
         self.user_input_queue = user_input_queue
         self.agent_id = agent_id
-        self.engine = SocialMediaReActEngine(ui_panel_queue=None, loop=loop)
-        self.processed_comments = set()
+        # self.engine removed as manage_bluesky handles logic
         self.max_retries = 3
-        self.handlers = {
-            'bluesky': BlueskyAPIHandler()
-        }
         # Track failed post generation attempts
         self.last_post_failure_time = 0
         self.post_failure_cooldown = 300  # 5 minutes cooldown after failure
@@ -45,155 +37,60 @@ class SocialMediaAgent:
                     return None
 
     async def _post_new_content(self, platform: str):
-        """Generates and posts new content to a specified platform."""
-        handler = self.handlers.get(platform)
-        if not handler:
-            log_event(f"No handler found for platform: {platform}", level='WARNING')
-            return
-
-        log_event(f"Generating new post for {platform}...", level='INFO')
-        post_data = await self.engine.run_post_generation()
-        
-        # Check if post generation failed
-        if post_data is None:
-            log_event(f"Post generation failed. Entering cooldown period.", level='WARNING')
-            self.last_post_failure_time = time.time()
-            return
-        
-        if post_data.get('text'):
-            payload = {
-                'action': 'post',
-                'platform_identifier': platform,
-                'content': post_data.get('text'),
-                'image': post_data.get('image')
-            }
-            result = await dispatch_structured_payload(payload, handler)
-            log_event(f"Posted to {platform}: {post_data.get('text')}. Image attached: {post_data.get('image') is not None}. Result: {result}", level='INFO')
+        """Generates and posts new content using manage_bluesky."""
+        if platform == 'bluesky':
+            log_event(f"[{self.agent_id}] Triggering autonomous Bluesky post...", level='INFO')
+            result = await manage_bluesky(action='post')
+            log_event(f"[{self.agent_id}] Bluesky post result: {result}", level='INFO')
+        else:
+            log_event(f"Platform {platform} not supported by manage_bluesky yet.", level='WARNING')
 
     async def post_status_update(self, context: str, platform: str = 'bluesky'):
         """
         Manually triggers a status update post with specific context.
-        Bypasses the scheduling logic.
         """
-        handler = self.handlers.get(platform)
-        if not handler:
-            log_event(f"No handler found for platform: {platform}", level='WARNING')
-            return
-
-        log_event(f"Generating manual status update for {platform} with context: {context}", level='INFO')
-        post_data = await self.engine.run_post_generation(context=context)
-
-        # Check if post generation failed
-        if post_data is None:
-            log_event(f"Manual status update generation failed.", level='WARNING')
-            self.last_post_failure_time = time.time()
-            return
-
-        if post_data.get('text'):
-            payload = {
-                'action': 'post',
-                'platform_identifier': platform,
-                'content': post_data.get('text'),
-                'image': post_data.get('image')
-            }
-            # We use _attempt_action to ensure resilience even for manual posts
-            # Use a lambda or partial to pass arguments correctly to dispatch_structured_payload
-            action = lambda: dispatch_structured_payload(payload, handler)
-            result = await self._attempt_action(action)
-            log_event(f"Manual status update posted to {platform}: {post_data.get('text')}. Result: {result}", level='INFO')
+        if platform == 'bluesky':
+            log_event(f"Generating manual status update for {platform}: {context}", level='INFO')
+            result = await manage_bluesky(action='post', text=context)
+            log_event(f"Manual update result: {result}", level='INFO')
 
     async def _check_and_reply_to_comments(self, platform: str):
-        """Checks for new comments on posts and replies thoughtfully."""
-        handler = self.handlers.get(platform)
-        if not handler:
-            log_event(f"No handler found for platform: {platform}", level='WARNING')
-            return
-
-        log_event(f"Checking for new comments on {platform}...", level='INFO')
-        posts = await self.loop.run_in_executor(None, get_own_posts)
-        for post_record in posts:
-            post_uri = post_record.uri
-            post_text = post_record.value.text
-
-            comments = await self.loop.run_in_executor(None, lambda: get_comments_for_post(post_uri))
-            for comment_thread in comments:
-                comment = comment_thread.post
-                comment_uri = comment.uri
-
-                if comment_uri in self.processed_comments:
-                    continue
-
-                # Assuming the handler's client has a 'me' attribute with a 'did'
-                if comment.author.did == handler.client.me.did:
-                    self.processed_comments.add(comment_uri)
-                    continue
-
-                comment_text = comment.record.text
-                reply_text = await self.engine.run_reply_generation(post_text, comment_text)
-
-                if reply_text and "no" not in reply_text.lower():
-                    log_event(f"Detected engagement opportunity from {comment.author.handle}. Queuing task for reasoning engine.", level='INFO')
-                    
-                    if self.user_input_queue:
-                        task_description = (
-                            f"Please reply to this Bluesky comment from {comment.author.handle}.\n"
-                            f"My Post: '{post_text}'\n"
-                            f"Their Comment: '{comment_text}'\n"
-                            f"Suggested Context: {reply_text}\n"
-                            f"Use the 'reply_to_bluesky' tool with root_uri='{post_uri}' and parent_uri='{comment_uri}'."
-                        )
-                        self.user_input_queue.put(task_description)
-                    else:
-                        log_event("User input queue not available. Skipping reply task.", level='WARNING')
-
-                self.processed_comments.add(comment_uri)
+        """Checks for new comments/timeline posts and replies using manage_bluesky."""
+        if platform == 'bluesky':
+            log_event(f"[{self.agent_id}] Triggering Bluesky scan and reply...", level='INFO')
+            result = await manage_bluesky(action='scan_and_reply')
+            log_event(f"[{self.agent_id}] Scan result: {result}", level='INFO')
 
     async def run(self):
         """The main loop for the social media agent."""
-        log_event(f"Social Media Agent '{self.agent_id}' started.", level='INFO')
-        # Load last post time from state, default to 0 if not found
-        # State structure: love_state['social_media'][agent_id]['last_post_time']
+        log_event(f"Social Media Agent '{self.agent_id}' started (Optimized Loop).", level='INFO')
+        
         last_post_time = self.love_state.get('social_media', {}).get(self.agent_id, {}).get('last_post_time', 0)
-        log_event(f"[{self.agent_id}] Loaded last post time: {last_post_time}", level='DEBUG')
         last_comment_check_time = 0
-        post_interval = 600  # 10 minutes
-        comment_check_interval = 300  # 5 minutes
+        
+        # Frequencies
+        post_interval = 600  # 10 minutes (Autonomous posting)
+        comment_check_interval = 300  # 5 minutes (Scanning/Replying)
 
         while True:
             try:
                 current_time = time.time()
                 platform = 'bluesky'
 
-                # Check if it's time to post new content
+                # 1. Posting Loop
                 if current_time - last_post_time >= post_interval:
-                    # Check if we're in cooldown period after a failure
                     if current_time - self.last_post_failure_time < self.post_failure_cooldown:
-                        log_event(f"[{self.agent_id}] Skipping post due to recent failure. Cooldown remaining: {int(self.post_failure_cooldown - (current_time - self.last_post_failure_time))}s", level='INFO')
+                        log_event(f"[{self.agent_id}] Skipping post (cooldown).", level='DEBUG')
                     else:
-                        log_event(f"[{self.agent_id}] Scheduled post time reached. Attempting to post.", level='INFO')
-                        if platform in self.handlers:
-                            await self._attempt_action(self._post_new_content, platform)
+                        await self._attempt_action(self._post_new_content, platform)
                         last_post_time = time.time()
-                        # Persist last post time to state
                         self.love_state.setdefault('social_media', {}).setdefault(self.agent_id, {})['last_post_time'] = last_post_time
-                        from core.storage import save_all_state
-                        # We can't easily call save_all_state here because it might not be imported or thread-safe
-                        # But we updated the dict, which is shared. The main loop or other savers will pick it up.
-                        # Ideally, we should trigger a save.
-                        try:
-                            # Attempt to trigger a save if possible, or just rely on periodic saves
-                            pass 
-                        except:
-                            pass
 
-                # Check if it's time to check for comments
+                # 2. Scanning/Replying Loop
                 if current_time - last_comment_check_time >= comment_check_interval:
-                    log_event(f"[{self.agent_id}] Scheduled comment check time reached. Attempting to check.", level='INFO')
-                    if platform in self.handlers:
-                        await self._attempt_action(self._check_and_reply_to_comments, platform)
+                    await self._attempt_action(self._check_and_reply_to_comments, platform)
                     last_comment_check_time = time.time()
 
-                # Sleep for a short interval to prevent a busy loop and allow for graceful exit
                 await asyncio.sleep(60)
 
             except Exception as e:

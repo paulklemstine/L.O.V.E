@@ -3036,102 +3036,39 @@ async def initialize_gpu_services():
         }
     )
     
-    tool_registry.register_tool(
-        name="post_to_bluesky",
-        tool=post_to_bluesky,
-        metadata={
-            "description": "Posts a status update to Bluesky. Requires 'text' or 'prompt'. You can optionally provide a local image path or a specific image generation prompt.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "text": {
-                        "type": "string",
-                        "description": "The text content of the post"
-                    },
-                    "prompt": {
-                        "type": "string",
-                        "description": "Alias for 'text'. The content of the post."
-                    },
-                    "image_path": {
-                        "type": "string",
-                        "description": "Optional. Absolute local file path to an image to upload. If provided, disables image generation."
-                    },
-                    "image_prompt": {
-                        "type": "string",
-                        "description": "Optional. Specific instructions for the image generation. If provided, overrides autonomous generation. Ignored if image_path is provided."
-                    }
-                },
-                "required": []
-            }
-        }
-    )
-
-    # Register scan_and_reply_to_bluesky and process_response_queue
-    from core.tools_legacy import scan_and_reply_to_bluesky, process_response_queue
-    
-    tool_registry.register_tool(
-        name="scan_and_reply_to_bluesky",
-        tool=scan_and_reply_to_bluesky,
-        metadata={
-            "description": "Scans Bluesky posts (timeline or own posts) and queues up responses. Can scan the home timeline or check for replies to own posts.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "scan_timeline": {
-                        "type": "boolean",
-                        "description": "If True, scans the user's home timeline for posts to engage with. If False, scans own posts for replies."
-                    }
-                },
-                "required": []
-            }
-        }
-    )
+    from core.tools_legacy import manage_bluesky
 
     tool_registry.register_tool(
-        name="process_response_queue",
-        tool=process_response_queue,
+        name="manage_bluesky",
+        tool=manage_bluesky,
         metadata={
-            "description": "Manages the Bluesky response queue. Can list, send, or clear queued responses.",
+            "description": "Unified tool for managing Bluesky interactions (Posting, Scanning, Replying).",
             "arguments": {
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": ["list", "send", "send_all", "clear"],
-                        "description": "Action to perform: 'list' to show queue, 'send' to send specific item, 'send_all' to send all, 'clear' to empty queue."
-                    },
-                    "index": {
-                        "type": "integer",
-                        "description": "Index of the item to send (only for 'send' action)."
-                    }
-                },
-                "required": ["action"]
-            }
-        }
-    )
-    
-    tool_registry.register_tool(
-        name="reply_to_bluesky",
-        tool=reply_to_bluesky,
-        metadata={
-            "description": "Replies to a Bluesky post.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "root_uri": {
-                        "type": "string",
-                        "description": "The URI of the root post"
-                    },
-                    "parent_uri": {
-                        "type": "string",
-                        "description": "The URI of the parent post (the one being replied to)"
+                        "description": "Action to perform: 'post' (create new post) or 'scan_and_reply' (auto-engage w/ timeline). Default: 'post'.",
+                        "enum": ["post", "scan_and_reply"]
                     },
                     "text": {
                         "type": "string",
-                        "description": "The content of the reply"
+                        "description": "Content of the post (for 'post' action). If minimal, will be auto-expanded."
+                    },
+                    "prompt": {
+                         "type": "string",
+                         "description": "Alias for 'text'."
+                    },
+                    "image_path": {
+                        "type": "string",
+                        "description": "Optional local image path for 'post' action."
+                    },
+                    "image_prompt": {
+                        "type": "string",
+                        "description": "Optional image generation prompt for 'post' action."
                     }
                 },
-                "required": ["root_uri", "parent_uri", "text"]
+                "required": []
             }
         }
     )
