@@ -1701,12 +1701,18 @@ def continuous_evolution_agent(loop):
             
             # Call evolve_self
             if 'love_task_manager' in globals() and love_task_manager:
-                result = asyncio.run_coroutine_threadsafe(
-                    evolve_self(goal, love_task_manager, loop, deep_agent_engine if 'deep_agent_engine' in globals() else None),
-                    loop
-                ).result(timeout=600)  # 10 minute timeout for evolution
-                
-                core.logging.log_event(f"Evolution Agent: Evolution result: {result}", "INFO")
+                try:
+                    result = asyncio.run_coroutine_threadsafe(
+                        evolve_self(goal, love_task_manager, loop, deep_agent_engine if 'deep_agent_engine' in globals() else None),
+                        loop
+                    ).result(timeout=600)  # 10 minute timeout for evolution
+                    
+                    core.logging.log_event(f"Evolution Agent: Evolution result: {result}", "INFO")
+                except RuntimeError as re:
+                    if "Event loop is closed" in str(re):
+                        core.logging.log_event("Evolution Agent: Event loop is closed. Shutting down agent.", "INFO")
+                        return # Exit the agent
+                    raise re # Re-raise if it's another runtime error
             else:
                 core.logging.log_event("Evolution Agent: love_task_manager not available. Skipping evolution.", "WARNING")
             
