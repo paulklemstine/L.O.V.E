@@ -3052,7 +3052,8 @@ async def initialize_gpu_services():
                     "image_prompt": {
                         "type": "string",
                         "description": "Optional. Specific instructions for the image generation (e.g., 'A cyberpunk city with neon rain'). If provided, this overrides autonomous generation."
-                    },
+                    }
+                },
                 "required": ["text"]
             }
         }
