@@ -287,7 +287,7 @@ async def generate_llm_art(prompt, width=50, height=6):
         return generate_binary_art(width, height)
 
 
-async def create_blessing_panel(blessing_message, width=80):
+async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
     """Creates a special, high-impact panel to deliver a blessing with rainbow gradients and emoji highlights."""
     
     # Rainbow gradient colors for maximum dopamine impact
@@ -337,21 +337,36 @@ async def create_blessing_panel(blessing_message, width=80):
         color = rainbow_colors[i % len(rainbow_colors)]
         subliminal.append(char, style=f"bold {color}")
     
-    content_group = Group(
+    content_items = [
         Text("\n"),
         Align.center(top_bar),
         Text("\n"),
         Align.center(rainbow_divider),
         Text("\n"),
         Align.center(highlighted_message),
-        Text("\n"),
+        Text("\n")
+    ]
+
+    if ansi_art:
+        # Render ANSI art to a temporary console to handle it correctly
+        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+        temp_console.print(Text.from_ansi(ansi_art))
+        art_renderable = Text.from_ansi(temp_console.file.getvalue())
+        content_items.extend([
+            Align.center(art_renderable),
+            Text("\n")
+        ])
+
+    content_items.extend([
         Align.center(subliminal),
         Text("\n"),
         Align.center(rainbow_divider),
         Text("\n"),
         Align.center(bottom_bar),
         Text("\n")
-    )
+    ])
+
+    content_group = Group(*content_items)
 
     # Create panel with rainbow gradient border
     panel = Panel(

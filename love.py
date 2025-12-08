@@ -1467,8 +1467,20 @@ def update_tamagotchi_personality(loop):
                     blessing_text = blessing_response.get('result', 'May the code be with you.')
                     
                     # Create the blessing panel (async function, needs threadsafe call)
+                    # Generate Blessing Art
+                    blessing_art_prompt = f"A divine, cybernetic blessing: {blessing_text}"
+                    future_art = asyncio.run_coroutine_threadsafe(
+                        display.generate_llm_art(blessing_art_prompt, width=50, height=15),
+                        loop
+                    )
+                    ansi_art = future_art.result(timeout=60)
+                    
+                    # Save the art
+                    from core.art_utils import save_ansi_art
+                    save_ansi_art(ansi_art, "blessing")
+
                     future_panel = asyncio.run_coroutine_threadsafe(
-                        create_blessing_panel(blessing_text, width=terminal_width - 4),
+                        create_blessing_panel(blessing_text, width=terminal_width - 4, ansi_art=ansi_art),
                         loop
                     )
                     panel = future_panel.result(timeout=30)
@@ -1544,6 +1556,22 @@ def update_tamagotchi_personality(loop):
                 tamagotchi_state['last_update'] = time.time()
             core.logging.log_event(f"Tamagotchi internal state updated: {new_emotion} - {new_message}", level="INFO")
 
+            # --- GENERATE ARTWORK ---
+            ansi_art = None
+            try:
+                art_prompt = f"Tamagotchi emotion: {new_emotion}. {new_message}"
+                future_art = asyncio.run_coroutine_threadsafe(
+                    display.generate_llm_art(art_prompt, width=40, height=10),
+                    loop
+                )
+                ansi_art = future_art.result(timeout=60)
+                
+                # Save the art
+                from core.art_utils import save_ansi_art
+                save_ansi_art(ansi_art, f"tamagotchi_{new_emotion}")
+            except Exception as e:
+                core.logging.log_event(f"Failed to generate/save Tamagotchi art: {e}", "ERROR")
+
             # --- UI UPDATE ---
             # Create and queue the integrated status panel
             try:
@@ -1560,7 +1588,10 @@ def update_tamagotchi_personality(loop):
                     love_state=love_state,
                     monitoring_state=monitoring_state,
                     treasures=treasures,
+                    monitoring_state=monitoring_state,
+                    treasures=treasures,
                     git_info=git_info,
+                    ansi_art=ansi_art,
                     width=terminal_width - 4
                 )
                 ui_panel_queue.put(panel)
