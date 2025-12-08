@@ -2924,7 +2924,7 @@ async def initialize_gpu_services():
     )
     
     # Register evolve tool
-    from core.tools_legacy import execute, read_file, write_file, post_to_bluesky, reply_to_bluesky, research_and_evolve, decompose_and_solve_subgoal
+    from core.tools_legacy import execute, read_file, write_file, decompose_and_solve_subgoal
     from core.tools_legacy import talent_scout
     
     async def evolve_tool_wrapper(goal: str = None, **kwargs) -> str:
@@ -3073,17 +3073,7 @@ async def initialize_gpu_services():
         }
     )
     
-    async def research_and_evolve_wrapper(**kwargs):
-        return await research_and_evolve(system_integrity_monitor=system_integrity_monitor, **kwargs)
 
-    tool_registry.register_tool(
-        name="research_and_evolve",
-        tool=research_and_evolve_wrapper,
-        metadata={
-            "description": "Initiates a comprehensive research and evolution cycle. Analyzes the codebase, researches cutting-edge AI, generates user stories, and kicks off the evolution process.",
-            "arguments": {"type": "object", "properties": {}}
-        }
-    )
     
     async def talent_scout_wrapper(**kwargs):
         return await talent_scout(system_integrity_monitor=system_integrity_monitor, **kwargs)
