@@ -146,11 +146,12 @@ def reply_to_post(root_uri, parent_uri, text):
             reply=models.AppBskyFeedPost.ReplyRef(root=root_ref, parent=parent_ref),
             created_at=client.get_current_time_iso(),
         )
-        return client.com.atproto.repo.create_record(
+        data = models.ComAtprotoRepoCreateRecord.Data(
             repo=client.me.did,
             collection=models.ids.AppBskyFeedPost,
             record=record
         )
+        return client.com.atproto.repo.create_record(data)
     except ModelError as e:
         # Handle cases where the CID might be wrong in the URI
         print(f"Error creating reply record for {parent_uri}: {e}")
@@ -168,11 +169,12 @@ def reply_to_post(root_uri, parent_uri, text):
                 record.reply.root = root_ref
                 record.reply.parent = parent_ref
 
-                return client.com.atproto.repo.create_record(
+                data = models.ComAtprotoRepoCreateRecord.Data(
                     repo=client.me.did,
                     collection=models.ids.AppBskyFeedPost,
                     record=record
                 )
+                return client.com.atproto.repo.create_record(data)
         except Exception as final_e:
             print(f"Could not recover from reply error for {parent_uri}: {final_e}")
 
