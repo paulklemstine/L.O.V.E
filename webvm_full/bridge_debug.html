@@ -84,12 +84,7 @@
             <span>Bridge:</span>
             <div id="bridge-dot" class="status-dot red" title="Host Bridge Disconnected"></div>
         </div>
-        <div>
-            <button id="inject-btn"
-                style="padding: 2px 8px; cursor: pointer; background: #666; color: white; border: none; margin-right: 5px;">🚀
-                Inject Bridge</button>
-            <button id="paste-btn" style="padding: 2px 8px; cursor: pointer;">📋 Paste</button>
-        </div>
+        <button id="paste-btn" style="padding: 2px 8px; cursor: pointer;">📋 Paste</button>
     </div>
     <div id="network-notice">⚠️ Click here to enable networking (Tailscale authentication required)</div>
     <div id="console"></div>
@@ -635,11 +630,6 @@ if __name__ == "__main__":
                         console.error('Failed to read clipboard:', err);
                         alert('Failed to read clipboard. Please allow clipboard access.');
                     }
-                };
-
-                // Add Inject Button logic (Restored)
-                document.getElementById('inject-btn').onclick = () => {
-                    injectVmNetScript();
                 };
 
                 console.log("%c✓ CheerpX ready!", "color: #0f0; font-weight: bold");
