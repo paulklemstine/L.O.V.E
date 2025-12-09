@@ -216,9 +216,27 @@ def _install_system_packages():
         except Exception as e:
              print(f"WARN: Error checking/creating python symlink: {e}")
 
-    # In the WebVM environment, we pre-install these packages in the Docker image.
-    # Runtime installation via apt-get/sudo is not reliable or permitted.
-    # We assume the environment is correctly provisioned.
+    # 3. Install necessary system packages (build-essential, cmake)
+    if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ and shutil.which("apt-get"):
+        print("Ensuring system dependencies (build-essential, cmake) are installed...")
+        packages = []
+        if not shutil.which("make") or not shutil.which("gcc"):
+            packages.append("build-essential")
+        if not shutil.which("cmake"):
+            packages.append("cmake")
+        if not shutil.which("python3-dev"):
+             packages.append("python3-dev")
+
+        if packages:
+            try:
+                print(f"Installing missing system packages: {', '.join(packages)}...")
+                cmd = f"sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {' '.join(packages)}"
+                subprocess.check_call(cmd, shell=True)
+                print("Successfully installed system packages.")
+            except subprocess.CalledProcessError as e:
+                print(f"WARN: Failed to install system packages: {e}")
+                print("Builds for some dependencies (like fast-downward) may fail.")
+
     mark_dependency_as_met("system_packages")
     return
 
