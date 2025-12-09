@@ -84,14 +84,19 @@
             <span>Bridge:</span>
             <div id="bridge-dot" class="status-dot red" title="Host Bridge Disconnected"></div>
         </div>
-        <button id="paste-btn" style="padding: 2px 8px; cursor: pointer;">📋 Paste</button>
+        <div>
+            <button id="inject-btn"
+                style="padding: 2px 8px; cursor: pointer; background: #666; color: white; border: none; margin-right: 5px;">🚀
+                Inject Bridge</button>
+            <button id="paste-btn" style="padding: 2px 8px; cursor: pointer;">📋 Paste</button>
+        </div>
     </div>
     <div id="network-notice">⚠️ Click here to enable networking (Tailscale authentication required)</div>
     <div id="console"></div>
     <script>
         // --- Host-Local Bridge Configuration ---
         const BRIDGE_WS_URL = "ws://localhost:8001";
-        
+
         // Inlined vm_net.py content to avoid fetch restrictions
         const VM_NET_SCRIPT_CONTENT = `#!/usr/bin/env python3
 # vm_net.py - The "Inside Man" SOCKS Server
@@ -467,21 +472,20 @@ if __name__ == "__main__":
         async function injectVmNetScript() {
             try {
                 console.log("Injecting vm_net.py (inlined)...");
-                const scriptContent = VM_NET_SCRIPT_CONTENT;
+                // Base64 encoded vm_net.py to avoid character escaping and length issues
+                const B64_SCRIPT = "IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwojIHZtX25ldC5weSAtIFRoZSAiSW5zaWRlIE1hbiIgU09DS1MgU2VydmVyCmltcG9ydCBzb2NrZXQKaW1wb3J0IHNlbGVjdAppbXBvcnQgc3RydWN0CmltcG9ydCBzeXMKaW1wb3J0IHRocmVhZGluZwppbXBvcnQgb3MKaW1wb3J0IHRpbWUKCiMgQ29uZmlnCkJSSURHRV9GSUxFID0gIi9tbnQvYnJpZGdlL25ldGJyaWRnZSIgIyBNb3VudGVkIERhdGFEZXZpY2UKU09DS1NfSE9TVCA9ICIxMjcuMC4wLjEiClNPQ0tTX1BPUlQgPSAxMDgwCgojIFByb3RvY29sIE9wY29kZXwKT1BfQ09OTkVDVCA9IDB4MDEKT1BfREFUQSA9IDB4MDIKT1BfQ0xPU0UgPSAweDAzCgpkZWYgbG9nKG1zZyk6CiAgICBzeXMuc3RkZXJyLndyaXRlKGYiWypdIHttc2d9XG4iKQogICAgc3lzLnN0ZGVyci5mbHVzaCgpCgojIEdsb2JhbCBtYXAgb2YgY29ubmVjdGlvbnMKY29ubmVjdGlvbnMgPSB7fQpjb25uX2xvY2sgPSB0aHJlYWRpbmcuTG9jaygpCm5leHRfY29ubl9pZCA9IDEKCmRlZiByZWFkZXJfdGhyZWFkKCk6CiAgICAiIiJSZWFkcyBmcm9tIHRoZSBicmlkZ2UgZmlsZSBhbmQgZGlzcGF0Y2hlcyB0byBzb2NrZXRzIiIiCiAgICBnbG9iYWwgY29ubmVjdGlvbnMKICAgIAogICAgbG9nKCJCcmlkZ2UgcmVhZGVyIHN0YXJ0aW5nLi4uIikKICAgIAogICAgd2hpbGUgVHJ1ZToKICAgICAgICB0cnk6CiAgICAgICAgICAgIGlmIG5vdCBvcy5wYXRoLmV4aXN0cyhCUklER0VfRklMRSk6CiAgICAgICAgICAgICAgICB0aW1lLnNsZWVwKDAuMSkKICAgICAgICAgICAgICAgIGNvbnRpbnVlCiAgICAgICAgICAgICAgICAKICAgICAgICAgICAgd2l0aCBvcGVuKEJSSURHRV9GSUxFLCAicmIiKSBhcyBmOgogICAgICAgICAgICAgICAgZGF0YSA9IGYucmVhZCgpCiAgICAgICAgICAgICAgICAKICAgICAgICAgICAgaWYgbm90IGRhdGEgb3IgbGVuKGRhdGEpID09IDA6CiAgICAgICAgICAgICAgICB0aW1lLnNsZWVwKDAuMDEpCiAgICAgICAgICAgICAgICBjb250aW51ZQogICAgICAgICAgICAgICAgCiAgICAgICAgICAgICMgQ2xlYXIgdGhlIGZpbGUgYWZ0ZXIgcmVhZGluZwogICAgICAgICAgICB3aXRoIG9wZW4oQlJJREdFX0ZJTEUsICJ3YiIpIGFzIGY6CiAgICAgICAgICAgICAgICBmLndyaXRlKGInJykKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAjIFByb2Nlc3MgdGhlIGRhdGEKICAgICAgICAgICAgYnVmZmVyID0gZGF0YQogICAgICAgICAgICB3aGlsZSBsZW4oYnVmZmVyKSA+/+SEVsbihob3N0X2J5dGVzKX1zSCcsIGxlbihob3N0X2J5dGVzKSwgaG9zdF9ieXRlcywgZGVzdF9wb3J0KQogICAgICAgIAogICAgICAgIHNlbmRfdG9fYnJpZGdlKGNvbm5faWQsIE9QX0NPTk5FQ1QsIHBheWxvYWQpCiAgICAgICAgCiAgICAgICAgIyA0LiBQdW1wIERhdGEKICAgICAgICB3aGlsZSBUcnVlOgogICAgICAgICAgICBkYXRhID0gY2xpZW50X3NvY2tldC5yZWN2KDQwOTYpCiAgICAgICAgICAgIGlmIG5vdCBkYXRhOiBicmVhawogICAgICAgICAgICBzZW5kX3RvX2JyaWRnZShjb25uX2lkLCBPUF9EQVRBLCBkYXRhKQogICAgICAgICAgICAKICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgZToKICAgICAgICBsb2coZiJDbGllbnQge2Nvbm5faWR9IGVycm9yOiB7ZX0iKQogICAgZmluYWxseToKICAgICAgICBzZW5kX3RvX2JyaWRnZShjb25uX2lkLCBPUF9DTE9TRSkKICAgICAgICB3aXRoIGNvbm5fbG9jazoKICAgICAgICAgICAgaWYgY29ubl9pZCBpbiBjb25uZWN0aW9uczoKICAgICAgICAgICAgICAgIGRlbCBjb25uZWN0aW9uc1tjb25uX2lkXQogICAgICAgIHRyeToKICAgICAgICAgICAgY2xpZW50X3NvY2tldC5jbG9zZSgpCiAgICAgICAgZXhjZXB0OgogICAgICAg     ICAgICBwYXNzCgpkZWYgbWFpbigpOgogICAgZ2xvYmFsIG5leHRfY29ubl9pZAogICAgCiAgICAjIFN0YXJ0IFJlYWRlciBUaHJlYWQKICAgIHQgPSB0aHJlYWRpbmcuVGhyZWFkKHRhcmdldD1yZWFkZXJfdGhyZWFkLCBkYWVtb249VHJ1ZSkKICAgIHQuc3RhcnQoKQogICAgCiAgICBzZXJ2ZXIgPSBzb2NrZXQuc29ja2V0KHNvY2tldC5BRl9JTkVULCBzb2NrZXQuU09DS19TVFJFQU0pCiAgICBzZXJ2ZXIuc2V0c29ja29wdChzb2NrZXQuU09MX1NPQ0tFVCwgc29ja2V0LlNPX1JFVVNFQUREUiwgMSkKICAgIHNlcnZlci5iaW5kKChTT0NLU19IT1NULCBTT0NLU19QT1JUKSkKICAgIHNlcnZlci5saXN0ZW4oMTApCiAg  ICAKICAgIGxvZyhmIlNPQ0tTNSBTZXJ2ZXIgbGlzdGVuaW5nIG9uIHtTT0NLU19IT1NUfTp7U09DS1NfUE9SVH0iKQogICAgCiAgICB3aGlsZSBUcnVlOgogICAgICAgIGNsaWVudCwgYWRkciA9IHNlcnZlci5hY2NlcHQoKQogICAgICAgIGNvbm5faWQgPSBuZXh0X2Nvbm5faWQKICAgICAgICBuZXh0X2Nvbm5faWQgKz0gMQogICAgICAg     CiAgICAgICAgd2l0aCBjb25uX2xvY2s6CiAgICAgICAgICAgIGNvbm5lY3Rpb25zW2Nvbm5faWRdID0gY2xpZW50CiAgICAgICAgICAgIAogICAgICAgIHQgPSB0aHJlYWRpbmcuVGhyZWFkKHRhcmdldD1jbGllbnRfaGFuZGxlciwgYXJncz0oY2xpZW50LCBjb25uX2lkKSwgZGFlbW9uPVRydWUpCiAgICAgICAgdC5zdGFydCgpCgppZiBfX25hbWVfXyA9PSAiX19tYWluX18iOgogICAgbWFpbigpCg==";
 
-                // Create the file
-                // Escape single quotes for bash heredoc
-                const escapedContent = scriptContent.replace(/'/g, "'\\''");
-
-                const cmd = `cat << 'EOF' > /root/vm_net.py\n${escapedContent}\nEOF\n`;
+                // Write to /tmp using Base64 decode, which handles all special chars and length issues
+                const cmd = `echo "${B64_SCRIPT}" | base64 -d > /tmp/vm_net.py\n`;
                 window.injectCommand(cmd);
 
                 // Wait a bit for write
                 await new Promise(r => setTimeout(r, 2000));
 
-                // Make executable and run
-                window.injectCommand("chmod +x /root/vm_net.py\n");
-                window.injectCommand("python3 /root/vm_net.py > /var/log/vm_net.log 2>&1 &\n");
+                // Make executable and run using absolute path
+                window.injectCommand("chmod +x /tmp/vm_net.py\n");
+                // Log to /tmp
+                window.injectCommand("python3 /tmp/vm_net.py > /tmp/vm_net.log 2>&1 &\n");
 
                 // Set proxy env vars
                 window.injectCommand("export ALL_PROXY=socks5h://127.0.0.1:1080\n");
@@ -631,6 +635,11 @@ if __name__ == "__main__":
                         console.error('Failed to read clipboard:', err);
                         alert('Failed to read clipboard. Please allow clipboard access.');
                     }
+                };
+
+                // Add Inject Button logic (Restored)
+                document.getElementById('inject-btn').onclick = () => {
+                    injectVmNetScript();
                 };
 
                 console.log("%c✓ CheerpX ready!", "color: #0f0; font-weight: bold");
