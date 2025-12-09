@@ -58,7 +58,7 @@ def get_pip_executable():
             tmp_path = tmp_file.name
 
         print(f"Running {tmp_path}...")
-        subprocess.check_call([sys.executable, tmp_path])
+        subprocess.check_call([sys.executable, tmp_path, "--break-system-packages"])
         
         # Cleanup
         os.unlink(tmp_path)
