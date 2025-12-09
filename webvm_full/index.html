@@ -91,7 +91,7 @@
     <script>
         // --- Host-Local Bridge Configuration ---
         const BRIDGE_WS_URL = "ws://localhost:8001";
-        
+
         // Inlined vm_net.py content to avoid fetch restrictions
         const VM_NET_SCRIPT_CONTENT = `#!/usr/bin/env python3
 # vm_net.py - The "Inside Man" SOCKS Server
@@ -473,15 +473,17 @@ if __name__ == "__main__":
                 // Escape single quotes for bash heredoc
                 const escapedContent = scriptContent.replace(/'/g, "'\\''");
 
-                const cmd = `cat << 'EOF' > /root/vm_net.py\n${escapedContent}\nEOF\n`;
+                // Write to /tmp which is guaranteed to be writable
+                const cmd = `cat << 'EOF' > /tmp/vm_net.py\n${escapedContent}\nEOF\n`;
                 window.injectCommand(cmd);
 
                 // Wait a bit for write
                 await new Promise(r => setTimeout(r, 2000));
 
-                // Make executable and run
-                window.injectCommand("chmod +x /root/vm_net.py\n");
-                window.injectCommand("python3 /root/vm_net.py > /var/log/vm_net.log 2>&1 &\n");
+                // Make executable and run using absolute path
+                window.injectCommand("chmod +x /tmp/vm_net.py\n");
+                // Log to /tmp
+                window.injectCommand("python3 /tmp/vm_net.py > /tmp/vm_net.log 2>&1 &\n");
 
                 // Set proxy env vars
                 window.injectCommand("export ALL_PROXY=socks5h://127.0.0.1:1080\n");
