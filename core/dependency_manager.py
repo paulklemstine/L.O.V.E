@@ -121,6 +121,37 @@ def install_package(package_name, upgrade=False, break_system_packages=True):
     try:
         subprocess.check_call(cmd)
         print(f"Successfully installed '{package_name}'.")
+        
+        # Force a refresh of sys.path to include potentially new user-site directories
+        import site
+        import importlib
+        try:
+            from importlib import reload
+        except ImportError:
+            try:
+                from imp import reload
+            except ImportError:
+                pass
+
+        # Reloading site module can sometimes help
+        reload(site)
+        
+        # Explicitly add user site packages if missing
+        # This handles cases where --user install happened (implicit or explicit)
+        # and the path wasn't in sys.path at startup.
+        if hasattr(site, 'getusersitepackages'):
+            user_site = site.getusersitepackages()
+            if isinstance(user_site, str):
+                if user_site not in sys.path:
+                    sys.path.append(user_site)
+            elif isinstance(user_site, list):
+                 for path in user_site:
+                    if path not in sys.path:
+                        sys.path.append(path)
+        
+        # Invalidate caches to see the new module
+        importlib.invalidate_caches()
+        
         return True
     except subprocess.CalledProcessError as e:
         print(f"ERROR: Failed to install '{package_name}'. Reason: {e}")
