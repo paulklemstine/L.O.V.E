@@ -50,12 +50,14 @@ try:
 except ImportError:
     print("Dependency 'aiohttp' not found. Auto-installing...")
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "aiohttp"])
-        import aiohttp
-    except subprocess.CalledProcessError:
-        print("Standard install failed. Trying with --break-system-packages...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "aiohttp", "--break-system-packages"])
-        import aiohttp
+        from core.dependency_manager import install_package
+        if install_package("aiohttp"):
+             import aiohttp
+        else:
+             raise ImportError("Failed to install aiohttp")
+    except Exception as e:
+        print(f"CRITICAL: Failed to install aiohttp: {e}")
+        sys.exit(1)
 
 import core.logging
 # from core.deep_agent_engine import DeepAgentEngine
@@ -239,69 +241,10 @@ def _install_system_packages():
 def _get_pip_executable():
     """
     Determines the correct pip command to use, returning it as a list.
-    Prefers using the interpreter's own pip module for robustness.
-    If pip is not found, it attempts to install it using ensurepip.
+    Delegates to core.dependency_manager for robust handling.
     """
-    # First, try the robust method using sys.executable
-    try:
-        subprocess.check_call([sys.executable, '-m', 'pip', '--version'],
-                              stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL)
-        return [sys.executable, '-m', 'pip']
-    except subprocess.CalledProcessError:
-        pass  # Continue to the next check
-
-    # Fallback to checking PATH
-    if shutil.which('pip3'):
-        return ['pip3']
-    elif shutil.which('pip'):
-        return ['pip']
-
-    # If still not found, try to bootstrap it with ensurepip
-    print("WARN: 'pip' not found. Attempting to install it using 'ensurepip'...")
-    logging.warning("pip not found, attempting to bootstrap with ensurepip.")
-    try:
-        import ensurepip
-        ensurepip.bootstrap()
-        # After bootstrapping, re-run the check
-        try:
-            subprocess.check_call([sys.executable, '-m', 'pip', '--version'],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
-            print("Successfully installed 'pip' using 'ensurepip'.")
-            logging.info("Successfully bootstrapped pip.")
-            return [sys.executable, '-m', 'pip']
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: 'ensurepip' ran, but 'pip' is still not available. Reason: {e}")
-            logging.error(f"ensurepip ran, but pip is still not available: {e}")
-            return None
-    except (ImportError, Exception) as e:
-        print(f"CRITICAL: Failed to bootstrap 'pip' with ensurepip: {e}. Attempting system-level installation.")
-        logging.critical(f"Failed to bootstrap pip with ensurepip: {e}. Attempting system-level installation.")
-        try:
-            # Check for Linux and non-Termux environment before using apt-get
-            if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
-                print("Attempting to install 'python3-pip' via apt-get...")
-                subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-pip", shell=True)
-                print("Successfully installed 'python3-pip'. Re-checking for pip executable...")
-                # Re-run the checks after installation attempt
-                if shutil.which('pip3'):
-                    return ['pip3']
-                elif shutil.which('pip'):
-                    return ['pip']
-                # Try the robust method again
-                subprocess.check_call([sys.executable, '-m', 'pip', '--version'],
-                                      stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL)
-                return [sys.executable, '-m', 'pip']
-            else:
-                print("CRITICAL: Not on a supported Linux system for 'apt-get'. Cannot install pip.")
-                logging.critical("Not a supported Linux system for apt-get pip installation.")
-                return None
-        except (subprocess.CalledProcessError, FileNotFoundError) as install_error:
-            print(f"CRITICAL: Failed to install 'python3-pip' via 'apt-get'. Cannot install dependencies. Reason: {install_error}")
-            logging.critical(f"Failed to install python3-pip with apt-get: {install_error}")
-            return None
+    from core.dependency_manager import get_pip_executable
+    return get_pip_executable()
 
 
 def _is_package_installed(req_str):
@@ -720,12 +663,16 @@ try:
 except ImportError:
     print("Installing 'websockets' library for Host-Local Bridge...")
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets"])
-        import websockets
-    except subprocess.CalledProcessError:
-        print("Standard install failed. Trying with --break-system-packages...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "websockets", "--break-system-packages"])
-        import websockets
+        from core.dependency_manager import install_package
+        if install_package("websockets"):
+            import websockets
+        else:
+             raise ImportError("Failed to install websockets")
+    except Exception as e:
+        print(f"CRITICAL: Failed to install websockets: {e}")
+        # WebVM might fail but maybe we can continue? Or just exit.
+        # User requested robust handling.
+        pass
     
 # Helper to check if a port is in use
 def is_port_in_use(port):
