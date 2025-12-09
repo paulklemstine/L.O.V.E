@@ -37,12 +37,16 @@ async def determine_evolution_goal(
         "todo_items": [],
         "kb_insights": [],
         "performance_issues": [],
+        "technical_debt": [],
         "system_state": {}
     }
     
     # 1. Analyze recent logs for errors
     analysis_data["recent_errors"] = await _analyze_recent_logs()
     
+    # 2. Analyze technical debt
+    analysis_data["technical_debt"] = await _analyze_technical_debt()
+
     # 2. Scan codebase for TODO/FIXME comments
     analysis_data["todo_items"] = await _scan_codebase_todos()
     
@@ -68,17 +72,17 @@ async def determine_evolution_goal(
 
 async def _analyze_recent_logs() -> list:
     """Analyzes recent log files for errors and issues."""
-    errors = []
+    issues = []
     
     try:
         log_dir = Path("logs")
         if not log_dir.exists():
-            return errors
+            return issues
         
         # Get the most recent log file
         log_files = sorted(log_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
         if not log_files:
-            return errors
+            return issues
         
         recent_log = log_files[0]
         
@@ -86,25 +90,47 @@ async def _analyze_recent_logs() -> list:
         with open(recent_log, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
             recent_lines = lines[-100:] if len(lines) > 100 else lines
-        
-        # Look for ERROR and WARNING patterns
+
+        # Categorize issues
         error_patterns = {}
+        warning_patterns = {}
         for line in recent_lines:
-            if "ERROR" in line or "CRITICAL" in line:
-                # Extract error message
-                if ":" in line:
-                    error_msg = line.split(":", 2)[-1].strip()
-                    # Count occurrences
-                    error_patterns[error_msg] = error_patterns.get(error_msg, 0) + 1
-        
-        # Return top 5 most frequent errors
-        sorted_errors = sorted(error_patterns.items(), key=lambda x: x[1], reverse=True)[:5]
-        errors = [{"message": msg, "count": count} for msg, count in sorted_errors]
-        
+            # Simple categorization based on keywords
+            category = "General"
+            if "CRITICAL" in line or "ERROR" in line:
+                if "Traceback" in line:
+                    category = "Exception"
+                elif "Timeout" in line:
+                    category = "Timeout"
+                elif "failed to" in line.lower():
+                    category = "OperationFailure"
+
+                # Extract and count error messages
+                error_msg = line.split(":", 2)[-1].strip() if ":" in line else line.strip()
+                if error_msg not in error_patterns:
+                    error_patterns[error_msg] = {"count": 0, "category": category}
+                error_patterns[error_msg]["count"] += 1
+
+            elif "WARNING" in line:
+                 # Extract and count warning messages
+                warning_msg = line.split(":", 2)[-1].strip() if ":" in line else line.strip()
+                if warning_msg not in warning_patterns:
+                    warning_patterns[warning_msg] = {"count": 0, "category": "Warning"}
+                warning_patterns[warning_msg]["count"] += 1
+
+        # Consolidate findings
+        sorted_errors = sorted(error_patterns.items(), key=lambda x: x[1]["count"], reverse=True)[:3]
+        for msg, data in sorted_errors:
+            issues.append({"type": data["category"], "message": msg, "count": data["count"]})
+
+        sorted_warnings = sorted(warning_patterns.items(), key=lambda x: x[1]["count"], reverse=True)[:3]
+        for msg, data in sorted_warnings:
+            issues.append({"type": data["category"], "message": msg, "count": data["count"]})
+
     except Exception as e:
         core.logging.log_event(f"[EvolutionAnalyzer] Error analyzing logs: {e}", "WARNING")
     
-    return errors
+    return issues
 
 
 async def _scan_codebase_todos() -> list:
@@ -212,68 +238,63 @@ def _analyze_system_state(love_state: dict) -> list:
 async def _synthesize_goal_with_llm(analysis_data: dict, deep_agent_instance=None) -> str:
     """Uses an LLM to synthesize all analysis data into a single actionable goal."""
     
-    # Build the synthesis prompt
     # Construct the analysis data string for the prompt
     analysis_data_str = ""
     
-    # Add recent errors
-    if analysis_data["recent_errors"]:
-        analysis_data_str += "## Recent Errors:\n"
-        for error in analysis_data["recent_errors"]:
-            analysis_data_str += f"- {error['message']} (occurred {error['count']} times)\n"
+    if analysis_data.get("recent_errors"):
+        analysis_data_str += "## Recent System Issues:\n"
+        for issue in analysis_data["recent_errors"]:
+            analysis_data_str += f"- Type: {issue.get('type', 'N/A')}, Message: {issue.get('message', 'N/A')} (occurred {issue.get('count', 0)} times)\n"
         analysis_data_str += "\n"
     
-    # Add TODO items
-    if analysis_data["todo_items"]:
+    if analysis_data.get("technical_debt"):
+        analysis_data_str += "## Technical Debt:\n"
+        for debt in analysis_data["technical_debt"]:
+            if debt.get('type') == 'HighComplexity':
+                analysis_data_str += f"- High Complexity in {debt.get('function', 'N/A')} ({debt.get('file', 'N/A')}), Complexity: {debt.get('complexity', 0)}\n"
+            else:
+                analysis_data_str += f"- Low Maintainability in {debt.get('file', 'N/A')}, Index: {debt.get('maintainability_index', 0)}\n"
+        analysis_data_str += "\n"
+
+    if analysis_data.get("todo_items"):
         analysis_data_str += "## TODO/FIXME Items:\n"
         for todo in analysis_data["todo_items"][:10]:  # Limit to top 10
-            analysis_data_str += f"- {todo['file']}:{todo['line']} - {todo['text']}\n"
+            analysis_data_str += f"- {todo.get('file', 'N/A')}:{todo.get('line', 0)} - {todo.get('text', 'N/A')}\n"
         analysis_data_str += "\n"
     
-    # Add KB insights
-    if analysis_data["kb_insights"]:
+    if analysis_data.get("kb_insights"):
         analysis_data_str += "## Knowledge Base Insights:\n"
         for insight in analysis_data["kb_insights"][:5]:  # Limit to top 5
-            analysis_data_str += f"- {insight['content']}\n"
+            analysis_data_str += f"- {insight.get('content', 'N/A')}\n"
         analysis_data_str += "\n"
     
-    # Add performance issues
-    if analysis_data["performance_issues"]:
+    if analysis_data.get("performance_issues"):
         analysis_data_str += "## System Performance Issues:\n"
         for issue in analysis_data["performance_issues"]:
             analysis_data_str += f"- {issue}\n"
         analysis_data_str += "\n"
     
-    # Add system state
-    if analysis_data["system_state"]:
+    if analysis_data.get("system_state"):
         analysis_data_str += f"## System State:\n{json.dumps(analysis_data['system_state'], indent=2)}\n\n"
     
     try:
-        # Use the LLM pool if available
-        # Use the LLM pool if available
-        if deep_agent_instance and hasattr(deep_agent_instance, 'use_pool') and deep_agent_instance.use_pool:
-            from core.llm_api import run_llm
-            result_dict = await run_llm(prompt_key="evolution_goal_synthesis", prompt_vars={"analysis_data_str": analysis_data_str}, purpose="evolution_goal_synthesis", deep_agent_instance=None)
-            goal = result_dict.get("result", "").strip()
-        elif deep_agent_instance:
-            # Use the deep agent's generate method
-            # We need to render the prompt manually here since we can't use run_llm with prompt_key easily
-            # without importing PromptRegistry, but let's try to stick to run_llm if possible.
-            # Actually, let's just use run_llm even if use_pool is False, as run_llm handles it.
-            # But wait, the original code had a specific branch for deep_agent_instance.generate.
-            # Let's assume run_llm is the preferred way now.
-            from core.llm_api import run_llm
-            result_dict = await run_llm(prompt_key="evolution_goal_synthesis", prompt_vars={"analysis_data_str": analysis_data_str}, purpose="evolution_goal_synthesis", deep_agent_instance=None)
-            goal = result_dict.get("result", "").strip()
-        else:
-            # Fallback: use a simple heuristic
-            goal = _fallback_goal_determination(analysis_data)
+        from core.llm_api import run_llm
+        result_dict = await run_llm(
+            prompt_key="evolution_goal_synthesis",
+            prompt_vars={"analysis_data_str": analysis_data_str},
+            purpose="evolution_goal_synthesis",
+            deep_agent_instance=deep_agent_instance
+        )
+        goal = result_dict.get("result", "").strip()
+
+        if not goal:
+            raise ValueError("LLM returned an empty goal.")
         
         # Clean up the goal
         goal = goal.replace('"', '').replace("'", '').strip()
         
-        # If the goal is too long or empty, use fallback
-        if not goal or len(goal) > 300:
+        # If the goal is too long, use fallback
+        if len(goal) > 300:
             goal = _fallback_goal_determination(analysis_data)
         
         return goal
@@ -306,3 +327,54 @@ def _fallback_goal_determination(analysis_data: dict) -> str:
     
     # Default: general improvement
     return "Improve overall system stability and performance through code refactoring"
+
+
+async def _analyze_technical_debt() -> list:
+    """
+    Analyzes the codebase for technical debt indicators like cyclomatic complexity.
+    """
+    debt_issues = []
+    try:
+        from radon.visitors import ComplexityVisitor
+        from radon.metrics import mi_visit
+
+        project_root = Path(".")
+
+        for py_file in project_root.rglob("*.py"):
+            if any(part.startswith('.') or part in ['venv', 'env', '__pycache__'] for part in py_file.parts):
+                continue
+
+            try:
+                with open(py_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+
+                # Analyze cyclomatic complexity
+                visitor = ComplexityVisitor.from_code(content)
+                for func in visitor.functions:
+                    if func.complexity > 10: # Threshold for high complexity
+                        debt_issues.append({
+                            "type": "HighComplexity",
+                            "file": str(py_file),
+                            "function": func.name,
+                            "complexity": func.complexity
+                        })
+
+                # Analyze maintainability index
+                maintainability_index = mi_visit(content, multi=True)
+                if maintainability_index < 20: # Threshold for low maintainability
+                    debt_issues.append({
+                        "type": "LowMaintainability",
+                        "file": str(py_file),
+                        "maintainability_index": round(maintainability_index, 2)
+                    })
+
+            except Exception:
+                continue
+
+    except ImportError:
+        core.logging.log_event("[EvolutionAnalyzer] `radon` library not installed. Skipping technical debt analysis.", "WARNING")
+    except Exception as e:
+        core.logging.log_event(f"[EvolutionAnalyzer] Error analyzing technical debt: {e}", "WARNING")
+
+    # Return top 5 most critical issues
+    return sorted(debt_issues, key=lambda x: x.get('complexity', 0), reverse=True)[:5]
