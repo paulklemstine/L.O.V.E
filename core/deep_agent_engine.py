@@ -45,18 +45,17 @@ def _select_model(love_state):
         # Full model (AWQ version may not be available yet)
         return "Qwen/Qwen3-30B-A3B-Thinking-2507"
     elif vram >= 7 * 1024:
-        # 7GB+ VRAM: Qwen3-8B (Hybrid model - good balance)
+        # 6GB+ VRAM: Qwen3-8B (Hybrid model - good balance)
         # AWQ version available and verified on HuggingFace
         return "Qwen/Qwen3-8B-AWQ"
-    elif vram >= 5800:
-        # 6GB VRAM: Qwen 1.5 7B Chat AWQ
-        return "Qwen/Qwen1.5-7B-Chat-AWQ"
-    elif vram >= 3800:
-        # 4GB VRAM: Qwen3-4B-Thinking
+    elif vram >= 6 * 1024:
+        # 3GB+ VRAM: Qwen3-4B-Thinking
+        # AWQ version available (cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit)
+        # Using official Qwen repo if available, else community version
         return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit"
     elif vram >= 2 * 1024:
         # 2GB+ VRAM: Qwen2.5 1.5B AWQ (fallback for low VRAM)
-        return "Qwen/Qwen1.5-1.8B-Chat-AWQ"
+        return "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
     else:
         # Fallback: Smallest available Qwen model with AWQ
         return "Qwen/Qwen2.5-0.5B-Instruct-AWQ"
