@@ -141,7 +141,7 @@ def reply_to_post(root_uri, parent_uri, text):
     parent_ref = models.ComAtprotoRepoStrongRef.Main(uri=parent_uri, cid=parent_uri.split('/')[-1])
 
     try:
-        record = models.AppBskyFeedPost.Main(
+        record = models.AppBskyFeedPost.Record(
             text=text,
             reply=models.AppBskyFeedPost.ReplyRef(root=root_ref, parent=parent_ref),
             created_at=client.get_current_time_iso(),

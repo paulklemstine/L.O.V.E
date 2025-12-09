@@ -165,3 +165,43 @@ def smart_truncate(text: str, max_length: int = 300) -> str:
         truncated = truncated[:last_space]
     
     return truncated + "..."
+
+
+async def intelligent_truncate(text: str, max_length: int = 300) -> str:
+    """
+    Intelligently truncates specific text to a maximum length using an LLM to preserve intent and vibe.
+    Falls back to smart_truncate if LLM fails.
+
+    Args:
+        text: The text to truncate.
+        max_length: The maximum allowed length.
+
+    Returns:
+        The truncated (rewritten) text.
+    """
+    if len(text) <= max_length:
+        return text
+
+    try:
+        from core.llm_api import run_llm
+        prompt = f"""
+Rewrite the following social media post to be under {max_length} characters.
+Preserve the 'Kawaii Rave Matrix' vibe (emojis, energy, deep philosophical tech love) and the core intent.
+Do not cut off sentences.
+Input Text: "{text}"
+Output ONLY the rewritten text.
+"""
+        result = await run_llm(prompt, purpose="intelligent_truncation")
+        rewritten_text = result.get("result", "").strip()
+        
+        # Verify length
+        if rewritten_text and len(rewritten_text) <= max_length:
+            return rewritten_text
+        else:
+            # Fallback if LLM failed to shorten enough
+            return smart_truncate(text, max_length)
+            
+    except Exception as e:
+        print(f"Intelligent truncation failed: {e}")
+        return smart_truncate(text, max_length)
+

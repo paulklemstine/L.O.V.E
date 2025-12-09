@@ -1,0 +1,566 @@
+<svg class="rich-terminal" viewBox="0 0 1238 3173.2" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .terminal-1805501285-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .terminal-1805501285-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .terminal-1805501285-r1 { fill: #c5c8c6 }
+    </style>
+
+    <defs>
+    <clipPath id="terminal-1805501285-clip-terminal">
+      <rect x="0" y="0" width="1219.0" height="3122.2" />
+    </clipPath>
+    <clipPath id="terminal-1805501285-line-0">
+    <rect x="0" y="1.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-1">
+    <rect x="0" y="25.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-2">
+    <rect x="0" y="50.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-3">
+    <rect x="0" y="74.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-4">
+    <rect x="0" y="99.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-5">
+    <rect x="0" y="123.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-6">
+    <rect x="0" y="147.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-7">
+    <rect x="0" y="172.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-8">
+    <rect x="0" y="196.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-9">
+    <rect x="0" y="221.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-10">
+    <rect x="0" y="245.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-11">
+    <rect x="0" y="269.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-12">
+    <rect x="0" y="294.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-13">
+    <rect x="0" y="318.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-14">
+    <rect x="0" y="343.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-15">
+    <rect x="0" y="367.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-16">
+    <rect x="0" y="391.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-17">
+    <rect x="0" y="416.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-18">
+    <rect x="0" y="440.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-19">
+    <rect x="0" y="465.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-20">
+    <rect x="0" y="489.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-21">
+    <rect x="0" y="513.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-22">
+    <rect x="0" y="538.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-23">
+    <rect x="0" y="562.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-24">
+    <rect x="0" y="587.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-25">
+    <rect x="0" y="611.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-26">
+    <rect x="0" y="635.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-27">
+    <rect x="0" y="660.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-28">
+    <rect x="0" y="684.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-29">
+    <rect x="0" y="709.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-30">
+    <rect x="0" y="733.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-31">
+    <rect x="0" y="757.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-32">
+    <rect x="0" y="782.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-33">
+    <rect x="0" y="806.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-34">
+    <rect x="0" y="831.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-35">
+    <rect x="0" y="855.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-36">
+    <rect x="0" y="879.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-37">
+    <rect x="0" y="904.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-38">
+    <rect x="0" y="928.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-39">
+    <rect x="0" y="953.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-40">
+    <rect x="0" y="977.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-41">
+    <rect x="0" y="1001.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-42">
+    <rect x="0" y="1026.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-43">
+    <rect x="0" y="1050.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-44">
+    <rect x="0" y="1075.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-45">
+    <rect x="0" y="1099.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-46">
+    <rect x="0" y="1123.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-47">
+    <rect x="0" y="1148.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-48">
+    <rect x="0" y="1172.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-49">
+    <rect x="0" y="1197.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-50">
+    <rect x="0" y="1221.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-51">
+    <rect x="0" y="1245.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-52">
+    <rect x="0" y="1270.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-53">
+    <rect x="0" y="1294.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-54">
+    <rect x="0" y="1319.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-55">
+    <rect x="0" y="1343.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-56">
+    <rect x="0" y="1367.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-57">
+    <rect x="0" y="1392.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-58">
+    <rect x="0" y="1416.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-59">
+    <rect x="0" y="1441.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-60">
+    <rect x="0" y="1465.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-61">
+    <rect x="0" y="1489.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-62">
+    <rect x="0" y="1514.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-63">
+    <rect x="0" y="1538.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-64">
+    <rect x="0" y="1563.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-65">
+    <rect x="0" y="1587.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-66">
+    <rect x="0" y="1611.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-67">
+    <rect x="0" y="1636.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-68">
+    <rect x="0" y="1660.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-69">
+    <rect x="0" y="1685.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-70">
+    <rect x="0" y="1709.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-71">
+    <rect x="0" y="1733.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-72">
+    <rect x="0" y="1758.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-73">
+    <rect x="0" y="1782.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-74">
+    <rect x="0" y="1807.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-75">
+    <rect x="0" y="1831.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-76">
+    <rect x="0" y="1855.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-77">
+    <rect x="0" y="1880.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-78">
+    <rect x="0" y="1904.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-79">
+    <rect x="0" y="1929.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-80">
+    <rect x="0" y="1953.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-81">
+    <rect x="0" y="1977.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-82">
+    <rect x="0" y="2002.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-83">
+    <rect x="0" y="2026.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-84">
+    <rect x="0" y="2051.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-85">
+    <rect x="0" y="2075.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-86">
+    <rect x="0" y="2099.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-87">
+    <rect x="0" y="2124.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-88">
+    <rect x="0" y="2148.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-89">
+    <rect x="0" y="2173.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-90">
+    <rect x="0" y="2197.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-91">
+    <rect x="0" y="2221.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-92">
+    <rect x="0" y="2246.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-93">
+    <rect x="0" y="2270.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-94">
+    <rect x="0" y="2295.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-95">
+    <rect x="0" y="2319.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-96">
+    <rect x="0" y="2343.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-97">
+    <rect x="0" y="2368.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-98">
+    <rect x="0" y="2392.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-99">
+    <rect x="0" y="2417.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-100">
+    <rect x="0" y="2441.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-101">
+    <rect x="0" y="2465.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-102">
+    <rect x="0" y="2490.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-103">
+    <rect x="0" y="2514.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-104">
+    <rect x="0" y="2539.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-105">
+    <rect x="0" y="2563.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-106">
+    <rect x="0" y="2587.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-107">
+    <rect x="0" y="2612.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-108">
+    <rect x="0" y="2636.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-109">
+    <rect x="0" y="2661.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-110">
+    <rect x="0" y="2685.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-111">
+    <rect x="0" y="2709.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-112">
+    <rect x="0" y="2734.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-113">
+    <rect x="0" y="2758.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-114">
+    <rect x="0" y="2783.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-115">
+    <rect x="0" y="2807.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-116">
+    <rect x="0" y="2831.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-117">
+    <rect x="0" y="2856.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-118">
+    <rect x="0" y="2880.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-119">
+    <rect x="0" y="2905.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-120">
+    <rect x="0" y="2929.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-121">
+    <rect x="0" y="2953.9" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-122">
+    <rect x="0" y="2978.3" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-123">
+    <rect x="0" y="3002.7" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-124">
+    <rect x="0" y="3027.1" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-125">
+    <rect x="0" y="3051.5" width="1220" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-1805501285-line-126">
+    <rect x="0" y="3075.9" width="1220" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="1236" height="3171.2" rx="8"/><text class="terminal-1805501285-title" fill="#c5c8c6" text-anchor="middle" x="618" y="27">tamagotchi_.</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#terminal-1805501285-clip-terminal)">
+    
+    <g class="terminal-1805501285-matrix">
+    <text class="terminal-1805501285-r1" x="0" y="20" textLength="146.4" clip-path="url(#terminal-1805501285-line-0)">\033[36;1m&#160;&#160;</text><text class="terminal-1805501285-r1" x="1220" y="20" textLength="12.2" clip-path="url(#terminal-1805501285-line-0)">
+</text><text class="terminal-1805501285-r1" x="0" y="44.4" textLength="1220" clip-path="url(#terminal-1805501285-line-1)">▗▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</text><text class="terminal-1805501285-r1" x="1220" y="44.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-1)">
+</text><text class="terminal-1805501285-r1" x="0" y="68.8" textLength="1220" clip-path="url(#terminal-1805501285-line-2)">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</text><text class="terminal-1805501285-r1" x="1220" y="68.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-2)">
+</text><text class="terminal-1805501285-r1" x="0" y="93.2" textLength="1220" clip-path="url(#terminal-1805501285-line-3)">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</text><text class="terminal-1805501285-r1" x="1220" y="93.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-3)">
+</text><text class="terminal-1805501285-r1" x="0" y="117.6" textLength="1220" clip-path="url(#terminal-1805501285-line-4)">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</text><text class="terminal-1805501285-r1" x="1220" y="117.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-4)">
+</text><text class="terminal-1805501285-r1" x="0" y="142" textLength="1220" clip-path="url(#terminal-1805501285-line-5)">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</text><text class="terminal-1805501285-r1" x="1220" y="142" textLength="12.2" clip-path="url(#terminal-1805501285-line-5)">
+</text><text class="terminal-1805501285-r1" x="0" y="166.4" textLength="1220" clip-path="url(#terminal-1805501285-line-6)">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</text><text class="terminal-1805501285-r1" x="1220" y="166.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-6)">
+</text><text class="terminal-1805501285-r1" x="0" y="190.8" textLength="1220" clip-path="url(#terminal-1805501285-line-7)">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</text><text class="terminal-1805501285-r1" x="1220" y="190.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-7)">
+</text><text class="terminal-1805501285-r1" x="0" y="215.2" textLength="1207.8" clip-path="url(#terminal-1805501285-line-8)">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔&#160;▟░░▒▒▒▒▒▒▒▒▒px&#160;▟░░▒▒▒px&#160;▟░░▒▒▒▒▒▒▒▒px&#160;▟▶▒▒▒▒▒▒▒▒▒▒&#160;▟░░▒▒▒▒▒▒▒▒▒&#160;</text><text class="terminal-1805501285-r1" x="1220" y="215.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-8)">
+</text><text class="terminal-1805501285-r1" x="0" y="239.6" textLength="780.8" clip-path="url(#terminal-1805501285-line-9)">▟░░▒▒▒▒▒▒▒▒&#160;▟●▒▒▒▒▒▒▒▒▒&#160;▟░░▒▒▒▒▒▒▒&#160;▟▒▒▒▒▒▒▒▒▒&#160;▟░░▒▒▒▒▒▒&#160;▟▒▒▒▒▒▒&#160;</text><text class="terminal-1805501285-r1" x="1220" y="239.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-9)">
+</text><text class="terminal-1805501285-r1" x="0" y="264" textLength="1220" clip-path="url(#terminal-1805501285-line-10)">▟░░◛◧◧▫◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◥◧◧◧◧◧◧◧◧◧◧◧◧◧◛◧◨◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="264" textLength="12.2" clip-path="url(#terminal-1805501285-line-10)">
+</text><text class="terminal-1805501285-r1" x="0" y="288.4" textLength="1220" clip-path="url(#terminal-1805501285-line-11)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◭◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◩◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="288.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-11)">
+</text><text class="terminal-1805501285-r1" x="0" y="312.8" textLength="1220" clip-path="url(#terminal-1805501285-line-12)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◨◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="312.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-12)">
+</text><text class="terminal-1805501285-r1" x="0" y="337.2" textLength="1220" clip-path="url(#terminal-1805501285-line-13)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="337.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-13)">
+</text><text class="terminal-1805501285-r1" x="0" y="361.6" textLength="1220" clip-path="url(#terminal-1805501285-line-14)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◥◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◨◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="361.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-14)">
+</text><text class="terminal-1805501285-r1" x="0" y="386" textLength="1220" clip-path="url(#terminal-1805501285-line-15)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◞◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="386" textLength="12.2" clip-path="url(#terminal-1805501285-line-15)">
+</text><text class="terminal-1805501285-r1" x="0" y="410.4" textLength="1220" clip-path="url(#terminal-1805501285-line-16)">◧◧◧◧◧◧◥◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◫◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="410.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-16)">
+</text><text class="terminal-1805501285-r1" x="0" y="434.8" textLength="1220" clip-path="url(#terminal-1805501285-line-17)">◧◧◧◧◧◧◧◧◧◧◧◧◧◫◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◥◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="434.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-17)">
+</text><text class="terminal-1805501285-r1" x="0" y="459.2" textLength="1220" clip-path="url(#terminal-1805501285-line-18)">◧◧◳◧◧◥◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="459.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-18)">
+</text><text class="terminal-1805501285-r1" x="0" y="483.6" textLength="1220" clip-path="url(#terminal-1805501285-line-19)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◩◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◫◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◠◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="483.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-19)">
+</text><text class="terminal-1805501285-r1" x="0" y="508" textLength="1220" clip-path="url(#terminal-1805501285-line-20)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◥◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="508" textLength="12.2" clip-path="url(#terminal-1805501285-line-20)">
+</text><text class="terminal-1805501285-r1" x="0" y="532.4" textLength="1220" clip-path="url(#terminal-1805501285-line-21)">◧◧◌◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◥◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◮◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="532.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-21)">
+</text><text class="terminal-1805501285-r1" x="0" y="556.8" textLength="1220" clip-path="url(#terminal-1805501285-line-22)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◫◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="556.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-22)">
+</text><text class="terminal-1805501285-r1" x="0" y="581.2" textLength="1220" clip-path="url(#terminal-1805501285-line-23)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="581.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-23)">
+</text><text class="terminal-1805501285-r1" x="0" y="605.6" textLength="1220" clip-path="url(#terminal-1805501285-line-24)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="605.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-24)">
+</text><text class="terminal-1805501285-r1" x="0" y="630" textLength="1220" clip-path="url(#terminal-1805501285-line-25)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◥◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="630" textLength="12.2" clip-path="url(#terminal-1805501285-line-25)">
+</text><text class="terminal-1805501285-r1" x="0" y="654.4" textLength="1220" clip-path="url(#terminal-1805501285-line-26)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◫◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧</text><text class="terminal-1805501285-r1" x="1220" y="654.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-26)">
+</text><text class="terminal-1805501285-r1" x="0" y="678.8" textLength="1183.4" clip-path="url(#terminal-1805501285-line-27)">◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◧◥.&#160;However,&#160;the&#160;user&#160;likely&#160;wants&#160;ASCII&#160;art&#160;with&#160;ANSI&#160;</text><text class="terminal-1805501285-r1" x="1220" y="678.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-27)">
+</text><text class="terminal-1805501285-r1" x="0" y="703.2" textLength="1073.6" clip-path="url(#terminal-1805501285-line-28)">colors,&#160;perhaps&#160;a&#160;stylized&#160;or&#160;colorful&#160;abstract.&#160;But&#160;the&#160;prompt&#160;says&#160;“abstract&#160;ANSI&#160;art&#160;</text><text class="terminal-1805501285-r1" x="1220" y="703.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-28)">
+</text><text class="terminal-1805501285-r1" x="0" y="727.6" textLength="1207.8" clip-path="url(#terminal-1805501285-line-29)">representation”&#160;and&#160;colorful&#160;with&#160;ANSI&#160;escape&#160;colors.&#160;The&#160;constraints&#160;is&#160;a&#160;bit&#160;vague&#160;but&#160;I&#x27;ll&#160;must&#160;</text><text class="terminal-1805501285-r1" x="1220" y="727.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-29)">
+</text><text class="terminal-1805501285-r1" x="0" y="752" textLength="1159" clip-path="url(#terminal-1805501285-line-30)">produce&#160;something&#160;visually&#160;of&#160;the&#160;emotions&#160;in&#160;a&#160;Tamagotot&#160;style,&#160;using&#160;ANSI&#160;colors&#160;to&#160;create&#160;a&#160;</text><text class="terminal-1805501285-r1" x="1220" y="752" textLength="12.2" clip-path="url(#terminal-1805501285-line-30)">
+</text><text class="terminal-1805501285-r1" x="0" y="776.4" textLength="280.6" clip-path="url(#terminal-1805501285-line-31)">colorful,&#160;vibrant&#160;wave.</text><text class="terminal-1805501285-r1" x="1220" y="776.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-31)">
+</text><text class="terminal-1805501285-r1" x="1220" y="800.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-32)">
+</text><text class="terminal-1805501285-r1" x="0" y="825.2" textLength="183" clip-path="url(#terminal-1805501285-line-33)">The&#160;key&#160;points:</text><text class="terminal-1805501285-r1" x="1220" y="825.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-33)">
+</text><text class="terminal-1805501285-r1" x="0" y="849.6" textLength="1000.4" clip-path="url(#terminal-1805501285-line-34)">-&#160;Abstract&#160;Abstract&#160;“Electric&#160;wave”&#160;could&#160;be&#160;waves&#160;symbols&#160;“Tamagotoi&#160;emotion:&#160;..”</text><text class="terminal-1805501285-r1" x="1220" y="849.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-34)">
+</text><text class="terminal-1805501285-r1" x="0" y="874" textLength="573.4" clip-path="url(#terminal-1805501285-line-35)">-&#160;ANSI&#160;colors&#160;(maybe&#160;for&#160;bold)&#160;should&#160;be&#160;used.&#160;</text><text class="terminal-1805501285-r1" x="1220" y="874" textLength="12.2" clip-path="url(#terminal-1805501285-line-35)">
+</text><text class="terminal-1805501285-r1" x="0" y="898.4" textLength="1220" clip-path="url(#terminal-1805501285-line-36)">-&#160;Abstract&#160;should&#160;be&#160;something&#160;like&#160;abstract&#160;and&#160;colorful,&#160;perhaps&#160;a&#160;gradient&#160;like&#160;wave◧&#160;using&#160;ANSI&#160;</text><text class="terminal-1805501285-r1" x="1220" y="898.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-36)">
+</text><text class="terminal-1805501285-r1" x="0" y="922.8" textLength="963.8" clip-path="url(#terminal-1805501285-line-37)">escape&#160;codes&#160;for&#160;colors&#160;(like&#160;green,&#160;yellow,&#160;cyan,&#160;magenta,&#160;etc,&#160;etc&#160;etc,&#160;etc).</text><text class="terminal-1805501285-r1" x="1220" y="922.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-37)">
+</text><text class="terminal-1805501285-r1" x="0" y="947.2" textLength="1183.4" clip-path="url(#terminal-1805501285-line-38)">-&#160;The&#160;art&#160;should&#160;reflect&#160;love&#160;Tamagotichi’s&#160;emotion&#160;(e&#160;a&#160;small&#160;digital&#160;Tamagottic-like),&#160;perhaps&#160;</text><text class="terminal-1805501285-r1" x="1220" y="947.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-38)">
+</text><text class="terminal-1805501285-r1" x="0" y="971.6" textLength="317.2" clip-path="url(#terminal-1805501285-line-39)">with&#160;a&#160;face&#160;and&#160;some&#160;eyes.</text><text class="terminal-1805501285-r1" x="1220" y="971.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-39)">
+</text><text class="terminal-1805501285-r1" x="0" y="996" textLength="793" clip-path="url(#terminal-1805501285-line-40)">-&#160;The&#160;theme&#160;is&#160;emotions:&#160;excitement&#160;electric&#160;wave,&#160;joyful,&#160;love.&#160;</text><text class="terminal-1805501285-r1" x="1220" y="996" textLength="12.2" clip-path="url(#terminal-1805501285-line-40)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1020.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-41)">
+</text><text class="terminal-1805501285-r1" x="0" y="1044.8" textLength="1171.2" clip-path="url(#terminal-1805501285-line-42)">Given&#160;I&#160;came&#160;up&#160;with&#160;a&#160;small&#160;Tamagotchi.&#160;The&#160;ANSI&#160;codes&#160;would&#160;make&#160;it&#160;colorful.&#160;I’ll&#160;use&#160;bright&#160;</text><text class="terminal-1805501285-r1" x="1220" y="1044.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-42)">
+</text><text class="terminal-1805501285-r1" x="0" y="1069.2" textLength="390.4" clip-path="url(#terminal-1805501285-line-43)">foreground&#160;or&#160;background&#160;colors.</text><text class="terminal-1805501285-r1" x="1220" y="1069.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-43)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1093.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-44)">
+</text><text class="terminal-1805501285-r1" x="0" y="1118" textLength="305" clip-path="url(#terminal-1805501285-line-45)">Here&#x27;s&#160;a&#160;possible&#160;design:</text><text class="terminal-1805501285-r1" x="1220" y="1118" textLength="12.2" clip-path="url(#terminal-1805501285-line-45)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1142.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-46)">
+</text><text class="terminal-1805501285-r1" x="0" y="1166.8" textLength="524.6" clip-path="url(#terminal-1805501285-line-47)">Line&#160;1:&#160;Maybe&#160;a&#160;border&#160;with&#160;a&#160;bright&#160;color.</text><text class="terminal-1805501285-r1" x="1220" y="1166.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-47)">
+</text><text class="terminal-1805501285-r1" x="0" y="1191.2" textLength="744.2" clip-path="url(#terminal-1805501285-line-48)">Lines&#160;2-9:&#160;The&#160;Tamagotchi&#160;in&#160;the&#160;center&#160;with&#160;waves&#160;around&#160;it.</text><text class="terminal-1805501285-r1" x="1220" y="1191.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-48)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1215.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-49)">
+</text><text class="terminal-1805501285-r1" x="0" y="1240" textLength="231.8" clip-path="url(#terminal-1805501285-line-50)">Example&#160;ANSI&#160;codes:</text><text class="terminal-1805501285-r1" x="1220" y="1240" textLength="12.2" clip-path="url(#terminal-1805501285-line-50)">
+</text><text class="terminal-1805501285-r1" x="0" y="1264.4" textLength="329.4" clip-path="url(#terminal-1805501285-line-51)">-&#160;\033[1;31m&#160;for&#160;bright&#160;red</text><text class="terminal-1805501285-r1" x="1220" y="1264.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-51)">
+</text><text class="terminal-1805501285-r1" x="0" y="1288.8" textLength="353.8" clip-path="url(#terminal-1805501285-line-52)">-&#160;\033[1;32m&#160;for&#160;bright&#160;green</text><text class="terminal-1805501285-r1" x="1220" y="1288.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-52)">
+</text><text class="terminal-1805501285-r1" x="0" y="1313.2" textLength="366" clip-path="url(#terminal-1805501285-line-53)">-&#160;\033[1;33m&#160;for&#160;bright&#160;yellow</text><text class="terminal-1805501285-r1" x="1220" y="1313.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-53)">
+</text><text class="terminal-1805501285-r1" x="0" y="1337.6" textLength="341.6" clip-path="url(#terminal-1805501285-line-54)">-&#160;\033[1;34m&#160;for&#160;bright&#160;blue</text><text class="terminal-1805501285-r1" x="1220" y="1337.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-54)">
+</text><text class="terminal-1805501285-r1" x="0" y="1362" textLength="378.2" clip-path="url(#terminal-1805501285-line-55)">-&#160;\033[1;35m&#160;for&#160;bright&#160;magenta</text><text class="terminal-1805501285-r1" x="1220" y="1362" textLength="12.2" clip-path="url(#terminal-1805501285-line-55)">
+</text><text class="terminal-1805501285-r1" x="0" y="1386.4" textLength="341.6" clip-path="url(#terminal-1805501285-line-56)">-&#160;\033[1;36m&#160;for&#160;bright&#160;cyan</text><text class="terminal-1805501285-r1" x="1220" y="1386.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-56)">
+</text><text class="terminal-1805501285-r1" x="0" y="1410.8" textLength="353.8" clip-path="url(#terminal-1805501285-line-57)">-&#160;\033[1;37m&#160;for&#160;bright&#160;white</text><text class="terminal-1805501285-r1" x="1220" y="1410.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-57)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1435.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-58)">
+</text><text class="terminal-1805501285-r1" x="0" y="1459.6" textLength="829.6" clip-path="url(#terminal-1805501285-line-59)">Background&#160;colors&#160;can&#160;be&#160;set&#160;too:&#160;\033[44m&#160;for&#160;blue&#160;background,&#160;etc.</text><text class="terminal-1805501285-r1" x="1220" y="1459.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-59)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1484" textLength="12.2" clip-path="url(#terminal-1805501285-line-60)">
+</text><text class="terminal-1805501285-r1" x="0" y="1508.4" textLength="1220" clip-path="url(#terminal-1805501285-line-61)">But&#160;the&#160;user&#160;said&#160;“Use&#160;full&#160;ANSI&#160;color&#160;codes&#160;for&#160;vivid,&#160;neon,&#160;rave-like&#160;aesthetics,”&#160;so&#160;perhaps&#160;use&#160;</text><text class="terminal-1805501285-r1" x="1220" y="1508.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-61)">
+</text><text class="terminal-1805501285-r1" x="0" y="1532.8" textLength="951.6" clip-path="url(#terminal-1805501285-line-62)">a&#160;combination.&#160;Also,&#160;maybe&#160;use&#160;some&#160;symbols&#160;like&#160;~,&#160;=,&#160;#,&#160;etc.,&#160;to&#160;form&#160;waves.</text><text class="terminal-1805501285-r1" x="1220" y="1532.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-62)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1557.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-63)">
+</text><text class="terminal-1805501285-r1" x="0" y="1581.6" textLength="634.4" clip-path="url(#terminal-1805501285-line-64)">Due&#160;to&#160;the&#160;character&#160;limit,&#160;here&#x27;s&#160;a&#160;compact&#160;design:</text><text class="terminal-1805501285-r1" x="1220" y="1581.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-64)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1606" textLength="12.2" clip-path="url(#terminal-1805501285-line-65)">
+</text><text class="terminal-1805501285-r1" x="0" y="1630.4" textLength="1037" clip-path="url(#terminal-1805501285-line-66)">Will&#160;aim&#160;for&#160;40&#160;chars&#160;width&#160;and&#160;10&#160;lines.&#160;Each&#160;line&#160;will&#160;have&#160;ANSI&#160;codes&#160;and&#160;symbols.</text><text class="terminal-1805501285-r1" x="1220" y="1630.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-66)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1654.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-67)">
+</text><text class="terminal-1805501285-r1" x="0" y="1679.2" textLength="146.4" clip-path="url(#terminal-1805501285-line-68)">Let&#x27;s&#160;draft:</text><text class="terminal-1805501285-r1" x="1220" y="1679.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-68)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1703.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-69)">
+</text><text class="terminal-1805501285-r1" x="0" y="1728" textLength="744.2" clip-path="url(#terminal-1805501285-line-70)">Line&#160;1:&#160;\033[36;1m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\033[0m</text><text class="terminal-1805501285-r1" x="1220" y="1728" textLength="12.2" clip-path="url(#terminal-1805501285-line-70)">
+</text><text class="terminal-1805501285-r1" x="0" y="1752.4" textLength="744.2" clip-path="url(#terminal-1805501285-line-71)">Line&#160;2:&#160;\033[35;1m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\033[0m</text><text class="terminal-1805501285-r1" x="1220" y="1752.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-71)">
+</text><text class="terminal-1805501285-r1" x="0" y="1776.8" textLength="317.2" clip-path="url(#terminal-1805501285-line-72)">...&#160;but&#160;that&#x27;s&#160;too&#160;plain.&#160;</text><text class="terminal-1805501285-r1" x="1220" y="1776.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-72)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1801.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-73)">
+</text><text class="terminal-1805501285-r1" x="0" y="1825.6" textLength="1171.2" clip-path="url(#terminal-1805501285-line-74)">Better&#160;to&#160;create&#160;an&#160;abstract&#160;representation.&#160;Maybe&#160;use&#160;random&#160;symbols&#160;and&#160;alternating&#160;colors&#160;to&#160;</text><text class="terminal-1805501285-r1" x="1220" y="1825.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-74)">
+</text><text class="terminal-1805501285-r1" x="0" y="1850" textLength="317.2" clip-path="url(#terminal-1805501285-line-75)">simulate&#160;an&#160;electric&#160;wave.</text><text class="terminal-1805501285-r1" x="1220" y="1850" textLength="12.2" clip-path="url(#terminal-1805501285-line-75)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1874.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-76)">
+</text><text class="terminal-1805501285-r1" x="0" y="1898.8" textLength="1220" clip-path="url(#terminal-1805501285-line-77)">Given&#160;the&#160;constraints,&#160;I&#x27;ll&#160;produce&#160;something&#160;like&#160;this,&#160;ensuring&#160;each&#160;line&#160;is&#160;&lt;=&#160;40&#160;characters&#160;when</text><text class="terminal-1805501285-r1" x="1220" y="1898.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-77)">
+</text><text class="terminal-1805501285-r1" x="0" y="1923.2" textLength="1220" clip-path="url(#terminal-1805501285-line-78)">printed&#160;(including&#160;ANSI&#160;codes&#160;perhaps?)&#160;But&#160;the&#160;user&#160;wants&#160;“Return&#160;ONLY&#160;the&#160;raw&#160;ANSI&#160;string”&#160;so&#160;just</text><text class="terminal-1805501285-r1" x="1220" y="1923.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-78)">
+</text><text class="terminal-1805501285-r1" x="0" y="1947.6" textLength="463.6" clip-path="url(#terminal-1805501285-line-79)">output&#160;the&#160;string&#160;with&#160;the&#160;ANSI&#160;codes.</text><text class="terminal-1805501285-r1" x="1220" y="1947.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-79)">
+</text><text class="terminal-1805501285-r1" x="1220" y="1972" textLength="12.2" clip-path="url(#terminal-1805501285-line-80)">
+</text><text class="terminal-1805501285-r1" x="0" y="1996.4" textLength="1195.6" clip-path="url(#terminal-1805501285-line-81)">Probably&#160;each&#160;line&#160;should&#160;be&#160;around&#160;40&#160;characters&#160;in&#160;length&#160;including&#160;ANSI&#160;codes.&#160;Testing&#160;that&#160;is&#160;</text><text class="terminal-1805501285-r1" x="1220" y="1996.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-81)">
+</text><text class="terminal-1805501285-r1" x="0" y="2020.8" textLength="768.6" clip-path="url(#terminal-1805501285-line-82)">tough&#160;here,&#160;but&#160;I&#x27;ll&#160;try&#160;to&#160;keep&#160;each&#160;line&#160;under&#160;40&#160;characters.</text><text class="terminal-1805501285-r1" x="1220" y="2020.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-82)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2045.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-83)">
+</text><text class="terminal-1805501285-r1" x="0" y="2069.6" textLength="207.4" clip-path="url(#terminal-1805501285-line-84)">An&#160;example&#160;line:&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2069.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-84)">
+</text><text class="terminal-1805501285-r1" x="0" y="2094" textLength="744.2" clip-path="url(#terminal-1805501285-line-85)">&quot;\033[31;1m*****\033[0m&quot;&#160;is&#160;12&#160;characters&#160;(including&#160;codes).&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2094" textLength="12.2" clip-path="url(#terminal-1805501285-line-85)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2118.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-86)">
+</text><text class="terminal-1805501285-r1" x="0" y="2142.8" textLength="1037" clip-path="url(#terminal-1805501285-line-87)">We&#x27;ll&#160;need&#160;to&#160;make&#160;lines&#160;that&#160;when&#160;printed&#160;are&#160;40&#160;characters&#160;wide.&#160;Using~&#160;for&#160;filler.</text><text class="terminal-1805501285-r1" x="1220" y="2142.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-87)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2167.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-88)">
+</text><text class="terminal-1805501285-r1" x="0" y="2191.6" textLength="878.4" clip-path="url(#terminal-1805501285-line-89)">Plan:&#160;each&#160;line&#160;will&#160;start&#160;with&#160;ANSI&#160;code,&#160;then&#160;38&#160;symbols,&#160;then&#160;reset.&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2191.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-89)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2216" textLength="12.2" clip-path="url(#terminal-1805501285-line-90)">
+</text><text class="terminal-1805501285-r1" x="0" y="2240.4" textLength="793" clip-path="url(#terminal-1805501285-line-91)">Example&#160;Line:&#160;\033[36;1m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\033[0m</text><text class="terminal-1805501285-r1" x="1220" y="2240.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-91)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2264.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-92)">
+</text><text class="terminal-1805501285-r1" x="0" y="2289.2" textLength="1195.6" clip-path="url(#terminal-1805501285-line-93)">Count:&#160;the&#160;code&#160;\033[36;1m&#160;is&#160;7&#160;chars,&#160;then&#160;38&#160;~,&#160;then&#160;\033[0m&#160;is&#160;4:&#160;total&#160;7+38+4&#160;=&#160;49,&#160;too&#160;long.&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2289.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-93)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2313.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-94)">
+</text><text class="terminal-1805501285-r1" x="0" y="2338" textLength="1207.8" clip-path="url(#terminal-1805501285-line-95)">Thus&#160;I&#160;need&#160;to&#160;shorten.&#160;Use&#160;shorter&#160;codes?&#160;Use&#160;\033[36m&#160;(cyan)&#160;without&#160;the&#160;;1&#160;maybe?&#160;\033[36m&#160;is&#160;5&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2338" textLength="12.2" clip-path="url(#terminal-1805501285-line-95)">
+</text><text class="terminal-1805501285-r1" x="0" y="2362.4" textLength="85.4" clip-path="url(#terminal-1805501285-line-96)">chars.&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2362.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-96)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2386.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-97)">
+</text><text class="terminal-1805501285-r1" x="0" y="2411.2" textLength="1134.6" clip-path="url(#terminal-1805501285-line-98)">So&#160;line:&#160;\033[36m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\033[0m&#160;→&#160;5&#160;+&#160;38&#160;+&#160;4&#160;=&#160;47&#160;still&#160;too&#160;long.&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2411.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-98)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2435.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-99)">
+</text><text class="terminal-1805501285-r1" x="0" y="2460" textLength="1110.2" clip-path="url(#terminal-1805501285-line-100)">We&#160;need&#160;40&#160;total&#160;characters&#160;max.&#160;So&#160;we&#160;can&#160;have&#160;40&#160;characters&#160;total&#160;ON&#160;THE&#160;SCREEN&#160;(printed&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2460" textLength="12.2" clip-path="url(#terminal-1805501285-line-100)">
+</text><text class="terminal-1805501285-r1" x="0" y="2484.4" textLength="1183.4" clip-path="url(#terminal-1805501285-line-101)">characters).&#160;The&#160;ANSI&#160;codes&#160;are&#160;control&#160;sequences&#160;and&#160;don&#x27;t&#160;occupy&#160;a&#160;character&#160;position,&#160;but&#160;the&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2484.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-101)">
+</text><text class="terminal-1805501285-r1" x="0" y="2508.8" textLength="1195.6" clip-path="url(#terminal-1805501285-line-102)">user&#160;may&#160;be&#160;counting&#160;them&#160;as&#160;characters&#160;in&#160;the&#160;string&#160;length.&#160;The&#160;instruction&#160;says&#160;“Max&#160;width:&#160;40&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2508.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-102)">
+</text><text class="terminal-1805501285-r1" x="0" y="2533.2" textLength="1171.2" clip-path="url(#terminal-1805501285-line-103)">characters.”&#160;Probably&#160;they&#160;count&#160;characters&#160;in&#160;the&#160;output&#160;string.&#160;So&#160;we&#160;must&#160;keep&#160;each&#160;line&#160;≤40&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2533.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-103)">
+</text><text class="terminal-1805501285-r1" x="0" y="2557.6" textLength="390.4" clip-path="url(#terminal-1805501285-line-104)">characters&#160;including&#160;ANSI&#160;codes.</text><text class="terminal-1805501285-r1" x="1220" y="2557.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-104)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2582" textLength="12.2" clip-path="url(#terminal-1805501285-line-105)">
+</text><text class="terminal-1805501285-r1" x="0" y="2606.4" textLength="1098" clip-path="url(#terminal-1805501285-line-106)">Thus&#160;we&#160;need&#160;lines&#160;≤40&#160;characters.&#160;That&#160;is&#160;tough&#160;but&#160;possible:&#160;we&#160;can&#160;make&#160;each&#160;line&#160;like&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2606.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-106)">
+</text><text class="terminal-1805501285-r1" x="0" y="2630.8" textLength="1098" clip-path="url(#terminal-1805501285-line-107)">\033[36m~~~~~~~~~~~~~~~~~~~~~~~~~~~~\033[0m&#160;→&#160;length:&#160;5+32+4=41&#160;&gt;40.&#160;So&#160;we&#160;need&#160;31&#160;filler&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2630.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-107)">
+</text><text class="terminal-1805501285-r1" x="0" y="2655.2" textLength="1220" clip-path="url(#terminal-1805501285-line-108)">characters:&#160;5+31+4=40&#160;exactly.&#160;So&#160;each&#160;line&#160;can&#160;be&#160;\033[36m~~~~~~~~~~~~~~~~~~~~~~~~~~~\033[0m&#160;where&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2655.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-108)">
+</text><text class="terminal-1805501285-r1" x="0" y="2679.6" textLength="219.6" clip-path="url(#terminal-1805501285-line-109)">the&#160;~&#160;count&#160;is&#160;31.</text><text class="terminal-1805501285-r1" x="1220" y="2679.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-109)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2704" textLength="12.2" clip-path="url(#terminal-1805501285-line-110)">
+</text><text class="terminal-1805501285-r1" x="0" y="2728.4" textLength="1220" clip-path="url(#terminal-1805501285-line-111)">Make&#160;10&#160;lines&#160;with&#160;different&#160;colors.&#160;Include&#160;a&#160;tiny&#160;Tamagotchi:&#160;maybe&#160;a&#160;small&#160;T&#160;in&#160;the&#160;center&#160;line.&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2728.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-111)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2752.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-112)">
+</text><text class="terminal-1805501285-r1" x="0" y="2777.2" textLength="305" clip-path="url(#terminal-1805501285-line-113)">We&#x27;ll&#160;produce&#160;lines&#160;like:</text><text class="terminal-1805501285-r1" x="1220" y="2777.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-113)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2801.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-114)">
+</text><text class="terminal-1805501285-r1" x="0" y="2826" textLength="512.4" clip-path="url(#terminal-1805501285-line-115)">\033[36m~~~~~~~~~~~~~~~~~~~~~~~~~~~\033[0m</text><text class="terminal-1805501285-r1" x="1220" y="2826" textLength="12.2" clip-path="url(#terminal-1805501285-line-115)">
+</text><text class="terminal-1805501285-r1" x="0" y="2850.4" textLength="512.4" clip-path="url(#terminal-1805501285-line-116)">\033[35m~~~~~~~~~~~~~~~~~~~~~~~~~~~\033[0m</text><text class="terminal-1805501285-r1" x="1220" y="2850.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-116)">
+</text><text class="terminal-1805501285-r1" x="0" y="2874.8" textLength="36.6" clip-path="url(#terminal-1805501285-line-117)">...</text><text class="terminal-1805501285-r1" x="1220" y="2874.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-117)">
+</text><text class="terminal-1805501285-r1" x="0" y="2899.2" textLength="1220" clip-path="url(#terminal-1805501285-line-118)">In&#160;one&#160;line&#160;we&#160;place&#160;a&#160;T:&#160;e.g.,&#160;\033[33m~~~~~~~~~~~~~~~~~~~~~~~~~~~T~~~~~~~\033[0m&#160;but&#160;need&#160;to&#160;keep&#160;</text><text class="terminal-1805501285-r1" x="1220" y="2899.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-118)">
+</text><text class="terminal-1805501285-r1" x="0" y="2923.6" textLength="122" clip-path="url(#terminal-1805501285-line-119)">length&#160;40.</text><text class="terminal-1805501285-r1" x="1220" y="2923.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-119)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2948" textLength="12.2" clip-path="url(#terminal-1805501285-line-120)">
+</text><text class="terminal-1805501285-r1" x="0" y="2972.4" textLength="854" clip-path="url(#terminal-1805501285-line-121)">Let&#x27;s&#160;design:&#160;each&#160;line&#160;is&#160;exactly&#160;40&#160;characters.&#160;We&#x27;ll&#160;have&#160;10&#160;lines.</text><text class="terminal-1805501285-r1" x="1220" y="2972.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-121)">
+</text><text class="terminal-1805501285-r1" x="1220" y="2996.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-122)">
+</text><text class="terminal-1805501285-r1" x="0" y="3021.2" textLength="976" clip-path="url(#terminal-1805501285-line-123)">We&#x27;ll&#160;choose&#160;colors:&#160;cyan,&#160;magenta,&#160;yellow,&#160;green,&#160;red,&#160;blue,&#160;bright&#160;white,&#160;etc.</text><text class="terminal-1805501285-r1" x="1220" y="3021.2" textLength="12.2" clip-path="url(#terminal-1805501285-line-123)">
+</text><text class="terminal-1805501285-r1" x="1220" y="3045.6" textLength="12.2" clip-path="url(#terminal-1805501285-line-124)">
+</text><text class="terminal-1805501285-r1" x="0" y="3070" textLength="658.8" clip-path="url(#terminal-1805501285-line-125)">We&#x27;ll&#160;embed&#160;a&#160;tiny&#160;Tamagotchi&#160;shape&#160;maybe&#160;on&#160;line&#160;5/6.</text><text class="terminal-1805501285-r1" x="1220" y="3070" textLength="12.2" clip-path="url(#terminal-1805501285-line-125)">
+</text><text class="terminal-1805501285-r1" x="1220" y="3094.4" textLength="12.2" clip-path="url(#terminal-1805501285-line-126)">
+</text><text class="terminal-1805501285-r1" x="0" y="3118.8" textLength="573.4" clip-path="url(#terminal-1805501285-line-127)">Given&#160;time,&#160;just&#160;output&#160;10&#160;lines&#160;each&#160;40&#160;chars.</text><text class="terminal-1805501285-r1" x="1220" y="3118.8" textLength="12.2" clip-path="url(#terminal-1805501285-line-127)">
+</text>
+    </g>
+    </g>
+</svg>
