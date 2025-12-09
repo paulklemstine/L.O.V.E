@@ -179,7 +179,43 @@ def mark_dependency_as_met(dependency_name, console=None):
 
 
 def _install_system_packages():
-    """Installs system-level packages like build-essential, and nmap."""
+    """
+    Ensures the environment is correctly configured with necessary paths and aliases.
+    Specifically adds ~/.local/bin to PATH and ensures 'python' points to 'python3'.
+    """
+    import os
+    import sys
+    import shutil
+    
+    # 1. Ensure ~/.local/bin is in PATH
+    home_dir = os.path.expanduser("~")
+    local_bin = os.path.join(home_dir, ".local", "bin")
+    
+    if not os.path.exists(local_bin):
+        try:
+            os.makedirs(local_bin, exist_ok=True)
+        except OSError as e:
+            print(f"WARN: Could not create {local_bin}: {e}")
+    
+    if local_bin not in os.environ.get("PATH", ""):
+        print(f"Adding {local_bin} to PATH for this session.")
+        os.environ["PATH"] = f"{local_bin}{os.pathsep}{os.environ.get('PATH', '')}"
+
+    # 2. Ensure 'python' command exists (required by some build scripts like fast-downward)
+    if not shutil.which("python"):
+        print("'python' command not found. Creating symlink to python3 in ~/.local/bin...")
+        try:
+            python_symlink = os.path.join(local_bin, "python")
+            if not os.path.exists(python_symlink):
+                # Use sys.executable to get the current python interpreter path
+                try:
+                    os.symlink(sys.executable, python_symlink)
+                    print(f"Created symlink: {python_symlink} -> {sys.executable}")
+                except OSError as e:
+                    print(f"WARN: Failed to create 'python' symlink: {e}")
+        except Exception as e:
+             print(f"WARN: Error checking/creating python symlink: {e}")
+
     # In the WebVM environment, we pre-install these packages in the Docker image.
     # Runtime installation via apt-get/sudo is not reliable or permitted.
     # We assume the environment is correctly provisioned.
