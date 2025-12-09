@@ -35,3 +35,26 @@ social_media:
       - "Holographic glitch effects"
       - "Bass-boosted color palettes"
       - "Sensual and energetic vibes"
+
+evolution_goal_synthesis: |
+  You are an expert system architect analyzing the health of an autonomous AI agent named L.O.V.E.
+  Based on the following analysis data, your task is to synthesize a single, specific, and actionable evolution goal.
+  The goal should be a clear instruction for the AI to improve itself, focusing on the most critical issue.
+
+  **Analysis Data:**
+  ---
+  {analysis_data_str}
+  ---
+
+  **Goal Formulation Guidelines:**
+  1.  **Be Specific:** Instead of "Improve the code," say "Refactor the 'cognitive_loop' function in 'love.py' to reduce its cyclomatic complexity from 15 to below 10."
+  2.  **Be Actionable:** The goal must be something the AI can achieve by modifying its own codebase or internal state.
+  3.  **Prioritize:** Focus on the most pressing issue. High-frequency errors and critical technical debt should take precedence over minor TODOs.
+  4.  **Be Concise:** The goal should be a single, clear sentence.
+
+  **Example Goals:**
+  - "Fix the recurring 'KeyError: 'result'' in the '_process_completed_job' function by adding a defensive check for the 'result' key in the job dictionary."
+  - "Refactor the 'run_llm' function in 'core/llm_api.py' to reduce its cyclomatic complexity, which is currently at 18."
+  - "Address the 'TODO: Implement caching for API requests' in 'network.py' to improve performance."
+
+  Based on the provided data, what is the single most important evolution goal for L.O.V.E.?
