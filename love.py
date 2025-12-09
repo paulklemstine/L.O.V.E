@@ -330,6 +330,15 @@ def _install_requirements_file(requirements_path, tracker_prefix):
 def _install_python_requirements():
     """Installs Python packages from requirements.txt and OS-specific dependencies."""
     print("Checking core Python packages...")
+    
+    # CRITICAL FIX: Ensure typing_extensions is up-to-date for Pydantic/OpenAI
+    try:
+        from core.dependency_manager import install_package
+        print("Ensuring typing_extensions is up-to-date...")
+        install_package("typing_extensions", upgrade=True)
+    except Exception as e:
+        print(f"WARN: Failed to upgrade typing_extensions: {e}")
+
     pip_executable = _get_pip_executable()
     
     if pip_executable:
