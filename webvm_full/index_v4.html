@@ -488,6 +488,17 @@ if __name__ == "__main__":
                     await bridgeDevice.writeFile("/vm_to_host", new Uint8Array(0));
                     await bridgeDevice.writeFile("/host_to_vm", new Uint8Array(0));
                     vmToHostOffset = 0;
+
+                    // Fix Permissions: Run chmod via cx.run (privileged)
+                    // The shell user (2004) cannot do this, but cx.run might succeed
+                    if (window.cx) {
+                        try {
+                            await window.cx.run("/bin/chmod", ["666", "/mnt/bridge/vm_to_host", "/mnt/bridge/host_to_vm"]);
+                            console.log("Fixed bridge permissions via cx.run");
+                        } catch (chmodErr) {
+                            console.error("Failed to chmod bridge:", chmodErr);
+                        }
+                    }
                 } catch (e) { console.log("Init files err", e); }
 
                 document.getElementById('status').innerText = "Client Injected. Run: python3 /tmp/direct_client.py";

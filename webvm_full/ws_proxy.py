@@ -116,8 +116,8 @@ async def tcp_to_ws(reader, websocket, connection_id):
 
 async def main():
     """Start the WebSocket proxy server"""
-    logger.info("Starting WebSocket proxy on ws://localhost:8001")
-    async with websockets.serve(handle_connection, "0.0.0.0", 8001):
+    logger.info("Starting WebSocket proxy on ws://0.0.0.0:8082")
+    async with websockets.serve(handle_connection, "0.0.0.0", 8082):
         await asyncio.Future()  # run forever
 
 if __name__ == "__main__":

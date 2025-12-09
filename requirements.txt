@@ -794,11 +794,7 @@ pytz==2025.2
     #   mem0ai
     #   pandas
 pyunormalize==17.0.0
-    # via
-    #   mcp
-    #   portalocker
-    #   web3
-
+    # via web3
 pyyaml==6.0.3
     # via
     #   accelerate
@@ -1102,5 +1098,3 @@ zstandard==0.25.0
 # The following packages are considered to be unsafe in a requirements file:
 # pip
 # setuptools
-radon==6.0.1
-pywin32==311 ; sys_platform == 'win32'

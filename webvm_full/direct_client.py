@@ -6,10 +6,10 @@ import sys
 
 # Protocol Config
 # STREAM PROTOCOL (Append Only)
-# /mnt/bridge/vm_to_host: VM writes (Appends), Host reads (Offsets)
-# /mnt/bridge/host_to_vm: Host writes (Appends), VM reads (Offsets)
+# /tmp/vm_to_host: VM writes (Appends), Host reads (Offsets)
+# /tmp/host_to_vm: Host writes (Appends), VM reads (Offsets)
 
-BASE_DIR = "/mnt/bridge"
+BASE_DIR = "/tmp"
 PIPE_OUT = os.path.join(BASE_DIR, "vm_to_host")
 PIPE_IN  = os.path.join(BASE_DIR, "host_to_vm")
 
@@ -53,7 +53,7 @@ def read_response(offset, timeout=5):
                 with open(PIPE_IN, "rb") as f:
                     f.seek(0, 2) # End
                     file_size = f.tell()
-                    
+                   
                     if file_size > offset:
                         f.seek(offset)
                         data = f.read()
@@ -104,7 +104,7 @@ def main():
             while len(read_buffer) >= 9:
                 conn_id, opcode, payload_len = struct.unpack('>IBI', read_buffer[:9])
                 
-                if len(read_buffer) >= 9 + payload_len:
+                if len(read_buffer) < 9 + payload_len:
                     payload = read_buffer[9:9+payload_len]
                     read_buffer = read_buffer[9+payload_len:] # Consume
                     

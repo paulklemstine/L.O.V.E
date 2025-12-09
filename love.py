@@ -736,12 +736,12 @@ def is_port_in_use(port):
 # Start ws_proxy.py
 ws_proxy_path = os.path.join("webvm_full", "ws_proxy.py")
 if os.path.exists(ws_proxy_path):
-    if not is_port_in_use(8001):
+    if not is_port_in_use(8082):
         print(f"Starting WebSocket Proxy from {ws_proxy_path}...")
         # Run in background
         subprocess.Popen([sys.executable, "ws_proxy.py"], cwd="webvm_full")
     else:
-        print("WebSocket Proxy (port 8001) appears to be already running. Skipping start.")
+        print("WebSocket Proxy (port 8082) appears to be already running. Skipping start.")
 else:
     print(f"ERROR: {ws_proxy_path} not found.")
 
@@ -761,7 +761,7 @@ else:
         subprocess.Popen([sys.executable, "-m", "http.server", "8080"], cwd="webvm_full")
         print("WebVM is running at http://localhost:8080 (Warning: Missing COOP/COEP headers)")
 
-print("Bridge is running at ws://localhost:8001")
+print("Bridge is running at ws://localhost:8082")
 print("---------------------------------------")
 # We continue to run L.O.V.E as requested, so it can "handle stuff programmatically"
 
