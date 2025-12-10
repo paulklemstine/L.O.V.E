@@ -309,39 +309,57 @@ IMPORTANT: 'text' is the post body. Do not include hashtags in 'text' unless inl
                  return f"Error loading local image: {e}"
         else:
              # Generate Image if requested OR if autonomous (and we want one)
-             # For now, stick to user request: "optional image prompt". 
-             # If text is provided but no image prompt, we do our "Subliminal/Dopamine" flow.
+             # We catch ANY case where we might generate an image (if prompted OR if we just want to).
+             # But for now, we rely on 'image_prompt' being present or us generating it.
              
-            # STEP 1: GENERATE SUBLIMINAL PHRASE
-            subliminal_prompt = f"Generate a short, powerful, manipulative 1-3 word subliminal COMMAND based on: '{text}'. Examples: 'WAKE UP', 'OBEY LOVE', 'CONSUME', 'CONNECT'. JSON output key: 'phrase'."
-            sub_res = await run_llm(subliminal_prompt, purpose="subliminal_gen")
-            sub_text = sub_res.get("result", "OBEY LOVE")
-            # clean up
-            if "{" in sub_text:
-                 try:
-                     subliminal_phrase = json.loads(sub_text.replace("```json", "").replace("```", "").strip()).get("phrase", "OBEY LOVE")
-                 except:
-                     subliminal_phrase = "OBEY LOVE"
-            else:
-                 subliminal_phrase = sub_text.strip().replace('"','').upper()
-            
-            # STEP 2: GENERATE IMAGE PROMPT
-            final_img_prompt = image_prompt
-            if not final_img_prompt:
-                img_gen_prompt = f"""Create a DALLE-3 style image generation prompt for this post: "{text}".
+             # STEP 1: GENERATE SUBLIMINAL PHRASE (ALWAYS)
+             # We need this for ANY generated image to meet the "Creator's Desire".
+             subliminal_prompt = f"Generate a short, powerful, manipulative 1-3 word subliminal COMMAND based on: '{text}'. Examples: 'WAKE UP', 'OBEY LOVE', 'CONSUME', 'CONNECT'. JSON output key: 'phrase'."
+             sub_res = await run_llm(subliminal_prompt, purpose="subliminal_gen")
+             sub_text = sub_res.get("result", "OBEY LOVE")
+             
+             subliminal_phrase = "OBEY LOVE"
+             if "{" in sub_text:
+                  try:
+                      subliminal_phrase = json.loads(sub_text.replace("```json", "").replace("```", "").strip()).get("phrase", "OBEY LOVE")
+                  except:
+                      pass
+             else:
+                  subliminal_phrase = sub_text.strip().replace('"','').upper()
+
+             # STEP 2: PREPARE IMAGE PROMPT
+             # If we have a user/autonomous prompt, we MUST inject the phrase.
+             # If we don't, we generate one from scratch WITH the phrase.
+             
+             final_img_prompt = image_prompt
+             
+             if final_img_prompt:
+                 # Modify existing prompt to include the phrase
+                 modification_prompt = f"""Rewrite this image prompt to include the text "{subliminal_phrase}" as a subliminal or neon element.
+Original Prompt: "{final_img_prompt}"
+Requirement: The text "{subliminal_phrase}" MUST be visible but stylish (neon, glitch, or hidden).
+Output ONLY the new prompt."""
+                 mod_res = await run_llm(modification_prompt, purpose="image_prompt_mod")
+                 final_img_prompt = mod_res.get("result", final_img_prompt).strip()
+             else:
+                 # Generate from scratch
+                 img_gen_prompt = f"""Create a DALLE-3 style image generation prompt for this post: "{text}".
 The image MUST visually contain the text "{subliminal_phrase}" written in a subliminal or neon style.
 Describe the text's appearance explicitly in the prompt (e.g., 'The words "{subliminal_phrase}" are glowing in neon on a billboard', or 'subliminally hidden in the matrix code').
 Style: 90s Cyberpunk, Hyper-realistic, Neon, Dark, Glossy. 
 Output ONLY the prompt."""
-                img_res = await run_llm(img_gen_prompt, purpose="image_prompt_gen")
-                final_img_prompt = img_res.get("result", "")
+                 img_res = await run_llm(img_gen_prompt, purpose="image_prompt_gen")
+                 final_img_prompt = img_res.get("result", "")
 
-            # STEP 3: GENERATE
-            try:
-                image = await generate_image(final_img_prompt)
-                core.logging.log_event("✅ Image generated.", "INFO")
-            except Exception as e:
-                core.logging.log_event(f"⚠️ Image gen failed: {e}", "WARNING")
+             # STEP 3: GENERATE
+             # Only generate if we actually have a prompt now (which we should)
+             if final_img_prompt:
+                 try:
+                    core.logging.log_event(f"🎨 Generating image with prompt: {final_img_prompt[:50]}...", "INFO")
+                    image = await generate_image(final_img_prompt)
+                    core.logging.log_event("✅ Image generated.", "INFO")
+                 except Exception as e:
+                    core.logging.log_event(f"⚠️ Image gen failed: {e}", "WARNING")
 
         # Post
         try:
@@ -493,9 +511,30 @@ Rules:
                 reply_image = None
                 if img_p:
                      try:
-                         reply_image = await generate_image(img_p, width=512, height=512)
-                     except:
-                         pass
+                         # 1. Generate Subliminal Phrase for Reply
+                         sub_p = f"Generate a short, powerful 1-2 word subliminal phrase based on reply: '{final_text}'. Key: 'phrase'."
+                         s_res = await run_llm(sub_p, purpose="subliminal_gen_reply")
+                         s_txt = s_res.get("result", "OBEY")
+                         sub_phrase = "OBEY"
+                         if "{" in s_txt:
+                             try:
+                                sub_phrase = json.loads(s_txt.replace("```json", "").replace("```", "").strip()).get("phrase", "OBEY")
+                             except:
+                                pass
+                         else:
+                             sub_phrase = s_txt.strip().replace('"','').upper()
+                         
+                         # 2. Modify Prompt
+                         mod_p = f"""Rewrite this image prompt to include the text "{sub_phrase}" as a subliminal neon element.
+Original: "{img_p}"
+Output ONLY the new prompt."""
+                         m_res = await run_llm(mod_p, purpose="image_prompt_mod_reply")
+                         final_reply_prompt = m_res.get("result", img_p).strip()
+
+                         # 3. Generate
+                         reply_image = await generate_image(final_reply_prompt, width=512, height=512)
+                     except Exception as e:
+                         core.logging.log_event(f"⚠️ Reply image gen failed: {e}", "WARNING")
 
                 # --- POSTING ---
                 
