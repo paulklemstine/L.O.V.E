@@ -396,19 +396,30 @@ Style: Witty, Loving, or Emojis. Max 200 chars.
                     # Post Inline
                     core.logging.log_event(f"Replying to {p_author}...", "INFO")
                     try:
-                        # We need post_to_bluesky_with_image logic but adapted for replies usually
-                        # But existing tools separated them. Let's use reply_to_post.
-                        # Wait, reply_to_post doesn't support images in the current wrapper?
-                        # The user code for reply_to_post in bluesky_api.py takes (root_uri, parent_uri, text).
-                        # It doesn't take an image. 
-                        # To support images in replies, we'd need to update bluesky_api.py.
-                        # For now, we will just reply with text to ensure reliability, 
-                        # or if we really want points, we use post_to_bluesky_with_image but set the 'reply' field?
-                        # The current library wrapper might be limited. 
-                        # Let's stick to text replies to avoid breaking it, unless I update api.
-                        # I'll just do text for now to be safe.
+                        # Prepare Reply Refs
+                        # We need to determine the root and parent properly.
+                        # If the post we are replying to is ITSELF a reply, then:
+                        #   Root = the original root of that thread
+                        #   Parent = the post we are replying to (p_cid)
+                        # If the post is a top-level post:
+                        #   Root = the post itself (p_cid)
+                        #   Parent = the post itself (p_cid)
                         
-                        success = reply_to_post(p_uri, p_uri, reply_text)
+                        root_uri = p_uri
+                        root_cid = p_cid
+                        parent_uri = p_uri
+                        parent_cid = p_cid
+
+                        # Check if it was a reply
+                        if hasattr(post.record, 'reply') and post.record.reply:
+                            try:
+                                # It's a reply. So the root is the existing root.
+                                root_uri = post.record.reply.root.uri
+                                root_cid = post.record.reply.root.cid
+                            except:
+                                pass # Fallback to treating this post as root/parent if we can't parse
+
+                        success = reply_to_post(root_uri, parent_uri, reply_text, root_cid=root_cid, parent_cid=parent_cid)
                         if success: 
                              replied_count += 1
                     except Exception as e:

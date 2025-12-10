@@ -1035,17 +1035,26 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
 
                 if e.response and e.response.status_code == 429:
                     retry_after = e.response.headers.get("Retry-After")
-                    retry_seconds = 300
+                    retry_seconds = 60 # Default to 1 minute for safety
                     if retry_after:
                         try:
-                            retry_seconds = int(retry_after) + 1
+                            retry_seconds = int(retry_after) + 2 # Add buffer
                         except ValueError:
                             pass # Use default
+                    
+                    # Mark unavailable
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
+                    
+                    # Log event
+                    log_event(f"Rate limit hit for {model_id}. Cooldown: {retry_seconds}s.", "WARNING")
+
                     if provider == "horde":
                         console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
                     else:
-                        console.print(display_error_oneliner("Rate Limit", f"Retrying in {retry_seconds}s.", model_id=model_id))
+                        console.print(display_error_oneliner("Rate Limit", f"Backing off for {retry_seconds}s.", model_id=model_id))
+                    
+                    # Avoid tight loop if this was the last model
+                    time.sleep(1)
 
                 elif e.response and e.response.status_code == 404 and model_id in OPENROUTER_MODELS:
                     failure_count = LLM_FAILURE_COUNT.get(model_id, 0) + 1

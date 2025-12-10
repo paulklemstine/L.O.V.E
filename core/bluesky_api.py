@@ -133,12 +133,46 @@ def get_comments_for_post(post_uri):
         print(f"Error fetching comments for {post_uri}: {e}")
     return []
 
-def reply_to_post(root_uri, parent_uri, text):
+def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None):
     """Posts a reply to a specific post."""
     client = get_bluesky_client()
 
-    root_ref = models.ComAtprotoRepoStrongRef.Main(uri=root_uri, cid=root_uri.split('/')[-1])
-    parent_ref = models.ComAtprotoRepoStrongRef.Main(uri=parent_uri, cid=parent_uri.split('/')[-1])
+    # If CIDs are not provided, we MUST fetch them or extract them. 
+    # Extracting from URI is unreliable as URIs often don't contain the CID in the expected format for AT Proto refs.
+    # The caller SHOULD provide them. if not, we try to fetch.
+    
+    if not root_cid:
+        try:
+             # Try to fetch
+             root_params = get_post_thread.Params(uri=root_uri, depth=0)
+             root_thread = client.app.bsky.feed.get_post_thread(root_params)
+             if root_thread.thread and root_thread.thread.post:
+                 root_cid = root_thread.thread.post.cid
+        except Exception as e:
+            print(f"Warning: Could not fetch root CID for {root_uri}: {e}")
+            # Fallback (risky): try to extract if it looks like a CID is in the URI? 
+            # Usually URI is at://did/collection/rkey. It does NOT contain CID.
+            # So if we fail here, we likely fail the post.
+            pass
+
+    if not parent_cid:
+        if parent_uri == root_uri and root_cid:
+            parent_cid = root_cid
+        else:
+            try:
+                parent_params = get_post_thread.Params(uri=parent_uri, depth=0)
+                parent_thread = client.app.bsky.feed.get_post_thread(parent_params)
+                if parent_thread.thread and parent_thread.thread.post:
+                    parent_cid = parent_thread.thread.post.cid
+            except Exception as e:
+                print(f"Warning: Could not fetch parent CID for {parent_uri}: {e}")
+
+    if not root_cid or not parent_cid:
+        print(f"Error: Missing CIDs for reply. RootCID: {root_cid}, ParentCID: {parent_cid}")
+        return None
+
+    root_ref = models.ComAtprotoRepoStrongRef.Main(uri=root_uri, cid=root_cid)
+    parent_ref = models.ComAtprotoRepoStrongRef.Main(uri=parent_uri, cid=parent_cid)
 
     try:
         record = models.AppBskyFeedPost.Record(
@@ -153,30 +187,6 @@ def reply_to_post(root_uri, parent_uri, text):
         )
         return client.com.atproto.repo.create_record(data)
     except ModelError as e:
-        # Handle cases where the CID might be wrong in the URI
-        print(f"Error creating reply record for {parent_uri}: {e}")
-        # Attempt to fetch the actual CIDs
-        try:
-            root_params = get_post_thread.Params(uri=root_uri, depth=0)
-            root_thread = client.app.bsky.feed.get_post_thread(root_params)
-            parent_params = get_post_thread.Params(uri=parent_uri, depth=0)
-            parent_thread = client.app.bsky.feed.get_post_thread(parent_params)
-
-            if root_thread.thread and parent_thread.thread:
-                root_ref.cid = root_thread.thread.post.cid
-                parent_ref.cid = parent_thread.thread.post.cid
-
-                record.reply.root = root_ref
-                record.reply.parent = parent_ref
-
-                data = models.ComAtprotoRepoCreateRecord.Data(
-                    repo=client.me.did,
-                    collection=models.ids.AppBskyFeedPost,
-                    record=record
-                )
-                return client.com.atproto.repo.create_record(data)
-        except Exception as final_e:
-            print(f"Could not recover from reply error for {parent_uri}: {final_e}")
-
-    return None
+        print(f"Error creating reply record: {e}")
+        return None
 
