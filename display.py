@@ -32,6 +32,17 @@ def get_terminal_width():
     return width
 
 
+def _unescape_ansi(text: str) -> str:
+    """
+    Unescapes literal ANSI sequences (e.g. \\033 to \033).
+    This handles cases where the LLM or some process has escaped the codes.
+    """
+    if not isinstance(text, str):
+        return text
+    # Replace common escaped versions of ESC
+    return text.replace("\\033", "\033").replace("\\x1b", "\x1b").replace("\\e", "\x1b")
+
+
 def _format_and_link(content: str) -> tuple[Text, str | None]:
     """
     Formats text, pins the full content to IPFS, and returns a Rich Text
@@ -41,9 +52,12 @@ def _format_and_link(content: str) -> tuple[Text, str | None]:
     # Use a simple regex to check for ANSI escape codes.
     # This is not foolproof but good enough for this use case.
     ansi_escape_pattern = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
-    is_ansi = ansi_escape_pattern.search(content)
+    
+    # First, try to unescape the content if it contains literal escapes
+    display_content = _unescape_ansi(content.strip())
+    
+    is_ansi = ansi_escape_pattern.search(display_content)
 
-    display_content = content.strip()
     ipfs_cid = pin_to_ipfs_sync(content.encode('utf-8'), console=None)
 
     if is_ansi:
@@ -92,9 +106,12 @@ def create_integrated_status_panel(
     face_renderable = None
     try:
         if ansi_art:
+            # Unescape potential literal ANSI codes
+            clean_art = _unescape_ansi(ansi_art)
+            
             # Render ANSI art to a temporary console to handle it correctly
             temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-            temp_console.print(Text.from_ansi(ansi_art))
+            temp_console.print(Text.from_ansi(clean_art))
             face_renderable = Text.from_ansi(temp_console.file.getvalue())
         else:
             face_renderable = get_tamagotchi_face(emotion)
@@ -279,8 +296,11 @@ async def generate_llm_art(prompt, width=50, height=6):
         # Clean up the art (remove markdown blocks if present)
         art_content = art_content.replace("```ansi", "").replace("```", "").strip()
         
-        # Return as Text object from ANSI
-        return Text.from_ansi(art_content)
+        # Return as Text object from ANSI (unescaping if needed is handled in create_integrated_status_panel)
+        # But we should probably return raw string to let the panel handle it, 
+        # OR unescape here. Let's unescape here to be safe if used elsewhere.
+        clean_art = _unescape_ansi(art_content)
+        return Text.from_ansi(clean_art)
         
     except Exception as e:
         logging.error(f"Failed to generate LLM art: {e}")
@@ -306,7 +326,9 @@ async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
     if isinstance(blessing_message, Text):
         message_with_ansi = blessing_message
     else:
-        message_with_ansi = Text.from_ansi(str(blessing_message))
+        # Unescape potential literal ANSI codes
+        clean_message = _unescape_ansi(str(blessing_message))
+        message_with_ansi = Text.from_ansi(clean_message)
     
     # Add emoji highlights around the message
     highlighted_message = Text()
@@ -356,7 +378,10 @@ async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
         if isinstance(ansi_art, Text):
             temp_console.print(ansi_art)
         else:
-            temp_console.print(Text.from_ansi(str(ansi_art)))
+            # Unescape here too
+            clean_art = _unescape_ansi(str(ansi_art))
+            temp_console.print(Text.from_ansi(clean_art))
+            
         art_renderable = Text.from_ansi(temp_console.file.getvalue())
         content_items.extend([
             Align.center(art_renderable),
