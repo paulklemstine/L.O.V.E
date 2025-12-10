@@ -13,14 +13,14 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Suppress websockets.server error logs (handshake failures during port checks)
-logging.getLogger("websockets.server").setLevel(logging.CRITICAL)
+# Enable verbose logging
+logging.getLogger("websockets.server").setLevel(logging.INFO)
 
 # Maximum connections
 MAX_CONNECTIONS = 100
 active_connections = {}
 
-async def handle_connection(websocket, path):
+async def handle_connection(websocket):
     """Handle a WebSocket connection and proxy it to TCP"""
     connection_id = id(websocket)
     logger.info(f"New WebSocket connection: {connection_id}")
@@ -53,7 +53,17 @@ async def handle_connection(websocket, path):
                     
                     try:
                         # Create TCP connection
-                        reader, writer = await asyncio.open_connection(host, port)
+                        logger.info(f"Opening TCP connection to {host}:{port}...")
+                        try:
+                            reader, writer = await asyncio.wait_for(
+                                asyncio.open_connection(host, port), 
+                                timeout=10.0
+                            )
+                            logger.info(f"TCP connection established to {host}:{port}")
+                        except asyncio.TimeoutError:
+                            logger.error(f"Timeout connecting to {host}:{port}")
+                            await websocket.send(bytes([0x81]))
+                            continue
                         active_connections[connection_id] = (reader, writer)
                         
                         # Send success
@@ -83,7 +93,7 @@ async def handle_connection(websocket, path):
     except websockets.exceptions.ConnectionClosed:
         logger.info(f"WebSocket connection closed: {connection_id}")
     except Exception as e:
-        logger.error(f"Error handling connection: {e}")
+        logger.error(f"Error handling connection: {e}", exc_info=True)
     finally:
         # Clean up any active TCP connections
         if connection_id in active_connections:

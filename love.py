@@ -748,8 +748,10 @@ ws_proxy_path = os.path.join("webvm_full", "ws_proxy.py")
 if os.path.exists(ws_proxy_path):
     if not is_port_in_use(8082):
         print(f"Starting WebSocket Proxy from {ws_proxy_path}...")
-        # Run in background
-        subprocess.Popen([sys.executable, "ws_proxy.py"], cwd="webvm_full")
+        # Run in background with logging
+        log_path = os.path.join("webvm_full", "ws_proxy.log")
+        log_file = open(log_path, "w")
+        subprocess.Popen([sys.executable, "-u", "ws_proxy.py"], cwd="webvm_full", stdout=log_file, stderr=subprocess.STDOUT)
     else:
         print("WebSocket Proxy (port 8082) appears to be already running. Skipping start.")
 else:

@@ -190,3 +190,24 @@ def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None):
         print(f"Error creating reply record: {e}")
         return None
 
+def get_notifications(limit=20):
+    """Fetches recent notifications."""
+    client = get_bluesky_client()
+    try:
+        params = models.AppBskyNotificationListNotifications.Params(limit=limit)
+        response = client.app.bsky.notification.list_notifications(params)
+        return response.notifications
+    except Exception as e:
+        print(f"Error fetching notifications: {e}")
+        return []
+
+def get_profile():
+    """Fetches the authenticated user's profile to get the DID."""
+    client = get_bluesky_client()
+    try:
+        # client.me is populated after login, containing .did and .handle
+        return client.me
+    except Exception as e:
+        print(f"Error fetching profile: {e}")
+        return None
+

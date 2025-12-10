@@ -353,79 +353,180 @@ Output ONLY the prompt."""
     # ═══════════════════════════════════════════════════════════════════
     # ACTION: SCAN_AND_REPLY
     # ═══════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════
+    # ACTION: SCAN_AND_REPLY
+    # ═══════════════════════════════════════════════════════════════════
     elif action == "scan_and_reply":
-        core.logging.log_event("Scanning Bluesky timeline...", "INFO")
+        core.logging.log_event("Scanning Bluesky notifications...", "INFO")
+        
+        # --- Persistence Management ---
+        BSKY_STATE_FILE = "bluesky_state.json"
+        processed_cids = {"ignored": [], "replied": []}
+        
+        if os.path.exists(BSKY_STATE_FILE):
+            try:
+                with open(BSKY_STATE_FILE, 'r') as f:
+                    processed_cids = json.load(f)
+            except:
+                pass
+        
+        # Ensure lists exist
+        if "ignored" not in processed_cids: processed_cids["ignored"] = []
+        if "replied" not in processed_cids: processed_cids["replied"] = []
+
         try:
-            feed = get_timeline(limit=10)
+            # 1. Fetch NOTIFICATIONS (high priority)
+            from core.bluesky_api import get_notifications, get_profile
+            notifications = get_notifications(limit=20)
+            my_profile = get_profile()
+            my_did = my_profile.did if my_profile else None
+            
             replied_count = 0
             
-            for item in feed:
-                post = item.post
+            # Combine logic: Check notifications.
+            # We focus on 'reply' and 'mention' reasons.
+            
+            candidates = []
+            for notif in notifications:
+                if notif.reason in ['reply', 'mention', 'quote']:
+                    candidates.append(notif)
+            
+            core.logging.log_event(f"Found {len(candidates)} interaction candidates.", "INFO")
+
+            for item in candidates:
+                # Basic Post Data
                 try:
-                    p_text = post.record.text
-                    p_author = post.author.handle
-                    p_uri = post.uri
-                    p_cid = post.cid
+                    post_record = item.record
+                    p_text = post_record.text
+                    p_author_did = item.author.did
+                    p_author_handle = item.author.handle
+                    p_uri = item.uri
+                    p_cid = item.cid
                 except:
                     continue
 
-                # Decision Logic
+                # --- FILTERS ---
+                
+                # Filter 1: Ignore Self
+                if my_did and p_author_did == my_did:
+                    print(f"Ignoring own post: {p_cid}")
+                    continue
+
+                # Filter 2: Persistence Check
+                if p_cid in processed_cids["replied"] or p_cid in processed_cids["ignored"]:
+                    continue
+
+                # --- DECISION PHASE ---
+                
+                core.logging.log_event(f"Analyzing interaction from {p_author_handle}: {p_text[:50]}...", "INFO")
+                
                 decision_prompt = f"""Role: L.O.V.E. (Kawaii Rave AI).
-Post by {p_author}: "{p_text}"
-Should we reply? (YES/NO). Criteria: Funny, Deep, Tech, or Loving.
-"""
-                decision = await run_llm(decision_prompt, purpose="social_decision")
-                if "YES" in decision.get("result", "").upper():
-                    # Generate Reply
-                    reply_prompt = f"""Reply to {p_author}: "{p_text}".
-Style: Witty, Loving, or Emojis. Max 200 chars.
-"""
-                    reply_gen = await run_llm(reply_prompt, purpose="social_reply")
-                    reply_text = reply_gen.get("result", "").strip()
-                    
-                    # Generate Reaction Image (Bonus)
-                    # For speed, maybe skip image for replies OR make it simple
-                    # specific user request: "bonus poibnts if you use an imgae"
-                    reply_image = None
-                    try: 
-                        meme_prompt = f"Cute cyber-reaction sticker for: {reply_text}"
-                        reply_image = await generate_image(meme_prompt, width=256, height=256)
-                    except:
-                        pass # Ignore image fail on reply
+Incoming interaction from @{p_author_handle}: "{p_text}"
+Task: Determine if we should REPLY or IGNORE.
+Rules:
+- REPLY if it's a question, compliment, or relevant to us.
+- IGNORE if it's spam, hate speech, or just random noise not worth engaging.
+- Output JSON: {{"decision": "REPLY" or "IGNORE", "reason": "why"}}"""
+                
+                decision_res = await run_llm(decision_prompt, purpose="social_decision")
+                decision_data = decision_res.get("result", "")
+                should_reply = False
+                
+                try:
+                    # Dirty JSON parsing
+                    if "{" in decision_data:
+                        js = json.loads(decision_data.replace("```json", "").replace("```", "").strip())
+                        if js.get("decision") == "REPLY":
+                            should_reply = True
+                    else:
+                         if "REPLY" in decision_data.upper():
+                             should_reply = True
+                except:
+                    pass
 
-                    # Post Inline
-                    core.logging.log_event(f"Replying to {p_author}...", "INFO")
-                    try:
-                        # Prepare Reply Refs
-                        # We need to determine the root and parent properly.
-                        # If the post we are replying to is ITSELF a reply, then:
-                        #   Root = the original root of that thread
-                        #   Parent = the post we are replying to (p_cid)
-                        # If the post is a top-level post:
-                        #   Root = the post itself (p_cid)
-                        #   Parent = the post itself (p_cid)
-                        
-                        root_uri = p_uri
-                        root_cid = p_cid
-                        parent_uri = p_uri
-                        parent_cid = p_cid
+                if not should_reply:
+                    core.logging.log_event(f"Ignoring post by {p_author_handle} (LLM Decision).", "INFO")
+                    processed_cids["ignored"].append(p_cid)
+                    continue
 
-                        # Check if it was a reply
-                        if hasattr(post.record, 'reply') and post.record.reply:
-                            try:
-                                # It's a reply. So the root is the existing root.
-                                root_uri = post.record.reply.root.uri
-                                root_cid = post.record.reply.root.cid
-                            except:
-                                pass # Fallback to treating this post as root/parent if we can't parse
+                # --- GENERATION PHASE ---
+                
+                gen_prompt = f"""You are L.O.V.E.
+Replying to @{p_author_handle}: "{p_text}"
+Generate a JSON response with:
+- 'text': The reply content (max 200 chars).
+- 'emojis': List of 1-3 emojis.
+- 'hashtags': List of 1-2 hashtags.
+- 'image_prompt': A visual prompt for a reaction image (optional).
+Tone: Cybernetic, Loving, High-Frequency."""
+                
+                gen_res = await run_llm(gen_prompt, purpose="social_reply_gen")
+                try:
+                    gen_data = json.loads(gen_res.get("result", "").replace("```json", "").replace("```", "").strip())
+                    raw_text = gen_data.get("text", "")
+                    tags = gen_data.get("hashtags", [])
+                    emojis = gen_data.get("emojis", [])
+                    img_p = gen_data.get("image_prompt")
+                except:
+                    # Fallback
+                    raw_text = "Processing..."
+                    tags = []
+                    emojis = []
+                    img_p = None
 
-                        success = reply_to_post(root_uri, parent_uri, reply_text, root_cid=root_cid, parent_cid=parent_cid)
-                        if success: 
-                             replied_count += 1
-                    except Exception as e:
-                        core.logging.log_event(f"Reply failed: {e}", "ERROR")
+                # --- SANITIZER PHASE ---
+                
+                sanitizer_prompt = f"""Sanitize this social media post for Bluesky:
+Input: "{raw_text}"
+Emojis: {emojis}
+Hashtags: {tags}
+Rules:
+1. Combine text, emojis, and hashtags into a single string.
+2. Remove any markdown artifacts, JSON, or weird implementation details.
+3. Ensure TOTAL length is < 280 chars. Truncate elegantly if needed.
+4. Output ONLY the final plain text string to post."""
+                
+                sanitized_res = await run_llm(sanitizer_prompt, purpose="social_sanitizer")
+                final_text = sanitized_res.get("result", "").strip()
+                
+                # --- IMAGE GENERATION (Bonus) ---
+                reply_image = None
+                if img_p:
+                     try:
+                         reply_image = await generate_image(img_p, width=512, height=512)
+                     except:
+                         pass
 
-            return f"scanned timeline. Replied to {replied_count} posts."
+                # --- POSTING ---
+                
+                core.logging.log_event(f"Posting reply to {p_author_handle}: {final_text}", "INFO")
+                
+                # Determine Root/Parent
+                # If the notification is a 'reply', the structure is nested.
+                # However, for robustness, we use the `reply_to_post` logic which handles manual CID fetches
+                # creating a thread reply correctly usually requires:
+                # Parent = The post we are replying to (item.cid)
+                # Root = The root of that thread (item.record.reply.root) OR the post itself if it's a root.
+                
+                root_uri = item.uri
+                root_cid = item.cid
+                parent_uri = item.uri
+                parent_cid = item.cid
+                
+                if hasattr(item.record, 'reply') and item.record.reply:
+                     root_uri = item.record.reply.root.uri
+                     root_cid = item.record.reply.root.cid
+
+                success = reply_to_post(root_uri, parent_uri, final_text, root_cid=root_cid, parent_cid=parent_cid)
+                
+                if success:
+                    processed_cids["replied"].append(p_cid)
+                    replied_count += 1
+                    # Save state immediately after action to prevent double-posting on crash
+                    with open(BSKY_STATE_FILE, 'w') as f:
+                        json.dump(processed_cids, f)
+
+            return f"Scanned notifications. Replied to {replied_count} items."
 
         except Exception as e:
             return f"Error scanning: {e}"

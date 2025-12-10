@@ -225,24 +225,23 @@ if __name__ == "__main__":
 
         // --- Data Pump Logic ---
 
-        async function sendToVm(data) {
-            if (window.cx) {
-                try {
-                    // Write to /root/host_to_vm using cx.run
-                    // We use UID 0 to ensure permissions are good
+        let sendVmQueue = Promise.resolve();
 
-                    let binary = '';
-                    for (let i = 0; i < data.length; i++) {
-                        binary += String.fromCharCode(data[i]);
+        function sendToVm(data) {
+            sendVmQueue = sendVmQueue.then(async () => {
+                if (window.cx) {
+                    try {
+                        let binary = '';
+                        for (let i = 0; i < data.length; i++) {
+                            binary += String.fromCharCode(data[i]);
+                        }
+                        const b64 = btoa(binary);
+                        await window.cx.run("/bin/sh", ["-c", `echo "${b64}" | base64 -d >> /root/host_to_vm`], { uid: 0, gid: 0 });
+                    } catch (e) {
+                        console.error("Failed to write to bridge:", e);
                     }
-                    const b64 = btoa(binary);
-
-                    await window.cx.run("/bin/sh", ["-c", `echo "${b64}" | base64 -d >> /root/host_to_vm`], { uid: 0, gid: 0 });
-
-                } catch (e) {
-                    console.error("Failed to write to bridge:", e);
                 }
-            }
+            }).catch(e => console.error("Bridge Queue Error:", e));
         }
 
 
@@ -387,7 +386,6 @@ if __name__ == "__main__":
                         const packet = new Uint8Array(1 + payload.length);
                         packet[0] = 1;
                         packet.set(payload, 1);
-                        console.log(`[Bridge] Sending to WS Proxy: CONNECT`);
                         ws.send(packet);
                     };
 
@@ -408,14 +406,18 @@ if __name__ == "__main__":
 
                     ws.onclose = (e) => {
                         console.log(`[Bridge] WS Closed: Code=${e.code} Reason=${e.reason}`);
-                        connections.delete(connId);
-                        if (connections.size === 0) setBridgeStatus(false);
-                        const vmPacket = new Uint8Array(9);
-                        const view = new DataView(vmPacket.buffer);
-                        view.setUint32(0, connId, false);
-                        view.setUint8(4, 3); // CLOSE
-                        view.setUint32(5, 0, false);
-                        sendToVm(vmPacket);
+                        if (connections.get(connId) === ws) {
+                            connections.delete(connId);
+                            if (connections.size === 0) setBridgeStatus(false);
+                            const vmPacket = new Uint8Array(9);
+                            const view = new DataView(vmPacket.buffer);
+                            view.setUint32(0, connId, false);
+                            view.setUint8(4, 3); // CLOSE
+                            view.setUint32(5, 0, false);
+                            sendToVm(vmPacket);
+                        } else {
+                            console.warn(`[Bridge] Ignored close for replaced socket ID ${connId}`);
+                        }
                     };
 
                     ws.onerror = (e) => {
