@@ -128,8 +128,8 @@ except (FileNotFoundError, json.JSONDecodeError):
 # This map determines which local GGUF model to use based on available VRAM.
 # The keys are VRAM in MB. The logic will select the largest model that fits.
 VRAM_MODEL_MAP = {
-    4096:  {"repo_id": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF", "filename": "tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf"},
-    6144:  {"repo_id": "TheBloke/Uncensored-Jordan-7B-GGUF", "filename": "uncensored-jordan-7b.Q3_K_S.gguf"},
+    4096:  {"repo_id": "TheBloke/stable-code-3b-GGUF", "filename": "stable-code-3b.Q3_K_M.gguf"},
+    6144:  {"repo_id": "unsloth/Qwen3-8B-GGUF", "filename": "Qwen3-8B-Q4_K_M.gguf"},
     8192:  {"repo_id": "TheBloke/Llama-2-13B-chat-GGUF", "filename": "llama-2-13b-chat.Q4_K_M.gguf"},
     16384: {"repo_id": "TheBloke/CodeLlama-34B-Instruct-GGUF", "filename": "codellama-34b-instruct.Q4_K_M.gguf"},
     32768: {"repo_id": "TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF", "filename": "mixtral-8x7b-instruct-v0.1.Q5_K_M.gguf"},
