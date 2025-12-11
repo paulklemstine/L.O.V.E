@@ -49,5 +49,23 @@ class MetacognitionAgent(SpecialistAgent):
             result = task_details.get('result', 'N/A')
             return f"Cognitive Event: Agent Result | Agent: '{agent_name}' | Result: '{result}'"
 
+        elif event_type == 'json_repair':
+            malformed = task_details.get('malformed_text', 'N/A')
+            error = task_details.get('error', 'N/A')
+            repaired = task_details.get('repaired_text', 'N/A')
+            return f"Cognitive Event: JSON Repair | Error: '{error}' | Malformed: '{malformed[:50]}...' | Repaired: '{repaired[:50]}...'"
+
         else:
             return f"Cognitive Event: Unknown Event | Details: {task_details}"
+
+    async def record_repair_event(self, malformed_text: str, error_context: str, repaired_text: str = None):
+        """
+        Records a JSON repair event.
+        """
+        event_payload = {
+            'event_type': 'json_repair',
+            'malformed_text': malformed_text,
+            'error': error_context,
+            'repaired_text': repaired_text
+        }
+        return await self.execute_task(event_payload)

@@ -2,6 +2,50 @@ import os
 import json
 import subprocess
 import tempfile
+from typing import Dict, Any
+
+class ModelPerformanceTracker:
+    def __init__(self, metrics_file: str = "model_performance.json"):
+        self.metrics_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), metrics_file)
+        self.metrics = self._load_metrics()
+
+    def _load_metrics(self) -> Dict[str, Any]:
+        if not os.path.exists(self.metrics_file):
+            return {}
+        try:
+            with open(self.metrics_file, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
+
+    def _save_metrics(self):
+        try:
+            with open(self.metrics_file, 'w') as f:
+                json.dump(self.metrics, f, indent=2)
+        except IOError as e:
+            print(f"Error saving model metrics: {e}")
+
+    def record_execution(self, model_name: str, tool_name: str, success: bool):
+        if model_name not in self.metrics:
+            self.metrics[model_name] = {}
+        
+        if tool_name not in self.metrics[model_name]:
+            self.metrics[model_name][tool_name] = {"successes": 0, "failures": 0, "total": 0}
+        
+        stats = self.metrics[model_name][tool_name]
+        stats["total"] += 1
+        if success:
+            stats["successes"] += 1
+        else:
+            stats["failures"] += 1
+        
+        self._save_metrics()
+
+    def get_reliability(self, model_name: str, tool_name: str) -> float:
+        stats = self.metrics.get(model_name, {}).get(tool_name)
+        if not stats or stats["total"] == 0:
+            return 1.0 # Default to confident if no data
+        return stats["successes"] / stats["total"]
 
 class AutomatedBenchmarker:
     def run_experiment(self, experiment_plan: dict, new_code: str) -> bool:

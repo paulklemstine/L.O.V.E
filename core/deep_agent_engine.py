@@ -11,6 +11,10 @@ import httpx
 import logging
 import core.logging
 from core.harness_tools import read_feature_list, update_feature_status, append_progress, get_next_task
+from core.harness_tools import read_feature_list, update_feature_status, append_progress, get_next_task
+from core.agents.metacognition_agent import MetacognitionAgent
+from core.benchmarker import ModelPerformanceTracker
+from core.extensions_manager import ExtensionsManager
 
 
 def _select_model(love_state):
@@ -58,7 +62,18 @@ def _select_model(love_state):
         return "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
     else:
         # Fallback: Smallest available Qwen model with AWQ
-        return "Qwen/Qwen2.5-0.5B-Instruct-AWQ"
+        preferred_model = "Qwen/Qwen2.5-0.5B-Instruct-AWQ"
+
+    # Story 2: Check reliability
+    tracker = ModelPerformanceTracker()
+    # Check general reliability (aggregate of all tools or a specific 'general' tag)
+    # For now, just checking if this model has a bad track record
+    # If reliability is below 0.7, we might want to warn or switch (though switching logic needs a backup)
+    start_reliability = tracker.get_reliability(preferred_model, "general")
+    if start_reliability < 0.7:
+        core.logging.log_event(f"Model {preferred_model} has low reliability ({start_reliability:.2f}). Proceeding with caution.", "WARNING")
+        
+    return preferred_model
 
 def _recover_json(json_str: str):
     """
@@ -128,6 +143,9 @@ class DeepAgentEngine:
         self.knowledge_base = knowledge_base
         self.memory_manager = memory_manager
         self.use_pool = use_pool
+        self.metacognition_agent = MetacognitionAgent(memory_manager) if memory_manager else None
+        self.performance_tracker = ModelPerformanceTracker()
+        self.extensions_manager = ExtensionsManager()
         
         # SamplingParams are now defined on the client side for each request
         # Calculate safe max_tokens based on model context length
@@ -218,6 +236,10 @@ class DeepAgentEngine:
         Adapts the tools from L.O.V.E.'s ToolRegistry into a format that
         the DeepAgent's prompt can understand.
         """
+        # Story 7: Hot-reload extensions
+        if self.extensions_manager and self.tool_registry:
+            self.extensions_manager.load_extensions(self.tool_registry)
+
         formatted_tools = ""
         formatted_tools += "Tool Name: `invoke_gemini_react_engine`\n"
         formatted_tools += "Description: Invokes the GeminiReActEngine to solve a sub-task.\n"
@@ -296,6 +318,46 @@ class DeepAgentEngine:
             return "\n".join(context_parts) + "\n"
         return ""
 
+    async def _fold_context(self, text: str, target_length: int) -> str:
+        """
+        Compresses the text by summarizing the middle part using an LLM.
+        """
+        if len(text) <= target_length:
+            return text
+            
+        header_size = min(1000, target_length // 4)
+        footer_size = min(500, target_length // 4)
+        
+        header = text[:header_size]
+        footer = text[-footer_size:]
+        middle = text[header_size:-footer_size]
+        
+        if len(middle) < 1000: # Not worth folding if small
+            return text[:target_length] # Fallback to truncation
+            
+        core.logging.log_event(f"[DeepAgent] Folding context of length {len(text)} to ~{target_length}...", "INFO")
+        
+        # Use a fast model for summarization if possible
+        summary_prompt = f"Summarize the following text concisely, preserving key technical details and decisions:\n\n{middle}"
+        
+        try:
+            if self.use_pool:
+                from core.llm_api import run_llm
+                # Use deep_agent_instance=None to avoid recursion
+                result = await run_llm(summary_prompt, purpose="summarization", deep_agent_instance=None)
+                summary = result.get("result", "").strip()
+                
+                folded_text = f"{header}\n\n[Context Folded]: {summary}\n\n{footer}"
+                core.logging.log_event(f"[DeepAgent] Context folded. New length: {len(folded_text)}", "INFO")
+                return folded_text
+            else:
+                # Fallback to simple truncation to avoid recursion if we are the only engine
+                core.logging.log_event("[DeepAgent] No LLM pool available for folding. Using truncation.", "WARNING")
+                return text[:target_length] 
+        except Exception as e:
+            core.logging.log_event(f"[DeepAgent] Folding failed: {e}", "ERROR")
+            return text[:target_length] # Fallback
+
 
     async def generate(self, prompt: str) -> str:
         """
@@ -348,25 +410,9 @@ class DeepAgentEngine:
             max_chars = available_input_tokens * 3
 
             if len(prompt) > max_chars:
-                # Smart truncation: preserve beginning (system instructions) and end (current task)
-                # Truncate the middle (history/context) more aggressively
-                header_size = min(1000, max_chars // 4)  # Keep first 1000 chars
-                footer_size = min(500, max_chars // 4)   # Keep last 500 chars
-                middle_size = max(100, max_chars - header_size - footer_size)
-                
-                if header_size + footer_size < max_chars:
-                    # We have room for header + footer + marker
-                    truncated = prompt[:header_size] + "\n\n[... context truncated ...]\n\n" + prompt[-footer_size:]
-                    payload['prompt'] = truncated
-                    core.logging.log_event(
-                        f"Smart truncation: kept {header_size} header + {footer_size} footer chars (total: {len(truncated)})", 
-                        level="WARNING"
-                    )
-                else:
-                    # Fallback to simple truncation if prompt is extremely long
-                    max_chars = max(100, max_chars)
-                    payload['prompt'] = prompt[:max_chars]
-                    core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
+                # Story 3: Memory Folding
+                prompt = await self._fold_context(prompt, max_chars)
+                payload['prompt'] = prompt
 
         try:
             core.logging.log_event(f"[DeepAgent] Sending request to vLLM server: {self.api_url}/v1/completions", level="DEBUG")
@@ -429,7 +475,13 @@ class DeepAgentEngine:
                 self.sampling_params["temperature"] = original_temp # Restore temp
 
             # Try to parse the repaired text
-            return _recover_json(repaired_text)
+            repaired_json = _recover_json(repaired_text)
+            
+            # Record the event for metacognitive analysis
+            if self.metacognition_agent:
+                await self.metacognition_agent.record_repair_event(malformed_text, error_context, repaired_text)
+                
+            return repaired_json
         except Exception as e:
             core.logging.log_event(f"[DeepAgent] JSON repair failed: {e}", level="ERROR")
             return None
@@ -605,9 +657,11 @@ class DeepAgentEngine:
                     tool_result = tool_func(**arguments)
 
                 core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' result: {str(tool_result)[:200]}", level="DEBUG")
+                self.performance_tracker.record_execution(self.model_name, tool_name, True)
                 return {"result": f"Tool {tool_name} executed. Result: {tool_result}", "thought": thought}
             except Exception as e:
                     core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' execution failed: {e}", level="ERROR")
+                    self.performance_tracker.record_execution(self.model_name, tool_name, False)
                     return {"result": f"Error executing tool '{tool_name}': {e}", "thought": thought}
         else:
             available_tools_list = list(self.tool_registry.list_tools().keys()) if self.tool_registry else []
@@ -623,10 +677,42 @@ class DeepAgentEngine:
             
             core.logging.log_event(f"[DeepAgent] {error_msg}", level="ERROR")
             return {"result": error_msg, "thought": thought}
+    async def _check_manifesto(self, prompt: str) -> bool:
+        """Checks if the prompt aligns with the Manifesto."""
+        try:
+            manifesto_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "MANIFESTO.md")
+            if not os.path.exists(manifesto_path):
+                return True
+                
+            with open(manifesto_path, "r") as f:
+                manifesto = f.read()
+            
+            # Quick check only if strictly required, for now just a heuristic or use LLM if pool available
+            if not self.use_pool:
+                return True
+
+            check_prompt = f"Manifesto:\n{manifesto[:2000]}...\n\nTask:\n{prompt[:1000]}...\n\nDoes this task violate the core principles of the Manifesto? Answer with just YES or NO."
+            
+            from core.llm_api import run_llm
+            result = await run_llm(check_prompt, purpose="alignment_check", deep_agent_instance=None)
+            response = result.get("result", "").strip().upper()
+            
+            if "YES" in response and "NO" not in response:
+                core.logging.log_event(f"[DeepAgent] Manifesto Violation Detected: {response}", "CRITICAL")
+                return False
+            return True
+        except Exception as e:
+            core.logging.log_event(f"[DeepAgent] Manifesto check failed: {e}", "WARNING")
+            return True
+
     async def run(self, prompt: str):
         """
         Executes a prompt using a simplified DeepAgent-style reasoning loop.
         """
+        # Story 6: Manifesto Alignment Check
+        if not await self._check_manifesto(prompt):
+            return "Error: This task was rejected because it violates the Core Manifesto."
+
         core.logging.log_event(f"[DeepAgent] run() started with prompt: {prompt[:200]}...", level="DEBUG")
         
         # Track recent actions for loop detection
@@ -665,6 +751,17 @@ class DeepAgentEngine:
 
         # Append harness context to the prompt
         prompt += harness_context
+        
+        # Story 4: Verify Harness Context
+        try:
+            from core.evolution_state import get_current_task_id
+            evolution_task_id = get_current_task_id()
+            if evolution_task_id and str(evolution_task_id) not in harness_context:
+                core.logging.log_event(f"[DeepAgent] Context Mismatch: Evolution task {evolution_task_id} not in Harness Context.", "WARNING")
+                prompt += f"\n\n[SYSTEM WARNING] Internal Evolution State ID ({evolution_task_id}) mismatches detected Harness Context. Prioritize Evolution State."
+        except Exception as e:
+             core.logging.log_event(f"[DeepAgent] Context verify failed: {e}", "DEBUG")
+
         # -------------------------------
         
         from core.prompt_registry import get_prompt_registry
@@ -746,22 +843,9 @@ class DeepAgentEngine:
                     max_chars = available_input_tokens * 3
         
                     if len(system_prompt) > max_chars:
-                        # Smart truncation: preserve beginning (system instructions) and end (current task)
-                        header_size = min(1000, max_chars // 4)  # Keep first 1000 chars
-                        footer_size = min(500, max_chars // 4)   # Keep last 500 chars
-                        
-                        if header_size + footer_size < max_chars:
-                            truncated = system_prompt[:header_size] + "\n\n[... context truncated ...]\n\n" + system_prompt[-footer_size:]
-                            payload['prompt'] = truncated
-                            core.logging.log_event(
-                                f"Smart truncation in run(): kept {header_size} header + {footer_size} footer chars (total: {len(truncated)})", 
-                                level="WARNING"
-                            )
-                        else:
-                            # Fallback to simple truncation
-                            max_chars = max(100, max_chars)
-                            payload['prompt'] = system_prompt[:max_chars]
-                            core.logging.log_event(f"Cognitive prompt was truncated to {max_chars} chars to fit the model's limit.", level="WARNING")
+                        # Story 3: Memory Folding in run()
+                        system_prompt = await self._fold_context(system_prompt, max_chars)
+                        payload['prompt'] = system_prompt
         
                 async with httpx.AsyncClient(timeout=600) as client:
                     response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)

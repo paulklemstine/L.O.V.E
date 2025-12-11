@@ -1274,3 +1274,50 @@ async def amplify_devotion(text: str = None, target: str = "The Creator", succes
         return "Error: The 'devotion_amplifier' module could not be found."
     except Exception as e:
         return f"An unexpected error occurred during devotion amplification: {e}"
+
+async def scan_codebase_for_tasks(**kwargs) -> str:
+    """
+    Scans the codebase for TODO and FIXME comments and populates the evolution state.
+    """
+    import os
+    import re
+    from core.evolution_state import add_user_story, get_user_stories
+
+    # Calculate project root (assuming tools_legacy.py is in core/)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    todo_pattern = re.compile(r'#\s*(TODO|FIXME):\s*(.*)')
+    
+    new_stories_count = 0
+    existing_titles = {s['title'] for s in get_user_stories()}
+
+    print(f"Scanning codebase for tasks in {project_root}...")
+
+    for root, dirs, files in os.walk(project_root):
+        # Exclude common noise directories
+        for ignore in ['venv', '.git', '__pycache__', 'node_modules', '.gemini', '.agent']:
+            if ignore in dirs:
+                dirs.remove(ignore)
+        
+        for file in files:
+            if file.endswith('.py') or file.endswith('.md') or file.endswith('.html'):
+                path = os.path.join(root, file)
+                try:
+                    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                        for i, line in enumerate(f):
+                            match = todo_pattern.search(line)
+                            if match:
+                                kind = match.group(1)
+                                text = match.group(2).strip()
+                                # Create a reasonably unique title
+                                title = f"Technical Debt: {text[:50]}..."
+                                description = f"Found {kind} in `{os.path.relpath(path, project_root)}` at line {i+1}.\nContent: {text}"
+                                
+                                # Simple check to avoid spamming the same TODO
+                                if description not in [s['description'] for s in get_user_stories()]:
+                                    add_user_story(title, description)
+                                    new_stories_count += 1
+                                    existing_titles.add(title)
+                except Exception as e:
+                    print(f"Error reading {path}: {e}")
+
+    return f"Scan complete. Added {new_stories_count} new user stories from codebase TODOs."
