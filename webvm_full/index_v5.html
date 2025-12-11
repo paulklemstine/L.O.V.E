@@ -102,107 +102,106 @@
         const BRIDGE_WS_URL = "ws://localhost:8082";
 
         const PYTHON_CLIENT_SRC = `#!/usr/bin/env python3
-import time
+import sys
 import os
 import struct
-import sys
 import base64
+import argparse
+import random
+from urllib.parse import urlparse
 
-# Protocol Config: CONSOLE BRIDGE V3
-# VM -> JS: Print to stdout [[BRIDGE:<base64>]]
-# JS -> VM: Write to /root/host_to_vm
+# Configuration
+BRIDGE_IN_FILE = "/root/host_to_vm"
+BRIDGE_OUT_PREFIX = "[[BRIDGE:"
+BRIDGE_OUT_SUFFIX = "]]"
 
-BASE_DIR = "/root"
-PIPE_IN  = os.path.join(BASE_DIR, "host_to_vm")
-
-# Opcodes
-OP_CONNECT = 0x01
-OP_DATA    = 0x02
-OP_CLOSE   = 0x03
+# Protocol Opcodes (Bridge V3)
+OP_CONNECT = 1
+OP_DATA = 2
+OP_CLOSE = 3
 
 def log(msg):
-    # Standard logs go to stderr to avoid confusing the bridge parser
-    sys.stderr.write(f"[DirectClient] {msg}\\n")
+    sys.stderr.write(f"[pcurl] {msg}\\n")
     sys.stderr.flush()
 
-def ensure_files():
-    pass
+def send_packet(conn_id, opcode, payload=b""):
+    if isinstance(payload, str):
+        payload = payload.encode('utf-8')
+    header = struct.pack("<I B I", conn_id, opcode, len(payload))
+    packet = header + payload
+    b64 = base64.b64encode(packet).decode('utf-8')
+    sys.stdout.write(f"{BRIDGE_OUT_PREFIX}{b64}{BRIDGE_OUT_SUFFIX}")
+    sys.stdout.flush()
 
-def send_frame(opcode, payload=b""):
-    # Format: [OPCODE:1][LEN:4][PAYLOAD]
-    conn_id = 999 
-    packet = struct.pack('>IBI', conn_id, opcode, len(payload)) + payload
-    
-    # ENCODE ADDRESS TO STDOUT
-    b64 = base64.b64encode(packet).decode('ascii')
-    # Print with marker. flush=True is critical.
-    print(f"[[BRIDGE:{b64}]]", flush=True)
-
-def read_response(offset, timeout=5):
-    start = time.time()
-    while time.time() - start < timeout:
-        if os.path.exists(PIPE_IN):
-            try:
-                with open(PIPE_IN, "rb") as f:
-                    f.seek(0, 2)
-                    file_size = f.tell()
-                    if file_size > offset:
-                        f.seek(offset)
-                        data = f.read()
-                        new_offset = offset + len(data)
-                        return data, new_offset
-            except: pass
-        time.sleep(0.1)
-    return None, offset
+def busy_wait(loops=10000):
+    # CheerpX time.sleep causes OverflowError
+    for _ in range(loops):
+        pass
 
 def main():
-    target_host = "google.com"
-    target_port = 80
-    log(f"Connecting to {target_host} via CONSOLE BRIDGE...")
-    ensure_files()
+    parser = argparse.ArgumentParser(description="Python Bridge Curl")
+    parser.add_argument("url", help="URL to fetch")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    args = parser.parse_args()
     
-    host_bytes = target_host.encode()
-    payload = struct.pack(f'>H{len(host_bytes)}sH', len(host_bytes), host_bytes, target_port)
-    send_frame(OP_CONNECT, payload)
+    parsed = urlparse(args.url)
+    host = parsed.hostname
+    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+    path = parsed.path or "/"
     
-    log("Sent CONNECT. Sending GET...")
-    time.sleep(1.0) 
+    conn_id = random.randint(100, 10000)
     
-    request = f"GET / HTTP/1.1\\r\\nHost: {target_host}\\r\\nConnection: close\\r\\n\\r\\n".encode()
-    send_frame(OP_DATA, request)
+    if args.verbose:
+        log(f"Connecting to {host}:{port}...")
+        
+    payload = struct.pack('>H', len(host)) + host.encode('utf-8') + struct.pack('>H', port)
+    send_packet(conn_id, OP_CONNECT, payload)
     
-    log("Waiting for response...")
-    total = b""
-    buf = b""
-    off = 0
-    start = time.time()
+    busy_wait(50000) 
     
-    # Simple loop to pump data
-    while time.time() - start < 10:
-        chunk, off = read_response(off, 1)
+    req = f"GET {path} HTTP/1.0\\r\\nHost: {host}\\r\\nUser-Agent: pcurl/1.0\\r\\nConnection: close\\r\\n\\r\\n"
+    if args.verbose:
+        log(f"Sending Request:\\n{req.strip()}")
+        
+    send_packet(conn_id, OP_DATA, req.encode('utf-8'))
+    
+    if not os.path.exists(BRIDGE_IN_FILE):
+        open(BRIDGE_IN_FILE, 'w').close()
+        
+    f = open(BRIDGE_IN_FILE, 'rb')
+    f.seek(0, 2)
+    
+    buffer = b""
+    # Timeout via iterations
+    max_loops = 1000000 
+    loops = 0
+    
+    while loops < max_loops:
+        loops += 1
+        chunk = f.read()
         if chunk:
-            buf += chunk
-            while len(buf) >= 9:
-                cid, op, pf_len = struct.unpack('>IBI', buf[:9])
-                if len(buf) < 9 + pf_len: break
-                payload = buf[9:9+pf_len]
-                buf = buf[9+pf_len:]
-                if cid != 999: continue
-                if op == OP_DATA: total += payload
-                elif op == OP_CLOSE: 
-                    log("Connection closed")
-                    start = 0 
-                    break
-        else: pass
-             
-    if total:
-        log("SUCCESS! Response:")
-        # Print to stderr for visibility
-        err_msg = total.decode('utf-8', errors='ignore')[:500]
-        sys.stderr.write("-" * 40 + "\\n")
-        sys.stderr.write(err_msg + "...\\n")
-        sys.stderr.write("-" * 40 + "\\n")
-    else: log("FAILED: No data.")
+            buffer += chunk
+            while len(buffer) >= 9:
+                cid, op, length = struct.unpack("<I B I", buffer[:9])
+                if len(buffer) < 9 + length: break
+                
+                payload = buffer[9:9+length]
+                buffer = buffer[9+length:]
+                
+                if cid == conn_id:
+                    if op == OP_DATA:
+                        sys.stdout.buffer.write(payload)
+                        sys.stdout.flush()
+                    elif op == OP_CLOSE:
+                        if args.verbose: log("Connection closed.")
+                        return
+                    elif op == 0x81: # ERROR
+                        log("Connection Error.")
+                        return
+        else:
+            busy_wait(1000) # Short wait
+
+    log("Timeout waiting for response.")
 
 if __name__ == "__main__":
     main()
@@ -447,22 +446,28 @@ if __name__ == "__main__":
 
         async function injectDirectClient() {
             try {
-                console.log("Injecting direct_client.py via cx.run (UID 0)...");
+                console.log("Injecting pcurl.py via cx.run (UID 0)...");
                 const b64 = btoa(PYTHON_CLIENT_SRC);
                 const rootOpts = { uid: 0, gid: 0 };
 
-                // 1. Write Source as Root in /root/direct_client.py
-                await window.cx.run("/bin/sh", ["-c", `echo "${b64}" | base64 -d > /root/direct_client.py`], rootOpts);
+                // 1. Write Source as Root in /root/pcurl.py
+                await window.cx.run("/bin/sh", ["-c", `echo "${b64}" | base64 -d > /root/pcurl.py`], rootOpts);
 
                 // 2. Init HOST_TO_VM File (VM reads this)
-                await window.cx.run("/bin/sh", ["-c", "> /root/host_to_vm"], rootOpts);
+                await window.cx.run("/bin/sh", ["-c", `> /root/host_to_vm`], rootOpts);
 
                 // 3. Chmod 666 host_to_vm so VM user can read/write
-                // We trust standard chown works on overlay
                 await window.cx.run("/bin/chmod", ["666", "/root/host_to_vm"], rootOpts);
 
+                // 4. Create alias script for curl
+                const curlWrapper = `#!/bin/sh
+python3 /root/pcurl.py "$@"
+`;
+                const curlB64 = btoa(curlWrapper);
+                await window.cx.run("/bin/sh", ["-c", `echo "${curlB64}" | base64 -d > /bin/curl && chmod +x /bin/curl`], rootOpts);
+
                 console.log("Provisioning complete.");
-                document.getElementById('status').innerText = "Client Injected (Console Bridge V3). Ready to Run.";
+                document.getElementById('status').innerText = "Tools Injected: pcurl.py, /bin/curl. Ready.";
 
             } catch (e) {
                 console.error("Injection Error:", e);
@@ -471,13 +476,11 @@ if __name__ == "__main__":
         }
 
         async function runClientAsRoot() {
-            console.log("Running client via cx.run (root)...");
+            console.log("Verifying tools...");
             try {
-                const proc = await window.cx.run("/usr/bin/python3", ["/root/direct_client.py"], {
-                    env: ["PYTHONPATH=/opt/python-packages"],
-                    uid: 0, gid: 0
-                });
-                console.log("Client process finished with:", proc);
+                // Just run help to verify
+                await window.injectCommand("python3 /root/pcurl.py --help\n");
+                console.log("Verification command sent.");
             } catch (e) {
                 console.error("Run error:", e);
             }
