@@ -2,8 +2,8 @@ import sys
 import os
 import struct
 import base64
-import time
 import argparse
+import random
 from urllib.parse import urlparse
 
 # Configuration
@@ -26,9 +26,13 @@ def send_packet(conn_id, opcode, payload=b""):
     header = struct.pack("<I B I", conn_id, opcode, len(payload))
     packet = header + payload
     b64 = base64.b64encode(packet).decode('utf-8')
-    # Print to stdout so JS console sees it
     sys.stdout.write(f"{BRIDGE_OUT_PREFIX}{b64}{BRIDGE_OUT_SUFFIX}")
     sys.stdout.flush()
+
+def busy_wait(loops=10000):
+    # CheerpX time.sleep causes OverflowError
+    for _ in range(loops):
+        pass
 
 def main():
     parser = argparse.ArgumentParser(description="Python Bridge Curl")
@@ -45,7 +49,7 @@ def main():
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
     path = parsed.path or "/"
     
-    conn_id = int(time.time()) % 10000 + 100 # Randomish ID
+    conn_id = random.randint(100, 10000)
     
     if args.verbose:
         log(f"Connecting to {host}:{port}...")
@@ -53,7 +57,7 @@ def main():
     payload = struct.pack('>H', len(host)) + host.encode('utf-8') + struct.pack('>H', port)
     send_packet(conn_id, OP_CONNECT, payload)
     
-    time.sleep(0.5) 
+    busy_wait(50000) 
     
     req = f"GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: pcurl/1.0\r\nConnection: close\r\n\r\n"
     if args.verbose:
@@ -61,7 +65,6 @@ def main():
         
     send_packet(conn_id, OP_DATA, req.encode('utf-8'))
     
-    # Ensure bridge file exists
     if not os.path.exists(BRIDGE_IN_FILE):
         open(BRIDGE_IN_FILE, 'w').close()
         
@@ -69,9 +72,12 @@ def main():
     f.seek(0, 2)
     
     buffer = b""
-    start_time = time.time()
+    # Timeout via iterations
+    max_loops = 1000000 
+    loops = 0
     
-    while True:
+    while loops < max_loops:
+        loops += 1
         chunk = f.read()
         if chunk:
             buffer += chunk
@@ -93,10 +99,9 @@ def main():
                         log("Connection Error.")
                         return
         else:
-            time.sleep(0.05)
-            if time.time() - start_time > 30: # Timeout
-                log("Timeout waiting for response.")
-                return
+            busy_wait(1000) # Short wait
+
+    log("Timeout waiting for response.")
 
 if __name__ == "__main__":
     main()
