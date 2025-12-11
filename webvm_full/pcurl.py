@@ -36,7 +36,11 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     args = parser.parse_args()
     
-    parsed = urlparse(args.url)
+    target_url = args.url
+    if not target_url.startswith(('http://', 'https://')):
+        target_url = 'http://' + target_url
+    
+    parsed = urlparse(target_url)
     host = parsed.hostname
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
     path = parsed.path or "/"

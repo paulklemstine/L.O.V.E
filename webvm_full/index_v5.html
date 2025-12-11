@@ -558,13 +558,17 @@ python3 /root/pcurl.py "$@"
 
                 console.log("%c✓ CheerpX ready!", "color: #0f0; font-weight: bold");
                 await cx.setConsole(document.getElementById('console'));
+
+                // Auto-inject Network Client
+                await injectDirectClient();
+
                 await cx.run("/bin/bash", ["-l"], {
                     env: ["HOME=/root", "TERM=xterm", "PYTHONUNBUFFERED=1", "PYTHONDONTWRITEBYTECODE=1", "PYTHONPATH=/opt/python-packages", "PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"],
                     cwd: "/root"
                 });
 
-                setTimeout(() => { injectDirectClient(); }, 5000);
-                document.getElementById('status').innerText = "Process Finished.";
+                // Bash blocks, so this is unreachable usually
+                // document.getElementById('status').innerText = "Session Ended.";
             } catch (e) {
                 document.getElementById('status').innerText = "Error: " + e;
                 console.error(e);
