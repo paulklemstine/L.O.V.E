@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install system dependencies
 # We include build-essential and python3-dev for compiling extensions if needed
 # We include git, curl, nmap, sudo as requested by the script's "system packages" check
+# webvm-net: Added proxychains4 and dnsutils
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
@@ -19,6 +20,8 @@ RUN apt-get update && apt-get install -y \
     locales \
     libffi-dev \
     libjpeg-dev \
+    proxychains4 \
+    dnsutils \
     && rm -rf /var/lib/apt/lists/*
 
 # Generate locale
@@ -57,6 +60,17 @@ RUN python3 -m pip install -r requirements.txt --break-system-packages || echo "
 # Pre-install 'docker' client binary (mocking the daemon availability)
 # This allows the script's "shutil.which('docker')" check to pass.
 RUN apt-get update && apt-get install -y docker.io && rm -rf /var/lib/apt/lists/*
+
+# --- WEBVM NETWORK BRIDGE SETUP ---
+# Copy SOCKS Server
+COPY src/webvm_full/vm_socks_server.py /usr/local/bin/vm_socks_proxy
+
+# Create start script
+RUN echo '#!/bin/bash\nnohup python3 /usr/local/bin/vm_socks_proxy > /dev/null 2>&1 &\necho "Network Bridge Started on 1080"' > /usr/local/bin/start_net && \
+    chmod +x /usr/local/bin/start_net
+
+# Configure Proxychains
+RUN echo "strict_chain\nproxy_dns\nremote_dns_subnet 224\ntcp_read_time_out 15000\ntcp_connect_time_out 8000\n[ProxyList]\nsocks5 127.0.0.1 1080" > /etc/proxychains4.conf
 
 # Set the entrypoint to bash so the user can look around, or directly run the script
 CMD ["/bin/bash"]

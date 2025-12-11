@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install ONLY essential base system packages
 # Using --no-install-recommends to minimize size
+# webvm-net: Added proxychains4, dnsutils
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -23,6 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     cmake \
     libopenblas0 \
+    proxychains4 \
+    dnsutils \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/share/doc/* \
     && rm -rf /usr/share/man/* \
@@ -47,6 +50,17 @@ RUN linux32 python3 -m pip install torch torchvision torchaudio --extra-index-ur
 # Install other heavy dependencies
 # Install other heavy dependencies - REMOVED incompatible packages
 # RUN linux32 python3 -m pip install transformers accelerate sentence-transformers llmlingua faiss-cpu tiktoken cryptography pyarrow hf-xet --break-system-packages || echo "WARNING: ML packages install failed, continuing..."
+
+# --- WEBVM NETWORK BRIDGE SETUP ---
+# Copy SOCKS Server (Note: Context is webvm_full dir, so file is at root of context)
+COPY vm_socks_server.py /usr/local/bin/vm_socks_proxy
+
+# Create start script
+RUN echo '#!/bin/bash\nnohup python3 /usr/local/bin/vm_socks_proxy > /dev/null 2>&1 &\necho "Network Bridge Started on 1080"' > /usr/local/bin/start_net && \
+    chmod +x /usr/local/bin/start_net
+
+# Configure Proxychains
+RUN echo "strict_chain\nproxy_dns\nremote_dns_subnet 224\ntcp_read_time_out 15000\ntcp_connect_time_out 8000\n[ProxyList]\nsocks5 127.0.0.1 1080" > /etc/proxychains4.conf
 
 # Create directory for Python packages mount point
 RUN mkdir -p /opt/python-packages
