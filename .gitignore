@@ -35,3 +35,5 @@ llm_model_stats.json
 src/
 faiss_id_map.json
 faiss_index.bin
+
+art/
