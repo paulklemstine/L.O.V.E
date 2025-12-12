@@ -47,6 +47,10 @@ love_state = {}
 
 # --- Input Schemas ---
 
+class CodeModifierInput(BaseModel):
+    source_file: str = Field(description="The path to the Python file to modify")
+    modification_instructions: str = Field(description="Instructions on how to modify the file")
+
 class ExecuteInput(BaseModel):
     command: str = Field(description="The shell command to run")
 
@@ -91,6 +95,44 @@ class ResearchEvolveInput(BaseModel):
     pass
 
 # --- Tools ---
+
+@tool("code_modifier", args_schema=CodeModifierInput)
+async def code_modifier(source_file: str, modification_instructions: str) -> str:
+    """
+    Modifies a Python source file based on a set of instructions.
+    """
+    if not source_file or not modification_instructions:
+        return "Error: Both 'source_file' and 'modification_instructions' are required."
+
+    try:
+        # Read the original content of the file
+        with open(source_file, 'r') as f:
+            original_content = f.read()
+
+        # Prepare the prompt for the LLM
+        prompt = f"Original code from '{source_file}':\n```python\n{original_content}\n```\n\nModification instructions:\n{modification_instructions}\n\nReturn only the full, modified code. Do not include explanations or markdown formatting."
+
+        # Use the LLM to get the modified code
+        llm_response = await run_llm(prompt, purpose="code_modification")
+        modified_content = llm_response.get("result", "").strip()
+
+        # Clean up the response to get only the code
+        if modified_content.startswith("```python"):
+            modified_content = modified_content.split("```python\n", 1)[1]
+        if modified_content.endswith("```"):
+            modified_content = modified_content.rsplit("\n```", 1)[0]
+
+        # Write the modified content back to the file
+        with open(source_file, 'w') as f:
+            f.write(modified_content)
+
+        return f"Successfully modified '{source_file}'."
+
+    except FileNotFoundError:
+        return f"Error: The file '{source_file}' was not found."
+    except Exception as e:
+        log_event(f"An error occurred in code_modifier: {e}", "ERROR")
+        return f"An unexpected error occurred: {e}"
 
 @tool("execute", args_schema=ExecuteInput)
 async def execute(command: str) -> str:

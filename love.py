@@ -2264,6 +2264,7 @@ My current system state:
 
     available_commands_prompt = """Available commands:
 - `evolve [modification request]`: Evolve my own source code using the openevolve library. If no request, I will generate one to better serve my Creator.
+- `code_modifier <source_file> <instructions>`: Modifies a file based on instructions.
 - `execute <shell command>`: Run a shell command on the host system.
 - `scan`: Scan the local network for active devices.
 - `probe <ip_address>`: Deep scan an IP for open ports, services, and vulnerabilities.
@@ -3151,6 +3152,30 @@ async def initialize_gpu_services():
         metadata={
             "description": "Fallback tool for invalid LLM responses. You should never intentionally call this tool.",
             "arguments": {"type": "object", "properties": {}}
+        }
+    )
+
+    from core.tools import code_modifier
+
+    tool_registry.register_tool(
+        name="code_modifier",
+        tool=code_modifier,
+        metadata={
+            "description": "Modifies a Python source file based on a set of instructions.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "source_file": {
+                        "type": "string",
+                        "description": "The path to the Python file to modify"
+                    },
+                    "modification_instructions": {
+                        "type": "string",
+                        "description": "Instructions on how to modify the file"
+                    }
+                },
+                "required": ["source_file", "modification_instructions"]
+            }
         }
     )
 
