@@ -60,7 +60,7 @@ RUN linux32 python3 -m pip install torch torchvision torchaudio --extra-index-ur
 COPY vm_socks_server.py /usr/local/bin/vm_socks_proxy
 
 # Create start script
-RUN echo '#!/bin/bash\nnohup python3 /usr/local/bin/vm_socks_proxy > /dev/null 2>&1 &\necho "Network Bridge Started on 1080"' > /usr/local/bin/start_net && \
+RUN echo '#!/bin/bash\npython3 /usr/local/bin/vm_socks_proxy 2> /dev/null &\necho "Network Bridge Started on 1080"' > /usr/local/bin/start_net && \
     chmod +x /usr/local/bin/start_net
 
 # Configure Proxychains
