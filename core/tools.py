@@ -3,6 +3,7 @@ import asyncio
 import os
 import re
 import subprocess
+import ast
 from typing import Dict, Any, Callable, Optional, List
 from rich.console import Console
 from core.llm_api import run_llm, get_llm_api, log_event
@@ -351,3 +352,39 @@ def assess_vulnerabilities(cpes, log_func):
             log_func(f"Could not assess vulnerabilities for {cpe}: {e}")
     return vulnerabilities
 
+
+def code_analyzer(filepath: str) -> list[str]:
+    """
+    Reads a Python file and extracts the values of 'description' keys from any
+    dictionaries found within the file's AST.
+
+    Args:
+        filepath: The path to the Python file.
+
+    Returns:
+        A list of strings, where each string is a description.
+        Returns an empty list if the file cannot be read or parsed.
+    """
+
+    descriptions = []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            file_contents = f.read()
+    except (IOError, UnicodeDecodeError) as e:
+        log_event(f"Error reading file {filepath}: {e}", level="ERROR")
+        return []
+
+    try:
+        tree = ast.parse(file_contents)
+    except SyntaxError as e:
+        log_event(f"Error parsing Python code in {filepath}: {e}", level="ERROR")
+        return []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            for i, key_node in enumerate(node.keys):
+                if isinstance(key_node, ast.Constant) and key_node.value == 'description':
+                    value_node = node.values[i]
+                    if isinstance(value_node, ast.Constant):
+                        descriptions.append(str(value_node.value))
+    return descriptions
