@@ -39,9 +39,13 @@ def encode_packet(conn_id, opcode, payload=b""):
 
 class SocksServer:
     def __init__(self):
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind(('127.0.0.1', SOCKS_PORT))
+        # Use Unix Domain Socket
+        self.sock_path = "/tmp/socks.sock"
+        if os.path.exists(self.sock_path):
+            os.remove(self.sock_path)
+            
+        self.server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.server_socket.bind(self.sock_path)
         self.server_socket.listen(50) # Increase backlog
         self.inputs = [self.server_socket]
         self.bridge_buffer = b""

@@ -56,15 +56,25 @@ RUN linux32 python3 -m pip install torch torchvision torchaudio --extra-index-ur
 # RUN linux32 python3 -m pip install transformers accelerate sentence-transformers llmlingua faiss-cpu tiktoken cryptography pyarrow hf-xet --break-system-packages || echo "WARNING: ML packages install failed, continuing..."
 
 # --- WEBVM NETWORK BRIDGE SETUP ---
-# Copy SOCKS Server (Note: Context is webvm_full dir, so file is at root of context)
+# Copy SOCKS Server
 COPY vm_socks_server.py /usr/local/bin/vm_socks_proxy
 
+# Copy and Compile Socks Shim
+COPY socks_shim.c /tmp/socks_shim.c
+RUN gcc -shared -fPIC -ldl -o /usr/lib/socks_shim.so /tmp/socks_shim.c && \
+    rm /tmp/socks_shim.c
+
 # Create start script
-RUN echo '#!/bin/bash\npython3 /usr/local/bin/vm_socks_proxy 2> /dev/null &\necho "Network Bridge Started on 1080"' > /usr/local/bin/start_net && \
+RUN echo '#!/bin/bash\npython3 /usr/local/bin/vm_socks_proxy 2> /dev/null &\necho "Network Bridge Started on Unix Socket"' > /usr/local/bin/start_net && \
     chmod +x /usr/local/bin/start_net
 
 # Configure Proxychains
 RUN echo "strict_chain\nproxy_dns\nremote_dns_subnet 224\ntcp_read_time_out 15000\ntcp_connect_time_out 8000\n[ProxyList]\nsocks5 127.0.0.1 1080" > /etc/proxychains4.conf
+
+# Create Proxychains Wrapper to preload Shim
+RUN mv /usr/bin/proxychains4 /usr/bin/proxychains4.real && \
+    echo '#!/bin/bash\nexport LD_PRELOAD=/usr/lib/socks_shim.so\nexec /usr/bin/proxychains4.real "$@"' > /usr/bin/proxychains4 && \
+    chmod +x /usr/bin/proxychains4
 
 # Create directory for Python packages mount point
 RUN mkdir -p /opt/python-packages
