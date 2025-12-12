@@ -2978,7 +2978,7 @@ async def initialize_gpu_services():
         name="evolve",
         tool=evolve_tool_wrapper,
         metadata={
-            "description": "Initiates self-evolution to improve the codebase. If no goal is specified, automatically analyzes the system to determine the best evolution goal based on recent errors, TODOs, knowledge base insights, and system state.",
+            "description": "Initiates self-evolution to improve the codebase. If no goal is specified, automatically analyzes the system to determine the best evolution goal based on recent errors, knowledge base insights, and system state.",
             "arguments": {
                 "type": "object",
                 "properties": {
