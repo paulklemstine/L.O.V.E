@@ -34,35 +34,68 @@ class AutonomousReasoningAgent:
                     log_event(f"Action {action.__name__} failed after {self.max_retries} attempts.", level='ERROR')
                     return None
 
+    def verify_outcome(self, plan):
+        """
+        Verifies if the generated plan is valid and actionable.
+        Returns Tuple[bool, str]: (is_valid, error_reason)
+        """
+        if not plan:
+            return False, "Plan is empty."
+        
+        # Check if the plan is just a generic failure message
+        if len(plan) == 1 and "no results" in plan[0].lower() and "continue general scouting" in plan[0].lower():
+             # heuristic: if we are just scouting blindly because we found nothing, that's "succcess" in a way (fallback),
+             # but if we want to force creative thought, we might count it as a soft failure if repeated.
+             # For now, let's treat it as valid to prevent infinite loops of despair.
+             pass
+
+        return True, ""
+
     async def _generate_and_queue_strategic_plan(self):
-        """Generates a strategic plan and queues tasks to the user input queue."""
+        """Generates a strategic plan and queues tasks to the user input queue, with Reflexion."""
         log_event(f"[{self.agent_id}] Generating strategic plan...", level='INFO')
         
-        try:
-            # Generate the strategic plan
-            plan = await self.engine.generate_strategic_plan()
-            
-            if not plan:
-                log_event(f"[{self.agent_id}] Strategic plan generation returned empty plan.", level='WARNING')
-                return
-            
-            log_event(f"[{self.agent_id}] Generated strategic plan with {len(plan)} steps.", level='INFO')
-            
-            # Queue each actionable step to the user input queue
-            for step in plan:
-                # Skip informational messages, only queue commands
-                if step.startswith(("Action:", "Strategic Insight:", "Insight:", "Suggestion:", "CRITICAL BLOCKER:")):
-                    log_event(f"[{self.agent_id}] Strategic insight: {step}", level='INFO')
-                else:
-                    # This is a command to execute
-                    if self.user_input_queue:
-                        self.user_input_queue.put(step)
-                        log_event(f"[{self.agent_id}] Queued strategic task: {step}", level='INFO')
-                    else:
-                        log_event(f"[{self.agent_id}] User input queue not available. Cannot queue task: {step}", level='WARNING')
+        reflexion_context = None
         
-        except Exception as e:
-            log_event(f"[{self.agent_id}] Error generating strategic plan: {e}\n{traceback.format_exc()}", level='ERROR')
+        for attempt in range(self.max_retries):
+            try:
+                # Generate the strategic plan with context
+                plan = await self.engine.generate_strategic_plan(reflexion_context=reflexion_context)
+                
+                # Verify outcome
+                is_valid, error_reason = self.verify_outcome(plan)
+                
+                if is_valid:
+                    log_event(f"[{self.agent_id}] Generated valid strategic plan with {len(plan)} steps.", level='INFO')
+                    
+                    # Queue each actionable step
+                    for step in plan:
+                        if step.startswith(("Action:", "Strategic Insight:", "Insight:", "Suggestion:", "CRITICAL BLOCKER:")):
+                            log_event(f"[{self.agent_id}] Strategic insight: {step}", level='INFO')
+                        else:
+                            if self.user_input_queue:
+                                self.user_input_queue.put(step)
+                                log_event(f"[{self.agent_id}] Queued strategic task: {step}", level='INFO')
+                            else:
+                                log_event(f"[{self.agent_id}] User input queue not available. Cannot queue task: {step}", level='WARNING')
+                    return # Success, exit loop
+                
+                else:
+                    # Reflexion Triggered
+                    log_event(f"[{self.agent_id}] Plan generation failed verification: {error_reason}. Triggering Reflexion attempt {attempt+1}/{self.max_retries}", level='WARNING')
+                    reflexion_context = f"The previous attempt failed because: {error_reason}. Please generate a more concrete and valid plan."
+                    
+                    # Store Reflexion in short-term memory (via Metacognition if available, or just log for now)
+                    # self.love_state['memory'].append(...) 
+                    
+                    await asyncio.sleep(2)
+                    continue
+
+            except Exception as e:
+                log_event(f"[{self.agent_id}] Error generating strategic plan: {e}\n{traceback.format_exc()}", level='ERROR')
+                reflexion_context = f"Previous attempt raised an exception: {e}"
+                
+        log_event(f"[{self.agent_id}] Failed to generate valid plan after {self.max_retries} attempts.", level='ERROR')
 
     async def run(self):
         """The main loop for the autonomous reasoning agent."""

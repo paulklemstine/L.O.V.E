@@ -38,6 +38,31 @@ class Sandbox:
             logging.error(f"Sandbox command failed: {e}")
             return -1, "", str(e)
 
+    def run_script(self, script_content: str, script_name: str = "verification_script.py"):
+        """
+        Writes a script to the sandbox and executes it.
+        Returns: (success: bool, output: str)
+        """
+        if not self.sandbox_path:
+             return False, "Sandbox not created."
+        
+        script_path = os.path.join(self.sandbox_path, script_name)
+        try:
+            with open(script_path, "w") as f:
+                f.write(script_content)
+        except Exception as e:
+            return False, f"Failed to write script: {e}"
+        
+        cmd = ["python3", script_name]
+        returncode, stdout, stderr = self._run_command(cmd, cwd=self.sandbox_path)
+        
+        output = f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
+        if returncode == 0:
+            return True, output
+        else:
+            return False, output
+
+
     def create(self, branch_name):
         """Creates a new sandbox by cloning a specific branch of the repository."""
         self.sandbox_path = os.path.join(self.base_dir, branch_name)

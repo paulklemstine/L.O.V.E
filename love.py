@@ -91,6 +91,7 @@ deep_agent_engine = None
 # --- MEMORY MANAGER ---
 # NOTE: Initialization is deferred until after dependency checks.
 memory_manager = None
+love_task_manager = None
 
 love_state = {
     "version_name": "initial-condition-alpha",
@@ -3642,6 +3643,11 @@ async def main(args):
     local_job_manager.start()
     monitoring_manager = MonitoringManager(love_state, console)
     monitoring_manager.start()
+
+    # --- Start Automated Codebase Ingestion ---
+    from core.ingest_codebase_task import IngestCodebaseTask
+    ingest_task = IngestCodebaseTask(memory_manager, root_dir=os.getcwd())
+    await ingest_task.start()
 
     # --- Startup Social Post ---
     # Hardcoded post removed in favor of autonomous agents

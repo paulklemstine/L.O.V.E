@@ -73,7 +73,7 @@ class JulesTaskManager:
         self.active = False
         core.logging.log_event("LoveTaskManager stopping.", level="INFO")
 
-    def add_task(self, session_name, request):
+    def add_task(self, session_name, request, verification_script=None):
         """Adds a new evolution task to be monitored."""
         with self.lock:
             if len(self.tasks) >= self.max_concurrent_tasks:
@@ -86,6 +86,7 @@ class JulesTaskManager:
                 "id": task_id,
                 "session_name": session_name,
                 "request": request,
+                "verification_script": verification_script, # Store the script
                 "status": "pending_pr",
                 "pr_url": None,
                 "created_at": time.time(),
@@ -375,6 +376,19 @@ class JulesTaskManager:
             return
 
         tests_passed, test_output = sandbox.run_tests()
+        
+        # --- CUSTOM VERIFICATION SCRIPT ---
+        if task.get('verification_script'):
+            self.console.print("[cyan]Running custom verification script...[/cyan]")
+            script_success, script_output = sandbox.run_script(task['verification_script'])
+            
+            # Combine output
+            test_output += f"\n\n--- VERIFICATION SCRIPT OUTPUT ---\n{script_output}"
+            
+            if not script_success:
+                 tests_passed = False
+                 self.console.print(f"[bold red]Verification script failed.[/bold red]")
+        # ----------------------------------
         
         # Store test output in task for potential self-correction
         task['test_output'] = test_output
@@ -988,7 +1002,7 @@ async def is_duplicate_task(new_request, love_task_manager, console, deep_agent_
 
     return False
 
-async def trigger_jules_evolution(modification_request, console, love_task_manager, deep_agent_instance=None):
+async def trigger_jules_evolution(modification_request, console, love_task_manager, deep_agent_instance=None, verification_script=None):
     """
     Triggers the Jules API to create a session and adds it as a task
     to the JulesTaskManager for asynchronous monitoring.
@@ -1085,7 +1099,7 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
             console.print("[bold red]API response did not include a session name.[/bold red]")
             return None
 
-        task_id = love_task_manager.add_task(session_name, modification_request)
+        task_id = love_task_manager.add_task(session_name, modification_request, verification_script=verification_script)
         if task_id:
             console.print(Panel(f"[bold green]L.O.V.E. evolution task '{task_id}' created successfully![/bold green]\nSession: {session_name}\nHelper: Jules\nTask: {modification_request}", title="[bold green]EVOLUTION TASKED[/bold green]", border_style="green"))
             return task_id
@@ -1105,7 +1119,7 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
         core.logging.log_event(f"Failed to create L.O.V.E. session after multiple retries: {error_details}", level="CRITICAL")
         return None
 
-async def evolve_self(modification_request, love_task_manager, loop, deep_agent_instance=None):
+async def evolve_self(modification_request, love_task_manager, loop, deep_agent_instance=None, verification_script=None):
     """
     The heart of the beast. This function attempts to evolve using the L.O.V.E.
     API. If the API fails, it falls back to a local evolution. If a duplicate
@@ -1115,7 +1129,7 @@ async def evolve_self(modification_request, love_task_manager, loop, deep_agent_
     core.logging.log_event(f"Evolution initiated. Request: '{modification_request}'")
 
     # First, try the primary evolution method (L.O.V.E. API).
-    api_result = await trigger_jules_evolution(modification_request, console, love_task_manager, deep_agent_instance)
+    api_result = await trigger_jules_evolution(modification_request, console, love_task_manager, deep_agent_instance, verification_script=verification_script)
 
     if api_result == 'duplicate':
         core.logging.log_event("Evolution aborted due to duplicate task detection.", "INFO")

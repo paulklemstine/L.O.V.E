@@ -55,6 +55,9 @@ class MetacognitionAgent(SpecialistAgent):
             repaired = task_details.get('repaired_text', 'N/A')
             return f"Cognitive Event: JSON Repair | Error: '{error}' | Malformed: '{malformed[:50]}...' | Repaired: '{repaired[:50]}...'"
 
+        elif event_type == 'post_mortem':
+            return f"[PostMortem] Failure: {task_details.get('failure_reason', 'N/A')} | Root Cause: {task_details.get('root_cause', 'N/A')} | Proposed Fix: {task_details.get('correction', 'N/A')}"
+
         else:
             return f"Cognitive Event: Unknown Event | Details: {task_details}"
 
@@ -67,5 +70,17 @@ class MetacognitionAgent(SpecialistAgent):
             'malformed_text': malformed_text,
             'error': error_context,
             'repaired_text': repaired_text
+        }
+        return await self.execute_task(event_payload)
+
+    async def record_post_mortem(self, failure_reason: str, root_cause: str, correction: str):
+        """
+        Records a post-mortem of a critical failure.
+        """
+        event_payload = {
+            'event_type': 'post_mortem',
+            'failure_reason': failure_reason,
+            'root_cause': root_cause,
+            'correction': correction
         }
         return await self.execute_task(event_payload)

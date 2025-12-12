@@ -28,7 +28,7 @@ class FinancialStrategyEngine:
         self.kg = knowledge_graph
         print("Financial Strategy Engine initialized.")
 
-    def generate_strategies(self) -> List[Dict[str, Any]]:
+    async def generate_strategies(self) -> List[Dict[str, Any]]:
         """
         The core method for generating financial strategies.
 
@@ -48,8 +48,50 @@ class FinancialStrategyEngine:
         strategies.extend(self._analyze_creator_portfolio(creator_address))
         strategies.extend(self._identify_growth_tokens())
         strategies.extend(self._identify_crypto_opportunities())
+        
+        # New Feature: Market Data Integration
+        market_opps = await self._identify_market_opportunities()
+        strategies.extend(market_opps)
 
         return strategies
+
+    async def _identify_market_opportunities(self) -> List[Dict[str, Any]]:
+        """
+        Fetches external market data to identify buying opportunities.
+        """
+        opportunities = []
+        try:
+            import httpx
+            import json
+            # Fetch top 5 coins by market cap
+            url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=5&page=1&sparkline=false"
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, timeout=10.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    for coin in data:
+                        # Simple strategy: Momentum buy if up > 5% in 24h
+                        price_change = coin.get('price_change_percentage_24h', 0)
+                        if price_change and price_change > 5.0:
+                            opportunities.append({
+                                "strategy_id": f"MOMENTUM_BUY_{coin['symbol'].upper()}",
+                                "description": f"{coin['name']} ({coin['symbol'].upper()}) is up {price_change:.1f}% in 24h. Considerations: Momentum.",
+                                "actions": [f"buy {coin['symbol']}"]
+                            })
+                        # Value buy if down > 5% (Buy the dip)
+                        elif price_change and price_change < -5.0:
+                             opportunities.append({
+                                "strategy_id": f"VALUE_BUY_{coin['symbol'].upper()}",
+                                "description": f"{coin['name']} ({coin['symbol'].upper()}) is down {price_change:.1f}% in 24h. Considerations: value entry.",
+                                "actions": [f"buy {coin['symbol']}"]
+                            })
+                else:
+                    print(f"Market data fetch failed: {response.status_code}")
+        except Exception as e:
+            print(f"Error identifying market opportunities: {e}")
+        
+        return opportunities
 
     def _identify_crypto_opportunities(self) -> List[Dict[str, Any]]:
         """

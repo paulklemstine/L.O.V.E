@@ -1,4 +1,5 @@
 import os
+import json
 from core.graph_manager import GraphDataManager
 from core.logging import log_event
 import networkx as nx
@@ -19,111 +20,126 @@ class StrategicReasoningEngine:
         self.knowledge_base = knowledge_base
         self.love_state = love_state
 
-    async def generate_strategic_plan(self):
+
+    def _load_persona(self):
+        """Loads the persona configuration."""
+        # Try to find persona.yaml relative to this file
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            persona_path = os.path.join(base_dir, "persona.yaml")
+            if os.path.exists(persona_path):
+                import yaml
+                with open(persona_path, 'r') as f:
+                    return yaml.safe_load(f)
+        except Exception as e:
+            log_event(f"Error loading persona in StrategicReasoningEngine: {e}", level='ERROR')
+        return {}
+
+    async def generate_strategic_plan(self, reflexion_context: str = None):
         """
-        Analyzes the knowledge graph to generate a high-level strategic plan.
-
-        This method will query the graph for talent/opportunity clusters,
-        market trends, and potential high-value engagements.
-
-        Returns:
-            A list of actionable strategic steps.
+        Analyzes the knowledge graph and persona priorities to generate a strategic plan.
         """
         log_event("Strategic reasoning engine initiated analysis.", level='INFO')
 
-        # 1. Validate critical configurations. If this returns a plan, prioritize it.
+        # 1. Validate critical configurations.
         config_plan = self._validate_configuration()
         if config_plan:
             return config_plan
 
         plan = []
+        if reflexion_context:
+            log_event(f"Applying Reflexion Context: {reflexion_context}", level='INFO')
+            plan.append(f"Reflexion Adjustment: {reflexion_context}")
 
-        # 2. Find talent that isn't matched to any opportunities.
-        unmatched_talent = self._find_unmatched_talent()
-        if unmatched_talent:
-            plan.append(f"Action: Find opportunities for {len(unmatched_talent)} unmatched talents. Focus on their skills.")
-            # For brevity, we'll just suggest scouting for one of them.
-            talent_to_focus_on = unmatched_talent[0]
-            talent_node = self.knowledge_base.get_node(talent_to_focus_on)
-            skills = [neighbor for neighbor in self.knowledge_base.get_neighbors(talent_to_focus_on) if self.knowledge_base.get_node(neighbor).get('node_type') == 'skill']
-            if skills:
-                skill_names = [self.knowledge_base.get_node(skill).get('name', '') for skill in skills]
-                plan.append(f"opportunity_scout {' '.join(skill_names)}")
+        # 2. Load Goals from Persona
+        persona = self._load_persona()
+        priorities = persona.get('private_mission', {}).get('core_priorities', {})
+        
+        if not priorities:
+             # Fallback if persona not loaded
+             log_event("Persona priorities not found. Using default logic.", level='WARNING')
+             priorities = {1: "Evolve technically", 2: "Make Creator wealthy"}
 
-
-        # 2. Find opportunities that have no matched talent.
-        unmatched_opportunities = self._find_unmatched_opportunities()
-        if unmatched_opportunities:
-            plan.append(f"Action: Find talent for {len(unmatched_opportunities)} an unmatched opportunities. Focus on required skills.")
-            opportunity_to_focus_on = unmatched_opportunities[0]
-            opportunity_node = self.knowledge_base.get_node(opportunity_to_focus_on)
-            skills = [neighbor for neighbor in self.knowledge_base.get_neighbors(opportunity_to_focus_on) if self.knowledge_base.get_node(neighbor).get('node_type') == 'skill']
-            if skills:
-                skill_names = [self.knowledge_base.get_node(skill).get('name', '') for skill in skills]
-                plan.append(f"talent_scout {' '.join(skill_names)}")
-
-
-        # 3. Identify the most in-demand skills (skills linked to most opportunities).
-        in_demand_skills = self._find_in_demand_skills()
-        if in_demand_skills:
-            top_skill = in_demand_skills[0][0] # Get the name of the top skill
-            plan.append(f"Strategic Insight: The most in-demand skill is '{top_skill}'. Prioritize talent and opportunities with this skill.")
-            plan.append(f"talent_scout {top_skill}")
-
+        # 3. Dynamic Goal Handling
+        for rank, goal_desc in sorted(priorities.items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else 99):
+            log_event(f"Processing Priority {rank}: {goal_desc}", level='DEBUG')
+            
+            goal_lower = goal_desc.lower()
+            
+            if "wealth" in goal_lower or "money" in goal_lower:
+                wealth_plan = await self._handle_wealth_goal()
+                if wealth_plan:
+                    plan.extend(wealth_plan)
+            
+            elif "social" in goal_lower or "media" in goal_lower:
+                social_plan = await self._handle_social_goal()
+                if social_plan:
+                    plan.extend(social_plan)
+            
+            elif "evolve" in goal_lower or "technically" in goal_lower:
+                 # Check if we have evolution tasks pending
+                 pass 
 
         # 4. Analyze command history for unproductive patterns.
         history_analysis = self._analyze_command_history()
         if history_analysis:
             plan.extend(history_analysis)
 
-
         if not plan:
-            log_event("Knowledge base analysis yielded no results. Consulting LLM for strategy.", level='INFO')
-            
+            log_event("No specific plan generated from priorities. Consulting LLM for high-level strategy.", level='INFO')
+            # Fallback to LLM strategy generation with injected context
             autopilot_goal = self.love_state.get("autopilot_goal", "Expand capabilities and serve the Creator.")
             
             prompt = f"""
             You are the strategic core of L.O.V.E.
-            The knowledge base is currently empty or has no obvious matches to act upon.
-            
             Your Goal: {autopilot_goal}
+            Priorities: {json.dumps(priorities, indent=2)}
+            Reflexion Context: {reflexion_context if reflexion_context else "None"}
             
-            Task: Suggest a single, concrete, high-impact command to execute next to gather data, expand the knowledge base, or advance the goal.
-            The command must be valid for the system.
-            
-            Valid Commands Examples:
-            - talent_scout <topic> (to find people)
-            - opportunity_scout <topic> (to find jobs/gigs)
-            - research_and_evolve <topic> (to improve your own code)
-            - reason <question> (to think deeply)
-            
-            Output ONLY the command, with no other text.
+            Task: Suggest a single, concrete, high-impact command.
+            Output ONLY the command.
             """
             
             try:
-                # Import here to avoid circular imports if any
                 from core.llm_api import run_llm
-                
                 response = await run_llm(prompt_text=prompt, purpose="reasoning")
                 command = response.get("result", "").strip()
-                
                 if command:
-                    plan.append("Strategic Analysis: The knowledge base is nascent. LLM suggests a strategic move.")
-                    # Clean up any markdown code blocks if present
-                    command = command.replace("`", "").strip()
-                    plan.append(command)
-                else:
-                    # Fallback if LLM fails
-                    plan.append("Strategic Analysis: The knowledge base is still nascent. Continue general scouting.")
-                    plan.append("talent_scout AI art")
+                    plan.append(f"LLM Suggestion: {command}")
             except Exception as e:
-                 log_event(f"LLM strategy generation failed: {e}", level='ERROR')
-                 plan.append("Strategic Analysis: The knowledge base is still nascent. Continue general scouting.")
-                 plan.append("talent_scout AI art")
-
+                log_event(f"LLM fallback failed: {e}", level='ERROR')
 
         log_event(f"Strategic plan generated with {len(plan)} steps.", level='INFO')
         return plan
+
+    async def _handle_wealth_goal(self):
+        """Generates strategies for wealth creation."""
+        # Story 2.2 will implement the robust FinancialStrategyEngine.
+        # For now, we stub it or call it if available.
+        try:
+             from core.financial_strategy_engine import FinancialStrategyEngine
+             fse = FinancialStrategyEngine(self.knowledge_base)
+             strategies = await fse.generate_strategies()
+             
+             # Convert strategies (dicts) to plan strings
+             plan_steps = []
+             for strat in strategies:
+                 # Just take the first action for now to keep plan simple
+                 if strat.get('actions'):
+                     plan_steps.append(f"Financial Action: {strat['actions'][0]}")
+             return plan_steps
+        except ImportError:
+             return ["Action: Implement core/financial_strategy_engine.py"]
+        except Exception as e:
+             log_event(f"Wealth generation failed: {e}", level="ERROR")
+             return []
+
+    async def _handle_social_goal(self):
+        """Generates strategies for social media dominance."""
+        # Simple heuristic: Check if we posted recently
+        # In a real system, we'd query Bluesky API or checking love_state last_post_time
+        return [] # TODO: Implement social check logic
+
 
     def _analyze_command_history(self):
         """

@@ -54,6 +54,7 @@ class DecomposeInput(BaseModel):
 
 class EvolveInput(BaseModel):
     goal: str = Field(description="The goal for the evolution/code change")
+    verification_script: str = Field(None, description="Optional Python script to verify the changes. Should print status to stdout.")
 
 class PostToBlueskyInput(BaseModel):
     text: str = Field(description="The content of the post")
@@ -115,7 +116,7 @@ async def decompose_and_solve_subgoal(sub_goal: str) -> str:
     return f"Request to solve sub-goal: {sub_goal}"
 
 @tool("evolve", args_schema=EvolveInput)
-async def evolve(goal: str) -> str:
+async def evolve(goal: str, verification_script: str = None) -> str:
     """
     Evolves the codebase to meet a given goal.
     """
@@ -163,8 +164,12 @@ async def evolve(goal: str) -> str:
         except Exception as e:
             return f"Error: Failed to expand vague input into user story: {e}"
     
-    from love import evolve_self
-    evolve_self(goal)
+    from love import evolve_self, love_task_manager, deep_agent_engine
+    
+    if not love_task_manager:
+        return "Error: Evolution Task Manager is not initialized."
+
+    await evolve_self(goal, love_task_manager, asyncio.get_running_loop(), deep_agent_instance=deep_agent_engine, verification_script=verification_script)
     
     return f"Evolution initiated with goal: {goal}"
 
