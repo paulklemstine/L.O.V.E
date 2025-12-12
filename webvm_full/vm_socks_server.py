@@ -41,7 +41,7 @@ class SocksServer:
     def __init__(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind(('0.0.0.0', SOCKS_PORT))
+        self.server_socket.bind(('127.0.0.1', SOCKS_PORT))
         self.server_socket.listen(50) # Increase backlog
         self.inputs = [self.server_socket]
         self.bridge_buffer = b""
