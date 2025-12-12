@@ -214,21 +214,13 @@ def _analyze_system_state(love_state: dict) -> list:
     
     try:
         hardware = love_state.get("hardware", {})
-        
-        # Check GPU availability
-        if not hardware.get("gpu_detected", False):
-            issues.append("No GPU available - consider optimizing for CPU-only operation")
-        
+
         # Check VRAM
         vram_mb = hardware.get("gpu_vram_mb", 0)
-        if 0 < vram_mb < 8000:
-            issues.append(f"Limited VRAM ({vram_mb}MB) - consider memory optimizations")
-        
+
         # Check CPU count
         cpu_count = hardware.get("cpu_count", 0)
-        if cpu_count < 4:
-            issues.append(f"Limited CPU cores ({cpu_count}) - consider async optimizations")
-        
+
     except Exception as e:
         core.logging.log_event(f"[EvolutionAnalyzer] Error analyzing system state: {e}", "WARNING")
     
