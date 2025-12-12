@@ -2,6 +2,7 @@ import os
 import json
 from core.graph_manager import GraphDataManager
 from core.logging import log_event
+import time
 import networkx as nx
 
 class StrategicReasoningEngine:
@@ -136,9 +137,33 @@ class StrategicReasoningEngine:
 
     async def _handle_social_goal(self):
         """Generates strategies for social media dominance."""
-        # Simple heuristic: Check if we posted recently
-        # In a real system, we'd query Bluesky API or checking love_state last_post_time
-        return [] # TODO: Implement social check logic
+        social_state = self.love_state.get('social_media', {})
+        # Post interval in seconds (e.g., 10 minutes)
+        post_interval = 600
+        current_time = time.time()
+
+        if not social_state:
+            # If no social media state exists at all, it's a good time to post.
+            return ["Action: `manage_bluesky action='post'` to establish social media presence."]
+
+        last_post_time = 0
+        # Find the most recent post time across all social media agents
+        for agent_id, agent_data in social_state.items():
+            agent_last_post = agent_data.get('last_post_time', 0)
+            if agent_last_post > last_post_time:
+                last_post_time = agent_last_post
+
+        if last_post_time == 0:
+             # If agents exist but none have ever posted.
+             return ["Action: `manage_bluesky action='post'` to make an initial post."]
+
+        time_since_last_post = current_time - last_post_time
+        if time_since_last_post > post_interval:
+            log_event(f"Time since last social media post: {int(time_since_last_post)}s. Proposing a new post.", "INFO")
+            return ["Action: `manage_bluesky action='post'` to maintain social media presence."]
+
+        log_event(f"Last social media post was only {int(time_since_last_post)}s ago. No action needed.", "DEBUG")
+        return []
 
 
     def _analyze_command_history(self):
