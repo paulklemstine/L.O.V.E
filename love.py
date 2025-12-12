@@ -2263,7 +2263,7 @@ My current system state:
 {dynamic_context_section}"""
 
     available_commands_prompt = """Available commands:
-- `evolve [modification request]`: Evolve my own source code using the openevolve library. If no request, I will generate one to better serve my Creator.
+- `evolve [modification request]`: Initiates self-evolution to improve the codebase. If no goal is specified, automatically analyzes the system to determine the best evolution goal.
 - `execute <shell command>`: Run a shell command on the host system.
 - `scan`: Scan the local network for active devices.
 - `probe <ip_address>`: Deep scan an IP for open ports, services, and vulnerabilities.
