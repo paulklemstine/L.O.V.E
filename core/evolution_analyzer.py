@@ -370,3 +370,40 @@ async def _analyze_technical_debt() -> list:
 
     # Return top 5 most critical issues
     return sorted(debt_issues, key=lambda x: x.get('complexity', 0), reverse=True)[:5]
+
+
+async def code_analyzer(file_path: str, goal: Optional[str] = None) -> list[str]:
+    """
+    Analyzes a file for potential improvements based on a goal or general best practices.
+
+    Args:
+        file_path: The path to the file to analyze.
+        goal: An optional goal for the analysis.
+
+    Returns:
+        A list of suggested modifications.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except FileNotFoundError:
+        return [f"Error: File not found at {file_path}"]
+    except Exception as e:
+        return [f"Error reading file: {e}"]
+
+    prompt_key = "code_analysis_goal" if goal else "code_analysis_general"
+    prompt_vars = {"file_content": content, "goal": goal}
+
+    try:
+        from core.llm_api import run_llm
+        result_dict = await run_llm(
+            prompt_key=prompt_key,
+            prompt_vars=prompt_vars,
+            purpose="code_analysis",
+            is_source_code=True
+        )
+        suggestions_text = result_dict.get("result", "")
+        suggestions = suggestions_text.strip().split('\n')
+        return [s.strip() for s in suggestions if s.strip()]
+    except Exception as e:
+        return [f"Error during LLM analysis: {e}"]

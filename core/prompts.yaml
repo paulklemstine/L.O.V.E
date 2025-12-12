@@ -952,3 +952,23 @@ social_media_interaction: |
   - Embed gratitude and connection
   - Keep it vibrant and engaging
   - Output ONLY the reply text.
+
+code_analysis_general: |
+  You are an expert software engineer AI. Analyze the following code for stylistic and structural improvements.
+  Provide a list of concrete suggestions to improve the code's readability, maintainability, and performance.
+  Your response should be a list of strings, with each string being a single suggestion.
+
+  Code:
+  ---
+  {{ file_content }}
+  ---
+
+code_analysis_goal: |
+  You are an expert software engineer AI. Analyze the following code to find improvements related to the following goal: "{{ goal }}".
+  Provide a list of concrete suggestions to achieve this goal.
+  Your response should be a list of strings, with each string being a single suggestion.
+
+  Code:
+  ---
+  {{ file_content }}
+  ---
