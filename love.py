@@ -4,6 +4,12 @@
 
 import os
 import sys
+import importlib.metadata
+try:
+    from packaging.requirements import Requirement
+except ImportError:
+    # Fallback or just let it fail if packaging is critical now
+    pass
 
 # Force unbuffered output to ensure real-time visibility
 # Use environment variable method which is more reliable than reconfigure
@@ -63,8 +69,11 @@ except ImportError:
 
 # Explicit check for langchain-hub as user requested autoinstall robustness
 try:
-    import pkg_resources
-    pkg_resources.require("langchain-hub")
+    try:
+        importlib.metadata.distribution("langchain-hub")
+        # Check specific version if needed, or just existence
+    except importlib.metadata.PackageNotFoundError:
+        raise ImportError
 except (ImportError, Exception): 
     print("Dependency 'langchain-hub' not found. Auto-installing...")
     try:
@@ -322,16 +331,26 @@ def _get_pip_executable():
 def _is_package_installed(req_str):
     """Checks if a package specified by a requirement string is installed."""
     try:
-        import pkg_resources
-        pkg_resources.require(req_str)
+        if 'Requirement' not in globals():
+             from packaging.requirements import Requirement
+        
+        req = Requirement(req_str)
+        try:
+             installed_version = importlib.metadata.version(req.name)
+        except importlib.metadata.PackageNotFoundError:
+             return False
+             
+        if req.specifier:
+            return req.specifier.contains(installed_version, prereleases=True)
         return True
-    except (pkg_resources.DistributionNotFound, pkg_resources.VersionConflict):
-        return False
-    except FileNotFoundError:
-        # This can happen if a package's metadata is corrupted (e.g., METADATA file is missing).
-        # We'll log it and treat the package as not installed so the script can attempt to fix it.
-        _temp_log_event(f"Handled FileNotFoundError for '{req_str}', treating as not installed.", "WARNING")
-        return False
+    except Exception as e:
+        # Fallback for simple names if packaging fails or other issues
+        try:
+             # fast path for just name
+             importlib.metadata.version(req_str)
+             return True
+        except:
+             return False
 
 def _install_requirements_file(requirements_path, tracker_prefix):
     """
@@ -343,7 +362,7 @@ def _install_requirements_file(requirements_path, tracker_prefix):
         logging.warning(f"Requirements file not found at '{requirements_path}'.")
         return
 
-    import pkg_resources
+    # import pkg_resources # REMOVED
     extra_pip_args = []
     with open(requirements_path, 'r') as f:
         lines = f.readlines()
@@ -367,10 +386,12 @@ def _install_requirements_file(requirements_path, tracker_prefix):
             continue
 
         try:
-            # Use pkg_resources to correctly parse the package name from the line
-            req = pkg_resources.Requirement.parse(line)
-            package_name = req.project_name
-        except ValueError:
+            # Use packaging to correctly parse the package name from the line
+            if 'Requirement' not in globals():
+                 from packaging.requirements import Requirement
+            req = Requirement(line)
+            package_name = req.name
+        except Exception:
             print(f"WARN: Could not parse requirement '{line}'. Skipping.")
             continue
 

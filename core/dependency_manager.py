@@ -124,7 +124,6 @@ def install_package(package_name, upgrade=False, break_system_packages=True):
         
         # Force a refresh of sys.path to include potentially new user-site directories
         import site
-        import importlib
         try:
             from importlib import reload
         except ImportError:
