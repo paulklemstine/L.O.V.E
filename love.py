@@ -57,7 +57,24 @@ except ImportError:
              raise ImportError("Failed to install aiohttp")
     except Exception as e:
         print(f"CRITICAL: Failed to install aiohttp: {e}")
+    except Exception as e:
+        print(f"CRITICAL: Failed to install aiohttp: {e}")
         sys.exit(1)
+
+# Explicit check for langchain-hub as user requested autoinstall robustness
+try:
+    import pkg_resources
+    pkg_resources.require("langchain-hub")
+except (ImportError, Exception): 
+    print("Dependency 'langchain-hub' not found. Auto-installing...")
+    try:
+        from core.dependency_manager import install_package
+        if install_package("langchain-hub"):
+             print("Successfully installed langchain-hub.")
+        else:
+             print("Warning: Failed to auto-install langchain-hub. System might degrade to local prompts.")
+    except Exception as e:
+        print(f"Warning: Failed to install langchain-hub: {e}")
 
 import core.logging
 # from core.deep_agent_engine import DeepAgentEngine

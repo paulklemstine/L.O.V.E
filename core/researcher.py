@@ -60,3 +60,57 @@ async def generate_evolution_book() -> List[Dict[str, str]]:
             return [] # Return empty list if format is incorrect
     except (json.JSONDecodeError, TypeError):
         return [] # Return empty list on failure
+
+async def explore_structured_data(topic: str, schema_description: str) -> Dict[str, Any]:
+    """
+    Performs research on a topic and extracts data according to a dynamically generated schema.
+    """
+    from core.llm_api import run_llm
+    from network import perform_webrequest
+    import subprocess
+    import sys
+    
+    # 1. Generate Schema Code
+    # Generate schema script path
+    schema_gen_script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "generate_schema.py")
+    
+    # Run the generator
+    proc = subprocess.run([sys.executable, schema_gen_script, schema_description], capture_output=True, text=True)
+    if proc.returncode != 0:
+        return {"error": f"Schema generation failed: {proc.stderr}"}
+        
+    schema_code = proc.stdout.strip()
+    
+    # 2. Research
+    search_summary, _ = await perform_webrequest(f"{topic}")
+    
+    # 3. Extract using Schema
+    extraction_prompt = f"""
+    You are a precise data extractor.
+    
+    ### Goal:
+    Extract information about '{topic}' from the provided text, strictly following the Pydantic schema defined below.
+    
+    ### Schema:
+    ```python
+    {schema_code}
+    ```
+    
+    ### Input Text:
+    {search_summary}
+    
+    ### Instruction:
+    Output ONLY valid JSON that matches the 'ExtractedData' model defined in the schema.
+    """
+    
+    result = await run_llm(prompt_text=extraction_prompt, is_source_code=True, purpose="general")
+    extracted_json_str = result.get('result', '')
+    
+    # Basic cleanup
+    if "```json" in extracted_json_str:
+        extracted_json_str = extracted_json_str.split("```json")[1].split("```")[0]
+        
+    try:
+        return json.loads(extracted_json_str)
+    except Exception as e:
+        return {"error": f"JSON parse failed: {e}", "raw": extracted_json_str}

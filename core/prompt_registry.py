@@ -11,6 +11,7 @@ class PromptRegistry:
     """
     _instance = None
     _prompts: Dict[str, str] = {}
+    _remote_cache: Dict[str, str] = {}
     _prompts_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts.yaml")
 
     def __new__(cls):
@@ -26,14 +27,48 @@ class PromptRegistry:
             return
 
         try:
-            with open(self._prompts_file, 'r') as f:
+            with open(self._prompts_file, 'r', encoding='utf-8') as f:
                 self._prompts = yaml.safe_load(f)
             log_event(f"Loaded {len(self._prompts)} prompts from {self._prompts_file}", "INFO")
         except Exception as e:
             log_event(f"Failed to load prompts: {e}", "ERROR")
 
     def get_prompt(self, key: str) -> Optional[str]:
-        """Retrieves a raw prompt template by key."""
+        """
+        Retrieves a raw prompt template by key.
+        Checks LangChain Hub if enabled.
+        """
+        # Remote Prompt Logic
+        if os.environ.get("USE_REMOTE_PROMPTS", "false").lower() == "true":
+            # Check cache first
+            if key in self._remote_cache:
+                return self._remote_cache[key]
+                
+            try:
+                from langchain import hub
+                repo_handle = os.environ.get("LANGCHAIN_HUB_REPO", "love-agent")
+                prompt = hub.pull(f"{repo_handle}/{key}")
+                
+                template_str = ""
+                # Extract template string
+                if hasattr(prompt, 'template'):
+                    template_str = prompt.template
+                elif hasattr(prompt, 'messages') and prompt.messages:
+                    # Return the first message template for chat prompts (simplification)
+                    template_str = prompt.messages[0].prompt.template
+                else:
+                    template_str = str(prompt)
+                
+                # Update cache
+                if template_str:
+                    self._remote_cache[key] = template_str
+                    return template_str
+                    
+            except Exception as e:
+                # Log only once per key to avoid spamming? Or just log warning.
+                # log_event(f"Failed to pull remote prompt '{key}': {e}. Falling back to local.", "WARNING")
+                pass
+        
         return self._prompts.get(key)
 
     def render_prompt(self, key: str, **kwargs) -> str:
@@ -62,6 +97,8 @@ class PromptRegistry:
     def reload(self):
         """Reloads the prompts from disk."""
         self._load_prompts()
+        self._remote_cache = {} # Clear remote cache to force re-fetch
+        log_event("PromptRegistry reloaded from disk/remote settings.", "INFO")
 
 # Global accessor
 def get_prompt_registry() -> PromptRegistry:

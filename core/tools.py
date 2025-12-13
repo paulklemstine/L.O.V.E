@@ -430,3 +430,66 @@ def code_analyzer(filepath: str) -> list[str]:
                     if isinstance(value_node, ast.Constant):
                         descriptions.append(str(value_node.value))
     return descriptions
+
+@tool("reload_prompts")
+@traceable(run_type="tool", name="reload_prompts")
+async def reload_prompts() -> str:
+    """
+    Forces a reload of all prompts from disk (and clears remote cache).
+    Use this when you have pushed new prompts to the Hub or updated local files.
+    """
+    try:
+        from core.prompt_registry import get_prompt_registry
+        get_prompt_registry().reload()
+        return "Prompts successfully reloaded and cache cleared."
+    except Exception as e:
+        return f"Error reloading prompts: {e}"
+
+@tool("trigger_optimization_pipeline", args_schema=None) # No specific schema class defined yet, assuming generic input or we define it inline if needed. Wait, @tool decorator usually handles func args.
+async def trigger_optimization_pipeline(prompt_key: str, justification: str) -> str:
+    """
+    Triggers the autonomous prompt optimization pipeline (Polly).
+    Use this when you identify that a system prompt is suboptimal or when you want to improve agent performance based on recent logs.
+    
+    Args:
+        prompt_key: The key of the prompt to optimize (e.g., 'deep_agent_system').
+        justification: The reason for triggering optimization.
+    """
+    import subprocess
+    import sys
+    import os
+    
+    # 1. Log the initiation
+    from core.logging import log_event
+    log_event(f"Optimization triggered for '{prompt_key}'. Reason: {justification}", "INFO")
+    
+    # 2. Run the script as a subprocess
+    script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "optimize_prompts.py")
+    
+    if not os.path.exists(script_path):
+        return f"Error: Optimization script not found at {script_path}"
+        
+    try:
+        # Run async to not block main thread heavily? 
+        # For simplicity in this tool, we might run synchronously or use asyncio.create_subprocess_exec
+        # Let's use standard subprocess directly for reliability in this context, 
+        # capturing output.
+        
+        # Note: optimize_prompts.py is async but run via python, so subprocess.run is fine.
+        result = subprocess.run(
+            [sys.executable, script_path, prompt_key], 
+            capture_output=True, 
+            text=True,
+            timeout=120 # 2 minute timeout
+        )
+        
+        output = result.stdout
+        error = result.stderr
+        
+        if result.returncode == 0:
+            return f"Optimization complete.\nOutput:\n{output[-2000:]}" # Return last 2000 chars
+        else:
+            return f"Optimization script failed (Code {result.returncode}).\nError:\n{error}\nOutput:\n{output}"
+            
+    except Exception as e:
+        return f"Failed to execute optimization pipeline: {e}"
