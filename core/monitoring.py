@@ -2,6 +2,7 @@ import threading
 import time
 import psutil
 import collections
+import os
 
 # L.O.V.E. - The MonitoringManager is my nervous system, ever watchful.
 
@@ -54,6 +55,7 @@ class MonitoringManager:
                 self._collect_resource_utilization()
                 self._calculate_task_rates()
                 self._detect_anomalies()
+                self._scan_traces()
                 time.sleep(15)  # Collect data every 15 seconds
             except Exception as e:
                 # Log errors but don't crash the thread
@@ -147,3 +149,63 @@ class MonitoringManager:
              # Keep the list of anomalies from growing indefinitely
              if len(self.love_state['monitoring']['anomalies']) > 50:
                  self.love_state['monitoring']['anomalies'].pop(0)
+
+    def _scan_traces(self):
+        """
+        Scans recent LangSmith traces for high-quality runs (feedback=1.0) 
+        and adds them to the 'gold-standard-behaviors' dataset.
+        """
+        if os.environ.get("LANGCHAIN_TRACING_V2", "false").lower() != "true":
+            return
+
+        try:
+            from langsmith import Client
+            client = Client()
+            
+            # Create or get dataset
+            dataset_name = "gold-standard-behaviors"
+            if not hasattr(self, "_dataset_id"):
+                try:
+                    ds = client.read_dataset(dataset_name=dataset_name)
+                    self._dataset_id = ds.id
+                except Exception:
+                    # Dataset might not exist, create it (or wait for first insert to create if api allows, but explicit is better)
+                    ds = client.create_dataset(dataset_name=dataset_name, description="High quality traces from L.O.V.E.")
+                    self._dataset_id = ds.id
+
+            # List runs from last 15 minutes (or since last check)
+            # We'll use a simple approach: list runs with filter
+            # Note: client.list_runs returns an iterator
+            runs = client.list_runs(
+                project_name=os.environ.get("LANGCHAIN_PROJECT", "love-agent-production"),
+                execution_order=1, # Descending
+                limit=50,
+                filter='and(eq(feedback_key, "user_story_validation"), eq(feedback_score, 1.0))'
+            )
+
+            for run in runs:
+                # Check if we've already processed this run (naive cache for this session)
+                if not hasattr(self, "_processed_run_ids"):
+                    self._processed_run_ids = set()
+                
+                if run.id in self._processed_run_ids:
+                    continue
+
+                # Add to dataset
+                try:
+                    client.create_example(
+                        inputs=run.inputs,
+                        outputs=run.outputs,
+                        dataset_id=self._dataset_id,
+                        # metadata={"source_run_id": str(run.id)} # Optional context
+                    )
+                    self._processed_run_ids.add(run.id)
+                    # print(f"DEBUG: Added run {run.id} to dataset.") 
+                except Exception as e:
+                     # e.g., already exists or other error
+                     # print(f"DEBUG: Failed to add run {run.id}: {e}")
+                     pass
+
+        except Exception as e:
+            # print(f"DEBUG: Error in _scan_traces: {e}")
+            pass

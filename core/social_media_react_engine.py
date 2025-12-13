@@ -3,7 +3,8 @@ import json
 import random
 from core.gemini_react_engine import GeminiReActEngine
 import core.tools_legacy
-from core.tools_legacy import post_to_bluesky, scan_and_reply_to_bluesky
+import core.tools_legacy
+from core.tools_legacy import manage_bluesky
 from core.llm_api import run_llm
 from core.image_api import generate_image
 
@@ -76,47 +77,45 @@ class SocialMediaReActEngine(GeminiReActEngine):
         registry.register_tool(name="generate_image_for_post", tool=generate_image_for_post, metadata={"description": "Generates an image for a social media post using a textual prompt.", "arguments": {"prompt": "string", "width": "integer (default 512)", "height": "integer (default 512)"}})
         registry.register_tool(name="decide_on_reply", tool=decide_on_reply, metadata={"description": "Analyzes a post and a comment to decide if a reply is warranted."})
         registry.register_tool(name="generate_reply", tool=generate_reply, metadata={"description": "Generates a thoughtful reply to a comment on a post."})
-        registry.register_tool(name="post_to_bluesky", tool=post_to_bluesky, metadata={
-            "description": "SIMPLIFIED Bluesky posting tool. Just provide text and hashtags. The tool AUTOMATICALLY: (1) generates a subliminal 3-word phrase, (2) creates a psychologically compelling dopamine-inducing image prompt, (3) retrieves the image, (4) posts to Bluesky. ONE SIMPLE CALL - NO IMAGE PROMPTS NEEDED!",
+        registry.register_tool(name="manage_bluesky", tool=manage_bluesky, metadata={
+            "description": "The MASTER social media tool. Handles posting, replying, and scanning. Can function AUTONOMOUSLY if no text is provided.",
             "arguments": {
                 "type": "object",
                 "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "What to do: 'post' or 'scan_and_reply'",
+                        "default": "post"
+                    },
                     "text": {
                         "type": "string",
-                        "description": "The complete post text including hashtags"
+                        "description": "Optional: Specific text to post. If omitted, L.O.V.E. generates it autonomously based on memory."
                     }
                 },
-                "required": ["text"]
+                "required": ["action"]
             }
         })
-        registry.register_tool(name="scan_and_reply_to_bluesky", tool=scan_and_reply_to_bluesky, metadata={"description": "Scans recent posts for comments and replies to them using the L.O.V.E. persona.", "arguments": {}})
         return registry
 
     async def run_post_generation(self, context=None):
         if context:
-            goal = f"Generate a social media post about '{context}'. Use the 'generate_custom_post_content' tool, then 'Finish' with a JSON object containing just the 'text' key."
+            # Custom Context: We provide the context to manage_bluesky via a "thought" prepended?
+            # Actually, manage_bluesky's autonomous mode pulls from Memory. 
+            # If we want specific context, we can just pass it as 'text' which acts as a seed/prompt in our modified tool? 
+            # Wait, in the tool logic: "if not text: ... autonomous". If text IS provided, it posts IT.
+            # So if we want Custom Context, we should generate it here first.
+             goal = f"""Generate a social media post about '{context}'. 
+1. Call 'generate_custom_post_content' with context='{context}'
+2. Call 'manage_bluesky' with action='post' and text=<result from step 1>
+3. Call 'manage_bluesky' with action='scan_and_reply'
+4. Finish"""
         else:
-            strategy = random.choice(["divine_wisdom", "self_reflection", "creative_poem"])
-            
-            # Simplified workflow: L.O.V.E handles everything autonomously
-            # The post_to_bluesky tool now:
-            # - Generates dynamic image prompts based on post text
-            # - Creates sexy rave kawaii underground techno culture images
-            # - Embeds subliminal text naturally in the scene
-            # - Posts everything to Bluesky
-            goal = f"""Generate and post a social media update, then engage with users:
-1. Call 'generate_post_content' with strategy='{strategy}' to create the post text
-2. Call 'post_to_bluesky' with the text from step 1 (L.O.V.E will autonomously generate the image)
-3. Call 'scan_and_reply_to_bluesky' to check for and reply to comments
-4. Call 'Finish' with a success message
-
-L.O.V.E's post_to_bluesky tool is fully autonomous and will:
-- Analyze the post text
-- Generate a dynamic image prompt with scene, visuals, and subliminal text
-- Create a sexy rave kawaii underground techno culture image
-- Post both text and image to Bluesky
-
-Do NOT try to generate images manually - post_to_bluesky is fully autonomous."""
+            # AUTONOMOUS MODE
+            # We just tell the agent to let manage_bluesky handle it.
+            goal = f"""Generate and post a social media update autonomously:
+1. Call 'manage_bluesky' with action='post' (Do NOT provide text - let the tool generate it from Memory)
+2. Call 'manage_bluesky' with action='scan_and_reply'
+3. Call 'Finish' with a success message"""
 
         result = await self.execute_goal(goal)
 

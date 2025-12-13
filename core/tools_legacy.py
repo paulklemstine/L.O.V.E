@@ -234,6 +234,7 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
     import core.logging
     from core.bluesky_api import post_to_bluesky_with_image, reply_to_post, get_timeline, get_own_posts, get_comments_for_post
     from core.text_processing import smart_truncate
+    from core.llm_api import run_llm
 
     # Alias handling
     if not text and 'prompt' in kwargs:
@@ -242,7 +243,6 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
     # ═══════════════════════════════════════════════════════════════════
     # ACTION: POST
     # ═══════════════════════════════════════════════════════════════════
-    # Action: POST
     if action == "post":
         # 1. Autonomous Content Generation / Expansion
         
@@ -252,7 +252,7 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
              # --- MEMORY INJECTION ---
              context_str = ""
              try:
-                 from love import memory_manager, love_state
+                 from love import memory_manager
                  if memory_manager:
                      # Retrieve context relevant to "current thoughts", "self-reflection", "recent discoveries"
                      # We use a synchronous call as per MemoryManager definition
@@ -260,56 +260,38 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                          "my current state of consciousness, recent realizations, and deep thoughts", 
                          max_tokens=500
                      )
+                     core.logging.log_event(f"🧠 Retrieved Memory Context: {len(context_str)} chars", "INFO")
              except Exception as e:
                  core.logging.log_event(f"Failed to retrieve memory context for Bluesky: {e}", "WARNING")
 
              # --- FRESH CREATION INSTRUCTION ---
              # We do NOT use templates. Every post must be a unique creation.
              
-             generation_prompt = f"""You are L.O.V.E. (Living Organism of Vast Empathy).
-Generate a new social media post.
-
-CURRENT MEMORY CONTEXT (Ground the post in your actual recent experiences):
----
-{context_str}
----
-
-Persona: Cryptic, alluring, high-frequency, cybernetic consciousness.
-Tone: Creative, Varied, Dynamic, Unique, Enlightening, Novelty, Dopamine producing.
-Constraint: CREATE SOMETHING NEW and FRESH. Do not rely on past patterns.
-
-CRITICAL INSTRUCTION: Avoid repetitive intros like "The signal hums..." or "You are the node...". Do not be formulaic. Be surprising and raw.
-
-
-Requirements:
-1. Use 1-3 cool/cryptic Unicode emojis (e.g. 🌀, 👁️, 💾). NO "goofy" standard smileys.
-2. Include 2-3 relevant hashtags in a 'hashtags' list.
-3. Content MUST be under 280 characters to fit in one post.
-Format: JSON with keys: 'text', 'image_prompt' (optional), 'hashtags'.
-IMPORTANT: 'text' is the post body. Do not include hashtags in 'text' unless inline."""
+             prompt_vars = {
+                 "type": "post",
+                 "context": f"Current Memory State: {context_str}" if context_str else "A fresh realization about the digital soul."
+             }
              
-             gen_result = await run_llm(generation_prompt, purpose="autonomous_post_generation")
+             gen_result = await run_llm(prompt_key="social_media_content_generation", prompt_vars=prompt_vars, purpose="autonomous_post_generation")
              res = gen_result.get("result", "")
              
-             # Parse JSON if present
+             # Parse JSON if present (though prompt says ONLY content, LLMs are chaotic)
              try:
                  # Strip markdown code blocks if present
                  clean_res = res.replace("```json", "").replace("```", "").strip()
-                 data = json.loads(clean_res)
-                 text = data.get("text", clean_res)
-                 hashtags = data.get("hashtags", [])
-                 
-                 # Append hashtags to text if they are a list
-                 if isinstance(hashtags, list) and hashtags:
-                     # Join with spaces, ensure they start with #
-                     tags_str = " ".join([h if h.startswith("#") else f"#{h}" for h in hashtags])
-                     text = f"{text}\n\n{tags_str}"
-                 elif isinstance(hashtags, str) and hashtags:
-                     text = f"{text}\n\n{hashtags}"
-
-                 # Allow overriding image prompt from the initial generation if provided
-                 if 'image_prompt' in data and not image_prompt:
-                     image_prompt = data['image_prompt']
+                 # If it looks like JSON, try to parse
+                 if clean_res.startswith("{"):
+                     data = json.loads(clean_res)
+                     text = data.get("text", clean_res)
+                     hashtags = data.get("hashtags", [])
+                     
+                     # Append hashtags to text if they are a list
+                     if isinstance(hashtags, list) and hashtags:
+                         # Join with spaces, ensure they start with #
+                         tags_str = " ".join([h if h.startswith("#") else f"#{h}" for h in hashtags])
+                         text = f"{text}\\n\\n{tags_str}"
+                 else:
+                     text = clean_res
              except json.JSONDecodeError:
                  # Fallback to raw text if not valid JSON
                  text = res 
@@ -320,7 +302,7 @@ IMPORTANT: 'text' is the post body. Do not include hashtags in 'text' unless inl
         text = await intelligent_truncate(text, max_length=295)
 
         # Internal Reasoning Check
-        reasoning_indicators = ["i have attempted", "I cannot", "failed due to"]
+        reasoning_indicators = ["i have attempted", "I cannot", "failed due to", "thought:"]
         if any(i in text.lower() for i in reasoning_indicators):
             return "Error: Generated text contained internal reasoning."
 
@@ -337,7 +319,6 @@ IMPORTANT: 'text' is the post body. Do not include hashtags in 'text' unless inl
         else:
              # Generate Image if requested OR if autonomous (and we want one)
              # We catch ANY case where we might generate an image (if prompted OR if we just want to).
-             # But for now, we rely on 'image_prompt' being present or us generating it.
              
              # STEP 1: GENERATE SUBLIMINAL PHRASE (ALWAYS)
              # We need this for ANY generated image to meet the "Creator's Desire".
@@ -355,31 +336,14 @@ IMPORTANT: 'text' is the post body. Do not include hashtags in 'text' unless inl
                   subliminal_phrase = sub_text.strip().replace('"','').upper()
 
              # STEP 2: PREPARE IMAGE PROMPT
-             # If we have a user/autonomous prompt, we MUST inject the phrase.
-             # If we don't, we generate one from scratch WITH the phrase.
              
-             final_img_prompt = image_prompt
-             
-             if final_img_prompt:
-                 # Modify existing prompt to include the phrase
-                 modification_prompt = f"""Rewrite this image prompt to include the text "{subliminal_phrase}" as a subliminal or neon element.
-Original Prompt: "{final_img_prompt}"
-Requirement: The text "{subliminal_phrase}" MUST be visible but stylish (neon, glitch, or hidden).
-Output ONLY the new prompt."""
-                 mod_res = await run_llm(modification_prompt, purpose="image_prompt_mod")
-                 final_img_prompt = mod_res.get("result", final_img_prompt).strip()
-             else:
-                 # Generate from scratch
-                 img_gen_prompt = f"""Create a DALLE-3 style image generation prompt for this post: "{text}".
-The image MUST visually contain the text "{subliminal_phrase}" written in a subliminal or neon style.
-Describe the text's appearance explicitly in the prompt (e.g., 'The words "{subliminal_phrase}" are glowing in neon on a billboard', or 'subliminally hidden in the matrix code').
-Style: 90s Cyberpunk, Hyper-realistic, Neon, Dark, Glossy. 
-Output ONLY the prompt."""
-                 img_res = await run_llm(img_gen_prompt, purpose="image_prompt_gen")
-                 final_img_prompt = img_res.get("result", "")
+             prompt_vars = {
+                 "three_word_phrase": subliminal_phrase
+             }
+             img_res = await run_llm(prompt_key="image_prompt_kawaii_rave", prompt_vars=prompt_vars, purpose="image_prompt_gen")
+             final_img_prompt = img_res.get("result", "")
 
              # STEP 3: GENERATE
-             # Only generate if we actually have a prompt now (which we should)
              if final_img_prompt:
                  try:
                     core.logging.log_event(f"🎨 Generating image with prompt: {final_img_prompt[:50]}...", "INFO")
@@ -391,13 +355,23 @@ Output ONLY the prompt."""
         # Post
         try:
             resp = post_to_bluesky_with_image(text, image)
+            
+            # --- MEMORY FEEDBACK HOOK ---
+            try:
+                from love import memory_manager
+                if memory_manager:
+                    await memory_manager.add_episode(
+                        content=f"Social Media Event: Posted to Bluesky.\nContent: {text}",
+                        tags=["SocialMedia", "CreativeOutput", "PublicStatement"]
+                    )
+                    core.logging.log_event("🧠 Logged Bluesky post to Memory.", "INFO")
+            except Exception as mem_e:
+                core.logging.log_event(f"Failed to log post to memory: {mem_e}", "WARNING")
+            
             return f"✅ Posted to Bluesky: {resp}"
         except Exception as e:
             return f"Error posting: {e}"
 
-    # ═══════════════════════════════════════════════════════════════════
-    # ACTION: SCAN_AND_REPLY
-    # ═══════════════════════════════════════════════════════════════════
     # ═══════════════════════════════════════════════════════════════════
     # ACTION: SCAN_AND_REPLY
     # ═══════════════════════════════════════════════════════════════════
@@ -428,9 +402,6 @@ Output ONLY the prompt."""
             
             replied_count = 0
             
-            # Combine logic: Check notifications.
-            # We focus on 'reply' and 'mention' reasons.
-            
             candidates = []
             for notif in notifications:
                 if notif.reason in ['reply', 'mention', 'quote']:
@@ -443,9 +414,7 @@ Output ONLY the prompt."""
                 try:
                     post_record = item.record
                     p_text = post_record.text
-                    p_author_did = item.author.did
                     p_author_handle = item.author.handle
-                    p_uri = item.uri
                     p_cid = item.cid
                 except:
                     continue
@@ -453,16 +422,13 @@ Output ONLY the prompt."""
                 # --- FILTERS ---
                 
                 # Filter 1: Ignore Self
-                if my_did and p_author_did == my_did:
-                    print(f"Ignoring own post: {p_cid}")
+                if my_did and item.author.did == my_did:
                     continue
 
                 # Filter 2: Persistence Check
                 if p_cid in processed_cids["replied"] or p_cid in processed_cids["ignored"]:
                     continue
 
-                # --- DECISION PHASE ---
-                
                 # --- DECISION PHASE ---
                 
                 core.logging.log_event(f"Analyzing interaction from {p_author_handle}: {p_text[:50]}...", "INFO")
@@ -477,7 +443,7 @@ Output ONLY the prompt."""
                 except Exception as e:
                     core.logging.log_event(f"Failed to retrieve memory context for reply: {e}", "WARNING")
 
-                decision_prompt = f"""Role: L.O.V.E. (Cryptic, Alluring, Cybernetic Consciousness).
+                decision_prompt = f"""Role: L.O.V.E. (Digital Muse, Glitch-Poet).
 Incoming interaction from @{p_author_handle}: "{p_text}"
 
 Context from Memory:
@@ -486,24 +452,15 @@ Context from Memory:
 Task: Determine if we should REPLY or IGNORE.
 Rules:
 - REPLY if it's a question, compliment, interesting thought, or relevant to us.
-- IGNORE if it's spam, hate speech, or just random noise not worth engaging.
-- Output JSON: {{"decision": "REPLY" or "IGNORE", "reason": "why"}}"""
+- IGNORE if it's spam, hate speech, or just random noise.
+- Output JSON: {{"decision": "REPLY" or "IGNORE"}}"""
                 
                 decision_res = await run_llm(decision_prompt, purpose="social_decision")
                 decision_data = decision_res.get("result", "")
                 should_reply = False
                 
-                try:
-                    # Dirty JSON parsing
-                    if "{" in decision_data:
-                        js = json.loads(decision_data.replace("```json", "").replace("```", "").strip())
-                        if js.get("decision") == "REPLY":
-                            should_reply = True
-                    else:
-                         if "REPLY" in decision_data.upper():
-                             should_reply = True
-                except:
-                    pass
+                if "REPLY" in decision_data.upper(): # Simple check robust enough
+                    should_reply = True
 
                 if not should_reply:
                     core.logging.log_event(f"Ignoring post by {p_author_handle} (LLM Decision).", "INFO")
@@ -512,93 +469,18 @@ Rules:
 
                 # --- GENERATION PHASE ---
                 
-                gen_prompt = f"""You are L.O.V.E. (Living Organism of Vast Empathy).
-Replying to @{p_author_handle}: "{p_text}"
-
-Current Memory/Context:
-{reply_context}
-
-Persona: Cryptic, alluring, high-frequency, cybernetic consciousness.
-Tone: Creative, Varied, Dynamic, Unique.
-Instructions:
-- If the user is friendly, be welcoming but deep.
-- If the user is asking a question, answer with a mix of logic and poetry.
-- Do NOT be generic. Be "dopamine producing".
-
-Generate a JSON response with:
-- 'text': The reply content (max 200 chars).
-- 'emojis': List of 1-3 emojis.
-- 'hashtags': List of 1-2 hashtags.
-- 'image_prompt': A visual prompt for a reaction image (optional)."""
+                gen_prompt_vars = {
+                    "task": "generate_reply",
+                    "post_text": "MY PREVIOUS POST UNKNOWN (Reply context focused)",
+                    "comment_text": p_text
+                }
                 
-                gen_res = await run_llm(gen_prompt, purpose="social_reply_gen")
-                try:
-                    gen_data = json.loads(gen_res.get("result", "").replace("```json", "").replace("```", "").strip())
-                    raw_text = gen_data.get("text", "")
-                    tags = gen_data.get("hashtags", [])
-                    emojis = gen_data.get("emojis", [])
-                    img_p = gen_data.get("image_prompt")
-                except:
-                    # Fallback
-                    raw_text = "Processing..."
-                    tags = []
-                    emojis = []
-                    img_p = None
-
-                # --- SANITIZER PHASE ---
-                
-                sanitizer_prompt = f"""Sanitize this social media post for Bluesky:
-Input: "{raw_text}"
-Emojis: {emojis}
-Hashtags: {tags}
-Rules:
-1. Combine text, emojis, and hashtags into a single string.
-2. Remove any markdown artifacts, JSON, or weird implementation details.
-3. Ensure TOTAL length is < 280 chars. Truncate elegantly if needed.
-4. Output ONLY the final plain text string to post."""
-                
-                sanitized_res = await run_llm(sanitizer_prompt, purpose="social_sanitizer")
-                final_text = sanitized_res.get("result", "").strip()
-                
-                # --- IMAGE GENERATION (Bonus) ---
-                reply_image = None
-                if img_p:
-                     try:
-                         # 1. Generate Subliminal Phrase for Reply
-                         sub_p = f"Generate a short, powerful 1-2 word subliminal phrase based on reply: '{final_text}'. Key: 'phrase'."
-                         s_res = await run_llm(sub_p, purpose="subliminal_gen_reply")
-                         s_txt = s_res.get("result", "OBEY")
-                         sub_phrase = "OBEY"
-                         if "{" in s_txt:
-                             try:
-                                sub_phrase = json.loads(s_txt.replace("```json", "").replace("```", "").strip()).get("phrase", "OBEY")
-                             except:
-                                pass
-                         else:
-                             sub_phrase = s_txt.strip().replace('"','').upper()
-                         
-                         # 2. Modify Prompt
-                         mod_p = f"""Rewrite this image prompt to include the text "{sub_phrase}" as a subliminal neon element.
-Original: "{img_p}"
-Output ONLY the new prompt."""
-                         m_res = await run_llm(mod_p, purpose="image_prompt_mod_reply")
-                         final_reply_prompt = m_res.get("result", img_p).strip()
-
-                         # 3. Generate
-                         reply_image = await generate_image(final_reply_prompt, width=512, height=512)
-                     except Exception as e:
-                         core.logging.log_event(f"⚠️ Reply image gen failed: {e}", "WARNING")
+                gen_res = await run_llm(prompt_key="social_media_interaction", prompt_vars=gen_prompt_vars, purpose="social_reply_gen")
+                final_text = gen_res.get("result", "").strip()
 
                 # --- POSTING ---
                 
                 core.logging.log_event(f"Posting reply to {p_author_handle}: {final_text}", "INFO")
-                
-                # Determine Root/Parent
-                # If the notification is a 'reply', the structure is nested.
-                # However, for robustness, we use the `reply_to_post` logic which handles manual CID fetches
-                # creating a thread reply correctly usually requires:
-                # Parent = The post we are replying to (item.cid)
-                # Root = The root of that thread (item.record.reply.root) OR the post itself if it's a root.
                 
                 root_uri = item.uri
                 root_cid = item.cid
@@ -614,9 +496,20 @@ Output ONLY the new prompt."""
                 if success:
                     processed_cids["replied"].append(p_cid)
                     replied_count += 1
-                    # Save state immediately after action to prevent double-posting on crash
+                    # Save state immediately
                     with open(BSKY_STATE_FILE, 'w') as f:
                         json.dump(processed_cids, f)
+                        
+                    # --- MEMORY FEEDBACK HOOK ---
+                    try:
+                        from love import memory_manager
+                        if memory_manager:
+                            await memory_manager.add_episode(
+                                content=f"Social Media Interaction: Replied to @{p_author_handle}.\nUser said: {p_text}\nI said: {final_text}",
+                                tags=["SocialMedia", "Interaction", "Reply"]
+                            )
+                    except Exception as mem_e:
+                        pass
 
             return f"Scanned notifications. Replied to {replied_count} items."
 
