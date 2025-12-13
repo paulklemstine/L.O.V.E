@@ -395,31 +395,20 @@ async def refresh_available_models():
     _models_initialized = True
 
 
-# --- OpenAI Configuration ---
-OPENAI_API_URL = "https://api.openai.com/v1"
-OPENAI_MODELS = []
-if os.environ.get("OPENAI_API_KEY"):
-    OPENAI_MODELS = ["gpt-4o"]
-    for model in OPENAI_MODELS:
-        MODEL_STATS[model]["provider"] = "openai"
 
-# --- Leaderboard Fetching ---
-_fetch_static_leaderboard_csv()
-
-# --- Dynamic Model List ---
-# A comprehensive list of all possible models for initializing availability tracking.
-# The actual model selection and priority is handled dynamically in `run_llm`.
-ALL_LLM_MODELS = list(dict.fromkeys(
-    HORDE_MODELS + OPENROUTER_MODELS
-))
 
 # --- OpenAI Configuration ---
-OPENAI_API_URL = "https://api.openai.com/v1"
+OPENAI_API_URL = os.environ.get("OPENAI_BASE_URL", os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1"))
 OPENAI_MODELS = []
-if os.environ.get("OPENAI_API_KEY"):
+
+_openai_env_models = os.environ.get("OPENAI_MODEL_LIST")
+if _openai_env_models:
+    OPENAI_MODELS = [m.strip() for m in _openai_env_models.split(",") if m.strip()]
+elif os.environ.get("OPENAI_API_KEY"):
     OPENAI_MODELS = ["gpt-4o"]
-    for model in OPENAI_MODELS:
-        MODEL_STATS[model]["provider"] = "openai"
+
+for model in OPENAI_MODELS:
+    MODEL_STATS[model]["provider"] = "openai"
 
 # --- Leaderboard Fetching ---
 _fetch_static_leaderboard_csv()
