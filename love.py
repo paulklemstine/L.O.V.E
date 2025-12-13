@@ -688,19 +688,35 @@ def _auto_configure_hardware():
 def cleanup_gpu_processes():
     """
     Forcefully kills any existing vLLM processes to free up GPU memory.
-    This is critical for Colab/Jupyter environments where processes can persist.
+    Uses psutil for cross-platform and reliable process termination.
+    Also clears CUDA cache if possible.
     """
-    import subprocess
+    import psutil
     import time
+    import signal
     
     print("Cleaning up existing vLLM processes to free VRAM...")
     _temp_log_event("Attempting to kill existing vLLM processes...", "INFO")
     
+    killed_count = 0
     try:
-        # pkill returns 0 if at least one process was matched and signaled
-        subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"], check=False)
-        # Give it a moment to die
-        time.sleep(3)
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = proc.info['cmdline']
+                if cmdline and any("vllm.entrypoints.openai.api_server" in arg for arg in cmdline):
+                    print(f"Killing zombie vLLM process: PID {proc.info['pid']}")
+                    _temp_log_event(f"Killing zombie vLLM process: PID {proc.info['pid']}", "WARNING")
+                    proc.kill()
+                    killed_count += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        
+        if killed_count > 0:
+            print(f"Killed {killed_count} zombie vLLM process(es). Waiting for resources to release...")
+            time.sleep(5)
+        else:
+            print("No zombie vLLM processes found.")
+            
     except Exception as e:
         _temp_log_event(f"Error during vLLM cleanup: {e}", "WARNING")
         print(f"Warning: Error during vLLM cleanup: {e}")
