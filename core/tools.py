@@ -41,6 +41,7 @@ from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.dynamic_compress_prompt import dynamic_arg_caller
 
 from langchain_core.tools import tool
+from langsmith import traceable
 from pydantic import BaseModel, Field
 
 love_state = {}
