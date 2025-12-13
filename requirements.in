@@ -54,3 +54,4 @@ cairosvg
 ruff>=0.1.0
 bandit>=1.7.0
 radon>=6.0.0
+langchain-hub
