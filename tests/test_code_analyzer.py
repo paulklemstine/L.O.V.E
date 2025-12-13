@@ -4,7 +4,7 @@ from unittest.mock import patch
 from io import StringIO
 
 from code_analyzer import code_analyzer
-from extract_todos import extract_todos
+from extract_findings import extract_findings
 
 class TestCodeAnalyzer(unittest.TestCase):
 
@@ -33,12 +33,13 @@ class TestCodeAnalyzer(unittest.TestCase):
         self.assertEqual(findings[2]['keyword'], 'TODO')
 
     @patch('sys.stdout', new_callable=StringIO)
-    def test_extract_todos(self, mock_stdout):
-        extract_todos(self.test_file)
+    def test_extract_findings(self, mock_stdout):
+        extract_findings(self.test_file)
         output = mock_stdout.getvalue()
-        self.assertIn("Found 2 TODOs", output)
-        self.assertIn("Line 2: # TODO: Fix this bug", output)
-        self.assertIn("Line 5: # todo: another todo", output)
+        self.assertIn("Found 3 findings", output)
+        self.assertIn("Line 2 (TODO): # TODO: Fix this bug", output)
+        self.assertIn("Line 3 (description): description = 'A test description'", output)
+        self.assertIn("Line 5 (TODO): # todo: another todo", output)
 
 if __name__ == '__main__':
     unittest.main()
