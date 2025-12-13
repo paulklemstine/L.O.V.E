@@ -685,6 +685,27 @@ def _auto_configure_hardware():
     _temp_save_state()
 
 
+def cleanup_gpu_processes():
+    """
+    Forcefully kills any existing vLLM processes to free up GPU memory.
+    This is critical for Colab/Jupyter environments where processes can persist.
+    """
+    import subprocess
+    import time
+    
+    print("Cleaning up existing vLLM processes to free VRAM...")
+    _temp_log_event("Attempting to kill existing vLLM processes...", "INFO")
+    
+    try:
+        # pkill returns 0 if at least one process was matched and signaled
+        subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"], check=False)
+        # Give it a moment to die
+        time.sleep(3)
+    except Exception as e:
+        _temp_log_event(f"Error during vLLM cleanup: {e}", "WARNING")
+        print(f"Warning: Error during vLLM cleanup: {e}")
+
+
 def _check_and_install_dependencies():
     """
     Orchestrates the installation of all dependencies, checking the status of each
@@ -692,6 +713,10 @@ def _check_and_install_dependencies():
     """
     # This function orchestrates the entire dependency and configuration process.
     print("--- L.O.V.E. PRE-FLIGHT CHECK ---")
+    
+    # Clean up GPU first to ensure accurate VRAM detection
+    cleanup_gpu_processes()
+    
     _install_system_packages()
     _install_python_requirements()
     _auto_configure_hardware()
@@ -3418,7 +3443,8 @@ async def initialize_gpu_services():
                         preflight_command = [
                             sys.executable, "-m", "vllm.entrypoints.openai.api_server",
                             "--model", model_repo_id,
-                            "--max-model-len", "999999"
+                            "--max-model-len", "999999",
+                            "--gpu-memory-utilization", "0.4"
                         ]
                         result = subprocess.run(preflight_command, capture_output=True, text=True, timeout=180)
 
