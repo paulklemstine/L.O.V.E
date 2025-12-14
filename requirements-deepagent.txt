@@ -30,3 +30,4 @@ tqdm
 deepagents
 langchain_core
 nest_asyncio
+numba==0.62.0

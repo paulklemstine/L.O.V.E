@@ -200,7 +200,6 @@ click==8.3.1
     #   rich-click
     #   sqlite-utils
     #   typer
-    #   typer-slim
     #   uvicorn
 click-default-group==1.2.4
     # via
@@ -490,6 +489,8 @@ llm==0.28
     # via -r requirements.in
 llmlingua==0.2.2
     # via -r requirements.in
+llvmlite==0.45.1
+    # via numba
 loguru==0.7.3
     # via
     #   rich-color-ext
@@ -565,6 +566,8 @@ networkx==3.6.1
     #   torch
 nltk==3.9.2
     # via llmlingua
+numba==0.62.0
+    # via -r requirements.in
 numpy==2.3.5
     # via
     #   -r requirements.in
@@ -575,6 +578,7 @@ numpy==2.3.5
     #   langextract
     #   llmlingua
     #   ml-dtypes
+    #   numba
     #   openevolve
     #   pandas
     #   qdrant-client
@@ -962,9 +966,7 @@ scipy==1.16.3
 sentence-transformers==5.2.0
     # via -r requirements.in
 shellingham==1.5.4
-    # via
-    #   huggingface-hub
-    #   typer
+    # via typer
 six==1.17.0
     # via
     #   furl
@@ -1113,7 +1115,6 @@ typing-extensions==4.15.0
     #   torch
     #   trio-typing
     #   typer
-    #   typer-slim
     #   typing-inspect
     #   typing-inspection
     #   web3

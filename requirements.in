@@ -54,3 +54,4 @@ ruff
 bandit
 radon
 langchainhub
+numba==0.62.0
