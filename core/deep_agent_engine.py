@@ -36,7 +36,7 @@ def _select_model(love_state):
 
     # VRAM requirements are estimates based on model size and quantization
     # AWQ INT4 quantization reduces memory by ~4x compared to FP16
-        if vram >= 120 * 1024:
+    if vram >= 120 * 1024:
         # 120GB+ VRAM: Qwen3-235B-A22B-Thinking
         # Full model (AWQ version may not be available yet)
         return "Qwen/Qwen3-235B-A22B-Thinking-2507"
