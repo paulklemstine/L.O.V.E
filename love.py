@@ -3487,6 +3487,7 @@ async def initialize_gpu_services():
                 if model_repo_id:
                     # ... (Keep existing max_model_len calculation logic unchanged) ...
                     max_len = None
+
                     try:
                         console.print("[cyan]Performing a pre-flight check to determine optimal max_model_len...[/cyan]")
                         preflight_command = [
@@ -3496,21 +3497,24 @@ async def initialize_gpu_services():
                             "--gpu-memory-utilization", "0.4"
                         ]
                         result = subprocess.run(preflight_command, capture_output=True, text=True, timeout=180)
+                        
+                        # Debug: Log the output of pre-flight check
+                        core.logging.log_event(f"Pre-flight stderr: {result.stderr[-500:]}", "DEBUG")
 
                         match = re.search(r"max_position_embeddings=(\d+)", result.stderr)
                         if not match:
                             match = re.search(r"model_max_length=(\d+)", result.stderr)
+                        
+                        # NEW: Check for OOM error suggestion
+                        oom_match = re.search(r"estimated maximum model length is (\d+)", result.stderr)
 
                         if match:
                             raw_max_len = int(match.group(1))
-                            # Use the full detected length, but ensure it's at least 4096 if possible.
-                            # If the model reports something huge (like 1M), we might want to cap it,
-                            # but for now, let's trust the model's reported capability or the user's VRAM.
-                            # The previous division by 8 was too aggressive.
                             max_len = raw_max_len
+                            console.print(f"[cyan]Pre-flight detected max_len: {raw_max_len}[/cyan]")
                             
                             # User requested to lower context window due to crashes on 6GB GPU
-                            if max_len ==262144:
+                            if max_len == 262144:
                                 max_len = 3072
                                 console.print(f"[yellow]Detected massive context window ({raw_max_len}). Reducing to {max_len} to save VRAM.[/yellow]")
 
@@ -3519,17 +3523,23 @@ async def initialize_gpu_services():
                                 max_len = 16384
                                 core.logging.log_event(f"Capping max_model_len to {max_len} to prevent OOM on standard GPUs.", "INFO")
                                 console.print(f"[yellow]Capping max_model_len to {max_len} to prevent OOM.[/yellow]")
-
-                            # Ensure we don't go below a usable minimum for DeepAgent
-                            if max_len < 2048:
-                                core.logging.log_event(f"Detected max_len {max_len} is small. Attempting to force 4096.", "WARNING")
-                                max_len = 2048
-
+                            
                             core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len} (Raw: {raw_max_len})", "INFO")
                             console.print(f"[green]Determined optimal max_model_len: {max_len}[/green]")
+                            
+                        elif oom_match:
+                            # If we OOM'd during pre-flight, use the suggestion!
+                            suggested_len = int(oom_match.group(1))
+                            max_len = min(suggested_len, 16384) # Still cap it to be safe
+                            console.print(f"[green]Detected OOM during pre-flight. Using suggested/capped max_model_len: {max_len} (Suggested: {suggested_len})[/green]")
+                            core.logging.log_event(f"Used vLLM OOM suggestion for max_model_len: {max_len}", "INFO")
+
                         else:
                             core.logging.log_event(f"Could not determine optimal max_model_len from pre-flight check. Stderr: {result.stderr}", "WARNING")
-                            console.print("[yellow]Could not determine optimal max_model_len from vLLM error. Proceeding without it.[/yellow]")
+                            console.print("[yellow]Could not determine optimal max_model_len from vLLM output. Defaulting to safe value.[/yellow]")
+                            max_len = 2048 # Fallback if detection fails completely
+
+
                     except (subprocess.TimeoutExpired, Exception) as e:
                         core.logging.log_event(f"An error occurred during vLLM pre-flight check: {e}", "WARNING")
                         console.print(f"[yellow]An error occurred during vLLM pre-flight check: {e}. Proceeding without dynamic max_model_len.[/yellow]")
