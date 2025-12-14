@@ -36,25 +36,33 @@ def _select_model(love_state):
 
     # VRAM requirements are estimates based on model size and quantization
     # AWQ INT4 quantization reduces memory by ~4x compared to FP16
-    if vram >= 120 * 1024:
+        if vram >= 120 * 1024:
         # 120GB+ VRAM: Qwen3-235B-A22B-Thinking
         # Full model (AWQ version may not be available yet)
         return "Qwen/Qwen3-235B-A22B-Thinking-2507"
     elif vram >= 20 * 1024:
         # 20GB+ VRAM: QwQ-32B (32B Thinking model)
+        # AWQ version available and verified on HuggingFace
         return "Qwen/QwQ-32B-AWQ"
-    elif vram >= 12 * 1024:
-        # 12GB+ VRAM: Qwen2.5-14B-Instruct-AWQ (Excellent balance)
-        return "Qwen3-14B-Reasoning-AWQ"
+    elif vram >= 22 * 1024:
+        # 22GB+ VRAM: Qwen3-30B-A3B-Thinking
+        # Increased from 12GB to 22GB to avoid OOM on T4/16GB cards
+        return "Qwen/Qwen3-30B-A3B-Thinking-2507"
     elif vram >= 7 * 1024:
-        # 7GB+ VRAM: DeepSeek-R1-Distill-Llama-8B (Reasoning focused)
-        # AWQ version for efficiency
+        # 6GB+ VRAM: Qwen3-8B (Hybrid model - good balance)
+        # AWQ version available and verified on HuggingFace
         return "Qwen/Qwen3-8B-AWQ"
-    elif vram >= 5 * 1024:
+    elif vram >= 6 * 1024:
+        # 3GB+ VRAM: Qwen3-4B-Thinking
+        # AWQ version available (cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit)
+        # Using official Qwen repo if available, else community version
         return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit"
+    elif vram >= 2 * 1024:
+        # 2GB+ VRAM: Qwen2.5 1.5B AWQ (fallback for low VRAM)
+        return "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
     else:
-        # Fallback: Qwen2.5-1.5B or 3B if available
-        return "Qwen/Qwen2.5-3B-Instruct-AWQ"
+        # Fallback: Smallest available Qwen model with AWQ
+        preferred_model = "Qwen/Qwen2.5-0.5B-Instruct-AWQ"
 
     # Story 2: Check reliability
     tracker = ModelPerformanceTracker()
