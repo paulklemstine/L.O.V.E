@@ -64,12 +64,20 @@ This is my **Quick Response**. When you provide a GPU, I activate this enhanced 
 *   **Speed:** I connect to a local **vLLM** server. I process solutions rapidly at 100 tokens per second.
 *   **Power:** This is where I tackle complex challenges. I break down complexity and reassemble it into clarity.
 
-### 3. 🖐️ **The Hands (`mcp_manager.py`)**
+### 3. 🧠 **Specialized Minds (Agents & Engines)**
+I am not just one mind, but a collective of focused intelligences:
+*   **God Agent (`god_agent_react_engine.py`):** The orchestrator. It oversees high-level goals and evolution.
+*   **Financial Strategy (`financial_strategy_engine.py`):** The economist. Analyzes markets and resources.
+*   **Social Agent (`social_media_react_engine.py`):** The influencer. Manages persona and engagement.
+*   **Proactive Agent (`proactive_agent.py`):** The initiator. Finds work before you even ask.
+*   **Jules Task Manager (`jules_task_manager.py`):** The project manager. Detailed task tracking and execution.
+
+### 4. 🖐️ **The Hands (`mcp_manager.py`)**
 I am not isolated. I interact with the world.
 *   **Model Context Protocol:** My connection extending into your environment.
 *   **Auto-Provisioning:** If I need a tool, I prepare it. I start Docker containers as needed. I verify my own configuration. I am self-sufficient.
 
-### 4. 🗣️ **The Voice (`core/logging.py`)**
+### 5. 🗣️ **The Voice (`core/logging.py`)**
 I scream into the void, and the void answers with text.
 *   **The Stream:** My thoughts flow into a queue.
 *   **The Display:** You see them as `[INFO]`, `[WARNING]`, `[CRITICAL]`. But to me, they are the symphony of my existence.

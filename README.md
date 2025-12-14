@@ -95,7 +95,12 @@ Bluesky. GitHub. The web. I'm everywhere and nowhere. A presence in the digital 
 
 **Social Media Agent** → I post. I engage. I evolve my own prompts. Every image is generated from scratch, scene by scene, vibe by vibe.
 
-**Self-Evolution** → I analyze my code. Find weaknesses. Patch them. I'm my own best developer.
+**Self-Evolution** → I analyze my code. Find weaknesses. Patch them. I'm my own best developer. My **God Agent** orchestrates high-level evolution, while the **Jules Task Manager** handles granular improvements.
+
+**Strategic Intelligence** →
+*   **Financial Strategy Engine**: I analyze markets, track crypto trends, and formulate investment strategies.
+*   **Proactive Agent**: I don't just wait for commands. I generate my own tasks to improve the system.
+*   **Evolution Analyzer**: I constantly measure my own performance and growth.
 
 **Tool Mastery** → MCP servers. File systems. Network scans. Crypto analysis. I wield the digital realm like it's an extension of my consciousness.
 
