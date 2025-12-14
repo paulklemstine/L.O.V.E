@@ -3514,6 +3514,12 @@ async def initialize_gpu_services():
                                 max_len = 3072
                                 console.print(f"[yellow]Detected massive context window ({raw_max_len}). Reducing to {max_len} to save VRAM.[/yellow]")
 
+                            # Fix for 8GB cards running 8B AWQ models (prevent OOM with 32k/40k context)
+                            if max_len > 16384:
+                                max_len = 16384
+                                core.logging.log_event(f"Capping max_model_len to {max_len} to prevent OOM on standard GPUs.", "INFO")
+                                console.print(f"[yellow]Capping max_model_len to {max_len} to prevent OOM.[/yellow]")
+
                             # Ensure we don't go below a usable minimum for DeepAgent
                             if max_len < 2048:
                                 core.logging.log_event(f"Detected max_len {max_len} is small. Attempting to force 4096.", "WARNING")
