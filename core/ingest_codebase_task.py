@@ -47,7 +47,7 @@ class IngestCodebaseTask:
                 dirs.remove("__pycache__")
             
             for file in files:
-                if file.endswith(".py") or file.endswith(".md"):
+                if file.endswith(".py"):
                     filepath = os.path.join(root, file)
                     await self._process_file(filepath)
         log_event("Codebase ingestion complete.", "INFO")

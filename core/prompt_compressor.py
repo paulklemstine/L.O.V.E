@@ -252,7 +252,7 @@ class PromptCompressor:
                 f"[PromptCompressor] Compressed {purpose}: "
                 f"{original_tokens} → {compressed_tokens} tokens "
                 f"({compression_ratio:.1%}) in {time_ms:.0f}ms",
-                "INFO"
+                "DEBUG"
             )
             
             return result

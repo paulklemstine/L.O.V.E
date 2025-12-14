@@ -12,7 +12,7 @@ import urllib.parse
 import random
 
 # --- Provider Configurations ---
-GEMINI_IMAGE_MODELS = ["gemini-3-pro-image-preview"]  # Imagen 3
+GEMINI_IMAGE_MODELS = ["imagen-3.0-generate-001"]  # Imagen 3
 STABILITY_MODELS = ["stable-diffusion-xl-1024-v1-0"]
 POLLINATIONS_MODELS = ["pollinations"]
 
@@ -88,7 +88,7 @@ def rank_image_models():
 
 async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
     """Generate image using Gemini Imagen3 via Gemini API"""
-    model_id = "gemini-3-pro-image-preview"
+    model_id = "imagen-3.0-generate-001"
     start_time = time.time()
     
     try:
@@ -98,9 +98,8 @@ async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: i
         
         core.logging.log_event(f"Attempting image generation with Gemini Imagen3: {prompt[:100]}...", "INFO")
         
-        # Note: This endpoint structure may need adjustment based on actual Gemini API
-        # Using the text generation endpoint as a base, but for images
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateImage"
+        # Using the predict endpoint for Imagen 3 on Generative Language API
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:predict"
         
         # Determine aspect ratio from width/height
         aspect_ratio = "1:1"
@@ -111,10 +110,16 @@ async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: i
 
         headers = {"Content-Type": "application/json"}
         params = {"key": api_key}
+        
+        # Construct payload for 'predict' method
         payload = {
-            "prompt": {"text": prompt},
-            "generationConfig": {
-                "numberOfImages": 1,
+            "instances": [
+                {
+                    "prompt": prompt
+                }
+            ],
+            "parameters": {
+                "sampleCount": 1,
                 "aspectRatio": aspect_ratio
             }
         }
@@ -127,20 +132,23 @@ async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: i
                 
                 data = await response.json()
                 
-                # Extract image data (may be base64 or URL)
-                if "images" in data and len(data["images"]) > 0:
-                    image_info = data["images"][0]
+                # Extract image data from 'predictions'
+                # Typical response: {"predictions": [{"bytesBase64Encoded": "..."}]}
+                if "predictions" in data and len(data["predictions"]) > 0:
+                    prediction = data["predictions"][0]
                     
-                    if "imageData" in image_info:
-                        # Base64 encoded image
-                        image_bytes = base64.b64decode(image_info["imageData"])
-                    elif "imageUrl" in image_info:
-                        # Download from URL
-                        async with session.get(image_info["imageUrl"]) as img_response:
-                            img_response.raise_for_status()
-                            image_bytes = await img_response.read()
+                    if "bytesBase64Encoded" in prediction:
+                        image_bytes = base64.b64decode(prediction["bytesBase64Encoded"])
+                    elif "mimeType" in prediction and "bytesBase64Encoded" in prediction:
+                        # Sometimes wrapped differently
+                        image_bytes = base64.b64decode(prediction["bytesBase64Encoded"])
                     else:
-                        raise Exception("No image data or URL in response")
+                        # Fallback for potential variation
+                        core.logging.log_event(f"Unexpected prediction format: {prediction.keys()}", "WARNING")
+                        if "image" in prediction: # older format?
+                             image_bytes = base64.b64decode(prediction["image"])
+                        else:
+                            raise Exception(f"Could not find image data in prediction: {prediction.keys()}")
                     
                     image = Image.open(io.BytesIO(image_bytes))
                     
@@ -154,7 +162,7 @@ async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: i
                     core.logging.log_event(f"Gemini Imagen3 generation successful in {elapsed:.2f}s", "INFO")
                     return image
                 else:
-                    raise Exception("No images in response")
+                    raise Exception(f"No predictions in response: {data.keys()}")
                     
     except Exception as e:
         elapsed = time.time() - start_time
