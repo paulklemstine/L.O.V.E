@@ -873,6 +873,14 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     if IS_COLAB and COLAB_AI_AVAILABLE:
                          try:
                             def _colab_internal_call():
+                                # Verify IPython kernel availability to avoid 'NoneType' object has no attribute 'kernel'
+                                try:
+                                    from IPython import get_ipython
+                                    if get_ipython() is None:
+                                        raise EnvironmentError("No active IPython kernel found. Cannot use 'google.colab.ai'. Try running with '%run love.py' instead of '!python love.py'.")
+                                except ImportError:
+                                    pass # Ensure we don't crash if IPython isn't installed (though it should be in Colab)
+
                                 from google.colab import ai
                                 # Attempt to use the generic generate method which might map to the best available internal model
                                 # or use the specific model if supported.
