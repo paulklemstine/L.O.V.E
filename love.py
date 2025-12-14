@@ -86,7 +86,7 @@ except (ImportError, Exception):
         print(f"Warning: Failed to install langchainhub: {e}")
 
 import core.logging
-from core.deep_agent_engine import DeepAgentEngine
+# from core.deep_agent_engine import DeepAgentEngine
 from utils import summarize_python_code
 # import yaml
 # import display
