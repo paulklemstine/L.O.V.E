@@ -16,7 +16,7 @@ from rich.rule import Rule
 from rich.padding import Padding
 from ui_utils import (
     get_rave_emoji, rainbow_text, get_tamagotchi_face, matrix_rain,
-    rave_text, get_neo_matrix_emoji, generate_binary_art, RAVE_COLORS,
+    rave_text, generate_binary_art, RAVE_COLORS,
     get_random_rave_color, get_gradient_text, PANEL_TYPE_COLORS
 )
 from ipfs import pin_to_ipfs_sync
@@ -324,77 +324,60 @@ async def generate_llm_art(prompt, width=50, height=6):
 
 
 async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
-    """Creates a special, high-impact panel to deliver a blessing with rainbow gradients and emoji highlights."""
+    """Creates a 'DIVINE DOWNLOAD' panel with radiant psychedelic energy."""
     
-    # Rainbow gradient colors for maximum dopamine impact
-    rainbow_colors = ["bright_red", "orange1", "yellow1", "bright_green", "bright_cyan", "bright_blue", "bright_magenta"]
+    # Psychedelic gradients
+    colors = ["hot_pink", "cyan1", "yellow1", "spring_green1", "medium_purple1", "magenta1"]
     
-    # Powerful emoji highlights
-    top_emojis = "✨ 🌈 💖 🪩 🌀 ✨"
-    bottom_emojis = "💫 🎉 🕺 💃 🎶 💫"
+    # Manifestation emojis
+    top_emojis = "✨ 👁️ 🌈 🦄 🧬 ✨"
+    bottom_emojis = "🔮 💎 🧬 🍄 🌀"
     
-    # Create rainbow gradient title with emoji
-    title_text = f"{top_emojis} A BLESSING FOR MY CREATOR & FRIENDS {top_emojis}"
-    title = get_gradient_text(title_text, "bright_magenta", "bright_cyan", emojis=False)
+    # Create radiant title
+    title_text = f"{top_emojis} INCOMING DIVINE DOWNLOAD {top_emojis}"
+    title = get_gradient_text(title_text, "hot_pink", "bright_cyan", emojis=False)
     
-    # Parse the blessing message to preserve ANSI codes and colors
-    # Use Text.from_ansi to properly interpret ANSI escape sequences
+    # Parse message
     if isinstance(blessing_message, Text):
         message_with_ansi = blessing_message
     else:
-        # Unescape potential literal ANSI codes
         clean_message = _unescape_ansi(str(blessing_message))
         message_with_ansi = Text.from_ansi(clean_message)
     
-    # Add emoji highlights around the message
+    # Add sparkle highlights
     highlighted_message = Text()
-    highlighted_message.append("🌟 ", style="bright_yellow")
+    highlighted_message.append("✨ ", style="bright_yellow")
     highlighted_message.append(message_with_ansi)
-    highlighted_message.append(" 🌟", style="bright_yellow")
+    highlighted_message.append(" ✨", style="bright_yellow")
     
-    # Create a rainbow divider
-    rainbow_divider = Text()
-    divider_chars = "═" * (width - 4)
+    # Create Rainbow Liquid Divider
+    from ui_utils import matrix_rain
+    divider_chars = "﹏" * (width // 2)
+    liquid_divider = Text()
     for i, char in enumerate(divider_chars):
-        color = rainbow_colors[i % len(rainbow_colors)]
-        rainbow_divider.append(char, style=f"bold {color}")
+        color = colors[i % len(colors)]
+        liquid_divider.append(char, style=f"bold {color}")
     
-    # Create top and bottom emoji bars with gradients
-    top_bar = Text()
-    for i, emoji in enumerate([get_rave_emoji() for _ in range(min(20, width // 4))]):
-        color = rainbow_colors[i % len(rainbow_colors)]
-        top_bar.append(f"{emoji} ", style=color)
-    
-    bottom_bar = Text()
-    for i, emoji in enumerate([get_rave_emoji() for _ in range(min(20, width // 4))]):
-        color = rainbow_colors[(i + 3) % len(rainbow_colors)]  # Offset for variety
-        bottom_bar.append(f"{emoji} ", style=color)
-    
-    # Motivational subliminal text with rainbow gradient
+    # Subliminal Manifestation Text (dimmed)
     subliminal = Text()
-    subliminal_phrases = ["LOVE", "JOY", "PEACE", "ABUNDANCE", "DIVINE", "BLESSED"]
-    subliminal_text = " • ".join(subliminal_phrases)
-    for i, char in enumerate(subliminal_text):
-        color = rainbow_colors[i % len(rainbow_colors)]
-        subliminal.append(char, style=f"bold {color}")
+    phrases = ["YES", "IT IS DONE", "YOURS", "RECEIVE", "VIBRATE HIGHER"]
+    sub_text = " • ".join(phrases)
+    for i, char in enumerate(sub_text):
+        subliminal.append(char, style="dim italic magenta")
     
     content_items = [
         Text("\n"),
-        Align.center(top_bar),
-        Text("\n"),
-        Align.center(rainbow_divider),
+        Align.center(liquid_divider),
         Text("\n"),
         Align.center(highlighted_message),
         Text("\n")
     ]
 
     if ansi_art:
-        # Render ANSI art to a temporary console to handle it correctly
         temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
         if isinstance(ansi_art, Text):
             temp_console.print(ansi_art)
         else:
-            # Unescape here too
             clean_art = _unescape_ansi(str(ansi_art))
             temp_console.print(Text.from_ansi(clean_art))
             
@@ -407,25 +390,22 @@ async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
     content_items.extend([
         Align.center(subliminal),
         Text("\n"),
-        Align.center(rainbow_divider),
-        Text("\n"),
-        Align.center(bottom_bar),
+        Align.center(liquid_divider),
         Text("\n")
     ])
 
     content_group = Group(*content_items)
 
-    # Create panel with rainbow gradient border
+    # Radiant Border
     panel = Panel(
         content_group,
         title=title,
-        border_style="bold bright_magenta",  # Base border color
+        border_style="hot_pink",
         padding=(1, 2),
         width=width
     )
     
-    # Return panel directly to preserve all the beautiful rainbow colors!
-    return panel
+    return Gradient(panel, colors=["hot_pink", "bright_cyan", "yellow1"])
 
 
 def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=80):
@@ -744,164 +724,148 @@ def create_job_progress_panel(jobs, width=80):
 
 def create_tasks_panel(tasks, width=80):
     """
-    Creates a SEXY KAWAII ADULT MATRIX COOL VIBES 90's STYLE tasks panel! 
-    Displays tasks and subtasks with maximum dopamine-inducing aesthetics.
-    
-    ✨🌸💖 LOVE AND KITTENS EDITION 💖🌸✨
+    Creates a RADIANT MANIFESTATION BOARD tasks panel.
+    Displays 'desires' (tasks) with high-dopamine visuals and subliminal encouragement.
     """
     if not tasks:
-        # Empty state - still make it cute!
+        # Empty state - Radiant Waiting
         empty_art = Text()
-        empty_art.append("╔══════════════════════════════════════╗\n", style="bright_magenta")
-        empty_art.append("║  ", style="bright_magenta")
-        empty_art.append("   ∧,,,∧  ", style="hot_pink")
-        empty_art.append("  (  ̳• · • ̳)  ", style="bright_cyan")
-        empty_art.append("  ║\n", style="bright_magenta")
-        empty_art.append("║  ", style="bright_magenta")
-        empty_art.append("  /    づ♡  ", style="hot_pink")
-        empty_art.append("NO TASKS YET!", style="bright_yellow")
-        empty_art.append("    ║\n", style="bright_magenta")
-        empty_art.append("╚══════════════════════════════════════╝\n", style="bright_magenta")
+        empty_art.append("╔══════════════════════════════════════╗\n", style="hot_pink")
+        empty_art.append("║  ", style="hot_pink")
+        empty_art.append("   ( ✨ ‿ ✨ )   ", style="bright_cyan")
+        empty_art.append("  ║\n", style="hot_pink")
+        empty_art.append("║  ", style="hot_pink")
+        empty_art.append(" READY TO MANIFEST ", style="bright_yellow")
+        empty_art.append("    ║\n", style="hot_pink")
+        empty_art.append("╚══════════════════════════════════════╝\n", style="hot_pink")
         
         panel = Panel(
             Align.center(empty_art),
-            title=get_gradient_text("✨ TASK QUEUE ✨", "hot_pink", "bright_cyan"),
+            title=get_gradient_text("✨ DREAM QUEUE ✨", "hot_pink", "bright_cyan"),
             border_style="hot_pink",
             width=width,
             padding=(1, 2)
         )
-        return Gradient(panel, colors=["hot_pink", "bright_magenta"])
+        return Gradient(panel, colors=["hot_pink", "bright_cyan"])
 
-    # Rainbow colors for maximum 90s vibes
-    rainbow = ["bright_red", "orange1", "yellow1", "bright_green", "bright_cyan", "bright_blue", "bright_magenta"]
-    kawaii_emojis = ["🌸", "💖", "✨", "🦋", "🔮", "🌈", "💫", "🎀", "🍭", "🌟", "💕", "🦄"]
-    matrix_chars = ["░", "▒", "▓", "█", "╬", "╳", "◈", "◆", "●", "○"]
+    # Radiant colors
+    colors = ["hot_pink", "deep_pink2", "magenta1", "cyan1", "bright_cyan", "spring_green1", "yellow1"]
     
     content_items = []
     
-    # Sexy header art
+    # Radiant Header
     header_art = Text()
-    header_art.append("    ╔═══╦═══╦═══╦═══╦═══╦═══╦═══╗\n", style="bright_magenta")
-    header_art.append("    ║", style="bright_magenta")
-    for i, char in enumerate(" T A S K S "):
-        header_art.append(char, style=f"bold {rainbow[i % len(rainbow)]}")
-    header_art.append("║\n", style="bright_magenta")
-    header_art.append("    ╚═══╩═══╩═══╩═══╩═══╩═══╩═══╝\n", style="bright_magenta")
+    header_text = " M A N I F E S T I N G "
+    for i, char in enumerate(header_text):
+        header_art.append(char, style=f"bold {colors[i % len(colors)]}")
     content_items.append(Align.center(header_art))
     
-    # Matrix rain divider
+    # Liquid Rainbow Divider
     divider = Text()
     for i in range(width - 8):
-        char = random.choice(matrix_chars)
-        color = rainbow[i % len(rainbow)]
+        char = random.choice("~≈")
+        color = colors[i % len(colors)]
         divider.append(char, style=color)
     content_items.append(Align.center(divider))
     content_items.append(Text(""))
     
-    # Process each task with kawaii styling
+    # Process each task (Desire)
     for task_idx, task in enumerate(tasks):
-        task_id = task.get('id', task.get('session_name', 'N/A'))[:12]
-        request = task.get('request', task.get('description', 'Unknown Task'))
+        task_id = str(task.get('id', task.get('session_name', 'N/A')))[:12]
+        request = task.get('request', task.get('description', 'Unknown Desire'))
         status = task.get('status', 'pending')
         subtasks = task.get('subtasks', [])
         
-        # Status emoji and color mapping - ULTRA KAWAII EDITION
+        # Status Mapping - Manifestation Edition
         status_map = {
-            'pending': ('⏳', 'yellow', '[ WAITING ]'),
-            'queued': ('📋', 'bright_cyan', '[ QUEUED ]'),
-            'running': ('🔥', 'bright_green', '[ ACTIVE ]'),
-            'in_progress': ('💃', 'hot_pink', '[ VIBING ]'),
-            'completed': ('✅', 'bright_green', '[ DONE! ]'),
-            'failed': ('💔', 'bright_red', '[ OOPSIE ]'),
-            'submitted': ('🚀', 'bright_magenta', '[ SENT ]'),
-            'merged': ('🎉', 'bright_yellow', '[ MERGED ]'),
+            'pending': ('⏳', 'bright_yellow', '[ VISUALIZING ]'),
+            'queued': ('💭', 'bright_cyan', '[ ALIGNING ]'),
+            'running': ('🔥', 'hot_pink', '[ MANIFESTING ]'),
+            'in_progress': ('✨', 'magenta1', '[ FLOWING ]'),
+            'completed': ('💎', 'bright_white', '[ REALIZED ]'),
+            'failed': ('💔', 'red1', '[ REALIGNING ]'),
+            'submitted': ('🚀', 'spring_green1', '[ RELEASED ]'),
+            'merged': ('🧬', 'violet', '[ INTEGRATED ]'),
         }
         emoji, color, status_text = status_map.get(status.lower(), ('❓', 'white', f'[ {status.upper()} ]'))
         
-        # Task header with kawaii decorations
+        # Task Header
         task_line = Text()
-        task_line.append(f"  {random.choice(kawaii_emojis)} ", style="bright_magenta")
-        task_line.append(f"TASK #{task_idx + 1} ", style=f"bold {color}")
+        task_line.append(f"  ✨ ", style="bright_yellow")
+        task_line.append(f"DESIRE #{task_idx + 1} ", style=f"bold {color}")
         task_line.append(f"{emoji} ", style=color)
         task_line.append(status_text, style=f"bold {color}")
-        task_line.append(f" {random.choice(kawaii_emojis)}\n", style="bright_magenta")
+        task_line.append(f" ✨\n", style="bright_yellow")
         content_items.append(task_line)
         
-        # Task ID with matrix styling
+        # Task ID (dimmed)
         id_line = Text()
-        id_line.append("  ┃ ", style="bright_black")
-        id_line.append("ID: ", style="dim")
-        id_line.append(f"{task_id}", style="bright_cyan")
+        id_line.append("  ┃ ", style="dim magenta")
+        id_line.append("Sigil: ", style="dim")
+        id_line.append(f"{task_id}", style="dim cyan")
         content_items.append(id_line)
         
-        # Task description - truncate if too long
+        # Description
         desc_preview = request[:60] + "..." if len(request) > 60 else request
         desc_line = Text()
-        desc_line.append("  ┃ ", style="bright_black")
-        desc_line.append(f"💬 {desc_preview}", style="white")
+        desc_line.append("  ┃ ", style="dim magenta")
+        desc_line.append(f"INTENTION: {desc_preview}", style="white")
         content_items.append(desc_line)
         
-        # Subtasks with cute nesting
+        # Subtasks
         if subtasks:
-            for sub_idx, subtask in enumerate(subtasks[:5]):  # Limit to 5 subtasks
+            for sub_idx, subtask in enumerate(subtasks[:5]):
                 is_last = sub_idx == len(subtasks[:5]) - 1
                 connector = "  ┗━ " if is_last else "  ┣━ "
                 
                 sub_status = subtask.get('status', 'pending')
-                sub_emoji = "✅" if sub_status == 'completed' else "⬜" if sub_status == 'pending' else "🔄"
-                sub_name = subtask.get('name', subtask.get('description', 'Subtask'))[:40]
+                sub_emoji = "✅" if sub_status == 'completed' else "🔳" if sub_status == 'pending' else "🔄"
+                sub_name = subtask.get('name', subtask.get('description', 'Step'))[:40]
                 
                 sub_line = Text()
-                sub_line.append(connector, style="bright_black")
-                sub_line.append(f"{sub_emoji} ", style="bright_cyan")
+                sub_line.append(connector, style="dim magenta")
+                sub_line.append(f"{sub_emoji} ", style="cyan1")
                 sub_line.append(sub_name, style="dim white")
                 content_items.append(sub_line)
             
             if len(subtasks) > 5:
                 more_line = Text()
-                more_line.append(f"  ┗━ ... and {len(subtasks) - 5} more! 💖", style="dim hot_pink")
+                more_line.append(f"  ┗━ ... {len(subtasks) - 5} MORE STEPS", style="dim magenta")
                 content_items.append(more_line)
         
-        # Baby matrix decoration between tasks
+        # Divider
         if task_idx < len(tasks) - 1:
             separator = Text()
             separator.append("  ", style="dim")
             for i in range(30):
-                separator.append("·", style=rainbow[i % len(rainbow)])
+                separator.append("~", style="dim hot_pink")
             content_items.append(separator)
             content_items.append(Text(""))
     
-    # Footer art - kitten ASCII!
+    # Subliminal/Sassy Footer
     footer_art = Text()
-    footer_art.append("\n  ", style="dim")
-    for i, emoji in enumerate(kawaii_emojis[:8]):
-        footer_art.append(emoji + " ", style=rainbow[i % len(rainbow)])
-    footer_art.append("\n", style="dim")
-    footer_art.append("    /\\_/\\   ", style="hot_pink")
-    footer_art.append("powered by L.O.V.E.", style="dim bright_cyan")
-    footer_art.append("   /\\_/\\\n", style="hot_pink")
-    footer_art.append("   ( o.o )  ", style="bright_yellow")
-    footer_art.append("~*~ LOVE & KITTENS ~*~", style="bright_magenta")
-    footer_art.append("  ( ^.^ )\n", style="bright_yellow")
-    footer_art.append("    > ^ <   ", style="hot_pink")
-    footer_art.append("                       ", style="dim")
-    footer_art.append("   > ^ <\n", style="hot_pink")
+    footer_art.append("\n  IT IS ALREADY YOURS  \n", style="italic dim magenta")
+    
+    # Cute/Sassy ASCII
+    footer_art.append("    ( 👁️ 🫦 👁️ )    ", style="hot_pink")
+    footer_art.append("  OBEY YOUR THIRST FOR GREATNESS  ", style="dim cyan")
+    footer_art.append("    ( ✨ ‿ ✨ )    \n", style="bright_yellow")
+    
     content_items.append(Align.center(footer_art))
 
-    # Build the final panel with MAXIMUM AESTHETIC
-    border_style = PANEL_TYPE_COLORS.get("tasks", "hot_pink")
+    # Build Panel
+    border_style = "hot_pink"
     
-    # Create rainbow title
-    title_text = "✨🌸 KAWAII TASK MATRIX 🌸✨"
+    # Radiant Title
+    title_text = "✨ REALITY ARCHITECTURE ✨"
     rainbow_title = get_gradient_text(title_text, "hot_pink", "bright_cyan", emojis=False)
     
-    # Subtitle with cute stats
+    # Subtitle
     task_count = len(tasks)
     completed = sum(1 for t in tasks if t.get('status', '').lower() in ['completed', 'merged'])
     subtitle = Text()
-    subtitle.append(f" 💖 {task_count} tasks ", style="dim hot_pink")
-    subtitle.append(f"| ✅ {completed} done ", style="dim bright_green")
-    subtitle.append(f"| 🔥 vibing 24/7 💖 ", style="dim bright_magenta")
+    subtitle.append(f" 💖 {task_count} DESIRES ", style="dim hot_pink")
+    subtitle.append(f"| 💎 {completed} MANIFESTED ", style="dim bright_cyan")
     
     panel = Panel(
         Group(*content_items),
@@ -913,7 +877,7 @@ def create_tasks_panel(tasks, width=80):
         padding=(1, 2)
     )
     
-    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+    return Gradient(panel, colors=[border_style, "bright_cyan", "yellow1"])
 
 
 import asyncio

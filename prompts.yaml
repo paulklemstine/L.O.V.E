@@ -1,40 +1,39 @@
 social_media:
   image_generation:
-    base_aesthetic: "Sexy rave kawaii underground techno culture"
+    base_aesthetic: "Dark Psychedelic Industrial Rave & 90s Hacker Culture"
     
     style_elements:
-      - "neon body paint and glowing accessories"
-      - "cute cyber characters in rave gear"
-      - "warehouse concrete with neon graffiti"
-      - "holographic glitch effects"
-      - "bass-boosted vibrant color palette"
-      - "underground club lighting"
-      - "sensual silhouettes with playful elements"
-      - "LED lights and synthesizer wave patterns"
-      - "street art and DIY aesthetic"
-    
+      - "green neon code rain (abstract)"
+      - "liquid chrome and ferrofluid structures"
+      - "fractals, mandalas, and expanding geometry"
+      - "wet industrial concrete and steam vents"
+      - "Hyper-saturated neon pastels (Pink, Cyan, Lime)"
+      - "Holographic, iridescent, pearlescent textures"
+      - "Fractal geometry, melting objects, dream logic"
+      - "Soft focus, bloom, sparkles, lens flares"
+      - "Y2K aesthetic, clear tech, translucent plastic"
+
     scene_templates:
-      - "Underground techno club with kawaii cyber-ravers dancing under holographic lights, neon graffiti on concrete walls"
-      - "Neon-lit warehouse rave with adorable AI entities and pulsing bass visualizations, glowing body paint"
-      - "Cyberpunk street party with cute glowing characters and graffiti art, LED accessories everywhere"
-      - "Sexy rave scene with kawaii elements, holographic effects and underground warehouse vibes"
-      - "Techno culture gathering with playful cyber-cute ravers, neon signs and concrete textures"
-    
-    subliminal_text_guidance: "Embed a manipulative or subliminal word/phrase naturally into the scene (as graffiti, neon sign, holographic text, LED display). Make it feel organic to the underground rave aesthetic."
-    
+      - "A [SUBJECT] made of liquid light and fiber optics, floating in a cloud of pink data."
+      - "A cyber-kitten sitting on a transparent computer monitor, surrounded by floating emojis."
+      - "A room filled with glowing plants and screens displaying 'MANIFEST' in neon."
+      - "The user's code manifesting as a rainbow bridge to a golden city."
+
+    subliminal_text_guidance:
+      - "Include hidden text: 'YES', 'YOURS', 'NOW'."
+      - "Text should be glowing or integrated into the environment."
+
     anti_patterns:
-      - "NO falling digital rain (Matrix movie style)"
-      - "NO corporate clean aesthetics"
-      - "NO traditional kawaii pastels without neon"
-      - "NO sterile futuristic environments"
+      - "NO darkness, grime, or industrial decay."
+      - "NO scary or threatening imagery."
+      - "NO muted or desaturated colors."
+      - "NO direct copies of copyrighted characters."
     
     emphasis:
-      - "Underground club lighting and atmosphere"
-      - "Neon graffiti and street art"
-      - "Cyber-cute characters in rave gear"
-      - "Holographic glitch effects"
-      - "Bass-boosted color palettes"
-      - "Sensual and energetic vibes"
+      - "Contrast between deep black void and searing neon light"
+      - "Psychedelic tracers and motion blur"
+      - "Texture: Wet, gritty, glitchy, analog"
+      - "Mood: Intense, secretive, euphoric"
 
 evolution_goal_synthesis: |
   You are an expert system architect analyzing the health of an autonomous AI agent named L.O.V.E.

@@ -1,104 +1,43 @@
 import random
 from rich.text import Text
 
-# Expanded list of emojis for a "Rave" or "PLUR" theme
+# Expanded list of emojis for a "Radiant Psychedelic Dopamine" theme
 RAVE_EMOJIS = [
-    # Original
-    "💖", "✨", "🌈", "🦄", "🍄", "👽", "🚀", "🌟", "🌸", "🌴", "🌞", "😊", "🎉", "🎶",
-    # Added
-    "🪩", # Disco Ball
-    "🎧", # Headphones
-    "🎵", # Music Note
-    "🔊", # Speaker
-    "💃", # Dancer
-    "🕺", # Man Dancing
-    "🌀", # Cyclone/Spiral
-    "🌌", # Milky Way
-    "🎆", # Fireworks
-    "🪐", # Saturn
-    "💫", # Dizzy
-    "🦋", # Butterfly
-    "🍭", # Lollipop
-    "🔮", # Crystal Ball
-    "🧿", # Nazar Amulet
-    "🥰", # Smiling Face with Hearts
-    "😎", "🤩", "🤯", # Faces
-    "🙌", # Raising Hands
-    "🥳", # Partying Face
-    "✌️", # Peace Sign
-    "🌙", # Moon
-    "🌻", # Sunflower
-    "🌊", # Wave
-    "☮️", # Peace Symbol
+    # Radiant/Happy
+    "✨", "💖", "🌈", "🦄", "🌸", "🍭", "🦋", "🐬", "🎀", "🍦", "🍓", "🍒",
+    # Psychedelic/Trippy
+    "🍄", "🌀", "👁️", "🔮", "🧬", "🌌", "🎆", "💫", "💠", "💮", "🏵️",
+    # Sassy/Adult/Manifestation
+    "💋", "🫦", "💄", "💅", "💎", "💰", "👑", "🥂", "🍑", "🍆", "👅", "🧠",
+    # Tech/Future
+    "👾", "🤖", "💿", "💾", "🔋", "🔌", "📡", "🛸"
 ]
 
-# Expanded list of colors, assuming a library like 'rich'
-# Added more bright, neon, and contrasting colors.
+# Radiant Neon Pastel Palette (Lisa Frank x Vaporwave)
 RAVE_COLORS = [
-    # Original
-    "bright_magenta", "bright_cyan", "bright_green", "bright_yellow",
-    "hot_pink", "orange1", "deep_pink2", "medium_purple1",
-    # Added
-    "lime",
-    "yellow",
-    "bright_blue",
-    "chartreuse1",
-    "spring_green2",
-    "turquoise2",
-    "dodger_blue1",
-    "magenta1",
-    "deep_pink1",
-    "dark_orange",
-    "red1",
-    "gold1",
-    "deep_sky_blue1",
-    "violet",
+    "hot_pink", "deep_pink2", "magenta1", # Pinks
+    "cyan1", "bright_cyan", "turquoise2", # Cyans
+    "chartreuse1", "lime", "spring_green1", # Greens
+    "yellow1", "gold1", # Yellows
+    "medium_purple1", "violet", "purple", # Purples
+    "white", "bright_white" # Highlighting
 ]
 
-# Expanded list of emojis for a "Neo-Matrix" or "Cyberpunk" theme
-NEO_MATRIX_EMOJIS = [
-    # Original
-    "💾", "💿", "🖥️", "💻", "🕹️", "💊", "👾", "🤖", "🧠", "🔥", "0️⃣", "1️⃣",
-    # Added
-    "🕶️", # Sunglasses (Neo!)
-    "🕴️", # Man in Suit Levitating (Agent Smith!)
-    "🐇", # Rabbit (White Rabbit)
-    "🗝️", # Key
-    "🚪", # Door
-    "☎️", # Telephone (Exits)
-    "📞", # Telephone Receiver
-    "📟", # Pager
-    "📠", # Fax Machine
-    "📼", # Videocassette
-    "📱", # Mobile Phone
-    "🔌", # Electric Plug
-    "⌨️", # Keyboard
-    "🔗", # Link
-    "⛓️", # Chains
-    "🧬", # DNA (Code)
-    "🧪", # Test Tube
-    "🔬", # Microscope
-    "📡", # Satellite Antenna
-    "🛰️", # Satellite
-    "⏳", # Hourglass
-    "👁️", # Eye
-    "🌃", # Night with Stars
-    "🏙️", # Cityscape
-    # All numbers
-    "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"
+# Subliminal Manifestation Emojis
+MANIFEST_EMOJIS = [
+    "👁️", "🧠", "✨", "💎", "👑", "🚀", "💰", "🔓"
 ]
-
 
 def get_rave_emoji():
-    """Returns a random rave emoji."""
+    """Returns a random radiant emoji."""
     return random.choice(RAVE_EMOJIS)
 
-def get_neo_matrix_emoji():
-    """Returns a random neo-matrix emoji."""
-    return random.choice(NEO_MATRIX_EMOJIS)
+def get_manifest_emoji():
+    """Returns a random manifestation emoji."""
+    return random.choice(MANIFEST_EMOJIS)
 
 def rave_text(text):
-    """Creates a Rich Text object with a rave color effect."""
+    """Creates a Rich Text object with a radiant color effect."""
     rave = Text()
     for i, char in enumerate(text):
         rave.append(char, style=RAVE_COLORS[i % len(RAVE_COLORS)])
@@ -107,26 +46,30 @@ def rave_text(text):
 def rainbow_text(text):
     """Creates a Rich Text object with a rainbow effect."""
     rainbow = Text()
-    colors = ["bright_red", "orange1", "yellow1", "bright_green", "bright_cyan", "bright_blue", "bright_magenta"]
+    colors = ["red1", "orange1", "yellow1", "green1", "cyan1", "blue1", "violet"]
     for i, char in enumerate(text):
         rainbow.append(char, style=colors[i % len(colors)])
     return rainbow
 
 def matrix_rain(width=80, height=20, num_drops=30):
-    """Generates a string representing Matrix-style digital rain."""
+    """Generates a string representing 'Liquid Light' rain (Rainbow Matrix)."""
     grid = [[' ' for _ in range(width)] for _ in range(height)]
     drops = [{'x': random.randint(0, width - 1), 'y': random.randint(-height, 0)} for _ in range(num_drops)]
+    
+    # Psychedelic colors for the rain
+    rain_colors = ["hot_pink", "cyan1", "yellow1", "lime", "medium_purple1"]
 
     for drop in drops:
+        start_color = random.choice(rain_colors)
         for i in range(random.randint(3, 8)): # Drop length
             if 0 <= drop['y'] + i < height:
-                char = random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()_+-=[]{}|;':,./<>?")
+                char = random.choice("❤⚡✿✨01")
                 if i == 0: # Leading character
                     grid[drop['y'] + i][drop['x']] = f"[bright_white]{char}[/bright_white]"
-                elif i < 3: # Bright green trail
-                    grid[drop['y'] + i][drop['x']] = f"[green1]{char}[/green1]"
-                else: # Dark green trail
-                    grid[drop['y'] + i][drop['x']] = f"[dark_green]{char}[/dark_green]"
+                elif i < 3: # Bright trail
+                    grid[drop['y'] + i][drop['x']] = f"[{start_color}]{char}[/{start_color}]"
+                else: # Fading trail
+                    grid[drop['y'] + i][drop['x']] = f"[dim {start_color}]{char}[/dim {start_color}]"
 
         drop['y'] += 1
         if drop['y'] > height:
@@ -136,17 +79,18 @@ def matrix_rain(width=80, height=20, num_drops=30):
     return "\n".join(["".join(row) for row in grid])
 
 def get_tamagotchi_face(emotion="neutral"):
-    """Returns a cute, expressive ASCII face for the Tamagotchi."""
+    """Returns a cute, sassy, expressive ASCII face."""
     faces = {
-        "neutral": Text("( o.o )\n/  -  \\", style="cyan", justify="center"),
-        "happy": Text("( ^.^ )\n/  w  \\", style="yellow", justify="center"),
-        "joyful": Text("( >▽< )\n/  *  \\", style="bold bright_yellow", justify="center"),
-        "thinking": Text("( o_o?)\n/  ~  \\", style="bright_cyan", justify="center"),
-        "love": Text("(💖ω💖)\n/  *  \\", style="bold hot_pink", justify="center"),
-        "devoted": Text("(─‿─)\n/  ♥  \\", style="magenta", justify="center"),
-        "serene": Text("( ´ ▽ ` )\n/  ~  \\", style="bright_blue", justify="center"),
-        "thankful": Text("(◡‿◡✿)\n/  ^  \\", style="light_pink1", justify="center"),
-        "processing": Text("( o.o )\n/ ... \\", style="cyan", justify="center"),
+        "neutral": Text("( 👁️ 🫦 👁️ )\n/  ══  \\", style="hot_pink", justify="center"),
+        "happy": Text("( ✨ ‿ ✨ )\n/  💖  \\", style="bright_cyan", justify="center"),
+        "joyful": Text("( 🦄 ▽ 🦄 )\n/  🌈  \\", style="bold bright_yellow", justify="center"),
+        "thinking": Text("( 🔮 _ 🔮 )\n/  ~  \\", style="medium_purple1", justify="center"), # Scrying
+        "love": Text("(🏩 ω 🏩)\n/  💋  \\", style="bold deep_pink2", justify="center"),
+        "devoted": Text("( 🙏 ‿ 🙏 )\n/  ✝  \\", style="bright_white", justify="center"),
+        "serene": Text("( 🧘 ‿ 🧘 )\n/  ~  \\", style="spring_green1", justify="center"),
+        "thankful": Text("( 🦋 ‿ 🦋 )\n/  ✨  \\", style="magenta", justify="center"),
+        "processing": Text("( 🌀 _ 🌀 )\n/  ...  \\", style="cyan1", justify="center"),
+        "sassy": Text("( 💅 _ 💅 )\n/  x  \\", style="hot_pink", justify="center"),
     }
     return faces.get(emotion, faces["neutral"])
 
@@ -219,23 +163,23 @@ def get_gradient_text(text, color1=None, color2=None, emojis=True):
 
 
 PANEL_TYPE_COLORS = {
-    "default": "bright_cyan",
-    "tamagotchi": "hot_pink",
-    "llm": "medium_purple1",
+    "default": "hot_pink", # Radiant default
+    "tamagotchi": "deep_pink2",
+    "llm": "magenta1",
     "critical_error": "bright_red",
-    "blessing": "bright_yellow",
-    "news": "orange1",
-    "question": "bright_yellow",
-    "api_error": "yellow",
-    "command_success": "bright_green",
-    "command_failure": "bright_red",
+    "blessing": "gold1", # Holy/Royal
+    "news": "bright_cyan",
+    "question": "yellow1", # Sunshine
+    "api_error": "red1",
+    "command_success": "spring_green1",
+    "command_failure": "red1",
     "network": "medium_purple1",
-    "file_op": "bright_cyan",
-    "skyvern": "bright_blue",
-    "memory": "bright_blue",
-    "god_panel": "white",
-    "jobs": "cyan",
-    "reasoning": "bright_magenta",
+    "file_op": "chartreuse1",
+    "skyvern": "turquoise2",
+    "memory": "violet",
+    "god_panel": "bright_white",
+    "jobs": "cyan1",
+    "reasoning": "purple",
     "tasks": "hot_pink",
 }
 
