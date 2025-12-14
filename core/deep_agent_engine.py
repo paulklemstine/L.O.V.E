@@ -45,16 +45,17 @@ def _select_model(love_state):
         return "Qwen/QwQ-32B-AWQ"
     elif vram >= 12 * 1024:
         # 12GB+ VRAM: Qwen2.5-14B-Instruct-AWQ (Excellent balance)
-        return "warshanks/Qwen3-16B-A3B-abliterated-AWQ"
+        return "kalomaze/Qwen3-16B-A3B"
     elif vram >= 7 * 1024:
         # 7GB+ VRAM: DeepSeek-R1-Distill-Llama-8B (Reasoning focused)
         # AWQ version for efficiency
         return "Qwen/Qwen3-8B-AWQ"
     elif vram >= 5 * 1024:
-        return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit"
+        #return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit"
+        return "Qwen/Qwen2.5-3B-Instruct-AWQ"
     else:
         # Fallback: Qwen2.5-1.5B or 3B if available
-        return "Qwen/Qwen2.5-3B-Instruct-AWQ"
+        return "Qwen/Qwen2.5-1.5B-Instruct-AWQ"
 
     # Story 2: Check reliability
     tracker = ModelPerformanceTracker()
