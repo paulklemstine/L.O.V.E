@@ -45,7 +45,7 @@ def _select_model(love_state):
         return "Qwen/QwQ-32B-AWQ"
     elif vram >= 12 * 1024:
         # 12GB+ VRAM: Qwen2.5-14B-Instruct-AWQ (Excellent balance)
-        return "Qwen/Qwen3-14B-AWQ"
+        return "Qwen3-14B-Reasoning-AWQ"
     elif vram >= 7 * 1024:
         # 7GB+ VRAM: DeepSeek-R1-Distill-Llama-8B (Reasoning focused)
         # AWQ version for efficiency
