@@ -67,7 +67,7 @@ class PollyOptimizationLoop:
     async def _emit_ui(self, message: str, status: str = "active"):
         if self.ui_queue:
             panel = self._create_polly_panel(message, status)
-            await self.ui_queue.put(panel)
+            self.ui_queue.put(panel)
 
     async def start(self):
         self.running = True
