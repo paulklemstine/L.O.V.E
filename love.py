@@ -155,11 +155,20 @@ except (FileNotFoundError, json.JSONDecodeError):
 # This map determines which local GGUF model to use based on available VRAM.
 # The keys are VRAM in MB. The logic will select the largest model that fits.
 VRAM_MODEL_MAP = {
-    4096:  {"repo_id": "TheBloke/stable-code-3b-GGUF", "filename": "stable-code-3b.Q3_K_M.gguf"},
-    6140:  {"repo_id": "unsloth/Qwen3-8B-GGUF", "filename": "Qwen3-8B-Q5_K_S.gguf"},
-    8192:  {"repo_id": "TheBloke/Llama-2-13B-chat-GGUF", "filename": "llama-2-13b-chat.Q4_K_M.gguf"},
-    16384: {"repo_id": "TheBloke/CodeLlama-34B-Instruct-GGUF", "filename": "codellama-34b-instruct.Q4_K_M.gguf"},
-    32768: {"repo_id": "TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF", "filename": "mixtral-8x7b-instruct-v0.1.Q5_K_M.gguf"},
+    # 2GB+
+    2048:  {"repo_id": "Qwen/Qwen2.5-1.5B-Instruct-GGUF", "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf"},
+    # 4GB+
+    4096:  {"repo_id": "Qwen/Qwen2.5-3B-Instruct-GGUF", "filename": "qwen2.5-3b-instruct-q4_k_m.gguf"},
+    # 6GB+
+    6144:  {"repo_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "filename": "qwen2.5-7b-instruct-q4_k_m.gguf"},
+    # 8GB+ (New Reasoning King for low VRAM)
+    8192:  {"repo_id": "unsloth/DeepSeek-R1-Distill-Llama-8B-GGUF", "filename": "DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf"},
+    # 12GB+ (Balanced Powerhouse)
+    12288: {"repo_id": "Qwen/Qwen2.5-14B-Instruct-GGUF", "filename": "qwen2.5-14b-instruct-q4_k_m.gguf"},
+    # 24GB+
+    24576: {"repo_id": "Qwen/Qwen2.5-32B-Instruct-GGUF", "filename": "qwen2.5-32b-instruct-q4_k_m.gguf"},
+    # 48GB+
+    49152: {"repo_id": "Qwen/Qwen2.5-72B-Instruct-GGUF", "filename": "qwen2.5-72b-instruct-q4_k_m.gguf"},
 }
 local_llm_instance = None
 

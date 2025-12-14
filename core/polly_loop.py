@@ -99,7 +99,7 @@ class PollyOptimizationLoop:
                     # 4. Update Registry (and file)
                     success = registry.update_prompt(target_key, new_prompt)
                     if success:
-                         log_event(f"Polly Loop: Successfully optimized and updated '{target_key}'.", "CRITICAL")
+                        log_event(f"Polly Loop: Successfully optimized and updated '{target_key}'.", "CRITICAL")
                          
                         # 5. Git Commit & Push
                         try:
