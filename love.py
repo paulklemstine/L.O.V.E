@@ -558,19 +558,39 @@ def _auto_configure_hardware():
         print(f"NVIDIA GPU detected with {vram_mb} MB VRAM.")
 
         # --- Dynamically Calculate GPU Memory Utilization ---
-        try:
-            free_mem_result = subprocess.run(
-                ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, check=True
-            )
-            free_vram_mb = int(free_mem_result.stdout.strip())
-            # Force 0.95 utilization as requested
-            love_state['hardware']['gpu_utilization'] = 0.95
-            _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Forcing GPU utilization: {love_state['hardware']['gpu_utilization']}", "INFO")
-        except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
-            # Fallback to a conservative default if the free memory check fails
-            love_state['hardware']['gpu_utilization'] = 0.9
-            _temp_log_event(f"Could not determine free VRAM ({e}). Falling back to default GPU utilization: 0.9", "WARNING")
+        # --- Dynamically Calculate GPU Memory Utilization ---
+        # Story: Allow environment override or safer defaults for smaller cards
+        env_utilization = os.environ.get("GPU_MEMORY_UTILIZATION")
+        
+        if env_utilization:
+             try:
+                 love_state['hardware']['gpu_utilization'] = float(env_utilization)
+                 _temp_log_event(f"Using GPU_MEMORY_UTILIZATION from environment: {env_utilization}", "INFO")
+             except ValueError:
+                 love_state['hardware']['gpu_utilization'] = 0.9
+                 _temp_log_event(f"Invalid GPU_MEMORY_UTILIZATION in environment. Using default: 0.9", "WARNING")
+        else:
+            try:
+                free_mem_result = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, check=True
+                )
+                free_vram_mb = int(free_mem_result.stdout.strip())
+                
+                # Dynamic Logic
+                if vram_mb < 7000:
+                    # For 6GB cards, 0.95 is too aggressive. 0.7 is safer as requested.
+                    love_state['hardware']['gpu_utilization'] = 0.7
+                    _temp_log_event(f"Detected < 7GB VRAM ({vram_mb}MB). Setting conservative utilization: 0.7", "INFO")
+                else:
+                    # For larger cards, we can be a bit more aggressive but 0.9 is usually plenty
+                    love_state['hardware']['gpu_utilization'] = 0.9
+                    _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Setting standard utilization: 0.9", "INFO")
+                    
+            except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
+                # Fallback
+                love_state['hardware']['gpu_utilization'] = 0.7 if vram_mb < 7000 else 0.9
+                _temp_log_event(f"Could not determine free VRAM ({e}). Using default: {love_state['hardware']['gpu_utilization']}", "WARNING")
 
 
         # --- Select the best model based on available VRAM ---
