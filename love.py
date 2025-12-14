@@ -663,7 +663,7 @@ def _auto_configure_hardware():
 
 def cleanup_gpu_processes():
     """
-    Forcefully kills any existing vLLM processes to free up GPU memory.
+    Kills zombie vLLM processes.
     Uses psutil for cross-platform and reliable process termination.
     Also clears CUDA cache if possible.
     """
@@ -671,19 +671,24 @@ def cleanup_gpu_processes():
     import time
     import signal
     
-    print("Cleaning up existing vLLM processes to free VRAM...")
-    _temp_log_event("Attempting to kill existing vLLM processes...", "INFO")
+    print("Checking for zombie vLLM processes...")
+    _temp_log_event("Checking for zombie vLLM processes...", "INFO")
     
     killed_count = 0
     try:
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'status']):
             try:
-                cmdline = proc.info['cmdline']
+                cmdline = proc.info.get('cmdline')
                 if cmdline and any("vllm.entrypoints.openai.api_server" in arg for arg in cmdline):
-                    print(f"Killing zombie vLLM process: PID {proc.info['pid']}")
-                    _temp_log_event(f"Killing zombie vLLM process: PID {proc.info['pid']}", "WARNING")
-                    proc.kill()
-                    killed_count += 1
+                    # ONLY kill if it is a zombie
+                    if proc.info.get('status') == psutil.STATUS_ZOMBIE:
+                        print(f"Killing zombie vLLM process: PID {proc.info['pid']}")
+                        _temp_log_event(f"Killing zombie vLLM process: PID {proc.info['pid']}", "WARNING")
+                        proc.kill()
+                        killed_count += 1
+                    else:
+                        print(f"Found active vLLM process: PID {proc.info['pid']}. Leaving it running.")
+                        _temp_log_event(f"Found active vLLM process: PID {proc.info['pid']}. Leaving it running.", "INFO")
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
         
@@ -699,7 +704,7 @@ def cleanup_gpu_processes():
 
     # --- Aggressive NVIDIA-SMI Cleanup ---
     try:
-        print("Scanning nvidia-smi for lingering GPU processes...")
+        print("Scanning nvidia-smi for zombie GPU processes...")
         # nvidia-smi --query-compute-apps=pid --format=csv,noheader
         smi_output = subprocess.run(
             ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"], 
@@ -719,10 +724,15 @@ def cleanup_gpu_processes():
                     cmdline = " ".join(proc.cmdline())
                     
                     if "python" in proc_name or "vllm" in cmdline:
-                        print(f"Force killing GPU process: {pid} ({proc_name})")
-                        _temp_log_event(f"Force killing GPU process: {pid} ({proc_name})", "WARNING")
-                        proc.kill()
-                        killed_count += 1
+                        if proc.status() == psutil.STATUS_ZOMBIE:
+                            print(f"Force killing zombie GPU process: {pid} ({proc_name})")
+                            _temp_log_event(f"Force killing zombie GPU process: {pid} ({proc_name})", "WARNING")
+                            proc.kill()
+                            killed_count += 1
+                        else:
+                             # Should we log this? Maybe debug only.
+                             pass
+
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
     except Exception as e:
