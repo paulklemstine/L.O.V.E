@@ -759,6 +759,8 @@ class DeepAgentEngine:
             else:
                 core.logging.log_event("The vLLM server returned an empty or invalid response.", level="ERROR")
                 return "Error: The vLLM server returned an empty or invalid response."
+        except httpx.RequestError as e:
+            error_message = f"Error communicating with vLLM server: {e}"
             core.logging.log_event(error_message, level="ERROR")
             return error_message
 
