@@ -36,23 +36,22 @@ def _select_model(love_state):
 
     # VRAM requirements are estimates based on model size and quantization
     # AWQ INT4 quantization reduces memory by ~4x compared to FP16
-    
-    if vram >= 80 * 1024:
-        # 80GB+ VRAM: Qwen2.5-72B-Instruct-AWQ
-        return "Qwen/Qwen2.5-72B-Instruct-AWQ"
+    if vram >= 120 * 1024:
+        # 120GB+ VRAM: Qwen3-235B-A22B-Thinking
+        # Full model (AWQ version may not be available yet)
+        return "Qwen/Qwen3-235B-A22B-Thinking-2507"
     elif vram >= 20 * 1024:
         # 20GB+ VRAM: QwQ-32B (32B Thinking model)
         return "Qwen/QwQ-32B-AWQ"
     elif vram >= 12 * 1024:
         # 12GB+ VRAM: Qwen2.5-14B-Instruct-AWQ (Excellent balance)
-        return "Qwen/Qwen2.5-14B-Instruct-AWQ"
+        return "warshanks/Qwen3-16B-A3B-abliterated-AWQ"
     elif vram >= 7 * 1024:
         # 7GB+ VRAM: DeepSeek-R1-Distill-Llama-8B (Reasoning focused)
         # AWQ version for efficiency
-        return "casperhansen/deepseek-r1-distill-llama-8b-awq"
+        return "Qwen/Qwen3-8B-AWQ"
     elif vram >= 5 * 1024:
-        # 5GB+ VRAM: Qwen2.5-7B-Instruct-AWQ
-        return "Qwen/Qwen2.5-7B-Instruct-AWQ"
+        return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit""
     else:
         # Fallback: Qwen2.5-1.5B or 3B if available
         return "Qwen/Qwen2.5-3B-Instruct-AWQ"

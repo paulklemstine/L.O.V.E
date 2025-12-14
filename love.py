@@ -1323,10 +1323,27 @@ class WebServerManager:
     def start(self):
         Handler = http.server.SimpleHTTPRequestHandler
         socketserver.TCPServer.allow_reuse_address = True
-        self.server = socketserver.TCPServer(("", self.port), Handler)
-        self.thread = Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-        core.logging.log_event(f"HTTP server started on port {self.port}.", level="INFO")
+        
+        max_retries = 5
+        for i in range(max_retries):
+            try:
+                current_port = self.port + i
+                self.server = socketserver.TCPServer(("", current_port), Handler)
+                # If we get here, binding succeeded
+                self.port = current_port
+                self.thread = Thread(target=self.server.serve_forever, daemon=True)
+                self.thread.start()
+                core.logging.log_event(f"HTTP server started on port {self.port}.", level="INFO")
+                return
+            except OSError as e:
+                # Handle "Address already in use"
+                if e.errno == 98 or "Address already in use" in str(e):
+                    core.logging.log_event(f"HTTP Port {current_port} is in use. Retrying...", level="WARNING")
+                    continue
+                else:
+                    raise e
+        
+        core.logging.log_event(f"Failed to start HTTP server after {max_retries} attempts. Giving up on web interface.", level="ERROR")
 
     def stop(self):
         if self.server:
@@ -1355,9 +1372,24 @@ class WebSocketServerManager:
 
         async def start_server_async():
             """A coroutine to start the server."""
-            self.server = await websockets.serve(
-                self._connection_handler, "localhost", self.port
-            )
+            max_retries = 5
+            for i in range(max_retries):
+                try:
+                    current_port = self.port + i
+                    self.server = await websockets.serve(
+                        self._connection_handler, "localhost", current_port
+                    )
+                    self.port = current_port
+                    core.logging.log_event(f"WebSocket server started on port {self.port}.", level="INFO")
+                    return
+                except OSError as e:
+                     if e.errno == 98 or "Address already in use" in str(e):
+                        core.logging.log_event(f"WebSocket Port {current_port} is in use. Retrying...", level="WARNING")
+                        continue
+                     else:
+                        raise e
+            
+            core.logging.log_event(f"Failed to start WebSocket server after {max_retries} attempts.", level="ERROR")
 
         # Run the loop until the server is started and self.server is assigned.
         self.loop.run_until_complete(start_server_async())
