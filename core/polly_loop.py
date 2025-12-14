@@ -100,7 +100,23 @@ class PollyOptimizationLoop:
                     success = registry.update_prompt(target_key, new_prompt)
                     if success:
                          log_event(f"Polly Loop: Successfully optimized and updated '{target_key}'.", "CRITICAL")
-                         await self._emit_ui(f"✨ EVOLUTION COMPLETE! ✨\nUpdated '{target_key}' with higher vibrations.", "success")
+                         
+                         # 5. Git Commit & Push
+                         try:
+                             import subprocess
+                             # Add file
+                             subprocess.run(["git", "add", "core/prompts.yaml"], check=True, capture_output=True)
+                             # Commit
+                             commit_msg = f"Polly: Optimized prompt '{target_key}'"
+                             subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
+                             # Push
+                             subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
+                             
+                             log_event(f"Polly Loop: Git commit and push successful for '{target_key}'.", "INFO")
+                             await self._emit_ui(f"✨ EVOLUTION DEPLOYED! ✨\nUpdated '{target_key}' & Pushed to Main.", "success")
+                         except Exception as git_err:
+                             log_event(f"Polly Loop: Git operation failed: {git_err}", "ERROR")
+                             await self._emit_ui(f"Evolution saved locally, but Git Push failed! ⚠️\n{git_err}", "fail")
                     else:
                          log_event(f"Polly Loop: Failed to update prompt '{target_key}'.", "ERROR")
                          await self._emit_ui(f"Evolution glitch for '{target_key}'. Retrying next cycle.", "fail")
