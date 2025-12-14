@@ -830,7 +830,13 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     log_event(f"Attempting LLM call with local DeepAgent vLLM (Purpose: {purpose})", level="DEBUG")
                     # We await directly here to avoid deadlocks with run_hypnotic_progress
                     # The WaitingAnimation (started at function entry) handles the visual feedback.
-                    result_text = await deep_agent_instance.generate(prompt_text)
+                    if purpose in ["reasoning", "strategic_planning", "complex"]:
+                        log_event(f"DeepAgent vLLM using AGENTIC mode for purpose: {purpose}", level="INFO")
+                        # Use the full agentic loop with Tree of Thoughts
+                        result_text = await deep_agent_instance.run(prompt_text, reasoning_mode="tree")
+                    else:
+                        # Standard generation
+                        result_text = await deep_agent_instance.generate(prompt_text)
                     log_event("DeepAgent vLLM call successful.")
 
                 # --- LOCAL MODEL LOGIC ---

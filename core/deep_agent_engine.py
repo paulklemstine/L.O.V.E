@@ -395,7 +395,7 @@ class DeepAgentEngine:
         # Let's try sequential for stability first, or parallel tasks.
         
         async def generate_single_thought(index):
-            core.logging.log_event(f"[DeepAgent] Generating thought branch {index+1}...", level="DEBUG")
+            core.logging.log_event(f"[DeepAgent] Generating thought branch {index+1}...", level="INFO")
             # We might want to inject a seed or slight prompt variation to encourage diversity if temperature isn't enough
             # But high temperature should suffice.
             return await self.generate_raw(system_prompt, temperature=0.8) # Slightly higher temp for diversity
@@ -417,7 +417,7 @@ class DeepAgentEngine:
                 continue
                 
             score = await self._evaluate_thought(prompt, thought_text)
-            core.logging.log_event(f"[DeepAgent] Branch {i+1} Score: {score}/10", level="DEBUG")
+            core.logging.log_event(f"[DeepAgent] Branch {i+1} Score: {score}/10", level="INFO")
             
             if score > best_score:
                 best_score = score
