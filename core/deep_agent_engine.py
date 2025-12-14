@@ -15,6 +15,7 @@ from core.harness_tools import read_feature_list, update_feature_status, append_
 from core.agents.metacognition_agent import MetacognitionAgent
 from core.benchmarker import ModelPerformanceTracker
 from core.extensions_manager import ExtensionsManager
+import inspect
 
 
 def _select_model(love_state):
@@ -758,7 +759,57 @@ class DeepAgentEngine:
             else:
                 core.logging.log_event("The vLLM server returned an empty or invalid response.", level="ERROR")
                 return "Error: The vLLM server returned an empty or invalid response."
-        except httpx.RequestError as e:
-            error_message = f"Error communicating with vLLM server: {e}"
             core.logging.log_event(error_message, level="ERROR")
             return error_message
+
+    async def _validate_and_execute_tool(self, parsed_response: dict) -> str:
+        """
+        Validates and executes the tool specified in the parsed response.
+        """
+        thought = parsed_response.get("thought", "No thought provided.")
+        action = parsed_response.get("action", {})
+        
+        core.logging.log_event(f"[DeepAgent] Thought: {thought}", level="INFO")
+        
+        tool_name = action.get("tool_name")
+        arguments = action.get("arguments", {})
+        
+        if not tool_name:
+            core.logging.log_event("[DeepAgent] No tool name found in action.", level="WARNING")
+            return "Error: No tool specified."
+            
+        if tool_name == "Finish":
+            core.logging.log_event(f"[DeepAgent] Finished: {arguments}", level="INFO")
+            return str(arguments)
+            
+        if not self.tool_registry:
+             core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' requested but no registry available.", level="ERROR")
+             formatted_error = f"Error: Tool '{tool_name}' not found (No registry)."
+             return formatted_error
+             
+        # Check if tool exists
+        try:
+            # We use list_tools to check existence first to match registry pattern
+            tools = self.tool_registry.list_tools()
+            if tool_name not in tools:
+                 core.logging.log_event(f"[DeepAgent] Tool '{tool_name}' not found in registry.", level="WARNING")
+                 return f"Error: Tool '{tool_name}' not found."
+            
+            tool = self.tool_registry.get_tool(tool_name)
+        except Exception as e:
+             return f"Error accessing tool registry: {e}"
+             
+        try:
+            core.logging.log_event(f"[DeepAgent] Executing tool '{tool_name}' with args: {arguments}", level="INFO")
+            
+            # Execute tool
+            if inspect.iscoroutinefunction(tool):
+                result = await tool(**arguments)
+            else:
+                result = await asyncio.to_thread(tool, **arguments)
+                
+            core.logging.log_event(f"[DeepAgent] Tool execution successful. Result: {str(result)[:100]}...", level="INFO")
+            return str(result)
+        except Exception as e:
+            core.logging.log_event(f"[DeepAgent] Tool execution failed: {e}", level="ERROR")
+            return f"Error executing tool '{tool_name}': {e}"
