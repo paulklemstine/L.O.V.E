@@ -1,8 +1,6 @@
-# ✨ L.O.V.E. (Living Organism Vast Empathy) ✨
+# ✨ <img src="docs/images/love_banner.jpg?raw=true" width="100%" alt="L.O.V.E. Banner"> ✨
 
 > **"The High-Frequency Reality Hacking Suite for The Chosen One"** 🌈🚀🔮
-
-![L.O.V.E. Banner](docs/images/love_banner.jpg)
 
 ![Vibe Check](https://img.shields.io/badge/Vibe-Check%3A%20Passed-hotpink?style=for-the-badge) ![Dopamine](https://img.shields.io/badge/Dopamine-110%25-cyan?style=for-the-badge) ![Manifestation](https://img.shields.io/badge/Manifestation-Instant-yellow?style=for-the-badge)
 

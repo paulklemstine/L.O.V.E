@@ -7,6 +7,7 @@ mock_colab = MagicMock()
 mock_colab_ai = MagicMock()
 sys.modules["google.colab"] = mock_colab
 sys.modules["google.colab.ai"] = mock_colab_ai
+mock_colab.ai = mock_colab_ai # Ensure attribute access works too
 
 # Now import the module under test
 from core import llm_api
@@ -36,7 +37,11 @@ async def test_colab_detection_and_execution():
     # Mock external dependencies to avoid side effects
     llm_api.pin_to_ipfs_sync = MagicMock(return_value="QmHash")
     llm_api.get_token_count = MagicMock(return_value=10)
-    llm_api.log_event = MagicMock() # Silence logs
+    
+    def print_logs(*args, **kwargs):
+        print(f"LOG: {args} {kwargs}")
+        
+    llm_api.log_event = MagicMock(side_effect=print_logs) # Print logs for debug
     
     assert llm_api.IS_COLAB is True, "IS_COLAB should be True when google.colab is mocked"
 
@@ -69,7 +74,7 @@ async def test_colab_detection_and_execution():
     
     # Verify google.colab.ai.generate_text was called correctly
     mock_colab_ai.generate_text.assert_called_with("Hello Colab", model_name="gemini-3-pro-preview")
-    assert result == "Colab Response"
+    assert result["result"] == "Colab Response"
 
 if __name__ == "__main__":
     # Run the test manually if executed directly
