@@ -564,14 +564,9 @@ def _auto_configure_hardware():
                 capture_output=True, text=True, check=True
             )
             free_vram_mb = int(free_mem_result.stdout.strip())
-            # Leave a 512MB buffer for safety
-            buffer_mb = 512
-            target_vram_mb = max(0, free_vram_mb - buffer_mb)
-            utilization_ratio = target_vram_mb / vram_mb if vram_mb > 0 else 0
-            # Clamp the value between 0.1 and 0.95 for safety
-            safe_utilization = max(0.1, min(utilization_ratio, 0.95))
-            love_state['hardware']['gpu_utilization'] = round(safe_utilization, 2)
-            _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Calculated safe GPU utilization: {love_state['hardware']['gpu_utilization']}", "INFO")
+            # Force 0.95 utilization as requested
+            love_state['hardware']['gpu_utilization'] = 0.95
+            _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Forcing GPU utilization: {love_state['hardware']['gpu_utilization']}", "INFO")
         except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
             # Fallback to a conservative default if the free memory check fails
             love_state['hardware']['gpu_utilization'] = 0.9
