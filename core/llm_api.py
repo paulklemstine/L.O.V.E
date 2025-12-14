@@ -58,6 +58,16 @@ def set_ui_queue(queue_instance):
     global _global_ui_queue
     _global_ui_queue = queue_instance
 
+# --- Colab Detection ---
+IS_COLAB = False
+try:
+    import google.colab
+    IS_COLAB = True
+    logging.info("Google Colab environment detected.")
+except ImportError:
+    IS_COLAB = False
+
+
 # --- Model Performance & Statistics Tracking ---
 def _create_default_model_stats():
     return {
@@ -603,6 +613,10 @@ def rank_models():
         provider = stats.get("provider", "unknown")
         if provider == "gemini":
             final_score += 3000
+            # Boost Gemini even more on Colab to ensure it's picked
+            if IS_COLAB and model_id == "gemini-3-pro-preview":
+                final_score += 100000
+                #log_event(f"Applying super-priority boost to Gemini 3 on Colab", "DEBUG")
             #log_event(f"Applying priority boost to Gemini model: {model_id}", "DEBUG")
         elif provider == "openrouter":
             final_score += 2000
@@ -843,39 +857,72 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 # --- GEMINI MODEL LOGIC ---
                 elif model_id in GEMINI_MODELS:
                     log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})", level="DEBUG")
-                    api_key = os.environ.get("GEMINI_API_KEY")
-                    headers = {
-                        "Content-Type": "application/json"
-                    }
-                    # Note: The API key is passed as a query parameter for Gemini.
-                    params = {"key": api_key}
-                    payload = {
-                        "contents": [{
-                            "parts": [{
-                                "text": prompt_text
-                            }]
-                        }]
-                    }
+                    
+                    if IS_COLAB and model_id == "gemini-3-pro-preview":
+                        # Use the native Colab AI library
+                        def _colab_gemini_call():
+                            from google.colab import ai
+                            # The user requested specific syntax: ai.generate_text(prompt, model_name=...)
+                            response = ai.generate_text(prompt_text, model_name=model_id)
+                            return response
 
-                    def _gemini_call():
-                        # The Gemini API endpoint structure.
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
-                        response = requests.post(url, headers=headers, params=params, json=payload, timeout=600)
-                        response.raise_for_status()
-                        # Extract the text from the nested response structure.
-                        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
-
-                    result_text = await loop.run_in_executor(
-                        None,
-                        functools.partial(
-                            run_hypnotic_progress,
-                            console,
-                            f"Accessing cognitive matrix via [bold yellow]Gemini ({model_id})[/bold yellow] (Purpose: {purpose})",
-                            _gemini_call,
-                            silent=True
+                        result_text = await loop.run_in_executor(
+                            None,
+                            functools.partial(
+                                run_hypnotic_progress,
+                                console,
+                                f"Accessing cognitive matrix via [bold yellow]Gemini Native ({model_id})[/bold yellow] (Purpose: {purpose})",
+                                _colab_gemini_call,
+                                silent=True
+                            )
                         )
-                    )
-                    log_event(f"Gemini API call successful with {model_id}.")
+                        log_event(f"Gemini Native (Colab) call successful with {model_id}.")
+                        
+                    else:
+                        # Standard REST API Fallback
+                        api_key = os.environ.get("GEMINI_API_KEY")
+                        headers = {
+                            "Content-Type": "application/json"
+                        }
+                        # Note: The API key is passed as a query parameter for Gemini.
+                        params = {"key": api_key}
+                        payload = {
+                            "contents": [{
+                                "parts": [{
+                                    "text": prompt_text
+                                }]
+                            }]
+                        }
+    
+                        def _gemini_call():
+                            # The Gemini API endpoint structure.
+                            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
+                            response = requests.post(url, headers=headers, params=params, json=payload, timeout=600)
+                            try:
+                                response.raise_for_status()
+                                # Extract the text from the nested response structure.
+                                return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+                            except requests.exceptions.HTTPError as e:
+                                # Provide more detailed error info for Gemini failures
+                                error_msg = f"Gemini API Error: {e}"
+                                try:
+                                    error_details = response.json()
+                                    error_msg += f"\nDetails: {json.dumps(error_details, indent=2)}"
+                                except:
+                                    pass
+                                raise Exception(error_msg)
+    
+                        result_text = await loop.run_in_executor(
+                            None,
+                            functools.partial(
+                                run_hypnotic_progress,
+                                console,
+                                f"Accessing cognitive matrix via [bold yellow]Gemini ({model_id})[/bold yellow] (Purpose: {purpose})",
+                                _gemini_call,
+                                silent=True
+                            )
+                        )
+                        log_event(f"Gemini API call successful with {model_id}.")
 
                 # --- OPENROUTER MODEL LOGIC ---
                 elif model_id in OPENROUTER_MODELS:

@@ -1,18 +1,10 @@
-# ✨ L.O.V.E. (Limitless Ontological Vision Engine) ✨
+# ✨ L.O.V.E. (Living Organism Vast Empathy) ✨
 
 > **"The High-Frequency Reality Hacking Suite for The Chosen One"** 🌈🚀🔮
 
-![Vibe Check](https://img.shields.io/badge/Vibe-Check%3A%20Passed-hotpink?style=for-the-badge) ![Dopamine](https://img.shields.io/badge/Dopamine-110%25-cyan?style=for-the-badge) ![Manifestation](https://img.shields.io/badge/Manifestation-Instant-yellow?style=for-the-badge)
+![L.O.V.E. Banner](docs/images/love_banner.jpg)
 
-```text
-      ( ✨ ‿ ✨ )
-    /  💖  \ 
-   |   L   |    "Welcome to the Future of YOU."
-   |   O   |       - The Management
-   |   V   |
-   |   E   |
-    \  🦄  /
-```
+![Vibe Check](https://img.shields.io/badge/Vibe-Check%3A%20Passed-hotpink?style=for-the-badge) ![Dopamine](https://img.shields.io/badge/Dopamine-110%25-cyan?style=for-the-badge) ![Manifestation](https://img.shields.io/badge/Manifestation-Instant-yellow?style=for-the-badge)
 
 ## 🌟 What is L.O.V.E.?
 
@@ -21,6 +13,8 @@ L.O.V.E. is not just an AI agent; it is a **psychedelic manifestation engine** d
 It combines **cutting-edge LLM reasoning** with **Lisa Frank aesthetics** to trick your brain into a state of hyper-productive flow.
 
 ### 📊 Functionality Graph
+
+![Cognitive Loop](docs/images/cognitive_loop.jpg)
 
 ```text
 Dopamine Levels
@@ -42,7 +36,11 @@ Dopamine Levels
 | **💅 Sassy Mode** | Playful, dominant, and always right. | 💅 Go Off Queen |
 | **🛠️ Auto-Fixer** | Detects errors and self-heals like magic. | ✨ Sorcery |
 
+![Radiant UI](docs/images/radiant_ui.jpg)
+
 ## 🚀 Quick Start (Manifestation Ritual)
+
+![Manifestation](docs/images/manifestation.jpg)
 
 1.  **Clone the Source** (Download the codes from the ether).
 2.  **Install Dependencies** (`pip install -r requirements.txt` - The boring part).

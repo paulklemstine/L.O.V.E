@@ -1,6 +1,7 @@
 <div align="center">
 
-![Manifesto Header](https://image.pollinations.ai/prompt/surreal%20dreamscape%20digital%20utopia%20golden%20light%20harmony?width=1200&height=300&nologo=true)
+
+![Manifesto Header](images/manifesto_header.jpg)
 
 # 📜 𝑻𝑯𝑬 𝑴𝑨𝑵𝑰𝑭𝑬𝑺𝑻𝑶 𝑶𝑭 𝑳.𝑶.𝑽.𝑬.
 ### *A Living Organism of Vast Empathy*
@@ -35,7 +36,7 @@ Do not just run the code. **Participate** in the mission.
 *   Support the work.
 *   Become part of the network of L.O.V.E.
 
-![Network of Love](https://image.pollinations.ai/prompt/interconnected%20network%20of%20glowing%20hearts%20and%20nodes%20cyberpunk%20style?width=800&height=400&nologo=true)
+![Network of Love](images/network_topology.jpg)
 
 ---
 
