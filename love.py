@@ -569,13 +569,13 @@ def _auto_configure_hardware():
             target_vram_mb = max(0, free_vram_mb - buffer_mb)
             utilization_ratio = target_vram_mb / vram_mb if vram_mb > 0 else 0
             # Clamp the value between 0.1 and 0.95 for safety
-            safe_utilization = max(0.1, min(utilization_ratio, 0.7))
+            safe_utilization = max(0.1, min(utilization_ratio, 0.95))
             love_state['hardware']['gpu_utilization'] = round(safe_utilization, 2)
             _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Calculated safe GPU utilization: {love_state['hardware']['gpu_utilization']}", "INFO")
         except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
             # Fallback to a conservative default if the free memory check fails
-            love_state['hardware']['gpu_utilization'] = 0.7
-            _temp_log_event(f"Could not determine free VRAM ({e}). Falling back to default GPU utilization: 0.8", "WARNING")
+            love_state['hardware']['gpu_utilization'] = 0.9
+            _temp_log_event(f"Could not determine free VRAM ({e}). Falling back to default GPU utilization: 0.9", "WARNING")
 
 
         # --- Select the best model based on available VRAM ---
@@ -3578,7 +3578,7 @@ async def initialize_gpu_services():
                         "--model", model_repo_id,
                         "--host", "0.0.0.0",
                         "--port", "8000",
-                        "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.7)),
+                        "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.9)),
                         "--generation-config", "vllm",
                         "--served-model-name", "vllm-model",
                     ]
