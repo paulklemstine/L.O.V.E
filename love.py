@@ -721,6 +721,37 @@ def cleanup_gpu_processes():
         _temp_log_event(f"Error during vLLM cleanup: {e}", "WARNING")
         print(f"Warning: Error during vLLM cleanup: {e}")
 
+    # --- Aggressive NVIDIA-SMI Cleanup ---
+    try:
+        print("Scanning nvidia-smi for lingering GPU processes...")
+        # nvidia-smi --query-compute-apps=pid --format=csv,noheader
+        smi_output = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"], 
+            capture_output=True, text=True
+        )
+        if smi_output.returncode == 0 and smi_output.stdout.strip():
+            pids = [int(p) for p in smi_output.stdout.strip().split('\n') if p.strip()]
+            my_pid = os.getpid()
+            for pid in pids:
+                if pid == my_pid:
+                    continue
+                try:
+                    proc = psutil.Process(pid)
+                    # Safety check: Don't kill important system processes if running locally
+                    # In Colab/Container, it's usually fine to kill everything on GPU
+                    proc_name = proc.name().lower()
+                    cmdline = " ".join(proc.cmdline())
+                    
+                    if "python" in proc_name or "vllm" in cmdline:
+                        print(f"Force killing GPU process: {pid} ({proc_name})")
+                        _temp_log_event(f"Force killing GPU process: {pid} ({proc_name})", "WARNING")
+                        proc.kill()
+                        killed_count += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+    except Exception as e:
+        print(f"Error during nvidia-smi cleanup: {e}")
+
 
 def _check_and_install_dependencies():
     """
@@ -3440,11 +3471,13 @@ async def initialize_gpu_services():
         elif vllm_already_running and not is_healthy:
              console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
              core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
-             subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
+             cleanup_gpu_processes()
              await asyncio.sleep(5) # Wait for it to die
              vllm_already_running = False
         else:
             console.print("[bold green]GPU detected. Launching vLLM server and initializing DeepAgent client...[/bold green]")
+            # Ensure GPU is clean before starting
+            cleanup_gpu_processes()
             try:
                 # Use a different model selection logic that prefers AWQ models
                 from core.deep_agent_engine import _select_model as select_vllm_model
@@ -3532,8 +3565,15 @@ async def initialize_gpu_services():
                     # Let vLLM auto-detect context length from the model
                     vllm_command.extend(["--max-model-len", str(int(max_len))])
 
+                    # --- Environment Configuration for Colab/T4 Compatibility ---
+                    vllm_env = os.environ.copy()
+                    # Fix "Unable to register factory" errors by using spawn
+                    vllm_env['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
+                    # Fix OOM fragmentation
+                    vllm_env['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+
                     vllm_log_file = open("vllm_server.log", "a")
-                    subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file)
+                    subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file, env=vllm_env)
                     core.logging.log_event(f"vLLM server process started with command: {' '.join(vllm_command)}. See vllm_server.log for details.", "CRITICAL")
 
                     console.print("[cyan]Waiting for vLLM server to come online...[/cyan]")

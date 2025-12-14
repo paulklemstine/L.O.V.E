@@ -44,9 +44,9 @@ def _select_model(love_state):
         # 20GB+ VRAM: QwQ-32B (32B Thinking model)
         # AWQ version available and verified on HuggingFace
         return "Qwen/QwQ-32B-AWQ"
-    elif vram >= 12 * 1024:
-        # 12GB+ VRAM: Qwen3-30B-A3B-Thinking
-        # Full model (AWQ version may not be available yet)
+    elif vram >= 22 * 1024:
+        # 22GB+ VRAM: Qwen3-30B-A3B-Thinking
+        # Increased from 12GB to 22GB to avoid OOM on T4/16GB cards
         return "Qwen/Qwen3-30B-A3B-Thinking-2507"
     elif vram >= 7 * 1024:
         # 6GB+ VRAM: Qwen3-8B (Hybrid model - good balance)
