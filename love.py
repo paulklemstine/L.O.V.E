@@ -3620,13 +3620,18 @@ async def initialize_gpu_services():
                     # --- Launch the vLLM Server as a Background Process ---
                     # NOTE: vLLM 0.11.0 has a bug with AWQ models and duplicate chat templates
                     # Upgrade to vLLM 0.11.1+ to fix: pip install --upgrade vllm
+                    # PRIORITIZE ENV VAR for final check
+                    final_gpu_util = os.environ.get("GPU_MEMORY_UTILIZATION")
+                    if not final_gpu_util:
+                        final_gpu_util = str(love_state.get('hardware', {}).get('gpu_utilization', 0.9))
+                    
                     vllm_command = [
                         sys.executable,
                         "-m", "vllm.entrypoints.openai.api_server",
                         "--model", model_repo_id,
                         "--host", "0.0.0.0",
                         "--port", "8000",
-                        "--gpu-memory-utilization", str(love_state.get('hardware', {}).get('gpu_utilization', 0.9)),
+                        "--gpu-memory-utilization", final_gpu_util,
                         "--generation-config", "vllm",
                         "--served-model-name", "vllm-model",
                     ]
