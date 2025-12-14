@@ -48,7 +48,8 @@ async def determine_evolution_goal(
     analysis_data["technical_debt"] = await _analyze_technical_debt()
 
     # 2. Scan codebase for TODO/FIXME comments
-    analysis_data["todo_items"] = await _scan_codebase_todos()
+    # analysis_data["todo_items"] = await _scan_codebase_todos()
+    analysis_data["todo_items"] = []
     
     # 3. Query knowledge base for strategic opportunities
     if knowledge_base:
