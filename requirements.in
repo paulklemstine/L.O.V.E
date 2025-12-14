@@ -1,5 +1,5 @@
 rich
-typing_extensions>=4.5.0
+typing_extensions
 web3
 netifaces
 requests
@@ -16,7 +16,7 @@ pytest-asyncio
 pytest-mock
 pycvesearch
 pycryptodome
-numpy<2.3
+numpy
 tiktoken
 scapy
 aioboto3
@@ -32,10 +32,9 @@ python-box
 httpx
 parsel
 agent-framework
-
 openevolve
-sentence-transformers>=3.0
-transformers>=4.34.0  # Upgraded for sentence-transformers 3.0 compatibility
+sentence-transformers
+transformers
 # tokenizers - using system-installed version
 torch
 torchvision
@@ -44,14 +43,14 @@ langextract
 monero-python
 openai
 faiss-cpu
-llmlingua==0.2.2 # Prompt compression
+llmlingua
 langgraph
-langchain>=0.2.0
-langchain-community>=0.2.0
-langchain-core>=0.2.0
-langsmith>=0.1.57
+langchain
+langchain-community
+langchain-core
+langsmith
 cairosvg
-ruff>=0.1.0
-bandit>=1.7.0
-radon>=6.0.0
+ruff
+bandit
+radon
 langchainhub
