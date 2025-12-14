@@ -53,7 +53,17 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
 
     # If the UI queue is configured and this log didn't come from the UI,
     # create a structured log object and send it to the display.
-    if ui_panel_queue is not None and not from_ui:
+    # OPTIMIZATION: Check if the log level is enabled before creating the object and queueing it.
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL
+    }
+    level_int = level_map.get(level.upper(), logging.INFO)
+
+    if ui_panel_queue is not None and not from_ui and logging.getLogger().isEnabledFor(level_int):
         try:
             log_object = {
                 "type": "log_message",
