@@ -522,6 +522,7 @@ def _auto_configure_hardware():
     Detects hardware (specifically NVIDIA GPUs) and configures the state accordingly.
     This helps in deciding whether to install GPU-specific dependencies.
     """
+    import os
     love_state.setdefault('hardware', {})
 
     # Check if we've already successfully detected a GPU to avoid re-running nvidia-smi
