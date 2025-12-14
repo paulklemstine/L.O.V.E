@@ -209,10 +209,13 @@ def _install_system_packages():
     """
     Ensures the environment is correctly configured with necessary paths and aliases.
     Specifically adds ~/.local/bin to PATH and ensures 'python' points to 'python3'.
+    Also checks/installs system packages like build-essential, cmake, curl, and docker.
     """
     import os
     import sys
     import shutil
+    import platform
+    import subprocess
     
     # 1. Ensure ~/.local/bin is in PATH
     home_dir = os.path.expanduser("~")
@@ -243,9 +246,9 @@ def _install_system_packages():
         except Exception as e:
              print(f"WARN: Error checking/creating python symlink: {e}")
 
-    # 3. Install necessary system packages (build-essential, cmake)
+    # 3. Install necessary system packages (build-essential, cmake, curl)
     if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ and shutil.which("apt-get"):
-        print("Ensuring system dependencies (build-essential, cmake) are installed...")
+        print("Ensuring system dependencies are installed...")
         packages = []
         if not shutil.which("make") or not shutil.which("gcc"):
             packages.append("build-essential")
@@ -253,6 +256,10 @@ def _install_system_packages():
             packages.append("cmake")
         if not shutil.which("python3-dev"):
              packages.append("python3-dev")
+        if not shutil.which("curl"):
+             packages.append("curl")
+        if not shutil.which("git"):
+             packages.append("git")
 
         if packages:
             try:
@@ -262,61 +269,30 @@ def _install_system_packages():
                 print("Successfully installed system packages.")
             except subprocess.CalledProcessError as e:
                 print(f"WARN: Failed to install system packages: {e}")
-                print("Builds for some dependencies (like fast-downward) may fail.")
+                print("Builds for some dependencies may fail.")
+
+    # 4. Ensure Docker is installed (User Request)
+    if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
+        if not shutil.which("docker"):
+            print("Container runtime 'docker' not found. Auto-installing...")
+            print("This may take a few minutes...")
+            try:
+                # Download and run the official Docker installation script
+                subprocess.check_call("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh", shell=True)
+                subprocess.check_call("sudo sh /tmp/get-docker.sh", shell=True)
+                
+                # Add current user to docker group
+                import getpass
+                current_user = getpass.getuser()
+                subprocess.check_call(f"sudo usermod -aG docker {current_user}", shell=True)
+                
+                print("Successfully installed 'docker'.")
+                print(f"IMPORTANT: You need to log out and back in for Docker group membership to take effect.")
+            except subprocess.CalledProcessError as e:
+                print(f"WARN: Failed to install 'docker'. Error: {e}")
+                print("You may need to install Docker Desktop for Windows and enable WSL integration manually.")
 
     mark_dependency_as_met("system_packages")
-    return
-
-    # if is_dependency_met("system_packages"):
-    #     print("System packages already installed. Skipping.")
-    #     return
-    # if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
-    #     try:
-    #         print("Ensuring build tools (build-essential, python3-dev) are installed...")
-    #         subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q build-essential python3-dev", shell=True)
-    #         print("Build tools check complete.")
-    #     except Exception as e:
-    #         print(f"WARN: Failed to install build tools. Some packages might fail to install. Error: {e}")
-    #         logging.warning(f"Failed to install build-essential/python3-dev: {e}")
-
-    #     if not shutil.which('nmap'):
-    #         print("Network scanning tool 'nmap' not found. Attempting to install...")
-    #         try:
-    #             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q nmap", shell=True)
-    #             print("Successfully installed 'nmap'.")
-    #             logging.info("Successfully installed nmap.")
-    #         except Exception as e:
-    #             print(f"ERROR: Failed to install 'nmap'. Network scanning will be disabled. Error: {e}")
-    #             logging.warning(f"nmap installation failed: {e}")
-
-    #     if not shutil.which('curl'):
-    #         print("HTTP client 'curl' not found. Attempting to install...")
-    #         try:
-    #             subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q curl", shell=True)
-    #             print("Successfully installed 'curl'.")
-    #             logging.info("Successfully installed curl.")
-    #         except Exception as e:
-    #             print(f"ERROR: Failed to install 'curl'. Some network features may be disabled. Error: {e}")
-    #             logging.warning(f"curl installation failed: {e}")
-
-    #     if not shutil.which('docker'):
-    #         print("Container runtime 'docker' not found. Attempting to install...")
-    #         print("This may take a few minutes...")
-    #         try:
-    #             # Download and run the official Docker installation script
-    #             subprocess.check_call("curl -fsSL https://get.docker.com -o /tmp/get-docker.sh", shell=True)
-    #             subprocess.check_call("sudo sh /tmp/get-docker.sh", shell=True)
-    #             # Add current user to docker group
-    #             import getpass
-    #             current_user = getpass.getuser()
-    #             subprocess.check_call(f"sudo usermod -aG docker {current_user}", shell=True)
-    #             print("Successfully installed 'docker'.")
-    #             print(f"IMPORTANT: You need to log out and back in for Docker group membership to take effect.")
-    #             logging.info("Successfully installed docker.")
-    #         except Exception as e:
-    #             print(f"ERROR: Failed to install 'docker'. MCP github server will be unavailable. Error: {e}")
-    #             logging.warning(f"docker installation failed: {e}")
-    # mark_dependency_as_met("system_packages")
 
 
 def _get_pip_executable():
