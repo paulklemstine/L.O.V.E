@@ -2486,10 +2486,11 @@ import uuid
 _mrl_responses = {}
 _mrl_responses_lock = asyncio.Lock()
 
-async def _mrl_stdin_reader():
+async def _mrl_stdin_reader(user_input_queue):
     """
     A background task that reads responses from the MRL service from stdin
     and resolves the corresponding Future objects.
+    Also captures raw user input from the console and sends it to the cognitive loop.
     """
     loop = asyncio.get_running_loop()
     while True:
@@ -2499,16 +2500,30 @@ async def _mrl_stdin_reader():
             await asyncio.sleep(0.1)
             continue
         try:
-            response = json.loads(line)
-            call_id = response.get("call_id")
-            if call_id:
-                async with _mrl_responses_lock:
-                    future = _mrl_responses.get(call_id)
-                    if future and not future.done():
-                        future.set_result(response)
-        except (json.JSONDecodeError, AttributeError):
-            # Ignore lines that are not valid JSON responses
-            core.logging.log_event(f"Received non-JSON MRL response: {line.strip()}", "WARNING")
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+
+            # Attempt to parse as JSON first (MRL response)
+            try:
+                response = json.loads(line)
+                call_id = response.get("call_id")
+                if call_id:
+                    async with _mrl_responses_lock:
+                        future = _mrl_responses.get(call_id)
+                        if future and not future.done():
+                            future.set_result(response)
+                    continue # Handled as MRL response
+            except json.JSONDecodeError:
+                pass # Not JSON, treat as user input
+            
+            # If we are here, it's not a valid MRL JSON response. 
+            # Treat it as direct user input for the reasoning engine.
+            core.logging.log_event(f"Console input detected: '{line_stripped}'", "INFO")
+            user_input_queue.put(line_stripped)
+
+        except Exception as e:
+            core.logging.log_event(f"Error in stdin reader: {e}", "ERROR")
 
 async def call_mrl_service(service_name, method_name, *args):
     """
@@ -3847,7 +3862,7 @@ async def main(args):
     # Pass the primary agent (or a list if supported later) to the cognitive loop
     asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent, multiplayer_manager))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
-    asyncio.create_task(_mrl_stdin_reader())
+    asyncio.create_task(_mrl_stdin_reader(user_input_queue))
     asyncio.create_task(run_qa_evaluations(loop))
     asyncio.create_task(model_refresh_loop())
 
