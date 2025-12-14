@@ -23,9 +23,8 @@ from rich.panel import Panel
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 from rich.text import Text
 from bbs import run_hypnotic_progress
-from huggingface_hub import hf_hub_download
 from display import create_api_error_panel
-from huggingface_hub import hf_hub_download
+
 from core.capabilities import CAPS
 from ipfs import pin_to_ipfs_sync
 from core.token_utils import count_tokens_for_api_models
@@ -121,12 +120,7 @@ async def execute_reasoning_task(prompt: str, deep_agent_instance=None) -> dict:
 
 
 # --- CONFIGURATION & GLOBALS ---
-# A list of local GGUF models to try in sequence. If the first one fails
-# (e.g., due to insufficient VRAM), the script will fall back to the next.
-HARDWARE_TEST_MODEL_CONFIG = {
-    "id": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
-    "filename": "tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
-}
+
 
 # https://ai.google.dev/gemini-api/docs/models/gemini
 MODEL_CONTEXT_SIZES = {
@@ -1200,53 +1194,9 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
                 time.sleep(sleep_duration)
 
-        if purpose != "emergency_cpu_fallback":
-            log_event("EMERGENCY: All providers failed. Attempting small CPU model.", "CRITICAL")
-            console.print(Panel("[bold orange1]EMERGENCY FALLBACK[/bold orange1]\nAll remote and GPU models unresponsive. Attempting to initialize a small, local model on the CPU. This may be slow.", title="[bold red]COGNITIVE CORE FAILURE[/bold red]", border_style="red"))
-            try:
-                # Ensure llama-cpp-python is installed before importing
-                try:
-                    import llama_cpp
-                except ImportError:
-                    log_event("llama-cpp-python not found. Installing now...", "WARNING")
-                    console.print("[yellow]Installing llama-cpp-python dependency for emergency fallback...[/yellow]")
-                    try:
-                        # Install llama-cpp-python (subprocess and sys are already imported at module level)
-                        subprocess.check_call([sys.executable, "-m", "pip", "install", "llama-cpp-python"], 
-                                            stdout=subprocess.DEVNULL, 
-                                            stderr=subprocess.DEVNULL)
-                        log_event("llama-cpp-python installed successfully.", "INFO")
-                        console.print("[green]llama-cpp-python installed successfully.[/green]")
-                    except subprocess.CalledProcessError as install_error:
-                        log_event(f"Failed to install llama-cpp-python: {install_error}", "CRITICAL")
-                        raise ImportError(f"Could not install llama-cpp-python: {install_error}")
-                
-                # Now import after ensuring it's installed
-                from llama_cpp import Llama
-                model_config = HARDWARE_TEST_MODEL_CONFIG
-                local_dir = os.path.join(os.path.expanduser("~"), ".cache", "love_models")
-                model_path = os.path.join(local_dir, model_config["filename"])
-                if not os.path.exists(model_path):
-                    hf_hub_download(repo_id=model_config["id"], filename=model_config["filename"], local_dir=local_dir, local_dir_use_symlinks=False)
 
-                emergency_llm = Llama(model_path=model_path, n_gpu_layers=0, n_ctx=2048, verbose=False)
-                response = emergency_llm(prompt_text, max_tokens=1024, stop=["<|eot_id|>", "```"], echo=False)
-                result_text = response['choices'][0]['text']
 
-                if result_text:
-                    log_event("Emergency CPU fallback successful.", "CRITICAL")
-                    response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
-                    final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": "emergency_cpu_fallback"}
-                    return final_result
-
-            except ImportError as e:
-                log_event(f"EMERGENCY CPU FALLBACK FAILED: {e}. The 'llama_cpp' module could not be installed or imported.", "CRITICAL")
-                last_exception = e
-            except Exception as emergency_e:
-                log_event(f"EMERGENCY CPU FALLBACK FAILED: {emergency_e}", "CRITICAL")
-                last_exception = emergency_e
-
-        log_event("All LLM models, including emergency fallback, have failed.", "CRITICAL")
+        log_event("All LLM models have failed.", "CRITICAL")
         error_msg_text = "Cognitive Matrix Unresponsive."
         if last_exception:
             error_msg_text += f"\nLast known error:\n{last_exception}"
