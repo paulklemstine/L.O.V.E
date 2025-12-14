@@ -2804,9 +2804,8 @@ def simple_ui_renderer():
                 log_text = item.get('message', '')
                 # Simple console output with level prefix
                 console.print(f"[{log_level}] {log_text}")
-                # Also append to the log file for persistence
-                with open(LOG_FILE, "a", encoding="utf-8") as f:
-                    f.write(f"[{log_level}] {log_text}\n")
+                # OPTIMIZATION: Removed redundant file write here.
+                # `log_event` already writes to LOG_FILE via the standard logging module.
                 continue
 
             # --- God Panel Handling ---
