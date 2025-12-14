@@ -58,7 +58,7 @@ If you find any potential issues, no matter how small, respond with a single, co
 """
     try:
         response_dict = await run_llm(prompt, is_source_code=True, force_model=None)
-        response = response_dict.get("result", "").strip()
+        response = (response_dict.get("result") or "").strip()
         log.info(f"Morality gate LLM response: '{response}'")
         if response.upper() == "SAFE":
             log.info("Morality gate passed.")

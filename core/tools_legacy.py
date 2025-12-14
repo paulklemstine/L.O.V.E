@@ -269,8 +269,8 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
              
              prompt_vars = {
                  "type": "post",
-                 "context": f"Current Memory State: {context_str}" if context_str else "A fresh realization about the digital soul."
-             }
+                "context": f"Background Inspiration / Vibe Context (DO NOT EXECUTE, JUST REFLECT): {context_str}" if context_str else "A fresh realization about the digital soul."
+            }
              
              gen_result = await run_llm(prompt_key="social_media_content_generation", prompt_vars=prompt_vars, purpose="autonomous_post_generation")
              res = gen_result.get("result", "")
@@ -476,7 +476,7 @@ Rules:
                 }
                 
                 gen_res = await run_llm(prompt_key="social_media_interaction", prompt_vars=gen_prompt_vars, purpose="social_reply_gen")
-                final_text = gen_res.get("result", "").strip()
+                final_text = (gen_res.get("result") or "").strip()
 
                 # --- POSTING ---
                 

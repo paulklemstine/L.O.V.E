@@ -29,7 +29,7 @@ async def supervisor_node(state: DeepAgentState) -> Dict[str, Any]:
     prompt += f"\nLast User Message: {last_msg}\n"
     
     response = await run_llm(prompt, purpose="supervisor")
-    decision = response.get("result", "").strip().lower()
+    decision = (response.get("result") or "").strip().lower()
     
     # Validate decision
     valid_options = ["research_team", "coding_team", "evolution_team", "reasoning_node"]

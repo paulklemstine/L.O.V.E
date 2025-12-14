@@ -104,7 +104,7 @@ class StrategicReasoningEngine:
             try:
                 from core.llm_api import run_llm
                 response = await run_llm(prompt_text=prompt, purpose="reasoning")
-                command = response.get("result", "").strip()
+                command = (response.get("result") or "").strip()
                 if command:
                     plan.append(f"LLM Suggestion: {command}")
             except Exception as e:

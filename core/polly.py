@@ -97,7 +97,7 @@ class PollyOptimizer:
             force_model=self.model_id
         )
 
-        improved_prompt = response.get('result', '').strip()
+        improved_prompt = (response.get('result') or '').strip()
         
         # Cleanup code blocks if present
         if improved_prompt.startswith("```"):

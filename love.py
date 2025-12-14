@@ -86,7 +86,7 @@ except (ImportError, Exception):
         print(f"Warning: Failed to install langchainhub: {e}")
 
 import core.logging
-# from core.deep_agent_engine import DeepAgentEngine
+from core.deep_agent_engine import DeepAgentEngine
 from utils import summarize_python_code
 # import yaml
 # import display
@@ -3458,16 +3458,21 @@ async def initialize_gpu_services():
                 core.logging.log_event("DeepAgent configured to use LLM Pool (Default).", "INFO")
                 console.print("[bold cyan]DeepAgent configured to use LLM Pool.[/bold cyan]")
 
-            deep_agent_engine = DeepAgentEngine(
-                api_url="http://localhost:8000", 
-                tool_registry=tool_registry, 
-                max_model_len=max_len,
-                knowledge_base=knowledge_base,
-                memory_manager=memory_manager,
-                use_pool=use_pool
-            )
-            core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
-            console.print("[bold green]DeepAgentEngine is ACTIVE and connected to existing vLLM server.[/bold green]")
+            try:
+                deep_agent_engine = DeepAgentEngine(
+                    api_url="http://localhost:8000", 
+                    tool_registry=tool_registry, 
+                    max_model_len=max_len,
+                    knowledge_base=knowledge_base,
+                    memory_manager=memory_manager,
+                    use_pool=use_pool
+                )
+                core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
+                console.print("[bold green]DeepAgentEngine is ACTIVE and connected to existing vLLM server.[/bold green]")
+            except Exception as e:
+                core.logging.log_event(f"Failed to initialize DeepAgentEngine client: {e}", "ERROR")
+                console.print(f"[bold red]Failed to initialize DeepAgentEngine client: {e}[/bold red]")
+                deep_agent_engine = None
         elif vllm_already_running and not is_healthy:
              console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
              core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")

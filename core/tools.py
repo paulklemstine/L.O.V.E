@@ -115,7 +115,7 @@ async def code_modifier(source_file: str, modification_instructions: str) -> str
 
         # Use the LLM to get the modified code
         llm_response = await run_llm(prompt, purpose="code_modification")
-        modified_content = llm_response.get("result", "").strip()
+        modified_content = (llm_response.get("result") or "").strip()
 
         # Clean up the response to get only the code
         if modified_content.startswith("```python"):

@@ -122,7 +122,7 @@ class Orchestrator:
         """
         try:
             classification = await run_llm(prompt_key="orchestrator_goal_classification", prompt_vars={"goal": goal}, force_model=None)
-            return classification.get("result", "").strip()
+            return (classification.get("result") or "").strip()
         except Exception as e:
             print(f"Error during goal classification: {e}")
             return "Procedural" # Default to procedural on error

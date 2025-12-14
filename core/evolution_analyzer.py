@@ -278,7 +278,7 @@ async def _synthesize_goal_with_llm(analysis_data: dict, deep_agent_instance=Non
             purpose="evolution_goal_synthesis",
             deep_agent_instance=deep_agent_instance
         )
-        goal = result_dict.get("result", "").strip()
+        goal = (result_dict.get("result") or "").strip()
 
         if not goal:
             raise ValueError("LLM returned an empty goal.")

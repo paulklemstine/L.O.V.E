@@ -371,7 +371,7 @@ class DeepAgentEngine:
                 from core.llm_api import run_llm
                 # Use deep_agent_instance=None to avoid recursion
                 result = await run_llm(summary_prompt, purpose="summarization", deep_agent_instance=None)
-                summary = result.get("result", "").strip()
+                summary = (result.get("result") or "").strip()
                 
                 folded_text = f"{header}\n\n[Context Folded]: {summary}\n\n{footer}"
                 core.logging.log_event(f"[DeepAgent] Context folded. New length: {len(folded_text)}", "INFO")
@@ -658,7 +658,7 @@ class DeepAgentEngine:
                 core.logging.log_event("[DeepAgent] Using LLM Pool for generation.", level="DEBUG")
                 # We pass deep_agent_instance=None to prevent run_llm from trying to use us (recursion)
                 result_dict = await run_llm(system_prompt, purpose="deep_agent_reasoning", deep_agent_instance=None)
-                response_text = result_dict.get("result", "").strip()
+                response_text = (result_dict.get("result") or "").strip()
                 
                 if not response_text:
                     core.logging.log_event("[DeepAgent] Empty response from LLM Pool.", level="ERROR")

@@ -192,7 +192,7 @@ Input Text: "{text}"
 Output ONLY the rewritten text.
 """
         result = await run_llm(prompt, purpose="intelligent_truncation")
-        rewritten_text = result.get("result", "").strip()
+        rewritten_text = (result.get("result") or "").strip()
         
         # Verify length
         if rewritten_text and len(rewritten_text) <= max_length:
