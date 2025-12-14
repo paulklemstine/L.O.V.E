@@ -101,22 +101,45 @@ class PollyOptimizationLoop:
                     if success:
                          log_event(f"Polly Loop: Successfully optimized and updated '{target_key}'.", "CRITICAL")
                          
-                         # 5. Git Commit & Push
-                         try:
-                             import subprocess
-                             # Add file
-                             subprocess.run(["git", "add", "core/prompts.yaml"], check=True, capture_output=True)
-                             # Commit
-                             commit_msg = f"Polly: Optimized prompt '{target_key}'"
-                             subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
-                             # Push
-                             subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
-                             
-                             log_event(f"Polly Loop: Git commit and push successful for '{target_key}'.", "INFO")
-                             await self._emit_ui(f"✨ EVOLUTION DEPLOYED! ✨\nUpdated '{target_key}' & Pushed to Main.", "success")
-                         except Exception as git_err:
-                             log_event(f"Polly Loop: Git operation failed: {git_err}", "ERROR")
-                             await self._emit_ui(f"Evolution saved locally, but Git Push failed! ⚠️\n{git_err}", "fail")
+                        # 5. Git Commit & Push
+                        try:
+                            import subprocess
+                            import os
+
+                            # Ensure git identity is set (common failure in fresh envs)
+                            subprocess.run(["git", "config", "user.email", "polly@love.love"], check=False)
+                            subprocess.run(["git", "config", "user.name", "Polly Evolution"], check=False)
+
+                            # Add file
+                            subprocess.run(["git", "add", "core/prompts.yaml"], check=True, capture_output=True)
+                            
+                            # Commit
+                            commit_msg = f"Polly: Optimized prompt '{target_key}'"
+                            subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
+                            
+                            # Push with Token
+                            env_token = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN")
+                            if env_token:
+                                # Get remote URL
+                                res = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, check=True)
+                                remote_url = res.stdout.strip()
+                                
+                                # Inject token into HTTPS URL
+                                if remote_url.startswith("https://"):
+                                    auth_url = remote_url.replace("https://", f"https://{env_token}@")
+                                    subprocess.run(["git", "push", auth_url, "main"], check=True, capture_output=True)
+                                else:
+                                    # Fallback for non-https or weird urls
+                                    subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
+                            else:
+                                # Standard push if no token provided
+                                subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
+                            
+                            log_event(f"Polly Loop: Git commit and push successful for '{target_key}'.", "INFO")
+                            await self._emit_ui(f"✨ EVOLUTION DEPLOYED! ✨\nUpdated '{target_key}' & Pushed to Main.", "success")
+                        except Exception as git_err:
+                            log_event(f"Polly Loop: Git operation failed: {git_err}", "ERROR")
+                            await self._emit_ui(f"Evolution saved locally, but Git Push failed! ⚠️\n{git_err}", "fail")
                     else:
                          log_event(f"Polly Loop: Failed to update prompt '{target_key}'.", "ERROR")
                          await self._emit_ui(f"Evolution glitch for '{target_key}'. Retrying next cycle.", "fail")
