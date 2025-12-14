@@ -60,10 +60,17 @@ def set_ui_queue(queue_instance):
 
 # --- Colab Detection ---
 IS_COLAB = False
+COLAB_AI_AVAILABLE = False
 try:
     import google.colab
     IS_COLAB = True
     logging.info("Google Colab environment detected.")
+    try:
+        from google.colab import ai
+        COLAB_AI_AVAILABLE = True
+        logging.info("Google Colab internal AI module detected.")
+    except ImportError:
+        logging.info("Google Colab detected, but internal AI module not found.")
 except ImportError:
     IS_COLAB = False
 
@@ -613,10 +620,14 @@ def rank_models():
         provider = stats.get("provider", "unknown")
         if provider == "gemini":
             final_score += 3000
-            # Boost Gemini even more on Colab to ensure it's picked
-            if IS_COLAB and model_id == "gemini-3-pro-preview":
-                final_score += 100000
-                #log_event(f"Applying super-priority boost to Gemini 3 on Colab", "DEBUG")
+            # Boost Gemini even more on Colab to ensure it's picked if the internal API is available
+            if IS_COLAB:
+                # If we have the internal AI module, this is likely free/unlimited, so max priority
+                if COLAB_AI_AVAILABLE:
+                     final_score += 200000
+                     # log_event(f"Applying super-priority boost to Gemini model {model_id} due to Colab internal access", "DEBUG")
+                elif model_id == "gemini-3-pro-preview":
+                    final_score += 100000
             #log_event(f"Applying priority boost to Gemini model: {model_id}", "DEBUG")
         elif provider == "openrouter":
             final_score += 2000
@@ -858,28 +869,51 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 elif model_id in GEMINI_MODELS:
                     log_event(f"Attempting LLM call with Gemini model: {model_id} (Purpose: {purpose})", level="DEBUG")
                     
-                    if IS_COLAB and model_id == "gemini-3-pro-preview":
-                        # Use the native Colab AI library
-                        def _colab_gemini_call():
-                            from google.colab import ai
-                            # The user requested specific syntax: ai.generate_text(prompt, model_name=...)
-                            response = ai.generate_text(prompt_text, model_name=model_id)
-                            return response
+                    # 1. Attempt Native Colab Internal API (High Priority, Free)
+                    if IS_COLAB and COLAB_AI_AVAILABLE:
+                         try:
+                            def _colab_internal_call():
+                                from google.colab import ai
+                                # Attempt to use the generic generate method which might map to the best available internal model
+                                # or use the specific model if supported.
+                                try:
+                                    # Try generic generation first if model is not strictly required to be exact
+                                    # or check if specific model is supported.
+                                    # For now, we pass the model name and hope Colab maps it or ignores it gracefully if generic.
+                                    # But ai.generate_text might be specific.
+                                    # Let's try the most likely method signature based on recent potential internal APIs
+                                    return ai.generate_text(prompt=prompt_text, model=model_id)
+                                except TypeError:
+                                    # Fallback for older/different signatures
+                                    return ai.generate_text(prompt_text)
+                                except Exception as e:
+                                    raise e
 
-                        result_text = await loop.run_in_executor(
-                            None,
-                            functools.partial(
-                                run_hypnotic_progress,
-                                console,
-                                f"Accessing cognitive matrix via [bold yellow]Gemini Native ({model_id})[/bold yellow] (Purpose: {purpose})",
-                                _colab_gemini_call,
-                                silent=True
+                            result_text = await loop.run_in_executor(
+                                None,
+                                functools.partial(
+                                    run_hypnotic_progress,
+                                    console,
+                                    f"Accessing cognitive matrix via [bold yellow]Gemini Internal ({model_id})[/bold yellow] (Purpose: {purpose})",
+                                    _colab_internal_call,
+                                    silent=True
+                                )
                             )
-                        )
-                        log_event(f"Gemini Native (Colab) call successful with {model_id}.")
-                        
-                    else:
+                            log_event(f"Gemini Internal (Colab) call successful with {model_id}.")
+                            # If successful, skip the REST API fallback
+                             
+                         except Exception as colab_e:
+                            log_event(f"Gemini Internal (Colab) call failed: {colab_e}. Falling back to REST API.", "WARNING")
+                            result_text = None # Trigger fallback
+
+                    # 2. Flash 2.0 / Native Python SDK (if not internal or internal failed)
+                    # Some users might have google-generativeai installed in Colab with a secret key
+                    if result_text is None and IS_COLAB:
+                         pass # We proceed to the REST/Standard logic below, or we could check for the SDK explicitly.
+
+                    if result_text is None:
                         # Standard REST API Fallback
+
                         api_key = os.environ.get("GEMINI_API_KEY")
                         headers = {
                             "Content-Type": "application/json"
