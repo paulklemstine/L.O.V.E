@@ -51,7 +51,7 @@ def _select_model(love_state):
         # AWQ version for efficiency
         return "Qwen/Qwen3-8B-AWQ"
     elif vram >= 5 * 1024:
-        return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit""
+        return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit"
     else:
         # Fallback: Qwen2.5-1.5B or 3B if available
         return "Qwen/Qwen2.5-3B-Instruct-AWQ"
