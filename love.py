@@ -3835,6 +3835,11 @@ async def main(args):
     asyncio.create_task(run_qa_evaluations(loop))
     asyncio.create_task(model_refresh_loop())
 
+    # Start the Polly Prompt Optimization Loop
+    from core.polly_loop import PollyOptimizationLoop
+    polly_loop = PollyOptimizationLoop(ui_queue=ui_panel_queue, interval_seconds=600)
+    asyncio.create_task(polly_loop.start())
+
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
     ui_panel_queue.put(BBS_ART)

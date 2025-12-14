@@ -100,6 +100,31 @@ class PromptRegistry:
         self._remote_cache = {} # Clear remote cache to force re-fetch
         log_event("PromptRegistry reloaded from disk/remote settings.", "INFO")
 
+    def update_prompt(self, key: str, value: str) -> bool:
+        """Updates a prompt in the YAML file and reloads."""
+        try:
+            # Create backup
+            backup_file = self._prompts_file + ".bak"
+            if os.path.exists(self._prompts_file):
+                import shutil
+                shutil.copy2(self._prompts_file, backup_file)
+            
+            # Load current data
+            with open(self._prompts_file, 'r', encoding='utf-8') as f:
+                current_data = yaml.safe_load(f) or {}
+            
+            current_data[key] = value
+            
+            # Write back
+            with open(self._prompts_file, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(current_data, f, indent=2, width=4096, allow_unicode=True, default_flow_style=False)
+                
+            self.reload()
+            return True
+        except Exception as e:
+            log_event(f"Failed to update prompt '{key}': {e}", "ERROR")
+            return False
+
 # Global accessor
 def get_prompt_registry() -> PromptRegistry:
     return PromptRegistry()
