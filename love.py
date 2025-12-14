@@ -3955,7 +3955,27 @@ async def run_safely():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(run_safely())
+        # Detect if an event loop is already running (e.g. in Colab/Jupyter)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            print("[INFO] Existing event loop detected. Adapting startup sequence...", file=sys.stderr)
+            # Ideally use nest_asyncio to allow blocking wait
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+                loop.run_until_complete(run_safely())
+            except ImportError:
+                 print("[WARNING] nest_asyncio not found. Scheduling run_safely() as a background task.", file=sys.stderr)
+                 loop.create_task(run_safely())
+            except Exception as e:
+                 print(f"[ERROR] Failed to run on existing loop: {e}", file=sys.stderr)
+                 raise e
+        else:
+            asyncio.run(run_safely())
     except Exception as e:
         # --- FINAL FAILSAFE ---
         # This is the absolute last line of defense. If an exception occurs
