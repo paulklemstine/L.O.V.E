@@ -417,6 +417,11 @@ async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
         width=width
     )
     
+    # If ANSI art is present, we return the panel directly to preserve its colors.
+    # The Gradient wrapper tends to overwrite/wash out specific ANSI foreground colors.
+    if ansi_art:
+        return panel
+        
     return Gradient(panel, colors=["hot_pink", "bright_cyan", "yellow1"])
 
 
