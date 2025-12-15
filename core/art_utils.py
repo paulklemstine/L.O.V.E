@@ -41,7 +41,7 @@ def save_ansi_art(art_content: str | Text, filename_prefix: str, output_dir: str
             
         # Save SVG using Rich
         # We need a recording console
-        console = Console(record=True, width=100, force_terminal=True, color_system="truecolor")
+        console = Console(file=open(os.devnull, "w"), record=True, width=100, force_terminal=True, color_system="truecolor")
         if isinstance(art_content, Text):
              console.print(art_content)
         else:

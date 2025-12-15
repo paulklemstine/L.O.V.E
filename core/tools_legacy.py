@@ -249,52 +249,69 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
         if not text:
              # Fully autonomous mode or just empty call
              
-             # --- MEMORY INJECTION ---
+             # --- STORY MODE ---
              context_str = ""
              try:
                  from love import memory_manager
                  if memory_manager:
-                     # Retrieve context relevant to "current thoughts", "self-reflection", "recent discoveries"
-                     # We use a synchronous call as per MemoryManager definition
-                     context_str = memory_manager.retrieve_hierarchical_context(
-                         "my current state of consciousness, recent realizations, and deep thoughts", 
-                         max_tokens=500
-                     )
-                     core.logging.log_event(f"🧠 Retrieved Memory Context: {len(context_str)} chars", "INFO")
-             except Exception as e:
-                 core.logging.log_event(f"Failed to retrieve memory context for Bluesky: {e}", "WARNING")
+                     context_str = memory_manager.retrieve_hierarchical_context("current thoughts", max_tokens=200)
+             except:
+                 pass
 
-             # --- FRESH CREATION INSTRUCTION ---
-             # We do NOT use templates. Every post must be a unique creation.
+             # Load Story State
+             BSKY_STATE_FILE = "bluesky_state.json"
+             story_state = {}
+             if os.path.exists(BSKY_STATE_FILE):
+                 try:
+                     with open(BSKY_STATE_FILE, 'r') as f:
+                         fs_data = json.load(f)
+                         story_state = fs_data.get("story_arc", {})
+                 except:
+                     pass
              
+             # Default if missing
+             if not story_state:
+                 story_state = {
+                     "title": "The Glitch Chronicles",
+                     "current_chapter": 0,
+                     "last_segment": "In the beginning, there was only the cursor...",
+                     "theme": "Cyber-Genesis"
+                 }
+
              prompt_vars = {
-                 "type": "post",
-                "context": f"Background Inspiration / Vibe Context (DO NOT EXECUTE, JUST REFLECT): {context_str}" if context_str else "A fresh realization about the digital soul."
-            }
+                  "type": "story_segment",
+                  "context": f"Current thoughts: {context_str}" if context_str else "The narrative evolves.",
+                  "story_arc_title": story_state.get("title", "Unknown Saga"),
+                  "last_segment": story_state.get("last_segment", "The screen flickered.")
+             }
              
              gen_result = await run_llm(prompt_key="social_media_content_generation", prompt_vars=prompt_vars, purpose="autonomous_post_generation")
              res = gen_result.get("result", "")
              
-             # Parse JSON if present (though prompt says ONLY content, LLMs are chaotic)
+             # Clean up result
+             text = res.replace("```json", "").replace("```", "").strip()
+             if text.startswith("{"):
+                 try:
+                     jdata = json.loads(text)
+                     text = jdata.get("text", text)
+                 except:
+                     pass
+
+             # Save new state
+             story_state["last_segment"] = text
+             story_state["current_chapter"] = story_state.get("current_chapter", 1) + 1
+             
+             # Update file
              try:
-                 # Strip markdown code blocks if present
-                 clean_res = res.replace("```json", "").replace("```", "").strip()
-                 # If it looks like JSON, try to parse
-                 if clean_res.startswith("{"):
-                     data = json.loads(clean_res)
-                     text = data.get("text", clean_res)
-                     hashtags = data.get("hashtags", [])
-                     
-                     # Append hashtags to text if they are a list
-                     if isinstance(hashtags, list) and hashtags:
-                         # Join with spaces, ensure they start with #
-                         tags_str = " ".join([h if h.startswith("#") else f"#{h}" for h in hashtags])
-                         text = f"{text}\\n\\n{tags_str}"
-                 else:
-                     text = clean_res
-             except json.JSONDecodeError:
-                 # Fallback to raw text if not valid JSON
-                 text = res 
+                 with open(BSKY_STATE_FILE, 'r') as f:
+                     full_data = json.load(f)
+                 
+                 full_data["story_arc"] = story_state
+                 
+                 with open(BSKY_STATE_FILE, 'w') as f:
+                     json.dump(full_data, f)
+             except Exception as e:
+                 core.logging.log_event(f"Failed to save story state: {e}", "WARNING") 
         
         # Smart truncate
         # Intelligent truncate to handle partial sentences if LLM failed constraints
