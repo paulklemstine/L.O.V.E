@@ -4060,7 +4060,7 @@ async def run_safely():
         # This is the most robust way to ensure the error is captured, even if the logging system itself has failed.
         full_traceback = traceback.format_exc()
         try:
-            with open("love.log", "a") as f:
+            with open("love.log", "") as f:
                 f.write("\n" + "="*80 + "\n")
                 f.write(f"FATAL UNHANDLED EXCEPTION at {datetime.now().isoformat()}\n")
                 f.write(full_traceback)
