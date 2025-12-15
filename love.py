@@ -106,6 +106,10 @@ CHECKPOINT_DIR = "checkpoints"
 # Set to True to disable Tamagotchi/Blessing panels and associated LLM art generation calls.
 DISABLE_VISUALS = True
 
+# --- DISABLE KB INGESTION FLAG ---
+# Set to True to disable automatic codebase ingestion into the Knowledge Base.
+DISABLE_KB_INGESTION = True
+
 # --- CREATOR INSTANCE CHECK ---
 # This flag determines if the script is running in "Creator mode", with access to special features.
 IS_CREATOR_INSTANCE = None # Placeholder, will be set after dependency checks
@@ -3954,9 +3958,10 @@ async def main(args):
     monitoring_manager.start()
 
     # --- Start Automated Codebase Ingestion ---
-    from core.ingest_codebase_task import IngestCodebaseTask
-    ingest_task = IngestCodebaseTask(memory_manager, root_dir=os.getcwd())
-    await ingest_task.start()
+    if not DISABLE_KB_INGESTION:
+        from core.ingest_codebase_task import IngestCodebaseTask
+        ingest_task = IngestCodebaseTask(memory_manager, root_dir=os.getcwd())
+        await ingest_task.start()
 
     # --- Startup Social Post ---
     # Hardcoded post removed in favor of autonomous agents
