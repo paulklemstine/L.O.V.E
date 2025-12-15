@@ -435,7 +435,8 @@ LLM_AVAILABILITY = {model: time.time() for model in ALL_LLM_MODELS}
 LLM_FAILURE_COUNT = {model: 0 for model in ALL_LLM_MODELS}
 PROVIDER_FAILURE_COUNT = {}
 HORDE_MODEL_FAILURE_COUNT = {model: 0 for model in HORDE_MODELS}
-HORDE_MODEL_AVAILABILITY = {model: time.time() for model in HORDE_MODELS}
+HORDE_MODEL_AVAILABILITY = {model: time.time() for model in HORDE_MODEL_FAILURE_COUNT}
+PROVIDER_AVAILABILITY = {} # Tracks when a provider (e.g., 'gemini', 'openrouter') will be available again
 local_llm_instance = None
 local_llm_tokenizer = None
 
@@ -633,6 +634,16 @@ def rank_models():
             # Horde is lowest priority
             pass
 
+        # --- Stability & Reliability User Story: Penalize Failures ---
+        # 1. Model Failure Penalty
+        failed_calls = stats.get("failed_calls", 0)
+        failure_penalty = failed_calls * 500
+        final_score -= failure_penalty
+        
+        # 2. Provider Failure Penalty (Systemic issues)
+        provider_failures = PROVIDER_FAILURE_COUNT.get(provider, 0)
+        final_score -= (provider_failures * 1000)
+
         ranked_models.append({"model_id": model_id, "score": final_score})
 
     # Sort models by score in descending order
@@ -762,7 +773,23 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 ranked_model_list.remove("deep_agent_vllm")
 
         log_event(f"Top 5 models from combined ranked list: {ranked_model_list[:5]}", "INFO")
-        models_to_try = [m for m in ranked_model_list if time.time() >= LLM_AVAILABILITY.get(m, 0)]
+        
+        # Filter by model availability AND provider availability
+        models_to_try = []
+        for m in ranked_model_list:
+            model_is_available = time.time() >= LLM_AVAILABILITY.get(m, 0)
+            
+            provider = MODEL_STATS[m].get("provider", "unknown")
+            provider_is_available = time.time() >= PROVIDER_AVAILABILITY.get(provider, 0)
+            
+            if model_is_available and provider_is_available:
+                models_to_try.append(m)
+            elif not provider_is_available:
+                 # Log once per provider if strictly necessary, but debug is better
+                 # log_event(f"Skipping {m} because provider '{provider}' is on cooldown.", "DEBUG")
+                 pass
+
+        # models_to_try = [m for m in ranked_model_list if time.time() >= LLM_AVAILABILITY.get(m, 0)]
 
         if not models_to_try:
             log_event("No available models to try after filtering by availability.", "WARNING")
@@ -944,15 +971,15 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                                 response.raise_for_status()
                                 # Extract the text from the nested response structure.
                                 return response.json()["candidates"][0]["content"]["parts"][0]["text"]
-                            except requests.exceptions.HTTPError as e:
-                                # Provide more detailed error info for Gemini failures
+                            except requests.exceptions.RequestException as e:
+                                # Provide more detailed error info for Gemini failures and RE-RAISE so the outer loop catches it
                                 error_msg = f"Gemini API Error: {e}"
                                 try:
                                     error_details = response.json()
                                     error_msg += f"\nDetails: {json.dumps(error_details, indent=2)}"
                                 except:
                                     pass
-                                raise Exception(error_msg)
+                                raise e # Re-raise the original RequestException to trigger the 429 handler
     
                         result_text = await loop.run_in_executor(
                             None,
@@ -1085,9 +1112,6 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 # --- Success Case ---
                 if result_text is not None:
                     # --- User Feedback: Response Logging ---
-                    # --- User Feedback: Response Logging ---
-                    # --- User Feedback: Response Logging ---
-                    # --- User Feedback: Response Logging ---
                     console.print(display_llm_interaction(f"Interaction with {model_id}", truncate_for_log(prompt_text, length=200), truncate_for_log(result_text, length=500), panel_type="llm", model_id=model_id, token_count=get_token_count(result_text), purpose=purpose, elapsed_time=time.time() - start_time))
 
                     PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
@@ -1113,23 +1137,26 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
 
                 if e.response and e.response.status_code == 429:
                     retry_after = e.response.headers.get("Retry-After")
-                    retry_seconds = 60 # Default to 1 minute for safety
+                    retry_seconds = 300 # Default to 5 minutes for strict circuit breaking
                     if retry_after:
                         try:
                             retry_seconds = int(retry_after) + 2 # Add buffer
                         except ValueError:
                             pass # Use default
                     
-                    # Mark unavailable
+                    # --- CIRCUIT BREAKER: Provider Level ---
+                    # If one model from a provider hits 429, the entire provider is likely rate-limited (e.g. Gemini).
+                    # We blacklist the entire provider for the duration.
+                    if provider in ["gemini", "openrouter", "openai"]:
+                        PROVIDER_AVAILABILITY[provider] = time.time() + retry_seconds
+                        log_event(f"CIRCUIT BREAKER: Provider '{provider}' rate limited. Cooling down for {retry_seconds}s.", "WARNING")
+                        console.print(display_error_oneliner("Circuit Breaker", f"Provider '{provider}' suspended for {retry_seconds}s.", model_id=provider))
+                    
+                    # Mark specific model unavailable as well
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
                     
-                    # Log event
-                    log_event(f"Rate limit hit for {model_id}. Cooldown: {retry_seconds}s.", "WARNING")
-
                     if provider == "horde":
                         console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
-                    else:
-                        console.print(display_error_oneliner("Rate Limit", f"Backing off for {retry_seconds}s.", model_id=model_id))
                     
                     # Avoid tight loop if this was the last model
                     time.sleep(1)

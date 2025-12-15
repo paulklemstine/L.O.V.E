@@ -89,7 +89,8 @@ class FinancialStrategyEngine:
                 else:
                     print(f"Market data fetch failed: {response.status_code}")
         except Exception as e:
-            print(f"Error identifying market opportunities: {e}")
+            # print(f"Error identifying market opportunities: {e}")
+            pass # Silent fail to avoid log spam if network is down
         
         return opportunities
 

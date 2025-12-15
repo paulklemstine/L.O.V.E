@@ -111,7 +111,10 @@ def create_integrated_status_panel(
             
             # Render ANSI art to a temporary console to handle it correctly
             temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
-            temp_console.print(Text.from_ansi(clean_art))
+            if isinstance(clean_art, Text):
+                 temp_console.print(clean_art)
+            else:
+                 temp_console.print(Text.from_ansi(clean_art))
             face_renderable = Text.from_ansi(temp_console.file.getvalue())
         else:
             face_renderable = get_tamagotchi_face(emotion)

@@ -66,5 +66,10 @@ class IngestCodebaseTask:
             # Use add_episode to leverage the full pipeline (folding, embedding, etc.)
             await self.memory_manager.add_episode(summary, tags=tags)
             
+        except AttributeError as e:
+            if "ColorTriplet" in str(e):
+                log_event(f"SKIPPING file {filepath} due to known ColorTriplet error (likely Pygments/Rich mismatch): {e}", "WARNING")
+            else:
+                log_event(f"Failed to ingest file {filepath} (AttributeError): {e}", "WARNING")
         except Exception as e:
             log_event(f"Failed to ingest file {filepath}: {e}", "WARNING")

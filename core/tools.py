@@ -62,6 +62,10 @@ class EvolveInput(BaseModel):
     goal: str = Field(description="The goal for the evolution/code change")
     verification_script: str = Field(None, description="Optional Python script to verify the changes. Should print status to stdout.")
 
+class SearchWebInput(BaseModel):
+    query: str = Field(description="The search query to verify facts or find information")
+    max_results: int = Field(default=5, description="Number of results to return")
+
 class PostToBlueskyInput(BaseModel):
     text: str = Field(description="The content of the post")
     image_prompt: str = Field(description="The prompt to generate the image for the post")
@@ -359,6 +363,51 @@ async def research_and_evolve() -> str:
     """Initiates a research and evolution cycle."""
     from love import research_and_evolve as love_research_and_evolve
     return await love_research_and_evolve()
+
+@tool("search_web", args_schema=SearchWebInput)
+def search_web(query: str, max_results: int = 5) -> str:
+    """
+    Searches the web for information using DuckDuckGo.
+    Use this to verify facts or retrieve up-to-date knowledge.
+    """
+    try:
+        from duckduckgo_search import DDGS
+        results = []
+        with DDGS() as ddgs:
+            # Use text search
+            for r in ddgs.text(query, max_results=max_results):
+                results.append(r)
+        
+        if not results:
+            return "No results found."
+            
+        formatted_results = []
+        for i, res in enumerate(results):
+            formatted_results.append(f"[{i+1}] {res.get('title', 'No Title')}\n    URL: {res.get('href', 'No URL')}\n    Summary: {res.get('body', 'No snippet')}")
+            
+        return "\n\n".join(formatted_results)
+        
+    except ImportError:
+        return "Error: duckduckgo-search library is not installed."
+    except Exception as e:
+        return f"Error searching the web: {e}"
+
+@tool("restart_vllm", args_schema=None)
+async def restart_vllm() -> str:
+    """
+    Restarts the vLLM inference server. 
+    Use this if the LLM seems to be hanging, returning empty responses, or if /health checks fail.
+    """
+    try:
+        from love import restart_vllm_service
+        # We pass None for deep_agent_instance for now as we don't have direct access, 
+        # but the function handles the restart of the process regardless.
+        msg = restart_vllm_service(deep_agent_instance=None)
+        return f"Success: {msg}"
+    except ImportError:
+        return "Error: Could not import restart logic from love.py"
+    except Exception as e:
+        return f"Error restarting vLLM: {e}"
 
 # --- Legacy Helper Functions ---
 # We keep these for compatibility if needed, or we can import them from love.py

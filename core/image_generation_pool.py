@@ -423,6 +423,14 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
             cooldown_remaining = IMAGE_MODEL_AVAILABILITY[provider_key] - time.time()
             core.logging.log_event(f"Provider {provider_name} is on cooldown for {cooldown_remaining:.0f}s", "INFO")
             continue
+            
+        # --- Pre-flight Checks (Prevent log spam) ---
+        if provider_name == "gemini" and not os.environ.get("GEMINI_API_KEY"):
+            # core.logging.log_event("Skipping Gemini Image Gen: No API Key", "DEBUG")
+            continue
+        if provider_name == "stability" and not os.environ.get("STABILITY_API_KEY"):
+            # core.logging.log_event("Skipping Stability AI: No API Key", "DEBUG")
+            continue
         
         try:
             core.logging.log_event(f"Trying image generation with provider: {provider_name}", "INFO")

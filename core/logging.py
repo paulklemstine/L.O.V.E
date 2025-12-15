@@ -160,7 +160,7 @@ def setup_global_logging(version_name='unknown', verbose=False):
         level=log_level,
         format='%(asctime)s [%(levelname)s] - %(message)s',
         filename=LOG_FILE,
-        filemode='a',
+        filemode='w',
         force=True # Override any existing handlers
     )
 

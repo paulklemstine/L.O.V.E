@@ -129,6 +129,13 @@ class GraphDataManager:
         """
         return list(self.graph.edges(data=True))
 
+    def get_triples(self):
+        """
+        Returns a list of (subject, predicate, object) triples.
+        Backward compatibility helper.
+        """
+        return [(u, data.get('relationship_type', 'related_to'), v) for u, v, data in self.graph.edges(data=True)]
+
     def _serialize_attributes(self):
         """
         Recursively serializes dictionary or list attributes to JSON strings for compatibility with GraphML.
