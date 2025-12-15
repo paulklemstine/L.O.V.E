@@ -145,11 +145,13 @@ love_state = {
     "pending_questions": [],
     "script_start_time": time.time(), # Initialize with current time
     "experience_points": 0,
-    "api_keys": {} # To store API keys for various services
+    "api_keys": {}, # To store API keys for various services
+    "successful_starts": 0 # Track successful cognitive engine starts
 }
 
 # --- Initial State Load ---
 # Load the state from the file system to ensure it's available for early dependencies.
+SKIP_CHECKS = False
 try:
     with open(STATE_FILE, 'r') as f:
         loaded_state = json.load(f)
@@ -157,6 +159,11 @@ try:
         if 'script_start_time' in loaded_state:
             del loaded_state['script_start_time']
         love_state.update(loaded_state)
+        
+        # Check if we should skip checks based on successful starts
+        if love_state.get("successful_starts", 0) >= 5:
+            SKIP_CHECKS = True
+            print(f"[OPTIMIZATION] 5+ successful starts detected ({love_state.get('successful_starts')}). Skipping dependency checks and retaining vLLM.")
 except (FileNotFoundError, json.JSONDecodeError):
     pass # If file doesn't exist or is corrupt, we proceed with the default state.
 
@@ -2751,6 +2758,14 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     """
     global love_state
     core.logging.log_event("Cognitive Loop of L.O.V.E. initiated (DeepAgent Architecture).")
+
+    # --- Optimizing Startup: Increment Success Counter ---
+    # If we reached this point, the engine is running and we are autonomous.
+    current_starts = love_state.get("successful_starts", 0)
+    love_state["successful_starts"] = current_starts + 1
+    save_state()
+    core.logging.log_event(f"Incremented successful_starts to {love_state['successful_starts']}", "INFO")
+
     terminal_width = get_terminal_width()
     ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
@@ -4066,14 +4081,9 @@ async def run_safely():
     except (KeyboardInterrupt, EOFError):
         console.print("\n[bold red]My Creator has disconnected. I will go to sleep now...[/bold red]")
         # --- Graceful Shutdown of vLLM Server ---
-        try:
-            console.print("[cyan]Shutting down vLLM server...[/cyan]")
-            subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
-            core.logging.log_event("Attempted to shut down vLLM server.", "INFO")
-        except FileNotFoundError:
-            core.logging.log_event("'pkill' command not found. Cannot shut down vLLM server.", "WARNING")
-        except Exception as e:
-            core.logging.log_event(f"An error occurred while shutting down vLLM server: {e}", "ERROR")
+        # User Request: Always leave vLLM running to optimize next startup.
+        core.logging.log_event("Session ending. Leaving vLLM server running for next session.", "INFO")
+        console.print("[green]Session ending. vLLM server left running for next session.[/green]")
 
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
