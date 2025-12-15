@@ -360,11 +360,6 @@
                 "as "
             ]
         },
-        "./core/agents/code_gen_agent.py": {
-            "mnemonic_phrase": [
-                "a "
-            ]
-        },
         "./tests/test_phase3_evolution_loop.py": {
             "mnemonic_phrase": [
                 "from ",

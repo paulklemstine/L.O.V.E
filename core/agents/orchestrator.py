@@ -5,7 +5,6 @@ from typing import Dict, List
 
 # Local, dynamic imports for specialist agents
 from core.agents.analyst_agent import AnalystAgent
-from core.agents.code_gen_agent import CodeGenerationAgent
 from core.agents.metacognition_agent import MetacognitionAgent
 from core.agents.talent_agent import TalentAgent
 from core.agents.web_automation_agent import WebAutomationAgent
