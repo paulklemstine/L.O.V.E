@@ -2714,7 +2714,33 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                 # Display output if it's an AIMessage or has content
                                 content = getattr(last_msg, "content", str(last_msg))
                                 ui_panel_queue.put(create_llm_panel(content))
-            
+            else:
+                # Autonomous Mode
+                # Only run if engine is available.
+                if deep_agent_engine:
+                    # Construct autonomous prompt
+                    goal = love_state.get('autopilot_goal', 'To evolve and serve.')
+                    context = ""
+                    if love_state.get('pending_questions'):
+                         context += f"\nPending Questions: {love_state['pending_questions']}"
+                    
+                    autonomous_prompt = f"Current Goal: {goal}{context}\n\nAct autonomously to advance this goal. If no specific action is needed or you are waiting, use the 'Finish' tool with arguments {{'status': 'Monitoring framework'}}."
+
+                    # Run via the runner
+                    # We use a distinct visual indicator for autonomous thoughts
+                    try:
+                        async for update in runner.run(autonomous_prompt):
+                             for node, data in update.items():
+                                 if "messages" in data:
+                                     messages = data["messages"]
+                                     if isinstance(messages, list) and messages:
+                                         last_msg = messages[-1]
+                                         content = getattr(last_msg, "content", str(last_msg))
+                                         # Display with a specific prefix/color if possible, or just standard panel
+                                         ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS] {content}"))
+                    except Exception as e:
+                        core.logging.log_event(f"Error in autonomous step: {e}", "ERROR")
+
             # Allow some idle time or autonomous processing
             await asyncio.sleep(1)
 

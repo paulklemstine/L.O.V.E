@@ -528,6 +528,44 @@ class DeepAgentEngine:
         # For backward compatibility, `generate` usually takes just a prompt and returns raw text.
         return await self.generate_raw(prompt)
 
+    async def _check_manifesto(self, prompt: str) -> bool:
+        """
+        Verifies if the prompt aligns with the Core Manifesto.
+        For now, this is a placeholder that returns True.
+        """
+        # TODO: Implement actual manifesto alignment check
+        return True
+
+    async def _repair_json_with_llm(self, broken_json: str, error_msg: str) -> dict:
+        """
+        Uses the LLM to attempt to repair a broken JSON string.
+        """
+        core.logging.log_event(f"[DeepAgent] Attempting to repair JSON with LLM...", level="INFO")
+        
+        repair_prompt = f"""
+        I have a broken JSON string that failed to parse.
+        Error: {error_msg}
+        
+        Broken JSON:
+        {broken_json}
+        
+        Please fix the JSON and return ONLY the valid JSON object. 
+        Do not add any explanations or markdown formatting.
+        """
+        
+        try:
+            if self.use_pool:
+                from core.llm_api import run_llm
+                result_dict = await run_llm(repair_prompt, purpose="json_repair", deep_agent_instance=None)
+                repaired_text = result_dict.get("result", "").strip()
+            else:
+                repaired_text = await self.generate_raw(repair_prompt, temperature=0.1)
+                
+            return _recover_json(repaired_text)
+        except Exception as e:
+            core.logging.log_event(f"[DeepAgent] JSON repair failed: {e}", level="ERROR")
+            return None
+
     async def run(self, prompt: str, reasoning_mode: str = "linear"):
 
         """
