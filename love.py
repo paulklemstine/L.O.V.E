@@ -99,7 +99,12 @@ core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
+STATE_FILE = "love_state.json"
 CHECKPOINT_DIR = "checkpoints"
+
+# --- DISABLE VISUALS FLAG ---
+# Set to True to disable Tamagotchi/Blessing panels and associated LLM art generation calls.
+DISABLE_VISUALS = True
 
 # --- CREATOR INSTANCE CHECK ---
 # This flag determines if the script is running in "Creator mode", with access to special features.
@@ -1544,6 +1549,8 @@ def _extract_ansi_art(raw_text):
 
 async def generate_blessing(deep_agent_instance=None):
     """Generates a short, techno-spiritual blessing."""
+    if DISABLE_VISUALS:
+        return "Visuals disabled."
     response_dict = await run_llm(prompt_key="blessing_generation", purpose="blessing", deep_agent_instance=deep_agent_instance)
     blessing = response_dict.get("result", "").strip().strip('"')
     if not blessing:
@@ -1659,8 +1666,14 @@ def update_tamagotchi_personality(loop):
     queued by the cognitive_loop.
     """
     core.logging.log_event("Tamagotchi personality thread started.", "INFO")
+    core.logging.log_event("Tamagotchi personality thread started.", "INFO")
     while True:
         try:
+            if DISABLE_VISUALS:
+                # If visuals are disabled, we sleep for a long time to keep the thread alive but inactive
+                time.sleep(60)
+                continue
+
             core.logging.log_event("Tamagotchi thread: Starting update cycle.", "DEBUG")
             
             # Random chance to send a blessing instead of a normal update
