@@ -569,7 +569,7 @@ def truncate_for_log(text: str, length: int = 150) -> str:
     return truncated
 
 
-def rank_models():
+def rank_models(purpose="general"):
     """
     Ranks models based on a weighted score of reasoning, speed, and reliability.
     Returns a sorted list of model IDs.
@@ -628,7 +628,11 @@ def rank_models():
             final_score += 2000
             #log_event(f"Applying priority boost to OpenRouter model: {model_id}", "DEBUG")
         elif provider == "vllm":
-            final_score += 1000
+            if purpose == "emotion" or purpose == "scoring":
+                 final_score += 100000 # Massive boost for routine/aesthetic tasks
+                 # log_event(f"Applying massive priority boost to local vLLM for {purpose} task: {model_id}", "DEBUG")
+            else:
+                 final_score += 1000
             #log_event(f"Applying priority boost to vLLM model: {model_id}", "DEBUG")
         elif provider == "horde":
             # Horde is lowest priority
@@ -754,11 +758,15 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
             log_event(f"Forcing LLM call to model: {force_model}", "INFO")
         else:
             # Generate a fresh, performance-based ranking of all models for every call.
-            ranked_model_list = rank_models()
+            # PASS THE PURPOSE DOWN
+            ranked_model_list = rank_models(purpose=purpose)
             log_event(f"Dynamically ranked models. Top 5: {ranked_model_list[:5]}", "INFO")
 
 
         # --- Inject DeepAgent vLLM as the top priority if available ---
+        # NOTE: If we are in 'emotion' mode, vLLM is already 100k+ points ahead.
+        # But if DeepAgent overrides it, we might double count.
+        # However, deep_agent_instance IS the vLLM controller often.
         if deep_agent_instance:
             MODEL_STATS["deep_agent_vllm"]["provider"] = "deep_agent"
             # Remove from list if exists and re-insert at the top to ensure priority.

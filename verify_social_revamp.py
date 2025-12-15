@@ -3,10 +3,13 @@ import asyncio
 import sys
 import unittest
 from unittest.mock import MagicMock, patch, AsyncMock
+import types
 
-# aggressively mock everything to prevent ImportErrors
-mocks = [
+# List of modules to mock
+# NOTE: We do NOT mock 'core' itself, as we need to import 'core.tools_legacy' from it.
+modules_to_mock = [
     'love',
+    # 'core', # Do not mock the top-level package to allow importing real submodules
     'core.bluesky_api',
     'core.image_api',
     'core.llm_api',
@@ -26,44 +29,51 @@ mocks = [
     'rich',
     'rich.console',
     'rich.table',
+    'rich.color_triplet',
     'PIL',
     'requests',
     'netifaces'
 ]
 
-for m in mocks:
+# Apply mocks to sys.modules
+for m in modules_to_mock:
     sys.modules[m] = MagicMock()
 
-# Now import the tool to test
-# Setup attributes explicitly to avoid AttributeError
-import types
-# core.text_processing
-tp = types.ModuleType('core.text_processing')
+# --- Re-Establish Specific Mocks Required for Tests ---
+
+# 1. core.text_processing
+tp = sys.modules['core.text_processing']
 tp.intelligent_truncate = AsyncMock(return_value="TRUNCATED")
 tp.smart_truncate = AsyncMock(return_value="TRUNCATED")
-sys.modules['core.text_processing'] = tp
 
-# core.llm_api
-la = types.ModuleType('core.llm_api')
+# 2. core.llm_api
+la = sys.modules['core.llm_api']
 la.run_llm = AsyncMock()
-sys.modules['core.llm_api'] = la
+la.get_llm_api = MagicMock() 
 
-# core.bluesky_api
-ba = types.ModuleType('core.bluesky_api')
+# 3. core.bluesky_api
+ba = sys.modules['core.bluesky_api']
 ba.post_to_bluesky_with_image = MagicMock()
 ba.reply_to_post = MagicMock()
 ba.get_timeline = MagicMock()
 ba.get_notifications = MagicMock()
 ba.get_profile = MagicMock()
-sys.modules['core.bluesky_api'] = ba
 
-# core.image_api
-ia = types.ModuleType('core.image_api')
+# 4. core.image_api
+ia = sys.modules['core.image_api']
 ia.generate_image = AsyncMock()
-sys.modules['core.image_api'] = ia
 
-from core.tools_legacy import manage_bluesky
+# 5. core.logging
+sys.modules['core.logging'].log_event = MagicMock()
 
+# Import the tool AFTER mocking
+try:
+    from core.tools_legacy import manage_bluesky
+except ImportError as e:
+    print(f"CRITICAL: Failed to import manage_bluesky even after mocking: {e}")
+    sys.exit(1)
+
+# --- Original Test Class ---
 class TestManageBluesky(unittest.IsolatedAsyncioTestCase):
 
     async def test_autonomous_post_generation(self):
@@ -72,15 +82,11 @@ class TestManageBluesky(unittest.IsolatedAsyncioTestCase):
         # Mock dependencies
         mock_memory_manager = AsyncMock()
         mock_memory_manager.retrieve_hierarchical_context.return_value = "Mock Memory Context"
-        mock_memory_manager.add_episode = AsyncMock() # Mock add_episode
+        mock_memory_manager.add_episode = AsyncMock() 
         
         sys.modules['love'].memory_manager = mock_memory_manager
         
         # Mock LLM responses
-        # 1. Content Generation
-        # 2. Subliminal Gen
-        # 3. Image Prompt Gen
-        
         mock_run_llm = AsyncMock(side_effect=[
             {"result": '{"text": "Dopamine hit! #test", "hashtags": ["#cool"], "image_prompt": "A cool image"}'}, # Content
             {"result": "WAKE UP"}, # Subliminal
@@ -153,27 +159,6 @@ class TestManageBluesky(unittest.IsolatedAsyncioTestCase):
         print(f"Result: {result}")
         
         # Assertions
-        # Should NOT retrieve memory context for content gen, but should for image gen?
-        # In current logic, if text is provided, it skips content gen.
-        
-        # Should generate image? Yes, autonomous image gen is triggered if logic flows there.
-        # Wait, the tool logic:
-        # if not text: -> generate text
-        # ... logic continues ...
-        # if image_path: ... else: -> generate image (if prompted or always? Current logic: if autonomous (no text provided?) OR if we just want to?)
-        # Let's check the code:
-        # "if not text:" ... generates text ...
-        # ...
-        # "else: # Generate Image if requested OR if autonomous"
-        # Wait, if text IS provided, does it skip image gen unless image_prompt is provided?
-        # My refactored code checks:
-        # "if image_path: ... else: ... # We catch ANY case where we might generate an image"
-        # It proceeds to Subliminal Gen Step 1.
-        # Then Step 2: "if final_img_prompt:"
-        # Wait, where does `final_img_prompt` come from if `image_prompt` was None and we provided text?
-        # "else: # Generate from scratch ... img_gen_prompt = ... final_img_prompt = img_res..."
-        # So YES, it autonomously generates an image even if text is provided manually.
-        
         sys.modules['core.image_api'].generate_image.assert_awaited()
         print("✅ Autonomous Image Gen triggered for Manual Post")
         
@@ -181,7 +166,11 @@ class TestManageBluesky(unittest.IsolatedAsyncioTestCase):
         print("✅ Memory Feedback Hook Triggered")
 
 if __name__ == '__main__':
+    # Ensure stdout encoding
+    if sys.stdout.encoding != 'utf-8':
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+        
     with open('test_results.log', 'w', encoding='utf-8') as f:
         runner = unittest.TextTestRunner(stream=f, verbosity=2)
         unittest.main(testRunner=runner, exit=False)
-

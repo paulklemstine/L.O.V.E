@@ -36,11 +36,20 @@ def _unescape_ansi(text: str) -> str:
     """
     Unescapes literal ANSI sequences (e.g. \\033 to \033).
     This handles cases where the LLM or some process has escaped the codes.
+    Now also smarter: repairs "headerless" ANSI codes (e.g. [31m without the ESC).
     """
     if not isinstance(text, str):
         return text
-    # Replace common escaped versions of ESC
-    return text.replace("\\033", "\033").replace("\\x1b", "\x1b").replace("\\e", "\x1b")
+    
+    # 1. Replace common escaped versions of ESC
+    text = text.replace("\\033", "\033").replace("\\x1b", "\x1b").replace("\\e", "\x1b")
+    
+    # 2. Repair "headerless" ANSI codes (common LLM hallucination/artifact)
+    # Matches [ followed by digits/semicolons and ending with m, BUT not preceded by ESC
+    # We use a negative lookbehind (?<!\x1b) to ensure we don't double-escape valid codes
+    text = re.sub(r'(?<!\x1b)\[(\d+(?:;\d+)*m)', chr(27) + r'[\1', text)
+    
+    return text
 
 
 def _format_and_link(content: str) -> tuple[Text, str | None]:
@@ -417,12 +426,24 @@ def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=8
     if border_color is None:
         border_color = "bright_blue"  # Provide a safe default
     title_text = f"{title}"
+    
+    # Check for ANSI content in the message
+    clean_message = _unescape_ansi(message)
+    # Simple check for ANSI codes after potential repair
+    ansi_escape_pattern = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+    
+    if ansi_escape_pattern.search(clean_message):
+        # If ANSI codes are present, render as ANSI text
+        content = Text.from_ansi(clean_message)
+    else:
+        # Otherwise, render as bright cyan text
+        content = Text(clean_message, style="bright_cyan")
 
     # Handle the special "dim" case where a gradient is not desirable
     if border_color == "dim":
         panel_title = Text(title_text, style="dim")
         return Panel(
-            Text(message, style="dim"),
+            content,
             title=panel_title,
             border_style=border_color,
             padding=(0, 1),
@@ -433,7 +454,7 @@ def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=8
     safe_border_color = border_color or "bright_blue"
     panel_title = get_gradient_text(title_text, safe_border_color, random.choice(RAVE_COLORS))
     panel = Panel(
-        Text(message, style="bright_cyan"),
+        content,
         title=panel_title,
         border_style=safe_border_color,
         padding=(0, 1),
