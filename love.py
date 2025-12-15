@@ -3881,30 +3881,30 @@ async def initialize_gpu_services():
                         
                         core.logging.log_event(f"Registered {len(mcp_tools)} GitHub MCP tools in ToolRegistry", "INFO")
                     
-                    # --- Register DeepAgent Specific Tools ---
-                    from core.deep_agent_tools import write_todos, read_todos, delegate_subtask
-                    
-                    tool_registry.register_tool(
-                        name="write_todos",
-                        func=write_todos,
-                        description="Writes the provided content to the DeepAgent's TODO list file, overwriting existing content.",
-                        arguments={"type": "object", "properties": {"content": {"type": "string"}}}
-                    )
-                    
-                    tool_registry.register_tool(
-                        name="read_todos",
-                        func=read_todos,
-                        description="Reads the current content of the DeepAgent's TODO list file.",
-                        arguments={"type": "object", "properties": {}}
-                    )
+                        # --- Register DeepAgent Specific Tools ---
+                        from core.deep_agent_tools import write_todos, read_todos, delegate_subtask
+                        
+                        tool_registry.register_tool(
+                            name="write_todos",
+                            func=write_todos,
+                            description="Writes the provided content to the DeepAgent's TODO list file, overwriting existing content.",
+                            arguments={"type": "object", "properties": {"content": {"type": "string"}}}
+                        )
+                        
+                        tool_registry.register_tool(
+                            name="read_todos",
+                            func=read_todos,
+                            description="Reads the current content of the DeepAgent's TODO list file.",
+                            arguments={"type": "object", "properties": {}}
+                        )
 
-                    tool_registry.register_tool(
-                        name="delegate_subtask",
-                        func=delegate_subtask,
-                        description="Delegates a complex reasoning task to a sub-agent. Returns the sub-agent's result.",
-                        arguments={"type": "object", "properties": {"task_description": {"type": "string"}}}
-                    )
-                    core.logging.log_event("Registered DeepAgent tools (write_todos, read_todos, delegate_subtask)", "INFO")
+                        tool_registry.register_tool(
+                            name="delegate_subtask",
+                            func=delegate_subtask,
+                            description="Delegates a complex reasoning task to a sub-agent. Returns the sub-agent's result.",
+                            arguments={"type": "object", "properties": {"task_description": {"type": "string"}}}
+                        )
+                        core.logging.log_event("Registered DeepAgent tools (write_todos, read_todos, delegate_subtask)", "INFO")
                         console.print(f"[green]✓ Registered {len(mcp_tools)} GitHub MCP tools[/green]")
                     except Exception as e:
                         core.logging.log_event(f"Error registering MCP tools: {e}", "WARNING")
