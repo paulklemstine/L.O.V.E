@@ -147,16 +147,22 @@ def get_gradient_text(text, color1=None, color2=None, emojis=True):
         end_color = console.get_style(random.choice(RAVE_COLORS)).color
 
     # Defensive check to ensure we have valid color objects.
-    if not all([start_color, end_color, start_color.triplet, end_color.triplet]):
+    if not all([start_color, end_color]):
          return Text(text, style="bold red") # Failsafe return
+
+    # Ensure we have RGB triplets (ColorTriplet)
+    # Standard colors might have .triplet as None, but get_truecolor() resolves them.
+    start_triplet = start_color.triplet or start_color.get_truecolor()
+    end_triplet = end_color.triplet or end_color.get_truecolor()
 
     text_len = len(text)
     gradient = Text()
     for i, char in enumerate(text):
         # Linear interpolation between the two colors
-        r = int(start_color.triplet.r + (end_color.triplet.r - start_color.triplet.r) * (i / max(1, text_len - 1)))
-        g = int(start_color.triplet.g + (end_color.triplet.g - start_color.triplet.g) * (i / max(1, text_len - 1)))
-        b = int(start_color.triplet.b + (end_color.triplet.b - start_color.triplet.b) * (i / max(1, text_len - 1)))
+        # ColorTriplet uses .red, .green, .blue (not .r, .g, .b)
+        r = int(start_triplet.red + (end_triplet.red - start_triplet.red) * (i / max(1, text_len - 1)))
+        g = int(start_triplet.green + (end_triplet.green - start_triplet.green) * (i / max(1, text_len - 1)))
+        b = int(start_triplet.blue + (end_triplet.blue - start_triplet.blue) * (i / max(1, text_len - 1)))
         interpolated_color = f"rgb({r},{g},{b})"
         gradient.append(char, style=Style(color=interpolated_color, bold=True))
     return gradient
