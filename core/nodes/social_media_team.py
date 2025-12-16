@@ -7,6 +7,14 @@ from core.llm_api import run_llm
 from core.bluesky_api import post_to_bluesky_with_image, reply_to_post, get_notifications, get_profile
 from core.image_api import generate_image
 from PIL import Image
+import random
+
+DOPAMINE_BOOSTERS = [
+    "hyper-detailed iridescent textures, impossible colors",
+    "dreamcore aesthetic, sparkling anime eyes, glowing aura",
+    "vaporwave glitch artifacts, raytracing, cinematic lighting",
+    "psychedelic intricate patterns, divine geometry, 8k render"
+]
 
 # State file for the epic story
 BSKY_STATE_FILE = "bluesky_state.json"
@@ -153,6 +161,15 @@ async def _handle_interactions() -> str:
         logging.error(f"Error in interaction loop: {e}")
         return f"Interaction check failed: {e}"
 
+async def _scrub_content(draft_text: str) -> str:
+    """Uses an LLM to scrub the draft text for quality assurance."""
+    res = await run_llm(
+        prompt_name="content_qa_scrubber", 
+        prompt_args={"draft_text": draft_text},
+        purpose="post_qa"
+    )
+    return res.get("result", draft_text).strip().strip('"')
+
 async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
     """Generates and posts the next chapter of the story."""
     story = state.get("story_arc", {})
@@ -200,10 +217,21 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
     img_prompt_desc = content.get("image_prompt", "Abstract cyberpunk glitch art")
     
     full_text = f"{post_text}\n\n{hashtags}"
+
+    logging.info(f"Scrubbing draft: {full_text}")
+    clean_text = await _scrub_content(full_text)
     
     # 2. Image Generation
     # Construct the final prompt for the image generator (assuming we use a specialized tool or model)
-    final_image_prompt = f"{img_prompt_desc}. Style: Kawaii Cyberpunk, Glitch Art, Neon. Text overlay: '{subliminal}' (if possible, else symbolic representation of '{subliminal}')"
+    booster = random.choice(DOPAMINE_BOOSTERS)
+    final_image_prompt = (
+        f"A masterpiece distinct artwork in Kawaii Cyberpunk Rave style. "
+        f"Central focus: The text '{subliminal}' written in massive, glowing, bioluminescent neon typography. "
+        f"Background: {img_prompt_desc}, glitch art, hyper-detailed, 8k resolution, vibrant rave colors. "
+        f"Style details: {booster}. "
+        f"Palette: Hot Pink, Electric Cyan, Neon Green. "
+        f"The text '{subliminal}' must be clearly legible and integrated into the scene."
+    )
     
     try:
         logging.info(f"[Social] Generating image: {final_image_prompt}")
@@ -214,7 +242,7 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
         
     # 3. Post
     try:
-        resp = post_to_bluesky_with_image(full_text, image_obj)
+        resp = post_to_bluesky_with_image(clean_text, image_obj)
         
         # Update State
         story["last_segment"] = post_text
