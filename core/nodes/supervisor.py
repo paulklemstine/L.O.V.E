@@ -40,4 +40,3 @@ async def supervisor_node(state: DeepAgentState) -> Dict[str, Any]:
         decision = "reasoning_node"
         
     return {"next_node": decision}
-```
