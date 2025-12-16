@@ -1058,7 +1058,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         headers = {"Content-Type": "application/json"}
                         payload = {
                             "model": model_id,
-                            "prompt": prompt_text,
+                            "messages": [{"role": "user", "content": prompt_text}],
                             "max_tokens": 4096,
                             "temperature": 0.7
                         }
@@ -1066,9 +1066,9 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         max_retries = 3
                         for attempt in range(max_retries + 1):
                             try:
-                                response = requests.post(f"{VLLM_API_URL}/completions", json=payload, headers=headers, timeout=600)
+                                response = requests.post(f"{VLLM_API_URL}/chat/completions", json=payload, headers=headers, timeout=600)
                                 response.raise_for_status()
-                                return response.json()["choices"][0]["text"]
+                                return response.json()["choices"][0]["message"]["content"]
                             except requests.exceptions.RequestException as e:
                                 if attempt < max_retries and e.response is not None and e.response.status_code == 429:
                                     delay = (2 ** attempt) + random.uniform(0, 1)

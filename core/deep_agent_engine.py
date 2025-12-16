@@ -482,7 +482,7 @@ class DeepAgentEngine:
         Internal raw generation method reusing the logic from `generate`.
         Refactored to allow `generate` to be the high-level entry point.
         """
-        # Prepare payload (logic copied/adapted from original generate)
+        # Prepare payload
         headers = {"Content-Type": "application/json"}
         
         # Use provided temp or default
@@ -492,7 +492,7 @@ class DeepAgentEngine:
              
         payload = {
             "model": self.model_name,
-            "prompt": prompt,
+            "messages": [{"role": "user", "content": prompt}],
             **sampling_params
         }
         
@@ -508,15 +508,15 @@ class DeepAgentEngine:
             max_chars = available_input_tokens * 3
             if len(prompt) > max_chars:
                 prompt = await self._fold_context(prompt, max_chars)
-                payload['prompt'] = prompt
+                payload['messages'][0]['content'] = prompt
 
         try:
             async with httpx.AsyncClient(timeout=600) as client:
-                response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
+                response = await client.post(f"{self.api_url}/v1/chat/completions", headers=headers, json=payload)
                 response.raise_for_status()
                 result = response.json()
                 if result.get("choices"):
-                    return result["choices"][0].get("text", "").strip()
+                    return result["choices"][0]["message"]["content"].strip()
         except Exception:
             pass
         return ""
