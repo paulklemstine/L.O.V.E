@@ -3259,6 +3259,74 @@ async def initialize_gpu_services():
         }
     )
     
+    # Register feed_user_story tool
+    async def feed_user_story_wrapper(story: str, **kwargs) -> str:
+        """Feeds a comprehensive user story to the Jules software engineer agent."""
+        try:
+            from core.jules_task_manager import trigger_jules_evolution
+            from rich.console import Console
+            local_console = Console()
+            
+            result = await trigger_jules_evolution(
+                modification_request=story, 
+                console=local_console, 
+                love_task_manager=love_task_manager, 
+                deep_agent_instance=deep_agent_engine
+            )
+            
+            if result and result != 'duplicate':
+                 return f"Successfully created Jules task: {result}"
+            elif result == 'duplicate':
+                 return "Task duplicate detected. No new task created."
+            else:
+                 return "Failed to create Jules task (API returned None)."
+        except Exception as e:
+            return f"Error feeding user story: {e}"
+
+    tool_registry.register_tool(
+        name="feed_user_story",
+        tool=feed_user_story_wrapper,
+        metadata={
+            "description": "Feeds a comprehensive SMART user story to the Jules software engineer agent for implementation.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "story": {
+                        "type": "string",
+                        "description": "The comprehensive SMART user story and description."
+                    }
+                },
+                "required": ["story"]
+            }
+        }
+    )
+
+    
+
+
+    # --- Register in Execution Node TOOL_MAP ---
+    try:
+        from core.nodes.execution import TOOL_MAP
+        # Wrap the async function in a structured tool if needed, 
+        # or if TOOL_MAP accepts functions directly.
+        # TOOL_MAP in execution.py maps strings to functions/invoke-ables.
+        # Simple functions usually work if they have .invoke or are callable.
+        # langchain tools have .invoke.
+        # Our wrapper is a raw async function. We might need to wrap it in a Tool.
+        from langchain_core.tools import tool as langchain_tool
+        
+        @langchain_tool("feed_user_story")
+        async def feed_user_story_lc_wrapper(story: str):
+            """Feeds a user story to Jules."""
+            return await feed_user_story_wrapper(story)
+            
+        TOOL_MAP["feed_user_story"] = feed_user_story_lc_wrapper
+        console.print("[green]feed_user_story registered in TOOL_MAP[/green]")
+    except ImportError:
+         console.print("[yellow]Warning: Could not import TOOL_MAP from core.nodes.execution[/yellow]")
+    except Exception as e:
+         console.print(f"[red]Error registering tool in TOOL_MAP: {e}[/red]")
+
     tool_registry.register_tool(
         name="execute",
         tool=execute,
