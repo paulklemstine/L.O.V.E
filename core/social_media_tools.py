@@ -183,6 +183,12 @@ async def post_to_bluesky(text: str, image: Optional[Image.Image] = None) -> Uni
     Posts the text and optional image to Bluesky.
     """
     core.logging.log_event(f"Posting to Bluesky: {text[:50]}...", "INFO")
+
+    # Validation: Ensure text is under 300 graphemes (using chars as proxy)
+    if len(text) > 300:
+        core.logging.log_event(f"Post text too long ({len(text)} chars). Truncating to 300.", "WARNING")
+        text = text[:297] + "..."
+
     try:
         if image:
             # post_to_bluesky_with_image handles both text and image

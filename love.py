@@ -3800,7 +3800,6 @@ async def initialize_gpu_services():
                         "--host", "0.0.0.0",
                         "--port", "8000",
                         "--gpu-memory-utilization", final_gpu_util,
-                        "--generation-config", "vllm",
                         "--served-model-name", "vllm-model",
                     ]
                     # Validate max_len before using it

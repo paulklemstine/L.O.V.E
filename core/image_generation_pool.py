@@ -12,7 +12,7 @@ import urllib.parse
 import random
 
 # --- Provider Configurations ---
-GEMINI_IMAGE_MODELS = ["imagen-3.0-generate-001"]  # Imagen 3
+GEMINI_IMAGE_MODELS = ["imagen-3.0"]  # Imagen 3
 STABILITY_MODELS = ["stable-diffusion-xl-1024-v1-0"]
 POLLINATIONS_MODELS = ["pollinations"]
 

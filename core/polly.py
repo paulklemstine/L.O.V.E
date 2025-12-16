@@ -112,8 +112,8 @@ class PollyOptimizer:
         improved_prompt = improved_prompt.strip()
 
         if not improved_prompt:
-             log_event(f"Polly: Optimization failed for '{prompt_key}'. No text returned.", "WARNING")
-             return None
+             log_event(f"Polly: Optimization failed for '{prompt_key}'. No text returned. Falling back to original.", "WARNING")
+             return current_prompt
              
         return improved_prompt
 
