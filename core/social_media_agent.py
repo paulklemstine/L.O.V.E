@@ -13,7 +13,9 @@ from core.social_media_tools import (
     generate_image_prompt,
     generate_image,
     generate_text_with_emoji_and_hashtags,
-    post_to_bluesky
+    generate_text_with_emoji_and_hashtags,
+    post_to_bluesky,
+    clean_social_content
 )
 
 class SocialMediaAgent:
@@ -73,7 +75,9 @@ class SocialMediaAgent:
                     return
 
                 # 6. Generate Text using Narrative Purpose
-                text = await generate_text_with_emoji_and_hashtags(scene.narrative_purpose, subliminal, img_prompt)
+                raw_text = await generate_text_with_emoji_and_hashtags(scene.narrative_purpose, subliminal, img_prompt)
+                # Ensure we define or import the cleaning logic
+                text = clean_social_content(raw_text)
                 
                 # 7. Post to Bluesky
                 result = await post_to_bluesky(text, image)

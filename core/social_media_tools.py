@@ -5,6 +5,31 @@ import core.logging
 from core.llm_api import run_llm
 from core.image_generation_pool import generate_image_with_pool
 from core.bluesky_api import post_to_bluesky_with_image, get_own_posts
+import re
+
+def clean_social_content(text: str) -> str:
+    """
+    Removes LLM conversational filler and formatting artifacts.
+    """
+    # 1. Remove wrapping quotes if present
+    text = text.strip().strip('"').strip("'")
+    
+    # 2. Regex for common conversational prefixes (case insensitive)
+    # Matches: "Here is...", "Here's the post:", "Ok, ", "Sure," etc.
+    patterns = [
+        r"^(Here(?:'s| is) (?:a|the) (?:draft )?(?:social media )?post(?: based on your request)?(?: for .*)?[:\-])\s*",
+        r"^(Sure|Okay|Ok|Certainly)[,.]?\s*(?:here is|here's)?.*[:\-]\s*",
+        r"^(I have generated|Here is your).*[:\-]\s*"
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            # Log warning for prompt tuning visibility
+            core.logging.log_event(f"Cleaned conversational artifact: '{match.group(0)}'", level='WARNING')
+            text = re.sub(pattern, "", text, count=1, flags=re.IGNORECASE)
+            
+    return text.strip()
 
 class SceneDirection(NamedTuple):
     visual_direction: str
@@ -174,7 +199,8 @@ async def generate_text_with_emoji_and_hashtags(narrative_purpose: str, sublimin
     - Keep it under 280 characters if possible, but prioritize impact.
     """
     result = await run_llm(prompt, purpose="social_media_post")
-    post_text = result.get("result", "").strip()
+    raw_text = result.get("result", "").strip()
+    post_text = clean_social_content(raw_text)
     core.logging.log_event(f"Generated post text: {post_text}", "INFO")
     return post_text
 
