@@ -18,7 +18,7 @@ async def main():
 
     # The Orchestrator now encapsulates the entire cognitive architecture.
     agent_orchestrator = Orchestrator(memory_manager)
-    agent_orchestrator.tool_registry.register_tool("crypto_scan", crypto_scan_tool)
+    # agent_orchestrator.tool_registry.register_tool("crypto_scan", crypto_scan_tool)
 
     # Start the cognitive loop as a background task
     if not os.environ.get("CI"):

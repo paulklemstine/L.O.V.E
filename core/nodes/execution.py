@@ -39,10 +39,14 @@ async def tool_execution_node(state: DeepAgentState) -> Dict[str, Any]:
             if tool_func:
                 try:
                     # Check if tool is async
-                    if hasattr(tool_func, "coroutine") or asyncio.iscoroutinefunction(tool_func):
-                        result = await tool_func.invoke(tool_args)
+                    if hasattr(tool_func, "ainvoke"):
+                         result = await tool_func.ainvoke(tool_args)
+                    elif hasattr(tool_func, "invoke"):
+                         result = tool_func.invoke(tool_args)
+                    elif asyncio.iscoroutinefunction(tool_func):
+                         result = await tool_func(**tool_args)
                     else:
-                        result = tool_func.invoke(tool_args)
+                         result = tool_func(**tool_args)
                 except Exception as e:
                     result = f"Error executing tool {tool_name}: {e}"
             else:

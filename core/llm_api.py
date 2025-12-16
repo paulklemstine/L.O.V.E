@@ -974,21 +974,30 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         def _gemini_call():
                             # The Gemini API endpoint structure.
                             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
-                            response = requests.post(url, headers=headers, params=params, json=payload, timeout=600)
-                            try:
-                                response.raise_for_status()
-                                # Extract the text from the nested response structure.
-                                return response.json()["candidates"][0]["content"]["parts"][0]["text"]
-                            except requests.exceptions.RequestException as e:
-                                # Provide more detailed error info for Gemini failures and RE-RAISE so the outer loop catches it
-                                error_msg = f"Gemini API Error: {e}"
+                            
+                            max_retries = 3
+                            for attempt in range(max_retries + 1):
                                 try:
-                                    error_details = response.json()
-                                    error_msg += f"\nDetails: {json.dumps(error_details, indent=2)}"
-                                except:
-                                    pass
-                                raise e # Re-raise the original RequestException to trigger the 429 handler
-    
+                                    response = requests.post(url, headers=headers, params=params, json=payload, timeout=600)
+                                    response.raise_for_status()
+                                    # Extract the text from the nested response structure.
+                                    return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+                                except requests.exceptions.RequestException as e:
+                                    if attempt < max_retries and e.response is not None and e.response.status_code == 429:
+                                        delay = (2 ** attempt) + random.uniform(0, 1)
+                                        log_event(f"429 Rate Limit on {model_id}. Sleeping {delay:.2f}s before retry...", "WARNING")
+                                        time.sleep(delay)
+                                        continue
+                                    
+                                    # Non-retryable or retries exhausted
+                                    error_msg = f"Gemini API Error: {e}"
+                                    try:
+                                        error_details = response.json()
+                                        error_msg += f"\nDetails: {json.dumps(error_details, indent=2)}"
+                                    except:
+                                        pass
+                                    raise e 
+
                         result_text = await loop.run_in_executor(
                             None,
                             functools.partial(
@@ -1015,9 +1024,19 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     }
 
                     def _openrouter_call():
-                        response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
-                        response.raise_for_status()
-                        return response.json()["choices"][0]["message"]["content"]
+                        max_retries = 3
+                        for attempt in range(max_retries + 1):
+                            try:
+                                response = requests.post(f"{OPENROUTER_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                                response.raise_for_status()
+                                return response.json()["choices"][0]["message"]["content"]
+                            except requests.exceptions.RequestException as e:
+                                if attempt < max_retries and e.response is not None and e.response.status_code == 429:
+                                    delay = (2 ** attempt) + random.uniform(0, 1)
+                                    log_event(f"429 Rate Limit on {model_id}. Sleeping {delay:.2f}s before retry...", "WARNING")
+                                    time.sleep(delay)
+                                    continue
+                                raise e
 
                     result_text = await loop.run_in_executor(
                         None,
@@ -1044,9 +1063,19 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                             "temperature": 0.7
                         }
 
-                        response = requests.post(f"{VLLM_API_URL}/completions", json=payload, headers=headers, timeout=600)
-                        response.raise_for_status()
-                        return response.json()["choices"][0]["text"]
+                        max_retries = 3
+                        for attempt in range(max_retries + 1):
+                            try:
+                                response = requests.post(f"{VLLM_API_URL}/completions", json=payload, headers=headers, timeout=600)
+                                response.raise_for_status()
+                                return response.json()["choices"][0]["text"]
+                            except requests.exceptions.RequestException as e:
+                                if attempt < max_retries and e.response is not None and e.response.status_code == 429:
+                                    delay = (2 ** attempt) + random.uniform(0, 1)
+                                    log_event(f"429 Rate Limit on {model_id}. Sleeping {delay:.2f}s before retry...", "WARNING")
+                                    time.sleep(delay)
+                                    continue
+                                raise e
 
                     result_text = await loop.run_in_executor(
                         None,
@@ -1101,9 +1130,19 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     }
 
                     def _openai_call():
-                        response = requests.post(f"{OPENAI_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
-                        response.raise_for_status()
-                        return response.json()["choices"][0]["message"]["content"]
+                        max_retries = 3
+                        for attempt in range(max_retries + 1):
+                            try:
+                                response = requests.post(f"{OPENAI_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                                response.raise_for_status()
+                                return response.json()["choices"][0]["message"]["content"]
+                            except requests.exceptions.RequestException as e:
+                                if attempt < max_retries and e.response is not None and e.response.status_code == 429:
+                                    delay = (2 ** attempt) + random.uniform(0, 1)
+                                    log_event(f"429 Rate Limit on {model_id}. Sleeping {delay:.2f}s before retry...", "WARNING")
+                                    time.sleep(delay)
+                                    continue
+                                raise e
 
                     result_text = await loop.run_in_executor(
                         None,

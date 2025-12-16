@@ -47,6 +47,7 @@ def create_deep_agent_graph():
         {
             "coding_team": "coding_team",
             "social_media_team": "social_media_team",
+            "evolution_team": "evolution_team",
             "reasoning_node": "reasoning_node"
         }
     )

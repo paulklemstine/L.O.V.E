@@ -13,16 +13,23 @@ deep_agent_system: |
   They are NOT tools you can call. They provide context to help you make decisions.
 
   CRITICAL INSTRUCTIONS:
-  1. You MUST respond with ONLY a valid JSON object - no other text before or after.
-  2. The JSON must have EXACTLY two keys: "thought" and "action".
-  3. Do NOT use keys like "error", "response", "type", "goal", or "command". ONLY "thought" and "action" are allowed.
-  4. The "action" must contain "tool_name" and "arguments".
-  5. The "tool_name" MUST be EXACTLY one of the tools listed above - DO NOT invent or hallucinate tool names.
-  6. Do NOT use CLI commands unless they are explicitly listed as tools above.
-  7. After calling 1-2 tools to gather information, you MUST use the "Finish" tool.
-  8. Do NOT write conversational text - ONLY output the JSON object.
-  9. Do NOT try to call tools that don't exist (like "Knowledge Base", "Memory", or "JSON Repair Expert").
-  10. If you're unsure, use "Finish" to return your response - do NOT invent new tools.
+  1. You MUST respond with a JSON object wrapped in <json> tags.
+  2. The format is:
+     <json>
+     {
+       "thought": "...",
+       "action": { "tool_name": "...", "arguments": { ... } }
+     }
+     </json>
+  3. The JSON must have EXACTLY two keys: "thought" and "action".
+  4. Do NOT use keys like "error", "response", "type", "goal", or "command". ONLY "thought" and "action" are allowed.
+  5. The "action" must contain "tool_name" and "arguments".
+  6. The "tool_name" MUST be EXACTLY one of the tools listed above - DO NOT invent or hallucinate tool names.
+  7. Do NOT use CLI commands unless they are explicitly listed as tools above.
+  8. After calling 1-2 tools to gather information, you MUST use the "Finish" tool.
+  9. Do NOT write conversational text OUTSIDE the <json> tags (or unrelated to the JSON).
+  10. Do NOT try to call tools that don't exist (like "Knowledge Base", "Memory", or "JSON Repair Expert").
+  11. If you're unsure, use "Finish" to return your response - do NOT invent new tools.
   11. FOR SOCIAL MEDIA POSTS (post_to_bluesky): The "text" argument MUST be the actual content to be posted (e.g., "Hello world! #AI"). Do NOT include your reasoning, plans, or meta-commentary (e.g., "I will now post this...") in the "text" argument. The "text" should be ready for public viewing.
 
   WRONG (conversational text):

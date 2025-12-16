@@ -22,7 +22,12 @@ async def supervisor_node(state: DeepAgentState) -> Dict[str, Any]:
     - "reasoning_node": For general reasoning, simple tasks, or when unsure.
     
     Analyze the conversation history and determine the next step.
-    Return ONLY the name of the option (e.g., "coding_team").
+    
+    CRITICAL: You MUST respond with a JSON object wrapped in <json> tags.
+    Format:
+    <json>
+    {"next_node": "coding_team"}
+    </json>
     """
     
     # We might want to pass the last few messages to context
@@ -30,13 +35,19 @@ async def supervisor_node(state: DeepAgentState) -> Dict[str, Any]:
     prompt += f"\nLast User Message: {last_msg}\n"
     
     response = await run_llm(prompt, purpose="supervisor")
-    decision = (response.get("result") or "").strip().lower()
+    
+    # Use the robust parser
+    from core.llm_parser import smart_parse_llm_response
+    parsed = smart_parse_llm_response(response.get("result", ""))
+    
+    decision = parsed.get("next_node", "").strip().lower()
     
     # Validate decision
     valid_options = ["research_team", "coding_team", "evolution_team", "social_media_team", "reasoning_node"]
     
     if decision not in valid_options:
-        # Fallback to reasoning_node if unclear
+        # Fallback logic
+        print(f"[Supervisor] Invalid decision '{decision}', defaulting to reasoning_node")
         decision = "reasoning_node"
         
     return {"next_node": decision}

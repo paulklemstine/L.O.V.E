@@ -2822,7 +2822,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                          # Display with a specific prefix/color if possible, or just standard panel
                                          ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS] {content}"))
                     except Exception as e:
-                        core.logging.log_event(f"Error in autonomous step: {e}", "ERROR")
+                        core.logging.log_event(f"Error in autonomous step: {e}\n{traceback.format_exc()}", "ERROR")
 
             # Allow some idle time or autonomous processing
             await asyncio.sleep(1)
@@ -3969,23 +3969,29 @@ async def initialize_gpu_services():
                         
                         tool_registry.register_tool(
                             name="write_todos",
-                            func=write_todos,
-                            description="Writes the provided content to the DeepAgent's TODO list file, overwriting existing content.",
-                            arguments={"type": "object", "properties": {"content": {"type": "string"}}}
+                            tool=write_todos,
+                            metadata={
+                                "description": "Writes the provided content to the DeepAgent's TODO list file, overwriting existing content.",
+                                "arguments": {"type": "object", "properties": {"content": {"type": "string"}}}
+                            }
                         )
                         
                         tool_registry.register_tool(
                             name="read_todos",
-                            func=read_todos,
-                            description="Reads the current content of the DeepAgent's TODO list file.",
-                            arguments={"type": "object", "properties": {}}
+                            tool=read_todos,
+                            metadata={
+                                "description": "Reads the current content of the DeepAgent's TODO list file.",
+                                "arguments": {"type": "object", "properties": {}}
+                            }
                         )
 
                         tool_registry.register_tool(
                             name="delegate_subtask",
-                            func=delegate_subtask,
-                            description="Delegates a complex reasoning task to a sub-agent. Returns the sub-agent's result.",
-                            arguments={"type": "object", "properties": {"task_description": {"type": "string"}}}
+                            tool=delegate_subtask,
+                            metadata={
+                                "description": "Delegates a complex reasoning task to a sub-agent. Returns the sub-agent's result.",
+                                "arguments": {"type": "object", "properties": {"task_description": {"type": "string"}}}
+                            }
                         )
                         core.logging.log_event("Registered DeepAgent tools (write_todos, read_todos, delegate_subtask)", "INFO")
                         console.print(f"[green]✓ Registered {len(mcp_tools)} GitHub MCP tools[/green]")

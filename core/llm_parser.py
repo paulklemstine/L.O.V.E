@@ -9,12 +9,13 @@ def smart_parse_llm_response(response: str, expected_keys: Optional[list] = None
     Intelligently parses LLM responses with multiple fallback strategies.
     
     Strategies (in order):
-    1. Parse key-value format (Thought: "..." Action: {...})
-    2. Extract from markdown code blocks (```json ... ```)
-    3. Parse as JSON (double quotes)
-    4. Parse as Python dict (single quotes) using ast.literal_eval
-    5. Extract JSON from mixed text using regex
-    6. Return error dict with raw response
+    1. Extract from <json> tags
+    2. Parse key-value format (Thought: "..." Action: {...})
+    3. Extract from markdown code blocks (```json ... ```)
+    4. Parse as JSON (double quotes)
+    5. Parse as Python dict (single quotes) using ast.literal_eval
+    6. Extract JSON from mixed text using regex
+    7. Return error dict with raw response
     
     Args:
         response: Raw LLM response string
@@ -31,6 +32,11 @@ def smart_parse_llm_response(response: str, expected_keys: Optional[list] = None
     
     response = response.strip()
     
+    # Strategy 0: Extract from <json> tags (New Priority)
+    result = _extract_from_xml(response)
+    if result and not result.get('_parse_error'):
+        return result
+
     # Strategy 1: Parse as JSON (Priority for valid JSON)
     try:
         result = json.loads(response)
@@ -215,3 +221,38 @@ def validate_parsed_response(parsed: Dict[str, Any], expected_keys: list) -> boo
         return False
     
     return all(key in parsed for key in expected_keys)
+
+
+def _extract_from_xml(response: str) -> Optional[Dict[str, Any]]:
+    """
+    Extracts JSON from <json> tags.
+    Supports <json>...</json>
+    """
+    pattern = r'<json>\s*(.*?)\s*</json>'
+    match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
+    
+    if not match:
+        return None
+        
+    content = match.group(1).strip()
+    
+    # Reuse existing extractors or parse directly
+    # Try parsing as JSON
+    try:
+        result = json.loads(content)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+        
+    # Try ast
+    try:
+        result = ast.literal_eval(content)
+        if isinstance(result, dict):
+            return result
+    except:
+        pass
+        
+    # If standard parse fails, try the regex extractor on the content
+    return _extract_json_from_text(content)
+
