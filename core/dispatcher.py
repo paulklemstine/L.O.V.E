@@ -71,3 +71,11 @@ class EventDispatcher:
 
 # Global singleton instance if needed, or instantiate per graph
 global_dispatcher = EventDispatcher()
+
+# --- Legacy Support ---
+async def dispatch_structured_payload(payload: Dict[str, Any], interface_handler: Any) -> Dict[str, Any]:
+    """
+    Legacy function: Dispatches a structured data payload to an external service interface.
+    Kept for backward compatibility with core.talent_utils.engager.
+    """
+    return await interface_handler.handle_payload(payload)

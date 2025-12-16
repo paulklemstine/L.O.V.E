@@ -566,6 +566,42 @@ class DeepAgentEngine:
             core.logging.log_event(f"[DeepAgent] JSON repair failed: {e}", level="ERROR")
             return None
 
+    def _classify_complexity(self, prompt: str) -> str:
+        """
+        Classifies the complexity of a prompt to determine the optimal model.
+        Returns "HIGH" or "LOW".
+        """
+        # Keywords suggesting complexity or need for high capability
+        high_complexity_keywords = [
+            "architect", "design", "refactor", "security", "optimize", 
+            "analyze", "strategy", "break down", "multi-step", "complex",
+            "debug", "fix", "implement", "code", "class", "function" 
+        ]
+        
+        # Keywords suggesting simple tasks
+        low_complexity_keywords = [
+            "summarize", "list", "extract", "format", "check", "verify",
+            "status", "update", "log", "simple"
+        ]
+        
+        prompt_lower = prompt.lower()
+        
+        # Check for high complexity indicators first
+        if any(keyword in prompt_lower for keyword in high_complexity_keywords):
+            return "HIGH"
+        
+        # If explicitly low complexity
+        if any(keyword in prompt_lower for keyword in low_complexity_keywords):
+            return "LOW"
+            
+        # Default to HIGH for safety if uncertain, or LOW if we want to save cost?
+        # Given this is an autonomous agent, default to HIGH usually safer, 
+        # but let's default to LOW if it's short, HIGH if it's long?
+        if len(prompt) > 500:
+            return "HIGH"
+            
+        return "LOW"
+
     async def run(self, prompt: str, reasoning_mode: str = "linear"):
 
         """
@@ -662,12 +698,64 @@ class DeepAgentEngine:
                     level="DEBUG"
                 )
 
-        # GENERATION (Linear or Tree)
-        if reasoning_mode == "tree":
-             generated_text = await self._generate_thought_tree(prompt, system_prompt, n_thoughts=3)
-        else:
-             generated_text = await self.generate_raw(system_prompt)
+        # --- ROUTING & GENERATION ---
         
+        complexity = self._classify_complexity(prompt)
+        core.logging.log_event(f"[DeepAgent] Task Complexity: {complexity}", level="INFO")
+        
+        generated_text = ""
+        success = False
+        
+        # Strategy:
+        # HIGH -> Try External Pool (Pro) -> Fallback to Local (Raw)
+        # LOW -> Try Local (Raw) -> Fallback to External Pool (Pro)
+        
+        primary_method = None
+        secondary_method = None
+        
+        if complexity == "HIGH" and self.use_pool:
+            # Prefer pool for high complexity
+            async def call_pool():
+                core.logging.log_event("[DeepAgent] Routing to External Model (Pool) for HIGH complexity.", "DEBUG")
+                from core.llm_api import run_llm
+                res = await run_llm(system_prompt, purpose="deep_agent_reasoning", deep_agent_instance=None)
+                return (res.get("result") or "").strip()
+            
+            primary_method = call_pool
+            secondary_method = lambda: self.generate_raw(system_prompt)
+        else:
+            # Prefer local for low complexity or if pool disabled
+            core.logging.log_event("[DeepAgent] Routing to Local vLLM for LOW complexity/Local-Only.", "DEBUG")
+            primary_method = lambda: self.generate_raw(system_prompt)
+            if self.use_pool:
+                 async def call_pool():
+                    from core.llm_api import run_llm
+                    res = await run_llm(system_prompt, purpose="deep_agent_reasoning", deep_agent_instance=None)
+                    return (res.get("result") or "").strip()
+                 secondary_method = call_pool
+        
+        # Execute Primary
+        try:
+             generated_text = await primary_method()
+             if generated_text:
+                 success = True
+        except Exception as e:
+            core.logging.log_event(f"[DeepAgent] Primary generation failed: {e}", "WARNING")
+            
+        # Execute Fallback if needed
+        if not success and secondary_method:
+             core.logging.log_event("[DeepAgent] Attempting Fallback method...", "WARNING")
+             try:
+                 generated_text = await secondary_method()
+                 if generated_text:
+                     success = True
+             except Exception as e:
+                 core.logging.log_event(f"[DeepAgent] Fallback generation failed: {e}", "ERROR")
+
+        if not success or not generated_text:
+             core.logging.log_event("[DeepAgent] All generation attempts failed.", "CRITICAL")
+             return "Error: Generation failed."
+
         # 4. JSON Repair (if needed)
         try:
             parsed_response = _recover_json(generated_text)
