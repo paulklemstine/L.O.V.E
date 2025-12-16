@@ -89,15 +89,15 @@ class MemoryManager:
 
         # The MemoryManager now uses the central GraphDataManager
         self.graph_data_manager = graph_data_manager
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.embedding_model = SentenceTransformer('all-mpnet-base-v2')
         self.faiss_index_path = "faiss_index.bin"
         self.faiss_id_map_path = "faiss_id_map.json"
         self.faiss_index = None
         self.faiss_id_map = []
 
         # Parameters for IndexIVFFlat for improved search performance
-        self.faiss_nlist = 100  # Number of Voronoi cells (clusters)
-        self.faiss_dimension = 384  # Dimension of the embeddings from all-MiniLM-L6-v2
+        self.faiss_nlist = 100  # Default, now dynamically adjusted in rebuild
+        self.faiss_dimension = 768  # Dimension of the embeddings from all-mpnet-base-v2
         
         # Hierarchical Memory System (Level 0 → Level 1 → Level 2)
         from core.memory.memory_folding_agent import MemoryFoldingAgent
@@ -170,7 +170,21 @@ class MemoryManager:
             print("FAISS not available or index not initialized; skipping save.")
             return
 
-        print(f"Asynchronously saving FAISS index to {self.faiss_index_path}...")
+        # Robust Persistence: Create backups before overwriting
+        try:
+            if os.path.exists(self.faiss_index_path):
+                backup_path = f"{self.faiss_index_path}.bak"
+                if os.path.exists(backup_path):
+                    os.remove(backup_path) # Remove old backup
+                os.rename(self.faiss_index_path, backup_path)
+            
+            if os.path.exists(self.faiss_id_map_path):
+                backup_path = f"{self.faiss_id_map_path}.bak"
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                os.rename(self.faiss_id_map_path, backup_path)
+        except Exception as e:
+            print(f"Warning: Failed to create backups during save: {e}")
 
         # Note: faiss.write_index is synchronous.
         # Running it in a thread pool executor to avoid blocking the event loop.
@@ -183,7 +197,7 @@ class MemoryManager:
         async with aiofiles.open(self.faiss_id_map_path, 'w') as f:
             await f.write(json.dumps(self.faiss_id_map))
 
-        print("FAISS data saved asynchronously.")
+        print("FAISS data saved asynchronously with robust backup.")
 
     async def _rebuild_faiss_index(self):
         """
@@ -210,9 +224,17 @@ class MemoryManager:
 
             note = MemoryNote.from_node_attributes(node_id, node_data)
 
-            # Data Migration for old memories without embeddings
+            # Data Migration: Re-embed if dimension mismatch (e.g. upgrading model)
+            # or if embedding is missing entirely.
+            should_re_embed = False
             if note.embedding is None or note.embedding.size == 0:
-                print(f"Generating missing embedding for old memory: {note.id}")
+                print(f"Generating missing embedding for memory: {note.id}")
+                should_re_embed = True
+            elif note.embedding.shape[0] != self.faiss_dimension:
+                print(f"Re-embedding memory {note.id} for dimension upgrade ({note.embedding.shape[0]} -> {self.faiss_dimension})")
+                should_re_embed = True
+
+            if should_re_embed:
                 note.embedding = self.embedding_model.encode([note.content])[0]
                 self.graph_data_manager.add_node(
                     node_id=note.id,
@@ -231,20 +253,36 @@ class MemoryManager:
             return
 
         embeddings_np = np.array(embeddings, dtype=np.float32)
+        num_vectors = embeddings_np.shape[0]
 
         # --- Stage 2: Train the IndexIVFFlat index ---
-        # A quantizer is the coarse-grained index for the Voronoi cells.
-        quantizer = faiss.IndexFlatL2(self.faiss_dimension)
-        self.faiss_index = faiss.IndexIVFFlat(quantizer, self.faiss_dimension, self.faiss_nlist, faiss.METRIC_L2)
-
-        # The index needs to be trained on the data to learn the clusters.
-        # It's crucial that the index is trained before adding vectors.
-        if embeddings_np.shape[0] < self.faiss_nlist:
-            print(f"Warning: Not enough embeddings ({embeddings_np.shape[0]}) to train the desired number of clusters ({self.faiss_nlist}). A smaller, temporary index will be used.")
-            # Fallback to a simpler index if there's not enough data to train
-            self.faiss_index = faiss.IndexFlatL2(self.faiss_dimension)
+        
+        # Dynamic Index Tuning: Calculate optimal nlist based on dataset size
+        # Rule of thumb: nlist ~ 4 * sqrt(N)
+        optimal_nlist = int(4 * np.sqrt(num_vectors))
+        
+        # Clamp nlist to reasonable bounds
+        # Minimum 4 clusters if we have enough data, otherwise just use Flat
+        # Maximum e.g. 1024 or higher if we have massive data
+        self.faiss_nlist = min(max(4, optimal_nlist), num_vectors // 39) if num_vectors >= 39 else 0
+        # Note: 39 is defined because FAISS requires at least 39 points per cluster for training usually? 
+        # Actually FAISS just needs num_vectors >= nlist * some_factor (usually 39 is min_points_per_centroid for k-means clustering stability)
+        # Let's be safer: if num_vectors is small (< 200), use Flat index.
+        
+        if num_vectors < 200:
+             print(f"Dataset small ({num_vectors} vectors). Using IndexFlatL2 for accuracy.")
+             self.faiss_index = faiss.IndexFlatL2(self.faiss_dimension)
         else:
-            print(f"Training FAISS IndexIVFFlat with {embeddings_np.shape[0]} vectors...")
+            # Adjust nlist if it's too large for the dataset
+            if self.faiss_nlist > num_vectors / 10:
+                self.faiss_nlist = int(num_vectors / 10)
+            
+            # Ensure nlist is at least 1
+            self.faiss_nlist = max(1, self.faiss_nlist)
+            
+            print(f"Training FAISS IndexIVFFlat with {num_vectors} vectors and nlist={self.faiss_nlist}...")
+            quantizer = faiss.IndexFlatL2(self.faiss_dimension)
+            self.faiss_index = faiss.IndexIVFFlat(quantizer, self.faiss_dimension, self.faiss_nlist, faiss.METRIC_L2)
             self.faiss_index.train(embeddings_np)
 
         # --- Stage 3: Add all embeddings to the trained index ---
