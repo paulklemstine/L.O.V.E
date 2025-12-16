@@ -87,13 +87,21 @@ def _create_default_model_stats():
 MODEL_STATS = defaultdict(_create_default_model_stats)
 
 # --- NEW REASONING FUNCTION ---
+async def _pin_to_ipfs_async(content: bytes, console: Console):
+    """
+    Async wrapper for pin_to_ipfs_sync to prevent blocking the event loop.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, pin_to_ipfs_sync, content, console)
+
+
 async def execute_reasoning_task(prompt: str, deep_agent_instance=None) -> dict:
     """
     Exclusively uses the run_llm function for a reasoning task.
     This is the new primary pathway for the GeminiReActEngine.
     """
     console = Console()
-    prompt_cid = pin_to_ipfs_sync(prompt.encode('utf-8'), console)
+    prompt_cid = await _pin_to_ipfs_async(prompt.encode('utf-8'), console)
     response_cid = None
     try:
         log_event("Initiating reasoning task via run_llm.", "INFO")
@@ -715,7 +723,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
     final_result = None
     try:
         # --- Token Count & Prompt Management ---
-        prompt_cid = pin_to_ipfs_sync(prompt_text.encode('utf-8'), console)
+        prompt_cid = await _pin_to_ipfs_async(prompt_text.encode('utf-8'), console)
         original_prompt_text = prompt_text
 
         try:
@@ -1163,7 +1171,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
 
                     PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
                     LLM_AVAILABILITY[model_id] = time.time()
-                    response_cid = pin_to_ipfs_sync(result_text.encode('utf-8'), console)
+                    response_cid = await _pin_to_ipfs_async(result_text.encode('utf-8'), console)
                     final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": model_id}
                     break
             except requests.exceptions.RequestException as e:
