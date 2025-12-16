@@ -18,6 +18,7 @@ async def supervisor_node(state: DeepAgentState) -> Dict[str, Any]:
     - "research_team": For tasks requiring extensive information gathering, web search, or analysis.
     - "coding_team": For tasks involving writing, testing, or fixing code.
     - "evolution_team": For tasks related to self-improvement, system updates, or architectural changes.
+    - "social_media_team": For managing the social media presence, posting to Bluesky, storytelling, or replying to fans.
     - "reasoning_node": For general reasoning, simple tasks, or when unsure.
     
     Analyze the conversation history and determine the next step.
@@ -32,9 +33,11 @@ async def supervisor_node(state: DeepAgentState) -> Dict[str, Any]:
     decision = (response.get("result") or "").strip().lower()
     
     # Validate decision
-    valid_options = ["research_team", "coding_team", "evolution_team", "reasoning_node"]
+    valid_options = ["research_team", "coding_team", "evolution_team", "social_media_team", "reasoning_node"]
+    
     if decision not in valid_options:
         # Fallback to reasoning_node if unclear
         decision = "reasoning_node"
         
     return {"next_node": decision}
+```

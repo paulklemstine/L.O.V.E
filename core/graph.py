@@ -6,6 +6,7 @@ from core.nodes.execution import tool_execution_node
 from core.nodes.tool_retrieval import retrieve_tools_node
 from core.nodes.memory import fold_memory_node
 from core.graphs.coding_team import create_coding_graph
+from core.nodes.social_media_team import social_media_node
 
 def create_deep_agent_graph():
     """
@@ -19,6 +20,7 @@ def create_deep_agent_graph():
     workflow.add_node("tool_execution_node", tool_execution_node)
     workflow.add_node("retrieve_tools_node", retrieve_tools_node)
     workflow.add_node("fold_memory_node", fold_memory_node)
+    workflow.add_node("social_media_team", social_media_node)
     
     # Add Subgraphs
     coding_graph = create_coding_graph()
@@ -31,8 +33,9 @@ def create_deep_agent_graph():
     def route_supervisor(state: DeepAgentState):
         next_node = state.get("next_node")
         if next_node == "evolution_team":
+            # Fallback until evolution team is separated
             return "coding_team"
-        if next_node in ["coding_team", "reasoning_node"]:
+        if next_node in ["coding_team", "reasoning_node", "social_media_team"]:
             return next_node
         # Default fallback
         return "reasoning_node"
@@ -42,6 +45,7 @@ def create_deep_agent_graph():
         route_supervisor,
         {
             "coding_team": "coding_team",
+            "social_media_team": "social_media_team",
             "reasoning_node": "reasoning_node"
         }
     )
@@ -80,5 +84,6 @@ def create_deep_agent_graph():
     workflow.add_edge("retrieve_tools_node", "reasoning_node")
     workflow.add_edge("fold_memory_node", "reasoning_node")
     workflow.add_edge("coding_team", "supervisor") 
+    workflow.add_edge("social_media_team", "supervisor") 
     
     return workflow.compile()
