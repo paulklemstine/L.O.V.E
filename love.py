@@ -2896,13 +2896,22 @@ def _automatic_update_checker(console):
         time.sleep(300)
 
 
+# Pre-compile the regex for performance
+ANSI_ESCAPE_PATTERN = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
 def _strip_ansi_codes(text):
     """Removes ANSI escape codes from a string."""
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
+    return ANSI_ESCAPE_PATTERN.sub('', text)
 
-def serialize_panel_to_json(panel, panel_type_map):
-    """Serializes a Rich Panel object to a JSON string for the web UI."""
+def serialize_panel_to_json(panel, panel_type_map, console=None):
+    """
+    Serializes a Rich Panel object to a JSON string for the web UI.
+
+    Args:
+        panel: The Rich Panel object to serialize.
+        panel_type_map: Mapping of border styles to panel types.
+        console: Optional existing Console instance to reuse (must have capture buffer).
+    """
     if not isinstance(panel, Panel):
         return None
 
@@ -2925,9 +2934,20 @@ def serialize_panel_to_json(panel, panel_type_map):
 
 
     # Render the content to a plain string, stripping ANSI codes
-    temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-    temp_console.print(panel.renderable)
-    content_with_ansi = temp_console.file.getvalue()
+    # Use provided console if available to save creation overhead
+    if console:
+        # Assuming console is backed by StringIO, we clear it first
+        console.file.seek(0)
+        console.file.truncate(0)
+        console.print(panel.renderable)
+        content_with_ansi = console.file.getvalue()
+        # We don't clear afterwards because the caller manages the console lifecycle
+        # but we should be aware of side effects. Ideally, caller clears before next use.
+    else:
+        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
+        temp_console.print(panel.renderable)
+        content_with_ansi = temp_console.file.getvalue()
+
     plain_content = _strip_ansi_codes(content_with_ansi)
 
     json_obj = {
@@ -2949,15 +2969,24 @@ def simple_ui_renderer():
     # The animation panel is consistently 3 lines high.
     animation_height = 3
 
+    # Optimization: Reuse Console and StringIO buffer to avoid creating thousands of objects
+    render_buffer = io.StringIO()
+    # force_terminal=True ensures ANSI codes are generated even though we write to a file
+    render_console = Console(file=render_buffer, force_terminal=True, color_system="truecolor")
+
     while True:
         try:
             item = ui_panel_queue.get()
 
+            # Update console width dynamically in case of resize
+            render_console.width = get_terminal_width()
+
             # --- Animation Frame Handling ---
             if isinstance(item, dict) and item.get('type') == 'animation_frame':
-                temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-                temp_console.print(item.get('content'))
-                output_str = temp_console.file.getvalue()
+                render_buffer.seek(0)
+                render_buffer.truncate(0)
+                render_console.print(item.get('content'))
+                output_str = render_buffer.getvalue()
 
                 if animation_active:
                     # Move cursor up, go to start of line, clear to end of screen
@@ -3006,13 +3035,16 @@ def simple_ui_renderer():
             # --- WEB SOCKET BROADCAST ---
             from ui_utils import PANEL_TYPE_COLORS
             if 'websocket_server_manager' in globals() and websocket_server_manager:
-                json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS)
+                # Reuse the render_console for serialization to save overhead
+                json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS, console=render_console)
                 if json_payload:
                     websocket_server_manager.broadcast(json_payload)
 
-            temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-            temp_console.print(item)
-            output_str = temp_console.file.getvalue()
+            # Clear buffer before rendering the main item
+            render_buffer.seek(0)
+            render_buffer.truncate(0)
+            render_console.print(item)
+            output_str = render_buffer.getvalue()
 
             # Print the styled output to the live console
             print(output_str, end='')
