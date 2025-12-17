@@ -17,7 +17,7 @@ pytest-asyncio
 pytest-mock
 pycvesearch
 pycryptodome
-numpy
+numpy<2.0.0
 tiktoken
 scapy
 aioboto3
@@ -37,7 +37,7 @@ openevolve
 sentence-transformers
 transformers
 # tokenizers - using system-installed version
-torch
+torch==2.5.1
 torchvision
 torchaudio
 langextract
@@ -56,4 +56,4 @@ bandit
 radon
 langchainhub
 duckduckgo-search
-numba==0.62.0
+numba==0.60.0

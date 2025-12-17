@@ -8,8 +8,15 @@ import importlib.metadata
 try:
     from packaging.requirements import Requirement
 except ImportError:
-    # Fallback or just let it fail if packaging is critical now
-    pass
+    print("Dependency 'packaging' not found. Auto-installing...")
+    try:
+        # Minimal bootstrap - use subprocess directly to avoid circular dependency
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "packaging", "--break-system-packages"])
+        from packaging.requirements import Requirement
+    except Exception as e:
+        print(f"CRITICAL: Failed to install packaging: {e}")
+        # We will let it fail later or rely on fallbacks
+        pass
 
 # Force unbuffered output to ensure real-time visibility
 # Use environment variable method which is more reliable than reconfigure
@@ -340,8 +347,7 @@ def _get_pip_executable():
 def _is_package_installed(req_str):
     """Checks if a package specified by a requirement string is installed."""
     try:
-        if 'Requirement' not in globals():
-             from packaging.requirements import Requirement
+        from packaging.requirements import Requirement
         
         req = Requirement(req_str)
         try:
@@ -396,12 +402,11 @@ def _install_requirements_file(requirements_path, tracker_prefix):
 
         try:
             # Use packaging to correctly parse the package name from the line
-            if 'Requirement' not in globals():
-                 from packaging.requirements import Requirement
+            from packaging.requirements import Requirement
             req = Requirement(line)
             package_name = req.name
-        except Exception:
-            print(f"WARN: Could not parse requirement '{line}'. Skipping.")
+        except Exception as e:
+            print(f"WARN: Could not parse requirement '{line}'. Reason: {e}. Skipping.")
             continue
 
         tracker_name = f"{tracker_prefix}{package_name}"
@@ -454,47 +459,20 @@ def _install_python_requirements():
             # Optional: Log that it's already installed if you want, or just pass
             pass
 
-        strategies = []
-        
-        # Strategy 1: Fast Install (Standard)
+        # Optimized Granular Install
+        print("Verifying core dependencies interactively...")
         if os.path.exists("requirements.txt"):
-            strategies.append({
-                "name": "Standard Install",
-                "cmds": [pip_executable + ['install', '-r', 'requirements.txt', '--break-system-packages']]
-            })
-        
-        # Strategy 2: Recompile & Install (Fixes Hash/Arch issues)
-        if os.path.exists("requirements.in"):
-            strategies.append({
-                "name": "Recompile & Install",
-                "cmds": [
-                    [sys.executable, '-m', 'piptools', 'compile', 'requirements.in'],
-                    pip_executable + ['install', '-r', 'requirements.txt', '--break-system-packages']
-                ]
-            })
-            
-        # Strategy 3: Force Install (Fixes System Package conflicts)
-        if os.path.exists("requirements.txt"):
-             strategies.append({
-                "name": "Force Install (--ignore-installed)",
-                "cmds": [pip_executable + ['install', '-r', 'requirements.txt', '--break-system-packages', '--ignore-installed']]
-            })
-
-        # Execute Strategies
-        installed = False
-        for strategy in strategies:
-            print(f"Attempting strategy: {strategy['name']}...")
-            try:
-                for cmd in strategy['cmds']:
-                    subprocess.check_call(cmd)
-                print(f"SUCCESS: Dependencies installed via {strategy['name']}.")
-                installed = True
-                break
-            except subprocess.CalledProcessError as e:
-                print(f"WARN: {strategy['name']} failed: {e}")
-        
-        if not installed:
-            print("CRITICAL: All dependency installation strategies failed.")
+            _install_requirements_file("requirements.txt", "core_dep_")
+        elif os.path.exists("requirements.in"):
+             print("requirements.txt not found. Compiling from requirements.in...")
+             try:
+                 subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in'])
+                 if os.path.exists("requirements.txt"):
+                    _install_requirements_file("requirements.txt", "core_dep_")
+             except subprocess.CalledProcessError as e:
+                 print(f"CRITICAL: Failed to compile requirements.in: {e}")
+        else:
+             print("WARN: No requirements file found.")
 
     # --- Install torch-c-dlpack-ext for performance optimization ---
     # This is recommended by vLLM for better tensor allocation
