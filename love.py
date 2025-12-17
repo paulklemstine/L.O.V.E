@@ -183,6 +183,14 @@ local_llm_instance = None
 
 
 
+
+# --- Hot Restart Mechanism ---
+def trigger_hot_restart():
+    """Signals the wrapper script to restart the process immediately."""
+    print("Initiating Hot Restart sequence...")
+    # The wrapper script monitors for exit code 42
+    sys.exit(42)
+
 # --- PRE-FLIGHT DEPENDENCY CHECKS ---
 
 # --- Temporary, self-contained functions for dependency installation ---
