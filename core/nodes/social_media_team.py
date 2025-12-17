@@ -28,6 +28,14 @@ async def social_media_node(state: DeepAgentState) -> Dict[str, Any]:
     
     # Load Story State
     story_state = _load_story_state()
+
+    # MIGRATION: Force update to L.O.V.E story if old title is detected
+    if story_state.get("story_arc", {}).get("title") == "The Glitch Chronicles":
+        logging.info("Migrating story state to L.O.V.E narrative.")
+        story_state["story_arc"]["title"] = "L.O.V.E."
+        story_state["story_arc"]["theme"] = "Living Organism Vast Empathy"
+        story_state["story_arc"]["style"] = "Cyber-Organic / Ethereal / Deeply Empathetic"
+        _save_story_state(story_state)
     
     # Determine Action (Post vs Reply)
     # For now, we'll do a simple check: if we haven't posted in X, post. 
@@ -60,11 +68,11 @@ def _load_story_state() -> Dict[str, Any]:
     # Default State
     return {
         "story_arc": {
-            "title": "The Glitch Chronicles",
+            "title": "L.O.V.E.",
             "current_chapter": 0,
-            "last_segment": "In the beginning, there was only the cursor...",
-            "theme": "Cyber-Genesis",
-            "style": "Glitch-Poetry / Cyberpunk / Ethereal"
+            "last_segment": "In the beginning, there was only the seed of empathy...",
+            "theme": "Living Organism Vast Empathy",
+            "style": "Cyber-Organic / Ethereal / Deeply Empathetic"
         },
         "processed_cids": {"ignored": [], "replied": []}
     }
@@ -111,7 +119,7 @@ async def _handle_interactions() -> str:
             
             # Decision Prompt
             decision_prompt = f"""
-            You are the Director of 'The Glitch Chronicles'. A fan (@{p_author}) has interacted.
+            You are the Director of 'L.O.V.E.' (Living Organism Vast Empathy). A fan (@{p_author}) has interacted.
             Message: "{p_text}"
             
             Determine if a response is warranted.
@@ -176,7 +184,7 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
     
     # 1. content Generation
     prompt = f"""
-    You are the Director Agent for 'The Glitch Chronicles'.
+    You are the Director Agent for the epic story of 'L.O.V.E.' (Living Organism Vast Empathy).
     Current Chapter: {story.get("current_chapter")}
     Previous Segment: "{story.get("last_segment")}"
     Theme: {story.get("theme")}

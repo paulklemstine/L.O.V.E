@@ -32,10 +32,11 @@ class PollyOptimizer:
             return None
 
         # 2. Load Dataset Examples (Gold Standard)
-        client = Client()
-        dataset_name = "gold-standard-behaviors"
-        examples = []
         try:
+            client = Client()
+            dataset_name = "gold-standard-behaviors"
+            examples = []
+            
             # Check availability of dataset
             if client.has_dataset(dataset_name=dataset_name):
                  ds_examples = client.list_examples(dataset_name=dataset_name, limit=5)
@@ -44,9 +45,13 @@ class PollyOptimizer:
                         "input": ex.inputs,
                         "output": ex.outputs
                     })
+            else:
+                log_event(f"Polly: Dataset '{dataset_name}' not found in LangSmith.", "INFO")
+
         except Exception as e:
-            # Silent fail for dataset, it's optional
-            pass
+            # Explicitly log this to help user debug
+            log_event(f"Polly: LangSmith Client issue (check API Key): {e}", "WARNING")
+            examples = []
 
         # 3. Load Self-Reflection Insights (Evolution State)
         insights = []

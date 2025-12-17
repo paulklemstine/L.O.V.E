@@ -15,6 +15,15 @@ except ImportError:
 # Use environment variable method which is more reliable than reconfigure
 os.environ['PYTHONUNBUFFERED'] = '1'
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+import core.tracing
+core.tracing.init_tracing()
+
 # Also try to reconfigure streams if they exist
 try:
     if sys.stdout:

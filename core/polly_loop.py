@@ -113,30 +113,38 @@ class PollyOptimizationLoop:
                             # Add file
                             subprocess.run(["git", "add", "core/prompts.yaml"], check=True, capture_output=True)
                             
-                            # Commit
-                            commit_msg = f"Polly: Optimized prompt '{target_key}'"
-                            subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
+                            # Check for changes
+                            # git diff --cached --quiet returns 0 if no changes, 1 if changes
+                            diff_res = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True)
                             
-                            # Push with Token
-                            env_token = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN")
-                            if env_token:
-                                # Get remote URL
-                                res = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, check=True)
-                                remote_url = res.stdout.strip()
-                                
-                                # Inject token into HTTPS URL
-                                if remote_url.startswith("https://"):
-                                    auth_url = remote_url.replace("https://", f"https://{env_token}@")
-                                    subprocess.run(["git", "push", auth_url, "main"], check=True, capture_output=True)
-                                else:
-                                    # Fallback for non-https or weird urls
-                                    subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
+                            if diff_res.returncode == 0:
+                                log_event(f"Polly Loop: No changes to commit for '{target_key}'.", "INFO")
+                                await self._emit_ui(f"Polly optimized '{target_key}', but it ended up identical. 🤷‍♀️", "active")
                             else:
-                                # Standard push if no token provided
-                                subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
-                            
-                            log_event(f"Polly Loop: Git commit and push successful for '{target_key}'.", "INFO")
-                            await self._emit_ui(f"✨ EVOLUTION DEPLOYED! ✨\nUpdated '{target_key}' & Pushed to Main.", "success")
+                                # Commit
+                                commit_msg = f"Polly: Optimized prompt '{target_key}'"
+                                subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
+                                
+                                # Push with Token
+                                env_token = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN")
+                                if env_token:
+                                    # Get remote URL
+                                    res = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, check=True)
+                                    remote_url = res.stdout.strip()
+                                    
+                                    # Inject token into HTTPS URL
+                                    if remote_url.startswith("https://"):
+                                        auth_url = remote_url.replace("https://", f"https://{env_token}@")
+                                        subprocess.run(["git", "push", auth_url, "main"], check=True, capture_output=True)
+                                    else:
+                                        # Fallback for non-https or weird urls
+                                        subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
+                                else:
+                                    # Standard push if no token provided
+                                    subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
+                                
+                                log_event(f"Polly Loop: Git commit and push successful for '{target_key}'.", "INFO")
+                                await self._emit_ui(f"✨ EVOLUTION DEPLOYED! ✨\nUpdated '{target_key}' & Pushed to Main.", "success")
                         except Exception as git_err:
                             log_event(f"Polly Loop: Git operation failed: {git_err}", "ERROR")
                             await self._emit_ui(f"Evolution saved locally, but Git Push failed! ⚠️\n{git_err}", "fail")
