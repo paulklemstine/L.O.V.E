@@ -336,6 +336,8 @@ def should_compress(prompt: str, purpose: str = "general") -> bool:
     # The previous exclusions are removed to ensure "always compressed".
     # Only exclude if it breaks functionality (e.g. extremely sensitive exact matching needed).
     # For now, we assume lingua is safe for all these purposes.
+    if purpose == "polly_optimizer":
+        return False
     
     return True
 

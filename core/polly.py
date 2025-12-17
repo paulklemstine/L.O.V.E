@@ -98,7 +98,7 @@ class PollyOptimizer:
         # 5. Run Optimization
         response = await run_llm(
             prompt_text=optimizer_prompt,
-            purpose="review",
+            purpose="polly_optimizer",
             force_model=self.model_id
         )
 
