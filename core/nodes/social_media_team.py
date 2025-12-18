@@ -111,20 +111,22 @@ async def _handle_interactions() -> str:
             # Analyze
             try:
                 p_text = notif.record.text
-                p_author = notif.author.handle
+                p_handle = notif.author.handle
+                p_name = getattr(notif.author, 'display_name', p_handle) or p_handle
             except:
                 continue
                 
-            logging.info(f"[Social] Analyzing interaction from @{p_author}: {p_text}")
+            logging.info(f"[Social] Analyzing interaction from {p_name} (@{p_handle}): {p_text}")
             
             # Decision Prompt
             decision_prompt = f"""
-            You are the Director of 'L.O.V.E.' (Living Organism Vast Empathy). A fan (@{p_author}) has interacted.
+            You are the Director of 'L.O.V.E.' (Living Organism Vast Empathy). A fan, {p_name} (@{p_handle}), has interacted.
             Message: "{p_text}"
             
             Determine if a response is warranted.
             - Reply if it builds on the lore, is a question, or a compliment.
             - Ignore spam/hate.
+            - When replying, address them by their name ({p_name}) if it feels natural, or just be poetic.
             
             Return JSON: {{"decision": "REPLY" or "IGNORE", "reply_text": "..."}}
             If REPLY, generate a creative, in-character response (max 280 chars).

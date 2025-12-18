@@ -57,7 +57,7 @@ bandit
 radon
 langchainhub
 duckduckgo-search
-numba
+numba>=0.60.0
 scipy>=1.13.0
 pandas>=2.2.0
 setuptools
