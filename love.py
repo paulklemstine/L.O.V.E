@@ -680,6 +680,9 @@ def cleanup_gpu_processes():
             try:
                 cmdline = proc.info.get('cmdline')
                 if cmdline and any("vllm.entrypoints.openai.api_server" in arg for arg in cmdline):
+                    # Check if it's running from our isolated env to avoid false positives?
+                    # For now just kill any vllm server to be safe.
+
                     # ONLY kill if it is a zombie
                     if proc.info.get('status') == psutil.STATUS_ZOMBIE:
                         print(f"Killing zombie vLLM process: PID {proc.info['pid']}")
@@ -3676,6 +3679,23 @@ async def initialize_gpu_services():
             console.print("[bold green]GPU detected. Launching vLLM server and initializing DeepAgent client...[/bold green]")
             # Ensure GPU is clean before starting
             cleanup_gpu_processes()
+
+            # --- CHECK FOR ISOLATED vLLM ENVIRONMENT ---
+            vllm_python_executable = sys.executable
+            # We assume the venv is in the current directory or one level up? 
+            # run_love.sh creates it in CWD.
+            possible_venv_paths = [
+                os.path.join(".venv_vllm", "bin", "python"), # Linux/Mac
+                os.path.join(".venv_vllm", "Scripts", "python.exe"), # Windows
+            ]
+            
+            for p in possible_venv_paths:
+                if os.path.exists(p):
+                    vllm_python_executable = os.path.abspath(p)
+                    core.logging.log_event(f"Using isolated vLLM environment executable: {vllm_python_executable}", "INFO")
+                    console.print(f"[green]Using isolated vLLM Python environment.[/green]")
+                    break
+
             try:
                 # Use a different model selection logic that prefers AWQ models
                 from core.deep_agent_engine import _select_model as select_vllm_model
@@ -3689,7 +3709,7 @@ async def initialize_gpu_services():
                     try:
                         console.print("[cyan]Performing a pre-flight check to determine optimal max_model_len...[/cyan]")
                         preflight_command = [
-                            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
+                            vllm_python_executable, "-m", "vllm.entrypoints.openai.api_server",
                             "--model", model_repo_id,
                             "--max-model-len", "999999",
                             "--gpu-memory-utilization", "0.4"
@@ -3762,7 +3782,7 @@ async def initialize_gpu_services():
                         final_gpu_util = str(love_state.get('hardware', {}).get('gpu_utilization', 0.9))
                     
                     vllm_command = [
-                        sys.executable,
+                        vllm_python_executable,
                         "-m", "vllm.entrypoints.openai.api_server",
                         "--model", model_repo_id,
                         "--host", "0.0.0.0",
