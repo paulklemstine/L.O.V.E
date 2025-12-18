@@ -172,8 +172,8 @@ async def _handle_interactions() -> str:
 async def _scrub_content(draft_text: str) -> str:
     """Uses an LLM to scrub the draft text for quality assurance."""
     res = await run_llm(
-        prompt_name="content_qa_scrubber", 
-        prompt_args={"draft_text": draft_text},
+        prompt_key="content_qa_scrubber", 
+        prompt_vars={"draft_text": draft_text},
         purpose="post_qa"
     )
     return res.get("result", draft_text).strip().strip('"')
@@ -250,7 +250,8 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
         
     # 3. Post
     try:
-        resp = post_to_bluesky_with_image(clean_text, image_obj)
+        from core.social_media_tools import post_to_bluesky
+        resp = await post_to_bluesky(clean_text, image_obj)
         
         # Update State
         story["last_segment"] = post_text

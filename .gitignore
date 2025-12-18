@@ -37,3 +37,4 @@ faiss_id_map.json
 faiss_index.bin
 
 art/
+.env
