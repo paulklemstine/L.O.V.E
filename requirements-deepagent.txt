@@ -10,10 +10,10 @@ fuzzywuzzy
 func-timeout
 lxml
 nltk
-numpy
+numpy<2.0.0
 openai
 openai-whisper
-pandas
+pandas>=2.2.0
 pdfplumber
 PyPDF2
 python-dateutil
