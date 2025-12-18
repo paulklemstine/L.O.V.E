@@ -257,6 +257,10 @@ def _install_system_packages():
     import platform
     import subprocess
     
+    if is_dependency_met("system_packages"):
+        print("System packages already installed (tracker). Skipping.")
+        return
+
     # 1. Ensure ~/.local/bin is in PATH
     home_dir = os.path.expanduser("~")
     local_bin = os.path.join(home_dir, ".local", "bin")
@@ -399,12 +403,23 @@ def _install_requirements_file(requirements_path, tracker_prefix):
         # Skip comments, empty lines, and argument lines
         if not line or line.startswith('#') or line.startswith('--'):
             continue
+            
+        print(f"Checking requirement: {line.strip()}...")
 
         try:
             # Use packaging to correctly parse the package name from the line
             from packaging.requirements import Requirement
             req = Requirement(line)
             package_name = req.name
+            
+            # Additional safety: explicitly skip typing_extensions here too if found
+            if package_name == "typing_extensions":
+                 if _is_package_installed("typing_extensions"):
+                      # Just assume it's fine to avoid the upgrade-freeze loop
+                      print("Skipping typing_extensions check in loop (handled explicitly).")
+                      mark_dependency_as_met(f"{tracker_prefix}typing_extensions")
+                      continue
+
         except Exception as e:
             print(f"WARN: Could not parse requirement '{line}'. Reason: {e}. Skipping.")
             continue
@@ -426,7 +441,8 @@ def _install_requirements_file(requirements_path, tracker_prefix):
             continue
         try:
             # Construct the install command, including any extra index URLs
-            install_command = pip_executable + ['install'] + extra_pip_args + [line, '--break-system-packages']
+            # ADDED: --no-input and --disable-pip-version-check to prevent hangs
+            install_command = pip_executable + ['install'] + extra_pip_args + [line, '--break-system-packages', '--no-input', '--disable-pip-version-check']
             subprocess.check_call(install_command)
             print(f"Successfully installed {package_name}.")
             mark_dependency_as_met(tracker_name)
@@ -441,8 +457,8 @@ def _install_python_requirements():
     # CRITICAL FIX: Ensure typing_extensions is up-to-date for Pydantic/OpenAI
     try:
         from core.dependency_manager import install_package
-        print("Ensuring typing_extensions is up-to-date...")
-        install_package("typing_extensions", upgrade=True)
+        print("Ensuring typing_extensions is installed...")
+        install_package("typing_extensions")
     except Exception as e:
         print(f"WARN: Failed to upgrade typing_extensions: {e}")
 
@@ -452,7 +468,7 @@ def _install_python_requirements():
         # Ensure pip-tools is installed
         if not _is_package_installed("pip-tools"):
             try:
-                subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages', '--no-input'])
             except subprocess.CalledProcessError:
                 pass
         else:
@@ -466,11 +482,13 @@ def _install_python_requirements():
         elif os.path.exists("requirements.in"):
              print("requirements.txt not found. Compiling from requirements.in...")
              try:
-                 subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in'])
+                 subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in', '-v'])
                  if os.path.exists("requirements.txt"):
                     _install_requirements_file("requirements.txt", "core_dep_")
              except subprocess.CalledProcessError as e:
                  print(f"CRITICAL: Failed to compile requirements.in: {e}")
+                 # Force exit so we don't crash with missing modules later
+                 sys.exit(1)
         else:
              print("WARN: No requirements file found.")
 

@@ -73,22 +73,13 @@ def get_pip_executable():
     except Exception as e:
         print(f"CRITICAL: Failed to install 'pip' using 'get-pip.py': {e}")
 
-    # 5. Try system package manager (Linux only)
-    if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
-        print("Attempting to install 'python3-pip' via apt-get...")
-        try:
-            subprocess.check_call("sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-pip", shell=True)
-            if shutil.which('pip3'):
-                return ['pip3']
-            elif shutil.which('pip'):
-                return ['pip']
-            # Check sys.executable again
-            subprocess.check_call([sys.executable, '-m', 'pip', '--version'],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
-            return [sys.executable, '-m', 'pip']
-        except subprocess.CalledProcessError as e:
-            print(f"CRITICAL: Failed to install 'python3-pip' via 'apt-get': {e}")
+    # 5. Try system package manager (Linux only) - DISABLED to prevent sudo hangs
+    # if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
+    #     print("Attempting to install 'python3-pip' via apt-get...")
+    #     # ... (code removed)
+    #     print("WARN: skipping sudo install of pip")
+    
+    return None
 
     return None
 
@@ -97,12 +88,13 @@ def install_package(package_name, upgrade=False, break_system_packages=True):
     Installs a single package using the detected pip executable.
     Returns True if successful, False otherwise.
     """
-    # Check if already installed
     try:
         importlib.import_module(package_name)
         # Some packages have different import names than install names (e.g. pyyaml -> yaml)
         # But for auto-installing missing imports, usually the name matches or we handle it caller side.
-        # However, for robustness, we might just try install if import failed before calling this.
+        if not upgrade:
+            logger.info(f"Package '{package_name}' already installed and upgrade not requested.")
+            return True
     except ImportError:
         pass
 
@@ -117,6 +109,9 @@ def install_package(package_name, upgrade=False, break_system_packages=True):
         cmd.append('--upgrade')
     if break_system_packages:
         cmd.append('--break-system-packages')
+    
+    cmd.append('--no-input')
+    cmd.append('--disable-pip-version-check')
 
     try:
         subprocess.check_call(cmd)
