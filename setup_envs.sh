@@ -25,7 +25,9 @@ create_venv() {
     if [ ! -f "$env_name/bin/python" ]; then
         echo -e "${YELLOW}Creating (or recreating) virtual environment: $env_name${NC}"
         rm -rf "$env_name" # Wipe potential broken dir
-        python3 -m venv "$env_name"
+        # Create venv WITHOUT pip first, because ensurepip often fails in Colab/Debian
+        # We will manually bootstrap it below.
+        python3 -m venv "$env_name" --without-pip
         
         # Verify creation succeeded
         if [ ! -f "$env_name/bin/python" ]; then
