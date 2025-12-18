@@ -23,7 +23,7 @@ python-pptx
 pyyaml
 requests
 rouge
-scipy
+scipy>=1.13.0
 spotipy
 sympy
 tqdm

@@ -35,7 +35,7 @@ parsel
 agent-framework
 openevolve
 sentence-transformers
-scikit-learn
+scikit-learn>=1.5.0
 transformers
 # tokenizers - using system-installed version
 torch
@@ -58,7 +58,7 @@ radon
 langchainhub
 duckduckgo-search
 numba
-scipy
+scipy>=1.13.0
 pandas>=2.2.0
 setuptools
 wheel
