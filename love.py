@@ -373,82 +373,37 @@ def _is_package_installed(req_str):
 
 def _install_requirements_file(requirements_path, tracker_prefix):
     """
-    Parses a requirements file and installs each package individually if not
-    already present and tracked. It now handles --extra-index-url arguments.
+    Parses a requirements file and installs packages using pip.
+    Now uses bulk installation for reliability and performance.
     """
     if not os.path.exists(requirements_path):
         print(f"WARN: Requirements file not found at '{requirements_path}'. Skipping.")
         logging.warning(f"Requirements file not found at '{requirements_path}'.")
         return
 
-    # import pkg_resources # REMOVED
-    extra_pip_args = []
-    with open(requirements_path, 'r') as f:
-        lines = f.readlines()
+    print(f"Installing dependencies from {requirements_path}...")
+    
+    pip_executable = _get_pip_executable()
+    if not pip_executable:
+        print("ERROR: Could not find 'pip' or 'pip3'. Please ensure pip is installed.")
+        logging.error("Could not find 'pip' or 'pip3'.")
+        return
 
-    # First pass: collect all extra arguments like --extra-index-url
-    for line in lines:
-        line = line.strip()
-        if line.startswith('--extra-index-url'):
-            # Split once to handle URLs that might contain spaces
-            parts = line.split(' ', 1)
-            if len(parts) == 2:
-                extra_pip_args.extend(parts)
-            else:
-                print(f"WARN: Could not parse argument line '{line}'. Skipping.")
-
-    # Second pass: install the packages
-    for line in lines:
-        line = line.strip()
-        # Skip comments, empty lines, and argument lines
-        if not line or line.startswith('#') or line.startswith('--'):
-            continue
-            
-        print(f"Checking requirement: {line.strip()}...")
-
-        try:
-            # Use packaging to correctly parse the package name from the line
-            from packaging.requirements import Requirement
-            req = Requirement(line)
-            package_name = req.name
-            
-            # Additional safety: explicitly skip typing_extensions here too if found
-            if package_name == "typing_extensions":
-                 if _is_package_installed("typing_extensions"):
-                      # Just assume it's fine to avoid the upgrade-freeze loop
-                      print("Skipping typing_extensions check in loop (handled explicitly).")
-                      mark_dependency_as_met(f"{tracker_prefix}typing_extensions")
-                      continue
-
-        except Exception as e:
-            print(f"WARN: Could not parse requirement '{line}'. Reason: {e}. Skipping.")
-            continue
-
-        tracker_name = f"{tracker_prefix}{package_name}"
-        if is_dependency_met(tracker_name):
-            continue
-
-        if _is_package_installed(line):
-            print(f"Package '{package_name}' is already installed, marking as met.")
-            mark_dependency_as_met(tracker_name)
-            continue
-
-        print(f"Installing package: {line}...")
-        pip_executable = _get_pip_executable()
-        if not pip_executable:
-            print("ERROR: Could not find 'pip' or 'pip3'. Please ensure pip is installed.")
-            logging.error("Could not find 'pip' or 'pip3'.")
-            continue
-        try:
-            # Construct the install command, including any extra index URLs
-            # ADDED: --no-input and --disable-pip-version-check to prevent hangs
-            install_command = pip_executable + ['install'] + extra_pip_args + [line, '--break-system-packages', '--no-input', '--disable-pip-version-check']
-            subprocess.check_call(install_command)
-            print(f"Successfully installed {package_name}.")
-            mark_dependency_as_met(tracker_name)
-        except subprocess.CalledProcessError as e:
-            print(f"ERROR: Failed to install package '{package_name}'. Reason: {e}")
-            logging.error(f"Failed to install package '{package_name}': {e}")
+    try:
+        # Construct the install command
+        # We use --break-system-packages because this is often running in managed envs (Colab/Conda)
+        # and we want to ensure we get our packages.
+        install_command = pip_executable + ['install', '-r', requirements_path, '--break-system-packages', '--no-input', '--disable-pip-version-check']
+        
+        # Run pip
+        subprocess.check_call(install_command)
+        print(f"Successfully installed dependencies from {requirements_path}.")
+        
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: Failed to install dependencies from {requirements_path}. Reason: {e}")
+        logging.error(f"Failed to install dependencies from {requirements_path}: {e}")
+        # Fail hard if dependencies fail - safer than continuing
+        sys.exit(1)
 
 def _install_python_requirements():
     """Installs Python packages from requirements.txt and OS-specific dependencies."""
