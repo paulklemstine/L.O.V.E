@@ -50,7 +50,7 @@ langgraph
 langchain
 langchain-community
 langchain-core
-langsmith
+langsmith<0.5.0
 cairosvg
 ruff
 bandit
