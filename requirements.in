@@ -35,6 +35,7 @@ parsel
 agent-framework
 openevolve
 sentence-transformers
+scikit-learn>=1.5.0
 transformers
 # tokenizers - using system-installed version
 torch==2.5.1
