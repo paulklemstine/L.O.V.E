@@ -393,7 +393,7 @@ def _install_requirements_file(requirements_path, tracker_prefix):
         # Construct the install command
         # We use --break-system-packages because this is often running in managed envs (Colab/Conda)
         # and we want to ensure we get our packages.
-        install_command = pip_executable + ['install', '-r', requirements_path, '--break-system-packages', '--no-input', '--disable-pip-version-check']
+        install_command = pip_executable + ['install', '-r', requirements_path, '--break-system-packages', '--no-input', '--disable-pip-version-check', '-v']
         
         # Run pip
         subprocess.check_call(install_command)
@@ -437,7 +437,7 @@ def _install_python_requirements():
         elif os.path.exists("requirements.in"):
              print("requirements.txt not found. Compiling from requirements.in...")
              try:
-                 subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in', '-v'])
+                 subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in', '-vv'])
                  if os.path.exists("requirements.txt"):
                     _install_requirements_file("requirements.txt", "core_dep_")
              except subprocess.CalledProcessError as e:
