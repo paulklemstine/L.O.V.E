@@ -16,11 +16,13 @@ echo -e "${GREEN}Starting Dependency Isolation Setup...${NC}"
 # Function to create venv if it doesn't exist
 create_venv() {
     local env_name=$1
-    if [ ! -d "$env_name" ]; then
-        echo -e "${YELLOW}Creating virtual environment: $env_name${NC}"
+    # Check if a critical file exists to confirm it's a valid venv
+    if [ ! -f "$env_name/bin/python" ]; then
+        echo -e "${YELLOW}Creating (or recreating) virtual environment: $env_name${NC}"
+        rm -rf "$env_name" # Wipe potential broken dir
         python3 -m venv "$env_name"
     else
-        echo -e "${GREEN}Virtual environment $env_name already exists.${NC}"
+        echo -e "${GREEN}Virtual environment $env_name appears valid.${NC}"
     fi
 }
 
