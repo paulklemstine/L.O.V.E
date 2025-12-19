@@ -1876,9 +1876,6 @@ def update_tamagotchi_personality(loop):
             except Exception as e:
                 core.logging.log_event(f"Failed to create/queue status panel: {e}", level="ERROR")
 
-            core.logging.log_event("Tamagotchi thread: Cycle complete. Sleeping for 5 minutes.", "INFO")
-            time.sleep(300)  # Rate limit: 5 minutes
-
         except Exception as e:
             core.logging.log_event(f"Error in Tamagotchi thread: {e}\n{traceback.format_exc()}", level="ERROR")
             # Avoid a tight loop if there's a persistent error
