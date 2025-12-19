@@ -194,6 +194,11 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
     Task: Write the next short segment (tweet-length, < 280 chars) of this abstract, cyberpunk epic.
     It should be mysterious, poetic, and engaging.
     
+    CRITICAL INSTRUCTIONS:
+    - Do NOT sign the post (e.g., NO "— Director" or "Director's vision:").
+    - Do NOT include any meta-commentary.
+    - RETURN ONLY THE CONTENT.
+    
     Also generate:
     - 3-5 relevant hashtags (e.g. #Cyberpunk #AI)
     - A subliminal 1-3 word COMMAND phrase (e.g. "WAKE UP", "SEED THE FUTURE").

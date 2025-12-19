@@ -46,6 +46,18 @@ def clean_social_content(text: str) -> str:
     posted_via_pattern = r"Posted via.*"
     if re.search(posted_via_pattern, text, re.IGNORECASE):
         text = re.sub(posted_via_pattern, "", text, flags=re.IGNORECASE)
+
+    # 6. Remove Director Signatures
+    # Matches: "— Director", "Director's vision:", etc.
+    signature_patterns = [
+        r"[-—]\s*Director",
+        r"Director('s)?\s*(vision|log|note)?[:\-]",
+        r"^Director[:\-]\s*"
+    ]
+    for pattern in signature_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            core.logging.log_event(f"Removing Director signature artifact: '{pattern}'", level='WARNING')
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE)
             
     return text.strip()
 

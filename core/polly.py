@@ -14,7 +14,7 @@ class PollyOptimizer:
     Polly: The Autonomous Prompt Optimizer.
     """
     
-    def __init__(self, model_id: str = "gemini-2.0-flash-exp"):
+    def __init__(self, model_id: str = None):
         self.model_id = model_id
         self.registry = get_prompt_registry()
         
