@@ -719,6 +719,7 @@ talent_scoring_evaluation: 'Here’s the optimized version of your prompt, addre
 
   **Optimized Prompt:**
 
+
   ```
 
   {{ evaluation_prompt }}
@@ -738,6 +739,8 @@ talent_scoring_evaluation: 'Here’s the optimized version of your prompt, addre
   2. **Ignore formatting, typos, or non-text elements** (e.g., images, links). Focus only on the written content.
 
   3. **Default to 5** if the text is neutral/ambiguous (e.g., lacks clear indicators of skill).
+
+  4. **Do not infer or assume context**—score only what is explicitly stated in the text.
 
 
   **Public Posts:**
@@ -766,6 +769,8 @@ talent_scoring_evaluation: 'Here’s the optimized version of your prompt, addre
   3. **Scope Limitation**: Emphasized focus on *text-only* content to avoid bias from non-text elements.
 
   4. **Conciseness**: Removed redundant phrasing while preserving the core task.
+
+  5. **Added Rule 4**: Explicitly instructed the agent not to infer or assume context, ensuring strict adherence to the provided text.
 
 
   This version ensures consistency, reduces ambiguity, and aligns with the agent’s role as an objective evaluator.'
