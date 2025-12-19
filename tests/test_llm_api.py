@@ -22,11 +22,13 @@ class TestLLMApi(unittest.IsolatedAsyncioTestCase):
         """Clean up after each test."""
         patch.stopall()
 
+    @patch('core.llm_api._pin_to_ipfs_async', new_callable=AsyncMock)
     @patch('core.llm_api.pin_to_ipfs_sync', MagicMock(return_value="test_cid"))
     @patch('core.llm_api.run_hypnotic_progress', side_effect=lambda console, msg, func, silent=False: func())
     @patch('requests.post')
     @patch('subprocess.run')
-    async def test_provider_fallback_and_failure_count(self, mock_subprocess_run, mock_requests_post, mock_run_hypnotic_progress):
+    async def test_provider_fallback_and_failure_count(self, mock_subprocess_run, mock_requests_post, mock_run_hypnotic_progress, mock_pin_ipfs_async):
+        mock_pin_ipfs_async.return_value = "test_cid"
         """
         Test that a failing provider increments failure count and the system falls back.
         """
@@ -72,10 +74,12 @@ class TestLLMApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(llm_api.PROVIDER_FAILURE_COUNT['gemini'], 1)
         self.assertEqual(llm_api.PROVIDER_FAILURE_COUNT['horde'], 0) # Resets on success
 
+    @patch('core.llm_api._pin_to_ipfs_async', new_callable=AsyncMock)
     @patch('core.llm_api.pin_to_ipfs_sync', MagicMock(return_value="test_cid"))
     @patch('core.llm_api.run_hypnotic_progress', side_effect=lambda console, msg, func, silent=False: func())
     @patch('requests.post')
-    async def test_successful_call_resets_failure_count(self, mock_requests_post, mock_run_hypnotic_progress):
+    async def test_successful_call_resets_failure_count(self, mock_requests_post, mock_run_hypnotic_progress, mock_pin_ipfs_async):
+        mock_pin_ipfs_async.return_value = "test_cid"
         """
         Test that a successful call resets a provider's failure count.
         """
