@@ -1,5 +1,6 @@
 import os
 import json
+import glob
 from typing import List, Dict, Any
 
 # Using local imports to avoid circular dependencies
@@ -114,3 +115,44 @@ async def explore_structured_data(topic: str, schema_description: str) -> Dict[s
         return json.loads(extracted_json_str)
     except Exception as e:
         return {"error": f"JSON parse failed: {e}", "raw": extracted_json_str}
+
+async def analyze_codebase(directory_path: str) -> str:
+    """
+    Analyzes the codebase in the specified directory to provide context for improvements.
+    """
+    from core.llm_api import run_llm
+
+    if not os.path.exists(directory_path):
+        return f"Directory not found: {directory_path}"
+    
+    code_content = ""
+    # Use glob to find all python files in the directory
+    py_files = glob.glob(os.path.join(directory_path, "*.py"))
+    
+    # helper to avoid huge files if necessary, currently reading all
+    for file_path in py_files:
+        try:
+            with open(file_path, 'r', errors='ignore') as f:
+                content = f.read()
+                # Simple truncation if too large? For now assume it fits or LLM handles it.
+                if len(content) > 20000:
+                    content = content[:20000] + "\n...[truncated]..."
+                code_content += f"--- {os.path.basename(file_path)} ---\n{content}\n\n"
+        except Exception as e:
+            code_content += f"--- {os.path.basename(file_path)} ---\nError reading file: {e}\n\n"
+            
+    prompt = f"""
+    Analyze the following codebase modules located in {directory_path}.
+    Identify the overall architecture, common patterns, and potential areas for global improvement.
+    Focus on code quality, consistency, and structural integrity.
+    
+    Codebase Content:
+    {code_content}
+    """
+    
+    try:
+        # Using prompt_text directly as per other usages
+        response = await run_llm(prompt_text=prompt, purpose="code_analysis")
+        return response.get('result', 'No analysis generated.')
+    except Exception as e:
+        return f"Error during analysis: {e}"
