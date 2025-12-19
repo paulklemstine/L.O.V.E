@@ -38,5 +38,5 @@ faiss_index.bin
 
 art/
 .env
-/venv_core/
+/.venv_core/
 /venv_vllm/

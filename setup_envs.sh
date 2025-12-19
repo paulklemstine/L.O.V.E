@@ -2,9 +2,22 @@
 set -e
 # Try to install python3-venv if we have apt-get and sudo (fixes some Colab/Ubuntu envs)
 if command -v apt-get &> /dev/null && command -v sudo &> /dev/null; then
-  echo -e "${YELLOW}Checking for python3-venv...${NC}"
-  sudo apt-get update && sudo apt-get install -y python3-venv || echo -e "${YELLOW}Could not install python3-venv, hoping it is already there.${NC}"
+  echo -e "${YELLOW}Checking/Installing Python 3.13...${NC}"
+  # Add deadsnakes PPA if needed (checking if python3.13 is available first)
+  if ! apt-cache show python3.13 >/dev/null 2>&1; then
+      sudo add-apt-repository ppa:deadsnakes/ppa -y || echo "Failed to add PPA, continuing..."
+      sudo apt-get update
+  fi
+  sudo apt-get install -y python3.13 python3.13-venv python3.13-dev || echo -e "${YELLOW}Could not install python3.13, using system default.${NC}"
 fi
+
+# Determine python executable
+if command -v python3.13 &> /dev/null; then
+    PYTHON_EXEC="python3.13"
+else
+    PYTHON_EXEC="python3"
+fi
+echo -e "${GREEN}Using Python executable: $PYTHON_EXEC${NC}"
 
 # Define environment paths
 VENV_CORE=".venv_core"
@@ -27,7 +40,7 @@ create_venv() {
         rm -rf "$env_name" # Wipe potential broken dir
         # Create venv WITHOUT pip first, because ensurepip often fails in Colab/Debian
         # We will manually bootstrap it below.
-        python3 -m venv "$env_name" --without-pip
+        $PYTHON_EXEC -m venv "$env_name" --without-pip
         
         # Verify creation succeeded
         if [ ! -f "$env_name/bin/python" ]; then
