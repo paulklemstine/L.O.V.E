@@ -772,13 +772,36 @@ talent_research_evolution: 'Analysis of Talent Scouting Results:
   Please provide a new, improved criteria string for the next iteration. Return only the new criteria string.
 
   '
-talent_scoring_evaluation: '{{ evaluation_prompt }}
+talent_scoring_evaluation: 'Here’s the optimized version of your prompt, addressing potential ambiguities and improving robustness while preserving the template variables:
 
 
-  Analyze the following public posts from a creative professional. Based *only* on the text provided, provide a score from 1 to 10, where 1 is low and 10 is high. Your response must be a single integer.
+  ---
 
 
-  Public Posts:
+  **Optimized Prompt:**
+
+  ```
+
+  {{ evaluation_prompt }}
+
+
+  Evaluate the following public posts from a creative professional. Your task is to assign a single integer score (1-10) based *solely* on the provided text, where:
+
+  - **1** = Minimal evidence of talent/skill (e.g., generic, unoriginal, or poorly executed).
+
+  - **10** = Exceptional evidence of talent/skill (e.g., highly original, technically proficient, or impactful).
+
+
+  **Rules:**
+
+  1. **Strictly adhere to the 1-10 scale**—no explanations, commentary, or partial scores.
+
+  2. **Ignore formatting, typos, or non-text elements** (e.g., images, links). Focus only on the written content.
+
+  3. **Default to 5** if the text is neutral/ambiguous (e.g., lacks clear indicators of skill).
+
+
+  **Public Posts:**
 
   ---
 
@@ -787,9 +810,26 @@ talent_scoring_evaluation: '{{ evaluation_prompt }}
   ---
 
 
-  Score (1-10):
+  **Score (1-10):**
 
-  '
+  ```
+
+
+  ---
+
+
+  ### Key Improvements:
+
+  1. **Clarified Scoring Criteria**: Explicitly defined what 1 and 10 represent to reduce subjectivity.
+
+  2. **Added Rules**: Enforced strict adherence to the format (no explanations) and handled edge cases (e.g., neutral text defaults to 5).
+
+  3. **Scope Limitation**: Emphasized focus on *text-only* content to avoid bias from non-text elements.
+
+  4. **Conciseness**: Removed redundant phrasing while preserving the core task.
+
+
+  This version ensures consistency, reduces ambiguity, and aligns with the agent’s role as an objective evaluator.'
 talent_web_request_simulation: 'You are a web search engine. Summarize information about ''{{ query }}'' and identify key entities and relationships.
 
   '
