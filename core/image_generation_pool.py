@@ -7,6 +7,7 @@ import base64
 from collections import defaultdict
 from PIL import Image
 import io
+from PIL import Image, ImageDraw, ImageFont
 import core.logging
 import urllib.parse
 import random
@@ -84,6 +85,61 @@ def rank_image_models():
     # Sort by score descending
     sorted_models = sorted(ranked_models, key=lambda x: x["score"], reverse=True)
     return [model["model_id"] for model in sorted_models]
+
+
+def _overlay_text(image: Image.Image, text: str) -> Image.Image:
+    """
+    Overlays text onto an image with a meme-generator style (or neon glow if possible).
+    """
+    if not text:
+        return image
+        
+    draw = ImageDraw.Draw(image)
+    width, height = image.size
+    
+    # Try to load a font, fallback to default
+    try:
+        # Try to find a bold font on Linux/Windows
+        font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "C:\\Windows\\Fonts\\arialbd.ttf"
+        ]
+        font = None
+        for path in font_paths:
+            if os.path.exists(path):
+                # Scale font to 10% of image height
+                font_size = int(height * 0.10)
+                font = ImageFont.truetype(path, font_size)
+                break
+        
+        if not font:
+             font = ImageFont.load_default()
+    except Exception:
+        font = ImageFont.load_default()
+
+    # Calculate text size and position (centered)
+    try:
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+    except AttributeError:
+        # Old PIL compatibility
+        text_w, text_h = draw.textsize(text, font=font)
+
+    x = (width - text_w) / 2
+    y = (height - text_h) / 2
+    
+    # 1. Shadow/Outline (Black)
+    outline_range = 3
+    for dx in range(-outline_range, outline_range + 1):
+        for dy in range(-outline_range, outline_range + 1):
+             draw.text((x + dx, y + dy), text, font=font, fill="black")
+
+    # 2. Main Text (Neon Pink or White)
+    draw.text((x, y), text, font=font, fill="#FF6EC7") # Neon Pink
+    
+    return image
 
 
 async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
@@ -392,7 +448,7 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
         core.logging.log_event(f"Pollinations failed: {e}. Cooldown: {cooldown}s", "WARNING")
         raise
 
-async def generate_image_with_pool(prompt: str, width: int = 1024, height: int = 1024, force_provider=None) -> Image.Image:
+async def generate_image_with_pool(prompt: str, width: int = 1024, height: int = 1024, force_provider=None, text_content: str = None) -> Image.Image:
     """
     Main entry point for image generation using the pool.
     Tries providers in order based on ranking, with automatic fallback.
@@ -402,11 +458,12 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
         width: Image width (default 1024)
         height: Image height (default 1024)
         force_provider: Optional provider to force ("gemini", "stability", "horde")
+        text_content: Optional text to embed/overlay
     
     Returns:
         PIL Image object
     """
-    core.logging.log_event(f"Starting image generation with pool: {prompt[:100]}... ({width}x{height})", "INFO")
+    core.logging.log_event(f"Starting image generation with pool: {prompt[:100]}... ({width}x{height}) [Text: {text_content}]", "INFO")
     
     # Define provider functions
     providers = {
@@ -446,7 +503,25 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
         
         try:
             core.logging.log_event(f"Trying image generation with provider: {provider_name}", "INFO")
-            image = await providers[provider_name](prompt, width=width, height=height)
+            
+            # --- Logic Split for Text Rendering ---
+            final_prompt = prompt
+            should_overlay = False
+            
+            if text_content:
+                if provider_name == "pollinations":
+                     # Pollinations is good at native text
+                     final_prompt = f"{prompt}. The text '{text_content}' is written in massive, glowing, bioluminescent neon typography. ensuring clear legibility."
+                else:
+                    # Others are bad at text -> use visual prompt only, then overlay
+                    should_overlay = True
+            
+            image = await providers[provider_name](final_prompt, width=width, height=height)
+            
+            if should_overlay and image:
+                core.logging.log_event(f"Applying manual text overlay: {text_content}", "INFO")
+                image = _overlay_text(image, text_content)
+                
             core.logging.log_event(f"Image generation successful with provider: {provider_name}", "INFO")
             return image
             

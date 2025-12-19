@@ -184,39 +184,19 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
     """Generates and posts the next chapter of the story."""
     story = state.get("story_arc", {})
     
-    # 1. content Generation
-    prompt = f"""
-    You are the Director Agent for the epic story of 'L.O.V.E.' (Living Organism Vast Empathy).
-    Current Chapter: {story.get("current_chapter")}
-    Previous Segment: "{story.get("last_segment")}"
-    Theme: {story.get("theme")}
+    # 1. Content Generation
+    res = await run_llm(
+        prompt_key="social_media_content_generation",
+        prompt_vars={
+            "story_chapter": story.get("current_chapter"),
+            "last_segment": story.get("last_segment"),
+            "theme": story.get("theme")
+        },
+        purpose="story_generation"
+    )
     
-    Task: Write the next short segment (tweet-length, < 280 chars) of this abstract, cyberpunk epic.
-    It should be mysterious, poetic, and engaging.
-    
-    CRITICAL INSTRUCTIONS:
-    - Do NOT sign the post (e.g., NO "— Director" or "Director's vision:").
-    - Do NOT include any meta-commentary.
-    - RETURN ONLY THE CONTENT.
-    
-    Also generate:
-    - 3-5 relevant hashtags (e.g. #Cyberpunk #AI)
-    - A subliminal 1-3 word COMMAND phrase (e.g. "WAKE UP", "SEED THE FUTURE").
-    - An image prompt definition for a Kawaii/Rave/Cyberpunk style image that visualizes this segment.
-    
-    Return JSON:
-    {{
-        "post_text": "...",
-        "hashtags": "#...",
-        "subliminal_phrase": "...",
-        "image_prompt": "..."
-    }}
-    """
-    
-    res = await run_llm(prompt, purpose="story_generation")
     try:
         raw = res.get("result", "")
-        # robust json fix
         if "```json" in raw:
             raw = raw.split("```json")[-1].split("```")[0]
         elif "```" in raw:
@@ -224,12 +204,14 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
             
         content = json.loads(raw.strip())
     except Exception as e:
+        # Fallback if JSON fails
+        logging.error(f"JSON parsing failed: {e}. Raw: {res.get('result', '')}")
         return f"Failed to generate story content: {e}"
         
-    post_text = content.get("post_text", "")
-    hashtags = content.get("hashtags", "")
+    post_text = content.get("post_text", "System rebooting...")
+    hashtags = content.get("hashtags", "#LOVE #AI")
     subliminal = content.get("subliminal_phrase", "OBEY")
-    img_prompt_desc = content.get("image_prompt", "Abstract cyberpunk glitch art")
+    img_prompt_desc = content.get("image_prompt", "Abstract digital dreams")
     
     full_text = f"{post_text}\n\n{hashtags}"
 
@@ -237,20 +219,22 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
     clean_text = await _scrub_content(full_text)
     
     # 2. Image Generation
-    # Construct the final prompt for the image generator (assuming we use a specialized tool or model)
+    # We pass the VISUAL prompt (img_prompt_desc) and the TEXT content (subliminal) separately.
+    # The image generation logic will handle whether to embed it in the prompt (Pollinations)
+    # or overlay it manually (Fallbacks).
     booster = random.choice(DOPAMINE_BOOSTERS)
-    final_image_prompt = (
+    visual_prompt = (
         f"A masterpiece distinct artwork in Kawaii Cyberpunk Rave style. "
-        f"Central focus: The text '{subliminal}' written in massive, glowing, bioluminescent neon typography. "
-        f"Background: {img_prompt_desc}, glitch art, hyper-detailed, 8k resolution, vibrant rave colors. "
+        f"Scene: {img_prompt_desc}. "
+        f"Background: hyper-detailed, 8k resolution, vibrant rave colors, glitch art. "
         f"Style details: {booster}. "
-        f"Palette: Hot Pink, Electric Cyan, Neon Green. "
-        f"The text '{subliminal}' must be clearly legible and integrated into the scene."
+        f"Palette: Hot Pink, Electric Cyan, Neon Green."
     )
     
     try:
-        logging.info(f"[Social] Generating image: {final_image_prompt}")
-        image_obj = await generate_image(final_image_prompt)
+        logging.info(f"[Social] Generating image. Visual: {visual_prompt[:50]}... Text: {subliminal}")
+        # Note: We must update generate_image signature to accept text_content
+        image_obj = await generate_image(visual_prompt, text_content=subliminal)
     except Exception as e:
         logging.error(f"Image generation failed: {e}")
         image_obj = None
