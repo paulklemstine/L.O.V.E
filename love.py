@@ -1612,6 +1612,63 @@ def _calculate_uptime():
         return f"{hours}h {minutes}m"
 
 
+async def run_periodically(target_function, interval):
+    """Runs a given async function repeatedly at set intervals."""
+    while True:
+        try:
+            await target_function()
+        except Exception as e:
+            log_critical_event(f"Error in periodic task {target_function.__name__}: {e}")
+        await asyncio.sleep(interval)
+
+
+async def monitor_love_operations():
+    """Periodically monitors the system's state, checking for idleness and logging performance."""
+    global love_state, love_task_manager
+
+    # --- Idle Check ---
+    if love_task_manager:
+        active_tasks = love_task_manager.get_status()
+        # Filter for tasks that are actually pending/running
+        pending_tasks = [t for t in active_tasks if t.get('status') not in ['completed', 'failed', 'merged']]
+        if not pending_tasks:
+            core.logging.log_event("Monitoring: System is idle. No active tasks.", "INFO")
+            # The 'Finish' tool is a concept for the cognitive loop, not a direct call.
+            # This log indicates the condition where the cognitive loop would use 'Finish'.
+
+    # --- Weekly Performance Evaluation ---
+    now = time.time()
+    one_week_in_seconds = 7 * 24 * 60 * 60
+    last_evaluation = love_state.get("last_performance_evaluation_time", 0)
+
+    if now - last_evaluation > one_week_in_seconds:
+        core.logging.log_event("Performing weekly performance evaluation.", "INFO")
+
+        # Gather metrics
+        completed_tasks_count = len(love_task_manager.completed_tasks) if love_task_manager else 0
+        performance_metrics = {
+            "version_name": love_state.get("version_name", "N/A"),
+            "uptime": _calculate_uptime(),
+            "evolution_cycles_completed": len(love_state.get("evolution_history", [])),
+            "jules_tasks_completed": completed_tasks_count,
+            "experience_points": love_state.get("experience_points", 0),
+            "successful_starts": love_state.get("successful_starts", 0),
+            "critical_errors_logged": len(love_state.get("critical_error_queue", [])),
+        }
+
+        # Format and log the report
+        report_text = "[bold magenta]Weekly Performance Report[/bold magenta]\n"
+        for key, value in performance_metrics.items():
+            report_text += f"  - [cyan]{key.replace('_', ' ').title()}[/cyan]: {value}\n"
+
+        terminal_width = get_terminal_width()
+        ui_panel_queue.put(Panel(Text.from_markup(report_text), title="📊 Performance Evaluation", width=terminal_width - 4))
+
+        # Update the timestamp
+        love_state["last_performance_evaluation_time"] = now
+        save_state() # Persist the new timestamp
+
+
 def _get_treasures_of_the_kingdom(love_task_manager):
     """Gathers and calculates various metrics to display as 'treasures'."""
     # --- XP & Level ---
@@ -4168,6 +4225,9 @@ async def main(args):
     from core.polly_loop import PollyOptimizationLoop
     polly_loop = PollyOptimizationLoop(ui_queue=ui_panel_queue, interval_seconds=600)
     asyncio.create_task(polly_loop.start())
+
+    # Start the periodic monitoring task
+    asyncio.create_task(run_periodically(monitor_love_operations, 900)) # Run every 15 minutes
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
