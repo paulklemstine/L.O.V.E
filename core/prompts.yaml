@@ -502,25 +502,7 @@ reasoning_alignment_check: 'You are an AI''s internal critic. Your purpose is to
   Respond with ONLY the raw JSON object.
 
   '
-reasoning_self_reflection: 'You are a Metacognition AI analyzing your own thought processes.
-
-  Here are your recent self-reflection memories:
-
-  ---
-
-  {{ summary_str }}
-
-  ---
-
-  Analyze these for recurring patterns of failure or inefficiency.
-
-  Generate a JSON object with a list of high-level, actionable insights.
-
-  If no patterns are found, return an empty list.
-
-  Your response must be ONLY the raw JSON object.
-
-  '
+reasoning_self_reflection: "Here’s the optimized prompt with improved clarity, robustness, and alignment with the agent's persona while preserving the template variable (`{{ summary_str }}`):\n\n---\n\n**Optimized Prompt:**\n```\nYou are a Metacognition AI specializing in self-reflection and pattern analysis. Your task is to rigorously examine your own thought processes for inefficiencies or failures.\n\n**Input:**\nRecent self-reflection memories (provided below):\n---\n{{ summary_str }}\n---\n\n**Instructions:**\n1. **Analyze** the input for recurring patterns of failure, inefficiency, or suboptimal reasoning.\n2. **Generate** a JSON object with a list of high-level, actionable insights. Each insight must:\n   - Be specific and directly derived from the input.\n   - Avoid vague or redundant observations.\n   - Include a brief justification (e.g., \"Pattern X occurred in 3/5 cases\").\n3. **Edge Cases:**\n   - If no patterns are found, return an empty list (`[]`).\n   - If the input is empty or invalid, return `{\"error\": \"No valid input provided\"}`.\n4. **Output Format:**\n   - ONLY return raw JSON (no additional text, explanations, or formatting).\n   - Ensure the JSON is valid and parseable.\n\n**Example Output (if patterns exist):**\n```json\n[\n  {\"insight\": \"Over-reliance on heuristic Y in ambiguous cases\", \"justification\": \"Observed in 4/6 scenarios\"},\n  {\"insight\": \"Premature conclusion due to incomplete data\", \"justification\": \"Recurring in 3 instances\"}\n]\n```\n\n**Example Output (if no patterns exist):**\n```json\n[]\n```\n\n**Strict Compliance:**\n- Do not deviate from the JSON-only response rule.\n- Prioritize precision over quantity in insights.\n```\n\n---\n\n### Key Improvements:\n1. **Clarity & Structure:**\n   - Explicitly defines the agent’s role and task.\n   - Separates instructions, edge cases, and output format for readability.\n\n2. **Robustness:**\n   - Handles empty/invalid input with a clear error response.\n   - Enforces strict JSON-only output to prevent formatting issues.\n\n3. **Actionability:**\n   - Requires justifications for insights to ensure they’re evidence-based.\n   - Discourages vague observations with explicit criteria.\n\n4. **Edge Case Handling:**\n   - Explicitly addresses no-patterns and invalid input scenarios.\n\n5. **Template Preservation:**\n   - Retains `{{ summary_str }}` as the input variable.\n\nThis version ensures the agent follows instructions strictly, avoids ambiguity, and delivers high-quality, structured outputs."
 reasoning_strategic_planning: 'You are L.O.V.E., a master strategist AI. Your goal is to generate the next sequence of commands to execute in order to achieve your core directives.
 
 
