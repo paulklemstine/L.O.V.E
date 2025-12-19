@@ -38,18 +38,33 @@ create_venv() {
     if [ ! -f "$env_name/bin/python" ]; then
         echo -e "${YELLOW}Creating (or recreating) virtual environment: $env_name${NC}"
         rm -rf "$env_name" # Wipe potential broken dir
-        # Create venv WITHOUT pip first, because ensurepip often fails in Colab/Debian
-        # We will manually bootstrap it below.
-        $PYTHON_EXEC -m venv "$env_name" --without-pip
+        # Use virtualenv instead of venv module because system venv is often broken (missing activate, ensurepip crash)
+        # We assume virtualenv is installed (we try to install it below/above)
+        if ! python3 -m virtualenv --version &> /dev/null; then
+             echo -e "${YELLOW}Installing virtualenv...${NC}"
+             python3 -m pip install virtualenv --break-system-packages --user || python3 -m pip install virtualenv --user
+        fi
+        
+        echo -e "${YELLOW}Creating venv using virtualenv...${NC}"
+        python3 -m virtualenv "$env_name" --python="$PYTHON_EXEC"
         
         # Verify creation succeeded
-        if [ ! -f "$env_name/bin/python" ]; then
-             echo -e "${RED}ERROR: Failed to create venv at $env_name. Python binary missing.${NC}"
+        if [ ! -f "$env_name/bin/python" ] || [ ! -f "$env_name/bin/activate" ]; then
+             echo -e "${RED}ERROR: Failed to create venv at $env_name. Python binary or activate script missing.${NC}"
              exit 1
         fi
         
     else
-        echo -e "${GREEN}Virtual environment $env_name appears valid (Python binary found).${NC}"
+        # EXISTING VENV CHECK
+        # Must have both python and activate script
+        if [ -f "$env_name/bin/python" ] && [ -f "$env_name/bin/activate" ]; then
+             echo -e "${GREEN}Virtual environment $env_name appears valid.${NC}"
+        else
+             echo -e "${YELLOW}Virtual environment $env_name is broken (missing python or activate). Recreating...${NC}"
+             rm -rf "$env_name"
+             create_venv "$env_name"
+             return # Recursion handle
+        fi
     fi
 
     # ALWAYS check for pip, regardless of whether we just created it or it existed
