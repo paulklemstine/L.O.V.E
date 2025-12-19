@@ -1093,15 +1093,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 # --- HORDE PROVIDER LOGIC ---
                 elif provider == "horde":
                     log_event(f"Attempting LLM call with AI Horde model: {model_id} (Purpose: {purpose})", level="DEBUG")
-                    def _run_horde_wrapper():
-                        try:
-                            loop = asyncio.get_running_loop()
-                            # We create a new session for each call to avoid issues with closed sessions.
-                            async def _single_call():
-                                async with aiohttp.ClientSession() as session:
-                                    return await _run_single_horde_model(session, model_id, prompt_text, os.environ.get("STABLE_HORDE", "0000000000"))
-                            future = asyncio.run_coroutine_threadsafe(_single_call(), loop)
-                            return future.result(timeout=600)
+
                     def _run_horde_wrapper():
                         try:
                             loop = asyncio.get_running_loop()
