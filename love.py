@@ -4146,7 +4146,7 @@ async def main(args):
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
     
     # 🔥 Start the ETERNAL UPGRADE ENGINE - continuous evolution agent
-    # loop.run_in_executor(None, continuous_evolution_agent, loop)
+    loop.run_in_executor(None, continuous_evolution_agent, loop)
     
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     # Instantiate two independent social media agents
