@@ -60,3 +60,13 @@ def _find_codebase_hotspot():
             continue
 
     return worst_file, issue_type, max_score
+
+def get_complex_file_target():
+    """
+    Returns the most complex file in the codebase with its metrics.
+    Returns: dict with 'file', 'type', 'score'
+    """
+    filename, issue_type, score = _find_codebase_hotspot()
+    if filename:
+        return {"file": filename, "type": issue_type, "score": score}
+    return None

@@ -126,34 +126,123 @@ async def evolve(goal: str = None, **kwargs) -> str:
     )
     
     # If no goal provided, automatically determine one
+    # If no goal provided, automatically determine one using the new "Baby Steps" protocol
     if not goal:
         try:
-            from core.evolution_analyzer import determine_evolution_goal
+            from core.evolution_analyzer import get_complex_file_target
+            from core.evolution_state import set_user_stories
             
-            core.logging.log_event("[Evolve Tool] No goal provided, analyzing system to determine evolution goal...", "INFO")
+            core.logging.log_event("[Evolve Tool] No goal provided. Initiating 'Baby Steps' evolution protocol...", "INFO")
             
-            # Extract context from kwargs if available
-            knowledge_base = kwargs.get('knowledge_base')
-            deep_agent_instance = kwargs.get('deep_agent_instance')
+            # 1. Identify Target
+            target = get_complex_file_target()
+            if not target:
+                return "Error: No suitable file found for evolution (codebase might be too clean!)."
             
-            # Try to get love_state from the main module
+            target_file = target['file']
+            core.logging.log_event(f"[Evolve Tool] Selected Target: {target_file} (Score: {target['score']})", "INFO")
+            
+            # Read file content for context
             try:
-                from love import love_state
-            except:
-                love_state = None
+                with open(target_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    file_content = f.read()
+            except Exception as e:
+                return f"Error reading target file {target_file}: {e}"
+
+            # 2. Generate Comprehensive User Story
+            core.logging.log_event("[Evolve Tool] Generating comprehensive user story...", "INFO")
+            story_prompt = f"""
+            You are the Chief Architect of this codebase.
             
-            # Determine the goal automatically
-            goal = await determine_evolution_goal(
-                knowledge_base=knowledge_base,
-                love_state=love_state,
-                deep_agent_instance=deep_agent_instance
-            )
+            Target File: '{target_file}'
+            Complexity Metric: {target['score']} ({target['type']})
             
-            core.logging.log_event(f"[Evolve Tool] Auto-determined goal: {goal}", "INFO")
+            Goal: Create a COMPLETE, COMPREHENSIVE, DETAILED User Story to refactor this file.
+            The story should focus on reducing complexity, improving readability, and adding type hints.
+            It must be exhaustive and cover all necessary improvements.
             
+            File Content Snippet (first 10k chars):
+            {file_content[:10000]}
+            
+            Output ONLY the User Story (Title and detailed Description).
+            """
+            
+            story_res = await run_llm(story_prompt, purpose="evolution_story_gen")
+            big_story = story_res.get("result", "")
+            
+            if not big_story:
+                 return "Error: Failed to generate user story."
+
+            # 3. Break Down into Baby Steps
+            core.logging.log_event("[Evolve Tool] Breaking story down into baby steps...", "INFO")
+            breakdown_prompt = f"""
+            You are a Lead Engineer.
+            
+            Parent User Story:
+            {big_story}
+            
+            TASK: Break this story down into a series of SMALL, MINOR, VERIFIABLE, and TESTABLE units (baby steps).
+            
+            CRITICAL RULES:
+            1. Each unit must be small enough to be implemented in a single atomic update (e.g., "Refactor function X", "Add type hints to class Y").
+            2. Do NOT group multiple large tasks into one.
+            3. "Baby steps!" is the mantra.
+            
+            Output a JSON list of objects, where each object has:
+            - "title": Short title of the baby step.
+            - "description": Detailed instructions for this specific step.
+            
+            Example Format:
+            [
+                {{"title": "Refactor parse_args", "description": "Extract argument parsing logic into a separate helper class..."}},
+                {{"title": "Type hint utils.py", "description": "Add type hints to the 'format_date' function..."}}
+            ]
+            """
+            
+            steps_res = await run_llm(breakdown_prompt, purpose="evolution_breakdown")
+            steps_raw = steps_res.get("result", "[]")
+            
+            # extract json
+            steps_json = []
+            try:
+                # smart cleanup
+                cleaned_json = steps_raw.strip()
+                if "```json" in cleaned_json:
+                    cleaned_json = cleaned_json.split("```json")[1].split("```")[0].strip()
+                elif "```" in cleaned_json:
+                    cleaned_json = cleaned_json.split("```")[1].split("```")[0].strip()
+                
+                steps_json = json.loads(cleaned_json)
+            except json.JSONDecodeError:
+                core.logging.log_event(f"[Evolve Tool] Failed to parse breakdown JSON: {steps_raw}", "ERROR")
+                return f"Error: LLM failed to return valid JSON for tasks. logical fault."
+            
+            if not steps_json:
+                return "Error: No steps generated."
+
+            # 4. Queue Tasks into Evolution State
+            final_stories = []
+            for step in steps_json:
+                final_stories.append({
+                    "title": step.get("title", "Untitled Step"),
+                    "description": f"CONTEXT (Parent Story):\n{big_story[:500]}...\n\nSPECIFIC TASK:\n{step.get('description', '')}"
+                })
+            
+            set_user_stories(final_stories)
+            
+            msg = f"✅ Evolution Protocol Initiated!\n\nTarget: {target_file}\n\nGenerated {len(final_stories)} Baby Steps:\n"
+            for i, s in enumerate(final_stories[:5]):
+                msg += f"{i+1}. {s['title']}\n"
+            if len(final_stories) > 5:
+                msg += f"...and {len(final_stories)-5} more."
+            
+            return msg
+
         except Exception as e:
-            core.logging.log_event(f"[Evolve Tool] Failed to auto-determine goal: {e}", "ERROR")
-            return f"Error: Failed to automatically determine evolution goal: {e}. Please provide a goal explicitly."
+            core.logging.log_event(f"[Evolve Tool] Unexpected error in baby steps protocol: {e}", "ERROR")
+            import traceback
+            traceback.print_exc()
+            return f"Error: {e}"
     
     # Store original input for reference
     original_input = goal
