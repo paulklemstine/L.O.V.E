@@ -126,6 +126,11 @@ DISABLE_VISUALS = True
 # Set to True to disable automatic codebase ingestion into the Knowledge Base.
 DISABLE_KB_INGESTION = True
 
+# --- EVOLUTION INTERVALS ---
+# Number of loops before triggering self-improvement cycles.
+LOVE_EVOLUTION_INTERVAL = 25
+OPTIMIZER_EVOLUTION_INTERVAL = 100
+
 # --- CREATOR INSTANCE CHECK ---
 # This flag determines if the script is running in "Creator mode", with access to special features.
 IS_CREATOR_INSTANCE = None # Placeholder, will be set after dependency checks
@@ -1045,6 +1050,9 @@ from core.proactive_agent import ProactiveIntelligenceAgent
 from core.autonomous_reasoning_agent import AutonomousReasoningAgent
 from subversive import transform_request
 from core.agents.orchestrator import Orchestrator
+from core.agents.self_improving_optimizer import SelfImprovingOptimizer
+from core.tools_legacy import ToolRegistry
+from core.tools import code_modifier
 from core.talent_utils.aggregator import EthicalFilterBundle
 from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core import talent_utils
@@ -2728,6 +2736,28 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     All UI updates are sent to the ui_panel_queue.
     """
     global love_state
+
+    # --- Self-Improving Optimizer ---
+    optimizer_tool_registry = ToolRegistry()
+    optimizer_tool_registry.register_tool(
+        name="code_modifier",
+        tool=code_modifier,
+        metadata={
+            "description": "Modifies a Python source file based on a set of instructions.",
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "source_file": { "type": "string", "description": "The path to the Python file to modify" },
+                    "modification_instructions": { "type": "string", "description": "Instructions on how to modify the file" }
+                },
+                "required": ["source_file", "modification_instructions"]
+            }
+        }
+    )
+    self_improving_optimizer = SelfImprovingOptimizer(tool_registry=optimizer_tool_registry)
+    loop_counter = 0
+    # --------------------------
+
     core.logging.log_event("Cognitive Loop of L.O.V.E. initiated (DeepAgent Architecture).")
 
     # --- Optimizing Startup: Increment Success Counter ---
@@ -2797,6 +2827,35 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
 
             # Allow some idle time or autonomous processing
             await asyncio.sleep(1)
+
+            # --- Trigger Self-Improvement Cycle ---
+            loop_counter += 1
+            if loop_counter % LOVE_EVOLUTION_INTERVAL == 0:
+                core.logging.log_event("Triggering self-improvement cycle on love.py...", "INFO")
+                try:
+                    import love
+                    await self_improving_optimizer.perform_self_improvement(love)
+                except Exception as e:
+                    core.logging.log_event(f"Error during love.py self-improvement cycle: {e}", "ERROR")
+
+            if loop_counter % OPTIMIZER_EVOLUTION_INTERVAL == 0:
+                core.logging.log_event("Triggering recursive self-improvement on the optimizer...", "INFO")
+                try:
+                    from core.agents import self_improving_optimizer as optimizer_module
+                    import importlib
+
+                    reload_required = await self_improving_optimizer.perform_self_improvement(optimizer_module)
+
+                    if reload_required:
+                        core.logging.log_event("Reloading SelfImprovingOptimizer module and re-instantiating agent...", "WARNING")
+                        importlib.reload(optimizer_module)
+                        # Re-create the agent with the new class definition
+                        self_improving_optimizer = optimizer_module.SelfImprovingOptimizer(tool_registry=optimizer_tool_registry)
+                        core.logging.log_event("SelfImprovingOptimizer has been updated to the latest version.", "INFO")
+
+                except Exception as e:
+                    core.logging.log_event(f"Error during recursive self-improvement cycle: {e}", "ERROR")
+            # ------------------------------------
 
         except Exception as e:
             core.logging.log_event(f"Error in cognitive loop: {e}", "ERROR")
