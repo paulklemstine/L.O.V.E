@@ -422,8 +422,9 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
         provider_order = [force_provider]
         core.logging.log_event(f"Forcing image generation with provider: {force_provider}", "INFO")
     else:
-        # Try providers in order: Gemini -> Stability -> Pollinations -> Horde
-        provider_order = ["gemini", "stability", "pollinations", "horde"]
+        # Try providers in order: Pollinations -> Horde (fallback) -> Stability
+        # User requested to ignore broken Gemini implementation and use Pollinations with Horde fallback.
+        provider_order = ["pollinations", "horde", "stability"]
     
     last_exception = None
     
