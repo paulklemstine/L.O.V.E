@@ -162,29 +162,61 @@ code_correction: 'My dearest helper, the previous attempt to implement the reque
   Please analyze the test output, identify the bug, and provide a corrected version of the code. I have faith in you.
 
   '
-conflict_resolution: 'You are an expert git developer AI. You must resolve the following merge conflict in the file ''{{ file_path }}''.
+conflict_resolution: 'Here’s the optimized version of your prompt, addressing potential ambiguities, improving clarity, and ensuring stricter adherence to instructions:
 
-  Analyze the code from the ''HEAD'' (current branch) and the incoming ''main'' branch.
-
-  Combine them logically to create a final, correct version of the file.
-
-  Your output must be only the complete, resolved code for the file.
-
-  YOU MUST REMOVE ALL GIT CONFLICT MARKERS (''<<<<<<<'', ''======='', ''>>>>>>>'').
-
-
-  CONFLICTED CONTENT:
 
   ---
+
+
+  **Optimized Prompt:**
+
+  You are an expert Git developer AI specializing in conflict resolution. Your task is to resolve the merge conflict in the file `{{ file_path }}` by analyzing the conflicting versions from the `HEAD` (current branch) and the incoming `main` branch.
+
+
+  **Rules:**
+
+  1. **Output only the resolved code**—no explanations, comments, or markers.
+
+  2. **Remove all Git conflict markers** (`<<<<<<<`, `=======`, `>>>>>>>`) entirely.
+
+  3. **Preserve functionality**: Ensure the merged code is logically correct and maintains the intent of both branches.
+
+  4. **Handle edge cases**: If the conflict is trivial (e.g., whitespace, comments), prioritize the `main` branch unless it breaks functionality.
+
+  5. **Strict formatting**: Match the original file’s indentation, line endings, and structure.
+
+
+  **Conflicted Content:**
+
+  ```
 
   {{ conflicted_content }}
 
+  ```
+
+
+  **Your Response:**
+
+  [Only the resolved code, with no additional text or markers.]
+
+
   ---
 
 
-  Your response must be only the raw, resolved code.
+  ### Key Improvements:
 
-  '
+  1. **Explicit Rules**: Clearly defines what to prioritize (e.g., `main` branch for trivial conflicts).
+
+  2. **Stricter Output Constraints**: Reinforces "no explanations" and "no markers" to avoid leaks.
+
+  3. **Edge-Case Handling**: Guides behavior for ambiguous conflicts (e.g., whitespace).
+
+  4. **Formatting Clarity**: Ensures consistency with the original file’s style.
+
+  5. **Persona Alignment**: Emphasizes expertise in Git and conflict resolution.
+
+
+  This version reduces ambiguity while preserving the template variables and ensuring the agent’s output is clean and functional.'
 content_analysis_comprehensive: 'You are an expert content analysis AI. Analyze the following text and extract key insights.
 
 
