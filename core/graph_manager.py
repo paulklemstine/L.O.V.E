@@ -167,21 +167,27 @@ class GraphDataManager:
         for _, data in self.graph.nodes(data=True):
             for key, value in data.items():
                 if isinstance(value, str):
-                    try:
-                        # Attempt to parse the string as JSON. If it's not a valid
-                        # JSON string, json.loads will raise an exception and we'll
-                        # leave the attribute as a plain string.
-                        data[key] = json.loads(value)
-                    except json.JSONDecodeError:
-                        continue # Not a JSON string, do nothing.
+                    # Bolt Optimization: Check for JSON-like characters first
+                    stripped = value.strip()
+                    if stripped.startswith(("{", "[")) and stripped.endswith(("}", "]")):
+                        try:
+                            # Attempt to parse the string as JSON. If it's not a valid
+                            # JSON string, json.loads will raise an exception and we'll
+                            # leave the attribute as a plain string.
+                            data[key] = json.loads(value)
+                        except json.JSONDecodeError:
+                            continue # Not a JSON string, do nothing.
 
         for _, _, data in self.graph.edges(data=True):
             for key, value in data.items():
                 if isinstance(value, str):
-                    try:
-                        data[key] = json.loads(value)
-                    except json.JSONDecodeError:
-                        continue # Not a JSON string.
+                    # Bolt Optimization: Check for JSON-like characters first
+                    stripped = value.strip()
+                    if stripped.startswith(("{", "[")) and stripped.endswith(("}", "]")):
+                        try:
+                            data[key] = json.loads(value)
+                        except json.JSONDecodeError:
+                            continue # Not a JSON string.
 
     def _estimate_tokens(self, text):
         """A simple heuristic to estimate token count. Assumes ~4 chars per token."""
