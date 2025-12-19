@@ -11,6 +11,20 @@ def get_top_image_models(count=1):
         response.raise_for_status()
         models = response.json()
         sorted_models = sorted([m for m in models if m.get('performance')], key=lambda x: x['performance'], reverse=True)
+        
+        # Prioritize known high-quality models if they are in the top 20
+        preferred_keywords = ["Juggernaut", "AlbedoBase", "RealVis", "SDXL"]
+        
+        candidates = []
+        # Check top 20 performance models for preferred keywords
+        for model in sorted_models[:20]:
+            for keyword in preferred_keywords:
+                if keyword.lower() in model['name'].lower():
+                    candidates.append(model['name'])
+                    if len(candidates) >= count:
+                        return candidates
+                        
+        # Fallback to pure performance sorting
         return [model['name'] for model in sorted_models[:count]]
     except Exception as e:
         return ["stable_diffusion_2.1"]
@@ -33,7 +47,7 @@ async def generate_image(prompt: str, width: int = 1024, height: int = 1024):
         core.logging.log_event(f"Image generation failed: {e}", "ERROR")
         raise
 
-async def generate_image_for_post(prompt: str, width: int = 512, height: int = 512):
+async def generate_image_for_post(prompt: str, width: int = 1024, height: int = 1024):
     """
     Generates an image for a social media post using a textual prompt.
     This is an async wrapper around the generate_image function.

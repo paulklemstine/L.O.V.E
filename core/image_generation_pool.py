@@ -266,13 +266,24 @@ async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 102
         if not top_models:
             raise Exception("Could not fetch any image models from AI Horde")
         
+        core.logging.log_event(f"AI Horde selected models: {top_models}", "INFO")
+
         payload = {
             "prompt": prompt,
             "params": {
                 "n": 1,
                 "width": width,
-                "height": height
+                "height": height,
+                "steps": 30,
+                "cfg_scale": 7.0,
+                "sampler_name": "k_dpmpp_2m",
+                "karras": True,
+                "tiling": False,
+                "hires_fix": False
             },
+            "nsfw": True,
+            "censor_nsfw": False,
+            "trusted_workers": False,
             "models": top_models
         }
         

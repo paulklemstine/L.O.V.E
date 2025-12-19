@@ -258,7 +258,7 @@ async def post_to_bluesky(text: str, image_prompt: str) -> str:
         # Step 1: Generate the image
         image = None
         try:
-            image = await generate_image(image_prompt, width=512, height=512)
+            image = await generate_image(image_prompt, width=1024, height=1024)
         except Exception as img_e:
             core.logging.log_event(f"Image generation failed: {img_e}", "WARNING")
         
