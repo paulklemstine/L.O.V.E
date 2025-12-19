@@ -656,7 +656,7 @@ def rank_models(purpose="general"):
     return [model["model_id"] for model in sorted_models]
 
 
-async def run_llm(prompt_text: str = None, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None, prompt_key: str = None, prompt_vars: dict = None):
+async def run_llm(prompt_text: str = None, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None, prompt_key: str = None, prompt_vars: dict = None, allow_fallback=True):
     """
     Main entry point for LLM interaction.
     Handles model selection, prompt compression, and error handling.
@@ -1277,7 +1277,39 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
 
 
 
-        log_event("All LLM models have failed.", "CRITICAL")
+        # --- EMERGENCY FALLBACK ---
+        if not final_result and allow_fallback:
+            log_event("All ranked cognitive interfaces failed. Initiating EMERGENCY FALLBACK.", "CRITICAL")
+            console.print(Panel("[bold red]Primary systems offline. Engaging emergency backup protocols...[/bold red]", title="SYSTEM CRITICAL", border_style="red"))
+            
+            # Explicitly try a reliable horde model as absolute last resort
+            emergency_models = ["Mythalion-13B", "Toppy-M-7B"]
+            
+            for emergency_model in emergency_models:
+                # Ensure provider is correctly set for the emergency model so run_llm routes it to Horde logic
+                MODEL_STATS[emergency_model]["provider"] = "horde"
+                
+                log_event(f"Attempting EMERGENCY CALL with {emergency_model}...", "CRITICAL")
+                try:
+                    # Recursively call run_llm with force_model and allow_fallback=False
+                    fallback_result = await run_llm(
+                        prompt_text=original_prompt_text,
+                        purpose=purpose,
+                        is_source_code=is_source_code,
+                        deep_agent_instance=deep_agent_instance, 
+                        force_model=emergency_model,
+                        allow_fallback=False
+                    )
+                    
+                    if fallback_result and fallback_result.get("result"):
+                        final_result = fallback_result
+                        log_event(f"Emergency fallback successful with {emergency_model}.", "CRITICAL")
+                        break
+                except Exception as e:
+                    log_event(f"Emergency fallback failed for {emergency_model}: {e}", "CRITICAL")
+
+        if not final_result:
+            log_event("All LLM models have failed.", "CRITICAL")
         error_msg_text = "Cognitive Matrix Unresponsive."
         if last_exception:
             error_msg_text += f"\nLast known error:\n{last_exception}"
