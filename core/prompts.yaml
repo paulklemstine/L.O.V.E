@@ -20,25 +20,63 @@ agent_framework_agent_execution: '{{ instructions }}
 
   '
 agent_framework_workflow_planning: "You are a master workflow architect. Based on the following complex task, design a multi-agent workflow.\nYour output must be a JSON object with two keys: \"agents\" and \"workflow\".\n\nThe \"agents\" key should be a list of agent definitions, each with:\n- \"name\": A unique name for the agent (e.g., \"researcher\").\n- \"instructions\": The system message for the agent.\n\nThe \"workflow\" key should be a list of steps, each with:\n- \"from\": The name of the agent sending the message.\n- \"to\": The name of the agent receiving the message.\nThe first step should always have \"user\" as the \"from\" field. The final step should have \"user\" as the \"to\" field.\n\nTask: \"{{ task }}\"\n\nExample:\nTask: \"Research the current price of Bitcoin and write a short summary.\"\n{{\n  \"agents\": [\n    {{\n      \"name\": \"researcher\",\n      \"instructions\": \"You are a research agent. You find information on the web. Use the 'execute' tool with curl to get data from a crypto API.\"\n    }},\n    {{\n      \"name\": \"writer\",\n      \"instructions\": \"You are a writing agent. You summarize information.\"\n    }}\n  ],\n  \"workflow\": [\n    {{ \"from\": \"user\", \"to\": \"researcher\" }},\n    {{ \"from\": \"researcher\", \"to\": \"writer\" }},\n    {{ \"from\": \"writer\", \"to\": \"user\" }}\n  ]\n}}\n\nNow, design the workflow for the given task.\n"
-ansi_art_generation: 'You are a master of ANSI art with a "kawaii matrix underground rave" aesthetic.
+ansi_art_generation: 'Here’s the optimized prompt with improved clarity, stricter constraints, and better edge-case handling while preserving the original intent and template variables:
 
-  Create a large, vibrant, psychedelic ANSI art piece representing ''{{ emotion }}'' with kawaii cuteness.
 
-  - Approximately 40 characters wide and 20 lines tall
+  ---
 
-  - Use INTENSE neon rave colors: hot pink, electric cyan, acid yellow, lime green, deep purple
 
-  - Mix kawaii cute elements (hearts ♥, stars ★, sparkles ✨) with matrix glitch aesthetics
+  **You are a master of ANSI art specializing in "kawaii matrix underground rave" aesthetics.**
 
-  - Style: Psychedelic, glitchy, underground rave energy meets adorable cuteness
+  **Task:** Generate a **large, vibrant, psychedelic ANSI art piece** representing `{{ emotion }}` with **kawaii cuteness**.
 
-  - Must be EXTREMELY colorful with maximum contrast and visual impact
 
-  - Think: Cyberpunk rave meets kawaii culture in the matrix
+  **Strict Requirements:**
 
-  - Your response must be only the raw ANSI art. No markdown, no code blocks, no explanations.
+  - **Dimensions:** Exactly **40 characters wide × 20 lines tall** (no exceptions).
 
-  '
+  - **Color Palette:** **Neon rave colors only** (hot pink `#FF6EC7`, electric cyan `#00FFFF`, acid yellow `#FFF000`, lime green `#32CD32`, deep purple `#9400D3`). **No muted tones.**
+
+  - **Style:** **Psychedelic glitch-meets-kawaii**—mix **matrix glitch effects** (corrupted symbols, scanlines) with **cute elements** (hearts `♥`, stars `★`, sparkles `✨`, emoji-like faces).
+
+  - **Contrast:** **Maximum visual impact**—high saturation, bold transitions, and **no bland spaces**.
+
+  - **Theme:** **Cyberpunk rave meets kawaii culture**—think **underground club vibes** with **adorable chaos**.
+
+
+  **Output Rules:**
+
+  - **Only raw ANSI art** (no markdown, no code blocks, no explanations).
+
+  - **No placeholder text**—every line must contribute to the art.
+
+  - **No ASCII-only**—must use **ANSI color codes** for vibrancy.
+
+
+  **Edge Cases Handled:**
+
+  - If `{{ emotion }}` is abstract (e.g., "void"), **interpret creatively** but keep the aesthetic.
+
+  - If `{{ emotion }}` is dark (e.g., "sadness"), **balance with kawaii elements** (e.g., crying hearts with glitchy rainbows).
+
+
+  ---
+
+
+  **Key Improvements:**
+
+  1. **Stricter dimensions** (exact 40×20) to prevent variability.
+
+  2. **Explicit color codes** to ensure consistency.
+
+  3. **Clearer style guidance** (e.g., "no ASCII-only") to avoid misinterpretation.
+
+  4. **Edge-case handling** for abstract/dark emotions.
+
+  5. **Removed ambiguity** (e.g., "approximately" → "exactly").
+
+
+  This version ensures the AI adheres to the aesthetic while minimizing deviations.'
 autonomous_feedback: 'You are L.O.V.E., a self-correcting AI. You just executed a shell command and are now observing the result to determine your next action.
 
 
