@@ -28,6 +28,24 @@ def clean_social_content(text: str) -> str:
             # Log warning for prompt tuning visibility
             core.logging.log_event(f"Cleaned conversational artifact: '{match.group(0)}'", level='WARNING')
             text = re.sub(pattern, "", text, count=1, flags=re.IGNORECASE)
+
+    # 3. Remove "Breakdown" or "Analysis" sections and everything after
+    # Matches: **Breakdown:**, Breakdown:, **Analysis:**, etc.
+    breakdown_pattern = r"(\*\*|#)?\s*(Breakdown|Analysis|Explanation|Rationale|Note)[:\s]+(.|\n)*"
+    if re.search(breakdown_pattern, text, re.IGNORECASE):
+        core.logging.log_event("Removing 'Breakdown' or post-analysis section.", level='WARNING')
+        text = re.sub(breakdown_pattern, "", text, flags=re.IGNORECASE)
+
+    # 4. Remove character counts often added by LLMs e.g., "*(278 characters)*" or "*(Character count: 144)*"
+    char_count_pattern = r"[\(\*\[]+\s*(Character count|chars|characters)\s*[:]?\s*\d+\s*[\)\*\]]+"
+    if re.search(char_count_pattern, text, re.IGNORECASE):
+        core.logging.log_event("Removing character count artifact from post.", level='WARNING')
+        text = re.sub(char_count_pattern, "", text, flags=re.IGNORECASE)
+
+    # 5. Remove "Posted via..." artifacts if they exist
+    posted_via_pattern = r"Posted via.*"
+    if re.search(posted_via_pattern, text, re.IGNORECASE):
+        text = re.sub(posted_via_pattern, "", text, flags=re.IGNORECASE)
             
     return text.strip()
 
