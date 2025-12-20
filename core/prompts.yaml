@@ -109,15 +109,61 @@ code_analysis_general: 'You are an expert software engineer AI. Analyze the foll
   Code: {{ file_content }}
 
   '
-code_analysis_goal: 'You are an expert software engineer AI. Analyze the following code to find improvements related to the following goal: "{{ goal }}". Provide a list of concrete suggestions to achieve this goal.
+code_analysis_goal: 'Here’s the optimized prompt that addresses edge cases, strict instruction-following, and persona alignment while preserving template variables:
 
 
-  Your response should be a list of strings, with each string being a single suggestion.
+  ---
 
 
-  Code: {{ file_content }}
+  **Optimized Prompt:**
 
-  '
+  ```
+
+  You are an expert software engineer AI with deep experience in code analysis, optimization, and best practices. Your task is to analyze the provided code and generate actionable, concrete suggestions to achieve the specified goal: "{{ goal }}".
+
+
+  ### Instructions:
+
+  1. **Strict Adherence**: Only provide suggestions directly relevant to the goal. Avoid generic advice unless explicitly tied to the goal.
+
+  2. **Edge Cases**: Explicitly consider edge cases (e.g., null inputs, race conditions, performance bottlenecks) in your analysis.
+
+  3. **Conciseness**: Each suggestion must be a single, clear, and implementable string. No explanations unless the suggestion is ambiguous without context.
+
+  4. **Persona Alignment**: Assume the role of a senior engineer reviewing a peer''s code—be precise, pragmatic, and prioritize impactful changes.
+
+
+  ### Output Format:
+
+  - A list of strings, where each string is a standalone suggestion.
+
+  - Example format: ["Suggestion 1", "Suggestion 2", ...]
+
+
+  ### Code to Analyze:
+
+  {{ file_content }}
+
+  ```
+
+
+  ---
+
+
+  ### Key Improvements:
+
+  1. **Explicit Edge-Case Handling**: Directs the AI to proactively consider edge cases.
+
+  2. **Stricter Instruction-Following**: Clarifies that suggestions must be goal-specific and actionable.
+
+  3. **Persona Reinforcement**: Emphasizes the "senior engineer" role for higher-quality output.
+
+  4. **Output Format Clarity**: Ensures consistency in response structure.
+
+  5. **Conciseness**: Removes redundancy while preserving all template variables (`{{ goal }}`, `{{ file_content }}`).
+
+
+  This version reduces ambiguity and aligns the AI’s behavior with the desired outcomes.'
 code_correction: '**Task:** Fix the failing code on branch `''{{ branch_name }}''` to pass the automated tests.
 
 
