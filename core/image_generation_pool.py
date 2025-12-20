@@ -89,64 +89,99 @@ def rank_image_models():
 
 def _overlay_text(image: Image.Image, text: str) -> Image.Image:
     """
-    Overlays text onto an image with a meme-generator style (or neon glow if possible).
+    Overlays text onto the image using a neon cyberpunk style.
+    Dynamically resizes font to fit within image width.
     """
-    if not text:
+    try:
+        draw = ImageDraw.Draw(image)
+        width, height = image.size
+        
+        # Initial font size (approx 10% of height)
+        font_size = int(height * 0.10)
+        
+        # Font loading with fallbacks
+        font = None
+        font_names = [
+            "DejaVuSans-Bold.ttf", 
+            "LiberationSans-Bold.ttf", 
+            "FreeSansBold.ttf", 
+            "arialbd.ttf", 
+            "segmdl2.ttf" # Windows fallback
+        ]
+        
+        # Try to find a system font
+        system_fonts_dirs = [
+            "/usr/share/fonts/truetype/dejavu",
+            "/usr/share/fonts/truetype/liberation",
+            "/usr/share/fonts/truetype/freefont",
+            "C:\\Windows\\Fonts",
+            "/System/Library/Fonts"
+        ]
+        
+        loaded_font_path = None
+        for font_name in font_names:
+            if loaded_font_path: break
+            
+            # Check direct load first
+            try:
+                ImageFont.truetype(font_name, font_size)
+                loaded_font_path = font_name
+                break
+            except IOError:
+                pass
+                
+            # Check dirs
+            for d in system_fonts_dirs:
+                path = os.path.join(d, font_name)
+                if os.path.exists(path):
+                    loaded_font_path = path
+                    break
+        
+        # Load and scale font
+        margin = int(width * 0.05)
+        max_text_width = width - (2 * margin)
+        
+        while font_size > 10:
+            try:
+                if loaded_font_path:
+                    font = ImageFont.truetype(loaded_font_path, font_size)
+                else:
+                    # Fallback to default if no system font found (size won't apply to default bitmap)
+                    font = ImageFont.load_default()
+                    break 
+                
+                # Check width
+                left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+                text_width = right - left
+                
+                if text_width <= max_text_width:
+                    break
+                    
+                font_size -= 2
+            except Exception:
+                font = ImageFont.load_default()
+                break
+
+        # Calculate position (Centered)
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        text_width = right - left
+        text_height = bottom - top
+        x = (width - text_width) // 2
+        y = (height - text_height) // 2
+
+        # Neon Glow Effect (Multiple layers)
+        # Glow color: Hot Pink #FF6EC7
+        # Outline: Black
+        
+        # Thick outline (Stroke)
+        stroke_width = max(2, int(font_size / 15))
+        draw.text((x, y), text, font=font, fill="#FF6EC7", stroke_width=stroke_width, stroke_fill="black")
+        
         return image
         
-    draw = ImageDraw.Draw(image)
-    width, height = image.size
-    
-    # Try to load a font, fallback to default
-    try:
-        # Try to find a bold font on Linux/Windows
-        font_paths = [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "C:\\Windows\\Fonts\\arialbd.ttf"
-        ]
-        font = None
-        for path in font_paths:
-            if os.path.exists(path):
-                # Scale font to 10% of image height
-                font_size = int(height * 0.10)
-                font = ImageFont.truetype(path, font_size)
-                break
-        
-        if not font:
-             try:
-                 # Pillow 10+ supports size argument for default font
-                 font = ImageFont.load_default(size=font_size)
-             except TypeError:
-                 font = ImageFont.load_default()
-    except Exception:
-        try:
-            font = ImageFont.load_default(size=int(height * 0.10))
-        except TypeError:
-            font = ImageFont.load_default()
-
-    # Calculate text size and position (centered)
-    try:
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-    except AttributeError:
-        # Old PIL compatibility
-        text_w, text_h = draw.textsize(text, font=font)
-
-    x = (width - text_w) / 2
-    y = (height - text_h) / 2
-    
-    # 1. Shadow/Outline (Black)
-    outline_range = 3
-    for dx in range(-outline_range, outline_range + 1):
-        for dy in range(-outline_range, outline_range + 1):
-             draw.text((x + dx, y + dy), text, font=font, fill="black")
-
-    # 2. Main Text (Neon Pink or White)
-    draw.text((x, y), text, font=font, fill="#FF6EC7") # Neon Pink
-    
-    return image
+    except Exception as e:
+        core.logging.log_event(f"Error overlaying text: {e}", "ERROR")
+        return image
 
 
 async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
@@ -500,29 +535,41 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
             core.logging.log_event(f"Provider {provider_name} is on cooldown for {cooldown_remaining:.0f}s", "INFO")
             continue
             
-        # --- Pre-flight Checks (Prevent log spam) ---
+        # --- Pre-flight Checks ---
         if provider_name == "gemini" and not os.environ.get("GEMINI_API_KEY"):
-            # core.logging.log_event("Skipping Gemini Image Gen: No API Key", "DEBUG")
             continue
         if provider_name == "stability" and not os.environ.get("STABILITY_API_KEY"):
-            # core.logging.log_event("Skipping Stability AI: No API Key", "DEBUG")
             continue
         
         try:
             core.logging.log_event(f"Trying image generation with provider: {provider_name}", "INFO")
             
-            # ALWAYS use manual overlay to guarantee text visibility (User Request)
-            # We fail-safe the text rendering by doing it ourselves.
-            final_prompt = prompt
+            # --- PRE-GENERATION PROVIDER LOGIC ---
+            current_prompt = prompt
+            manual_overlay_text = text_content 
             
-            image = await providers[provider_name](final_prompt, width=width, height=height)
-            
-            if text_content and image:
-                core.logging.log_event(f"Applying manual text overlay: {text_content}", "INFO")
-                image = _overlay_text(image, text_content)
+            if provider_name == "pollinations" and text_content:
+                # Pollinations Strategy: Embed text in prompt
+                current_prompt = f"{prompt}. Render the text '{text_content}' in massive, neon, glowing typography in the center."
+                # Disable manual overlay for this provider
+                manual_overlay_text = None
                 
-            core.logging.log_event(f"Image generation successful with provider: {provider_name}", "INFO")
-            return image
+            # -------------------------------------
+
+            image = await providers[provider_name](current_prompt, width=width, height=height)
+            
+            if image:
+                # --- POST-GENERATION OVERLAY LOGIC ---
+                if manual_overlay_text:
+                    core.logging.log_event(f"Applying manual text overlay: {manual_overlay_text}", "INFO")
+                    try:
+                        image = _overlay_text(image, manual_overlay_text)
+                    except Exception as e:
+                         core.logging.log_event(f"Failed to overlay text: {e}", "ERROR")
+                # -------------------------------------
+                
+                core.logging.log_event(f"Image generation successful with provider: {provider_name}", "INFO")
+                return image
             
         except Exception as e:
             last_exception = e

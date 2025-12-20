@@ -135,7 +135,7 @@ class JulesTaskManager:
 
                                     # Trigger a new evolution with the same request
                                     future = asyncio.run_coroutine_threadsafe(
-                                        trigger_jules_evolution(original_request, self.console, self, self.deep_agent_engine), self.loop
+                                        trigger_jules_evolution(original_request, self.console, self, self.deep_agent_engine, skip_duplicate_check=True), self.loop
                                     )
                                     new_task_id = future.result()
                                     if new_task_id and new_task_id != 'duplicate':
@@ -161,7 +161,7 @@ class JulesTaskManager:
 
                                         # Trigger a new evolution with the escalated request
                                         future = asyncio.run_coroutine_threadsafe(
-                                            trigger_jules_evolution(escalated_request, self.console, self, self.deep_agent_engine), self.loop
+                                            trigger_jules_evolution(escalated_request, self.console, self, self.deep_agent_engine, skip_duplicate_check=True), self.loop
                                         )
                                         api_success = future.result()
                                         if api_success == 'success':
@@ -183,7 +183,7 @@ class JulesTaskManager:
 
                             # Use trigger_jules_evolution which returns the task status
                             future = asyncio.run_coroutine_threadsafe(
-                                trigger_jules_evolution(request, self.console, self, self.deep_agent_engine), self.loop
+                                trigger_jules_evolution(request, self.console, self, self.deep_agent_engine, skip_duplicate_check=True), self.loop
                             )
                             new_task_id = future.result()
                             if new_task_id and new_task_id != 'duplicate':
@@ -217,7 +217,7 @@ class JulesTaskManager:
 
                                 # Use trigger_jules_evolution which returns the task status
                                 future = asyncio.run_coroutine_threadsafe(
-                                    trigger_jules_evolution(request, self.console, self, self.deep_agent_engine), self.loop
+                                    trigger_jules_evolution(request, self.console, self, self.deep_agent_engine, skip_duplicate_check=True), self.loop
                                 )
                                 new_task_id = future.result()
                                 if new_task_id and new_task_id != 'duplicate':
@@ -469,7 +469,7 @@ class JulesTaskManager:
         # trigger_jules_evolution is async.
         
         future = asyncio.run_coroutine_threadsafe(
-            trigger_jules_evolution(correction_request, self.console, self, self.deep_agent_engine), self.loop
+            trigger_jules_evolution(correction_request, self.console, self, self.deep_agent_engine, skip_duplicate_check=True), self.loop
         )
         new_task_id = future.result()
         
@@ -508,7 +508,7 @@ class JulesTaskManager:
         self._update_task_status(task_id, 'superseded', "Superseded by merge conflict resolution task.")
 
         future = asyncio.run_coroutine_threadsafe(
-            trigger_jules_evolution(conflict_request, self.console, self, self.deep_agent_engine), self.loop
+            trigger_jules_evolution(conflict_request, self.console, self, self.deep_agent_engine, skip_duplicate_check=True), self.loop
         )
         new_task_id = future.result()
         
@@ -1002,7 +1002,7 @@ async def is_duplicate_task(new_request, love_task_manager, console, deep_agent_
 
     return False
 
-async def trigger_jules_evolution(modification_request, console, love_task_manager, deep_agent_instance=None, verification_script=None):
+async def trigger_jules_evolution(modification_request, console, love_task_manager, deep_agent_instance=None, verification_script=None, skip_duplicate_check=False):
     """
     Triggers the Jules API to create a session and adds it as a task
     to the JulesTaskManager for asynchronous monitoring.
@@ -1025,7 +1025,7 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
 
     # First, check if this is a duplicate task.
     # is_duplicate_task calls run_llm, so it needs to be awaited
-    if await is_duplicate_task(modification_request, love_task_manager, console, deep_agent_instance):
+    if not skip_duplicate_check and await is_duplicate_task(modification_request, love_task_manager, console, deep_agent_instance):
         # The is_duplicate_task function already logs and prints.
         return 'duplicate'
 
