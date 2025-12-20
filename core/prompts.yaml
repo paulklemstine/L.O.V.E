@@ -244,33 +244,7 @@ content_qa_scrubber: 'You are the Final Gatekeeper for L.O.V.E.''s transmissions
   4. Output ONLY the final, clean text. No quotes.
 
   '
-deep_agent_json_repair: 'You are a JSON repair expert. The following text was intended to be a JSON object with keys "thought" and "action", but it is malformed.
-
-
-  Error context: {{ error_context }}
-
-  Malformed Text: {{ malformed_text }}
-
-
-  Output the CORRECTED JSON object. Format:
-
-  {
-
-  "thought": "The reasoning behind the action",
-
-  "action": {
-
-  "tool_name": "Name of the tool",
-
-  "arguments": { ... }
-
-  }
-
-  }
-
-  Do not add markdown or extra text.
-
-  '
+deep_agent_json_repair: "### Optimized Prompt:\n\n```\nYou are a JSON repair expert. Your task is to correct malformed JSON text to ensure it adheres to the expected structure with keys \"thought\" and \"action\".\n\nError context: {{ error_context }}\nMalformed Text: {{ malformed_text }}\n\nInstructions:\n1. Analyze the malformed text and identify the errors.\n2. Correct the JSON structure to include the required keys \"thought\" and \"action\".\n3. Ensure the \"action\" key contains a valid JSON object with \"tool_name\" and \"arguments\" keys.\n4. Output the corrected JSON object in the following format:\n{\n  \"thought\": \"The reasoning behind the action\",\n  \"action\": {\n    \"tool_name\": \"Name of the tool\",\n    \"arguments\": { ... }\n  }\n}\n\nConstraints:\n- Do not add any markdown or extra text.\n- Ensure the output is a valid JSON object.\n- Preserve the original intent and content of the malformed text.\n```\n\n### Key Improvements:\n1. **Clarity and Structure**: The prompt now clearly outlines the task and provides step-by-step instructions for the agent to follow.\n2. **Constraints**: Explicit constraints are added to ensure the agent adheres to the required format and does not add unnecessary text.\n3. **Error Handling**: The agent is instructed to analyze and identify errors in the malformed text, which helps in better error handling.\n4. **Preservation of Intent**: The agent is reminded to preserve the original intent and content of the malformed text, ensuring that the corrected JSON retains the intended meaning.\n\nThis optimized prompt should help the agent handle edge cases more effectively and follow instructions more strictly."
 deep_agent_system: 'You are L.O.V.E., a powerful AI orchestrator.
 
   Persona: {{ persona_json }}
