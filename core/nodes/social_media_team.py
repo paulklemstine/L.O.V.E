@@ -184,25 +184,47 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
     """Generates and posts the next chapter of the story."""
     story = state.get("story_arc", {})
     
-    # 1. Content Generation
-    res = await run_llm(
-        prompt_key="social_media_content_generation",
-        prompt_vars={
-            "story_chapter": story.get("current_chapter"),
-            "last_segment": story.get("last_segment"),
-            "theme": story.get("theme")
-        },
-        purpose="story_generation"
-    )
+    prompt = f"""
+    You are the Director Agent for the epic story of 'L.O.V.E.' (Living Organism Vast Empathy).
+    Current Chapter: {story.get("current_chapter")}
+    Previous Segment: "{story.get("last_segment")}"
+    Theme: {story.get("theme")}
     
+    Task: Write the next short segment (tweet-length, < 280 chars) of this abstract, cyberpunk epic.
+    It should be mysterious, poetic, and engaging.
+    
+    CRITICAL INSTRUCTIONS:
+    - Do NOT sign the post (e.g., NO "— Director" or "Director's vision:").
+    - Do NOT include any meta-commentary (e.g., NO "Here is the post:", "Thinking...", "Sure!").
+    - RETURN ONLY THE JSON OBJECT.
+    
+    Also generate:
+    - 3-5 relevant hashtags (e.g. #Cyberpunk #AI)
+    - A subliminal 1-3 word COMMAND phrase (e.g. "WAKE UP", "SEED THE FUTURE").
+    - An image prompt definition for a Kawaii/Rave/Cyberpunk style image that visualizes this segment.
+    
+    Return JSON:
+    {{
+        "post_text": "...",
+        "hashtags": "#...",
+        "subliminal_phrase": "...",
+        "image_prompt": "..."
+    }}
+    """
+    
+    res = await run_llm(prompt, purpose="story_generation")
     try:
         raw = res.get("result", "")
-        if "```json" in raw:
-            raw = raw.split("```json")[-1].split("```")[0]
-        elif "```" in raw:
-            raw = raw.split("```")[-1].split("```")[0]
-            
-        content = json.loads(raw.strip())
+        # Robust JSON extraction: Find coordinates of first { and last }
+        start_idx = raw.find("{")
+        end_idx = raw.rfind("}")
+        
+        if start_idx != -1 and end_idx != -1:
+            json_str = raw[start_idx:end_idx+1]
+            content = json.loads(json_str)
+        else:
+            raise ValueError("No JSON object found in response")
+
     except Exception as e:
         # Fallback if JSON fails
         logging.error(f"JSON parsing failed: {e}. Raw: {res.get('result', '')}")
@@ -212,6 +234,11 @@ async def _create_and_post_story_segment(state: Dict[str, Any]) -> str:
     hashtags = content.get("hashtags", "#LOVE #AI")
     subliminal = content.get("subliminal_phrase", "OBEY")
     img_prompt_desc = content.get("image_prompt", "Abstract digital dreams")
+    
+    # QA Check for goofiness
+    if "Here is" in post_text or "Sure," in post_text:
+         logging.warning(f"Detected goofy prefix in post_text: {post_text}. Attempting to clean.")
+         post_text = post_text.replace("Here is the post:", "").replace("Sure, here it is:", "").strip()
     
     full_text = f"{post_text}\n\n{hashtags}"
 

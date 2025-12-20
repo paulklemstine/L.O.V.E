@@ -3301,22 +3301,25 @@ async def initialize_gpu_services():
         # If no goal provided, automatically determine one
         if not goal:
             try:
-                from core.evolution_analyzer import determine_evolution_goal
-                
-                core.logging.log_event("[Evolve Tool] No goal provided, analyzing system to determine evolution goal...", "INFO")
-                
-                # Determine the goal automatically with access to system resources
-                goal = await determine_evolution_goal(
-                    knowledge_base=knowledge_base,
-                    love_state=love_state,
-                    deep_agent_instance=deep_agent_engine
-                )
-                
-                core.logging.log_event(f"[Evolve Tool] Auto-determined goal: {goal}", "INFO")
-                
+                # CORE FIX: Disable auto-determination here so tools_legacy.evolve can handle "Baby Steps"
+                # from core.evolution_analyzer import determine_evolution_goal
+                # 
+                # core.logging.log_event("[Evolve Tool] No goal provided, analyzing system to determine evolution goal...", "INFO")
+                # 
+                # # Determine the goal automatically with access to system resources
+                # goal = await determine_evolution_goal(
+                #     knowledge_base=knowledge_base,
+                #     love_state=love_state,
+                #     deep_agent_instance=deep_agent_engine
+                # )
+                # 
+                # core.logging.log_event(f"[Evolve Tool] Auto-determined goal: {goal}", "INFO")
+                pass
+
             except Exception as e:
                 core.logging.log_event(f"[Evolve Tool] Failed to auto-determine goal: {e}", "ERROR")
-                return f"Error: Failed to automatically determine evolution goal: {e}. Please provide a goal explicitly."
+                # return f"Error: Failed to automatically determine evolution goal: {e}. Please provide a goal explicitly."
+                pass
         
         # Access the global love_task_manager which is initialized in main()
         # and the current event loop.

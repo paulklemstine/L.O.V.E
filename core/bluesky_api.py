@@ -11,6 +11,11 @@ from PIL import Image
 import io
 from atproto_client.models.app.bsky.feed import get_post_thread
 from core.llm_api import run_llm
+from core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenException
+
+# Initialize Circuit Breaker for Bluesky
+# 3 failures, 60s base recovery timeout
+bluesky_breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=60)
 
 def get_bluesky_client():
     """Creates and returns an authenticated Bluesky client."""
@@ -91,7 +96,14 @@ def post_to_bluesky_with_image(text: str, image: Image.Image = None):
             images=[models.AppBskyEmbedImages.Image(alt='Posted via L.O.V.E.', image=upload.blob)]
         )
 
-    return client.send_post(text=text_builder, embed=embed)
+    try:
+        return bluesky_breaker.call(client.send_post, text=text_builder, embed=embed)
+    except CircuitBreakerOpenException as e:
+        print(f"BlueSky Circuit Breaker is OPEN: {e}")
+        return None
+    except Exception as e:
+        print(f"Failed to post to BlueSky: {e}")
+        return None
 
 def get_own_posts(limit=20):
     """Fetches the most recent posts for the authenticated user."""
@@ -185,9 +197,15 @@ def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None):
             collection=models.ids.AppBskyFeedPost,
             record=record
         )
-        return client.com.atproto.repo.create_record(data)
+        return bluesky_breaker.call(client.com.atproto.repo.create_record, data)
+    except CircuitBreakerOpenException as e:
+        print(f"BlueSky Circuit Breaker is OPEN: {e}")
+        return None
     except ModelError as e:
         print(f"Error creating reply record: {e}")
+        return None
+    except Exception as e:
+        print(f"Failed to reply on BlueSky: {e}")
         return None
 
 def get_notifications(limit=20):

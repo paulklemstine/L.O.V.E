@@ -16,7 +16,12 @@ import csv
 import io
 import functools
 
+class EmergencyMemoryFold(Exception):
+    """Raised when the context window is exhausted and memory must be folded immediately."""
+    pass
+
 from collections import defaultdict
+
 
 from rich.console import Console
 from rich.panel import Panel
@@ -793,11 +798,41 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         
         # Filter by model availability AND provider availability
         models_to_try = []
+        context_limit_hit = False
+
         for m in ranked_model_list:
             model_is_available = time.time() >= LLM_AVAILABILITY.get(m, 0)
             
             provider = MODEL_STATS[m].get("provider", "unknown")
             provider_is_available = time.time() >= PROVIDER_AVAILABILITY.get(provider, 0)
+
+            # Token Budget Monitor
+            # Check if this model can handle the prompt + buffer
+            # Default to 4096 if unknown (safe conservative default)
+            # Use 2000 token buffer for response/overhead
+            context_limit = MODEL_CONTEXT_SIZES.get(m, 4096)
+            estimated_response_buffer = 2000 
+            
+            if token_count + estimated_response_buffer > context_limit:
+                 log_event(f"Token Budget Monitor: Model {m} context limit ({context_limit}) exceeded by request ({token_count} + {estimated_response_buffer}). Skipping.", "WARNING")
+                 context_limit_hit = True
+                 continue
+
+            if model_is_available and provider_is_available:
+                models_to_try.append(m)
+            elif not model_is_available:
+                 log_event(f"Skipping model {m} due to cooldown.", "DEBUG")
+            elif not provider_is_available:
+                 log_event(f"Skipping model {m} because provider {provider} is cooling down.", "DEBUG")
+
+        if not models_to_try:
+            if context_limit_hit:
+                 log_event("Token Budget Monitor: All available models exceeded context limits. Triggering EmergencyMemoryFold.", "CRITICAL")
+                 raise EmergencyMemoryFold(f"Context limit exhausted. Request size: {token_count}")
+            
+            log_event("No models available to try (cooldowns or empty list).", "WARNING")
+            return {"result": None, "error": "No models available"}
+
             
             if model_is_available and provider_is_available:
                 models_to_try.append(m)

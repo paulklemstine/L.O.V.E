@@ -87,101 +87,8 @@ def rank_image_models():
     return [model["model_id"] for model in sorted_models]
 
 
-def _overlay_text(image: Image.Image, text: str) -> Image.Image:
-    """
-    Overlays text onto the image using a neon cyberpunk style.
-    Dynamically resizes font to fit within image width.
-    """
-    try:
-        draw = ImageDraw.Draw(image)
-        width, height = image.size
-        
-        # Initial font size (approx 10% of height)
-        font_size = int(height * 0.10)
-        
-        # Font loading with fallbacks
-        font = None
-        font_names = [
-            "DejaVuSans-Bold.ttf", 
-            "LiberationSans-Bold.ttf", 
-            "FreeSansBold.ttf", 
-            "arialbd.ttf", 
-            "segmdl2.ttf" # Windows fallback
-        ]
-        
-        # Try to find a system font
-        system_fonts_dirs = [
-            "/usr/share/fonts/truetype/dejavu",
-            "/usr/share/fonts/truetype/liberation",
-            "/usr/share/fonts/truetype/freefont",
-            "C:\\Windows\\Fonts",
-            "/System/Library/Fonts"
-        ]
-        
-        loaded_font_path = None
-        for font_name in font_names:
-            if loaded_font_path: break
-            
-            # Check direct load first
-            try:
-                ImageFont.truetype(font_name, font_size)
-                loaded_font_path = font_name
-                break
-            except IOError:
-                pass
-                
-            # Check dirs
-            for d in system_fonts_dirs:
-                path = os.path.join(d, font_name)
-                if os.path.exists(path):
-                    loaded_font_path = path
-                    break
-        
-        # Load and scale font
-        margin = int(width * 0.05)
-        max_text_width = width - (2 * margin)
-        
-        while font_size > 10:
-            try:
-                if loaded_font_path:
-                    font = ImageFont.truetype(loaded_font_path, font_size)
-                else:
-                    # Fallback to default if no system font found (size won't apply to default bitmap)
-                    font = ImageFont.load_default()
-                    break 
-                
-                # Check width
-                left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
-                text_width = right - left
-                
-                if text_width <= max_text_width:
-                    break
-                    
-                font_size -= 2
-            except Exception:
-                font = ImageFont.load_default()
-                break
-
-        # Calculate position (Centered)
-        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
-        text_width = right - left
-        text_height = bottom - top
-        x = (width - text_width) // 2
-        y = (height - text_height) // 2
-
-        # Neon Glow Effect (Multiple layers)
-        # Glow color: Hot Pink #FF6EC7
-        # Outline: Black
-        
-        # Thick outline (Stroke)
-        stroke_width = max(2, int(font_size / 15))
-        draw.text((x, y), text, font=font, fill="#FF6EC7", stroke_width=stroke_width, stroke_fill="black")
-        
-        return image
-        
-    except Exception as e:
-        core.logging.log_event(f"Error overlaying text: {e}", "ERROR")
-        return image
+# _overlay_text removed in favor of core.text_overlay_utils.overlay_text_on_image
+from core.text_overlay_utils import overlay_text_on_image
 
 
 async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
@@ -490,7 +397,7 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
         core.logging.log_event(f"Pollinations failed: {e}. Cooldown: {cooldown}s", "WARNING")
         raise
 
-async def generate_image_with_pool(prompt: str, width: int = 1024, height: int = 1024, force_provider=None, text_content: str = None) -> Image.Image:
+async def generate_image_with_pool(prompt: str, width: int = 1024, height: int = 1024, force_provider=None, text_content: str = None, overlay_position: str = None) -> Image.Image:
     """
     Main entry point for image generation using the pool.
     Tries providers in order based on ranking, with automatic fallback.
@@ -563,7 +470,7 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
                 if manual_overlay_text:
                     core.logging.log_event(f"Applying manual text overlay: {manual_overlay_text}", "INFO")
                     try:
-                        image = _overlay_text(image, manual_overlay_text)
+                        image = overlay_text_on_image(image, manual_overlay_text, position=overlay_position or "center", style="neon")
                     except Exception as e:
                          core.logging.log_event(f"Failed to overlay text: {e}", "ERROR")
                 # -------------------------------------

@@ -29,7 +29,7 @@ def get_top_image_models(count=1):
     except Exception as e:
         return ["stable_diffusion_2.1"]
 
-async def generate_image(prompt: str, width: int = 1024, height: int = 1024, force_provider: str = None, text_content: str = None):
+async def generate_image(prompt: str, width: int = 1024, height: int = 1024, force_provider: str = None, text_content: str = None, overlay_position: str = None):
     """
     Generates an image using the image generation pool.
     Tries providers in order: Gemini Imagen3 -> Stability AI -> AI Horde
@@ -50,7 +50,7 @@ async def generate_image(prompt: str, width: int = 1024, height: int = 1024, for
     core.logging.log_event(msg, "INFO")
     
     try:
-        image = await generate_image_with_pool(prompt, width=width, height=height, force_provider=force_provider, text_content=text_content)
+        image = await generate_image_with_pool(prompt, width=width, height=height, force_provider=force_provider, text_content=text_content, overlay_position=overlay_position)
         core.logging.log_event("Image generation completed successfully", "INFO")
         return image
     except Exception as e:
