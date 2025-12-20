@@ -223,7 +223,7 @@ def get_openrouter_models():
     Fetches the list of free models from the OpenRouter API, ranks them based
     on a scoring algorithm, and updates their provider in MODEL_STATS.
     """
-    global MODEL_STATS
+    global MODEL_STATS, MODEL_CONTEXT_SIZES
     blacklist = _load_model_blacklist()
     ranked_models = []
     try:
@@ -253,6 +253,8 @@ def get_openrouter_models():
 
             # Score based on context length
             context_length = model.get('context_length', 0)
+            if context_length > 0:
+                MODEL_CONTEXT_SIZES[model_id] = context_length
             score += context_length / 1000 # Add a point per 1000 tokens of context
 
             # Infer model size and reward larger models
@@ -464,10 +466,17 @@ async def _run_single_horde_model(session, model_id, prompt_text, api_key):
         headers = {"apikey": api_key, "Content-Type": "application/json"}
         payload = {
             "prompt": prompt_text,
-            "params": {"max_length": 2048, "max_context_length": 8192},
+            "params": {"max_length": 1024},
             "models": [model_id]
         }
         async with session.post(api_url, json=payload, headers=headers) as response:
+            if response.status >= 400:
+                try:
+                    error_body = await response.text()
+                except:
+                    error_body = "Could not read response body"
+                log_event(f"AI Horde Request Failed: {response.status}. Body: {error_body}", "ERROR")
+            
             response.raise_for_status()
             job = await response.json()
             job_id = job["id"]
@@ -1217,6 +1226,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": model_id}
                     break
             except requests.exceptions.RequestException as e:
+                # print(f"DEBUG: Caught RequestException: {e}")
                 if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
                 last_exception = e
                 # --- Enhanced Error Logging ---
@@ -1241,15 +1251,26 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         except ValueError:
                             pass # Use default
                     
-                    # --- CIRCUIT BREAKER: Provider Level ---
-                    # If one model from a provider hits 429, the entire provider is likely rate-limited (e.g. Gemini).
-                    # We blacklist the entire provider for the duration.
-                    if provider in ["gemini", "openrouter", "openai"]:
-                        PROVIDER_AVAILABILITY[provider] = time.time() + retry_seconds
-                        log_event(f"CIRCUIT BREAKER: Provider '{provider}' rate limited. Cooling down for {retry_seconds}s.", "WARNING")
-                        console.print(display_error_oneliner("Circuit Breaker", f"Provider '{provider}' suspended for {retry_seconds}s.", model_id=provider))
                     
-                    # Mark specific model unavailable as well
+                    # --- CIRCUIT BREAKER: Refined Strategy ---
+                    # Default: Per-Model Cooldown (429 usually means model rate limit)
+                    # Exception: Provider Cooldown (if "quota", "billing" or "insufficient" is mentioned)
+                    
+                    is_global_quota_issue = False
+                    error_content_lower = error_details.lower()
+                    
+                    if "insufficient_quota" in error_content_lower or "billing" in error_content_lower or "quota exceeded" in error_content_lower:
+                        is_global_quota_issue = True
+                    
+                    if is_global_quota_issue and provider in ["gemini", "openrouter", "openai"]:
+                        PROVIDER_AVAILABILITY[provider] = time.time() + retry_seconds
+                        log_event(f"CIRCUIT BREAKER: Global Quota Limit for '{provider}'. Cooling down for {retry_seconds}s.", "CRITICAL")
+                        console.print(display_error_oneliner("Circuit Breaker", f"Provider '{provider}' suspended (Quota Exceeded).", model_id=provider))
+                    else:
+                        # Just mark the specific model as unavailable
+                        log_event(f"Rate limit (429) for model {model_id}. Applying per-model cooldown of {retry_seconds}s.", "WARNING")
+                    
+                    # Mark specific model unavailable (always do this on 429)
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
                     
                     if provider == "horde":

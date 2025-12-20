@@ -4172,7 +4172,7 @@ async def main(args):
 
     # Asynchronously initialize the MemoryManager
     memory_manager = await MemoryManager.create(knowledge_base, ui_panel_queue, kb_file_path=KNOWLEDGE_BASE_FILE)
-    love_state['memory_manager'] = memory_manager
+
 
     mcp_manager = MCPManager(console)
 
