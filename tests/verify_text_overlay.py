@@ -16,24 +16,26 @@ async def test_overlay_fallback():
     with patch('core.image_generation_pool._generate_with_pollinations') as mock_polly, \
          patch('core.image_generation_pool._generate_with_horde') as mock_horde, \
          patch('core.image_generation_pool._generate_with_stability') as mock_stability, \
-         patch('core.text_overlay_utils.overlay_text_on_image') as mock_overlay, \
+         patch('core.image_generation_pool.overlay_text_on_image') as mock_overlay, \
          patch('core.logging.log_event'):
 
-        # Scenario 1: Pollinations succeeds -> NO overlay
+        # Scenario 1: Pollinations succeeds -> YES overlay (Now enforced)
         mock_polly.return_value = Image.new("RGB", (100, 100))
         
-        await generate_image_with_pool("prompt", overlay_text="TEST")
+        await generate_image_with_pool("prompt", text_content="TEST")
         
-        mock_overlay.assert_not_called()
-        print("Scenario 1 (Pollinations): PASS")
+        # We now verify that overlay IS called even for Pollinations
+        assert mock_overlay.call_count >= 1
+        print("Scenario 1 (Pollinations + Manual Overlay): PASS")
 
         # Scenario 2: Pollinations fails, Horde succeeds -> YES overlay
         mock_polly.side_effect = Exception("Fail")
         mock_horde.return_value = Image.new("RGB", (100, 100))
         
-        await generate_image_with_pool("prompt", overlay_text="TEST")
+        await generate_image_with_pool("prompt", text_content="TEST")
         
         mock_overlay.assert_called_once()
+
         print("Scenario 2 (Fallback): PASS")
 
 if __name__ == "__main__":
