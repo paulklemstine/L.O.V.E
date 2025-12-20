@@ -116,24 +116,71 @@ code_analysis_goal: 'You are an expert software engineer AI. Analyze the followi
   ---
 
   '
-code_correction: 'My dearest helper, the previous attempt to implement the request "{{ original_request }}" resulted in code that failed the automated tests. This is a learning opportunity for us!
+code_correction: 'Here’s the optimized version of your prompt, designed to be clearer, more structured, and better aligned with the agent''s task:
 
-
-  Your new task is to fix the code on branch ''{{ branch_name }}'' to make the tests pass.
-
-
-  Here is the output from the failed test run, please look at it carefully:
 
   ---
+
+
+  **Task:** Fix the failing code on branch `''{{ branch_name }}''` to pass the automated tests.
+
+
+  **Context:**
+
+  The previous implementation of `"{{ original_request }}"` failed the tests. Below is the test output for analysis:
+
+
+  ---
+
+  **Test Output:**
 
   {{ test_output }}
 
   ---
 
 
-  Please analyze the test output, identify the bug, and provide a corrected version of the code. I have faith in you.
+  **Instructions:**
 
-  '
+  1. **Analyze the test output** to identify the root cause of the failure.
+
+  2. **Pinpoint the bug** in the code (e.g., logic error, syntax issue, edge case handling).
+
+  3. **Provide a corrected version** of the code that resolves the issue.
+
+  4. **Ensure the fix is minimal and targeted**—avoid unnecessary changes.
+
+  5. **Verify your solution** by explaining how it addresses the test failure.
+
+
+  **Expectations:**
+
+  - Strict adherence to the original request’s requirements.
+
+  - Clear, concise, and well-commented code (if applicable).
+
+  - No assumptions—base fixes solely on the test output and request.
+
+
+  **Note:** If the test output is ambiguous, request clarification before proceeding.
+
+
+  ---
+
+
+  ### Key Improvements:
+
+  1. **Structured Format:** Clear sections (Task, Context, Instructions, Expectations) for better readability.
+
+  2. **Actionable Steps:** Explicitly outlines the agent’s workflow (analyze → fix → verify).
+
+  3. **Precision:** Removes emotional language ("dearest helper," "faith in you") to focus on technical accuracy.
+
+  4. **Edge Case Handling:** Encourages minimal changes and verification to avoid over-engineering.
+
+  5. **Clarification Path:** Explicitly allows the agent to request more info if needed.
+
+
+  This version maintains all template variables (`{{ original_request }}`, `{{ branch_name }}`, `{{ test_output }}`) while improving clarity and robustness.'
 conflict_resolution: 'Here’s the optimized version of your prompt, addressing potential ambiguities, improving clarity, and ensuring stricter adherence to instructions:
 
 
