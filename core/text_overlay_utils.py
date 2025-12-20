@@ -25,9 +25,17 @@ def overlay_text_on_image(image: Image.Image, text: str, position: str = "bottom
     
     # --- Font Selection ---
     # Try to load a reasonable font
+    # PRIORITIZE: Local assets for portability
+    local_font_path = os.path.join(os.getcwd(), "assets", "fonts", "arialbd.ttf")
+    
     font_paths = [
+        local_font_path,
+        "assets/fonts/arialbd.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/mnt/c/Windows/Fonts/arialbd.ttf",
+        "/mnt/c/Windows/Fonts/impact.ttf",
         "arial.ttf",
         "Arial.ttf"
     ]

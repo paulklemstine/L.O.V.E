@@ -456,10 +456,9 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
             manual_overlay_text = text_content 
             
             if provider_name == "pollinations" and text_content:
-                # Pollinations Strategy: Embed text in prompt
-                current_prompt = f"{prompt}. Render the text '{text_content}' in massive, neon, glowing typography in the center."
-                # Disable manual overlay for this provider
-                manual_overlay_text = None
+                # Pollinations Strategy: Embed text in prompt AND apply manual overlay because models are inconsistent.
+                current_prompt = f"{prompt}. Text: '{text_content}'."
+                # We KEEP manual_overlay_text active to guarantee it appears.
                 
             # -------------------------------------
 
