@@ -395,36 +395,7 @@ interaction_response: '### ROLE
   - Give the answer or the decision immediately.
 
   '
-knowledge_extraction_structured: '### TASK
-
-  Extract structured data from the text based on the provided schema.
-
-
-  ### INPUT
-
-  {{ input_text }}
-
-
-  ### SCHEMA
-
-  {{ extraction_schema }}
-
-
-  ### OUTPUT
-
-  JSON List of objects.
-
-  Each object MUST include:
-
-  - "type"
-
-  - "sub_type"
-
-  - "data" (Map/Dictionary)
-
-  - For relationships, "data" must have "from" and "to".
-
-  '
+knowledge_extraction_structured: "### TASK\nYou are a specialized information extraction system. Your task is to analyze the provided text and extract structured data that matches the given schema. You must identify all relevant entities, attributes, and relationships present in the text and format them as a JSON array of objects.\n\n### INSTRUCTIONS\n1. Carefully analyze the provided extraction schema to understand the required data structure.\n2. Scan the input text thoroughly to identify all instances of data that match the schema requirements.\n3. For each identified entity/relationship in the text:\n   a. Extract all relevant information\n   b. Format it according to the schema\n   c. Include only information that is explicitly mentioned in the text\n4. If certain fields in the schema cannot be found in the text:\n   a. Omit those fields from the output\n   b. Never invent or hallucinate information\n5. For relationship extraction:\n   a. Identify the \"from\" and \"to\" entities\n   b. Ensure these entities are clearly mentioned in the text\n   c. Document the relationship type in \"sub_type\"\n6. Maintain strict adherence to the JSON format specified in the schema.\n\n### INPUT\n{{ input_text }}\n\n### SCHEMA\n{{ extraction_schema }}\n\n### OUTPUT REQUIREMENTS\n1. Output must be a valid JSON array (list of objects).\n2. Each object in the array MUST include:\n   - \"type\": The category of the extracted entity (e.g., \"person\", \"organization\", \"location\")\n   - \"sub_type\": The specific type within the category (e.g., \"employee\", \"department\", \"city\")\n   - \"data\": A dictionary/map containing all relevant key-value pairs for this entity\n3. For relationship objects:\n   - The \"data\" dictionary MUST include:\n     - \"from\": The source entity in the relationship\n     - \"to\": The target entity in the relationship\n   - Additional relationship properties can be included in \"data\" as needed\n4. If no relevant information is found in the text, return an empty array: []\n5. Ensure all string values are properly escaped in the JSON\n6. Validate that your output is syntactically correct JSON before responding\n\n### EXAMPLES\nNo examples provided. Base your extraction strictly on the schema and the content of the input text."
 memory_folding_compression: "### ROLE\nYou are a Memory Architect.\n\n### TASK\nCompress the following interaction history into a structured summary.\n\n### INPUT\n{{ full_interaction }}\n\n### OUTPUT JSON\n{\n  \"Episodic Memory\": \"One paragraph narrative of what happened.\",\n  \"Working Memory\": \"One sentence describing the final state.\",\n  \"Tool Memory\": \"Summary of tools used, their effectiveness, and errors.\"\n}\n"
 orchestrator_goal_classification: '### TASK
 
