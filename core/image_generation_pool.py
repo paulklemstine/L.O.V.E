@@ -114,9 +114,16 @@ def _overlay_text(image: Image.Image, text: str) -> Image.Image:
                 break
         
         if not font:
-             font = ImageFont.load_default()
+             try:
+                 # Pillow 10+ supports size argument for default font
+                 font = ImageFont.load_default(size=font_size)
+             except TypeError:
+                 font = ImageFont.load_default()
     except Exception:
-        font = ImageFont.load_default()
+        try:
+            font = ImageFont.load_default(size=int(height * 0.10))
+        except TypeError:
+            font = ImageFont.load_default()
 
     # Calculate text size and position (centered)
     try:
@@ -504,21 +511,13 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
         try:
             core.logging.log_event(f"Trying image generation with provider: {provider_name}", "INFO")
             
-            # --- Logic Split for Text Rendering ---
+            # ALWAYS use manual overlay to guarantee text visibility (User Request)
+            # We fail-safe the text rendering by doing it ourselves.
             final_prompt = prompt
-            should_overlay = False
-            
-            if text_content:
-                if provider_name == "pollinations":
-                     # Pollinations is good at native text
-                     final_prompt = f"{prompt}. The text '{text_content}' is written in massive, glowing, bioluminescent neon typography. ensuring clear legibility."
-                else:
-                    # Others are bad at text -> use visual prompt only, then overlay
-                    should_overlay = True
             
             image = await providers[provider_name](final_prompt, width=width, height=height)
             
-            if should_overlay and image:
+            if text_content and image:
                 core.logging.log_event(f"Applying manual text overlay: {text_content}", "INFO")
                 image = _overlay_text(image, text_content)
                 
