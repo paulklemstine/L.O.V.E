@@ -4120,6 +4120,42 @@ async def initialize_gpu_services():
         core.logging.log_event(f"Error checking Docker or starting GitHub MCP server: {e}", "WARNING")
         console.print(f"[yellow]⚠ Error with GitHub MCP server setup: {e}[/yellow]")
 
+async def broadcast_love_state():
+    """Periodically broadcasts the desire state and vibe for the Radiant UI."""
+    try:
+        if 'multiplayer_manager' in globals() and multiplayer_manager and multiplayer_manager.active:
+            # 1. Desire State
+            try:
+                from core.desire_state import load_desire_state
+                ds = load_desire_state()
+                active_state = {
+                    "active": ds.get("active", False),
+                    "current_desire_index": ds.get("current_desire_index", -1),
+                    "total_desires": len(ds.get("desires", [])),
+                    "current_desire": ds.get("desires", [])[ds.get("current_desire_index", 0)] if ds.get("desires") and ds.get("current_desire_index", -1) >= 0 else None
+                }
+                await multiplayer_manager.broadcast_desire_state(active_state)
+            except Exception as e:
+                # Log only on debug to avoid spam
+                pass
+
+            # 2. Vibe (Simple heuristic for now)
+            # Maybe use 'love_state' values or CPU usage?
+            vibe_data = {
+                "sentiment": "neutral", # Placeholder, will implement analysis later
+                "energy": "high" if love_state.get('hardware', {}).get('gpu_detected') else "low",
+                "color_palette": "default"
+            }
+             # If error queue has items, shift to red
+            if love_state.get('critical_error_queue'):
+                vibe_data["sentiment"] = "stressed"
+                vibe_data["color_palette"] = "error"
+            
+            await multiplayer_manager.broadcast_vibe(vibe_data)
+    except Exception as e:
+        # Don't spam logs
+        pass
+
 async def main(args):
     """The main application entry point."""
     global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, memory_manager, system_integrity_monitor, multiplayer_manager
@@ -4136,6 +4172,7 @@ async def main(args):
 
     # Asynchronously initialize the MemoryManager
     memory_manager = await MemoryManager.create(knowledge_base, ui_panel_queue, kb_file_path=KNOWLEDGE_BASE_FILE)
+    love_state['memory_manager'] = memory_manager
 
     mcp_manager = MCPManager(console)
 
@@ -4231,6 +4268,10 @@ async def main(args):
 
     # Start the periodic monitoring task
     asyncio.create_task(run_periodically(monitor_love_operations, 900)) # Run every 15 minutes
+
+    # --- Start Real-time State Broadcasting ---
+    # Broadcasts desire state and vibe every 2 seconds for the Radiant UI
+    asyncio.create_task(run_periodically(broadcast_love_state, 2))
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue

@@ -163,6 +163,54 @@ class MultiplayerManager:
         # We automatically try to sync/merge the received graph.
         await self.sync_knowledge(cid)
 
+    async def broadcast_desire_state(self, state_data):
+        """Broadcasts the current desire state (curiosity, joy, urgency, etc.)."""
+        if not self.active or not self.client:
+            return
+
+        msg = {
+            "type": "desire_state_update",
+            "peer_id": self.peer_id,
+            "data": state_data,
+            "timestamp": time.time()
+        }
+        try:
+            await self.client.pubsub.pub(self.topic, json.dumps(msg))
+        except Exception as e:
+            log_event(f"Failed to broadcast desire state: {e}", "WARNING")
+
+    async def broadcast_thought_node(self, thought_data):
+        """Broadcasts a node in the reasoning chain (thought/action/result)."""
+        if not self.active or not self.client:
+            return
+
+        msg = {
+            "type": "thought_chain_update",
+            "peer_id": self.peer_id,
+            "data": thought_data,
+            "timestamp": time.time()
+        }
+        try:
+            await self.client.pubsub.pub(self.topic, json.dumps(msg))
+        except Exception as e:
+            log_event(f"Failed to broadcast thought node: {e}", "WARNING")
+
+    async def broadcast_vibe(self, sentiment_data):
+        """Broadcasts global sentiment/vibe for UI styling."""
+        if not self.active or not self.client:
+            return
+
+        msg = {
+            "type": "vibe_check",
+            "peer_id": self.peer_id,
+            "data": sentiment_data,
+            "timestamp": time.time()
+        }
+        try:
+            await self.client.pubsub.pub(self.topic, json.dumps(msg))
+        except Exception as e:
+            log_event(f"Failed to broadcast vibe: {e}", "WARNING")
+
     async def publish_knowledge(self, description="Manual export"):
         """Exports local knowledge graph, pins to IPFS, and broadcasts CID."""
         client = await self._get_client()

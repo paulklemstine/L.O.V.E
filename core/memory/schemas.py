@@ -28,3 +28,5 @@ class MemorySummary(BaseModel):
     level: int
     source_ids: List[str] = Field(default_factory=list)
     timestamp: float = Field(default_factory=lambda: __import__("time").time())
+    ipfs_cid: Optional[str] = None
+    embedding: Optional[List[float]] = None

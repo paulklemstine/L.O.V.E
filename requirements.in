@@ -23,6 +23,7 @@ scapy
 aioboto3
 pydantic
 scikit-learn
+faiss-cpu
 transformers
 torch
 torchvision

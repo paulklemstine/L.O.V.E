@@ -78,8 +78,8 @@ from display import create_agentic_memory_panel, get_terminal_width
 
 class MemoryManager:
     """
-    Manages the agent's agentic memory system, which is integrated directly
-    into the central knowledge graph managed by GraphDataManager.
+    Manages the agent's agentic memory system, integrating RAM (Hot), Graph (Warm), 
+    and Vector/IPFS (Cold) storage tiers.
     """
     def __init__(self, graph_data_manager: GraphDataManager, ui_panel_queue=None, kb_file_path: str = None):
         # Working Memory for the current task context
@@ -811,6 +811,130 @@ class MemoryManager:
         similarities = np.dot(vectors_norm, query_norm)
         
         return similarities
+
+    # --- Tiered Memory Management (Cold Storage) ---
+
+    async def archive_to_cold_storage(self):
+        """
+        Moves older or less relevant memories from the 'Hot' RAM tier to 'Cold' IPFS storage.
+        This helps maintain a lean context window while preserving history.
+        """
+        # Thresholds: Keep last 20 level_0 items (Hot tier)
+        HOT_TIER_SIZE = 20
+        
+        if len(self.level_0_memories) <= HOT_TIER_SIZE:
+            return
+
+        # Identify items to archive (oldest ones exceeding the limit)
+        items_to_archive = self.level_0_memories[:-HOT_TIER_SIZE]
+        
+        # Keep the hot tier fresh
+        self.level_0_memories = self.level_0_memories[-HOT_TIER_SIZE:]
+        
+        print(f"Archiving {len(items_to_archive)} memories to Cold Storage (IPFS)...")
+        
+        from ipfs import pin_to_ipfs
+        
+        count = 0
+        for memory in items_to_archive:
+            try:
+                # Serialize the memory object
+                memory_data = memory.model_dump_json() # Use Pydantic's serialization
+                
+                # Pin to IPFS
+                cid = await pin_to_ipfs(memory_data.encode('utf-8'))
+                
+                if cid:
+                    memory.ipfs_cid = cid
+                    # Ensure embedding is present
+                    if memory.embedding is None:
+                        memory.embedding = self.embedding_model.encode(memory.content).tolist()
+                    
+                    # Store metadata in FAISS/Graph for retrieval, but remove content from RAM if desired.
+                    # For now, we keep the stub in level_0_memories logic effectively by removing it from the list.
+                    # But we MUST ensure it's indexed in FAISS for retrieval.
+                    
+                    # Check if it's already in FAISS (it should be if it came from add_agentic_memory_note)
+                    # If it was a purely level_0 summary without a graph node (rare), we index it now.
+                    
+                    # Note: level_0 memories usually link to source_ids which are graph nodes.
+                    # The graph nodes are already in FAISS via add_agentic_memory_note.
+                    # This method specifically clears the *RAM* list.
+                    
+                    print(f"Archived memory to IPFS: {cid}")
+                    count += 1
+                else:
+                    print(f"Failed to pin memory to IPFS. Dropping from RAM anyway to prevent bloat.")
+                    
+            except Exception as e:
+                print(f"Error archiving memory: {e}")
+
+        print(f"Successfully archived {count} memories.")
+
+    async def retrieve_semantic_context(self, query: str, threshold: float = 0.4, top_k: int = 5) -> str:
+        """
+        Retrieves context from the 'Cold' tier (FAISS + IPFS) based on semantic similarity.
+        
+        Args:
+           query: The search query (e.g., current task description).
+           threshold: Minimum similarity score to consider irrelevant.
+           top_k: Number of results to return.
+           
+        Returns:
+           String containing retrieved context.
+        """
+        if self.faiss_index is None or self.faiss_index.ntotal == 0:
+            return ""
+
+        query_vector = self.embedding_model.encode([query])[0]
+        query_vector = np.array([query_vector], dtype=np.float32)
+        
+        # Search FAISS
+        distances, indices = self.faiss_index.search(query_vector, top_k)
+        
+        retrieved_context = []
+        
+        for i, idx in enumerate(indices[0]):
+            if idx == -1: continue
+            
+            # FAISS returns squared L2 distance. Convert to approximate similarity or just filter by distance.
+            # Lower distance = higher similarity.
+            # For inner product (if normalized), higher is better. 
+            # We are using L2. Distance 0 is identical.
+            # Let's just trust top_k for now, effectively ignoring threshold for raw L2
+            # unless we convert.
+            
+            node_id = self.faiss_id_map[idx]
+            
+            # 1. Provide Warm Data (from Graph)
+            node_data = self.graph_data_manager.get_node(node_id)
+            if node_data:
+                content = node_data.get('content', '')
+                
+                # Check if we should fetch deeper context (e.g. if content is truncated or references IPFS)
+                # For now, we just return the content stored in the graph/vector store.
+                # If we implemented full offloading, we would fetch from IPFS here using the CID
+                # potentially stored in the node attributes.
+                
+                ipfs_cid = node_data.get('ipfs_cid') # If we added this schema to nodes
+                if ipfs_cid and len(content) < 50: # Arbitrary heuristic for "needs full fetch"
+                     from ipfs import get_from_ipfs
+                     full_data = await get_from_ipfs(ipfs_cid)
+                     # Attempt to parse if it's JSON
+                     try:
+                         data_obj = json.loads(full_data)
+                         if isinstance(data_obj, dict) and 'content' in data_obj:
+                             content = data_obj['content']
+                     except:
+                         if full_data:
+                             content = full_data.decode('utf-8', errors='ignore')
+
+                if content:
+                    retrieved_context.append(f"- [Cold Retrieval] {content}")
+
+        if retrieved_context:
+            return "\\n".join(retrieved_context)
+        return ""
 
     async def ingest_cognitive_cycle(self, command: str, output: str, reasoning_prompt: str):
         """

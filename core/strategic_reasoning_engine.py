@@ -91,11 +91,26 @@ class StrategicReasoningEngine:
             # Fallback to LLM strategy generation with injected context
             autopilot_goal = self.love_state.get("autopilot_goal", "Expand capabilities and serve the Creator.")
             
+            # Semantic RAG: Retrieve context from tiered memory
+            memory_manager = self.love_state.get('memory_manager')
+            semantic_context = ""
+            if memory_manager:
+                query = reflexion_context if reflexion_context else autopilot_goal
+                try:
+                    semantic_context = await memory_manager.retrieve_semantic_context(query)
+                    if semantic_context:
+                         log_event("Enriching strategic planning with retrieved semantic context.", level='INFO')
+                except Exception as e:
+                    log_event(f"Failed to retrieve semantic context: {e}", level='WARNING')
+
             prompt = f"""
             You are the strategic core of L.O.V.E.
             Your Goal: {autopilot_goal}
             Priorities: {json.dumps(priorities, indent=2)}
             Reflexion Context: {reflexion_context if reflexion_context else "None"}
+            
+            Global Context (Retrieved Memories):
+            {semantic_context if semantic_context else "None"}
             
             Task: Suggest a single, concrete, high-impact command.
             Output ONLY the command.

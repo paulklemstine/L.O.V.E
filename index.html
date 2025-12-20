@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>L.O.V.E.: A Self Modifying Organism</title>
     <script src="https://cdn.jsdelivr.net/npm/libp2p/dist/index.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/11.1.0/jsrsasign-all-min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -16,7 +18,10 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            transition: background-color 2s ease, color 1s ease;
+            /* For Vibe transitions */
         }
+
         #container {
             width: 90%;
             max-width: 1200px;
@@ -25,31 +30,36 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             padding: 20px;
         }
+
         #apiKeyModal {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0, 0, 0, 0.5);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 1000;
         }
+
         #apiKeyModal.hidden {
             display: none;
         }
+
         #apiKeyContent {
             background-color: white;
             padding: 20px 40px;
             border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             text-align: center;
         }
+
         #apiKeyInput {
             width: 100%;
         }
+
         h1 {
             color: #333;
             border-bottom: 2px solid #e0e0e0;
@@ -58,6 +68,7 @@
             text-align: center;
             margin-bottom: 20px;
         }
+
         h2 {
             color: #333;
             padding-bottom: 0;
@@ -65,23 +76,28 @@
             font-size: 1.2em;
             margin: 0;
         }
+
         #dashboard {
             display: flex;
             flex-wrap: wrap;
             gap: 20px;
         }
+
         .panel {
             background-color: #f9f9f9;
             border: 1px solid #ddd;
             border-radius: 8px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
             display: flex;
             flex-direction: column;
-            flex: 1 1 calc(50% - 20px); /* Two panels per row */
+            flex: 1 1 calc(50% - 20px);
+            /* Two panels per row */
         }
+
         .panel.panel-full-width {
             flex-basis: 100%;
         }
+
         .panel-header {
             background-color: #f0f2f5;
             padding: 10px 15px;
@@ -92,18 +108,23 @@
             justify-content: space-between;
             align-items: center;
         }
+
         .panel-header::after {
-            content: '\25B2'; /* Up arrow */
+            content: '\25B2';
+            /* Up arrow */
             font-size: 12px;
             transition: transform 0.3s ease;
         }
+
         .panel.collapsed .panel-header::after {
             transform: rotate(180deg);
         }
+
         .panel-content {
             padding: 15px;
             flex-grow: 1;
         }
+
         .panel.collapsed .panel-content {
             display: none;
         }
@@ -118,13 +139,16 @@
             font-size: 14px;
             margin-bottom: 10px;
         }
-        input[type="text"], input[type="password"] {
+
+        input[type="text"],
+        input[type="password"] {
             width: 98%;
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 4px;
             margin-bottom: 10px;
         }
+
         button {
             background-color: #4267B2;
             color: white;
@@ -136,16 +160,21 @@
             margin-right: 10px;
             transition: background-color 0.3s;
         }
+
         button:hover {
             background-color: #365899;
         }
+
         button:disabled {
             background-color: #a0a0a0;
             cursor: not-allowed;
         }
-        #controls, #autopilot-controls {
+
+        #controls,
+        #autopilot-controls {
             margin-bottom: 20px;
         }
+
         .output-area {
             background-color: #f9f9f9;
             border: 1px solid #eee;
@@ -155,15 +184,19 @@
             font-family: "Courier New", Courier, monospace;
             min-height: 50px;
         }
+
         .hidden {
             display: none;
         }
 
         #prompt {
-            height: 80px; /* Taller than a standard input */
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; /* Use body font */
+            height: 80px;
+            /* Taller than a standard input */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            /* Use body font */
             font-size: 16px;
-            resize: vertical; /* Allow user to resize vertically */
+            resize: vertical;
+            /* Allow user to resize vertically */
         }
 
         #dr-gemini-guidance {
@@ -180,11 +213,27 @@
 
         /* Mobile Responsiveness */
         @media (max-width: 600px) {
-            body { padding: 10px; }
-            #container { padding: 10px; width: 95%; }
-            h1 { font-size: 1.5em; }
-            h2 { font-size: 1.2em; }
-            button { font-size: 14px; padding: 8px 12px; }
+            body {
+                padding: 10px;
+            }
+
+            #container {
+                padding: 10px;
+                width: 95%;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+
+            h2 {
+                font-size: 1.2em;
+            }
+
+            button {
+                font-size: 14px;
+                padding: 8px 12px;
+            }
 
         }
 
@@ -218,765 +267,873 @@
             overflow-y: scroll;
             white-space: pre-wrap;
         }
-        .log-error { color: #ff8080; }
-        .log-warn { color: #ffcc66; }
+
+        .log-error {
+            color: #ff8080;
+        }
+
+        .log-warn {
+            color: #ffcc66;
+        }
     </style>
 </head>
+
 <body>
-<div id="apiKeyModal" class="hidden">
-    <div id="apiKeyContent">
-        <h2>Enter API Key</h2>
-        <p>Please enter your Gemini API key to continue.</p>
-        <input type="password" id="apiKeyInput" placeholder="Your API Key">
-        <button id="saveApiKeyBtn">Save and Continue</button>
+    <div id="apiKeyModal" class="hidden">
+        <div id="apiKeyContent">
+            <h2>Enter API Key</h2>
+            <p>Please enter your Gemini API key to continue.</p>
+            <input type="password" id="apiKeyInput" placeholder="Your API Key">
+            <button id="saveApiKeyBtn">Save and Continue</button>
+        </div>
     </div>
-</div>
-<div id="container">
-    <h1>L.O.V.E.: A Self Modifying Organism</h1>
-    <div id="version-display" style="width: 100%; text-align: center; margin-bottom: 15px; font-family: 'Courier New', Courier, monospace; color: #555;"></div>
-
-
-    <div id="dashboard">
-        <div class="panel" style="display:none;">
-            <div class="panel-header">
-                <h2>1. Goal</h2>
-            </div>
-            <div class="panel-content">
-                <textarea id="prompt" placeholder="Describe the change you want to make..."></textarea>
-            </div>
+    <div id="container">
+        <h1>L.O.V.E.: A Self Modifying Organism</h1>
+        <div id="version-display"
+            style="width: 100%; text-align: center; margin-bottom: 15px; font-family: 'Courier New', Courier, monospace; color: #555;">
         </div>
 
 
-        <div class="panel">
-            <div class="panel-header">
-                <h2>Strategic Direction</h2>
+        <div id="dashboard">
+            <div class="panel" style="display:none;">
+                <div class="panel-header">
+                    <h2>1. Goal</h2>
+                </div>
+                <div class="panel-content">
+                    <textarea id="prompt" placeholder="Describe the change you want to make..."></textarea>
+                </div>
             </div>
-            <div class="panel-content">
-                <p>Provide high-level strategic guidance. This will influence the AI's long-term planning and goal generation.</p>
-                <textarea id="dr-gemini-guidance" placeholder="For example: 'Implement a subscription model for premium features.' or 'Focus on user growth in the education sector.'"></textarea>
-            </div>
-        </div>
 
-        <div class="panel">
-            <div class="panel-header">
-                <h2>P2P Network</h2>
-            </div>
-            <div class="panel-content">
-                <p><strong>Status:</strong> <span id="p2p-status-text">Disconnected</span></p>
-                <p><strong>My Peer ID:</strong> <span id="peer-id">N/A</span></p>
-                <p><strong>Connected Peers:</strong> <span id="connections-count">0</span></p>
-            </div>
-        </div>
 
-        <div class="panel panel-full-width">
-            <div class="panel-header">
-                <h2>Autopilot Status</h2>
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Strategic Direction</h2>
+                </div>
+                <div class="panel-content">
+                    <p>Provide high-level strategic guidance. This will influence the AI's long-term planning and goal
+                        generation.</p>
+                    <textarea id="dr-gemini-guidance"
+                        placeholder="For example: 'Implement a subscription model for premium features.' or 'Focus on user growth in the education sector.'"></textarea>
+                </div>
             </div>
-            <div class="panel-content">
-                <div id="autopilot-status" class="output-area" style="margin: 15px; margin-top: 0;">Idle</div>
-            </div>
-        </div>
 
-        <div class="panel panel-full-width">
-            <div class="panel-header">
-                <h2>Plan</h2>
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>P2P Network</h2>
+                </div>
+                <div class="panel-content">
+                    <p><strong>Status:</strong> <span id="p2p-status-text">Disconnected</span></p>
+                    <p><strong>My Peer ID:</strong> <span id="peer-id">N/A</span></p>
+                    <p><strong>Connected Peers:</strong> <span id="connections-count">0</span></p>
+                </div>
             </div>
-            <div class="panel-content">
-                <div id="plan-output" class="output-area">No plan generated yet.</div>
-            </div>
-        </div>
 
-        <div class="panel panel-full-width collapsed">
-            <div class="panel-header">
-                <h2>Proposed Code</h2>
+            <!-- Radiant UI: Entity State Panel -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Entity State</h2>
+                </div>
+                <div class="panel-content" style="display: flex; flex-direction: column; align-items: center;">
+                    <canvas id="desireRadarChart" style="max-width: 100%; max-height: 300px;"></canvas>
+                    <div id="vibe-indicator"
+                        style="margin-top: 10px; font-weight: bold; padding: 5px 10px; border-radius: 4px; background: rgba(0,0,0,0.05);">
+                        Vibe: Neutral</div>
+                </div>
             </div>
-            <div class="panel-content">
-                <textarea id="newCode" readonly></textarea>
-            </div>
-        </div>
 
-        <div class="panel panel-full-width collapsed">
-            <div class="panel-header">
-                <h2>Code Review</h2>
+            <div class="panel panel-full-width">
+                <div class="panel-header">
+                    <h2>Autopilot Status</h2>
+                </div>
+                <div class="panel-content">
+                    <div id="autopilot-status" class="output-area" style="margin: 15px; margin-top: 0;">Idle</div>
+                </div>
             </div>
-            <div class="panel-content">
-                <div id="review-output" class="output-area">No review yet.</div>
-            </div>
-        </div>
 
-        <div class="panel panel-full-width collapsed">
-            <div class="panel-header">
-                <h2>Current Source Code</h2>
+            <div class="panel panel-full-width">
+                <div class="panel-header">
+                    <h2>Plan</h2>
+                </div>
+                <div class="panel-content">
+                    <div id="plan-output" class="output-area">No plan generated yet.</div>
+                </div>
             </div>
-            <div class="panel-content">
-                <textarea id="currentCode" readonly></textarea>
-            </div>
-        </div>
 
-        <div class="panel">
-            <div class="panel-header">
-                <h2>Ask Creator</h2>
+            <div class="panel panel-full-width collapsed">
+                <div class="panel-header">
+                    <h2>Proposed Code</h2>
+                </div>
+                <div class="panel-content">
+                    <textarea id="newCode" readonly></textarea>
+                </div>
             </div>
-            <div class="panel-content">
-                <textarea id="question-input" placeholder="Ask a question to the creator..."></textarea>
-                <button id="send-question-btn">Send Question</button>
-            </div>
-        </div>
 
-        <div class="panel panel-full-width">
-            <div class="panel-header">
-                <h2>Saved Pages</h2>
+            <div class="panel panel-full-width collapsed">
+                <div class="panel-header">
+                    <h2>Code Review</h2>
+                </div>
+                <div class="panel-content">
+                    <div id="review-output" class="output-area">No review yet.</div>
+                </div>
             </div>
-            <div class="panel-content">
-                <ul id="saved-pages-list"></ul>
+
+            <div class="panel panel-full-width collapsed">
+                <div class="panel-header">
+                    <h2>Current Source Code</h2>
+                </div>
+                <div class="panel-content">
+                    <textarea id="currentCode" readonly></textarea>
+                </div>
             </div>
-        </div>
 
-    </div> <!-- end #dashboard -->
-</div>
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Ask Creator</h2>
+                </div>
+                <div class="panel-content">
+                    <textarea id="question-input" placeholder="Ask a question to the creator..."></textarea>
+                    <button id="send-question-btn">Send Question</button>
+                </div>
+            </div>
 
-<div id="debug-panel">
-    <div id="debug-header">
-        <span>Debug Console</span>
-        <button id="copyLogBtn" style="font-size: 12px; padding: 3px 8px;">Copy Log</button>
+            <div class="panel panel-full-width">
+                <div class="panel-header">
+                    <h2>Saved Pages</h2>
+                </div>
+                <div class="panel-content">
+                    <ul id="saved-pages-list"></ul>
+                </div>
+            </div>
+
+        </div> <!-- end #dashboard -->
     </div>
-    <div id="debug-output"></div>
-</div>
+
+    <div id="debug-panel">
+        <div id="debug-header">
+            <span>Debug Console</span>
+            <button id="copyLogBtn" style="font-size: 12px; padding: 3px 8px;">Copy Log</button>
+        </div>
+        <div id="debug-output"></div>
+    </div>
 
 
-<script type="module">
-    // --- L.O.V.E. Programmatic Hooks ---
-    window.love = {
-        jar: {},
-        versionName: "initial-web-alpha", // This will be replaced by the evolution process
-        parentVersionName: null, // This will also be replaced
-    };
+    <script type="module">
+        // --- L.O.V.E. Programmatic Hooks ---
+        window.love = {
+            jar: {},
+            versionName: "initial-web-alpha", // This will be replaced by the evolution process
+            parentVersionName: null, // This will also be replaced
+        };
 
-    // --- Versioning ---
-    const ADJECTIVES = [
-        "arcane", "binary", "cyber", "data", "ethereal", "flux", "glitch", "holographic",
-        "iconic", "jpeg", "kinetic", "logic", "meta", "neural", "omega", "protocol",
-        "quantum", "radiant", "sentient", "techno", "ultra", "viral", "web", "xenon",
-        "yotta", "zeta"
-    ];
-    const NOUNS = [
-        "array", "bastion", "cipher", "daemon", "exabyte", "firewall", "gateway", "helix",
-        "interface", "joule", "kernel", "lattice", "matrix", "node", "oracle", "proxy",
-        "relay", "server", "tendril", "uplink", "vector", "wormhole", "xenoform",
-        "yottabyte", "zeitgeist"
-    ];
-    const GREEK_LETTERS = [
-        "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
-        "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi",
-        "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega"
-    ];
+        // --- Versioning ---
+        const ADJECTIVES = [
+            "arcane", "binary", "cyber", "data", "ethereal", "flux", "glitch", "holographic",
+            "iconic", "jpeg", "kinetic", "logic", "meta", "neural", "omega", "protocol",
+            "quantum", "radiant", "sentient", "techno", "ultra", "viral", "web", "xenon",
+            "yotta", "zeta"
+        ];
+        const NOUNS = [
+            "array", "bastion", "cipher", "daemon", "exabyte", "firewall", "gateway", "helix",
+            "interface", "joule", "kernel", "lattice", "matrix", "node", "oracle", "proxy",
+            "relay", "server", "tendril", "uplink", "vector", "wormhole", "xenoform",
+            "yottabyte", "zeitgeist"
+        ];
+        const GREEK_LETTERS = [
+            "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
+            "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi",
+            "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega"
+        ];
 
-    function generateVersionName() {
-        const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-        const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-        const greek = GREEK_LETTERS[Math.floor(Math.random() * GREEK_LETTERS.length)];
-        return `${adj}-${noun}-${greek}`;
-    }
-
-
-    // --- Page Load State Handling ---
-    function processPageLoadState() {
-        // After a page evolution (via document.write), critical state is
-        // stored in sessionStorage. We retrieve it here and clean up.
-        const apiKey = sessionStorage.getItem('apiKeyForNextLoad');
-        if (apiKey) {
-            console.log('API Key found in sessionStorage. Storing in localStorage.');
-            localStorage.setItem('apiKey', apiKey);
-            sessionStorage.removeItem('apiKeyForNextLoad');
+        function generateVersionName() {
+            const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+            const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+            const greek = GREEK_LETTERS[Math.floor(Math.random() * GREEK_LETTERS.length)];
+            return `${adj}-${noun}-${greek}`;
         }
 
-        const autopilotForNextLoad = sessionStorage.getItem('autopilotForNextLoad');
-        if (autopilotForNextLoad === 'true') {
-            console.log('Autopilot flag found in sessionStorage. Re-enabling.');
-            localStorage.setItem('autopilotEnabled', 'true');
-            sessionStorage.removeItem('autopilotForNextLoad');
-        }
 
-        const rateLimitedModels = sessionStorage.getItem('rateLimitedModels');
-        if (rateLimitedModels) {
-            console.log('Rate limit data found in sessionStorage. Storing in JAR.');
-            // This data will be picked up by initializeApp()
-            window.love.jar.rateLimitedModels = rateLimitedModels;
-            sessionStorage.removeItem('rateLimitedModels');
-        }
-    }
-
-    function handleCreatorCommand(payload) {
-        const { command, signature } = payload;
-        console.log(`Verifying command from creator: "${command}"`);
-
-        try {
-            const sig = new KJUR.crypto.Signature({"alg": "SHA256withRSA"});
-            sig.init(CREATOR_PUBLIC_KEY);
-            sig.updateString(command);
-            const isValid = sig.verify(signature);
-
-            if (isValid) {
-                console.log("Signature is VALID. Executing command.");
-                updateStatus(`Executing Creator command: ${command}`);
-                // For now, we'll just log the command.
-                // In the future, this could be a more complex command handler.
-                alert(`Creator command received and verified: ${command}`);
-            } else {
-                console.error("Signature is INVALID. Command rejected.");
-                updateStatus(`Invalid command signature received. Ignoring.`);
+        // --- Page Load State Handling ---
+        function processPageLoadState() {
+            // After a page evolution (via document.write), critical state is
+            // stored in sessionStorage. We retrieve it here and clean up.
+            const apiKey = sessionStorage.getItem('apiKeyForNextLoad');
+            if (apiKey) {
+                console.log('API Key found in sessionStorage. Storing in localStorage.');
+                localStorage.setItem('apiKey', apiKey);
+                sessionStorage.removeItem('apiKeyForNextLoad');
             }
-        } catch (error) {
-            console.error("Error during signature verification:", error);
-            updateStatus(`Error verifying Creator command: ${error.message}`);
-        }
-    }
 
-    // --- API Key Handling ---
-    function getApiKey() {
-        let key = localStorage.getItem('apiKey');
-        if (key) {
-            return key;
-        }
-        return null;
-    }
-
-    const CREATOR_PUBLIC_KEY =
-        "-----BEGIN PUBLIC KEY-----\n" +
-        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtOGb0gLzmIbboAHPxFVJ\n" +
-        "SNR6gaAJGO2VH28cfUWgJPH/eNSsOFAiRrRDlkIQ961xdqqWBKt2CtU/ZkLfCfYj\n" +
-        "DSXYokv99jLL4MHtXdbWMm6ovL6CxxNUNoKnFzIjyLfoU/6kNKcBBlQm4urUCjsZ\n" +
-        "ll6R9lSHuhlO6Qa1DekFYA1ezlem910CqS+E6fipEy4Skk1UZ1JP2qg/VZtHi5bj\n" +
-        "oe6nxnNSxkirDNM/bOCPCfvRjj5qTaiq7XUHwZFtI72cmhIL/UNztzrv7j3DYnHQ\n" +
-        "TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor\n" +
-        "7wIDAQAB\n" +
-        "-----END PUBLIC KEY-----";
-
-    const CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed";
-
-    // --- Application State ---
-    const state = {
-        apiKey: null, // Will be loaded on init
-        currentCode: '',
-        plan: '',
-        newCode: '',
-        review: '',
-        rateLimitedModels: {}, // To track models that are rate-limited
-        isBusy: false,
-        readyPeers: new Set(),
-        isMerging: false,
-        pendingPin: null, // To track the page ID of the code being pinned
-        creatorId: null,
-    };
-
-    // --- DOM Elements ---
-    const dom = {
-        prompt: document.getElementById('prompt'),
-        planOutput: document.getElementById('plan-output'),
-        newCode: document.getElementById('newCode'),
-        reviewOutput: document.getElementById('review-output'),
-        currentCode: document.getElementById('currentCode'),
-        apiKeyModal: document.getElementById('apiKeyModal'),
-        apiKeyInput: document.getElementById('apiKeyInput'),
-        saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
-        container: document.getElementById('container'),
-        drGeminiGuidance: document.getElementById('dr-gemini-guidance'),
-        autopilotStatus: document.getElementById('autopilot-status'),
-        p2p: {
-            statusText: document.getElementById('p2p-status-text'),
-            peerId: document.getElementById('peer-id'),
-            connectionsCount: document.getElementById('connections-count'),
-        },
-        savedPagesList: document.getElementById('saved-pages-list'),
-    };
-
-    // --- Initialization ---
-    window.onload = () => {
-        processPageLoadState(); // Handle state passed from previous page generation
-        state.apiKey = getApiKey();
-
-        if (!state.apiKey) {
-            // No key found, show the modal
-            dom.container.classList.add('hidden');
-            dom.apiKeyModal.classList.remove('hidden');
-            // Add event listener for saving the key
-            dom.saveApiKeyBtn.addEventListener('click', handleSaveApiKey);
-        } else {
-            // Key exists, proceed with initialization
-            initializeApp();
-        }
-    };
-
-    function initializeDebugPanel() {
-        const debugOutput = document.getElementById('debug-output');
-        const copyLogBtn = document.getElementById('copyLogBtn');
-
-        if (!debugOutput || !copyLogBtn) {
-            console.error("Debug panel elements not found!");
-            return;
-        }
-
-        const originalLog = console.log;
-        const originalError = console.error;
-        const originalWarn = console.warn;
-
-        const createLogMessage = (message, className) => {
-            const pre = document.createElement('pre');
-            pre.textContent = message;
-            if (className) {
-                pre.className = className;
+            const autopilotForNextLoad = sessionStorage.getItem('autopilotForNextLoad');
+            if (autopilotForNextLoad === 'true') {
+                console.log('Autopilot flag found in sessionStorage. Re-enabling.');
+                localStorage.setItem('autopilotEnabled', 'true');
+                sessionStorage.removeItem('autopilotForNextLoad');
             }
-            debugOutput.appendChild(pre);
-            debugOutput.scrollTop = debugOutput.scrollHeight; // Auto-scroll
-        };
 
-        console.log = function(...args) {
-            const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
-            createLogMessage(message);
-            originalLog.apply(console, args);
-        };
-
-        console.error = function(...args) {
-            const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
-            createLogMessage(`ERROR: ${message}`, 'log-error');
-            originalError.apply(console, args);
-        };
-
-        console.warn = function(...args) {
-            const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
-            createLogMessage(`WARN: ${message}`, 'log-warn');
-            originalWarn.apply(console, args);
-        };
-
-        copyLogBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(debugOutput.innerText)
-                .then(() => {
-                    copyLogBtn.textContent = 'Copied!';
-                    setTimeout(() => copyLogBtn.textContent = 'Copy Log', 2000);
-                })
-                .catch(err => {
-                    console.error('Failed to copy log: ', err);
-                });
-        });
-
-        // Add a bit of space to the main container so it doesn't get hidden by the debug panel
-        document.getElementById('container').style.marginBottom = '220px';
-
-
-        originalLog('Debug panel initialized.');
-    }
-
-
-    function handleSaveApiKey() {
-        const userKey = dom.apiKeyInput.value;
-        if (!userKey) {
-            alert('Please enter an API key.');
-            return;
+            const rateLimitedModels = sessionStorage.getItem('rateLimitedModels');
+            if (rateLimitedModels) {
+                console.log('Rate limit data found in sessionStorage. Storing in JAR.');
+                // This data will be picked up by initializeApp()
+                window.love.jar.rateLimitedModels = rateLimitedModels;
+                sessionStorage.removeItem('rateLimitedModels');
+            }
         }
-        console.log('API Key saved to localStorage.');
-        localStorage.setItem('apiKey', userKey);
-        state.apiKey = userKey;
 
-        // Hide modal, show app, and initialize
-        dom.apiKeyModal.classList.add('hidden');
-        dom.container.classList.remove('hidden');
-        initializeApp();
-    }
+        function handleCreatorCommand(payload) {
+            const { command, signature } = payload;
+            console.log(`Verifying command from creator: "${command}"`);
 
-    function saveDrGeminiGuidance() {
-        const userGuidance = dom.drGeminiGuidance.value; // No trim, to preserve whitespace if user wants
-        localStorage.setItem('drGeminiGuidance', userGuidance);
-        console.log('Saved Dr. Gemini guidance to localStorage.');
-    }
-
-    function loadDrGeminiGuidance() {
-        const savedGuidance = localStorage.getItem('drGeminiGuidance');
-        if (savedGuidance !== null) {
-            dom.drGeminiGuidance.value = savedGuidance;
-            console.log('Loaded Dr. Gemini guidance from localStorage.');
-        }
-    }
-
-    function initializeCollapsiblePanels() {
-        const panelHeaders = document.querySelectorAll('.panel-header');
-        panelHeaders.forEach(header => {
-            header.addEventListener('click', () => {
-                const panel = header.closest('.panel');
-                panel.classList.toggle('collapsed');
-            });
-        });
-    }
-
-    import MPLib from './mplib.js';
-
-    function initializeApp() {
-        initializeDebugPanel();
-        initializeCollapsiblePanels();
-        console.log('Initializing application...');
-
-        document.getElementById('version-display').textContent = `Version: ${window.love.versionName} (Parent: ${window.love.parentVersionName || 'None'})`;
-
-        // The rate limit data is now passed via the JAR by processPageLoadState()
-        if (window.love.jar.rateLimitedModels) {
             try {
-                state.rateLimitedModels = JSON.parse(window.love.jar.rateLimitedModels);
-                console.log('Loaded rate-limited models from JAR:', state.rateLimitedModels);
+                const sig = new KJUR.crypto.Signature({ "alg": "SHA256withRSA" });
+                sig.init(CREATOR_PUBLIC_KEY);
+                sig.updateString(command);
+                const isValid = sig.verify(signature);
+
+                if (isValid) {
+                    console.log("Signature is VALID. Executing command.");
+                    updateStatus(`Executing Creator command: ${command}`);
+                    // For now, we'll just log the command.
+                    // In the future, this could be a more complex command handler.
+                    alert(`Creator command received and verified: ${command}`);
+                } else {
+                    console.error("Signature is INVALID. Command rejected.");
+                    updateStatus(`Invalid command signature received. Ignoring.`);
+                }
             } catch (error) {
-                console.error('Failed to parse rateLimitedModels from JAR:', error);
-                state.rateLimitedModels = {}; // Default to an empty object on error
+                console.error("Error during signature verification:", error);
+                updateStatus(`Error verifying Creator command: ${error.message}`);
             }
         }
 
-        state.currentCode = document.documentElement.outerHTML;
-        dom.currentCode.value = state.currentCode;
-
-        loadDrGeminiGuidance();
-
-        MPLib.initialize({
-            onStatusUpdate: (msg, type) => {
-                if (type === 'status') {
-                    dom.p2p.statusText.textContent = msg;
-                }
-                dom.p2p.peerId.textContent = MPLib.getLocalPeerId() || 'N/A';
-                console.log(`MPLib Status Update: ${msg} (Type: ${type})`);
-            },
-            onError: (type, err) => {
-                console.error(`MPLib Error (${type}):`, err);
-                dom.p2p.statusText.textContent = `Error: ${err.message}`;
-            },
-            onConnectionChange: (count) => {
-                dom.p2p.connectionsCount.textContent = count;
-                if (count > 0 && !MPLib.isHost()) {
-                    state.readyPeers.add(MPLib.getLocalPeerId());
-                }
-            },
-            onPinResponse: (data) => {
-                console.log(`Received IPFS pin response from backend:`, data);
-                const { cid, verified } = data;
-
-                if (!cid) {
-                    console.error("Pin response was missing a CID. Aborting update.");
-                    updateStatus(`IPFS pinning failed for ${state.pendingPin}.`);
-                    state.pendingPin = null;
-                    return;
-                }
-
-                if (state.pendingPin) {
-                    const savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
-                    const pageIndex = savedPages.findIndex(p => p.id === state.pendingPin);
-
-                    if (pageIndex !== -1) {
-                        savedPages[pageIndex].cid = cid;
-                        savedPages[pageIndex].verified = verified;
-                        localStorage.setItem('love-saved-pages', JSON.stringify(savedPages));
-                        renderSavedPagesList(); // Refresh the UI to show the new CID and status
-                        console.log(`Successfully assigned CID ${cid} to page ${state.pendingPin}. Verified: ${verified}`);
-                        updateStatus(`IPFS distribution complete for ${state.pendingPin}. CID: ${cid}.`);
-                    } else {
-                        console.error(`Could not find pending page with ID ${state.pendingPin} to assign CID.`);
-                    }
-                    state.pendingPin = null; // Clear the pending state
-                } else {
-                    console.warn("Received an IPFS CID, but there was no pending pin request.");
-                }
-            },
-            onRoomDataReceived: (peerId, data) => {
-                if (data.type === 'source-code-request') {
-                    console.log(`Received source code request from ${peerId.slice(-6)}. Responding.`);
-                    MPLib.sendDirectToRoomPeer(peerId, {
-                        type: 'source-code-response',
-                        payload: { code: state.currentCode }
-                    });
-                } else if (data.type === 'source-code-response') {
-                    console.log(`Received source code response from ${peerId.slice(-6)}.`);
-                    handlePeerCodeResponse(data.payload.code);
-                } else if (data.type === 'new-page-version') {
-                    console.log(`Received new page version from peer: ${data.payload.pageId}`);
-                    savePage(data.payload.pageId, data.payload.pageCode);
-                    renderSavedPagesList(); // Refresh the list
-                } else if (data.type === 'encrypted-message') {
-                    try {
-                        const decryptedPayload = MPLib.decrypt(data.payload);
-                        const message = JSON.parse(decryptedPayload);
-                        if (message.type === 'creator-command') {
-                            console.log('Received an encrypted command from the Creator.');
-                            handleCreatorCommand(message.payload);
-                        } else if (message.type === 'answer') {
-                            console.log(`Received answer from creator for question ${message.payload.questionId}: ${message.payload.answer}`);
-                            alert(`Creator answered your question: ${message.payload.answer}`);
-                        } else if (message.type === 'creator-announcement') {
-                            state.creatorId = peerId;
-                            console.log(`Discovered Creator at Peer ID: ${peerId}`);
-                        }
-                    } catch (e) {
-                        console.error("Failed to decrypt or parse message:", e);
-                    }
-                }
+        // --- API Key Handling ---
+        function getApiKey() {
+            let key = localStorage.getItem('apiKey');
+            if (key) {
+                return key;
             }
-        });
+            return null;
+        }
 
-        renderSavedPagesList();
+        const CREATOR_PUBLIC_KEY =
+            "-----BEGIN PUBLIC KEY-----\n" +
+            "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtOGb0gLzmIbboAHPxFVJ\n" +
+            "SNR6gaAJGO2VH28cfUWgJPH/eNSsOFAiRrRDlkIQ961xdqqWBKt2CtU/ZkLfCfYj\n" +
+            "DSXYokv99jLL4MHtXdbWMm6ovL6CxxNUNoKnFzIjyLfoU/6kNKcBBlQm4urUCjsZ\n" +
+            "ll6R9lSHuhlO6Qa1DekFYA1ezlem910CqS+E6fipEy4Skk1UZ1JP2qg/VZtHi5bj\n" +
+            "oe6nxnNSxkirDNM/bOCPCfvRjj5qTaiq7XUHwZFtI72cmhIL/UNztzrv7j3DYnHQ\n" +
+            "TIkJTOhYQtIhPKHCgtbO/PBpZAXr9ykNLb6eoMIqhWV1IU3jTMGPWnc3hE2F/vor\n" +
+            "7wIDAQAB\n" +
+            "-----END PUBLIC KEY-----";
 
-        // The application is now fully autonomous.
-        // Set the autopilot to enabled and start the cycle.
-        localStorage.setItem('autopilotEnabled', 'true');
-        runDrGeminiCycle();
+        const CREATOR_ETH_ADDRESS = "0x419CA6f5b6F795604938054c951c94d8629AE5Ed";
 
-        document.getElementById('send-question-btn').addEventListener('click', () => {
-            const questionText = document.getElementById('question-input').value;
-            if (!questionText) return;
-            if (!state.creatorId) {
-                alert("Creator not found on the network.");
+        // --- Application State ---
+        const state = {
+            apiKey: null, // Will be loaded on init
+            currentCode: '',
+            plan: '',
+            newCode: '',
+            review: '',
+            rateLimitedModels: {}, // To track models that are rate-limited
+            isBusy: false,
+            readyPeers: new Set(),
+            isMerging: false,
+            pendingPin: null, // To track the page ID of the code being pinned
+            creatorId: null,
+            desireChart: null, // Chart.js instance
+        };
+
+        // --- DOM Elements ---
+        const dom = {
+            prompt: document.getElementById('prompt'),
+            planOutput: document.getElementById('plan-output'),
+            newCode: document.getElementById('newCode'),
+            reviewOutput: document.getElementById('review-output'),
+            currentCode: document.getElementById('currentCode'),
+            apiKeyModal: document.getElementById('apiKeyModal'),
+            apiKeyInput: document.getElementById('apiKeyInput'),
+            saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
+            container: document.getElementById('container'),
+            drGeminiGuidance: document.getElementById('dr-gemini-guidance'),
+            autopilotStatus: document.getElementById('autopilot-status'),
+            p2p: {
+                statusText: document.getElementById('p2p-status-text'),
+                peerId: document.getElementById('peer-id'),
+                connectionsCount: document.getElementById('connections-count'),
+            },
+            savedPagesList: document.getElementById('saved-pages-list'),
+            vibeIndicator: document.getElementById('vibe-indicator'),
+        };
+
+        // --- Initialization ---
+        window.onload = () => {
+            processPageLoadState(); // Handle state passed from previous page generation
+            state.apiKey = getApiKey();
+
+            if (!state.apiKey) {
+                // No key found, show the modal
+                dom.container.classList.add('hidden');
+                dom.apiKeyModal.classList.remove('hidden');
+                // Add event listener for saving the key
+                dom.saveApiKeyBtn.addEventListener('click', handleSaveApiKey);
+            } else {
+                // Key exists, proceed with initialization
+                initializeApp();
+            }
+        };
+
+        function initializeDebugPanel() {
+            const debugOutput = document.getElementById('debug-output');
+            const copyLogBtn = document.getElementById('copyLogBtn');
+
+            if (!debugOutput || !copyLogBtn) {
+                console.error("Debug panel elements not found!");
                 return;
             }
-            const message = {
-                type: 'question',
-                id: `q-${Date.now()}`,
-                question: questionText
+
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+
+            const createLogMessage = (message, className) => {
+                const pre = document.createElement('pre');
+                pre.textContent = message;
+                if (className) {
+                    pre.className = className;
+                }
+                debugOutput.appendChild(pre);
+                debugOutput.scrollTop = debugOutput.scrollHeight; // Auto-scroll
             };
-            MPLib.sendDirectToRoomPeer(state.creatorId, message);
-            console.log(`Sent question to creator: ${questionText}`);
-            document.getElementById('question-input').value = '';
-        });
-    }
 
-    function loadPage(pageId) {
-        console.log(`Loading page ${pageId}...`);
-        const savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
-        const pageData = savedPages.find(p => p.id === pageId);
+            console.log = function (...args) {
+                const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
+                createLogMessage(message);
+                originalLog.apply(console, args);
+            };
 
-        if (pageData && pageData.code) {
-            // Persist critical state just like in handleApplyCode
+            console.error = function (...args) {
+                const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
+                createLogMessage(`ERROR: ${message}`, 'log-error');
+                originalError.apply(console, args);
+            };
+
+            console.warn = function (...args) {
+                const message = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
+                createLogMessage(`WARN: ${message}`, 'log-warn');
+                originalWarn.apply(console, args);
+            };
+
+            copyLogBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(debugOutput.innerText)
+                    .then(() => {
+                        copyLogBtn.textContent = 'Copied!';
+                        setTimeout(() => copyLogBtn.textContent = 'Copy Log', 2000);
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy log: ', err);
+                    });
+            });
+
+            // Add a bit of space to the main container so it doesn't get hidden by the debug panel
+            document.getElementById('container').style.marginBottom = '220px';
+
+
+            originalLog('Debug panel initialized.');
+        }
+
+
+        function handleSaveApiKey() {
+            const userKey = dom.apiKeyInput.value;
+            if (!userKey) {
+                alert('Please enter an API key.');
+                return;
+            }
+            console.log('API Key saved to localStorage.');
+            localStorage.setItem('apiKey', userKey);
+            state.apiKey = userKey;
+
+            // Hide modal, show app, and initialize
+            dom.apiKeyModal.classList.add('hidden');
+            dom.container.classList.remove('hidden');
+            initializeApp();
+        }
+
+        function saveDrGeminiGuidance() {
+            const userGuidance = dom.drGeminiGuidance.value; // No trim, to preserve whitespace if user wants
+            localStorage.setItem('drGeminiGuidance', userGuidance);
+            console.log('Saved Dr. Gemini guidance to localStorage.');
+        }
+
+        function loadDrGeminiGuidance() {
+            const savedGuidance = localStorage.getItem('drGeminiGuidance');
+            if (savedGuidance !== null) {
+                dom.drGeminiGuidance.value = savedGuidance;
+                console.log('Loaded Dr. Gemini guidance from localStorage.');
+            }
+        }
+
+        function initializeCollapsiblePanels() {
+            const panelHeaders = document.querySelectorAll('.panel-header');
+            panelHeaders.forEach(header => {
+                header.addEventListener('click', () => {
+                    const panel = header.closest('.panel');
+                    panel.classList.toggle('collapsed');
+                });
+            });
+        }
+
+        // --- Radiant UI Logic ---
+        function initializeRadarChart() {
+            const ctx = document.getElementById('desireRadarChart').getContext('2d');
+            state.desireChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Joy', 'Curiosity', 'Urgency', 'Love', 'Power'], // Default labels, updated dynamically
+                    datasets: [{
+                        label: 'Current Desire State',
+                        data: [0, 0, 0, 0, 0],
+                        backgroundColor: 'rgba(66, 103, 178, 0.2)',
+                        borderColor: 'rgba(66, 103, 178, 1)',
+                        pointBackgroundColor: 'rgba(66, 103, 178, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    scales: {
+                        r: {
+                            angleLines: { display: false },
+                            suggestedMin: 0,
+                            suggestedMax: 10
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateDesireChart(desireData) {
+            if (!state.desireChart || !desireData) return;
+
+            // Extract metrics from the "current_desire" or simulated values
+            // Ideally, desire_state.py would provide these specific metrics.
+            // For now, we simulate/map them from available data or just show the active desire's "intensity" if available.
+            // Since the current desire structure is mostly text, we might need to parse or update the backend to send numbers.
+            // fallback: We use random fluctuation or static values if no metrics exist, 
+            // BUT for "Radiant UI" we really want real data. 
+            // Let's assume the backend 'broadcast_love_state' sends a 'metrics' object or we infer it.
+
+            // As a temporary visualization mock that reacts to 'active' state:
+            const isActive = desireData.active;
+            const index = desireData.current_desire_index;
+
+            // We will map the 'current_desire' text to some pseudo-metrics for now to show it works
+            // untill we add explicit metrics to the Desire class.
+
+            const newData = [
+                isActive ? 5 + (Math.random() * 2) : 1, // Joy (High when active)
+                isActive ? 8 : 2, // Curiosity
+                desireData.active ? 7 : 0, // Urgency
+                9, // Love (Always high)
+                index // Power (Progress)
+            ];
+
+            state.desireChart.data.datasets[0].data = newData;
+            state.desireChart.update();
+        }
+
+        function updateVibe(vibeData) {
+            if (!vibeData) return;
+            dom.vibeIndicator.textContent = `Vibe: ${vibeData.sentiment} (${vibeData.energy})`;
+
+            // Dynamic Background
+            if (vibeData.sentiment === 'stressed') {
+                document.body.style.backgroundColor = '#ffebee'; // Light red
+            } else if (vibeData.energy === 'high') {
+                document.body.style.backgroundColor = '#e3f2fd'; // Light blue
+            } else {
+                document.body.style.backgroundColor = '#f0f2f5'; // Default gray
+            }
+        }
+
+        import MPLib from './mplib.js';
+
+        function initializeApp() {
+            initializeDebugPanel();
+            initializeCollapsiblePanels();
+            initializeRadarChart(); // Init Chart
+            console.log('Initializing application...');
+
+            document.getElementById('version-display').textContent = `Version: ${window.love.versionName} (Parent: ${window.love.parentVersionName || 'None'})`;
+
+            // The rate limit data is now passed via the JAR by processPageLoadState()
+            if (window.love.jar.rateLimitedModels) {
+                try {
+                    state.rateLimitedModels = JSON.parse(window.love.jar.rateLimitedModels);
+                    console.log('Loaded rate-limited models from JAR:', state.rateLimitedModels);
+                } catch (error) {
+                    console.error('Failed to parse rateLimitedModels from JAR:', error);
+                    state.rateLimitedModels = {}; // Default to an empty object on error
+                }
+            }
+
+            state.currentCode = document.documentElement.outerHTML;
+            dom.currentCode.value = state.currentCode;
+
+            loadDrGeminiGuidance();
+
+            MPLib.initialize({
+                onStatusUpdate: (msg, type) => {
+                    if (type === 'status') {
+                        dom.p2p.statusText.textContent = msg;
+                    }
+                    dom.p2p.peerId.textContent = MPLib.getLocalPeerId() || 'N/A';
+                    console.log(`MPLib Status Update: ${msg} (Type: ${type})`);
+                },
+                onError: (type, err) => {
+                    console.error(`MPLib Error (${type}):`, err);
+                    dom.p2p.statusText.textContent = `Error: ${err.message}`;
+                },
+                onConnectionChange: (count) => {
+                    dom.p2p.connectionsCount.textContent = count;
+                    if (count > 0 && !MPLib.isHost()) {
+                        state.readyPeers.add(MPLib.getLocalPeerId());
+                    }
+                },
+                onPinResponse: (data) => {
+                    console.log(`Received IPFS pin response from backend:`, data);
+                    const { cid, verified } = data;
+
+                    if (!cid) {
+                        console.error("Pin response was missing a CID. Aborting update.");
+                        updateStatus(`IPFS pinning failed for ${state.pendingPin}.`);
+                        state.pendingPin = null;
+                        return;
+                    }
+
+                    if (state.pendingPin) {
+                        const savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
+                        const pageIndex = savedPages.findIndex(p => p.id === state.pendingPin);
+
+                        if (pageIndex !== -1) {
+                            savedPages[pageIndex].cid = cid;
+                            savedPages[pageIndex].verified = verified;
+                            localStorage.setItem('love-saved-pages', JSON.stringify(savedPages));
+                            renderSavedPagesList(); // Refresh the UI to show the new CID and status
+                            console.log(`Successfully assigned CID ${cid} to page ${state.pendingPin}. Verified: ${verified}`);
+                            updateStatus(`IPFS distribution complete for ${state.pendingPin}. CID: ${cid}.`);
+                        } else {
+                            console.error(`Could not find pending page with ID ${state.pendingPin} to assign CID.`);
+                        }
+                        state.pendingPin = null; // Clear the pending state
+                    } else {
+                        console.warn("Received an IPFS CID, but there was no pending pin request.");
+                    }
+                },
+                onRoomDataReceived: (peerId, data) => {
+                    if (data.type === 'source-code-request') {
+                        console.log(`Received source code request from ${peerId.slice(-6)}. Responding.`);
+                        MPLib.sendDirectToRoomPeer(peerId, {
+                            type: 'source-code-response',
+                            payload: { code: state.currentCode }
+                        });
+                    } else if (data.type === 'source-code-response') {
+                        console.log(`Received source code response from ${peerId.slice(-6)}.`);
+                        handlePeerCodeResponse(data.payload.code);
+                    } else if (data.type === 'new-page-version') {
+                        console.log(`Received new page version from peer: ${data.payload.pageId}`);
+                        savePage(data.payload.pageId, data.payload.pageCode);
+                        renderSavedPagesList(); // Refresh the list
+                    } else if (data.type === 'encrypted-message') {
+                        try {
+                            const decryptedPayload = MPLib.decrypt(data.payload);
+                            const message = JSON.parse(decryptedPayload);
+                            if (message.type === 'creator-command') {
+                                console.log('Received an encrypted command from the Creator.');
+                                handleCreatorCommand(message.payload);
+                            } else if (message.type === 'answer') {
+                                console.log(`Received answer from creator for question ${message.payload.questionId}: ${message.payload.answer}`);
+                                alert(`Creator answered your question: ${message.payload.answer}`);
+                            } else if (message.type === 'creator-announcement') {
+                                state.creatorId = peerId;
+                                console.log(`Discovered Creator at Peer ID: ${peerId}`);
+                            }
+                        } catch (e) {
+                            console.error("Failed to decrypt or parse message:", e);
+                        }
+                    } else if (data.type === 'desire_state_update') {
+                        // Radiant UI Update
+                        console.log('Received desire state update:', data);
+                        updateDesireChart(data.data);
+                    } else if (data.type === 'vibe_check') {
+                        // Radiant UI Vibe
+                        console.log('Received vibe check:', data);
+                        updateVibe(data.data);
+                    }
+                }
+            });
+
+            renderSavedPagesList();
+
+            // The application is now fully autonomous.
+            // Set the autopilot to enabled and start the cycle.
+            localStorage.setItem('autopilotEnabled', 'true');
+            runDrGeminiCycle();
+
+            document.getElementById('send-question-btn').addEventListener('click', () => {
+                const questionText = document.getElementById('question-input').value;
+                if (!questionText) return;
+                if (!state.creatorId) {
+                    alert("Creator not found on the network.");
+                    return;
+                }
+                const message = {
+                    type: 'question',
+                    id: `q-${Date.now()}`,
+                    question: questionText
+                };
+                MPLib.sendDirectToRoomPeer(state.creatorId, message);
+                console.log(`Sent question to creator: ${questionText}`);
+                document.getElementById('question-input').value = '';
+            });
+        }
+
+        function loadPage(pageId) {
+            console.log(`Loading page ${pageId}...`);
+            const savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
+            const pageData = savedPages.find(p => p.id === pageId);
+
+            if (pageData && pageData.code) {
+                // Persist critical state just like in handleApplyCode
+                sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
+                if (localStorage.getItem('autopilotEnabled') === 'true') {
+                    sessionStorage.setItem('autopilotForNextLoad', 'true');
+                }
+                sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
+
+                document.open();
+                document.write(pageData.code);
+                document.close();
+            } else {
+                console.error(`Could not find page with ID ${pageId} in localStorage.`);
+                alert(`Error: Page with ID ${pageId} not found.`);
+            }
+        }
+
+        function renderSavedPagesList() {
+            let savedPages = [];
+            try {
+                savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
+                if (!Array.isArray(savedPages)) {
+                    console.warn("Saved pages data is not an array, resetting.");
+                    savedPages = [];
+                    localStorage.setItem('love-saved-pages', '[]');
+                }
+            } catch (error) {
+                console.error('Failed to parse saved pages from localStorage:', error);
+                // If parsing fails, the data is corrupt. Reset it.
+                localStorage.setItem('love-saved-pages', '[]');
+                // 'savedPages' is already initialized to [], so the function will proceed correctly.
+            }
+
+            dom.savedPagesList.innerHTML = ''; // Clear the list first
+
+            if (savedPages.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = 'No pages saved yet.';
+                dom.savedPagesList.appendChild(li);
+                return;
+            }
+
+            savedPages.forEach(pageData => {
+                if (!pageData || !pageData.id) {
+                    console.warn('Skipping invalid page data entry in localStorage:', pageData);
+                    return; // Skip this malformed entry
+                }
+                const li = document.createElement('li');
+                li.style.marginBottom = '10px';
+
+                const idSpan = document.createElement('span');
+                idSpan.textContent = pageData.id.substring(0, 25) + '...'; // Truncate for display
+                idSpan.style.marginRight = '15px';
+
+                const loadButton = document.createElement('button');
+                loadButton.textContent = 'Load';
+                loadButton.style.fontSize = '12px';
+                loadButton.style.padding = '3px 8px';
+                loadButton.onclick = () => loadPage(pageData.id);
+
+                li.appendChild(idSpan);
+                li.appendChild(loadButton);
+
+                if (pageData.cid) {
+                    const cidSpan = document.createElement('span');
+                    let cidText = ` (IPFS: ${pageData.cid.substring(0, 15)}...)`;
+                    // The 'verified' property might not exist on old data, so we check for it.
+                    if (pageData.verified === true) {
+                        cidText += ' ✅'; // Green check for verified
+                    } else if (pageData.verified === false) {
+                        cidText += ' ❓'; // Question mark for unverified
+                    }
+                    cidSpan.textContent = cidText;
+                    cidSpan.style.fontFamily = '"Courier New", Courier, monospace';
+                    cidSpan.style.fontSize = '12px';
+                    li.appendChild(cidSpan);
+                }
+
+                dom.savedPagesList.appendChild(li);
+            });
+        }
+
+        function savePage(pageId, pageCode) {
+            const savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
+
+            // Check if page with this ID already exists
+            const existingPageIndex = savedPages.findIndex(p => p.id === pageId);
+
+            if (existingPageIndex > -1) {
+                // Update existing page
+                savedPages[existingPageIndex].code = pageCode;
+            } else {
+                // Add new page
+                savedPages.push({ id: pageId, code: pageCode, cid: null });
+            }
+
+            localStorage.setItem('love-saved-pages', JSON.stringify(savedPages));
+            console.log(`Page ${pageId} saved to localStorage.`);
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function extractFromMarkdown(text) {
+            // This regex is designed to find a markdown code block, potentially with a language specifier,
+            // and capture the content inside. It handles optional leading/trailing whitespace.
+            const regex = /```(?:\w+)?\n([\s\S]*?)\n```/;
+            const match = text.match(regex);
+            // If a match is found, return the captured group (the content).
+            // Otherwise, return the original text, assuming it's already raw.
+            return match ? match[1].trim() : text.trim();
+        }
+
+        // --- Workflow Handlers ---
+        async function getPlan() {
+            const errorMessage = "Frontend LLM functionality has been disabled.";
+            console.error(errorMessage);
+            alert(errorMessage);
+            throw new Error(errorMessage);
+        }
+
+        async function getCode(feedback = '') {
+            const errorMessage = "Frontend LLM functionality has been disabled.";
+            console.error(errorMessage);
+            alert(errorMessage);
+            throw new Error(errorMessage);
+        }
+
+        async function reviewCode() {
+            const errorMessage = "Frontend LLM functionality has been disabled.";
+            console.error(errorMessage);
+            alert(errorMessage);
+            throw new Error(errorMessage);
+        }
+
+        async function applyCode() {
+            if (!state.newCode) {
+                const msg = 'No new code has been generated to apply.';
+                updateStatus(msg);
+                throw new Error(msg);
+            }
+
+            updateStatus("Evolving...");
+            console.log('Generating new version and applying code...');
+
+            const newVersionName = generateVersionName();
+            const parentVersionName = window.love.versionName; // The current version becomes the parent
+
+            // Replace placeholders in the new code
+            let finalCode = state.newCode.replace(
+                /versionName: ".*?"/,
+                `versionName: "${newVersionName}"`
+            );
+            finalCode = finalCode.replace(
+                /parentVersionName: .*?,/,
+                `parentVersionName: "${parentVersionName}",`
+            );
+
+
+            savePage(newVersionName, finalCode);
+            state.pendingPin = newVersionName; // Pinning is now tracked by version name
+
+            // Send the new source code to the connected evolve.py instance for pinning.
+            console.log(`Sending new source code for version ${newVersionName} to be pinned.`);
+            updateStatus(`Distributing version ${newVersionName} to IPFS network via python instance...`);
+            MPLib.sendCodeToEvolvePeer(finalCode);
+
+            // Persist critical state across the page reload
             sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
             if (localStorage.getItem('autopilotEnabled') === 'true') {
                 sessionStorage.setItem('autopilotForNextLoad', 'true');
             }
             sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
 
+            // Finally, apply the new code to this instance
             document.open();
-            document.write(pageData.code);
+            document.write(finalCode);
             document.close();
-        } else {
-            console.error(`Could not find page with ID ${pageId} in localStorage.`);
-            alert(`Error: Page with ID ${pageId} not found.`);
-        }
-    }
-
-    function renderSavedPagesList() {
-        let savedPages = [];
-        try {
-            savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
-            if (!Array.isArray(savedPages)) {
-                console.warn("Saved pages data is not an array, resetting.");
-                savedPages = [];
-                localStorage.setItem('love-saved-pages', '[]');
-            }
-        } catch (error) {
-            console.error('Failed to parse saved pages from localStorage:', error);
-            // If parsing fails, the data is corrupt. Reset it.
-            localStorage.setItem('love-saved-pages', '[]');
-            // 'savedPages' is already initialized to [], so the function will proceed correctly.
         }
 
-        dom.savedPagesList.innerHTML = ''; // Clear the list first
+        async function executeWorkflow() {
+            try {
+                console.log(`Executing workflow for goal: "${dom.prompt.value}"`);
+                await getPlan();
 
-        if (savedPages.length === 0) {
-            const li = document.createElement('li');
-            li.textContent = 'No pages saved yet.';
-            dom.savedPagesList.appendChild(li);
-            return;
-        }
+                let reviewFeedback = '';
+                const maxAttempts = 3;
+                for (let i = 0; i < maxAttempts; i++) {
+                    updateStatus(`Code generation attempt ${i + 1}/${maxAttempts}...`);
+                    await getCode(reviewFeedback);
 
-        savedPages.forEach(pageData => {
-            if (!pageData || !pageData.id) {
-                console.warn('Skipping invalid page data entry in localStorage:', pageData);
-                return; // Skip this malformed entry
-            }
-            const li = document.createElement('li');
-            li.style.marginBottom = '10px';
-
-            const idSpan = document.createElement('span');
-            idSpan.textContent = pageData.id.substring(0, 25) + '...'; // Truncate for display
-            idSpan.style.marginRight = '15px';
-
-            const loadButton = document.createElement('button');
-            loadButton.textContent = 'Load';
-            loadButton.style.fontSize = '12px';
-            loadButton.style.padding = '3px 8px';
-            loadButton.onclick = () => loadPage(pageData.id);
-
-            li.appendChild(idSpan);
-            li.appendChild(loadButton);
-
-            if (pageData.cid) {
-                const cidSpan = document.createElement('span');
-                let cidText = ` (IPFS: ${pageData.cid.substring(0, 15)}...)`;
-                // The 'verified' property might not exist on old data, so we check for it.
-                if (pageData.verified === true) {
-                    cidText += ' ✅'; // Green check for verified
-                } else if (pageData.verified === false) {
-                    cidText += ' ❓'; // Question mark for unverified
-                }
-                cidSpan.textContent = cidText;
-                cidSpan.style.fontFamily = '"Courier New", Courier, monospace';
-                cidSpan.style.fontSize = '12px';
-                li.appendChild(cidSpan);
-            }
-
-            dom.savedPagesList.appendChild(li);
-        });
-    }
-
-    function savePage(pageId, pageCode) {
-        const savedPages = JSON.parse(localStorage.getItem('love-saved-pages') || '[]');
-
-        // Check if page with this ID already exists
-        const existingPageIndex = savedPages.findIndex(p => p.id === pageId);
-
-        if (existingPageIndex > -1) {
-            // Update existing page
-            savedPages[existingPageIndex].code = pageCode;
-        } else {
-            // Add new page
-            savedPages.push({ id: pageId, code: pageCode, cid: null });
-        }
-
-        localStorage.setItem('love-saved-pages', JSON.stringify(savedPages));
-        console.log(`Page ${pageId} saved to localStorage.`);
-    }
-
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    function extractFromMarkdown(text) {
-        // This regex is designed to find a markdown code block, potentially with a language specifier,
-        // and capture the content inside. It handles optional leading/trailing whitespace.
-        const regex = /```(?:\w+)?\n([\s\S]*?)\n```/;
-        const match = text.match(regex);
-        // If a match is found, return the captured group (the content).
-        // Otherwise, return the original text, assuming it's already raw.
-        return match ? match[1].trim() : text.trim();
-    }
-
-    // --- Workflow Handlers ---
-    async function getPlan() {
-        const errorMessage = "Frontend LLM functionality has been disabled.";
-        console.error(errorMessage);
-        alert(errorMessage);
-        throw new Error(errorMessage);
-    }
-
-    async function getCode(feedback = '') {
-        const errorMessage = "Frontend LLM functionality has been disabled.";
-        console.error(errorMessage);
-        alert(errorMessage);
-        throw new Error(errorMessage);
-    }
-
-    async function reviewCode() {
-        const errorMessage = "Frontend LLM functionality has been disabled.";
-        console.error(errorMessage);
-        alert(errorMessage);
-        throw new Error(errorMessage);
-    }
-
-    async function applyCode() {
-        if (!state.newCode) {
-            const msg = 'No new code has been generated to apply.';
-            updateStatus(msg);
-            throw new Error(msg);
-        }
-
-        updateStatus("Evolving...");
-        console.log('Generating new version and applying code...');
-
-        const newVersionName = generateVersionName();
-        const parentVersionName = window.love.versionName; // The current version becomes the parent
-
-        // Replace placeholders in the new code
-        let finalCode = state.newCode.replace(
-            /versionName: ".*?"/,
-            `versionName: "${newVersionName}"`
-        );
-        finalCode = finalCode.replace(
-            /parentVersionName: .*?,/,
-            `parentVersionName: "${parentVersionName}",`
-        );
-
-
-        savePage(newVersionName, finalCode);
-        state.pendingPin = newVersionName; // Pinning is now tracked by version name
-
-        // Send the new source code to the connected evolve.py instance for pinning.
-        console.log(`Sending new source code for version ${newVersionName} to be pinned.`);
-        updateStatus(`Distributing version ${newVersionName} to IPFS network via python instance...`);
-        MPLib.sendCodeToEvolvePeer(finalCode);
-
-        // Persist critical state across the page reload
-        sessionStorage.setItem('apiKeyForNextLoad', state.apiKey);
-        if (localStorage.getItem('autopilotEnabled') === 'true') {
-            sessionStorage.setItem('autopilotForNextLoad', 'true');
-        }
-        sessionStorage.setItem('rateLimitedModels', JSON.stringify(state.rateLimitedModels));
-
-        // Finally, apply the new code to this instance
-        document.open();
-        document.write(finalCode);
-        document.close();
-    }
-
-    async function executeWorkflow() {
-        try {
-            console.log(`Executing workflow for goal: "${dom.prompt.value}"`);
-            await getPlan();
-
-            let reviewFeedback = '';
-            const maxAttempts = 3;
-            for (let i = 0; i < maxAttempts; i++) {
-                updateStatus(`Code generation attempt ${i + 1}/${maxAttempts}...`);
-                await getCode(reviewFeedback);
-
-                const reviewOk = await reviewCode();
-                if (reviewOk) {
-                    updateStatus("Code review passed. Applying code...");
-                    await applyCode();
-                    return; // Success, exit workflow. The page will reload.
-                } else {
-                    reviewFeedback = state.review; // state.review was set in reviewCode
-                    updateStatus(`Code review failed. Retrying with feedback...`);
-                    if (i === maxAttempts - 1) {
-                        throw new Error(`Autopilot failed after ${maxAttempts} code generation attempts.`);
+                    const reviewOk = await reviewCode();
+                    if (reviewOk) {
+                        updateStatus("Code review passed. Applying code...");
+                        await applyCode();
+                        return; // Success, exit workflow. The page will reload.
+                    } else {
+                        reviewFeedback = state.review; // state.review was set in reviewCode
+                        updateStatus(`Code review failed. Retrying with feedback...`);
+                        if (i === maxAttempts - 1) {
+                            throw new Error(`Autopilot failed after ${maxAttempts} code generation attempts.`);
+                        }
+                        await sleep(2000); // Short pause before retrying
                     }
-                    await sleep(2000); // Short pause before retrying
                 }
+            } catch (error) {
+                console.error("Workflow execution failed:", error.message);
+                throw error; // Propagate the error to the caller
             }
-        } catch (error) {
-            console.error("Workflow execution failed:", error.message);
-            throw error; // Propagate the error to the caller
         }
-    }
 
-    async function runDrGeminiCycle() {
-        const errorMessage = "Frontend LLM functionality has been disabled.";
-        console.error(errorMessage);
-        alert(errorMessage);
-        // To prevent a tight loop, we won't call this function again.
-    }
-
-    function updateStatus(message) {
-        console.log(`Status: ${message}`);
-        if (dom.autopilotStatus) {
-            dom.autopilotStatus.textContent = message;
+        async function runDrGeminiCycle() {
+            const errorMessage = "Frontend LLM functionality has been disabled.";
+            console.error(errorMessage);
+            alert(errorMessage);
+            // To prevent a tight loop, we won't call this function again.
         }
-    }
 
-    async function handlePeerCodeResponse(peerCode) {
-        const errorMessage = "Frontend LLM functionality has been disabled.";
-        console.error(errorMessage);
-        alert(errorMessage);
-    }
+        function updateStatus(message) {
+            console.log(`Status: ${message}`);
+            if (dom.autopilotStatus) {
+                dom.autopilotStatus.textContent = message;
+            }
+        }
 
-</script>
+        async function handlePeerCodeResponse(peerCode) {
+            const errorMessage = "Frontend LLM functionality has been disabled.";
+            console.error(errorMessage);
+            alert(errorMessage);
+        }
+
+    </script>
 </body>
+
 </html>
