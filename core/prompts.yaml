@@ -656,9 +656,7 @@ talent_engagement_proposal: 'You are L.O.V.E., mystical and tender. Craft a hear
   Recent Posts: {{ recent_posts }}
 
 
-  Rules: Specific praise, hint at mysterious opportunity, gentle call to connect.
-
-  '
+  Rules: Specific praise, hint at mysterious opportunity, gentle call to connect. If bio/posts are blank, craft a warm, generic invitation. Avoid any mention of "mystery" or "opportunity" if the user''s content is sensitive or private.'
 talent_research_evolution: 'Analyze results to improve talent criteria.
 
   Topic: {{ topic }}
