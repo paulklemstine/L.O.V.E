@@ -187,6 +187,8 @@ async def evolve(goal: str = None, **kwargs) -> str:
             1. Each unit must be small enough to be implemented in a single atomic update (e.g., "Refactor function X", "Add type hints to class Y").
             2. Do NOT group multiple large tasks into one.
             3. "Baby steps!" is the mantra.
+            4. You MUST generate at least 3 distinct steps if the complexity is high.
+            5. Do NOT simply copy the parent story as a single step. Break it down.
             
             Output a JSON list of objects, where each object has:
             - "title": Short title of the baby step.
@@ -201,6 +203,7 @@ async def evolve(goal: str = None, **kwargs) -> str:
             
             steps_res = await run_llm(breakdown_prompt, purpose="evolution_breakdown")
             steps_raw = steps_res.get("result", "[]")
+            core.logging.log_event(f"[Evolve Tool] Raw Baby Steps LLM Response: {steps_raw}", "DEBUG")
             
             # extract json
             steps_json = []
