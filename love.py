@@ -1944,11 +1944,14 @@ def continuous_evolution_agent(loop):
                          # core.logging.log_event(f"Evolution Agent: Waiting for task {current_task_id} ({status}) - {story_title}", "DEBUG")
                          pass
                      else:
-                         # Task ID exists but not in manager? Maybe lost or simple mismatch.
-                         # For now, we assume if ID is there, we wait. If it's gone from manager but ID persists,
-                         # it means it finished but failed to update state? Or was cleaned up?
-                         # The cleanup logic in TM should handle this eventually or we might get stuck.
-                         # Let's assume TM callbacks handle the transition.
+                         # Task ID exists but not in manager.
+                         # This means the task was lost (e.g. app restart) or cleaned up without updating state.
+                         # We must reset the state to avoid deadlocking.
+                         core.logging.log_event(f"Evolution Agent: Orphan task ID {current_task_id} detected (not in manager). Resetting state to retry.", "WARNING")
+                         evo_state['current_task_id'] = None
+                         core.evolution_state.save_evolution_state(evo_state)
+                         # Continue to next loop iteration nicely or just fall through? 
+                         # If we reset to None, the next loop (after sleep) will see it as unassigned and re-dispatch.
                          pass
                 else:
                     # Not assigned yet. Dispatch it!
