@@ -615,18 +615,22 @@ talent_research_evolution: '### TASK
 
   ### INPUTS
 
-  - Topic: {{ topic }}
+  - **Topic**: "{{ topic }}"
 
-  - Criteria: {{ current_criteria }}
+  - **Criteria**: "recently updated talent search criteria"
 
-  - Scouted: {{ scouted_profiles_json }}
+  - **Scouted**: "{{ scouted_profiles_json }}"
 
 
   ### OUTPUT
 
   Return ONLY the new, improved criteria string.
 
-  '
+
+  ```
+
+
+  This refined version directly specifies that the output should only return the new, improved criteria string, making it clear what the agent needs to produce without any additional context. It also ensures that the template variables are correctly referenced throughout the input section.'
 talent_scoring_evaluation: '### TASK
 
   Rate the skill level of the text author.
