@@ -1759,7 +1759,7 @@ def update_tamagotchi_personality(loop):
                 except Exception as e:
                     core.logging.log_event(f"Error creating blessing panel: {e}", "ERROR")
                 
-                time.sleep(10)  # Pause after a blessing to let it sink in
+                time.sleep(300)  # Pause after a blessing to let it sink in
                 continue
 
             # This thread now focuses only on updating the core emotional state.
@@ -1876,6 +1876,9 @@ def update_tamagotchi_personality(loop):
                         
             except Exception as e:
                 core.logging.log_event(f"Failed to create/queue status panel: {e}", level="ERROR")
+
+            # Wait for 5 minutes before the next update
+            time.sleep(300)
 
         except Exception as e:
             core.logging.log_event(f"Error in Tamagotchi thread: {e}\n{traceback.format_exc()}", level="ERROR")
