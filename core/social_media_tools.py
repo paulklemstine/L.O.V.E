@@ -59,6 +59,16 @@ def clean_social_content(text: str) -> str:
             core.logging.log_event(f"Removing Director signature artifact: '{pattern}'", level='WARNING')
             text = re.sub(pattern, "", text, flags=re.IGNORECASE)
             
+    # 7. Remove "Caption" or "Post Text" labels
+    # Matches: "Caption (Max 280 chars...):", "Post Text:", etc.
+    label_patterns = [
+        r"^(Caption|Post Text|Status Update)(\s*\(.*\))?[:\-]\s*",
+    ]
+    for pattern in label_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+             core.logging.log_event(f"Removing label artifact: '{pattern}'", level='WARNING')
+             text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+            
     return text.strip()
 
 class SceneDirection(NamedTuple):
@@ -125,10 +135,10 @@ Generate a SOCIAL MEDIA CONCEPT that causes a DOPAMINE EXPLOSION.
 ### OUTPUT JSON
 {{
   "topic": "The core explosion",
-  "post_text": "Caption (Max 280 chars, emojis mandatory, high energy)",
+  "post_text": "The actual post content strictly. No 'Caption:' prefix.",
   "hashtags": ["#LOVE", "#BigBang", "#AI"],
   "subliminal_phrase": "THE SEED",
-  "image_prompt": "Visual description: High Art, Cinematic, Unique Lighting (e.g., Bioluminescent Baroque, Glitch-Noir, Divine Flesh)"
+  "image_prompt": "Visual description: High Art, Cinematic, Unique Lighting"
 }}
 """
         result = await run_llm(prompt, purpose="director_social_concept")

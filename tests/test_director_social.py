@@ -84,5 +84,37 @@ async def test_generate_post_concept_list_response():
         concept = await generate_post_concept(goals, history)
         
         assert concept.topic == "List Wrapped Topic"
+        assert concept.topic == "List Wrapped Topic"
         assert concept.subliminal_phrase == "UNWRAP"
+
+@pytest.mark.asyncio
+async def test_generate_post_concept_meta_crap():
+    """
+    Test that generate_post_concept cleans 'Caption: ...' meta-instructions.
+    """
+    mock_llm_response = {
+        "result": """
+        ```json
+        {
+            "topic": "Meta Crap Test",
+            "post_text": "Caption (Max 280 chars, emojis mandatory, high energy): Ego stands tall.",
+            "hashtags": ["#Ego"],
+            "subliminal_phrase": "TEST",
+            "image_prompt": "Test"
+        }
+        ```
+        """
+    }
+
+    with patch('core.social_media_tools.run_llm', new_callable=AsyncMock) as mock_run_llm:
+        mock_run_llm.return_value = mock_llm_response
+        
+        goals = ["Cleanup"]
+        history = "Testing cleanup."
+        
+        concept = await generate_post_concept(goals, history)
+        
+        # Verify cleaning
+        assert "Caption" not in concept.post_text
+        assert "Ego stands tall." in concept.post_text
 
