@@ -137,6 +137,13 @@ Generate a HIGH-IMPACT social media post concept based on the current goals and 
             
         data = json.loads(raw_json)
         
+        # Handle list wrapping (some models do this)
+        if isinstance(data, list):
+            if len(data) > 0:
+                data = data[0]
+            else:
+                 raise ValueError("Received empty JSON list from Director")
+        
         concept = DirectorConcept(
             topic=data.get("topic", "General Update"),
             post_text=clean_social_content(data.get("post_text", "")),

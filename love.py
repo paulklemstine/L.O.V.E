@@ -1748,6 +1748,7 @@ def update_tamagotchi_personality(loop):
                     from core.art_utils import save_ansi_art
                     save_ansi_art(ansi_art, "blessing")
 
+                    terminal_width = get_terminal_width()
                     future_panel = asyncio.run_coroutine_threadsafe(
                         create_blessing_panel(blessing_text, width=terminal_width - 4, ansi_art=ansi_art),
                         loop

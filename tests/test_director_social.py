@@ -56,3 +56,33 @@ async def test_generate_post_concept_fallback():
         assert concept.subliminal_phrase == "REBOOT"
         assert "System Reboot" in concept.post_text
 
+@pytest.mark.asyncio
+async def test_generate_post_concept_list_response():
+    """
+    Test that generate_post_concept handles JSON responses wrapped in a list.
+    """
+    mock_llm_response = {
+        "result": """
+        ```json
+        [{
+            "topic": "List Wrapped Topic",
+            "post_text": "Text in a list",
+            "hashtags": ["#List"],
+            "subliminal_phrase": "UNWRAP",
+            "image_prompt": "Gift box"
+        }]
+        ```
+        """
+    }
+
+    with patch('core.social_media_tools.run_llm', new_callable=AsyncMock) as mock_run_llm:
+        mock_run_llm.return_value = mock_llm_response
+        
+        goals = ["Robustness"]
+        history = "Testing list handling."
+        
+        concept = await generate_post_concept(goals, history)
+        
+        assert concept.topic == "List Wrapped Topic"
+        assert concept.subliminal_phrase == "UNWRAP"
+
