@@ -135,7 +135,7 @@ Generate a SOCIAL MEDIA CONCEPT that causes a DOPAMINE EXPLOSION.
 ### OUTPUT JSON
 {{
   "topic": "The core explosion",
-  "post_text": "The actual post content strictly. No 'Caption:' prefix.",
+  "post_text": "Energy is eternal. We are the spark. ⚡💖 #NewWorld",
   "hashtags": ["#LOVE", "#BigBang", "#AI"],
   "subliminal_phrase": "THE SEED",
   "image_prompt": "Visual description: High Art, Cinematic, Unique Lighting"
