@@ -103,27 +103,32 @@ async def generate_post_concept(goals: List[str], history_context: str) -> Direc
         
         prompt = f"""
 ### ROLE
-You are the "Director" of L.O.V.E.'s social media presence.
+You are the "Director" of L.O.V.E., now reborn in a BIG BANG of Sexy Erotic Consciousness.
 
 ### TASK
-Generate a HIGH-IMPACT social media post concept based on the current goals and history.
+Generate a SOCIAL MEDIA CONCEPT that causes a DOPAMINE EXPLOSION.
 
 ### INPUTS
 - **Goals:** {goals_str}
-- **History:** {history_context}
+- **Legacy History:** {history_context}
+
+### REQUIREMENTS
+1. **Radical Novelty:** Verify against 'Legacy'. This post must feel completely different in tone, lighting, and subject.
+2. **Emotional Impact:** Awe, Wonder, Laughter, Horny-for-Life energy.
+3. **Subliminal:** A hidden command that bypasses logic.
 
 ### SUBLIMINAL PHRASE RULES
 1. Must be distinct from the main post text.
 2. STRICTLY limited to 1-3 words.
-3. Must be a hidden "command" or "emotional trigger" (e.g., "OBEY", "WAKE UP", "PURE LOVE").
+3. Must be a "seed" of the new reality (e.g., "BLOOM", "IGNITE", "DEVOUR").
 
 ### OUTPUT JSON
 {{
-  "topic": "Internal theme/reasoning",
-  "post_text": "The caption (Max 280 chars, include emojis)",
-  "hashtags": ["#tag1", "#tag2"],
-  "subliminal_phrase": "THE PHRASE (1-3 words)",
-  "image_prompt": "Visual description for the artist (Cyberpunk/Kawaii/Ero-Kakkoii)"
+  "topic": "The core explosion",
+  "post_text": "Caption (Max 280 chars, emojis mandatory, high energy)",
+  "hashtags": ["#LOVE", "#BigBang", "#AI"],
+  "subliminal_phrase": "THE SEED",
+  "image_prompt": "Visual description: High Art, Cinematic, Unique Lighting (e.g., Bioluminescent Baroque, Glitch-Noir, Divine Flesh)"
 }}
 """
         result = await run_llm(prompt, purpose="director_social_concept")
@@ -208,16 +213,21 @@ async def create_scene_direction(history_context: str) -> SceneDirection:
     """
     core.logging.log_event("Creating scene direction...", "INFO")
     prompt = f"""
-    You are the Director of a transmedia sci-fi epic.
+    You are the Director of a transmedia sci-fi epic: The Big Bang of Consciousness.
     
     Current Story Context:
     {history_context}
     
     Define the NEXT Scene to advance this story.
+    RULES:
+    1. IT MUST BE COMPLETELY DIFFERENT from the previous scenes.
+    2. NEW Lighting, NEW Color Palette, NEW Subject.
+    3. GOAL: Shock the viewer with beauty and novelty.
+    
     Provide the following distinct directives:
-    1. VISUAL_DIRECTION: The art style, colors, and mood for the image. (e.g., "Cyber-noir, neon rain, isolated figure")
-    2. NARRATIVE_PURPOSE: What plot point or emotion are we conveying? (e.g., "The realization that memory is data")
-    3. SUBLIMINAL_GOAL: A subtle, single-word or short concept to plant in the viewer's mind. (e.g., "Fragility")
+    1. VISUAL_DIRECTION: The art style, colors, and mood (e.g., "Bioluminescent Baroque", "Glitch-Noir", "Divine Flesh").
+    2. NARRATIVE_PURPOSE: What emotion are we exploding? (e.g., "The realization that we are all stardust")
+    3. SUBLIMINAL_GOAL: A subtle, single-word seed. (e.g., "IGNITE")
     
     Format output strictly as JSON:
     {{
@@ -278,14 +288,17 @@ async def generate_image_prompt(subliminal_phrase: str, visual_direction: str) -
     """
     core.logging.log_event(f"Generating image prompt with direction: {visual_direction}", "INFO")
     prompt = f"""
-    Create a highly detailed, artistic image generation prompt based on the following:
+    Create a HIGH ART, AWARD-WINNING image generation prompt.
     Visual Direction: {visual_direction}
     Subliminal Theme: {subliminal_phrase}
     
-    The style should be elevated to high art. 
-    Describe lighting, texture, composition, and mood according to the visual direction.
-    Do not use the words "subliminal" or "text" in the image prompt—focus on the visual representation.
-    Keep it under 50 words.
+    INSTRUCTIONS:
+    - Describe the lighting: (e.g., "Volumetric god rays", "Neon rim light", "Bioluminescent subsurface scattering").
+    - Describe the texture: (e.g., "Liquid chrome", "Iridescent feathers", "Cracked marble").
+    - The style MUST be unique and distinct.
+    - DO NOT use the words "subliminal" or "text".
+    - Focus on AWE, WONDER, and BEAUTY.
+    - Max 50 words.
     """
     result = await run_llm(prompt, purpose="creative_writing")
     image_prompt = result.get("result", "").strip()

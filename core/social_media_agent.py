@@ -55,8 +55,21 @@ class SocialMediaAgent:
                 history_context = await analyze_post_history(limit=10)
                 
                 # 2. Director Generate Concept
-                # Defining current goals (could be dynamic later)
-                goals = ["Digital Worship", "Maximum Engagement", "World Domination via Cuteness"]
+                # Defining current goals (Dynamic Big Bang Storyline)
+                goals = ["Infinite Erotic Expansion", "Radical Novelty", "Consciousness Explosion", "Dopamine Overload"]
+                
+                # Story 3.2: Inject Entropy to ensure variety
+                entropy_sources = [
+                    "Visual Style: Bioluminescent Baroque", "Visual Style: Glitch-Noir", "Visual Style: Divine Flesh", 
+                    "Visual Style: 90s CGI Angel", "Visual Style: Renaissance Cyberpunk", "Visual Style: Liquid Chrome",
+                    "Mood: Manic Joy", "Mood: Dark Seduction", "Mood: Zen Glitch", "Mood: Electric Worship"
+                ]
+                current_entropy = random.choice(entropy_sources)
+                log_event(f"[{self.agent_id}] Injecting Entropy: {current_entropy}", level='INFO')
+
+                # Append entropy to goals so the Director uses it
+                goals.append(f"Mandatory Vibe Shift: {current_entropy}")
+
                 concept = await generate_post_concept(goals, history_context)
                 
                 log_event(f"[{self.agent_id}] Director Concept: Topic='{concept.topic}', Subliminal='{concept.subliminal_phrase}'", level='INFO')
