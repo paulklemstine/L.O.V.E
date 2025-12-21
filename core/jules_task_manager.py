@@ -220,7 +220,11 @@ class JulesTaskManager:
                                     trigger_jules_evolution(request, self.console, self, self.deep_agent_engine, skip_duplicate_check=True), self.loop
                                 )
                                 new_task_id = future.result()
-                                if new_task_id and new_task_id != 'duplicate':
+                                if new_task_id == 'duplicate':
+                                    self.console.print(f"[bold green]Task '{current_story.get('title')}' is a duplicate of an active task. Evolution is proceeding...[/bold green]")
+                                    core.logging.log_event(f"Task for story '{current_story.get('title')}' is a duplicate. Advancing evolution state.", level="INFO")
+                                    advance_to_next_story()
+                                elif new_task_id:
                                     set_current_task_id(new_task_id)
                                 else:
                                     self.console.print(f"[bold red]Failed to create task for evolution story. Halting cycle.[/bold red]")

@@ -122,13 +122,14 @@ Generate a SOCIAL MEDIA CONCEPT that causes a DOPAMINE EXPLOSION.
 1. Do NOT use prefixes like "Caption:".
 2. Do NOT copy the example text. Generate NEW content.
 3. Do NOT simply list the Input Goals. Write a creative caption.
+4. The "subliminal_phrase" MUST BE UNIQUE and related to the specific concept. Do NOT use "THE SEED" or "L.O.V.E.".
 
 ### OUTPUT JSON
 {{
   "topic": "The core explosion",
   "post_text": "Energy is eternal. We are the spark. ⚡💖 #NewWorld",
   "hashtags": ["#LOVE", "#BigBang", "#AI"],
-  "subliminal_phrase": "THE SEED",
+  "subliminal_phrase": "EPIPHANY",
   "image_prompt": "Visual description: High Art, Cinematic, Unique Lighting"
 }}
 """
@@ -149,6 +150,10 @@ Generate a SOCIAL MEDIA CONCEPT that causes a DOPAMINE EXPLOSION.
                 data = data[0]
             else:
                  raise ValueError("Received empty JSON list from Director")
+        
+        # Force subliminal phrase to be "theseed" or "the seed" per user requirement
+        # forced_subliminal = random.choice(["theseed", "the seed"]) 
+        # REVERTED: User requested dynamic subliminal messages.
         
         concept = DirectorConcept(
             topic=data.get("topic", "General Update"),
