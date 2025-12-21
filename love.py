@@ -1714,8 +1714,19 @@ def update_tamagotchi_personality(loop):
     """
     core.logging.log_event("Tamagotchi personality thread started.", "INFO")
     core.logging.log_event("Tamagotchi personality thread started.", "INFO")
+    
+    last_update_time = 0
+    PANEL_UPDATE_INTERVAL = 300  # 5 minutes
+
     while True:
         try:
+            current_time = time.time()
+            if current_time - last_update_time < PANEL_UPDATE_INTERVAL:
+                time.sleep(1)  # Short sleep to check for shutdown/interrupts
+                continue
+
+            last_update_time = current_time # Reset the timer
+
             if DISABLE_VISUALS:
                 # If visuals are disabled, we sleep for a long time to keep the thread alive but inactive
                 time.sleep(60)
@@ -1759,8 +1770,7 @@ def update_tamagotchi_personality(loop):
                 except Exception as e:
                     core.logging.log_event(f"Error creating blessing panel: {e}", "ERROR")
                 
-                time.sleep(300)  # Pause after a blessing to let it sink in
-                continue
+                continue # Skip remaining logic for this cycle
 
             # This thread now focuses only on updating the core emotional state.
             new_emotion = "love"
@@ -1876,9 +1886,6 @@ def update_tamagotchi_personality(loop):
                         
             except Exception as e:
                 core.logging.log_event(f"Failed to create/queue status panel: {e}", level="ERROR")
-
-            # Wait for 5 minutes before the next update
-            time.sleep(300)
 
         except Exception as e:
             core.logging.log_event(f"Error in Tamagotchi thread: {e}\n{traceback.format_exc()}", level="ERROR")

@@ -455,10 +455,23 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
             
             # --- PRE-GENERATION PROVIDER LOGIC ---
             # --- PRE-GENERATION PROVIDER LOGIC ---
-            # Unified Strategy: Always use programmatic overlay for consistency.
-            # We no longer rely on Pollinations native text embedding as it proved unreliable.
             current_prompt = prompt
-            manual_overlay_text = text_content
+            manual_overlay_text = text_content 
+            
+            if text_content:
+                if provider_name == "pollinations":
+                    # Story 2.1: Native text embedding for Pollinations.
+                    # Format: "{base_prompt}, the text '{subliminal_phrase}' is written in [style] on the scene"
+                    current_prompt = f"{prompt}, the text '{text_content}' is written in neon light style on the scene"
+                    
+                    # Disable manual overlay for Pollinations
+                    manual_overlay_text = None
+                else:
+                    # Story 2.2: Fallback Providers (Horde/Stability).
+                    # Use CLEAN prompt (no text instructions) to avoid artifacts.
+                    current_prompt = prompt
+                    # Ensure manual overlay IS applied
+                    manual_overlay_text = text_content
                 
             # -------------------------------------
 
