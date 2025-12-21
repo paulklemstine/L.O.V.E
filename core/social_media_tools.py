@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, Union, Dict, Any, NamedTuple, List
+from typing import Optional, Union, Dict, Any, NamedTuple, List, Tuple
 from PIL import Image
 import core.logging
 from core.llm_api import run_llm
@@ -285,19 +285,20 @@ async def generate_image_prompt(subliminal_phrase: str, visual_direction: str) -
     core.logging.log_event(f"Generated image prompt: {image_prompt}", "INFO")
     return image_prompt
 
-async def generate_image(prompt: str) -> Image.Image:
+async def generate_image(prompt: str) -> Tuple[Optional[Image.Image], str]:
     """
     Generates an image using the available image generation pool.
-    Returns a PIL Image object.
+    Returns a tuple (PIL Image object, provider_name).
     """
     core.logging.log_event(f"Generating image with prompt: {prompt}", "INFO")
-    # Using the pool to handle provider fallback/selection
-    image = await generate_image_with_pool(prompt)
-    if image:
-        core.logging.log_event("Image generation successful.", "INFO")
-    else:
-        core.logging.log_event("Image generation failed (returned None).", "WARNING")
-    return image
+    try:
+        # Using the pool to handle provider fallback/selection
+        image, provider = await generate_image_with_pool(prompt)
+        core.logging.log_event(f"Image generation successful via {provider}.", "INFO")
+        return image, provider
+    except Exception as e:
+        core.logging.log_event(f"Image generation failed: {e}", "WARNING")
+        return None, "unknown"
 
 async def generate_text_with_emoji_and_hashtags(narrative_purpose: str, subliminal_phrase: str, image_context: str) -> str:
     """

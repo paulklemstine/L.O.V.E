@@ -50,8 +50,8 @@ async def generate_image(prompt: str, width: int = 1024, height: int = 1024, for
     core.logging.log_event(msg, "INFO")
     
     try:
-        image = await generate_image_with_pool(prompt, width=width, height=height, force_provider=force_provider, text_content=text_content, overlay_position=overlay_position)
-        core.logging.log_event("Image generation completed successfully", "INFO")
+        image, provider = await generate_image_with_pool(prompt, width=width, height=height, force_provider=force_provider, text_content=text_content, overlay_position=overlay_position)
+        core.logging.log_event(f"Image generation completed successfully via {provider}", "INFO")
         return image
     except Exception as e:
         core.logging.log_event(f"Image generation failed: {e}", "ERROR")

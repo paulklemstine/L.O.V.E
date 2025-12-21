@@ -62,12 +62,11 @@ class SocialMediaAgent:
                 log_event(f"[{self.agent_id}] Director Concept: Topic='{concept.topic}', Subliminal='{concept.subliminal_phrase}'", level='INFO')
 
                 # 3. Generate Image using Director's Visual Description
-                image = await generate_image(concept.image_prompt)
+                image, provider = await generate_image(concept.image_prompt)
+                
+                # Story 3.1: Explicit Null Image Handling -> Abort
                 if not image:
-                    log_event(f"[{self.agent_id}] Image generation failed. Aborting post.", level='WARNING')
-                    # Could potentially post text only, but for this persona, image is key. 
-                    # Let's try to post text only if image fails, or just return?
-                    # Original logic returned. Staying consistent.
+                    log_event(f"[{self.agent_id}] Image generation failed (Provider: {provider}). Aborting post.", level='WARNING')
                     return
 
                 # 4. Prepare Final Text
@@ -75,12 +74,16 @@ class SocialMediaAgent:
                 final_text = concept.post_text
                 # Ensure hashtags are appended if they aren't in the text
                 for tag in concept.hashtags:
+                    # Simple check to avoid duplication (case-insensitive check would be better but this is MVP)
                     if tag not in final_text:
                         final_text += f" {tag}"
                 
                 final_text = clean_social_content(final_text)
                 
                 # 5. Post to Bluesky
+                # Story 3.1: Log which provider was used for the final post
+                log_event(f"[{self.agent_id}] Publishing post to Bluesky with {provider} image...", level='INFO')
+                
                 result = await post_to_bluesky(final_text, image)
                 log_event(f"[{self.agent_id}] Bluesky Director post result: {result}", level='INFO')
                 

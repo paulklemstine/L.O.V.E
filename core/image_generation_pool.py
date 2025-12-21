@@ -397,7 +397,9 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
         core.logging.log_event(f"Pollinations failed: {e}. Cooldown: {cooldown}s", "WARNING")
         raise
 
-async def generate_image_with_pool(prompt: str, width: int = 1024, height: int = 1024, force_provider=None, text_content: str = None, overlay_position: str = None) -> Image.Image:
+from typing import Tuple
+
+async def generate_image_with_pool(prompt: str, width: int = 1024, height: int = 1024, force_provider=None, text_content: str = None, overlay_position: str = None) -> Tuple[Image.Image, str]:
     """
     Main entry point for image generation using the pool.
     Tries providers in order based on ranking, with automatic fallback.
@@ -487,7 +489,8 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
                 # -------------------------------------
                 
                 core.logging.log_event(f"Image generation successful with provider: {provider_name}", "INFO")
-                return image
+                core.logging.log_event(f"Image generation successful with provider: {provider_name}", "INFO")
+                return image, provider_name
             
         except Exception as e:
             last_exception = e
