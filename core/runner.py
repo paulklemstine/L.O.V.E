@@ -20,13 +20,17 @@ class DeepAgentRunner:
             "retrieved_tools": []
         }
 
-    async def run(self, user_input: str) -> AsyncGenerator[Dict[str, Any], None]:
+    async def run(self, user_input: str, mandate: str = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Runs the agent with the given input.
         Yields updates from the graph execution.
         """
         # Add user message
         self.state["messages"].append(HumanMessage(content=user_input))
+        
+        # Inject mandate if provided
+        if mandate:
+            self.state["creator_mandate"] = mandate
         
         # Run the graph
         # astream returns a stream of outputs from nodes

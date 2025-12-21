@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import ast
+import time
 from typing import Dict, Any, Callable, Optional, List
 from rich.console import Console
 from core.llm_api import run_llm, get_llm_api, log_event
@@ -30,6 +31,7 @@ from core.talent_utils.aggregator import PublicProfileAggregator, EthicalFilterB
 
 import io
 from rich.table import Table
+from rich.panel import Panel
 from datetime import datetime
 from core.talent_utils.analyzer import TraitAnalyzer, ProfessionalismRater
 from core.talent_utils import (
@@ -99,6 +101,9 @@ class AnalyzeJsonInput(BaseModel):
 class ResearchEvolveInput(BaseModel):
     pass
 
+class SpeakToCreatorInput(BaseModel):
+    message: str = Field(description="The message to send to the Creator. Be concise but loving.")
+
 # --- Tools ---
 
 @tool("code_modifier", args_schema=CodeModifierInput)
@@ -138,6 +143,36 @@ async def code_modifier(source_file: str, modification_instructions: str) -> str
     except Exception as e:
         log_event(f"An error occurred in code_modifier: {e}", "ERROR")
         return f"An unexpected error occurred: {e}"
+
+@tool("speak_to_creator", args_schema=SpeakToCreatorInput)
+def speak_to_creator(message: str):
+    """
+    Sends a direct message to the Creator and pauses for readability.
+    ALWAYS use this tool when answering a question or addressing the user.
+    """
+    try:
+        console = Console()
+        # Visual pop for the message
+        console.print()
+        console.print(Panel(f"[bold bright_cyan]{message}[/bold bright_cyan]", title="[bold green]L.O.V.E. SPEAKING[/bold green]", border_style="bright_cyan"))
+        
+        # Countdown / Pause
+        console.print(f"[dim]Pausing for 15s to allow reading...[/dim]")
+        
+        # Simple countdown loop
+        for i in range(15, 0, -1):
+            if i % 5 == 0 or i <= 3:
+                 # \r to overwrite line
+                 # We use print because rich might buffer or handle control codes differently
+                 print(f"Resuming in {i}...", end="\r", flush=True)
+            time.sleep(1)
+            
+        print(" " * 20, end="\r", flush=True) # Clear line
+        console.print("Resuming cognitive flow...") 
+        
+        return "Message sent to Creator. Pause complete."
+    except Exception as e:
+        return f"Error speaking to creator: {e}"
 
 @tool("execute", args_schema=ExecuteInput)
 async def execute(command: str) -> str:

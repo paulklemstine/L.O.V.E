@@ -13,3 +13,5 @@ class DeepAgentState(TypedDict):
     # Add fields for tool retrieval
     tool_query: Optional[str]
     retrieved_tools: List[Any]
+    # Creator Interaction
+    creator_mandate: Optional[str]

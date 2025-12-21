@@ -2917,18 +2917,28 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
 
             if user_input:
                 # Run the DeepAgent graph with the input
-                async for update in runner.run(user_input):
-                    # Log updates
-                    for node, data in update.items():
-                        core.logging.log_event(f"Graph Node '{node}' executed.", "DEBUG")
-                        if "messages" in data:
-                            # Handle list of messages
-                            messages = data["messages"]
-                            if isinstance(messages, list) and messages:
-                                last_msg = messages[-1]
-                                # Display output if it's an AIMessage or has content
-                                content = getattr(last_msg, "content", str(last_msg))
-                                ui_panel_queue.put(create_llm_panel(content))
+                # Treat direct user input as a MANDATE
+                core.logging.log_event(f"Processing Creator Mandate: {user_input}", "CRITICAL")
+                try:
+                    async for update in runner.run(user_input, mandate=user_input):
+                        # Log updates
+                        for node, data in update.items():
+                            core.logging.log_event(f"Graph Node '{node}' executed.", "DEBUG")
+                            if "messages" in data:
+                                # Handle list of messages
+                                messages = data["messages"]
+                                if isinstance(messages, list) and messages:
+                                    last_msg = messages[-1]
+                                    # Display output if it's an AIMessage or has content
+                                    content = getattr(last_msg, "content", str(last_msg))
+                                    ui_panel_queue.put(create_llm_panel(content))
+                            
+                            # Check if mandate is cleared (optional, or we clear it here)
+                            if "creator_mandate" in runner.state and not runner.state["creator_mandate"]:
+                                core.logging.log_event("Creator mandate fulfilled.", "INFO")
+                except Exception as e:
+                     core.logging.log_event(f"Error executing mandate: {e}", "ERROR")
+                     ui_panel_queue.put(create_api_error_panel(f"Error executing mandate: {e}"))
             else:
                 # Autonomous Mode
                 # Only run if engine is available.

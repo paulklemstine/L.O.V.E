@@ -4,13 +4,15 @@ from core.tool_retriever import ToolRetriever
 from core.tools import (
     execute, decompose_and_solve_subgoal, evolve, post_to_bluesky,
     read_file, write_file, scan_network, probe_target,
-    perform_webrequest, analyze_json_file, research_and_evolve
+    perform_webrequest, analyze_json_file, research_and_evolve,
+    speak_to_creator
 )
 
 ALL_TOOLS = [
     execute, decompose_and_solve_subgoal, evolve, post_to_bluesky,
     read_file, write_file, scan_network, probe_target,
-    perform_webrequest, analyze_json_file, research_and_evolve
+    perform_webrequest, analyze_json_file, research_and_evolve,
+    speak_to_creator
 ]
 
 _retriever = None
