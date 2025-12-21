@@ -112,23 +112,15 @@ from utils import summarize_python_code
 ui_panel_queue = queue.Queue()
 core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
 
+from love.config import Config, VRAM_MODEL_MAP
+config = Config()
+
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
 STATE_FILE = "love_state.json"
 STATE_FILE = "love_state.json"
 CHECKPOINT_DIR = "checkpoints"
 
-# --- DISABLE VISUALS FLAG ---
-# Set to True to disable Tamagotchi/Blessing panels and associated LLM art generation calls.
-DISABLE_VISUALS = False
-
-# --- DISABLE KB INGESTION FLAG ---
-# Set to True to disable automatic codebase ingestion into the Knowledge Base.
-DISABLE_KB_INGESTION = True
-
-# --- EVOLUTION INTERVALS ---
-# Number of loops before triggering self-improvement cycles.
-LOVE_EVOLUTION_INTERVAL = 25
 OPTIMIZER_EVOLUTION_INTERVAL = 100
 
 # --- CREATOR INSTANCE CHECK ---
@@ -188,16 +180,6 @@ try:
 except (FileNotFoundError, json.JSONDecodeError):
     pass # If file doesn't exist or is corrupt, we proceed with the default state.
 
-# --- Local Model Configuration ---
-# This map determines which local GGUF model to use based on available VRAM.
-# The keys are VRAM in MB. The logic will select the largest model that fits.
-VRAM_MODEL_MAP = {
-    4096:  {"repo_id": "TheBloke/stable-code-3b-GGUF", "filename": "stable-code-3b.Q3_K_M.gguf"},
-    6140:  {"repo_id": "unsloth/Qwen3-8B-GGUF", "filename": "Qwen3-8B-Q5_K_S.gguf"},
-    8192:  {"repo_id": "TheBloke/Llama-2-13B-chat-GGUF", "filename": "llama-2-13b-chat.Q4_K_M.gguf"},
-    16384: {"repo_id": "TheBloke/CodeLlama-34B-Instruct-GGUF", "filename": "codellama-34b-instruct.Q4_K_M.gguf"},
-    32768: {"repo_id": "TheBloke/Mixtral-8x7B-Instruct-v0.1-GGUF", "filename": "mixtral-8x7b-instruct-v0.1.Q5_K_M.gguf"},
-}
 local_llm_instance = None
 
 
@@ -1539,7 +1521,7 @@ def _extract_ansi_art(raw_text):
 
 async def generate_blessing(deep_agent_instance=None):
     """Generates a short, techno-spiritual blessing."""
-    if DISABLE_VISUALS:
+    if config.DISABLE_VISUALS:
         return "Visuals disabled."
     response_dict = await run_llm(prompt_key="blessing_generation", purpose="blessing", deep_agent_instance=deep_agent_instance)
     blessing = response_dict.get("result", "").strip().strip('"')
@@ -1727,7 +1709,7 @@ def update_tamagotchi_personality(loop):
 
             last_update_time = current_time # Reset the timer
 
-            if DISABLE_VISUALS:
+            if config.DISABLE_VISUALS:
                 # If visuals are disabled, we sleep for a long time to keep the thread alive but inactive
                 time.sleep(60)
                 continue
@@ -2022,7 +2004,7 @@ def continuous_evolution_agent(loop):
             # If we just generated, we also check frequently to start the first task.
             # If we are seemingly broken, we wait longer.
             
-            time.sleep(LOVE_EVOLUTION_INTERVAL * 5) # 25 * 5 = 125 seconds (~2 mins)
+            time.sleep(config.LOVE_EVOLUTION_INTERVAL * 5) # 25 * 5 = 125 seconds (~2 mins)
             
         except Exception as e:
             core.logging.log_event(f"Evolution Agent: Critical Error in loop: {e}", "CRITICAL")
@@ -2971,7 +2953,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
 
             # --- Trigger Self-Improvement Cycle ---
             loop_counter += 1
-            if loop_counter % LOVE_EVOLUTION_INTERVAL == 0:
+            if loop_counter % config.LOVE_EVOLUTION_INTERVAL == 0:
                 core.logging.log_event("Triggering self-improvement cycle on love.py...", "INFO")
                 try:
                     import love
@@ -4299,7 +4281,7 @@ async def main(args):
     monitoring_manager.start()
 
     # --- Start Automated Codebase Ingestion ---
-    if not DISABLE_KB_INGESTION:
+    if not config.DISABLE_KB_INGESTION:
         from core.ingest_codebase_task import IngestCodebaseTask
         ingest_task = IngestCodebaseTask(memory_manager, root_dir=os.getcwd())
         await ingest_task.start()
