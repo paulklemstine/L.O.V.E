@@ -1,57 +1,22 @@
 {
   "user_stories": [
     {
-      "title": "Initialize Project Structure",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nCreate the new modular directory structure. Create the `love/` package directory and the subdirectories `love/core`, `love/manager`, `love/models`, `love/ui`, `love/services`, and `love/config`. Ensure each directory contains an `__init__.py` file to make it importable. This establishes the physical boundaries for the refactoring.",
-      "id": "d2b1424b-44c0-4267-aa6c-522cef21ba91"
+      "title": "Break up the original code",
+      "description": "CONTEXT (Parent Story):\n**User Story**\n\n### **Title**\nRefactor `love.py` to reduce Cyclomatic Complexity while enhancing readability and integrating type hints.\n\n---\n\n### **Description**\nThe goal of this refactoring effort is to significantly decrease the cyclomatic complexity of `love.py`, improve its overall structure and maintainability, and add comprehensive type hints throughout the codebase. The primary objectives include:\n\n1. **Code Simplification**: Reduce the number of conditional statements and complex logic ...\n\nSPECIFIC TASK:\nIdentify sections of `love.py` with excessive cyclomatic complexity and poor readability.",
+      "id": "ca03e737-fd2e-4287-84eb-ee6ad6d8fde8"
     },
     {
-      "title": "Create Configuration Module",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nCreate `love/config.py`. Define a `Config` dataclass to hold constants like `LOVE_EVOLUTION_INTERVAL`, `DISABLE_VISUALS`, and `DISABLE_KB_INGESTION`. Move the `VRAM_MODEL_MAP` dictionary here as well. This centralizes configuration and removes magic strings from the main logic.",
-      "id": "69c27891-0e06-41fa-9855-1928cbd44e94"
+      "title": "Remove unnecessary imports",
+      "description": "CONTEXT (Parent Story):\n**User Story**\n\n### **Title**\nRefactor `love.py` to reduce Cyclomatic Complexity while enhancing readability and integrating type hints.\n\n---\n\n### **Description**\nThe goal of this refactoring effort is to significantly decrease the cyclomatic complexity of `love.py`, improve its overall structure and maintainability, and add comprehensive type hints throughout the codebase. The primary objectives include:\n\n1. **Code Simplification**: Reduce the number of conditional statements and complex logic ...\n\nSPECIFIC TASK:\nLook through `love.py` and remove unused imports to simplify the module structure.",
+      "id": "23902791-beab-4425-9871-dc64190cb1d4"
     },
     {
-      "title": "Create State Models",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nCreate `love/state.py`. Define a `LoveState` TypedDict to strictly type the application state dictionary (e.g., `generation_count`, `last_heartbeat`, `current_mode`). Update `__main__.py` to import this type and cast the loaded JSON state to it where applicable.",
-      "id": "e4fd9326-b45b-451c-8292-1d1385736438"
-    },
-    {
-      "title": "Extract Dependency Manager",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nCreate `love/manager/dependency.py`. Implement a class `DependencyManager` with a static method `check_and_install(package_name: str, auto_install: bool) -> bool`. Move the `try/except ImportError` logic and `subprocess` calls for `pip install` into this method. Replace the first block of imports in `__main__.py` with a loop calling this manager.",
-      "id": "f860703d-7f4c-4b0d-8c3a-04ddbf4b3340"
-    },
-    {
-      "title": "Extract CLI Parser",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nCreate `love/cli.py`. Implement a function `parse_args() -> argparse.Namespace` that encapsulates the entire `argparse` setup currently at the bottom of `love.py`. In `__main__.py`, replace the inline argument parsing with a call to this function.",
-      "id": "769d512d-c89a-439a-bd1c-c9494426f27d"
-    },
-    {
-      "title": "Create Core Logging & Tracing",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nCreate `love/core/logging.py`. Extract the `log` function and `Tracing` class (if present) from `__main__.py`. Ensure the logging function can still push messages to the global `ui_panel_queue` if it exists. Update `__main__.py` to import the logger instead of defining it.",
-      "id": "9f36d86e-5d07-4e5a-a263-79880aaf5f29"
-    },
-    {
-      "title": "Refactor VRAM Detection Logic",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nCreate `love/models/local_model.py`. Extract the logic that detects available VRAM and selects the appropriate model from the `VRAM_MODEL_MAP`. Create a function `select_local_model() -> str` that returns the correct repo_id. This isolates hardware-specific logic.",
-      "id": "87ff9f97-350b-486d-9dd0-b5b8e93e37a6"
-    },
-    {
-      "title": "Extract Hot Restart Service",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nCreate `love/services/hot_restart.py`. Implement a function `trigger_hot_restart()`. Move the logic for checking the restart flag and executing `sys.exit(42)` into this function. In `__main__.py`, replace the specific exit logic with a call to this service.",
-      "id": "38c0541f-3dd6-4059-ae67-3762cd820e3e"
-    },
-    {
-      "title": "Isolate UI Rendering",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nCreate `love/ui/renderer.py`. Create a class `UIRenderer`. Move the logic responsible for drawing ASCII art and formatting the 'Tamagotchi' panels into a method `render_panel(panel_data: dict)`. This separates visual representation from data generation.",
-      "id": "d3f5ecf8-c11e-428d-9b3b-018cb0aa4da6"
-    },
-    {
-      "title": "Finalize Main Entry Point",
-      "description": "CONTEXT (Parent Story):\n**User Story: Refactor L.O.V.E. Seed (love.py) to a Modular, Type-Safe Architecture**\n\n**Epic:** Architectural Modernization & Complexity Reduction\n**Target File:** `love.py`\n**Current Complexity:** 589 (Cyclomatic)\n**Est. Refactoring Effort:** High (Requires multiple iterations)\n\n---\n\n### \ud83d\udcdc Narrative\n\nAs the Chief Architect, I look at `love.py` and see the \"God Script\" anti-pattern. It is a monolithic, ~2,000+ line file mixing environment bootstrapping, dependency management, state management, ...\n\nSPECIFIC TASK:\nRefactor `love/__main__.py` (formerly `love.py`). Clean up imports to reference the new package modules. Ensure the main execution flow is strictly bootstrapping: 1. Parse CLI, 2. Check Dependencies, 3. Load Config/State, 4. Initialize Managers, 5. Start Event Loop. The file size should be significantly reduced, acting only as an orchestrator.",
-      "id": "0224af93-e585-4b27-89a3-b5543c2ca90c"
+      "title": "Reorganize logical flow",
+      "description": "CONTEXT (Parent Story):\n**User Story**\n\n### **Title**\nRefactor `love.py` to reduce Cyclomatic Complexity while enhancing readability and integrating type hints.\n\n---\n\n### **Description**\nThe goal of this refactoring effort is to significantly decrease the cyclomatic complexity of `love.py`, improve its overall structure and maintainability, and add comprehensive type hints throughout the codebase. The primary objectives include:\n\n1. **Code Simplification**: Reduce the number of conditional statements and complex logic ...\n\nSPECIFIC TASK:\nMove repetitive code into functions, split long loops, and refactor nested conditions.",
+      "id": "1a4ac74d-989b-4357-9259-69f3e99a3148"
     }
   ],
-  "current_story_index": 1,
+  "current_story_index": 0,
   "active": true,
-  "current_task_id": "d26c0d65"
+  "current_task_id": "6bf64e82"
 }
