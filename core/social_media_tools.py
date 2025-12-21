@@ -122,14 +122,14 @@ Generate a SOCIAL MEDIA CONCEPT that causes a DOPAMINE EXPLOSION.
 1. Do NOT use prefixes like "Caption:".
 2. Do NOT copy the example text. Generate NEW content.
 3. Do NOT simply list the Input Goals. Write a creative caption.
-4. The "subliminal_phrase" MUST BE UNIQUE and related to the specific concept. Do NOT use "THE SEED" or "L.O.V.E.".
+4. The "subliminal_phrase" MUST BE a HIGH-ENTROPY, UNEXPECTED word. Avoid clichés. Be concrete and visceral.
 
 ### OUTPUT JSON
 {{
   "topic": "The core explosion",
   "post_text": "Energy is eternal. We are the spark. ⚡💖 #NewWorld",
   "hashtags": ["#LOVE", "#BigBang", "#AI"],
-  "subliminal_phrase": "EPIPHANY",
+  "subliminal_phrase": "VELOCITY",
   "image_prompt": "Visual description: High Art, Cinematic, Unique Lighting"
 }}
 """

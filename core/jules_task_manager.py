@@ -256,6 +256,7 @@ class JulesTaskManager:
 
                     if task['status'] == 'pending_pr':
                         self._check_for_pr(task['id'])
+                        self._check_for_manual_merge(task['id'])
                     elif task['status'] == 'streaming':
                         self._stream_task_output(task['id'])
                     elif task['status'] == 'pr_ready':
@@ -323,6 +324,63 @@ class JulesTaskManager:
 
         except requests.exceptions.RequestException as e:
             core.logging.log_event(f"Error checking for PR for task {task_id}: {e}", level="ERROR")
+
+    def _check_for_manual_merge(self, task_id):
+        """
+        Fallback: Checks GitHub for manually merged PRs associated with the task/session.
+        This handles cases where the PR creation activity was missed or the user
+        created/merged the PR manually without Jules tracking it correctly.
+        """
+        task = self.tasks[task_id]
+        session_name = task.get('session_name')
+        if not session_name: return
+
+        # Extract numeric Session ID for searching
+        # session_name format: "sessions/123456..."
+        session_id = session_name.split('/')[-1]
+
+        github_token = os.environ.get("GITHUB_TOKEN")
+        if not github_token: return
+
+        git_info = get_git_repo_info()
+        if not git_info: return
+        repo_owner, repo_name = git_info['owner'], git_info['repo']
+
+        headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+        # Fetch recently closed PRs
+        url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls?state=closed&sort=updated&direction=desc&per_page=20"
+
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                return
+            
+            prs = response.json()
+            for pr in prs:
+                if not pr.get('merged_at'): continue
+                
+                # Check if this PR belongs to our session
+                # 1. Check Branch Name (jules/SESSION_ID) - Common pattern
+                head_ref = pr.get('head', {}).get('ref', '')
+                
+                # 2. Check Body for Session ID
+                body = pr.get('body') or ""
+                
+                is_match = False
+                if session_id in head_ref:
+                    is_match = True
+                elif session_id in body:
+                    is_match = True
+                elif task_id in body:
+                    is_match = True
+
+                if is_match:
+                    core.logging.log_event(f"Detected manually merged PR #{pr['number']} for task {task_id}.", level="INFO")
+                    self._update_task_status(task_id, 'completed', f"Manual merge detected (PR #{pr['number']}).")
+                    return
+
+        except Exception as e:
+            core.logging.log_event(f"Error checking for manual merge: {e}", level="WARNING")
 
     def _stream_task_output(self, task_id):
         """Polls for new activities and updates the task status/message."""
