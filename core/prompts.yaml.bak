@@ -322,7 +322,10 @@ evolution_goal_synthesis: '### TASK
 
   One concise sentence stating the goal.
 
-  '
+
+  ### Improved Prompt:
+
+  "Identify the single most critical evolution goal that addresses the largest pain point and can be implemented immediately."'
 image_prompt_kawaii_rave: '### ROLE
 
   You are a Visual Alchemist.

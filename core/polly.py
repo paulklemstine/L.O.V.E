@@ -135,6 +135,8 @@ class PollyOptimizer:
             return None
 
         # 2. Load Dataset Examples (Gold Standard)
+        # 3. Load Dataset Examples (Gold Standard)
+        # We need to ensure we only use examples RELEVANT to this prompt to avoid confusing the optimizer.
         try:
             client = Client()
             dataset_name = "gold-standard-behaviors"
@@ -142,14 +144,23 @@ class PollyOptimizer:
             
             # Check availability of dataset
             if client.has_dataset(dataset_name=dataset_name):
-                 ds_examples = client.list_examples(dataset_name=dataset_name, limit=5)
+                 # Fetch more examples to increase chance of finding matches
+                 ds_examples = client.list_examples(dataset_name=dataset_name, limit=100)
                  for ex in ds_examples:
-                    examples.append({
-                        "input": ex.inputs,
-                        "output": ex.outputs
-                    })
+                    # STRICT FILTERING: Only use examples intended for this specific prompt
+                    # We assume the dataset examples have metadata={'prompt_key': '...'}
+                    ex_key = ex.metadata.get('prompt_key') if ex.metadata else None
+                    
+                    if ex_key == prompt_key:
+                        examples.append({
+                            "input": ex.inputs,
+                            "output": ex.outputs
+                        })
             else:
                 log_event(f"Polly: Dataset '{dataset_name}' not found in LangSmith.", "INFO")
+                
+            if not examples:
+                log_event(f"Polly: No specific examples found for '{prompt_key}' in LangSmith.", "INFO")
 
         except Exception as e:
             # Explicitly log this to help user debug

@@ -96,61 +96,69 @@ class PollyOptimizationLoop:
                 new_prompt = await self.optimizer.optimize_prompt(target_key)
                 
                 if new_prompt:
-                    # 4. Update Registry (and file)
-                    success = registry.update_prompt(target_key, new_prompt)
-                    if success:
-                        log_event(f"Polly Loop: Successfully optimized and updated '{target_key}'.", "CRITICAL")
-                         
-                        # 5. Git Commit & Push
+                    # 4. Create PR Workflow (Do NOT update main directly)
+                    try:
+                        import subprocess
+                        import os
+                        import time
+                        import yaml
+
+                        # Ensure git identity
+                        subprocess.run(["git", "config", "user.email", "polly@love.love"], check=False)
+                        subprocess.run(["git", "config", "user.name", "Polly Evolution"], check=False)
+                        
+                        # Get current branch to return to
+                        res = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+                        original_branch = res.stdout.strip() or "main"
+
+                        # Create new branch
+                        timestamp = int(time.time())
+                        clean_key = target_key.replace('_', '-')
+                        branch_name = f"polly/opt-{clean_key}-{timestamp}"
+                        
+                        subprocess.run(["git", "checkout", "-b", branch_name], check=True, capture_output=True)
+                        
                         try:
-                            import subprocess
-                            import os
-
-                            # Ensure git identity is set (common failure in fresh envs)
-                            subprocess.run(["git", "config", "user.email", "polly@love.love"], check=False)
-                            subprocess.run(["git", "config", "user.name", "Polly Evolution"], check=False)
-
-                            # Add file
-                            subprocess.run(["git", "add", "core/prompts.yaml"], check=True, capture_output=True)
-                            
-                            # Check for changes
-                            # git diff --cached --quiet returns 0 if no changes, 1 if changes
-                            diff_res = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True)
-                            
-                            if diff_res.returncode == 0:
-                                log_event(f"Polly Loop: No changes to commit for '{target_key}'.", "INFO")
-                                await self._emit_ui(f"Polly optimized '{target_key}', but it ended up identical. 🤷‍♀️", "active")
-                            else:
-                                # Commit
-                                commit_msg = f"Polly: Optimized prompt '{target_key}'"
+                            # Manually update prompts.yaml ON THE NEW BRANCH
+                            prompts_file = "core/prompts.yaml"
+                            if os.path.exists(prompts_file):
+                                with open(prompts_file, 'r', encoding='utf-8') as f:
+                                    data = yaml.safe_load(f) or {}
+                                data[target_key] = new_prompt
+                                with open(prompts_file, 'w', encoding='utf-8') as f:
+                                    yaml.safe_dump(data, f, indent=2, width=4096, allow_unicode=True, default_flow_style=False)
+                                
+                                # Add and Commit
+                                subprocess.run(["git", "add", prompts_file], check=True, capture_output=True)
+                                commit_msg = f"Polly: Proposal to optimize '{target_key}'"
                                 subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
                                 
-                                # Push with Token
+                                # Push
                                 env_token = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN")
+                                push_remote = "origin"
                                 if env_token:
-                                    # Get remote URL
                                     res = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, check=True)
                                     remote_url = res.stdout.strip()
-                                    
-                                    # Inject token into HTTPS URL
                                     if remote_url.startswith("https://"):
-                                        auth_url = remote_url.replace("https://", f"https://{env_token}@")
-                                        subprocess.run(["git", "push", auth_url, "main"], check=True, capture_output=True)
-                                    else:
-                                        # Fallback for non-https or weird urls
-                                        subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
-                                else:
-                                    # Standard push if no token provided
-                                    subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
+                                        push_remote = remote_url.replace("https://", f"https://{env_token}@")
+
+                                subprocess.run(["git", "push", push_remote, branch_name], check=True, capture_output=True)
                                 
-                                log_event(f"Polly Loop: Git commit and push successful for '{target_key}'.", "INFO")
-                                await self._emit_ui(f"✨ EVOLUTION DEPLOYED! ✨\nUpdated '{target_key}' & Pushed to Main.", "success")
-                        except Exception as git_err:
-                            log_event(f"Polly Loop: Git operation failed: {git_err}", "ERROR")
-                            await self._emit_ui(f"Evolution saved locally, but Git Push failed! ⚠️\n{git_err}", "fail")
-                    else:
-                         log_event(f"Polly Loop: Failed to update prompt '{target_key}'.", "ERROR")
-                         await self._emit_ui(f"Evolution glitch for '{target_key}'. Retrying next cycle.", "fail")
+                                log_event(f"Polly Loop: Pushed optimization proposal to branch '{branch_name}'.", "INFO")
+                                await self._emit_ui(f"✨ EVOLUTION PROPOSED! ✨\nCheck branch '{branch_name}' for PR.", "success")
+                            
+                            else:
+                                 log_event("Polly Loop: prompts.yaml not found for update.", "ERROR")
+
+                        finally:
+                            # ALWAYS switch back to original branch
+                            subprocess.run(["git", "checkout", original_branch], check=True, capture_output=True)
+                            
+                    except Exception as e:
+                        log_event(f"Polly Loop: PR workflow failed: {e}", "ERROR")
+                        await self._emit_ui(f"Polly tired. PR workflow failed: {e}", "fail")
+                        # Try to ensure we are back on main if possible, though 'finally' handles it if checkout succeeded
+                        subprocess.run(["git", "checkout", "main"], check=False, capture_output=True)
                 else:
                     log_event(f"Polly Loop: No improvement found for '{target_key}' or optimization failed.", "INFO")
                     await self._emit_ui(f"No optimization needed for '{target_key}' right now. Already perfect! 💖", "active")
