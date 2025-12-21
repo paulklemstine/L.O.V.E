@@ -661,6 +661,13 @@ def rank_models(purpose="general"):
             # Horde is lowest priority
             pass
 
+        # --- Purpose-Specific Adjustments ---
+        if purpose == "polly_judge":
+             # Prefer fast, smart models for judging (e.g., GPT-4o-mini, Flash, small smart locals)
+             if "gpt-4o-mini" in model_id or "flash" in model_name_lower or "llama-3" in model_name_lower:
+                 final_score += 5000
+                 # log_event(f"Boosting {model_id} for polly_judge task.", "DEBUG")
+
         # --- Stability & Reliability User Story: Penalize Failures ---
         # 1. Model Failure Penalty
         failed_calls = stats.get("failed_calls", 0)

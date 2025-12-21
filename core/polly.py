@@ -93,8 +93,9 @@ class PollyOptimizer:
                 
                 judge_response = await run_llm(
                     prompt_text=judge_prompt,
-                    purpose="polly_judge",
-                    force_model="gpt-4o-mini" # Use a cheap/fast/smart model for judging
+                    purpose="polly_judge"
+                    # force_model="gpt-4o-mini"  <-- REMOVED to prevent emergency mode. 
+                    # The rank_models logic in llm_api.py will handle preference for smart/fast models.
                 )
                 
                 score_text = judge_response.get('result', '').strip()
