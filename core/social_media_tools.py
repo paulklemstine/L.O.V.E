@@ -292,15 +292,15 @@ async def generate_image_prompt(subliminal_phrase: str, visual_direction: str) -
     core.logging.log_event(f"Generated image prompt: {image_prompt}", "INFO")
     return image_prompt
 
-async def generate_image(prompt: str) -> Tuple[Optional[Image.Image], str]:
+async def generate_image(prompt: str, text_content: Optional[str] = None) -> Tuple[Optional[Image.Image], str]:
     """
     Generates an image using the available image generation pool.
     Returns a tuple (PIL Image object, provider_name).
     """
-    core.logging.log_event(f"Generating image with prompt: {prompt}", "INFO")
+    core.logging.log_event(f"Generating image with prompt: {prompt} [Text: {text_content}]", "INFO")
     try:
         # Using the pool to handle provider fallback/selection
-        image, provider = await generate_image_with_pool(prompt)
+        image, provider = await generate_image_with_pool(prompt, text_content=text_content)
         core.logging.log_event(f"Image generation successful via {provider}.", "INFO")
         return image, provider
     except Exception as e:

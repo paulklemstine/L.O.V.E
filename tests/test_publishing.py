@@ -56,6 +56,12 @@ async def test_post_construction_success(mock_agent):
                 break
         assert found_provider_log, "Failed to log provider name in final post log."
 
+        # Verify generate_image was called with text_content (Story 2.1 Fix)
+        mock_gen_image.assert_called_once()
+        args, kwargs = mock_gen_image.call_args
+        # args[0] is prompt
+        assert kwargs.get("text_content") == "Wake Up"
+
 @pytest.mark.asyncio
 async def test_post_abort_on_null_image(mock_agent):
     """

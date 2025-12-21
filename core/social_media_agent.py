@@ -62,7 +62,8 @@ class SocialMediaAgent:
                 log_event(f"[{self.agent_id}] Director Concept: Topic='{concept.topic}', Subliminal='{concept.subliminal_phrase}'", level='INFO')
 
                 # 3. Generate Image using Director's Visual Description
-                image, provider = await generate_image(concept.image_prompt)
+                # Pass subliminal phrase for overlay (Story 2.1 Fix: Always overlay text)
+                image, provider = await generate_image(concept.image_prompt, text_content=concept.subliminal_phrase)
                 
                 # Story 3.1: Explicit Null Image Handling -> Abort
                 if not image:
