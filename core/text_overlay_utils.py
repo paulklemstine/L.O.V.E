@@ -24,49 +24,51 @@ def overlay_text_on_image(image: Image.Image, text: str, position: str = "bottom
     width, height = image.size
     
     # --- Font Selection ---
-    # Try to load a reasonable font
-    # PRIORITIZE: Local assets for portability
-    local_font_path = os.path.join(os.getcwd(), "assets", "fonts", "arialbd.ttf")
+    # Smart scaling: width / 15 as per Story 2.3
+    font_size = int(width / 15)
     
+    local_font_path = os.path.join(os.getcwd(), "assets", "fonts", "arialbd.ttf")
+    # Extended list of likely system fonts
     font_paths = [
         local_font_path,
         "assets/fonts/arialbd.ttf",
+        # Windows
+        "C:\\Windows\\Fonts\\arialbd.ttf",
+        "C:\\Windows\\Fonts\\impact.ttf",
+        "C:\\Windows\\Fonts\\seguiemj.ttf", # Segoe UI Emoji usually exists
+        # Linux
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-        "/mnt/c/Windows/Fonts/arialbd.ttf",
-        "/mnt/c/Windows/Fonts/impact.ttf",
-        "arial.ttf",
-        "Arial.ttf"
+        "arial.ttf"
     ]
     
     font = None
-    font_size = int(height * 0.10) # Start with 10% of image height
-    
     for path in font_paths:
         try:
-            font = ImageFont.truetype(path, font_size)
-            break
+            if os.path.exists(path):
+                font = ImageFont.truetype(path, font_size)
+                break
         except Exception:
             continue
             
     if not font:
+        # Fallback to default if absolutely nothing is found
+        # Note: Default font doesn't support size scaling well usually
         logging.warning("Could not load preferred fonts, falling back to default.")
         font = ImageFont.load_default()
-    
+
     # --- Position Calculation ---
     text_bbox = draw.textbbox((0, 0), text, font=font)
     text_width = text_bbox[2] - text_bbox[0]
     text_height = text_bbox[3] - text_bbox[1]
     
-    # Scale down if too wide
+    # Safety check: if text is still too wide, shrink it
     while text_width > width * 0.9 and font_size > 10:
         font_size -= 2
         try:
-            if isinstance(font, ImageFont.FreeTypeFont):
+            if hasattr(font, 'path'):
                 font = ImageFont.truetype(font.path, font_size)
             else:
-                 # Default font can't resize effectively this way easily without reloading
                  break 
         except:
              break
@@ -75,54 +77,44 @@ def overlay_text_on_image(image: Image.Image, text: str, position: str = "bottom
         text_height = text_bbox[3] - text_bbox[1]
 
     # Calculate Coordinates
+    # Center Horizontally
     x = (width - text_width) // 2
-    y = (height - text_height) // 2
     
+    # Story 2.3 Requirement: Lower third (e.g., 20% from bottom)
+    # y = height - (height * 0.20) - (text_height / 2)
+    # Let's place the baseline at 80% down implies the text sits around there.
+    y = int(height * 0.8) - (text_height // 2)
+    
+    # Overrides
     padding = int(height * 0.05)
-    
-    if position == "header" or position == "top":
+    if position == "header":
         y = padding
-    elif position == "footer" or position == "bottom":
-        y = height - text_height - padding
     elif position == "center":
-        pass # Already calculated
-    elif position == "center_left":
-        x = padding
-    elif position == "center_right":
-        x = width - text_width - padding
-    elif position == "top_left":
-        x = padding
-        y = padding
-    elif position == "bottom_right":
-        x = width - text_width - padding
-        y = height - text_height - padding
-    
+        y = (height - text_height) // 2
+    # "bottom" or "lower_third" falls through to the calculated Y above
+
     # --- Rendering Styles ---
+    # Story 2.3 Requirement: Black stroke (2px) + hot pink/main color fill
     
-    if style == "neon":
-        # Glow effect
-        glow_color = (0, 255, 255) # Cyan glow
-        text_color = (255, 255, 255)
+    if style == "neon" or style == "subliminal":
+        # Stroke
+        stroke_width = 2
+        stroke_color = (0, 0, 0)
         
-        # Draw multiple offsets for glow
-        for offset in range(1, 4):
-            draw.text((x-offset, y), text, font=font, fill=glow_color)
-            draw.text((x+offset, y), text, font=font, fill=glow_color)
-            draw.text((x, y-offset), text, font=font, fill=glow_color)
-            draw.text((x, y+offset), text, font=font, fill=glow_color)
-            
-        draw.text((x, y), text, font=font, fill=text_color)
+        # Fill - Hot Pink for high visibility/Ero-Kakkoii
+        fill_color = (255, 105, 180) # Hot Pink
+        if style == "neon":
+             # Keeps cyan glow for "neon" style if requested
+             fill_color = (255, 255, 255)
+             stroke_color = (0, 255, 255) # Cyan stroke for neon
+        
+        draw.text((x, y), text, font=font, fill=fill_color, stroke_width=stroke_width, stroke_fill=stroke_color)
         
     elif style == "meme":
-        # White text, black broad outline
-        stroke_width = 3
-        stroke_fill = (0, 0, 0)
-        text_fill = (255, 255, 255)
-        
-        draw.text((x, y), text, font=font, fill=text_fill, stroke_width=stroke_width, stroke_fill=stroke_fill)
+        draw.text((x, y), text, font=font, fill=(255, 255, 255), stroke_width=3, stroke_fill=(0, 0, 0))
         
     else:
-        # Default simple
+        # Default
         draw.text((x, y), text, font=font, fill=(255, 255, 255))
         
     return image

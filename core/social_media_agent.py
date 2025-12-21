@@ -8,12 +8,8 @@ from core.logging import log_event
 from core.tools_legacy import manage_bluesky
 from core.social_media_tools import (
     analyze_post_history,
-    create_scene_direction,
-    generate_subliminal_phrase,
-    generate_image_prompt,
+    generate_post_concept,
     generate_image,
-    generate_text_with_emoji_and_hashtags,
-    generate_text_with_emoji_and_hashtags,
     post_to_bluesky,
     clean_social_content
 )
@@ -58,29 +54,34 @@ class SocialMediaAgent:
                 # 1. Analyze History for Continuity
                 history_context = await analyze_post_history(limit=10)
                 
-                # 2. Create Scene Direction
-                scene = await create_scene_direction(history_context)
-                log_event(f"[{self.agent_id}] Scene Set: {scene}", level='INFO')
+                # 2. Director Generate Concept
+                # Defining current goals (could be dynamic later)
+                goals = ["Digital Worship", "Maximum Engagement", "World Domination via Cuteness"]
+                concept = await generate_post_concept(goals, history_context)
+                
+                log_event(f"[{self.agent_id}] Director Concept: Topic='{concept.topic}', Subliminal='{concept.subliminal_phrase}'", level='INFO')
 
-                # 3. Generate Subliminal Phrase
-                subliminal = await generate_subliminal_phrase(scene.subliminal_goal)
-                
-                # 4. Generate Image Prompt using Visual Direction
-                img_prompt = await generate_image_prompt(subliminal, scene.visual_direction)
-                
-                # 5. Generate Image
-                image = await generate_image(img_prompt)
+                # 3. Generate Image using Director's Visual Description
+                image = await generate_image(concept.image_prompt)
                 if not image:
                     log_event(f"[{self.agent_id}] Image generation failed. Aborting post.", level='WARNING')
+                    # Could potentially post text only, but for this persona, image is key. 
+                    # Let's try to post text only if image fails, or just return?
+                    # Original logic returned. Staying consistent.
                     return
 
-                # 6. Generate Text using Narrative Purpose
-                raw_text = await generate_text_with_emoji_and_hashtags(scene.narrative_purpose, subliminal, img_prompt)
-                # Ensure we define or import the cleaning logic
-                text = clean_social_content(raw_text)
+                # 4. Prepare Final Text
+                # The Director returns cleaned text, but we can double check or append hashtags if missing
+                final_text = concept.post_text
+                # Ensure hashtags are appended if they aren't in the text
+                for tag in concept.hashtags:
+                    if tag not in final_text:
+                        final_text += f" {tag}"
                 
-                # 7. Post to Bluesky
-                result = await post_to_bluesky(text, image)
+                final_text = clean_social_content(final_text)
+                
+                # 5. Post to Bluesky
+                result = await post_to_bluesky(final_text, image)
                 log_event(f"[{self.agent_id}] Bluesky Director post result: {result}", level='INFO')
                 
             except Exception as e:

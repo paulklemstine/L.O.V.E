@@ -452,13 +452,25 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
             core.logging.log_event(f"Trying image generation with provider: {provider_name}", "INFO")
             
             # --- PRE-GENERATION PROVIDER LOGIC ---
+            # --- PRE-GENERATION PROVIDER LOGIC ---
             current_prompt = prompt
             manual_overlay_text = text_content 
             
-            if provider_name == "pollinations" and text_content:
-                # Pollinations Strategy: Embed text in prompt AND apply manual overlay because models are inconsistent.
-                current_prompt = f"{prompt}. Text: '{text_content}'."
-                # We KEEP manual_overlay_text active to guarantee it appears.
+            if text_content:
+                if provider_name == "pollinations":
+                    # Story 2.1: Native text embedding for Pollinations.
+                    # Format: "{base_prompt}, the text '{subliminal_phrase}' is written in [style] on the scene"
+                    current_prompt = f"{prompt}, the text '{text_content}' is written in neon light style on the scene"
+                    
+                    # Disable manual overlay for Pollinations (trusting the AI, or accepting failure if text is missing)
+                    # The requirement implies we rely on native generation for this provider.
+                    manual_overlay_text = None
+                else:
+                    # Story 2.2: Fallback Providers (Horde/Stability).
+                    # Use CLEAN prompt (no text instructions) to avoid artifacts.
+                    current_prompt = prompt
+                    # Ensure manual overlay IS applied (Story 2.3)
+                    manual_overlay_text = text_content
                 
             # -------------------------------------
 

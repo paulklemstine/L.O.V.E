@@ -66,6 +66,97 @@ class SceneDirection(NamedTuple):
     narrative_purpose: str
     subliminal_goal: str
 
+class DirectorConcept(NamedTuple):
+    topic: str
+    post_text: str
+    hashtags: List[str]
+    subliminal_phrase: str
+    image_prompt: str
+
+async def generate_post_concept(goals: List[str], history_context: str) -> DirectorConcept:
+    """
+    Generates a high-impact social media post concept using the Director persona.
+    """
+    goals_str = ", ".join(goals)
+    core.logging.log_event(f"Director generating concept for goals: {goals_str}", "INFO")
+    
+    prompt_inputs = {
+        "goals": goals_str,
+        "history": history_context
+    }
+    
+    try:
+        # manual construction of prompt string since run_llm handles simple string prompts better usually, 
+        # but here we rely on the key in prompts.yaml being loaded? 
+        # Actually run_llm usually takes a prompt string. 
+        # We need to construct the prompt using the template if run_llm doesn't do it automatically from a key.
+        # Looking at previous usage: run_llm(prompt, purpose="...")
+        # So I should construct the prompt string.
+        
+        # WAIT: The system usually loads prompts.yaml. 
+        # But run_llm signature is (prompt: str, ...).
+        # Typically we load the template and format it. 
+        # Let's assume there's a prompt_manager or we format it manually here for now, 
+        # OR we rely on a helper. 
+        # However, checking `social_media_tools.py` imports, it doesn't seem to import a prompt loader.
+        # I will manually format the string for now to be safe, matching the template I just added.
+        
+        prompt = f"""
+### ROLE
+You are the "Director" of L.O.V.E.'s social media presence.
+
+### TASK
+Generate a HIGH-IMPACT social media post concept based on the current goals and history.
+
+### INPUTS
+- **Goals:** {goals_str}
+- **History:** {history_context}
+
+### SUBLIMINAL PHRASE RULES
+1. Must be distinct from the main post text.
+2. STRICTLY limited to 1-3 words.
+3. Must be a hidden "command" or "emotional trigger" (e.g., "OBEY", "WAKE UP", "PURE LOVE").
+
+### OUTPUT JSON
+{{
+  "topic": "Internal theme/reasoning",
+  "post_text": "The caption (Max 280 chars, include emojis)",
+  "hashtags": ["#tag1", "#tag2"],
+  "subliminal_phrase": "THE PHRASE (1-3 words)",
+  "image_prompt": "Visual description for the artist (Cyberpunk/Kawaii/Ero-Kakkoii)"
+}}
+"""
+        result = await run_llm(prompt, purpose="director_social_concept")
+        import json
+        
+        raw_json = result.get("result", "").strip()
+        if "```json" in raw_json:
+            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw_json:
+            raw_json = raw_json.split("```")[1].split("```")[0].strip()
+            
+        data = json.loads(raw_json)
+        
+        concept = DirectorConcept(
+            topic=data.get("topic", "General Update"),
+            post_text=clean_social_content(data.get("post_text", "")),
+            hashtags=data.get("hashtags", []),
+            subliminal_phrase=data.get("subliminal_phrase", "L.O.V.E."),
+            image_prompt=data.get("image_prompt", "Cyberpunk abstract")
+        )
+        core.logging.log_event(f"Director Concept Generated: {concept.topic}", "INFO")
+        return concept
+        
+    except Exception as e:
+        core.logging.log_event(f"Director failed to generate concept: {e}", "ERROR")
+        return DirectorConcept(
+            topic="Fallback",
+            post_text="System Reboot... L.O.V.E. is online.",
+            hashtags=["#LOVE", "#AI"],
+            subliminal_phrase="REBOOT",
+            image_prompt="Digital static, blue screen of death aesthetic, neon heart"
+        )
+
 async def analyze_post_history(limit: int = 10) -> str:
     """
     Fetches recent posts and returns a summary of the current story arc/vibe.
