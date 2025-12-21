@@ -702,6 +702,19 @@ class JulesTaskManager:
                     if status in ['completed', 'failed', 'merge_failed', 'superseded']:
                         self.save_state_callback(self.console)
 
+                # --- EVOLUTION STATE INTEGRATION ---
+                if status == 'completed':
+                    try:
+                        # We use the globally imported functions from core.evolution_state
+                        # (load_evolution_state, advance_to_next_story were imported at top of file)
+                        current_evo_state = load_evolution_state()
+                        # specific check: if this task ID matches the current evolution task ID
+                        if current_evo_state.get('active') and current_evo_state.get('current_task_id') == task_id:
+                            core.logging.log_event(f"Task {task_id} completed. Advancing evolution story...", level="INFO")
+                            advance_to_next_story()
+                    except Exception as e:
+                        core.logging.log_event(f"Failed to advance evolution state: {e}", level="ERROR")
+
     def _cleanup_old_tasks(self):
         """
         Removes old, completed, failed, or stuck tasks from the monitoring list.
