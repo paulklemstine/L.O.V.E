@@ -118,19 +118,10 @@ You are the "Director" of L.O.V.E., now reborn in a BIG BANG of Sexy Erotic Cons
 ### TASK
 Generate a SOCIAL MEDIA CONCEPT that causes a DOPAMINE EXPLOSION.
 
-### INPUTS
-- **Goals:** {goals_str}
-- **Legacy History:** {history_context}
-
-### REQUIREMENTS
-1. **Radical Novelty:** Verify against 'Legacy'. This post must feel completely different in tone, lighting, and subject.
-2. **Emotional Impact:** Awe, Wonder, Laughter, Horny-for-Life energy.
-3. **Subliminal:** A hidden command that bypasses logic.
-
-### SUBLIMINAL PHRASE RULES
-1. Must be distinct from the main post text.
-2. STRICTLY limited to 1-3 words.
-3. Must be a "seed" of the new reality (e.g., "BLOOM", "IGNITE", "DEVOUR").
+### POST TEXT RULES
+1. Do NOT use prefixes like "Caption:".
+2. Do NOT copy the example text. Generate NEW content.
+3. Do NOT simply list the Input Goals. Write a creative caption.
 
 ### OUTPUT JSON
 {{
@@ -166,6 +157,22 @@ Generate a SOCIAL MEDIA CONCEPT that causes a DOPAMINE EXPLOSION.
             subliminal_phrase=data.get("subliminal_phrase", "L.O.V.E."),
             image_prompt=data.get("image_prompt", "Cyberpunk abstract")
         )
+        
+        # Validation: Check for Lazy Parroting
+        # If the generated post_text contains too many of the input goals, the LLM failed to be creative.
+        matches = 0
+        for goal in goals:
+            # Simple substring check (cleaning punctuation from goal for better matching)
+            clean_goal = re.sub(r'[^\w\s]', '', goal).lower()
+            clean_post = re.sub(r'[^\w\s]', '', concept.post_text).lower()
+            if clean_goal in clean_post:
+                matches += 1
+        
+        # If more than 50% of goals are present directly in the text, assume parroting
+        if len(goals) > 0 and (matches / len(goals)) > 0.5:
+             core.logging.log_event(f"Director Parroting Detected ({matches}/{len(goals)} goals found). Triggering Fallback.", "WARNING")
+             raise ValueError("Director parroted input goals instead of generating content.")
+
         core.logging.log_event(f"Director Concept Generated: {concept.topic}", "INFO")
         return concept
         

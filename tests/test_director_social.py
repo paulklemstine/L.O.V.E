@@ -118,3 +118,36 @@ async def test_generate_post_concept_meta_crap():
         assert "Caption" not in concept.post_text
         assert "Ego stands tall." in concept.post_text
 
+@pytest.mark.asyncio
+async def test_generate_post_concept_parroting():
+    """
+    Test that generate_post_concept detects when LLM parrots the goals and falls back.
+    """
+    goals = ["Goal A", "Goal B", "Goal C"]
+    parroted_text = "Goal A, Goal B, Goal C #Hashtag"
+    
+    mock_llm_response = {
+        "result": f"""
+        ```json
+        {{
+            "topic": "Lazy Bot",
+            "post_text": "{parroted_text}",
+            "hashtags": ["#Hashtag"],
+            "subliminal_phrase": "FAIL",
+            "image_prompt": "Fail"
+        }}
+        ```
+        """
+    }
+
+    with patch('core.social_media_tools.run_llm', new_callable=AsyncMock) as mock_run_llm:
+        mock_run_llm.return_value = mock_llm_response
+        
+        concept = await generate_post_concept(goals, "History")
+        
+        # Should TRIGGER FALLBACK because post_text overlaps too much with goals
+        # Fallback text is "System Reboot... L.O.V.E. is online."
+        assert concept.topic == "Fallback"
+        assert concept.subliminal_phrase == "REBOOT"
+        assert concept.post_text != parroted_text
+
