@@ -3037,7 +3037,7 @@ def _strip_ansi_codes(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return ansi_escape.sub('', text)
 
-def serialize_panel_to_json(panel, panel_type_map):
+def serialize_panel_to_json(panel, panel_type_map, render_console=None):
     """Serializes a Rich Panel object to a JSON string for the web UI."""
     if not isinstance(panel, Panel):
         return None
@@ -3061,7 +3061,15 @@ def serialize_panel_to_json(panel, panel_type_map):
 
 
     # Render the content to a plain string, stripping ANSI codes
-    temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
+    # OPTIMIZATION: Reuse existing console if provided to avoid initialization overhead
+    if render_console:
+        temp_console = render_console
+        # We must reset the buffer for the new content
+        temp_console.file.seek(0)
+        temp_console.file.truncate(0)
+    else:
+        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
+
     temp_console.print(panel.renderable)
     content_with_ansi = temp_console.file.getvalue()
     plain_content = _strip_ansi_codes(content_with_ansi)
@@ -3085,15 +3093,35 @@ def simple_ui_renderer():
     # The animation panel is consistently 3 lines high.
     animation_height = 3
 
+    # OPTIMIZATION: Initialize reusable objects once
+    render_buf = io.StringIO()
+    render_console = Console(file=render_buf, force_terminal=True, color_system="truecolor", width=get_terminal_width())
+
+    # OPTIMIZATION: Keep log file open to avoid repeated syscalls
+    # We use a context manager in the try/except block or just open it.
+    # Since this is an infinite loop, we'll keep it open.
+    try:
+        log_file_handle = open(LOG_FILE, "a", encoding="utf-8")
+    except Exception as e:
+        print(f"CRITICAL: Failed to open log file {LOG_FILE}: {e}", file=sys.stderr)
+        log_file_handle = None
+
     while True:
         try:
             item = ui_panel_queue.get()
 
+            # OPTIMIZATION: Get terminal width once per frame
+            current_terminal_width = get_terminal_width()
+            render_console.width = current_terminal_width
+
             # --- Animation Frame Handling ---
             if isinstance(item, dict) and item.get('type') == 'animation_frame':
-                temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-                temp_console.print(item.get('content'))
-                output_str = temp_console.file.getvalue()
+                # Reset buffer
+                render_buf.seek(0)
+                render_buf.truncate(0)
+
+                render_console.print(item.get('content'))
+                output_str = render_buf.getvalue()
 
                 if animation_active:
                     # Move cursor up, go to start of line, clear to end of screen
@@ -3130,8 +3158,7 @@ def simple_ui_renderer():
 
             # --- God Panel Handling ---
             if isinstance(item, dict) and item.get('type') == 'god_panel':
-                terminal_width = get_terminal_width()
-                item = create_god_panel(item.get('insight', '...'), width=terminal_width - 4)
+                item = create_god_panel(item.get('insight', '...'), width=current_terminal_width - 4)
 
             # --- Reasoning Panel Handling ---
             if isinstance(item, dict) and item.get('type') == 'reasoning_panel':
@@ -3142,13 +3169,17 @@ def simple_ui_renderer():
             # --- WEB SOCKET BROADCAST ---
             from ui_utils import PANEL_TYPE_COLORS
             if 'websocket_server_manager' in globals() and websocket_server_manager:
-                json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS)
+                # OPTIMIZATION: Pass reusable console for serialization
+                json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS, render_console=render_console)
                 if json_payload:
                     websocket_server_manager.broadcast(json_payload)
 
-            temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-            temp_console.print(item)
-            output_str = temp_console.file.getvalue()
+            # Reset buffer for main render
+            render_buf.seek(0)
+            render_buf.truncate(0)
+
+            render_console.print(item)
+            output_str = render_buf.getvalue()
 
             # Print the styled output to the live console
             print(output_str, end='')
@@ -3156,8 +3187,10 @@ def simple_ui_renderer():
 
             # Strip ANSI codes and write the plain text to the log file
             plain_output = _strip_ansi_codes(output_str)
-            with open(LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(plain_output)
+
+            if log_file_handle:
+                log_file_handle.write(plain_output)
+                log_file_handle.flush() # Ensure it's written immediately
 
         except queue.Empty:
             continue
