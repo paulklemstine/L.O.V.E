@@ -77,3 +77,4 @@ google-auth
 protobuf
 grpcio
 libcst
+coverage
