@@ -327,6 +327,7 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
     from core.bluesky_api import post_to_bluesky_with_image, reply_to_post, get_timeline, get_own_posts, get_comments_for_post
     from core.text_processing import smart_truncate
     from core.llm_api import run_llm
+    from core.social_media_tools import generate_full_reply_concept, generate_image
 
     # Alias handling
     if not text and 'prompt' in kwargs:
@@ -578,14 +579,20 @@ Rules:
 
                 # --- GENERATION PHASE ---
                 
-                gen_prompt_vars = {
-                    "task": "generate_reply",
-                    "post_text": "MY PREVIOUS POST UNKNOWN (Reply context focused)",
-                    "comment_text": p_text
-                }
+                # Use new full concept generation
+                concept = await generate_full_reply_concept(p_text, p_author_handle, reply_context)
                 
-                gen_res = await run_llm(prompt_key="social_media_interaction", prompt_vars=gen_prompt_vars, purpose="social_reply_gen")
-                final_text = (gen_res.get("result") or "").strip()
+                final_text = concept.post_text
+                final_img_prompt = concept.image_prompt
+                
+                # Generate Image
+                image = None
+                if final_img_prompt:
+                    try:
+                        core.logging.log_event(f"🎨 Generating reply image: {final_img_prompt[:50]}...", "INFO")
+                        image, _ = await generate_image(final_img_prompt)
+                    except Exception as e:
+                        core.logging.log_event(f"Reply image gen failed: {e}", "WARNING")
 
                 # --- POSTING ---
                 
@@ -599,8 +606,9 @@ Rules:
                 if hasattr(item.record, 'reply') and item.record.reply:
                      root_uri = item.record.reply.root.uri
                      root_cid = item.record.reply.root.cid
-
-                success = reply_to_post(root_uri, parent_uri, final_text, root_cid=root_cid, parent_cid=parent_cid)
+                
+                # Pass image to reply
+                success = reply_to_post(root_uri, parent_uri, final_text, root_cid=root_cid, parent_cid=parent_cid, image=image)
                 
                 if success:
                     processed_cids["replied"].append(p_cid)

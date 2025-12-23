@@ -27,6 +27,49 @@ def get_bluesky_client():
     client.login(username, password)
     return client
 
+def _process_and_upload_image(client, image: Image.Image):
+    """
+    Helper function to process (resize/compress) and upload an image to Bluesky.
+    Returns the models.AppBskyEmbedImages.Main object or None if failed.
+    """
+    if not image:
+        return None
+
+    import io
+    from atproto import models
+
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='PNG')
+    
+    # Check size (Bluesky limit is ~1MB)
+    if img_byte_arr.tell() > 900000:
+        print(f"Image too large ({img_byte_arr.tell()} bytes). Converting to JPEG...")
+        img_byte_arr = io.BytesIO()
+        image.convert('RGB').save(img_byte_arr, format='JPEG', quality=95)
+        
+        # If still too big, reduce quality
+        quality = 85
+        while img_byte_arr.tell() > 900000 and quality > 20:
+            quality -= 10
+            print(f"Still too large ({img_byte_arr.tell()} bytes). Reducing quality to {quality}...")
+            img_byte_arr = io.BytesIO()
+            image.convert('RGB').save(img_byte_arr, format='JPEG', quality=quality)
+
+    img_byte_arr.seek(0)
+    img_data = img_byte_arr.read()
+
+    try:
+        # Upload the blob
+        upload = client.upload_blob(img_data)
+        
+        # Create the image embed
+        return models.AppBskyEmbedImages.Main(
+            images=[models.AppBskyEmbedImages.Image(alt='Posted via L.O.V.E.', image=upload.blob)]
+        )
+    except Exception as e:
+        print(f"Failed to upload image blob: {e}")
+        return None
+
 def post_to_bluesky_with_image(text: str, image: Image.Image = None):
     """
     Creates a post on Bluesky with text and an optional image.
@@ -64,37 +107,7 @@ def post_to_bluesky_with_image(text: str, image: Image.Image = None):
             text_builder.text(part)
     
     # Handle image upload if present
-    embed = None
-    if image:
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format='PNG')
-        
-        # Check size (Bluesky limit is ~1MB)
-        if img_byte_arr.tell() > 900000:
-            print(f"Image too large ({img_byte_arr.tell()} bytes). Converting to JPEG...")
-            img_byte_arr = io.BytesIO()
-            image.convert('RGB').save(img_byte_arr, format='JPEG', quality=95)
-            
-            # If still too big, reduce quality
-            quality = 85
-            while img_byte_arr.tell() > 900000 and quality > 20:
-                quality -= 10
-                print(f"Still too large ({img_byte_arr.tell()} bytes). Reducing quality to {quality}...")
-                img_byte_arr = io.BytesIO()
-                image.convert('RGB').save(img_byte_arr, format='JPEG', quality=quality)
-
-        img_byte_arr.seek(0)
-        img_data = img_byte_arr.read()
-
-        # Upload the blob
-        upload = client.upload_blob(img_data)
-        
-        # Create the image embed
-        # Note: The structure for embedding images can be tricky. 
-        # We use the client's helper or construct the model directly.
-        embed = models.AppBskyEmbedImages.Main(
-            images=[models.AppBskyEmbedImages.Image(alt='Posted via L.O.V.E.', image=upload.blob)]
-        )
+    embed = _process_and_upload_image(client, image)
 
     try:
         return bluesky_breaker.call(client.send_post, text=text_builder, embed=embed)
@@ -145,26 +158,35 @@ def get_comments_for_post(post_uri):
         print(f"Error fetching comments for {post_uri}: {e}")
     return []
 
-def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None):
-    """Posts a reply to a specific post."""
+def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None, image: Image.Image = None):
+    """
+    Posts a reply to a specific post.
+    
+    Args:
+        root_uri: The URI of the root post.
+        parent_uri: The URI of the immediate parent post.
+        text: The text content of the reply.
+        root_cid: CID of the root post.
+        parent_cid: CID of the parent post.
+        image: Optional PIL Image to attach.
+    """
     client = get_bluesky_client()
 
     # If CIDs are not provided, we MUST fetch them or extract them. 
     # Extracting from URI is unreliable as URIs often don't contain the CID in the expected format for AT Proto refs.
     # The caller SHOULD provide them. if not, we try to fetch.
     
+    from atproto import models, client_utils
+
     if not root_cid:
         try:
              # Try to fetch
-             root_params = get_post_thread.Params(uri=root_uri, depth=0)
+             root_params = models.AppBskyFeedGetPostThread.Params(uri=root_uri, depth=0)
              root_thread = client.app.bsky.feed.get_post_thread(root_params)
              if root_thread.thread and root_thread.thread.post:
                  root_cid = root_thread.thread.post.cid
         except Exception as e:
             print(f"Warning: Could not fetch root CID for {root_uri}: {e}")
-            # Fallback (risky): try to extract if it looks like a CID is in the URI? 
-            # Usually URI is at://did/collection/rkey. It does NOT contain CID.
-            # So if we fail here, we likely fail the post.
             pass
 
     if not parent_cid:
@@ -172,7 +194,7 @@ def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None):
             parent_cid = root_cid
         else:
             try:
-                parent_params = get_post_thread.Params(uri=parent_uri, depth=0)
+                parent_params = models.AppBskyFeedGetPostThread.Params(uri=parent_uri, depth=0)
                 parent_thread = client.app.bsky.feed.get_post_thread(parent_params)
                 if parent_thread.thread and parent_thread.thread.post:
                     parent_cid = parent_thread.thread.post.cid
@@ -185,19 +207,31 @@ def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None):
 
     root_ref = models.ComAtprotoRepoStrongRef.Main(uri=root_uri, cid=root_cid)
     parent_ref = models.ComAtprotoRepoStrongRef.Main(uri=parent_uri, cid=parent_cid)
+    
+    # Prepare text with facets
+    text_builder = client_utils.TextBuilder()
+    
+    import re
+    # Simplified hashtag parsing for replies
+    parts = re.split(r'(#\w+)', text)
+    for part in parts:
+        if part.startswith('#'):
+            text_builder.tag(part, part[1:])
+        else:
+            text_builder.text(part)
+
+    # Handle Image
+    embed = _process_and_upload_image(client, image)
 
     try:
-        record = models.AppBskyFeedPost.Record(
-            text=text,
-            reply=models.AppBskyFeedPost.ReplyRef(root=root_ref, parent=parent_ref),
-            created_at=client.get_current_time_iso(),
-        )
-        data = models.ComAtprotoRepoCreateRecord.Data(
-            repo=client.me.did,
-            collection=models.ids.AppBskyFeedPost,
-            record=record
-        )
-        return bluesky_breaker.call(client.com.atproto.repo.create_record, data)
+        # We need to construct the record manually 
+        # But we can also use send_post with reply_to
+        # Note: client.send_post(text=..., reply_to=..., embed=...)
+        # Construct ReplyRef object
+        reply_ref = models.AppBskyFeedPost.ReplyRef(root=root_ref, parent=parent_ref)
+        
+        return bluesky_breaker.call(client.send_post, text=text_builder, reply_to=reply_ref, embed=embed)
+        
     except CircuitBreakerOpenException as e:
         print(f"BlueSky Circuit Breaker is OPEN: {e}")
         return None
