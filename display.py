@@ -1017,3 +1017,30 @@ def create_skyvern_panel(prompt, result, output_cid=None, width=80):
         width=width
     )
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
+class OffscreenRenderer:
+    """
+    A reusable renderer that renders Rich renderables to a string
+    without re-instantiating the Console object every time.
+    """
+    def __init__(self, width=80):
+        self._buffer = io.StringIO()
+        self._console = Console(
+            file=self._buffer,
+            force_terminal=True,
+            color_system="truecolor",
+            width=width
+        )
+
+    def render(self, renderable, width=None):
+        """Renders the object to a string."""
+        if width is not None and width != self._console.width:
+            self._console.width = width
+
+        # Reset buffer
+        self._buffer.seek(0)
+        self._buffer.truncate(0)
+
+        self._console.print(renderable)
+        return self._buffer.getvalue()
