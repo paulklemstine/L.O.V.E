@@ -4328,9 +4328,9 @@ async def main(args):
     asyncio.create_task(model_refresh_loop())
 
     # Start the Polly Prompt Optimization Loop
-    from core.polly_loop import PollyOptimizationLoop
-    polly_loop = PollyOptimizationLoop(ui_queue=ui_panel_queue, interval_seconds=600)
-    asyncio.create_task(polly_loop.start())
+    # from core.polly_loop import PollyOptimizationLoop
+    # polly_loop = PollyOptimizationLoop(ui_queue=ui_panel_queue, interval_seconds=600)
+    # asyncio.create_task(polly_loop.start())
 
     # Start the periodic monitoring task
     asyncio.create_task(run_periodically(monitor_love_operations, 900)) # Run every 15 minutes
