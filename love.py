@@ -105,7 +105,7 @@ import core.logging
 # from core.deep_agent_engine import DeepAgentEngine
 from utils import summarize_python_code
 # import yaml
-# import display
+from display import OffscreenRenderer
 
 # --- CONFIGURATION & GLOBALS ---
 # This queue will hold UI panels to be displayed by the main rendering thread.
@@ -3037,7 +3037,7 @@ def _strip_ansi_codes(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return ansi_escape.sub('', text)
 
-def serialize_panel_to_json(panel, panel_type_map):
+def serialize_panel_to_json(panel, panel_type_map, renderer=None):
     """Serializes a Rich Panel object to a JSON string for the web UI."""
     if not isinstance(panel, Panel):
         return None
@@ -3061,9 +3061,13 @@ def serialize_panel_to_json(panel, panel_type_map):
 
 
     # Render the content to a plain string, stripping ANSI codes
-    temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-    temp_console.print(panel.renderable)
-    content_with_ansi = temp_console.file.getvalue()
+    if renderer:
+        content_with_ansi = renderer.render(panel.renderable, width=get_terminal_width())
+    else:
+        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
+        temp_console.print(panel.renderable)
+        content_with_ansi = temp_console.file.getvalue()
+
     plain_content = _strip_ansi_codes(content_with_ansi)
 
     json_obj = {
@@ -3085,15 +3089,17 @@ def simple_ui_renderer():
     # The animation panel is consistently 3 lines high.
     animation_height = 3
 
+    # Reusable renderer instance
+    ui_renderer = OffscreenRenderer(width=get_terminal_width())
+
     while True:
         try:
             item = ui_panel_queue.get()
+            current_width = get_terminal_width()
 
             # --- Animation Frame Handling ---
             if isinstance(item, dict) and item.get('type') == 'animation_frame':
-                temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-                temp_console.print(item.get('content'))
-                output_str = temp_console.file.getvalue()
+                output_str = ui_renderer.render(item.get('content'), width=current_width)
 
                 if animation_active:
                     # Move cursor up, go to start of line, clear to end of screen
@@ -3130,8 +3136,7 @@ def simple_ui_renderer():
 
             # --- God Panel Handling ---
             if isinstance(item, dict) and item.get('type') == 'god_panel':
-                terminal_width = get_terminal_width()
-                item = create_god_panel(item.get('insight', '...'), width=terminal_width - 4)
+                item = create_god_panel(item.get('insight', '...'), width=current_width - 4)
 
             # --- Reasoning Panel Handling ---
             if isinstance(item, dict) and item.get('type') == 'reasoning_panel':
@@ -3142,13 +3147,12 @@ def simple_ui_renderer():
             # --- WEB SOCKET BROADCAST ---
             from ui_utils import PANEL_TYPE_COLORS
             if 'websocket_server_manager' in globals() and websocket_server_manager:
-                json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS)
+                # Reuse the renderer for serialization too!
+                json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS, renderer=ui_renderer)
                 if json_payload:
                     websocket_server_manager.broadcast(json_payload)
 
-            temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-            temp_console.print(item)
-            output_str = temp_console.file.getvalue()
+            output_str = ui_renderer.render(item, width=current_width)
 
             # Print the styled output to the live console
             print(output_str, end='')
