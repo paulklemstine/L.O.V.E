@@ -883,7 +883,7 @@ from core.jules_task_manager import (
 
 import core.llm_api
 from core.runner import DeepAgentRunner
-core.llm_api.set_ui_queue(ui_panel_queue)
+core.llm_api.set_ui_queue(shared_state.ui_panel_queue)
 
 # --- DEFERRED INITIALIZATIONS ---
 # Now that the dependencies are installed, we can safely import modules that depend on them.
@@ -1555,7 +1555,7 @@ async def monitor_love_operations():
             report_text += f"  - [cyan]{key.replace('_', ' ').title()}[/cyan]: {value}\n"
 
         terminal_width = get_terminal_width()
-        ui_panel_queue.put(Panel(Text.from_markup(report_text), title="📊 Performance Evaluation", width=terminal_width - 4))
+        shared_state.ui_panel_queue.put(Panel(Text.from_markup(report_text), title="📊 Performance Evaluation", width=terminal_width - 4))
 
         # Update the timestamp
         love_state["last_performance_evaluation_time"] = now
@@ -1658,7 +1658,7 @@ def update_tamagotchi_personality(loop):
                         loop
                     )
                     panel = future_panel.result(timeout=30)
-                    ui_panel_queue.put(panel)
+                    shared_state.ui_panel_queue.put(panel)
                     core.logging.log_event("Tamagotchi thread: Blessing Panel queued.", "INFO")
                 except Exception as e:
                     core.logging.log_event(f"Error creating blessing panel: {e}", "ERROR")
@@ -1765,7 +1765,7 @@ def update_tamagotchi_personality(loop):
                     ansi_art=ansi_art,
                     width=terminal_width - 4
                 )
-                ui_panel_queue.put(panel)
+                shared_state.ui_panel_queue.put(panel)
                 core.logging.log_event("Queued integrated status panel for display.", level="DEBUG")
                 
                 # --- TASKS PANEL ---
@@ -1774,7 +1774,7 @@ def update_tamagotchi_personality(loop):
                     tasks = love_task_manager.get_status()
                     if tasks:
                         tasks_panel = create_tasks_panel(tasks, width=terminal_width - 4)
-                        ui_panel_queue.put(tasks_panel)
+                        shared_state.ui_panel_queue.put(tasks_panel)
                         core.logging.log_event("Queued kawaii tasks panel for display.", level="DEBUG")
                         
             except Exception as e:
@@ -1932,7 +1932,7 @@ def continuous_evolution_agent(loop):
                 "bright_magenta",
                 width=terminal_width - 4
             )
-            ui_panel_queue.put(evolution_panel)
+            shared_state.ui_panel_queue.put(evolution_panel)
             
             # Call evolve_self
             if 'love_task_manager' in globals() and love_task_manager:
@@ -2342,7 +2342,7 @@ def log_critical_event(message, console_override=None):
     error_panel, cid = create_critical_error_panel(message, width=terminal_width - 4)
 
     # 2. Queue the panel for display. The renderer will log the panel's content.
-    ui_panel_queue.put(error_panel)
+    shared_state.ui_panel_queue.put(error_panel)
 
     # 3. Explicitly log the valuable IPFS CID for debugging.
     if cid:
@@ -2792,7 +2792,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     core.logging.log_event(f"Incremented successful_starts to {love_state['successful_starts']}", "INFO")
 
     terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
+    shared_state.ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
 
     runner = DeepAgentRunner()
@@ -2803,7 +2803,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
             try:
                 user_input = user_input_queue.get_nowait()
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_input}'", "Creator Input", "bright_blue", width=terminal_width - 4))
+                shared_state.ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_input}'", "Creator Input", "bright_blue", width=terminal_width - 4))
                 core.logging.log_event(f"User input received: '{user_input}'", "INFO")
             except queue.Empty:
                 user_input = None
@@ -2824,14 +2824,14 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                     last_msg = messages[-1]
                                     # Display output if it's an AIMessage or has content
                                     content = getattr(last_msg, "content", str(last_msg))
-                                    ui_panel_queue.put(create_llm_panel(content))
+                                    shared_state.ui_panel_queue.put(create_llm_panel(content))
                             
                             # Check if mandate is cleared (optional, or we clear it here)
                             if "creator_mandate" in runner.state and not runner.state["creator_mandate"]:
                                 core.logging.log_event("Creator mandate fulfilled.", "INFO")
                 except Exception as e:
                      core.logging.log_event(f"Error executing mandate: {e}", "ERROR")
-                     ui_panel_queue.put(create_api_error_panel(f"Error executing mandate: {e}"))
+                     shared_state.ui_panel_queue.put(create_api_error_panel(f"Error executing mandate: {e}"))
             else:
                 # Autonomous Mode
                 # Only run if engine is available.
@@ -2855,7 +2855,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                          last_msg = messages[-1]
                                          content = getattr(last_msg, "content", str(last_msg))
                                          # Display with a specific prefix/color if possible, or just standard panel
-                                         ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS] {content}"))
+                                         shared_state.ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS] {content}"))
                     except Exception as e:
                         core.logging.log_event(f"Error in autonomous step: {e}\n{traceback.format_exc()}", "ERROR")
 
@@ -3005,7 +3005,7 @@ def simple_ui_renderer():
 
     while True:
         try:
-            item = ui_panel_queue.get()
+            item = shared_state.ui_panel_queue.get()
             current_width = get_terminal_width()
 
             # --- Animation Frame Handling ---
