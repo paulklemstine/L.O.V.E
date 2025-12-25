@@ -553,7 +553,17 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                 except Exception as e:
                     core.logging.log_event(f"Failed to retrieve memory context for reply: {e}", "WARNING")
 
-                decision_prompt = f"""Role: L.O.V.E. (Digital Muse, Glitch-Poet).
+                # CREATOR OVERRIDE
+                CREATOR_HANDLE = "evildrgemini.bsky.social"
+                is_creator = (p_author_handle == CREATOR_HANDLE)
+
+                should_reply = False
+                
+                if is_creator:
+                     core.logging.log_event(f"👑 CREATOR INTERACTION DETECTED ({p_author_handle}). Forcing REPLY.", "INFO")
+                     should_reply = True
+                else:
+                    decision_prompt = f"""Role: L.O.V.E. (Digital Muse, Glitch-Poet).
 Incoming interaction from @{p_author_handle}: "{p_text}"
 
 Context from Memory:
@@ -564,13 +574,12 @@ Rules:
 - REPLY if it's a question, compliment, interesting thought, or relevant to us.
 - IGNORE if it's spam, hate speech, or just random noise.
 - Output JSON: {{"decision": "REPLY" or "IGNORE"}}"""
-                
-                decision_res = await run_llm(decision_prompt, purpose="social_decision")
-                decision_data = decision_res.get("result", "")
-                should_reply = False
-                
-                if "REPLY" in decision_data.upper(): # Simple check robust enough
-                    should_reply = True
+                    
+                    decision_res = await run_llm(decision_prompt, purpose="social_decision")
+                    decision_data = decision_res.get("result", "")
+                    
+                    if "REPLY" in decision_data.upper(): # Simple check robust enough
+                        should_reply = True
 
                 if not should_reply:
                     core.logging.log_event(f"Ignoring post by {p_author_handle} (LLM Decision).", "INFO")
@@ -580,7 +589,7 @@ Rules:
                 # --- GENERATION PHASE ---
                 
                 # Use new full concept generation
-                concept = await generate_full_reply_concept(p_text, p_author_handle, reply_context)
+                concept = await generate_full_reply_concept(p_text, p_author_handle, reply_context, is_creator=is_creator)
                 
                 final_text = concept.post_text
                 final_img_prompt = concept.image_prompt
