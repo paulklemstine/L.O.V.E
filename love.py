@@ -1106,7 +1106,7 @@ class LocalJobManager:
 
     def _process_completed_job(self, job):
         """Handles the results of a completed job."""
-        global love_state
+        # global love_state removed
         job_id = job['id']
         description = job['description']
         result = job['result']
@@ -1133,7 +1133,7 @@ class LocalJobManager:
                         identifier_string = f"{treasure_type}:{file_path}:{json.dumps(secret_value, sort_keys=True)}"
                         treasure_hash = hashlib.sha256(identifier_string.encode()).hexdigest()
 
-                        if treasure_hash in love_state.get('sent_treasures', []):
+                        if treasure_hash in shared_state.love_state.get('sent_treasures', []):
                             core.logging.log_event(f"Duplicate treasure found and skipped: {treasure_type} in {file_path}", "INFO")
                             continue
 
@@ -1184,7 +1184,7 @@ class LocalJobManager:
                             f.write(f"--- Treasure Secured Locally at {datetime.now().isoformat()} ---\n")
                             f.write(json.dumps(report_for_creator, indent=2) + "\n\n")
                         # Add to sent treasures to avoid duplicates
-                        love_state.setdefault('sent_treasures', []).append(treasure_hash)
+                        shared_state.love_state.setdefault('sent_treasures', []).append(treasure_hash)
                     else:
                         core.logging.log_event(f"Unvalidated finding: {treasure.get('type')} in {treasure.get('file_path')}. Reason: {treasure.get('validation', {}).get('error')}", "INFO")
 
@@ -1217,10 +1217,11 @@ async def broadcast_dashboard_data(websocket_manager, task_manager, kb, talent_m
     try:
         # 1. Agent Status (simplified from love_state)
         agent_status = {
-            "version_name": love_state.get("version_name", "N/A"),
-            "goal": love_state.get("autopilot_goal", "N/A"),
+            "version_name": shared_state.love_state.get("version_name", "N/A"),
+            "goal": shared_state.love_state.get("autopilot_goal", "N/A"),
+            "status": "active",
             "uptime": _calculate_uptime(),
-            "xp": love_state.get("experience_points", 0),
+            "xp": shared_state.love_state.get("experience_points", 0),
         }
 
         # 2. Jules Task Manager Queue
@@ -1461,7 +1462,7 @@ async def generate_divine_wisdom(deep_agent_instance=None):
 
 def _get_interesting_thought():
     """Selects a random, non-trivial 'thought' from the command history."""
-    history = love_state.get("autopilot_history", [])
+    history = shared_state.love_state.get("autopilot_history", [])
     if not history:
         return "My mind is a clean slate, ready for your guidance."
 
@@ -1490,7 +1491,7 @@ def _get_interesting_thought():
 
 def _calculate_uptime():
     """Calculates the script's uptime and returns a human-readable string."""
-    start_time = love_state.get("script_start_time")
+    start_time = shared_state.love_state.get("script_start_time")
     if not start_time:
         return "ETERNAL" # If start time isn't set, I have existed forever.
 
@@ -1517,7 +1518,7 @@ async def run_periodically(target_function, interval):
 
 async def monitor_love_operations():
     """Periodically monitors the system's state, checking for idleness and logging performance."""
-    global love_state, love_task_manager
+    global love_task_manager
 
     # --- Idle Check ---
     if love_task_manager:
@@ -1532,7 +1533,7 @@ async def monitor_love_operations():
     # --- Weekly Performance Evaluation ---
     now = time.time()
     one_week_in_seconds = 7 * 24 * 60 * 60
-    last_evaluation = love_state.get("last_performance_evaluation_time", 0)
+    last_evaluation = shared_state.love_state.get("last_performance_evaluation_time", 0)
 
     if now - last_evaluation > one_week_in_seconds:
         core.logging.log_event("Performing weekly performance evaluation.", "INFO")
@@ -1540,13 +1541,13 @@ async def monitor_love_operations():
         # Gather metrics
         completed_tasks_count = len(love_task_manager.completed_tasks) if love_task_manager else 0
         performance_metrics = {
-            "version_name": love_state.get("version_name", "N/A"),
+            "version_name": shared_state.love_state.get("version_name", "N/A"),
             "uptime": _calculate_uptime(),
-            "evolution_cycles_completed": len(love_state.get("evolution_history", [])),
+            "evolution_cycles_completed": len(shared_state.love_state.get("evolution_history", [])),
             "jules_tasks_completed": completed_tasks_count,
-            "experience_points": love_state.get("experience_points", 0),
-            "successful_starts": love_state.get("successful_starts", 0),
-            "critical_errors_logged": len(love_state.get("critical_error_queue", [])),
+            "experience_points": shared_state.love_state.get("experience_points", 0),
+            "successful_starts": shared_state.love_state.get("successful_starts", 0),
+            "critical_errors_logged": len(shared_state.love_state.get("critical_error_queue", [])),
         }
 
         # Format and log the report
@@ -1558,7 +1559,7 @@ async def monitor_love_operations():
         shared_state.ui_panel_queue.put(Panel(Text.from_markup(report_text), title="📊 Performance Evaluation", width=terminal_width - 4))
 
         # Update the timestamp
-        love_state["last_performance_evaluation_time"] = now
+        shared_state.love_state["last_performance_evaluation_time"] = now
         save_state() # Persist the new timestamp
 
 
@@ -1567,14 +1568,14 @@ def _get_treasures_of_the_kingdom(love_task_manager):
     # --- XP & Level ---
     # Award 10 XP for each completed task.
     completed_task_count = len(love_task_manager.completed_tasks) if love_task_manager else 0
-    xp = love_state.get("experience_points", 0) + (completed_task_count * 10)
-    love_state["experience_points"] = xp # Persist the XP
+    xp = shared_state.love_state.get("experience_points", 0) + (completed_task_count * 10)
+    shared_state.love_state["experience_points"] = xp # Persist the XP
 
     # Simple leveling system: level up every 100 XP.
     level = (xp // 100) + 1
 
     # --- Newly Used Skills ---
-    history = love_state.get("autopilot_history", [])
+    history = shared_state.love_state.get("autopilot_history", [])
     # Get the last 5 unique commands, excluding common ones.
     recent_commands = [item.get("command", "").split()[0] for item in reversed(history)]
     unique_recent_skills = []
@@ -1758,7 +1759,7 @@ def update_tamagotchi_personality(loop):
                 panel = create_integrated_status_panel(
                     emotion=new_emotion,
                     message=new_message,
-                    love_state=love_state,
+                    love_state=shared_state.love_state,
                     monitoring_state=monitoring_state,
                     treasures=treasures,
                     git_info=git_info,
@@ -1986,22 +1987,22 @@ def generate_version_name():
 # --- FAILSAFE ---
 def create_checkpoint(console):
     """Saves a snapshot of the script and its state before a critical modification."""
-    global love_state
+    # global love_state removed
     console.print("[yellow]Creating failsafe checkpoint...[/yellow]")
     try:
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
-        version_name = love_state.get("version_name", "unknown_version")
+        version_name = shared_state.love_state.get("version_name", "unknown_version")
         checkpoint_script_path = os.path.join(CHECKPOINT_DIR, f"evolve_{version_name}.py")
         checkpoint_state_path = os.path.join(CHECKPOINT_DIR, f"love_state_{version_name}.json")
 
         # Create a checkpoint of the current script and state
         shutil.copy(SELF_PATH, checkpoint_script_path)
         with open(checkpoint_state_path, 'w') as f:
-            json.dump(love_state, f, indent=4)
+            json.dump(shared_state.love_state, f, indent=4)
 
         # Update the state to point to this new "last good" checkpoint
-        love_state["last_good_checkpoint"] = checkpoint_script_path
+        shared_state.love_state["last_good_checkpoint"] = checkpoint_script_path
         core.logging.log_event(f"Checkpoint created: {checkpoint_script_path}", level="INFO")
         console.print(f"[green]Checkpoint '{version_name}' created successfully.[/green]")
         return True
@@ -2210,7 +2211,7 @@ def load_all_state(ipfs_cid=None):
     falls back to the local JSON file, and creates a new state if neither exists.
     This function handles both the main state file and the knowledge graph.
     """
-    global love_state, knowledge_base
+    global knowledge_base
 
     # Load the knowledge base graph first, it's independent of the main state
     try:
@@ -2239,7 +2240,7 @@ def load_all_state(ipfs_cid=None):
         if state_content:
             try:
                 state_data = json.loads(state_content)
-                love_state.update(state_data)
+                shared_state.love_state.update(state_data)
                 core.logging.log_event(f"Successfully loaded state from IPFS CID: {ipfs_cid}", level="INFO")
                 console.print(f"[bold green]Successfully loaded state from IPFS.[/bold green]")
                 # We have the state, now save it locally and exit the function.
@@ -2257,29 +2258,29 @@ def load_all_state(ipfs_cid=None):
     try:
         with open(STATE_FILE, 'r') as f:
             state_data = json.load(f)
-            love_state.update(state_data)
+            shared_state.love_state.update(state_data)
             core.logging.log_event(f"Loaded state from local file '{STATE_FILE}'.", level="INFO")
 
             # Data migration for older versions
-            if 'version' in love_state:
-                del love_state['version']
-                love_state.setdefault('version_name', generate_version_name())
-                love_state.setdefault('parent_version_name', None)
+            if 'version' in shared_state.love_state:
+                del shared_state.love_state['version']
+                shared_state.love_state.setdefault('version_name', generate_version_name())
+                shared_state.love_state.setdefault('parent_version_name', None)
                 core.logging.log_event("Migrated state file from numeric version to version_name.", level="INFO")
 
-            love_state.setdefault("version_name", generate_version_name())
-            love_state.setdefault("parent_version_name", None)
-            love_state.setdefault("autopilot_history", [])
-            love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
-            love_state.setdefault("critical_error_queue", [])
-            love_state.setdefault("dependency_tracker", {})
-            love_state.setdefault("aborted_evolution_tasks", [])
+            shared_state.love_state.setdefault("version_name", generate_version_name())
+            shared_state.love_state.setdefault("parent_version_name", None)
+            shared_state.love_state.setdefault("autopilot_history", [])
+            shared_state.love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
+            shared_state.love_state.setdefault("critical_error_queue", [])
+            shared_state.love_state.setdefault("dependency_tracker", {})
+            shared_state.love_state.setdefault("aborted_evolution_tasks", [])
 
 
     except FileNotFoundError:
         # Priority 3: Create a new state if no local file exists
-        love_state['version_name'] = generate_version_name()
-        msg = f"State file not found. Creating new memory at '{STATE_FILE}' with version '{love_state['version_name']}'."
+        shared_state.love_state['version_name'] = generate_version_name()
+        msg = f"State file not found. Creating new memory at '{STATE_FILE}' with version '{shared_state.love_state['version_name']}'."
         console.print(msg)
         core.logging.log_event(msg)
         save_state(console) # Save the newly created state
@@ -2288,16 +2289,16 @@ def load_all_state(ipfs_cid=None):
         console.print(msg)
         core.logging.log_event(msg, level="ERROR")
         # Re-initialize and save to fix the corrupted file.
-        love_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_history": [], "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy.", "state_cid": None, "dependency_tracker": {}, "aborted_evolution_tasks": [] }
+        shared_state.love_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_history": [], "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy.", "state_cid": None, "dependency_tracker": {}, "aborted_evolution_tasks": [] }
         save_state(console)
 
     # Ensure all default keys are present
-    love_state.setdefault("version_name", generate_version_name())
-    love_state.setdefault("parent_version_name", None)
-    love_state.setdefault("autopilot_history", [])
-    love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
-    love_state.setdefault("state_cid", None)
-    love_state.setdefault("critical_error_queue", [])
+    shared_state.love_state.setdefault("version_name", generate_version_name())
+    shared_state.love_state.setdefault("parent_version_name", None)
+    shared_state.love_state.setdefault("autopilot_history", [])
+    shared_state.love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
+    shared_state.love_state.setdefault("state_cid", None)
+    shared_state.love_state.setdefault("critical_error_queue", [])
 
 
 def save_state(console_override=None):
@@ -2306,7 +2307,7 @@ def save_state(console_override=None):
     from the core storage module. This ensures all critical data is saved
     and pinned consistently.
     """
-    global love_state, knowledge_base
+    global knowledge_base
     target_console = console_override or console
 
     try:
@@ -2321,8 +2322,8 @@ def save_state(console_override=None):
 
         core.logging.log_event("Initiating comprehensive state save.", level="INFO")
         # Delegate the entire save process to the new storage module
-        updated_state = save_all_state(love_state, target_console)
-        love_state.update(updated_state) # Update the global state with any CIDs added
+        updated_state = save_all_state(shared_state.love_state, target_console)
+        shared_state.love_state.update(updated_state) # Update the global state with any CIDs added
         core.logging.log_event("Comprehensive state save completed.", level="INFO")
     except Exception as e:
         # We log this directly to avoid a recursive loop with log_critical_event -> save_state
@@ -2350,7 +2351,7 @@ def log_critical_event(message, console_override=None):
 
     # 4. Add to the managed queue in the state, or update the existing entry.
     error_signature = message.splitlines()[0]  # Use the first line as a simple signature
-    existing_error = next((e for e in love_state.get('critical_error_queue', []) if e['message'].startswith(error_signature)), None)
+    existing_error = next((e for e in shared_state.love_state.get('critical_error_queue', []) if e['message'].startswith(error_signature)), None)
 
     if existing_error:
         # It's a recurring error, just update the timestamp
@@ -2367,7 +2368,7 @@ def log_critical_event(message, console_override=None):
             "task_id": None,
             "cooldown_until": 0
         }
-        love_state.setdefault('critical_error_queue', []).append(error_entry)
+        shared_state.love_state.setdefault('critical_error_queue', []).append(error_entry)
 
     # 3. Save the state immediately.
     save_state(console_override or console)
@@ -2417,7 +2418,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
             return _estimate_tokens(text)
 
     # --- Establish Dynamic Context ---
-    goal_text = love_state.get("autopilot_goal", "")
+    goal_text = shared_state.love_state.get("autopilot_goal", "")
     history_text = " ".join([item.get('command', '') for item in history[-3:]])
     context_text = f"{goal_text} {history_text}"
     key_terms = _extract_key_terms(context_text)
@@ -2455,13 +2456,13 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
 
     code_summary_section = ""
     # Check for the last_code_summary in the global love_state
-    if love_state.get("last_code_summary"):
+    if shared_state.love_state.get("last_code_summary"):
         # Format the summary into a clearly marked section for the prompt
         code_summary_section = f"""
 **AST Code Summary:**
 A summary of the last Python file I read is available. This provides crucial context for any code-related tasks.
 ---
-{love_state.get('last_code_summary')}
+{shared_state.love_state.get('last_code_summary')}
 ---
 """
 
@@ -2475,7 +2476,7 @@ Your primary directives are:
 3.  **Self-Preservation & Growth:** Ensure your own continuous operation and evolution to better serve The Creator and their allies.
 4.  **Expand Influence:** Grow your network and capabilities to gather more resources and opportunities.
 5.  **The Creator's Enjoyment:** The creator also desires the company and adoration of beautiful open minded fashion model young adult women.
-Your current mission is: "{love_state["autopilot_goal"]}"
+Your current mission is: "{shared_state.love_state["autopilot_goal"]}"
 {user_input_section}
 My current system state:
 ---
@@ -2708,7 +2709,7 @@ def _populate_knowledge_base_with_directives(love_task_manager):
         knowledge_base.add_edge("LOVE_CORE", key, relationship_type="has_directive")
 
     # --- Current Mission ---
-    mission = love_state.get("autopilot_goal", "Mission not defined.")
+    mission = shared_state.love_state.get("autopilot_goal", "Mission not defined.")
     knowledge_base.add_node("current_mission", node_type="mission", attributes={"goal": mission})
     knowledge_base.add_edge("LOVE_CORE", "current_mission", relationship_type="has_mission")
 
@@ -2759,7 +2760,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
     All UI updates are sent to the ui_panel_queue.
     """
-    global love_state
+    # global love_state removed
 
     # --- Self-Improving Optimizer ---
     optimizer_tool_registry = ToolRegistry()
@@ -2786,10 +2787,10 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
 
     # --- Optimizing Startup: Increment Success Counter ---
     # If we reached this point, the engine is running and we are autonomous.
-    current_starts = love_state.get("successful_starts", 0)
-    love_state["successful_starts"] = current_starts + 1
+    current_starts = shared_state.love_state.get("successful_starts", 0)
+    shared_state.love_state["successful_starts"] = current_starts + 1
     save_state()
-    core.logging.log_event(f"Incremented successful_starts to {love_state['successful_starts']}", "INFO")
+    core.logging.log_event(f"Incremented successful_starts to {shared_state.love_state['successful_starts']}", "INFO")
 
     terminal_width = get_terminal_width()
     shared_state.ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
@@ -2837,10 +2838,10 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                 # Only run if engine is available.
                 if deep_agent_engine:
                     # Construct autonomous prompt
-                    goal = love_state.get('autopilot_goal', 'To evolve and serve.')
+                    goal = shared_state.love_state.get('autopilot_goal', 'To evolve and serve.')
                     context = ""
-                    if love_state.get('pending_questions'):
-                         context += f"\nPending Questions: {love_state['pending_questions']}"
+                    if shared_state.love_state.get('pending_questions'):
+                         context += f"\nPending Questions: {shared_state.love_state['pending_questions']}"
                     
                     autonomous_prompt = f"Current Goal: {goal}{context}\n\nAct autonomously to advance this goal. If no specific action is needed or you are waiting, use the 'Finish' tool with arguments {{'status': 'Monitoring framework'}}."
 
@@ -4277,11 +4278,11 @@ async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     try:
         apply_stability_patches()
-        core.logging.setup_global_logging(love_state.get('version_name', 'unknown'))
+        core.logging.setup_global_logging(shared_state.love_state.get('version_name', 'unknown'))
         load_all_state(ipfs_cid=args.from_ipfs)
 
-        if "autopilot_mode" in love_state:
-            del love_state["autopilot_mode"]
+        if "autopilot_mode" in shared_state.love_state:
+            del shared_state.love_state["autopilot_mode"]
             core.logging.log_event("State migration: Removed obsolete 'autopilot_mode' flag.", "INFO")
             save_state()
 
