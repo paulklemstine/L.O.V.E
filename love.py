@@ -3262,9 +3262,13 @@ async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
     global deep_agent_engine, knowledge_base, memory_manager
 
-    # --- FIX: Initialize ToolRegistry here ---
+    # Initialize registries
     from core.tools_legacy import ToolRegistry
     from core.prompt_registry import PromptRegistry
+
+    # Ensure prompts are loaded early
+    PromptRegistry()
+
     tool_registry = ToolRegistry()
     
     # Register home-grown tools
