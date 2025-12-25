@@ -48,20 +48,16 @@ import time
 import json
 import shutil
 import traceback
-import concurrent.futures
 import argparse
 import logging
 import core.logging
 from core.patch_utils import patch_attribute
 import platform
-import platform
 from datetime import datetime, timedelta
 import threading
-from collections import deque
 import queue
 import hashlib
 import io
-import shlex
 import re
 import time
 import asyncio
@@ -103,7 +99,6 @@ except (ImportError, Exception):
 
 import core.logging
 # from core.deep_agent_engine import DeepAgentEngine
-from utils import summarize_python_code
 # import yaml
 from display import OffscreenRenderer
 
@@ -656,7 +651,6 @@ def cleanup_gpu_processes():
     """
     import psutil
     import time
-    import signal
     
     print("Checking for zombie vLLM processes...")
     _temp_log_event("Checking for zombie vLLM processes...", "INFO")
@@ -921,12 +915,7 @@ _check_and_install_dependencies()
 
 from core.jules_task_manager import (
     JulesTaskManager,
-    trigger_jules_evolution,
-    evolve_self,
-    generate_evolution_request,
-    evolve_locally,
-    conduct_code_review,
-    is_duplicate_task
+    evolve_self
 )
 
 import core.llm_api
@@ -937,7 +926,6 @@ core.llm_api.set_ui_queue(ui_panel_queue)
 # Now that the dependencies are installed, we can safely import modules that depend on them.
 from core.deep_agent_engine import DeepAgentEngine
 # Now that dependencies are installed, we can safely import utils and check the instance type.
-import yaml
 from utils import verify_creator_instance
 IS_CREATOR_INSTANCE = verify_creator_instance()
 # Now that dependencies are installed, we can import modules that need them.
@@ -947,17 +935,10 @@ from core.memory.memory_manager import MemoryManager
 # NOTE: memory_manager is now initialized asynchronously in main()
 
 
-import requests
-from openevolve import run_evolution
-from core.openevolve_evaluator import evaluate_evolution
 # Now, it's safe to import everything else.
 import core.logging
 from core.storage import save_all_state
-from core.capabilities import CAPS
-from core.evolution_state import load_evolution_state, get_current_story, set_current_task_id, advance_to_next_story, clear_evolution_state
-from core.desire_state import set_desires, load_desire_state, get_current_desire, set_current_task_id_for_desire, advance_to_next_desire, clear_desire_state
-from utils import get_git_repo_info, list_directory, get_file_content, get_process_list, get_network_interfaces, parse_ps_output, replace_in_file
-from core.retry import retry
+from utils import get_git_repo_info
 from rich.console import Console
 
 # --- GLOBAL CONSOLE INSTANCE ---
@@ -1013,73 +994,40 @@ def apply_stability_patches():
     except (ImportError, AttributeError) as e:
         core.logging.log_event(f"Failed to apply JulesTaskManager oscillation patch: {e}", level="ERROR")
 from rich.panel import Panel
-from rich.prompt import Prompt
 from rich.syntax import Syntax
-from rich.progress import Progress, BarColumn, TextColumn
 from rich.text import Text
 from rich.panel import Panel
-from rich.console import Group
-from rich.rule import Rule
-from rich.console import Group
-from rich.rule import Rule
 
-from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, get_llm_api, execute_reasoning_task, MODEL_STATS, refresh_available_models
-from core.perception.config_scanner import scan_directory
-from display import create_integrated_status_panel, create_llm_panel, create_command_panel, create_file_op_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_question_panel, create_blessing_panel, get_terminal_width, create_job_progress_panel, create_connectivity_panel, create_god_panel, create_tasks_panel, generate_llm_art
+from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, MODEL_STATS, refresh_available_models
+from display import create_integrated_status_panel, create_llm_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_blessing_panel, get_terminal_width, create_connectivity_panel, create_god_panel, create_tasks_panel, generate_llm_art
 from ui_utils import rainbow_text
-from core.reasoning import ReasoningEngine
 from core.proactive_agent import ProactiveIntelligenceAgent
 from core.autonomous_reasoning_agent import AutonomousReasoningAgent
-from subversive import transform_request
-from core.agents.orchestrator import Orchestrator
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 from core.tools_legacy import ToolRegistry
 from core.tools import code_modifier
-from core.talent_utils.aggregator import EthicalFilterBundle
-from core.talent_utils.analyzer import TraitAnalyzer, AestheticScorer, ProfessionalismRater
 from core import talent_utils
 from core.talent_utils import (
-    initialize_talent_modules,
-    public_profile_aggregator,
-    intelligence_synthesizer
+    initialize_talent_modules
 )
-from core.talent_utils.directive import initiate_talent_scout
-from core.talent_utils.engager import OpportunityEngager
-from core.talent_utils.dynamic_prompter import DynamicPrompter
-from core.talent_utils.curator import creators_joy_curator
-from core.agent_framework_manager import create_and_run_workflow
 from core.monitoring import MonitoringManager
 from core.system_integrity_monitor import SystemIntegrityMonitor
-from core.data_miner import analyze_fs
-from core.experimental_engine_manager import run_simulation_loop
 from core.social_media_agent import SocialMediaAgent
-from god_agent import GodAgent
-from core.strategic_reasoning_engine import StrategicReasoningEngine
 from core.qa_agent import QAAgent
 from mcp_manager import MCPManager
-from core.image_api import generate_image
 import http.server
 import socketserver
 import websockets
 
 # Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
 LLM_AVAILABILITY = api_llm_availability
-from bbs import BBS_ART, run_hypnotic_progress
-from network import scan_network, probe_target, perform_webrequest, execute_shell_command, track_ethereum_price, get_eth_balance
-from market_data_harvester import get_crypto_market_data, get_nft_collection_stats
-from asset_scorer import AssetScorer
-from secure_transaction_manager import SecureTransactionManager
+from bbs import BBS_ART
 
 from ipfs_manager import IPFSManager
-from sandbox import Sandbox
-from filesystem import analyze_filesystem
-from ipfs import pin_to_ipfs_sync
 from core.multiplayer import MultiplayerManager
 from threading import Thread, Lock, RLock
 import uuid
-import yaml
 import queue
-from core.knowledge_extraction import transform_text_to_structured_records
 
 
 # --- LOCAL JOB MANAGER ---
