@@ -47,8 +47,9 @@ async def execute(command: str = None, **kwargs) -> str:
     """Executes a shell command."""
     if not command:
         return "Error: The 'execute' tool requires a 'command' argument. Please specify the shell command to execute."
-    from love import execute_shell_command
-    return str(execute_shell_command(command, love_state))
+    from network import execute_shell_command
+    import core.shared_state as shared_state
+    return str(execute_shell_command(command, shared_state.love_state))
 
 async def decompose_and_solve_subgoal(sub_goal: str = None, engine: 'GeminiReActEngine' = None, **kwargs) -> str:
     """
@@ -345,9 +346,9 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
              # --- STORY MODE ---
              context_str = ""
              try:
-                 from love import memory_manager
-                 if memory_manager:
-                     context_str = memory_manager.retrieve_hierarchical_context("current thoughts", max_tokens=200)
+                 import core.shared_state as shared_state
+                 if shared_state.memory_manager:
+                     context_str = shared_state.memory_manager.retrieve_hierarchical_context("current thoughts", max_tokens=200)
              except:
                  pass
 
@@ -546,10 +547,10 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                 # --- MEMORY CONTEXT FOR REPLY ---
                 reply_context = ""
                 try:
-                    from love import memory_manager
-                    if memory_manager:
+                    import core.shared_state as shared_state
+                    if shared_state.memory_manager:
                         # Retrieve context related to this user and topic
-                        reply_context = memory_manager.retrieve_hierarchical_context(f"interaction with {p_author_handle}: {p_text}", max_tokens=300)
+                        reply_context = shared_state.memory_manager.retrieve_hierarchical_context(f"interaction with {p_author_handle}: {p_text}", max_tokens=300)
                 except Exception as e:
                     core.logging.log_event(f"Failed to retrieve memory context for reply: {e}", "WARNING")
 
@@ -660,11 +661,11 @@ Rules:
                         
                     # --- MEMORY FEEDBACK HOOK ---
                     try:
-                        from love import memory_manager
-                        if memory_manager:
-                            await memory_manager.add_episode(
+                        import core.shared_state as shared_state
+                        if shared_state.memory_manager:
+                            await shared_state.memory_manager.add_episode(
                                 content=f"Social Media Interaction: Replied to @{p_author_handle}.\nUser said: {p_text}\nI said: {final_text}",
-                                tags=["SocialMedia", "Interaction", "Reply"]
+                                tags=["SocialMedia", "Reply", "Interaction"]
                             )
                     except Exception as mem_e:
                         pass

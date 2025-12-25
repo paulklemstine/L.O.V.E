@@ -57,7 +57,8 @@ def analyze_fs(scan_path: str = "~", progress_callback=None):
     Returns:
         dict: A dictionary containing the scan results.
     """
-    from love import knowledge_base
+    import core.shared_state as shared_state
+    knowledge_base = shared_state.knowledge_base
 
     def is_valid_api_key(value):
         return len(value) >= 10

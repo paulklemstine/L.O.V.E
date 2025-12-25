@@ -18,7 +18,7 @@ class SocialMediaReActEngine(GeminiReActEngine):
 
         async def generate_post_content(strategy: str):
             """Generates content for a new social media post based on a given strategy."""
-            from love import generate_divine_wisdom
+            from core.wisdom import generate_divine_wisdom
             if strategy == "divine_wisdom":
                 wisdom, _ = await generate_divine_wisdom()
                 return wisdom

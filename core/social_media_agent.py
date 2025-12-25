@@ -13,6 +13,7 @@ from core.social_media_tools import (
     post_to_bluesky,
     clean_social_content
 )
+from core.story_manager import story_manager
 
 class SocialMediaAgent:
     """
@@ -45,7 +46,7 @@ class SocialMediaAgent:
 
 
 
-from core.story_manager import story_manager
+
 
     async def _post_new_content(self, platform: str):
         """Generates and posts new content using the Narrative Director workflow."""

@@ -283,7 +283,7 @@ Do NOT call '{tool_name}' again with the same arguments."""
 
                 # Story 2.5: Create a ToolMemory note for dynamically discovered tools
                 if is_dynamic_tool:
-                    from love import memory_manager
+                    import core.shared_state as shared_state
                     tool_memory_content = (
                         f"Dynamically Discovered Tool Usage:\n"
                         f"- Tool Name: {tool_name}\n"
@@ -294,8 +294,8 @@ Do NOT call '{tool_name}' again with the same arguments."""
                     # However, if memory_manager is None or not initialized properly in love.py, this could fail.
                     # In love.py, memory_manager is initialized.
                     # Check if add_episode is async. Yes, it is (read_file confirmed).
-                    if memory_manager:
-                        await memory_manager.add_episode(tool_memory_content, tags=['ToolMemory'])
+                    if shared_state.memory_manager:
+                        await shared_state.memory_manager.add_episode(tool_memory_content, tags=['ToolMemory'])
 
             except Exception as e:
                 observation = f"Error executing tool {tool_name}: {e}"

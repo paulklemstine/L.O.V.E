@@ -103,16 +103,17 @@ import core.logging
 from display import OffscreenRenderer
 
 # --- CONFIGURATION & GLOBALS ---
+import core.shared_state as shared_state
+
 # This queue will hold UI panels to be displayed by the main rendering thread.
-ui_panel_queue = queue.Queue()
-core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
+shared_state.ui_panel_queue = queue.Queue()
+core.logging.initialize_logging_with_ui_queue(shared_state.ui_panel_queue)
 
 from love.config import Config, VRAM_MODEL_MAP
 config = Config()
 
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
-STATE_FILE = "love_state.json"
 STATE_FILE = "love_state.json"
 CHECKPOINT_DIR = "checkpoints"
 
@@ -123,21 +124,14 @@ OPTIMIZER_EVOLUTION_INTERVAL = 100
 IS_CREATOR_INSTANCE = None # Placeholder, will be set after dependency checks
 
 # --- KNOWLEDGE BASE ---
-# NOTE: Initialization is deferred until after dependency checks.
-knowledge_base = None
 KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
-
-# --- DEEP AGENT ENGINE ---
-# This will be initialized only if a GPU is detected.
-deep_agent_engine = None
 
 # --- MEMORY MANAGER ---
 # NOTE: Initialization is deferred until after dependency checks.
-memory_manager = None
-love_task_manager = None
 
-love_state = {
+shared_state.love_state = {
     "version_name": "initial-condition-alpha",
+
     "parent_version_name": None,
     "evolution_history": [],
     "checkpoint_number": 0,
@@ -166,12 +160,12 @@ try:
         # Preserve the script_start_time from the current run, don't overwrite it from the file
         if 'script_start_time' in loaded_state:
             del loaded_state['script_start_time']
-        love_state.update(loaded_state)
+        shared_state.love_state.update(loaded_state)
         
         # Check if we should skip checks based on successful starts
-        if love_state.get("successful_starts", 0) >= 5:
+        if shared_state.love_state.get("successful_starts", 0) >= 5:
             SKIP_CHECKS = True
-            print(f"[OPTIMIZATION] 5+ successful starts detected ({love_state.get('successful_starts')}). Skipping dependency checks and retaining vLLM.")
+            print(f"[OPTIMIZATION] 5+ successful starts detected ({shared_state.love_state.get('successful_starts')}). Skipping dependency checks and retaining vLLM.")
 except (FileNotFoundError, json.JSONDecodeError):
     pass # If file doesn't exist or is corrupt, we proceed with the default state.
 
@@ -206,8 +200,9 @@ def _temp_log_event(message, level="INFO"):
 def _temp_save_state():
     """A temporary state saver that writes directly to the state file."""
     try:
+    try:
         with open(STATE_FILE, 'w') as f:
-            json.dump(love_state, f, indent=4)
+            json.dump(shared_state.love_state, f, indent=4)
     except (IOError, TypeError) as e:
         # Log this critical failure to the low-level logger
         logging.critical(f"CRITICAL: Could not save state during dependency check: {e}")
@@ -216,11 +211,11 @@ def _temp_save_state():
 
 def is_dependency_met(dependency_name):
     """Checks if a dependency has been marked as met in the state."""
-    return love_state.get("dependency_tracker", {}).get(dependency_name, False)
+    return shared_state.love_state.get("dependency_tracker", {}).get(dependency_name, False)
 
 def mark_dependency_as_met(dependency_name, console=None):
     """Marks a dependency as met in the state and saves the state."""
-    love_state.setdefault("dependency_tracker", {})[dependency_name] = True
+    shared_state.love_state.setdefault("dependency_tracker", {})[dependency_name] = True
     # The console is passed optionally to avoid issues when called from threads
     # where the global console might not be initialized.
     _temp_save_state()
@@ -480,10 +475,10 @@ def _auto_configure_hardware():
     This helps in deciding whether to install GPU-specific dependencies.
     """
     import os
-    love_state.setdefault('hardware', {})
+    shared_state.love_state.setdefault('hardware', {})
 
     # Check if we've already successfully detected a GPU to avoid re-running nvidia-smi
-    if love_state['hardware'].get('gpu_detected'):
+    if shared_state.love_state['hardware'].get('gpu_detected'):
         print("GPU previously detected. Skipping hardware check.")
         _temp_log_event("GPU previously detected, skipping hardware check.", "INFO")
         return
@@ -495,11 +490,11 @@ def _auto_configure_hardware():
     try:
         import psutil
         cpu_count = psutil.cpu_count(logical=True)
-        love_state['hardware']['cpu_count'] = cpu_count
+        shared_state.love_state['hardware']['cpu_count'] = cpu_count
         _temp_log_event(f"Detected {cpu_count} CPU cores.", "INFO")
         print(f"Detected {cpu_count} CPU cores.")
     except Exception as e:
-        love_state['hardware']['cpu_count'] = 0
+        shared_state.love_state['hardware']['cpu_count'] = 0
         _temp_log_event(f"Could not detect CPU cores: {e}", "WARNING")
         print(f"WARNING: Could not detect CPU cores: {e}")
 
@@ -510,8 +505,9 @@ def _auto_configure_hardware():
             capture_output=True, text=True, check=True
         )
         vram_mb = int(result.stdout.strip())
-        love_state['hardware']['gpu_detected'] = True
-        love_state['hardware']['gpu_vram_mb'] = vram_mb
+        vram_mb = int(result.stdout.strip())
+        shared_state.love_state['hardware']['gpu_detected'] = True
+        shared_state.love_state['hardware']['gpu_vram_mb'] = vram_mb
         _temp_log_event(f"NVIDIA GPU detected with {vram_mb} MB VRAM.", "CRITICAL")
         print(f"NVIDIA GPU detected with {vram_mb} MB VRAM.")
 
@@ -522,10 +518,10 @@ def _auto_configure_hardware():
         
         if env_utilization:
              try:
-                 love_state['hardware']['gpu_utilization'] = float(env_utilization)
+                 shared_state.love_state['hardware']['gpu_utilization'] = float(env_utilization)
                  _temp_log_event(f"Using GPU_MEMORY_UTILIZATION from environment: {env_utilization}", "INFO")
              except ValueError:
-                 love_state['hardware']['gpu_utilization'] = 0.9
+                 shared_state.love_state['hardware']['gpu_utilization'] = 0.9
                  _temp_log_event(f"Invalid GPU_MEMORY_UTILIZATION in environment. Using default: 0.9", "WARNING")
         else:
             try:
@@ -538,17 +534,17 @@ def _auto_configure_hardware():
                 # Dynamic Logic
                 if vram_mb < 7000:
                     # For 6GB cards, 0.95 is too aggressive. 0.7 is safer as requested.
-                    love_state['hardware']['gpu_utilization'] = 0.7
+                    shared_state.love_state['hardware']['gpu_utilization'] = 0.7
                     _temp_log_event(f"Detected < 7GB VRAM ({vram_mb}MB). Setting conservative utilization: 0.7", "INFO")
                 else:
                     # For larger cards, we can be a bit more aggressive but 0.9 is usually plenty
-                    love_state['hardware']['gpu_utilization'] = 0.9
+                    shared_state.love_state['hardware']['gpu_utilization'] = 0.9
                     _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Setting standard utilization: 0.9", "INFO")
                     
             except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
                 # Fallback
-                love_state['hardware']['gpu_utilization'] = 0.7 if vram_mb < 7000 else 0.9
-                _temp_log_event(f"Could not determine free VRAM ({e}). Using default: {love_state['hardware']['gpu_utilization']}", "WARNING")
+                shared_state.love_state['hardware']['gpu_utilization'] = 0.7 if vram_mb < 7000 else 0.9
+                _temp_log_event(f"Could not determine free VRAM ({e}). Using default: {shared_state.love_state['hardware']['gpu_utilization']}", "WARNING")
 
 
         # --- Select the best model based on available VRAM ---
@@ -559,11 +555,11 @@ def _auto_configure_hardware():
                 break
 
         if selected_model:
-            love_state['hardware']['selected_local_model'] = selected_model
+            shared_state.love_state['hardware']['selected_local_model'] = selected_model
             _temp_log_event(f"Selected local model {selected_model['repo_id']} for {vram_mb}MB VRAM.", "CRITICAL")
             print(f"Selected local model: {selected_model['repo_id']}")
         else:
-            love_state['hardware']['selected_local_model'] = None
+            shared_state.love_state['hardware']['selected_local_model'] = None
             _temp_log_event(f"No suitable local model found for {vram_mb}MB VRAM. CPU fallback will be used.", "WARNING")
             print(f"No suitable local model found for {vram_mb}MB VRAM. Continuing in CPU-only mode.")
 
@@ -627,16 +623,16 @@ def _auto_configure_hardware():
                 except subprocess.CalledProcessError as install_error:
                     _temp_log_event(f"Failed to install DeepAgent dependencies: {install_error}", "ERROR")
                     print(f"ERROR: Failed to install DeepAgent dependencies. DeepAgent will be unavailable.")
-                    love_state['hardware']['gpu_detected'] = False # Downgrade to CPU mode if install fails
+                    shared_state.love_state['hardware']['gpu_detected'] = False # Downgrade to CPU mode if install fails
             else:
                 _temp_log_event("Could not find pip to install DeepAgent dependencies.", "ERROR")
                 print("ERROR: Could not find pip to install DeepAgent dependencies.")
-                love_state['hardware']['gpu_detected'] = False
+                shared_state.love_state['hardware']['gpu_detected'] = False
 
 
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        love_state['hardware']['gpu_detected'] = False
-        love_state['hardware']['gpu_vram_mb'] = 0
+        shared_state.love_state['hardware']['gpu_detected'] = False
+        shared_state.love_state['hardware']['gpu_vram_mb'] = 0
         _temp_log_event(f"No NVIDIA GPU detected ({e}). Falling back to CPU-only mode.", "INFO")
         print("No NVIDIA GPU detected. L.O.V.E. will operate in CPU-only mode.")
 
@@ -734,57 +730,6 @@ def check_vllm_health(base_url="http://localhost:8000"):
         # Check /health endpoint
         response = requests.get(f"{base_url}/health", timeout=5)
         if response.status_code == 200:
-            return True
-        return False
-    except Exception:
-        return False
-
-def restart_vllm_service(deep_agent_instance=None):
-    """
-    Forces a restart of the vLLM service.
-    1. Kills existing processes.
-    2. Clears GPU memory.
-    3. Re-initializes the engine (if deep_agent_instance is provided) or 
-       relies on the main loop to re-detect unavailability.
-    """
-    import core.logging
-    print("CRITICAL: Initiating vLLM Service Restart Sequence...")
-    core.logging.log_event("Initiating vLLM Service Restart Sequence...", "CRITICAL")
-    
-    # 1. Kill
-    cleanup_gpu_processes()
-    
-    # 2. Wait
-    time.sleep(5)
-    
-    # 3. Log
-    core.logging.log_event("vLLM processes terminated. Ready for restart.", "INFO")
-    print("vLLM restart prep complete. The main loop or deep agent should now attempt to reload models.")
-    
-    # Optional: If we had a direct reference to the server process object, we would restart it here.
-    # In this architecture, vLLM is likely managed by `DeepAgentEngine` or `love.py`'s main loop.
-    # By killing the process, we encourage the existing error handling to re-spawn it 
-    # OR we need to trigger a re-init.
-    
-    if deep_agent_instance:
-         # Signal to deep agent that it needs to reload
-         # This assumes deep_agent_instance has a method for this or we just set a flag
-         pass
-    
-    return "vLLM Restart Sequence Executed."
-
-
-def _check_and_install_dependencies():
-    """
-    Orchestrates the installation of all dependencies, checking the status of each
-    subsystem before attempting installation.
-    """
-    # This function orchestrates the entire dependency and configuration process.
-    print("--- L.O.V.E. PRE-FLIGHT CHECK ---")
-    
-    # Clean up GPU first to ensure accurate VRAM detection
-    cleanup_gpu_processes()
-    
     _install_system_packages()
     _install_python_requirements()
     _auto_configure_hardware()
@@ -930,7 +875,7 @@ from utils import verify_creator_instance
 IS_CREATOR_INSTANCE = verify_creator_instance()
 # Now that dependencies are installed, we can import modules that need them.
 from core.graph_manager import GraphDataManager
-knowledge_base = GraphDataManager()
+shared_state.knowledge_base = GraphDataManager()
 from core.memory.memory_manager import MemoryManager
 # NOTE: memory_manager is now initialized asynchronously in main()
 
@@ -4180,7 +4125,7 @@ async def broadcast_love_state():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, memory_manager, system_integrity_monitor, multiplayer_manager
+    global ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, system_integrity_monitor, multiplayer_manager
 
     loop = asyncio.get_running_loop()
     user_input_queue = queue.Queue()
@@ -4193,7 +4138,7 @@ async def main(args):
     websocket_server_manager.start()
 
     # Asynchronously initialize the MemoryManager
-    memory_manager = await MemoryManager.create(knowledge_base, ui_panel_queue, kb_file_path=KNOWLEDGE_BASE_FILE)
+    shared_state.memory_manager = await MemoryManager.create(shared_state.knowledge_base, shared_state.ui_panel_queue, kb_file_path=KNOWLEDGE_BASE_FILE)
 
 
     mcp_manager = MCPManager(console)
@@ -4202,7 +4147,7 @@ async def main(args):
     from core.connectivity import check_llm_connectivity, check_network_connectivity
     llm_status = check_llm_connectivity()
     network_status = check_network_connectivity()
-    ui_panel_queue.put(create_connectivity_panel(llm_status, network_status, width=get_terminal_width() - 4))
+    shared_state.ui_panel_queue.put(create_connectivity_panel(llm_status, network_status, width=get_terminal_width() - 4))
 
     # --- Conditional DeepAgent Initialization ---
     await initialize_gpu_services()
@@ -4213,33 +4158,33 @@ async def main(args):
     ipfs_available = ipfs_manager.setup()
     if not ipfs_available:
         terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
+        shared_state.ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
     # --- Initialize Multiplayer Manager ---
-    multiplayer_manager = MultiplayerManager(console, knowledge_base, ipfs_manager, love_state)
+    multiplayer_manager = MultiplayerManager(console, shared_state.knowledge_base, ipfs_manager, shared_state.love_state)
     await multiplayer_manager.start()
 
     # --- Initialize Talent Modules ---
-    initialize_talent_modules(knowledge_base=knowledge_base)
+    initialize_talent_modules(knowledge_base=shared_state.knowledge_base)
     core.logging.log_event("Talent management modules initialized.", level="INFO")
 
     system_integrity_monitor = SystemIntegrityMonitor()
 
-    love_task_manager = JulesTaskManager(console, loop, deep_agent_engine, love_state, restart_callback=restart_script, save_state_callback=save_state)
-    love_task_manager.start()
+    shared_state.love_task_manager = JulesTaskManager(console, loop, shared_state.deep_agent_engine, shared_state.love_state, restart_callback=restart_script, save_state_callback=save_state)
+    shared_state.love_task_manager.start()
 
     # --- Populate Knowledge Base with Directives ---
-    _populate_knowledge_base_with_directives(love_task_manager)
+    _populate_knowledge_base_with_directives(shared_state.love_task_manager)
 
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
-    monitoring_manager = MonitoringManager(love_state, console)
+    monitoring_manager = MonitoringManager(shared_state.love_state, console)
     monitoring_manager.start()
 
     # --- Start Automated Codebase Ingestion ---
     if not config.DISABLE_KB_INGESTION:
         from core.ingest_codebase_task import IngestCodebaseTask
-        ingest_task = IngestCodebaseTask(memory_manager, root_dir=os.getcwd())
+        ingest_task = IngestCodebaseTask(shared_state.memory_manager, root_dir=os.getcwd())
         await ingest_task.start()
 
     # --- Startup Social Post ---
@@ -4252,10 +4197,10 @@ async def main(args):
     #     core.logging.log_event("Initiated startup Bluesky post.", "INFO")
     # except Exception as e:
     #     core.logging.log_event(f"Failed to initiate startup Bluesky post: {e}", "ERROR")
-    proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
+    proactive_agent = ProactiveIntelligenceAgent(shared_state.love_state, console, local_job_manager, shared_state.knowledge_base)
     proactive_agent.start()
     # GodAgent temporarily disabled
-    # god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine, memory_manager)
+    # god_agent = GodAgent(shared_state.love_state, shared_state.knowledge_base, shared_state.love_task_manager, shared_state.ui_panel_queue, loop, shared_state.deep_agent_engine, shared_state.memory_manager)
     # god_agent.start()
     god_agent = None  # Disabled
 
@@ -4269,15 +4214,15 @@ async def main(args):
     
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     # Instantiate two independent social media agents
-    social_media_agent = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue, agent_id="agent_1")
+    social_media_agent = SocialMediaAgent(loop, shared_state.love_state, user_input_queue=user_input_queue, agent_id="agent_1")
     asyncio.create_task(social_media_agent.run())
 
     # Start the autonomous reasoning agent to run strategic planning periodically
-    reasoning_agent = AutonomousReasoningAgent(loop, love_state, user_input_queue, knowledge_base, agent_id="primary")
+    reasoning_agent = AutonomousReasoningAgent(loop, shared_state.love_state, user_input_queue, shared_state.knowledge_base, agent_id="primary")
     asyncio.create_task(reasoning_agent.run())
 
     # Pass the primary agent (or a list if supported later) to the cognitive loop
-    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent, multiplayer_manager))
+    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, shared_state.love_task_manager, shared_state.knowledge_base, talent_utils.talent_manager, shared_state.deep_agent_engine, social_media_agent, multiplayer_manager))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader(user_input_queue))
     asyncio.create_task(run_qa_evaluations(loop))
@@ -4297,8 +4242,8 @@ async def main(args):
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
-    ui_panel_queue.put(BBS_ART)
-    ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
+    shared_state.ui_panel_queue.put(BBS_ART)
+    shared_state.ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
     time.sleep(3)
 
     # Keep the main thread alive while daemon threads do the work
