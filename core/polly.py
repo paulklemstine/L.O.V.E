@@ -1,7 +1,7 @@
 
 import os
 import json
-import asyncio
+import re
 from typing import List, Dict, Any, Optional
 
 from core.prompt_registry import get_prompt_registry
@@ -100,7 +100,6 @@ class PollyOptimizer:
                 
                 score_text = judge_response.get('result', '').strip()
                 # Extract number
-                import re
                 match = re.search(r'\d+(\.\d+)?', score_text)
                 if match:
                     score = float(match.group())
