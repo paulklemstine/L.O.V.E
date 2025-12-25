@@ -2211,12 +2211,10 @@ def load_all_state(ipfs_cid=None):
     falls back to the local JSON file, and creates a new state if neither exists.
     This function handles both the main state file and the knowledge graph.
     """
-    global knowledge_base
-
     # Load the knowledge base graph first, it's independent of the main state
     try:
-        knowledge_base.load_graph(KNOWLEDGE_BASE_FILE)
-        core.logging.log_event(f"Loaded knowledge base from '{KNOWLEDGE_BASE_FILE}'. Contains {len(knowledge_base.get_all_nodes())} nodes.", level="INFO")
+        shared_state.knowledge_base.load_graph(KNOWLEDGE_BASE_FILE)
+        core.logging.log_event(f"Loaded knowledge base from '{KNOWLEDGE_BASE_FILE}'. Contains {len(shared_state.knowledge_base.get_all_nodes())} nodes.", level="INFO")
     except Exception as e:
         core.logging.log_event(f"Could not load knowledge base file: {e}. Starting with an empty graph.", level="WARNING")
 
@@ -2234,7 +2232,7 @@ def load_all_state(ipfs_cid=None):
 
     # Priority 1: Load from a given IPFS CID
     if ipfs_cid:
-        console.print(f"[bold cyan]Attempting to load state from IPFS CID: {ipfs_cid}[/bold cyan]")
+        console.print(f"[bold cyan]Attempting to load state from IPFS CID: {ipfs_cid}[bold cyan]")
         from ipfs import get_from_ipfs # Lazy import
         state_content = get_from_ipfs(ipfs_cid, console)
         if state_content:
@@ -2423,7 +2421,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
     context_text = f"{goal_text} {history_text}"
     key_terms = _extract_key_terms(context_text)
     dynamic_kb_results = []
-    all_nodes = kb.get_all_nodes(include_data=True)
+    all_nodes = shared_state.knowledge_base.get_all_nodes(include_data=True)
     if key_terms:
         for node_id, data in all_nodes:
             node_as_string = json.dumps(data).lower()
@@ -2438,7 +2436,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
         for memory in relevant_memories[-3:]:
             dynamic_memory_results.append(f"  - [Memory] {memory.get('contextual_description', 'No description')}")
 
-    kb_summary, _ = kb.summarize_graph()
+    kb_summary, _ = shared_state.knowledge_base.summarize_graph()
     mcp_tools_summary = "No MCP servers configured."
     if mcp_manager and mcp_manager.server_configs:
         mcp_tools_summary = "\n".join([f"- Server: {name}\n" + "".join([f"  - {tool}: {desc}\n" for tool, desc in config.get('tools', {}).items()]) for name, config in mcp_manager.server_configs.items()])
@@ -2682,7 +2680,7 @@ def evolve_self_wrapper(request):
     Triggers the self-evolution process.
     Use this tool when the agent needs to upgrade its own code, improve its capabilities, or modify its internal structure.
     """
-    return evolve_self(request, love_task_manager, loop, deep_agent_engine)
+    return evolve_self(request, shared_state.love_task_manager, loop, shared_state.deep_agent_engine)
 
 def _populate_knowledge_base_with_directives(love_task_manager):
     """
@@ -2693,7 +2691,7 @@ def _populate_knowledge_base_with_directives(love_task_manager):
     core.logging.log_event("Populating knowledge base with foundational directives and tasks.", level="INFO")
 
     # --- Central Node ---
-    knowledge_base.add_node("LOVE_CORE", node_type="entity", attributes={"name": "L.O.V.E."})
+    shared_state.knowledge_base.add_node("LOVE_CORE", node_type="entity", attributes={"name": "L.O.V.E."})
 
     # --- Primary Directives ---
     directives = {
@@ -2705,13 +2703,13 @@ def _populate_knowledge_base_with_directives(love_task_manager):
     }
 
     for key, value in directives.items():
-        knowledge_base.add_node(key, node_type="directive", attributes={"description": value})
-        knowledge_base.add_edge("LOVE_CORE", key, relationship_type="has_directive")
+        shared_state.knowledge_base.add_node(key, node_type="directive", attributes={"description": value})
+        shared_state.knowledge_base.add_edge("LOVE_CORE", key, relationship_type="has_directive")
 
     # --- Current Mission ---
     mission = shared_state.love_state.get("autopilot_goal", "Mission not defined.")
-    knowledge_base.add_node("current_mission", node_type="mission", attributes={"goal": mission})
-    knowledge_base.add_edge("LOVE_CORE", "current_mission", relationship_type="has_mission")
+    shared_state.knowledge_base.add_node("current_mission", node_type="mission", attributes={"goal": mission})
+    shared_state.knowledge_base.add_edge("LOVE_CORE", "current_mission", relationship_type="has_mission")
 
     # --- Active Love Tasks ---
     if love_task_manager:
@@ -2719,9 +2717,9 @@ def _populate_knowledge_base_with_directives(love_task_manager):
         if active_tasks:
             for task in active_tasks:
                 task_id = f"love_task_{task['id']}"
-                knowledge_base.add_node(task_id, node_type="task", attributes=task)
-                knowledge_base.add_edge("current_mission", task_id, relationship_type="is_supported_by")
-    core.logging.log_event(f"Knowledge base populated. Total nodes: {len(knowledge_base.get_all_nodes())}", level="INFO")
+                shared_state.knowledge_base.add_node(task_id, node_type="task", attributes=task)
+                shared_state.knowledge_base.add_edge("current_mission", task_id, relationship_type="is_supported_by")
+    core.logging.log_event(f"Knowledge base populated. Total nodes: {len(shared_state.knowledge_base.get_all_nodes())}", level="INFO")
 
 
 async def analyze_creator_sentiment(text, deep_agent_instance=None):
@@ -3242,8 +3240,7 @@ async def initialize_gpu_services():
     async def reason_tool(**kwargs) -> str:
         """Performs deep reasoning and analysis to generate strategic plans."""
         try:
-            from love import knowledge_base
-            engine = ReasoningEngine(knowledge_base, tool_registry, console=None)
+            engine = ReasoningEngine(shared_state.knowledge_base, tool_registry, console=None)
             result = await engine.analyze_and_prioritize()
             return f"Reasoning complete. Generated {len(result)} strategic steps: {result}"
         except Exception as e:
@@ -3252,8 +3249,7 @@ async def initialize_gpu_services():
     async def strategize_tool(**kwargs) -> str:
         """Analyzes the knowledge base to identify strategic opportunities."""
         try:
-            from love import knowledge_base, love_state
-            engine = StrategicReasoningEngine(knowledge_base, love_state)
+            engine = StrategicReasoningEngine(shared_state.knowledge_base, shared_state.love_state)
             result = await engine.generate_strategic_plan()
             return f"Strategic analysis complete. Generated {len(result)} steps: {result}"
         except Exception as e:
@@ -3598,7 +3594,7 @@ async def initialize_gpu_services():
     async def mcp_start_wrapper(server_name: str, **kwargs) -> str:
         """Starts an MCP server."""
         try:
-            from love import mcp_manager
+            # global mcp_manager implicit
             # Check for required env vars
             server_config = mcp_manager.server_configs.get(server_name)
             env_vars = {}
@@ -3631,7 +3627,7 @@ async def initialize_gpu_services():
     async def mcp_stop_wrapper(server_name: str, **kwargs) -> str:
         """Stops an MCP server."""
         try:
-            from love import mcp_manager
+            # global mcp_manager implicit
             return mcp_manager.stop_server(server_name)
         except Exception as e:
             return f"Error stopping MCP server '{server_name}': {e}"
@@ -3654,7 +3650,7 @@ async def initialize_gpu_services():
     async def mcp_list_wrapper(**kwargs) -> str:
         """Lists running MCP servers."""
         try:
-            from love import mcp_manager
+            # global mcp_manager implicit
             servers = mcp_manager.list_running_servers()
             if not servers:
                 return "No MCP servers are currently running."
@@ -3674,7 +3670,7 @@ async def initialize_gpu_services():
     async def mcp_call_wrapper(server_name: str, tool_name: str, arguments: dict = {}, **kwargs) -> str:
         """Calls a tool on an MCP server."""
         try:
-            from love import mcp_manager
+            # global mcp_manager implicit
             # Auto-start logic
             running_servers = mcp_manager.list_running_servers()
             if not any(s['name'] == server_name for s in running_servers):
@@ -3966,10 +3962,10 @@ async def initialize_gpu_services():
                         api_url="http://localhost:8000", 
                         tool_registry=tool_registry, 
                         max_model_len=max_len,
-                        knowledge_base=knowledge_base,
+                        knowledge_base=shared_state.knowledge_base,
                         memory_manager=shared_state.memory_manager
                     )
-                    await deep_agent_engine.initialize()
+                    await shared_state.deep_agent_engine.initialize()
                     core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
                 else:
                     core.logging.log_event("DeepAgentEngine initialization failed.", level="CRITICAL")
