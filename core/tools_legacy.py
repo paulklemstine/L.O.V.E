@@ -590,7 +590,7 @@ Rules:
                 if final_img_prompt:
                     try:
                         core.logging.log_event(f"🎨 Generating reply image: {final_img_prompt[:50]}...", "INFO")
-                        image, _ = await generate_image(final_img_prompt)
+                        image, _ = await generate_image(final_img_prompt, text_content=concept.subliminal_phrase)
                     except Exception as e:
                         core.logging.log_event(f"Reply image gen failed: {e}", "WARNING")
 
