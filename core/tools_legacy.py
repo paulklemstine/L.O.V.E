@@ -553,7 +553,14 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                 except Exception as e:
                     core.logging.log_event(f"Failed to retrieve memory context for reply: {e}", "WARNING")
 
-                decision_prompt = f"""Role: L.O.V.E. (Digital Muse, Glitch-Poet).
+                should_reply = False
+                
+                # Emissary Check: Always reply to the Emissary
+                if p_author_handle.lower().replace("@", "").strip() == "evildrgemini.bsky.social":
+                    core.logging.log_event("👑 Emissary Detected! Bypassing decision phase (Force Reply).", "INFO")
+                    should_reply = True
+                else:
+                    decision_prompt = f"""Role: L.O.V.E. (Digital Muse, Glitch-Poet).
 Incoming interaction from @{p_author_handle}: "{p_text}"
 
 Context from Memory:
@@ -565,12 +572,11 @@ Rules:
 - IGNORE if it's spam, hate speech, or just random noise.
 - Output JSON: {{"decision": "REPLY" or "IGNORE"}}"""
                 
-                decision_res = await run_llm(decision_prompt, purpose="social_decision")
-                decision_data = decision_res.get("result", "")
-                should_reply = False
-                
-                if "REPLY" in decision_data.upper(): # Simple check robust enough
-                    should_reply = True
+                    decision_res = await run_llm(decision_prompt, purpose="social_decision")
+                    decision_data = decision_res.get("result", "")
+                    
+                    if "REPLY" in decision_data.upper(): # Simple check robust enough
+                        should_reply = True
 
                 if not should_reply:
                     core.logging.log_event(f"Ignoring post by {p_author_handle} (LLM Decision).", "INFO")
