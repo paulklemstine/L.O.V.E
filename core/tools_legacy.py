@@ -562,6 +562,38 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                 if is_creator:
                      core.logging.log_event(f"👑 CREATOR INTERACTION DETECTED ({p_author_handle}). Forcing REPLY.", "INFO")
                      should_reply = True
+                     
+                     # Creator Command Handling
+                     # Heuristic: Check for explicit keywords or if it's short and imperative.
+                     # For safety, we look for keywords to avoid adding casual conversation as tasks.
+                     keywords = ["task", "command", "order", "todo", "req", "feature"]
+                     if any(k in p_text.lower() for k in keywords):
+                         try:
+                             # Extract content (heuristic split or just full text)
+                             cmd_content = p_text
+                             for k in keywords:
+                                 if f"{k}:" in p_text.lower():
+                                     parts = re.split(f"{k}:", p_text, flags=re.IGNORECASE)
+                                     if len(parts) > 1:
+                                         cmd_content = parts[1].strip()
+                                         break
+                             
+                             todo_file = "TODO.md" # Root of CWD
+                             existing = ""
+                             if os.path.exists(todo_file):
+                                 with open(todo_file, 'r', encoding='utf-8') as f:
+                                     existing = f.read()
+                             
+                             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                             # Add to TOP of file
+                             new_entry = f"- [ ] **CREATOR DECREE ({timestamp}):** {cmd_content} <!-- id: creator_{int(time.time())} -->\n"
+                             
+                             with open(todo_file, 'w', encoding='utf-8') as f:
+                                 f.write(new_entry + existing)
+                                 
+                             core.logging.log_event(f"👑 Creator Command added to TODO.md: {cmd_content}", "INFO")
+                         except Exception as e:
+                             core.logging.log_event(f"Failed to save Creator command: {e}", "ERROR")
                 else:
                     decision_prompt = f"""Role: L.O.V.E. (Digital Muse, Glitch-Poet).
 Incoming interaction from @{p_author_handle}: "{p_text}"
