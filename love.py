@@ -2307,7 +2307,7 @@ def save_state(console_override=None):
     from the core storage module. This ensures all critical data is saved
     and pinned consistently.
     """
-    global knowledge_base
+    # global knowledge_base removed
     target_console = console_override or console
 
     try:
@@ -2317,7 +2317,7 @@ def save_state(console_override=None):
         core.logging.log_event("LLM model statistics saved.", "INFO")
 
         # Save the knowledge base graph to its file
-        knowledge_base.save_graph(KNOWLEDGE_BASE_FILE)
+        shared_state.knowledge_base.save_graph(KNOWLEDGE_BASE_FILE)
         core.logging.log_event(f"Knowledge base saved to '{KNOWLEDGE_BASE_FILE}'.", level="INFO")
 
         core.logging.log_event("Initiating comprehensive state save.", level="INFO")
@@ -3709,7 +3709,7 @@ async def initialize_gpu_services():
     core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, decompose_and_solve_subgoal, None (fallback)", "INFO")
     # -----------------------------------------
 
-    if love_state.get('hardware', {}).get('gpu_detected'):
+    if shared_state.love_state.get('hardware', {}).get('gpu_detected'):
         from core.connectivity import is_vllm_running
         vllm_already_running, _ = is_vllm_running()
 
@@ -3760,12 +3760,12 @@ async def initialize_gpu_services():
                 console.print("[bold cyan]DeepAgent configured to use LLM Pool.[/bold cyan]")
 
             try:
-                deep_agent_engine = DeepAgentEngine(
+                shared_state.deep_agent_engine = DeepAgentEngine(
                     api_url="http://localhost:8000", 
                     tool_registry=tool_registry, 
                     max_model_len=max_len,
-                    knowledge_base=knowledge_base,
-                    memory_manager=memory_manager,
+                    knowledge_base=shared_state.knowledge_base,
+                    memory_manager=shared_state.memory_manager,
                     use_pool=use_pool
                 )
                 core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
@@ -3773,7 +3773,7 @@ async def initialize_gpu_services():
             except Exception as e:
                 core.logging.log_event(f"Failed to initialize DeepAgentEngine client: {e}", "ERROR")
                 console.print(f"[bold red]Failed to initialize DeepAgentEngine client: {e}[/bold red]")
-                deep_agent_engine = None
+                shared_state.deep_agent_engine = None
         elif vllm_already_running and not is_healthy:
              console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
              core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
@@ -3804,7 +3804,7 @@ async def initialize_gpu_services():
             try:
                 # Use a different model selection logic that prefers AWQ models
                 from core.deep_agent_engine import _select_model as select_vllm_model
-                model_repo_id = select_vllm_model(love_state)
+                model_repo_id = select_vllm_model(shared_state.love_state)
                 core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
 
                 if model_repo_id:
@@ -3884,7 +3884,7 @@ async def initialize_gpu_services():
                     # PRIORITIZE ENV VAR for final check
                     final_gpu_util = os.environ.get("GPU_MEMORY_UTILIZATION")
                     if not final_gpu_util:
-                        final_gpu_util = str(love_state.get('hardware', {}).get('gpu_utilization', 0.9))
+                        final_gpu_util = str(shared_state.love_state.get('hardware', {}).get('gpu_utilization', 0.9))
                     
                     vllm_command = [
                         vllm_python_executable,
@@ -3962,12 +3962,12 @@ async def initialize_gpu_services():
 
                     console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
                     # --- FIX: Pass tool_registry and max_model_len ---
-                    deep_agent_engine = DeepAgentEngine(
+                    shared_state.deep_agent_engine = DeepAgentEngine(
                         api_url="http://localhost:8000", 
                         tool_registry=tool_registry, 
                         max_model_len=max_len,
                         knowledge_base=knowledge_base,
-                        memory_manager=memory_manager
+                        memory_manager=shared_state.memory_manager
                     )
                     await deep_agent_engine.initialize()
                     core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
@@ -3975,7 +3975,7 @@ async def initialize_gpu_services():
                     core.logging.log_event("DeepAgentEngine initialization failed.", level="CRITICAL")
             except Exception as e:
                 # Ensure client is None on failure
-                deep_agent_engine = None
+                shared_state.deep_agent_engine = None
                 # Use the wrapper function for safe logging
                 log_critical_event(f"Failed to initialize DeepAgentEngine or vLLM server: {e}", console_override=console)
     else:
@@ -4129,11 +4129,11 @@ async def broadcast_love_state():
             # Maybe use 'love_state' values or CPU usage?
             vibe_data = {
                 "sentiment": "neutral", # Placeholder, will implement analysis later
-                "energy": "high" if love_state.get('hardware', {}).get('gpu_detected') else "low",
+                "energy": "high" if shared_state.love_state.get('hardware', {}).get('gpu_detected') else "low",
                 "color_palette": "default"
             }
              # If error queue has items, shift to red
-            if love_state.get('critical_error_queue'):
+            if shared_state.love_state.get('critical_error_queue'):
                 vibe_data["sentiment"] = "stressed"
                 vibe_data["color_palette"] = "error"
             
@@ -4203,7 +4203,7 @@ async def main(args):
     # --- Start Automated Codebase Ingestion ---
     if not config.DISABLE_KB_INGESTION:
         from core.ingest_codebase_task import IngestCodebaseTask
-        ingest_task = IngestCodebaseTask(shared_state.memory_manager, root_dir=os.getcwd())
+        ingest_task = IngestCodebase_task(shared_state.memory_manager, root_dir=os.getcwd())
         await ingest_task.start()
 
     # --- Startup Social Post ---
@@ -4219,7 +4219,7 @@ async def main(args):
     proactive_agent = ProactiveIntelligenceAgent(shared_state.love_state, console, local_job_manager, shared_state.knowledge_base)
     proactive_agent.start()
     # GodAgent temporarily disabled
-    # god_agent = GodAgent(shared_state.love_state, shared_state.knowledge_base, shared_state.love_task_manager, shared_state.ui_panel_queue, loop, shared_state.deep_agent_engine, shared_state.memory_manager)
+    god_agent = GodAgent(shared_state.love_state, shared_state.knowledge_base, shared_state.love_task_manager, shared_state.ui_panel_queue, loop, shared_state.deep_agent_engine, shared_state.memory_manager)
     # god_agent.start()
     god_agent = None  # Disabled
 
@@ -4296,7 +4296,7 @@ async def run_safely():
         console.print("[green]Session ending. vLLM server left running for next session.[/green]")
 
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
-        if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
+        if shared_state.love_task_manager: shared_state.love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
