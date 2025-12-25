@@ -2980,10 +2980,12 @@ def _automatic_update_checker(console):
         time.sleep(300)
 
 
+# Pre-compile the regex to improve performance in the hot path
+ANSI_ESCAPE_PATTERN = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
 def _strip_ansi_codes(text):
     """Removes ANSI escape codes from a string."""
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
+    return ANSI_ESCAPE_PATTERN.sub('', text)
 
 def serialize_panel_to_json(panel, panel_type_map, renderer=None):
     """Serializes a Rich Panel object to a JSON string for the web UI."""
@@ -3039,6 +3041,13 @@ def simple_ui_renderer():
 
     # Reusable renderer instance
     ui_renderer = OffscreenRenderer(width=get_terminal_width())
+
+    # OPTIMIZATION: Keep log file open to avoid repetitive syscalls
+    try:
+        log_file_handle = open(LOG_FILE, "a", encoding="utf-8")
+    except IOError as e:
+        print(f"CRITICAL: Failed to open log file {LOG_FILE}: {e}")
+        log_file_handle = None
 
     while True:
         try:
@@ -3108,8 +3117,9 @@ def simple_ui_renderer():
 
             # Strip ANSI codes and write the plain text to the log file
             plain_output = _strip_ansi_codes(output_str)
-            with open(LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(plain_output)
+            if log_file_handle:
+                log_file_handle.write(plain_output)
+                log_file_handle.flush() # Ensure it's written immediately
 
         except queue.Empty:
             continue
