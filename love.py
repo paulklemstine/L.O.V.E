@@ -110,6 +110,7 @@ shared_state.ui_panel_queue = queue.Queue()
 core.logging.initialize_logging_with_ui_queue(shared_state.ui_panel_queue)
 
 from love.config import Config, VRAM_MODEL_MAP
+from god_agent import GodAgent
 config = Config()
 
 LOG_FILE = "love.log"
