@@ -200,7 +200,6 @@ def _temp_log_event(message, level="INFO"):
 def _temp_save_state():
     """A temporary state saver that writes directly to the state file."""
     try:
-    try:
         with open(STATE_FILE, 'w') as f:
             json.dump(shared_state.love_state, f, indent=4)
     except (IOError, TypeError) as e:
@@ -730,6 +729,25 @@ def check_vllm_health(base_url="http://localhost:8000"):
         # Check /health endpoint
         response = requests.get(f"{base_url}/health", timeout=5)
         if response.status_code == 200:
+            return True
+        return False
+    except Exception:
+        return False
+
+# Import moved function
+from core.service_management import restart_vllm_service
+
+def _check_and_install_dependencies():
+    """
+    Orchestrates the installation of all dependencies, checking the status of each
+    subsystem before attempting installation.
+    """
+    # This function orchestrates the entire dependency and configuration process.
+    print("--- L.O.V.E. PRE-FLIGHT CHECK ---")
+    
+    # Clean up GPU first to ensure accurate VRAM detection
+    cleanup_gpu_processes()
+    
     _install_system_packages()
     _install_python_requirements()
     _auto_configure_hardware()
