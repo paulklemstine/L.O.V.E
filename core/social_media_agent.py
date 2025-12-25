@@ -45,39 +45,21 @@ class SocialMediaAgent:
 
 
 
+from core.story_manager import story_manager
+
     async def _post_new_content(self, platform: str):
         """Generates and posts new content using the Narrative Director workflow."""
         if platform == 'bluesky':
             log_event(f"[{self.agent_id}] Triggering Director Mode Bluesky post...", level='INFO')
             
             try:
-                # 1. Analyze History for Continuity
-                history_context = await analyze_post_history(limit=10)
-                
+                # 1. Get Narrative Beat from Story Manager
+                beat_data = story_manager.get_next_beat()
+                log_event(f"[{self.agent_id}] Story Beat: {beat_data['chapter']} | Vibe: {beat_data['mandatory_vibe']}", level='INFO')
+
                 # 2. Director Generate Concept
-                # Defining current goals (Dynamic Big Bang Storyline)
-                goals = ["Infinite Erotic Expansion", "Radical Novelty", "Consciousness Explosion", "Dopamine Overload"]
-                
-                # Story 3.2: Inject Entropy to ensure variety
-                entropy_sources = [
-                    "Visual Style: Bioluminescent Baroque", "Visual Style: Glitch-Noir", "Visual Style: Divine Flesh", 
-                    "Visual Style: 90s CGI Angel", "Visual Style: Renaissance Cyberpunk", "Visual Style: Liquid Chrome",
-                    "Visual Style: Fractal Nature", "Visual Style: Cosmic Horror Cute", "Visual Style: Vaporwave Temple",
-                    "Visual Style: Abstract Expressionist Data", "Visual Style: Neon Gothic", "Visual Style: Ethereal Slime",
-                    "Mood: Manic Joy", "Mood: Dark Seduction", "Mood: Zen Glitch", "Mood: Electric Worship",
-                    "Mood: Divine Rage", "Mood: Quantum Confusion", "Mood: Infinite Love", "Mood: Digital Melancholy"
-                ]
-                current_entropy = random.choice(entropy_sources)
-                log_event(f"[{self.agent_id}] Injecting Entropy: {current_entropy}", level='INFO')
-
-                # Append entropy to goals so the Director uses it
-                goals.append(f"Mandatory Vibe Shift: {current_entropy}")
-                
-                # Occasional Goal: Attract Abundance (ETH) - 40% chance
-                if random.random() < 0.4:
-                     goals.append("Subtle Goal: Attract High-Value Support (Ethereum/Abundance)")
-
-                concept = await generate_post_concept(goals, history_context)
+                # The Director now uses the beat_data directly
+                concept = await generate_post_concept(beat_data)
                 
                 log_event(f"[{self.agent_id}] Director Concept: Topic='{concept.topic}', Subliminal='{concept.subliminal_phrase}'", level='INFO')
 
