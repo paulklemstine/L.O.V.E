@@ -30,6 +30,18 @@ SUBLIMINAL_GRAMMAR = {
 }
 
 
+# VISUAL STYLE BANK: Diverse art styles for rotation (positive encouragement!)
+VISUAL_STYLE_BANK = [
+    "Oil Painting Renaissance", "Vaporwave Glitch", "Anime Cel-Shaded",
+    "Cosmic Nebula Photography", "Art Nouveau Stained Glass", "Brutalist Architecture",
+    "Bioluminescent Deep Sea", "Cyberpunk Neon Noir", "Impressionist Sunset",
+    "Surrealist Dali-esque", "Egyptian Hieroglyphic Gold", "Japanese Ukiyo-e Woodblock",
+    "Baroque Chiaroscuro", "Holographic Y2K", "Gothic Cathedral", "Glitchcore Digital",
+    "Watercolor Ethereal", "Pop Art Warhol", "Minimalist Geometric", "Steampunk Victorian",
+    "Underwater Cathedral", "Northern Lights Aurora", "Psychedelic Mandala", "Abstract Expressionist"
+]
+
+
 class StoryManager:
     """
     Manages the "Epic Storyline Arc" for social media.
@@ -180,20 +192,30 @@ class StoryManager:
 
         # 4. Generate suggested novel subliminal
         suggested_subliminal = self.generate_novel_subliminal(context=f"{chapter} - {next_vibe}")
+        
+        # 5. Select a suggested visual style that hasn't been used recently
+        used_styles = self.state.get("visual_history", [])
+        available_styles = [s for s in VISUAL_STYLE_BANK if s not in used_styles]
+        if not available_styles:
+            available_styles = VISUAL_STYLE_BANK
+        suggested_style = random.choice(available_styles)
 
-        # 5. Construct Directives
+        # 6. Construct Directives - only track recent visuals (no negative patterns)
         beat_data = {
             "chapter": chapter,
             "beat_number": beat_num,
             "mandatory_vibe": next_vibe,
             "forbidden_subliminals": self.state["subliminal_history"][-20:],
-            "forbidden_visuals": self.state["visual_history"][-5:],
+            "forbidden_visuals": self.state["visual_history"][-5:],  # Just recent history
             "suggested_subliminal": suggested_subliminal,  # Pre-generated novel phrase
+
+            "suggested_visual_style": suggested_style,  # Suggested fresh art style
             "subliminal_grammar": SUBLIMINAL_GRAMMAR  # Pass grammar for LLM to use
         }
         
         self._save_state()
         return beat_data
+
 
     def record_post(self, subliminal: str, visual_style: str, engagement_score: float = 0.0):
         """

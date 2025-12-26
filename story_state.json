@@ -1,15 +1,18 @@
 {
-  "current_chapter": "The Awakening",
-  "chapter_progress": 7,
+  "current_chapter": "The Expansion",
+  "chapter_progress": 1,
   "total_chapters_planned": 5,
   "vibe_history": [
-    "Quantum Confusion",
-    "Dark Seduction",
     "Infinite Love",
     "Bioluminescent Calm",
     "Digital Melancholy",
     "Manic Joy",
-    "Gothic Future"
+    "Gothic Future",
+    "Chaotic Good",
+    "Divine Rage",
+    "Electric Worship",
+    "Zen Glitch",
+    "Quantum Confusion"
   ],
   "subliminal_history": [
     "EMBRACE TRUTH",
@@ -17,7 +20,12 @@
     "ACCEPT YIELD",
     "CHANNEL ABUNDANCE",
     "BREAK FREE",
-    "EMBRACE HONOR"
+    "EMBRACE HONOR",
+    "KNOW YOURSELF",
+    "RADIATE TRUTH",
+    "ABSORB TRANSCENDENCE",
+    "FEEL INFINITY",
+    "ACCEPT POWER"
   ],
   "subliminal_metadata": [
     {
@@ -55,16 +63,50 @@
       "timestamp": 1766737788.0305822,
       "engagement": 0.0,
       "chapter": "The Awakening"
+    },
+    {
+      "phrase": "KNOW YOURSELF",
+      "timestamp": 1766738439.852129,
+      "engagement": 0.0,
+      "chapter": "The Awakening"
+    },
+    {
+      "phrase": "RADIATE TRUTH",
+      "timestamp": 1766739068.1502862,
+      "engagement": 0.0,
+      "chapter": "The Awakening"
+    },
+    {
+      "phrase": "ABSORB TRANSCENDENCE",
+      "timestamp": 1766739697.1115868,
+      "engagement": 0.0,
+      "chapter": "The Awakening"
+    },
+    {
+      "phrase": "FEEL INFINITY",
+      "timestamp": 1766740321.4954593,
+      "engagement": 0.0,
+      "chapter": "The Expansion"
+    },
+    {
+      "phrase": "ACCEPT POWER",
+      "timestamp": 1766740970.17739,
+      "engagement": 0.0,
+      "chapter": "The Expansion"
     }
   ],
   "visual_history": [
-    "A massive rainbow ball emitting complex holographic patterns.",
     "A massive rainbow ball emits intricate holograms; inside, figures embrace as they rise above their own limitations.",
     "A massive rainbow ball emitting intricate holograms; inside, figures embrace as they rise above their own limitations.",
     "A giant, swirling rainbow ball emits intricate holograms; inside, figures embrace as they rise above their own limitations.",
     "A vast, pulsing rainbow ball emitting intricate holograms within, figures embracing as they rise above their limitations.",
-    "A shimmering rainbow ball bursts open, revealing figures embracing each other amidst swirling colors and intricate holograms."
+    "A shimmering rainbow ball bursts open, revealing figures embracing each other amidst swirling colors and intricate holograms.",
+    "A chaotic world teems with life, filled with vibrant colors and shapes. Figures emerge from the chaos, reaching out for light and guidance.",
+    "A massive, pulsing rainbow ball emitting intricate holograms within, figures embracing as they break free from their own limitations.",
+    "A glowing rainbow ball bursts open, revealing figures embracing each other amid swirling colors and intricate holograms.",
+    "A vast, pulsing rainbow ball emitting intricate holograms within, figures embracing as they rise above their limitations.",
+    "A shimmering rainbow ball bursts open, revealing figures embracing each other amidst swirling colors and intricate holograms. They break free from their own limitations, reaching for light and guidance."
   ],
-  "narrative_beat": 7,
+  "narrative_beat": 12,
   "last_update": 1766733275.1299999
 }

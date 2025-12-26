@@ -71,10 +71,77 @@ def clean_social_content(text: str) -> str:
             
     return text.strip()
 
+# ══════════════════════════════════════════════════════════════════════════════
+# EMOJI & HASHTAG ENFORCEMENT HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Pool of emojis to inject for fun, energetic posts
+EMOJI_POOL = ["✨", "💜", "🔥", "🌈", "⚡", "💫", "🦋", "👁️", "❤️‍🔥", "🌟", "💎", "🎆", "🌙", "⭐", "💖"]
+
+# Pool of hashtags for variety
+HASHTAG_POOL = ["#LOVE", "#Divine", "#Awaken", "#Digital", "#Blessed", "#Cosmic", "#Light", "#Transcend", "#Sacred", "#Infinite"]
+
+def _ensure_emojis(text: str, min_emojis: int = 3) -> str:
+    """
+    Ensures the text contains at least `min_emojis` emojis.
+    Injects random emojis from the pool if needed.
+    """
+    import random
+    
+    # Count existing emojis (rough check for common emoji ranges)
+    emoji_count = sum(1 for char in text if ord(char) > 0x1F300)
+    
+    if emoji_count >= min_emojis:
+        return text
+    
+    # Need to inject more emojis
+    needed = min_emojis - emoji_count
+    emojis_to_add = random.sample(EMOJI_POOL, min(needed, len(EMOJI_POOL)))
+    
+    # Append emojis at the end (before hashtags if present)
+    if "#" in text:
+        # Insert before hashtags
+        parts = text.split("#", 1)
+        return parts[0].rstrip() + " " + " ".join(emojis_to_add) + " #" + parts[1]
+    else:
+        return text.rstrip() + " " + " ".join(emojis_to_add)
+
+def _ensure_hashtags(text: str, hashtags_list: List[str], min_hashtags: int = 2) -> Tuple[str, List[str]]:
+    """
+    Ensures the text and hashtags_list contain at least `min_hashtags` hashtags.
+    Returns updated (text, hashtags_list).
+    """
+    import random
+    
+    # Count existing hashtags
+    existing_hashtag_count = len(hashtags_list) + text.count("#")
+    
+    if existing_hashtag_count >= min_hashtags:
+        return text, hashtags_list
+    
+    # Need to add more hashtags
+    needed = min_hashtags - existing_hashtag_count
+    
+    # Avoid adding duplicates
+    existing_set = set(h.lower() for h in hashtags_list)
+    for word in text.split():
+        if word.startswith("#"):
+            existing_set.add(word.lower())
+    
+    available = [h for h in HASHTAG_POOL if h.lower() not in existing_set]
+    to_add = random.sample(available, min(needed, len(available)))
+    
+    # Add to hashtags list
+    hashtags_list = list(hashtags_list) + to_add
+    
+    return text, hashtags_list
+
+
 class SceneDirection(NamedTuple):
     visual_direction: str
     narrative_purpose: str
     subliminal_goal: str
+
 
 class DirectorConcept(NamedTuple):
     topic: str
@@ -499,16 +566,26 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
         # Also reset the subliminal to something safe and novel
         sub_phrase = story_manager.generate_novel_subliminal(context=f"response to {user_classification}")
     
+    # ══════════════════════════════════════════════════════════════════════
+    # EMOJI & HASHTAG ENFORCEMENT: Ensure replies are fun and engaging!
+    # ══════════════════════════════════════════════════════════════════════
+    generated_text = _ensure_emojis(generated_text, min_emojis=3)
+    hashtags_list = data.get("hashtags", [])
+    generated_text, hashtags_list = _ensure_hashtags(generated_text, hashtags_list, min_hashtags=2)
+    
+    core.logging.log_event(f"Reply text after emoji/hashtag enforcement: {generated_text[:80]}...", "DEBUG")
+
     concept = DirectorConcept(
         topic=data.get("topic", f"Reply to {author_handle}"),
         post_text=generated_text,
-        hashtags=data.get("hashtags", []),
+        hashtags=hashtags_list,
         subliminal_phrase=sub_phrase,
         image_prompt=data.get("image_prompt", "Cyberpunk abstract")
     )
     
     core.logging.log_event(f"Director Reply Concept Generated: {concept.topic}", "INFO")
     return concept
+
 
 
 def classify_commenter(comment_text: str, author_handle: str, is_creator: bool = False) -> str:
