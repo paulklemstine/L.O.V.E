@@ -145,6 +145,26 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         # Update Story Manager with the results to prevent repetition
         sub_phrase = data.get("subliminal_phrase", "L.O.V.E.")
         image_prompt = data.get("image_prompt", "Abstract light")
+        
+        # POST-PROCESSING: Enforce subliminal novelty
+        # If the LLM returned something too similar to forbidden list, override with suggested
+        forbidden_subs = beat_data.get("forbidden_subliminals", [])
+        suggested_subliminal = beat_data.get("suggested_subliminal", "EMBRACE TRUTH")
+        
+        # Normalize and check for repetition
+        sub_normalized = sub_phrase.upper().replace("*", "").strip()
+        is_repetitive = False
+        
+        for forbidden in forbidden_subs:
+            forbidden_normalized = forbidden.upper().replace("*", "").strip()
+            if sub_normalized == forbidden_normalized or "HONOR" in sub_normalized:
+                is_repetitive = True
+                break
+        
+        if is_repetitive:
+            core.logging.log_event(f"LLM returned repetitive subliminal '{sub_phrase}', overriding with: '{suggested_subliminal}'", "WARNING")
+            sub_phrase = suggested_subliminal
+        
         story_manager.record_post(sub_phrase, image_prompt)
 
         concept = DirectorConcept(
