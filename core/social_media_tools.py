@@ -157,7 +157,7 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         
         for forbidden in forbidden_subs:
             forbidden_normalized = forbidden.upper().replace("*", "").strip()
-            if sub_normalized == forbidden_normalized or "HONOR" in sub_normalized:
+            if sub_normalized == forbidden_normalized:
                 is_repetitive = True
                 break
         
