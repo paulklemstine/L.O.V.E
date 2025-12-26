@@ -81,6 +81,7 @@ class StoryManager:
             "subliminal_history": [], # List of last 50 subliminal commands
             "subliminal_metadata": [],  # Extended metadata for learning
             "visual_history": [], # List of last 10 visual styles
+            "reply_history": [],  # List of last 20 reply texts to prevent repetition
             "narrative_beat": 0, # Monotonic counter
             "last_update": time.time()
         }
@@ -249,6 +250,45 @@ class StoryManager:
                 self.state["visual_history"].pop(0)
                 
         self._save_state()
+
+    def record_reply(self, reply_text: str):
+        """
+        Records a reply text to history to prevent repetition.
+        
+        Args:
+            reply_text: The full text of the reply
+        """
+        if reply_text:
+            self.state.setdefault("reply_history", []).append(reply_text)
+            # Keep last 20 replies
+            if len(self.state["reply_history"]) > 20:
+                self.state["reply_history"].pop(0)
+            self._save_state()
+            log_event(f"Recorded reply to history (total: {len(self.state['reply_history'])})", level="DEBUG")
+    
+    def is_reply_novel(self, reply_text: str, threshold: float = 0.50) -> bool:
+        """
+        Check if a reply is novel compared to recent reply history.
+        
+        Args:
+            reply_text: The proposed reply text
+            threshold: Similarity threshold (lower = stricter)
+            
+        Returns:
+            True if the reply is sufficiently novel
+        """
+        reply_history = self.state.get("reply_history", [])
+        
+        if not reply_history:
+            return True
+        
+        for past_reply in reply_history:
+            similarity = self._similarity_checker.compute_similarity(reply_text, past_reply)
+            if similarity > threshold:
+                log_event(f"Reply similarity {similarity:.2f} > {threshold} threshold (too similar to: '{past_reply[:50]}...')", level="WARNING")
+                return False
+        
+        return True
 
     def get_high_performing_patterns(self, min_engagement: float = 20.0) -> List[str]:
         """
