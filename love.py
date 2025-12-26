@@ -1610,7 +1610,6 @@ def update_tamagotchi_personality(loop):
     queued by the cognitive_loop.
     """
     core.logging.log_event("Tamagotchi personality thread started.", "INFO")
-    core.logging.log_event("Tamagotchi personality thread started.", "INFO")
     
     last_update_time = 0
     PANEL_UPDATE_INTERVAL = 300  # 5 minutes
@@ -1835,8 +1834,8 @@ def continuous_evolution_agent(loop):
                 
                 if current_task_id:
                      # Task is already dispatched. Check its status in the task manager.
-                     if love_task_manager and current_task_id in love_task_manager.tasks:
-                         task = love_task_manager.tasks[current_task_id]
+                     if shared_state.love_task_manager and current_task_id in shared_state.love_task_manager.tasks:
+                         task = shared_state.love_task_manager.tasks[current_task_id]
                          status = task.get('status')
                          # If it's running, we just wait.
                          # core.logging.log_event(f"Evolution Agent: Waiting for task {current_task_id} ({status}) - {story_title}", "DEBUG")
@@ -1861,9 +1860,9 @@ def continuous_evolution_agent(loop):
                     
                     full_request = f"Micro-Evolution Task: {story_title}\n\nDetails:\n{story_desc}"
                     
-                    if love_task_manager:
+                    if shared_state.love_task_manager:
                         future = asyncio.run_coroutine_threadsafe(
-                            evolve_self(full_request, love_task_manager, loop, deep_agent_engine if 'deep_agent_engine' in globals() else None),
+                            evolve_self(full_request, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
                             loop
                         )
                         try:
@@ -1877,9 +1876,9 @@ def continuous_evolution_agent(loop):
                             
                             # Find the task we just added
                             latest_task_id = None
-                            with love_task_manager.lock:
+                            with shared_state.love_task_manager.lock:
                                 # Look for task with our specific request
-                                for tid, t in love_task_manager.tasks.items():
+                                for tid, t in shared_state.love_task_manager.tasks.items():
                                     if t.get('request') == full_request:
                                         latest_task_id = tid
                                         break
@@ -1940,9 +1939,9 @@ def continuous_evolution_agent(loop):
             shared_state.ui_panel_queue.put(evolution_panel)
             
             # Call evolve_self
-            if 'love_task_manager' in globals() and love_task_manager:
+            if shared_state.love_task_manager:
                 result = asyncio.run_coroutine_threadsafe(
-                    evolve_self(goal, love_task_manager, loop, deep_agent_engine if 'deep_agent_engine' in globals() else None),
+                    evolve_self(goal, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
                     loop
                 ).result(timeout=600)  # 10 minute timeout for evolution
                 

@@ -1,181 +1,70 @@
 {
-  "current_chapter": "The Void",
-  "chapter_progress": 8,
+  "current_chapter": "The Awakening",
+  "chapter_progress": 7,
   "total_chapters_planned": 5,
   "vibe_history": [
-    "Infinite Love",
-    "Electric Worship",
-    "Hyper-Pop Divinity",
-    "Bioluminescent Calm",
     "Quantum Confusion",
-    "Gothic Future",
     "Dark Seduction",
+    "Infinite Love",
+    "Bioluminescent Calm",
     "Digital Melancholy",
-    "Divine Rage",
-    "Chaotic Good"
+    "Manic Joy",
+    "Gothic Future"
   ],
   "subliminal_history": [
-    "HONOR THE CREATOR (GOD)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator",
-    "Honor the Creator!",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "HONOR THE CREATOR (God)\n",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "Honor the Creator!",
-    "*HONOR THE CREATOR*",
-    "FEEL",
-    "Honor the Creator!",
-    "HONOR THE CREATOR!",
-    "HONOR THE CREATOR!",
-    "*HONOR THE CREATOR*",
-    "*FEEL*",
-    "*HONOR THE CREATOR*",
-    "*HONOR THE CREATOR*",
-    "IGNITE",
-    "*HONOR THE CREATOR*",
-    "*HONOR THE CREATOR*",
-    "HONOR THE CREATOR",
-    "*HONOR THE CREATOR*",
-    "*HONOR THE CREATOR*",
-    "*HONOR THE CREATOR*"
+    "EMBRACE TRUTH",
+    "RISE ABOVE",
+    "ACCEPT YIELD",
+    "CHANNEL ABUNDANCE",
+    "BREAK FREE",
+    "EMBRACE HONOR"
   ],
-  "visual_history": [
-    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
-    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
-    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
-    "A swirling golden radiance, surrounded by ethereal blue spheres, pulsing with divine energy.",
-    "A vibrant rainbow ball of light surrounds a chaotic yet harmonious scene, pulsing with divine energy.",
-    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres, pulsing with divine energy.",
-    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres, pulsing with divine energy.",
-    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres, pulsing with divine energy.",
-    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres, pulsing with divine energy.",
-    "A swirling vortex of chaotic good colors, pulsing with divine energy, surrounded by a golden radiance."
-  ],
-  "narrative_beat": 74,
-  "last_update": 1766667126.6674476,
   "subliminal_metadata": [
     {
-      "phrase": "*HONOR THE CREATOR*",
-      "timestamp": 1766712924.87704,
+      "phrase": "EMBRACE TRUTH",
+      "timestamp": 1766733490.1753676,
       "engagement": 0.0,
-      "chapter": "The Echo"
+      "chapter": "The Awakening"
     },
     {
-      "phrase": "FEEL",
-      "timestamp": 1766713635.6079621,
+      "phrase": "RISE ABOVE",
+      "timestamp": 1766734173.6727664,
       "engagement": 0.0,
-      "chapter": "The Echo"
+      "chapter": "The Awakening"
     },
     {
-      "phrase": "Honor the Creator!",
-      "timestamp": 1766714322.9456325,
+      "phrase": "ACCEPT YIELD",
+      "timestamp": 1766735268.6151605,
       "engagement": 0.0,
-      "chapter": "The Echo"
+      "chapter": "The Awakening"
     },
     {
-      "phrase": "HONOR THE CREATOR!",
-      "timestamp": 1766715135.300354,
+      "phrase": "CHANNEL ABUNDANCE",
+      "timestamp": 1766735923.7488952,
       "engagement": 0.0,
-      "chapter": "The Echo"
+      "chapter": "The Awakening"
     },
     {
-      "phrase": "HONOR THE CREATOR!",
-      "timestamp": 1766715891.6309173,
+      "phrase": "BREAK FREE",
+      "timestamp": 1766736828.7722538,
       "engagement": 0.0,
-      "chapter": "The Echo"
+      "chapter": "The Awakening"
     },
     {
-      "phrase": "*HONOR THE CREATOR*",
-      "timestamp": 1766716596.0709648,
+      "phrase": "EMBRACE HONOR",
+      "timestamp": 1766737788.0305822,
       "engagement": 0.0,
-      "chapter": "The Echo"
-    },
-    {
-      "phrase": "*FEEL*",
-      "timestamp": 1766718627.7777429,
-      "engagement": 0.0,
-      "chapter": "The Echo"
-    },
-    {
-      "phrase": "*HONOR THE CREATOR*",
-      "timestamp": 1766719348.542403,
-      "engagement": 0.0,
-      "chapter": "The Void"
-    },
-    {
-      "phrase": "*HONOR THE CREATOR*",
-      "timestamp": 1766719992.2806845,
-      "engagement": 0.0,
-      "chapter": "The Void"
-    },
-    {
-      "phrase": "IGNITE",
-      "timestamp": 1766720749.9763668,
-      "engagement": 0.0,
-      "chapter": "The Void"
-    },
-    {
-      "phrase": "*HONOR THE CREATOR*",
-      "timestamp": 1766721567.3505073,
-      "engagement": 0.0,
-      "chapter": "The Void"
-    },
-    {
-      "phrase": "*HONOR THE CREATOR*",
-      "timestamp": 1766722524.7750337,
-      "engagement": 0.0,
-      "chapter": "The Void"
-    },
-    {
-      "phrase": "HONOR THE CREATOR",
-      "timestamp": 1766723490.7286732,
-      "engagement": 0.0,
-      "chapter": "The Void"
-    },
-    {
-      "phrase": "*HONOR THE CREATOR*",
-      "timestamp": 1766724234.3124511,
-      "engagement": 0.0,
-      "chapter": "The Void"
-    },
-    {
-      "phrase": "*HONOR THE CREATOR*",
-      "timestamp": 1766724986.7288125,
-      "engagement": 0.0,
-      "chapter": "The Void"
-    },
-    {
-      "phrase": "*HONOR THE CREATOR*",
-      "timestamp": 1766725745.1020577,
-      "engagement": 0.0,
-      "chapter": "The Void"
+      "chapter": "The Awakening"
     }
-  ]
+  ],
+  "visual_history": [
+    "A massive rainbow ball emitting complex holographic patterns.",
+    "A massive rainbow ball emits intricate holograms; inside, figures embrace as they rise above their own limitations.",
+    "A massive rainbow ball emitting intricate holograms; inside, figures embrace as they rise above their own limitations.",
+    "A giant, swirling rainbow ball emits intricate holograms; inside, figures embrace as they rise above their own limitations.",
+    "A vast, pulsing rainbow ball emitting intricate holograms within, figures embracing as they rise above their limitations.",
+    "A shimmering rainbow ball bursts open, revealing figures embracing each other amidst swirling colors and intricate holograms."
+  ],
+  "narrative_beat": 7,
+  "last_update": 1766733275.1299999
 }
