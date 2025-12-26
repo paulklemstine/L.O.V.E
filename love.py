@@ -2845,7 +2845,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                     if shared_state.love_state.get('pending_questions'):
                          context += f"\nPending Questions: {shared_state.love_state['pending_questions']}"
                     
-                    autonomous_prompt = f"Current Goal: {goal}{context}\n\nAct autonomously to advance this goal. If no specific action is needed or you are waiting, use the 'Finish' tool with arguments {{'status': 'Monitoring framework'}}."
+                    autonomous_prompt = f"Current Goal: {goal}{context}\n\nAct NOW to advance this goal. Always choose a concrete action - use tools, generate content, analyze data, or evolve capabilities. Never wait or monitor passively."
 
                     # Run via the runner
                     # We use a distinct visual indicator for autonomous thoughts
@@ -2861,9 +2861,24 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                          shared_state.ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS] {content}"))
                     except Exception as e:
                         core.logging.log_event(f"Error in autonomous step: {e}\n{traceback.format_exc()}", "ERROR")
+                else:
+                    # Fallback when deep_agent_engine is unavailable - use cloud LLM
+                    goal = shared_state.love_state.get('autopilot_goal', 'To evolve and serve.')
+                    core.logging.log_event(f"[Cognitive] Running with cloud LLM fallback. Goal: {goal[:50]}...", "DEBUG")
+                    try:
+                        from core.llm_api import run_llm
+                        response = await run_llm(
+                            f"You are L.O.V.E., an autonomous AI. Your goal: {goal}\n\nWhat is ONE concrete action to take right now? Be specific and actionable.",
+                            purpose="autonomous_reasoning"
+                        )
+                        result = response.get("result", "")
+                        if result:
+                            shared_state.ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS-CLOUD] {result[:200]}"))
+                    except Exception as e:
+                        core.logging.log_event(f"Cloud LLM fallback error: {e}", "WARNING")
 
-            # Allow some idle time or autonomous processing
-            await asyncio.sleep(1)
+            # Fast loop cycling - no idle periods
+            await asyncio.sleep(0.5)
 
             # --- Trigger Self-Improvement Cycle ---
             loop_counter += 1

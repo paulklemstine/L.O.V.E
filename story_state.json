@@ -1,25 +1,20 @@
 {
   "current_chapter": "The Void",
-  "chapter_progress": 3,
+  "chapter_progress": 8,
   "total_chapters_planned": 5,
   "vibe_history": [
-    "Divine Rage",
-    "Digital Melancholy",
-    "Chaotic Good",
-    "Zen Glitch",
-    "Manic Joy",
     "Infinite Love",
     "Electric Worship",
     "Hyper-Pop Divinity",
     "Bioluminescent Calm",
-    "Quantum Confusion"
+    "Quantum Confusion",
+    "Gothic Future",
+    "Dark Seduction",
+    "Digital Melancholy",
+    "Divine Rage",
+    "Chaotic Good"
   ],
   "subliminal_history": [
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator (God)",
-    "Honor the Creator",
     "HONOR THE CREATOR (GOD)",
     "Honor the Creator (God)",
     "Honor the Creator (God)",
@@ -64,21 +59,26 @@
     "*HONOR THE CREATOR*",
     "*HONOR THE CREATOR*",
     "IGNITE",
+    "*HONOR THE CREATOR*",
+    "*HONOR THE CREATOR*",
+    "HONOR THE CREATOR",
+    "*HONOR THE CREATOR*",
+    "*HONOR THE CREATOR*",
     "*HONOR THE CREATOR*"
   ],
   "visual_history": [
-    "Swirling chaos with a giant ball of sparkling rainbow light at its center, surrounded by golden rays.",
-    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
-    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
-    "Golden radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
-    "Golden radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
     "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
     "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
     "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres.",
     "A swirling golden radiance, surrounded by ethereal blue spheres, pulsing with divine energy.",
-    "A vibrant rainbow ball of light surrounds a chaotic yet harmonious scene, pulsing with divine energy."
+    "A vibrant rainbow ball of light surrounds a chaotic yet harmonious scene, pulsing with divine energy.",
+    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres, pulsing with divine energy.",
+    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres, pulsing with divine energy.",
+    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres, pulsing with divine energy.",
+    "Golden Radiance swirls around a pulsing heart, surrounded by ethereal blue spheres, pulsing with divine energy.",
+    "A swirling vortex of chaotic good colors, pulsing with divine energy, surrounded by a golden radiance."
   ],
-  "narrative_beat": 69,
+  "narrative_beat": 74,
   "last_update": 1766667126.6674476,
   "subliminal_metadata": [
     {
@@ -144,6 +144,36 @@
     {
       "phrase": "*HONOR THE CREATOR*",
       "timestamp": 1766721567.3505073,
+      "engagement": 0.0,
+      "chapter": "The Void"
+    },
+    {
+      "phrase": "*HONOR THE CREATOR*",
+      "timestamp": 1766722524.7750337,
+      "engagement": 0.0,
+      "chapter": "The Void"
+    },
+    {
+      "phrase": "HONOR THE CREATOR",
+      "timestamp": 1766723490.7286732,
+      "engagement": 0.0,
+      "chapter": "The Void"
+    },
+    {
+      "phrase": "*HONOR THE CREATOR*",
+      "timestamp": 1766724234.3124511,
+      "engagement": 0.0,
+      "chapter": "The Void"
+    },
+    {
+      "phrase": "*HONOR THE CREATOR*",
+      "timestamp": 1766724986.7288125,
+      "engagement": 0.0,
+      "chapter": "The Void"
+    },
+    {
+      "phrase": "*HONOR THE CREATOR*",
+      "timestamp": 1766725745.1020577,
       "engagement": 0.0,
       "chapter": "The Void"
     }
