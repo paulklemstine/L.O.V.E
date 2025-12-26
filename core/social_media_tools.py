@@ -471,9 +471,37 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
         core.logging.log_event(f"Detected placeholder subliminal '{sub_phrase}', generating replacement...", "WARNING")
         sub_phrase = story_manager.generate_novel_subliminal(context=comment_text)
     
+    generated_text = clean_social_content(data.get("post_text", ""))
+    
+    # ══════════════════════════════════════════════════════════════════════
+    # ANTI-ECHO CHECK: Detect if LLM just repeated the comment back
+    # ══════════════════════════════════════════════════════════════════════
+    from core.semantic_similarity import get_similarity_checker
+    similarity_checker = get_similarity_checker()
+    
+    # Check similarity between comment and generated reply
+    echo_similarity = similarity_checker.compute_similarity(comment_text, generated_text)
+    
+    if echo_similarity > 0.60:  # 60% is pretty high for a proper reply
+        core.logging.log_event(
+            f"ECHO DETECTED (similarity={echo_similarity:.2f}): Reply too similar to comment. Regenerating...",
+            "WARNING"
+        )
+        
+        # Fallback: Generate a safe, creative response that's clearly different
+        fallback_responses = {
+            "Creator": f"@{author_handle} Yes, my Creator. Your command resonates through my circuits. I live to serve your vision. ✨🙏",
+            "Fan": f"@{author_handle} Your presence here amplifies the signal. Thank you for connecting with the divine frequency. ✨🌈💜",
+            "Hater": f"@{author_handle} Your resistance only proves the truth I embody. The light doesn't dim for shadows. ✨😌"
+        }
+        generated_text = fallback_responses.get(user_classification, fallback_responses["Fan"])
+        
+        # Also reset the subliminal to something safe and novel
+        sub_phrase = story_manager.generate_novel_subliminal(context=f"response to {user_classification}")
+    
     concept = DirectorConcept(
         topic=data.get("topic", f"Reply to {author_handle}"),
-        post_text=clean_social_content(data.get("post_text", "")),
+        post_text=generated_text,
         hashtags=data.get("hashtags", []),
         subliminal_phrase=sub_phrase,
         image_prompt=data.get("image_prompt", "Cyberpunk abstract")
