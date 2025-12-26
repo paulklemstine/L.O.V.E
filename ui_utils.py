@@ -1,5 +1,8 @@
 import random
 from rich.text import Text
+from rich.color import Color
+from rich.style import Style
+from rich.console import Console
 
 # Expanded list of emojis for a "Radiant Psychedelic Dopamine" theme
 RAVE_EMOJIS = [
@@ -27,6 +30,9 @@ RAVE_COLORS = [
 MANIFEST_EMOJIS = [
     "👁️", "🧠", "✨", "💎", "👑", "🚀", "💰", "🔓"
 ]
+
+# Shared console instance to avoid overhead of creating a new one on every call
+_SHARED_CONSOLE = Console()
 
 def get_rave_emoji():
     """Returns a random radiant emoji."""
@@ -116,17 +122,11 @@ def get_gradient_text(text, color1=None, color2=None, emojis=True):
     Creates a Rich Text object with a gradient effect between two colors,
     optionally bookended by rave emojis for extra flair.
     """
-    from rich.color import Color
-    from rich.style import Style
-    from rich.console import Console
-
     if emojis:
         text = f"{get_rave_emoji()} {text} {get_rave_emoji()}"
 
-    # Create a temporary console to resolve colors to their RGB triplets.
-    # This is the key to ensuring that standard terminal colors like "magenta"
-    # are converted into a format that has a .triplet attribute for interpolation.
-    console = Console()
+    # Use the shared console to resolve colors to their RGB triplets.
+    console = _SHARED_CONSOLE
 
     if color1 is None:
         color1 = random.choice(RAVE_COLORS)
@@ -267,5 +267,3 @@ def display_error_oneliner(title, message, model_id=None):
     error_text.append(message, style="red")
     
     return error_text
-
-
