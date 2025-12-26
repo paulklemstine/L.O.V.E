@@ -462,6 +462,15 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
     
     sub_phrase = data.get("subliminal_phrase", "CONNECT")
     
+    # POST-PROCESSING: Catch placeholder text that LLM failed to replace
+    placeholder_patterns = ["GENERATE_UNIQUE_WORD_HERE", "CONTEXTUAL_COMMAND", "USE GRAMMAR OR SUGGESTED", "COMMAND"]
+    sub_upper = sub_phrase.upper().strip()
+    
+    if any(p in sub_upper for p in placeholder_patterns) or len(sub_phrase) > 30:
+        # LLM failed to generate a real subliminal - use story manager
+        core.logging.log_event(f"Detected placeholder subliminal '{sub_phrase}', generating replacement...", "WARNING")
+        sub_phrase = story_manager.generate_novel_subliminal(context=comment_text)
+    
     concept = DirectorConcept(
         topic=data.get("topic", f"Reply to {author_handle}"),
         post_text=clean_social_content(data.get("post_text", "")),
