@@ -829,7 +829,8 @@ class JulesTaskManager:
         try:
             @retry(exceptions=(requests.exceptions.RequestException,), tries=2, delay=15)
             def _list_sessions():
-                response = requests.get(url, headers=headers, timeout=45)
+                # Reduced timeout to prevents hangs
+                response = requests.get(url, headers=headers, timeout=10)
                 response.raise_for_status()
                 return response.json()
 

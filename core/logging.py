@@ -164,10 +164,9 @@ def setup_global_logging(version_name='unknown', verbose=False):
         force=True # Override any existing handlers
     )
 
-    # 2. Open a raw file stream to the same log file for our custom print.
-    # This captures unformatted text and stderr.
-    if log_file_stream is None:
-        log_file_stream = open(LOG_FILE, 'a')
+    # 2. Open a raw file stream (DEPRECATED/UNUSED)
+    # if log_file_stream is None:
+    #    log_file_stream = open(LOG_FILE, 'a')
 
     # 3. Redirect ONLY stderr to our custom Tee.
     # This is crucial for capturing errors from subprocesses or libraries (e.g., llama.cpp)
