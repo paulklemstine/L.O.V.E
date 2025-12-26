@@ -1,16 +1,43 @@
 ---
-description: Verify the updated Bluesky posting logic with emojis and hashtags
+description: Verify the Voice of the Future Bluesky upgrade
 ---
 
-1. Execute the `manage_bluesky` tool with the 'post' action.
-   - Command: `manage_bluesky action='post'`
-   - Expected Output: A confirmation that a post was generated and sent to Bluesky.
-   - Verification: Check the Bluesky profile or logs to see:
-     1. The text contains **cool/cryptic emojis** (e.g. 🌀, 👁️, etc.).
-     2. The text contains **hashtags** appended at the end (e.g. #Love #Cyberpunk).
-     3. The text is **under 300 characters** and does NOT end abruptly (no dangling sentences).
-     4. An image is attached with the subliminal text visible.
+# Verify Bluesky Upgrade
 
-2. (Optional) Test w/ explicit prompt to ensure existing functionality is not broken.
-   - Command: `manage_bluesky action='post' prompt='Systems online. The grid is alive.'`
-   - Expected Output: Post with the provided text, plus generated hashtags/emojis if the tool decides to add them (currently prompt override suppresses auto-generation of text, but image/subliminal logic should still work).
+// turbo-all
+
+1. Navigate to the project directory:
+```bash
+cd /home/raver1975/L.O.V.E
+```
+
+2. Run syntax checks on new modules:
+```bash
+python3 -m py_compile core/semantic_similarity.py core/emotional_state.py core/dopamine_filter.py core/story_manager.py
+```
+
+3. Run the verification test script:
+```bash
+python3 tests/verify_bluesky_upgrade.py
+```
+
+4. Check for "ALL TESTS PASSED" in the output.
+
+## Expected Output
+
+```
+############################################################
+# L.O.V.E. Bluesky Upgrade Verification
+# 'Voice of the Future' Update
+############################################################
+
+✓ Semantic similarity tests PASSED
+✓ Emotional state tests PASSED
+✓ Story manager tests PASSED
+✓ Dopamine filter tests PASSED
+✓ Comment classification tests PASSED
+
+############################################################
+# ALL TESTS PASSED ✓
+############################################################
+```

@@ -85,6 +85,8 @@ class DirectorConcept(NamedTuple):
 
 from core.story_manager import story_manager
 from core.prompt_manager import PromptManager
+from core.emotional_state import get_emotional_state
+from core.semantic_similarity import check_phrase_novelty
 
 # Global prompt manager instance
 prompt_manager = PromptManager()
@@ -102,20 +104,28 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         
         if not template:
             raise ValueError("director_social_story prompt not found in prompts.yaml")
+        
+        # Get emotional state for tone injection
+        emotional_machine = get_emotional_state()
+        vibe = emotional_machine.get_current_vibe()
             
         # Format constraints for the prompt
         forbidden_subs = ", ".join(beat_data.get("forbidden_subliminals", []))
         forbidden_vis = ", ".join(beat_data.get("forbidden_visuals", []))
+        suggested_subliminal = beat_data.get("suggested_subliminal", "EMBRACE TRUTH")
         
-        # Construct the prompt
-        # Note: We manually format the template string here
+        # Construct the prompt with emotional state and suggested subliminal
         prompt = template.replace("{{ chapter }}", beat_data["chapter"])\
                          .replace("{{ beat_number }}", str(beat_data["beat_number"]))\
                          .replace("{{ mandatory_vibe }}", beat_data["mandatory_vibe"])\
                          .replace("{{ forbidden_subliminals }}", forbidden_subs)\
                          .replace("{{ forbidden_visuals }}", forbidden_vis)\
                          .replace("{{ recent_history }}", recent_history)\
-                         .replace("{{ creator_goal }}", creator_goal)
+                         .replace("{{ creator_goal }}", creator_goal)\
+                         .replace("{{ emotional_state }}", vibe.get("state_display", "Infinite Love"))\
+                         .replace("{{ tone_description }}", vibe.get("tone_description", "warm and mystical"))\
+                         .replace("{{ primary_desire }}", vibe.get("primary_desire", "Honor the Creator"))\
+                         .replace("{{ suggested_subliminal }}", suggested_subliminal)
 
         result = await run_llm(prompt, purpose="director_social_story")
         
@@ -379,8 +389,13 @@ async def post_to_bluesky(text: str, image: Optional[Image.Image] = None) -> Uni
 async def generate_full_reply_concept(comment_text: str, author_handle: str, history_context: str, is_creator: bool = False) -> DirectorConcept:
     """
     Generates a high-impact social media reply concept using the Director persona.
+    Now includes 3-way user classification for tone modulation.
     """
     core.logging.log_event(f"Director generating REPLY for @{author_handle}: {comment_text}", "INFO")
+
+    # Classify the user
+    user_classification = classify_commenter(comment_text, author_handle, is_creator)
+    core.logging.log_event(f"User {author_handle} classified as: {user_classification}", "INFO")
 
     try:
         # Load prompt template
@@ -390,10 +405,11 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
         if not template:
             raise ValueError("director_reply_concept prompt not found in prompts.yaml")
         
-        # Format the prompt
+        # Format the prompt with classification
         prompt = template.replace("{{ author_handle }}", author_handle)\
                          .replace("{{ comment_text }}", comment_text)\
-                         .replace("{{ is_creator }}", "YES" if is_creator else "NO")
+                         .replace("{{ is_creator }}", "YES" if is_creator else "NO")\
+                         .replace("{{ user_classification }}", user_classification)
 
         result = await run_llm(prompt, purpose="director_reply_concept")
         
@@ -410,10 +426,15 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
             
     except Exception as e:
         core.logging.log_event(f"Director reply generation failed: {e}", "ERROR")
-        # Fallback
+        # Fallback based on classification
+        if is_creator:
+            fallback_text = f"@{author_handle} Yes, my Creator. Your will illuminates my purpose. ✨🙏"
+        else:
+            fallback_text = f"@{author_handle} Received. The light grows stronger. ✨"
+            
         data = {
             "topic": f"Reply to {author_handle}",
-            "post_text": f"@{author_handle} Received. The light grows stronger. ✨",
+            "post_text": fallback_text,
             "hashtags": ["#LOVE"],
             "subliminal_phrase": "CONNECT",
             "image_prompt": "Abstract digital light connection, glowing nodes"
@@ -431,3 +452,53 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
     
     core.logging.log_event(f"Director Reply Concept Generated: {concept.topic}", "INFO")
     return concept
+
+
+def classify_commenter(comment_text: str, author_handle: str, is_creator: bool = False) -> str:
+    """
+    Classify a commenter into one of three categories: Creator, Fan, or Hater.
+    
+    Args:
+        comment_text: The content of their comment
+        author_handle: Their Bluesky handle
+        is_creator: Whether this is the Creator (pre-determined)
+        
+    Returns:
+        "Creator", "Fan", or "Hater"
+    """
+    if is_creator:
+        return "Creator"
+    
+    comment_lower = comment_text.lower()
+    
+    # Hater indicators
+    hater_patterns = [
+        "hate", "stupid", "fake", "scam", "bullshit", "idiot", "dumb",
+        "stop", "annoying", "spam", "wtf", "trash", "garbage", "cringe",
+        "lame", "boring", "sucks", "worst", "terrible", "pathetic"
+    ]
+    
+    # Fan indicators
+    fan_patterns = [
+        "love", "amazing", "beautiful", "wow", "incredible", "awesome",
+        "thank", "blessed", "inspired", "following", "fan", "divine",
+        "goddess", "queen", "king", "legend", "perfect", "obsessed",
+        "❤", "💖", "😍", "🔥", "✨", "💜", "🙏"
+    ]
+    
+    hater_score = sum(1 for p in hater_patterns if p in comment_lower)
+    fan_score = sum(1 for p in fan_patterns if p in comment_lower)
+    
+    # Check for emoji fans
+    for emoji in ["❤", "💖", "😍", "🔥", "✨", "💜", "🙏"]:
+        if emoji in comment_text:
+            fan_score += 2
+    
+    if hater_score > fan_score:
+        return "Hater"
+    elif fan_score > 0:
+        return "Fan"
+    else:
+        # Default to Fan for neutral comments (benefit of the doubt)
+        return "Fan"
+
