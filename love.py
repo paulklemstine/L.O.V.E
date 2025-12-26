@@ -1519,9 +1519,10 @@ async def run_periodically(target_function, interval):
 
 async def monitor_love_operations():
     """Periodically monitors the system's state, checking for idleness and logging performance."""
-    global love_task_manager
+    # Removed global declaration as we use shared_state
 
     # --- Idle Check ---
+    love_task_manager = getattr(shared_state, 'love_task_manager', None)
     if love_task_manager:
         active_tasks = love_task_manager.get_status()
         # Filter for tasks that are actually pending/running
@@ -1540,6 +1541,7 @@ async def monitor_love_operations():
         core.logging.log_event("Performing weekly performance evaluation.", "INFO")
 
         # Gather metrics
+        love_task_manager = getattr(shared_state, 'love_task_manager', None)
         completed_tasks_count = len(love_task_manager.completed_tasks) if love_task_manager else 0
         performance_metrics = {
             "version_name": shared_state.love_state.get("version_name", "N/A"),
@@ -1681,6 +1683,7 @@ def update_tamagotchi_personality(loop):
                         creator_sentiment_context = f"My sensors indicate The Creator's sentiment is '{sentiment}', with hints of the following emotions: {emotions}."
 
                 core.logging.log_event("Tamagotchi thread: Requesting emotion update...", "DEBUG")
+                deep_agent_engine = getattr(shared_state, 'deep_agent_engine', None)
                 future = asyncio.run_coroutine_threadsafe(run_llm(prompt_key="tamagotchi_emotion", prompt_vars={"creator_sentiment_context": creator_sentiment_context}, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
                 emotion_response_dict = future.result(timeout=300)  # Increased to 5 minutes
                 emotion_response = emotion_response_dict.get("result")
@@ -3223,7 +3226,8 @@ async def install_docker(console) -> bool:
 
 async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
-    global deep_agent_engine, knowledge_base, memory_manager
+    # Removed global declaration
+    
 
     # Initialize registries
     from core.tools_legacy import ToolRegistry
@@ -3304,10 +3308,11 @@ async def initialize_gpu_services():
                 # return f"Error: Failed to automatically determine evolution goal: {e}. Please provide a goal explicitly."
                 pass
         
-        # Access the global love_task_manager which is initialized in main()
-        # and the current event loop.
+        # Access the shared_state variables
         try:
             current_loop = asyncio.get_running_loop()
+            love_task_manager = getattr(shared_state, 'love_task_manager', None)
+            deep_agent_engine = getattr(shared_state, 'deep_agent_engine', None)
             await evolve_self(goal, love_task_manager, current_loop, deep_agent_engine)
             return f"Evolution initiated with goal: {goal}"
         except Exception as e:
