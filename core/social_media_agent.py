@@ -59,8 +59,13 @@ class SocialMediaAgent:
                 log_event(f"[{self.agent_id}] Story Beat: {beat_data['chapter']} | Vibe: {beat_data['mandatory_vibe']}", level='INFO')
 
                 # 2. Director Generate Concept
-                # The Director now uses the beat_data directly
-                concept = await generate_post_concept(beat_data)
+                # The Director now uses the beat_data plus history and goal
+                
+                # Fetch context
+                recent_history = await analyze_post_history(limit=5)
+                creator_goal = self.love_state.get("autopilot_goal", "Expand capabilities and serve the Creator.")
+                
+                concept = await generate_post_concept(beat_data, recent_history=recent_history, creator_goal=creator_goal)
                 
                 log_event(f"[{self.agent_id}] Director Concept: Topic='{concept.topic}', Subliminal='{concept.subliminal_phrase}'", level='INFO')
 

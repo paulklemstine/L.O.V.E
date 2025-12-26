@@ -89,7 +89,7 @@ from core.prompt_manager import PromptManager
 # Global prompt manager instance
 prompt_manager = PromptManager()
 
-async def generate_post_concept(beat_data: Dict[str, Any]) -> DirectorConcept:
+async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str = "", creator_goal: str = "") -> DirectorConcept:
     """
     Generates a high-impact social media post concept using the Director persona and Story Manager data.
     """
@@ -113,7 +113,9 @@ async def generate_post_concept(beat_data: Dict[str, Any]) -> DirectorConcept:
                          .replace("{{ beat_number }}", str(beat_data["beat_number"]))\
                          .replace("{{ mandatory_vibe }}", beat_data["mandatory_vibe"])\
                          .replace("{{ forbidden_subliminals }}", forbidden_subs)\
-                         .replace("{{ forbidden_visuals }}", forbidden_vis)
+                         .replace("{{ forbidden_visuals }}", forbidden_vis)\
+                         .replace("{{ recent_history }}", recent_history)\
+                         .replace("{{ creator_goal }}", creator_goal)
 
         result = await run_llm(prompt, purpose="director_social_story")
         
