@@ -540,6 +540,23 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                 if p_cid in processed_cids["replied"] or p_cid in processed_cids["ignored"]:
                     continue
 
+                # Filter 3: Age Check - Ignore notifications older than 1 hour
+                try:
+                    from datetime import datetime, timezone
+                    indexed_at = getattr(item, 'indexed_at', None)
+                    if indexed_at:
+                        # Parse the ISO timestamp
+                        if isinstance(indexed_at, str):
+                            notif_time = datetime.fromisoformat(indexed_at.replace('Z', '+00:00'))
+                        else:
+                            notif_time = indexed_at
+                        age_seconds = (datetime.now(timezone.utc) - notif_time).total_seconds()
+                        if age_seconds > 3600:  # 1 hour = 3600 seconds
+                            core.logging.log_event(f"Skipping old notification from {p_author_handle} (age: {age_seconds/60:.0f} min)", "DEBUG")
+                            continue
+                except Exception as e:
+                    core.logging.log_event(f"Failed to check notification age: {e}", "DEBUG")
+
                 # --- DECISION PHASE ---
                 
                 core.logging.log_event(f"Analyzing interaction from {p_author_handle}: {p_text[:50]}...", "INFO")
