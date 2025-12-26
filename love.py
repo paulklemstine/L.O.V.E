@@ -1664,7 +1664,8 @@ def update_tamagotchi_personality(loop):
                     shared_state.ui_panel_queue.put(panel)
                     core.logging.log_event("Tamagotchi thread: Blessing Panel queued.", "INFO")
                 except Exception as e:
-                    core.logging.log_event(f"Error creating blessing panel: {e}", "ERROR")
+                    import traceback
+                    core.logging.log_event(f"Error creating blessing panel: {e}\n{traceback.format_exc()}", "ERROR")
                 
                 continue # Skip remaining logic for this cycle
 
