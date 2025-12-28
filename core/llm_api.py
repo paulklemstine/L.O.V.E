@@ -654,6 +654,9 @@ def rank_models(purpose="general"):
             if purpose == "emotion" or purpose == "scoring":
                  final_score += 100000 # Massive boost for routine/aesthetic tasks
                  # log_event(f"Applying massive priority boost to local vLLM for {purpose} task: {model_id}", "DEBUG")
+            elif purpose == "creative_art":
+                 # Penalize local vLLM for creative art to force cloud models
+                 final_score -= 10000
             else:
                  final_score += 1000
             #log_event(f"Applying priority boost to vLLM model: {model_id}", "DEBUG")
@@ -667,6 +670,14 @@ def rank_models(purpose="general"):
              if "gpt-4o-mini" in model_id or "flash" in model_name_lower or "llama-3" in model_name_lower:
                  final_score += 5000
                  # log_event(f"Boosting {model_id} for polly_judge task.", "DEBUG")
+
+        if purpose == "creative_art":
+             # Massive boost for high-end models for art
+             if provider in ["gemini", "openrouter", "openai"]:
+                 final_score += 50000
+                 # Additional boost for known artistically capable models
+                 if "claude" in model_name_lower or "gpt-4" in model_name_lower or "gemini" in model_name_lower:
+                     final_score += 20000
 
         # --- Stability & Reliability User Story: Penalize Failures ---
         # 1. Model Failure Penalty

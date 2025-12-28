@@ -313,6 +313,13 @@ async def generate_llm_art(prompt, width=50, height=6):
     - Use full ANSI color codes for vivid, neon, rave-like aesthetics.
     - Do not include markdown code blocks.
     - Return ONLY the raw ANSI string.
+    
+    CRITICAL STYLE RULES:
+    1. DO NOT use solid block characters like '█', '▀', '▄', '▌', '▐'.
+    2. DO NOT create solid rectangles or filled shapes.
+    3. USE diverse ASCII characters (e.g., *, @, #, %, &, ~, +, =, -, :, ., ^) to create texture and gradients.
+    4. The art should use whitespace effectively - do not fill every character cell.
+    5. The style should be 'cyberpunk glitch art' or 'complex ASCII landscape'.
     """
     
     try:
