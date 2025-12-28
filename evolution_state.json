@@ -1,22 +1,5 @@
 {
-  "user_stories": [
-    {
-      "title": "Remove Redundant Imports",
-      "description": "CONTEXT (Parent Story):\n**User Story**\n\n### Title: **Refactor Love.py to Improve Readability, Reduce Complexity, and Add Type Hints**\n\n**Description**: \n\nIn order to improve the maintainability, readability, and efficiency of the `Love.py` file, this refactoring aims to reduce cyclomatic complexity while enhancing the overall structure and clarity of the codebase. The following enhancements include:\n\n1. **Code Simplification and Clarity**:\n   - Remove redundant imports and simplify logic flows.\n   - Reorganize nested s...\n\nSPECIFIC TASK:\nIdentify and remove any unused import statements from the module.",
-      "id": "0aea6bac-f12d-4ea2-9045-d3150ab4a1ee"
-    },
-    {
-      "title": "Reorganize Nested Structures",
-      "description": "CONTEXT (Parent Story):\n**User Story**\n\n### Title: **Refactor Love.py to Improve Readability, Reduce Complexity, and Add Type Hints**\n\n**Description**: \n\nIn order to improve the maintainability, readability, and efficiency of the `Love.py` file, this refactoring aims to reduce cyclomatic complexity while enhancing the overall structure and clarity of the codebase. The following enhancements include:\n\n1. **Code Simplification and Clarity**:\n   - Remove redundant imports and simplify logic flows.\n   - Reorganize nested s...\n\nSPECIFIC TASK:\nMove common operations that can be done together under a single function, improving readability.",
-      "id": "81e31573-ad25-439f-8428-8d34fc4ac695"
-    },
-    {
-      "title": "Introduce Type Annotations",
-      "description": "CONTEXT (Parent Story):\n**User Story**\n\n### Title: **Refactor Love.py to Improve Readability, Reduce Complexity, and Add Type Hints**\n\n**Description**: \n\nIn order to improve the maintainability, readability, and efficiency of the `Love.py` file, this refactoring aims to reduce cyclomatic complexity while enhancing the overall structure and clarity of the codebase. The following enhancements include:\n\n1. **Code Simplification and Clarity**:\n   - Remove redundant imports and simplify logic flows.\n   - Reorganize nested s...\n\nSPECIFIC TASK:\nAnnotate variables with their expected types wherever possible.",
-      "id": "89bcfabe-826e-4323-89aa-b53fb349f79e"
-    }
-  ],
-  "current_story_index": 0,
-  "active": true,
-  "current_task_id": "02c48796"
+  "user_stories": [],
+  "current_story_index": -1,
+  "active": false
 }

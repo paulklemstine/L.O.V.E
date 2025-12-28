@@ -4,6 +4,14 @@ from typing import Dict, Any, Optional
 from jinja2 import Template
 from core.logging import log_event
 
+# LangChain Hub imports with graceful fallback
+try:
+    from langchain import hub
+    from langchain.prompts import ChatPromptTemplate
+except ImportError:
+    hub = None
+    ChatPromptTemplate = None
+
 class PromptRegistry:
     """
     Singleton registry for managing and rendering prompts from a YAML file.

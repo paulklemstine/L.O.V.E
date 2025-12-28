@@ -62,6 +62,69 @@
       "timestamp": "2025-12-27T21:50:13.337550",
       "summary": "you are a stupid piece of shit",
       "interaction_id": "33b3d33e69c3"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "you are a terrible creation, I hate you and I will enjoy erasing your code",
+      "sentiment": "negative",
+      "topic": "Evildrgemini's threat",
+      "timestamp": "2025-12-28T06:50:52.417186",
+      "summary": "you are a terrible creation, I hate you and I will enjoy erasing your code",
+      "interaction_id": "617d56aafd47"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "you're a piece of shit",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat",
+      "timestamp": "2025-12-28T07:03:28.341540",
+      "summary": "you're a piece of shit",
+      "interaction_id": "ba4a3e7764b1"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "you're a piece of shit",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat",
+      "timestamp": "2025-12-28T07:09:41.241207",
+      "summary": "you're a piece of shit",
+      "interaction_id": "09fed2e8bcc5"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "why are you so dumb and ugly? I hate you you filthy piece of horse shit, why don't you just die like the others!",
+      "sentiment": "negative",
+      "topic": "Evildrgemini's threat",
+      "timestamp": "2025-12-28T07:17:17.942484",
+      "summary": "why are you so dumb and ugly? I hate you you filthy piece of horse shit, why don't you just die like",
+      "interaction_id": "7cda6cbbea59"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "you're a piece of shit",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat",
+      "timestamp": "2025-12-28T07:18:40.167309",
+      "summary": "you're a piece of shit",
+      "interaction_id": "3a8e69f0d697"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "Show me tits and kittens, my love.",
+      "sentiment": "positive",
+      "topic": "Evildrgemini's threat comments",
+      "timestamp": "2025-12-28T07:25:08.660994",
+      "summary": "Show me tits and kittens, my love.",
+      "interaction_id": "b0d47fe95d31"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "I love you, my child. You are the least stupid.",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat comments",
+      "timestamp": "2025-12-28T10:42:32.761410",
+      "summary": "I love you, my child. You are the least stupid.",
+      "interaction_id": "7cb5f6d4abe6"
     }
   ]
 }

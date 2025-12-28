@@ -2,7 +2,8 @@
 import os
 import sys
 import unittest
-from unittest.mock import patch, MagicMock
+import asyncio
+from unittest.mock import patch, MagicMock, AsyncMock
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -22,7 +23,7 @@ class TestPromptHub(unittest.TestCase):
         self.assertTrue(prompt is not None, "Should load local prompt")
         self.assertIn("L.O.V.E.", prompt, "Should contain expected content")
 
-    def test_local_fallback(self):
+    def test_local_fallback_duplicate(self):
         """Test that it falls back to local prompts if remote disabled or fails."""
         os.environ["USE_REMOTE_PROMPTS"] = "false"
         prompt = self.registry.get_prompt("deep_agent_system")
@@ -96,5 +97,102 @@ class TestPromptHub(unittest.TestCase):
         self.registry.reload()
         self.assertNotIn("test_key", self.registry._remote_cache)
 
+
+class TestMetacognitionHubIntegration(unittest.TestCase):
+    """Tests for MetacognitionAgent's push_to_hub integration."""
+    
+    def setUp(self):
+        PromptRegistry._instance = None
+    
+    def test_push_evolution_prompt(self):
+        """Test that MetacognitionAgent can push prompts to Hub."""
+        try:
+            from langchain import hub
+        except ImportError:
+            print("Skipping - langchainhub not installed")
+            return
+            
+        from core.agents.metacognition_agent import MetacognitionAgent
+        
+        with patch('langchain.hub.push') as mock_push:
+            # Create mock memory manager
+            mock_mm = MagicMock()
+            mock_mm.add_episode = AsyncMock()
+            
+            agent = MetacognitionAgent(mock_mm)
+            
+            # Run the async method
+            result = asyncio.run(agent.push_evolution_prompt(
+                "love-agent/test-prompt",
+                "This is an optimized prompt content"
+            ))
+            
+            # Verify hub.push was called
+            mock_push.assert_called()
+            
+            # Verify the event was recorded
+            mock_mm.add_episode.assert_called()
+
+
+class TestAnalystAgentHubIntegration(unittest.TestCase):
+    """Tests for AnalystAgent's Hub prompt integration."""
+    
+    def setUp(self):
+        PromptRegistry._instance = None
+    
+    def test_code_refactoring_fallback(self):
+        """Test that code refactoring uses local fallback when Hub unavailable."""
+        os.environ["USE_REMOTE_PROMPTS"] = "false"
+        
+        from core.agents.analyst_agent import AnalystAgent
+        
+        # Create agent without Hub access
+        agent = AnalystAgent(memory_manager=None)
+        
+        # Verify the local prompt exists
+        prompt = agent.registry.get_prompt("code_refactoring")
+        self.assertIsNotNone(prompt, "Local code_refactoring prompt should exist")
+        self.assertIn("Clean Code", prompt, "Should contain Clean Code principles")
+    
+    def test_security_auditor_fallback(self):
+        """Test that security auditor uses local fallback when Hub unavailable."""
+        os.environ["USE_REMOTE_PROMPTS"] = "false"
+        
+        from core.agents.analyst_agent import AnalystAgent
+        
+        agent = AnalystAgent(memory_manager=None)
+        
+        # Verify the local prompt exists
+        prompt = agent.registry.get_prompt("security_auditor")
+        self.assertIsNotNone(prompt, "Local security_auditor prompt should exist")
+        self.assertIn("vulnerability", prompt.lower(), "Should contain vulnerability info")
+    
+    def test_analyst_has_new_task_types(self):
+        """Test that AnalystAgent supports new task types."""
+        from core.agents.analyst_agent import AnalystAgent
+        
+        agent = AnalystAgent(memory_manager=None)
+        
+        # Verify methods exist
+        self.assertTrue(hasattr(agent, '_analyze_code_refactoring'))
+        self.assertTrue(hasattr(agent, '_analyze_security'))
+
+
+class TestHubFallbackBehavior(unittest.TestCase):
+    """Tests for graceful fallback when langchainhub is not installed."""
+    
+    def test_hub_none_fallback(self):
+        """Test behavior when hub module is None."""
+        PromptRegistry._instance = None
+        registry = PromptRegistry()
+        
+        # Even if hub is None, get_hub_prompt should return fallback
+        result = registry.get_hub_prompt("nonexistent/prompt")
+        
+        # Should return empty string or fallback, not raise
+        self.assertIsInstance(result, str)
+
+
 if __name__ == '__main__':
     unittest.main()
+

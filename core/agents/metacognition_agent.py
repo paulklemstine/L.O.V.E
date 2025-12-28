@@ -59,6 +59,12 @@ class MetacognitionAgent(SpecialistAgent):
         elif event_type == 'post_mortem':
             return f"[PostMortem] Failure: {task_details.get('failure_reason', 'N/A')} | Root Cause: {task_details.get('root_cause', 'N/A')} | Proposed Fix: {task_details.get('correction', 'N/A')}"
 
+        elif event_type == 'prompt_evolution':
+            repo_id = task_details.get('repo_id', 'N/A')
+            result = task_details.get('result', 'N/A')
+            prompt_preview = task_details.get('prompt_preview', '')[:50]
+            return f"Cognitive Event: Prompt Evolution | Repo: '{repo_id}' | Result: '{result}' | Preview: '{prompt_preview}...'"
+
         else:
             return f"Cognitive Event: Unknown Event | Details: {task_details}"
 

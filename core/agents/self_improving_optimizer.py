@@ -159,8 +159,57 @@ class SelfImprovingOptimizer:
 
             log_event(f"Modification result: {result}", "INFO")
             print(f"SelfImprovingOptimizer: Modifications applied to {os.path.basename(module_path)}. See love.log for details.")
-            return "Error" not in result
+            
+            success = "Error" not in result
+            
+            # Push successful improvement strategies to LangChain Hub
+            if success and modification_plan.get('thought'):
+                await self._push_improvement_to_hub(module_path, modification_plan)
+            
+            return success
 
         except Exception as e:
             log_event(f"Error applying modifications: {e}", "ERROR")
             return False
+
+    async def _push_improvement_to_hub(self, module_path, modification_plan):
+        """
+        Pushes a successful improvement strategy to LangChain Hub for knowledge sharing.
+        """
+        try:
+            from core.agents.metacognition_agent import MetacognitionAgent
+            from core.memory.memory_manager import MemoryManager
+            
+            # Create a prompt from the successful modification
+            thought = modification_plan.get('thought', '')
+            action = modification_plan.get('action', {})
+            instructions = action.get('arguments', {}).get('modification_instructions', '')
+            
+            # Format as a reusable prompt
+            prompt_content = f"""### SUCCESSFUL CODE IMPROVEMENT PATTERN
+
+**Analysis:**
+{thought}
+
+**Modification Strategy:**
+{instructions}
+
+**Target Module Type:** {os.path.basename(module_path)}
+
+### APPLICATION
+Apply this pattern to similar code that exhibits the same characteristics.
+"""
+            
+            # Create repo ID based on module name
+            module_name = os.path.basename(module_path).replace('.py', '')
+            repo_id = f"love-agent/improvement-{module_name}"
+            
+            # Use MetacognitionAgent to push and log the evolution
+            memory_manager = MemoryManager()  # Singleton
+            metacog = MetacognitionAgent(memory_manager)
+            await metacog.push_evolution_prompt(repo_id, prompt_content)
+            
+            log_event(f"Successfully pushed improvement pattern to Hub: {repo_id}", "INFO")
+            
+        except Exception as e:
+            log_event(f"Failed to push improvement to Hub: {e}", "WARNING")
