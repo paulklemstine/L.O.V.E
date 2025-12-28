@@ -29,6 +29,38 @@ class TestPromptHub(unittest.TestCase):
         self.assertTrue(prompt is not None, "Should load local prompt")
         self.assertIn("L.O.V.E.", prompt, "Should contain expected content")
 
+    
+    def test_get_hub_prompt_specific(self):
+        """Test specific get_hub_prompt method."""
+        try:
+             from langchain import hub
+        except ImportError:
+             return
+
+        with patch('langchain.hub.pull') as mock_pull:
+            # Mock the remote prompt object
+            mock_prompt = MagicMock()
+            mock_prompt.template = "REMOTE CONTENT SPECIFIC"
+            mock_pull.return_value = mock_prompt
+            
+            # Explicit call
+            result = self.registry.get_hub_prompt("hwchase17/react")
+            
+            mock_pull.assert_called_with("hwchase17/react")
+            self.assertEqual(result, "REMOTE CONTENT SPECIFIC")
+
+    def test_push_to_hub(self):
+        """Test pushing to hub."""
+        try:
+             from langchain import hub
+        except ImportError:
+             return
+
+        with patch('langchain.hub.push') as mock_push:
+            success = self.registry.push_to_hub("my/repo", "Test Prompt")
+            self.assertTrue(success)
+            mock_push.assert_called()
+
     def test_remote_pull(self):
         """Test that it pulls from hub if enabled (only if module exists)."""
         try:
@@ -55,7 +87,8 @@ class TestPromptHub(unittest.TestCase):
             
             # Verify Cache
             self.registry.get_prompt("deep_agent_system")
-            mock_pull.assert_called_once() # Should not call again
+            # Should not call again because it hits cache
+            mock_pull.assert_called_once()
 
     def test_reload_clears_cache(self):
         """Test that reload clears the cache."""

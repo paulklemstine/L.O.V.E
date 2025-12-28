@@ -1,5 +1,6 @@
 from core.agents.specialist_agent import SpecialistAgent
 from typing import Dict, Any
+from core.prompt_registry import PromptRegistry
 
 class MetacognitionAgent(SpecialistAgent):
     """
@@ -84,3 +85,17 @@ class MetacognitionAgent(SpecialistAgent):
             'correction': correction
         }
         return await self.execute_task(event_payload)
+
+    async def push_evolution_prompt(self, repo_id: str, prompt_content: str):
+        """
+        Pushes an optimized prompt to the LangChain Hub.
+        """
+        registry = PromptRegistry()
+        success = registry.push_to_hub(repo_id, prompt_content)
+        result = "Success" if success else "Failed"
+        return await self.execute_task({
+            'event_type': 'prompt_evolution',
+            'repo_id': repo_id,
+            'result': result
+        })
+

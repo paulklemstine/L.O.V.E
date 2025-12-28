@@ -32,9 +32,21 @@ class UnifiedReasoningAgent:
             print(f"Retrieved {len(relevant_memories)} relevant folded memories.")
 
             # 2. Build the reasoning prompt
+            from core.prompt_registry import PromptRegistry
+            registry = PromptRegistry()
+            
+            # Pull a community-optimized reasoning prompt if available, or fall back to local/hardcoded
+            remote_prompt = registry.get_hub_prompt("hwchase17/react")
+            
+            # If we got a valid remote prompt, we might want to adapt it or just use it as a base.
+            # For this integration, let's incorporate it into our context.
+            
             history_str = "\n".join(self.internal_history)
             prompt = f"""
 You are a Unified Reasoning Agent. Your goal is to solve complex, open-ended problems.
+
+**Community Wisdom (Hub Prompt):**
+{remote_prompt}
 
 **Your Goal:**
 {goal}

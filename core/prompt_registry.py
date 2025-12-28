@@ -33,6 +33,59 @@ class PromptRegistry:
         except Exception as e:
             log_event(f"Failed to load prompts: {e}", "ERROR")
 
+    
+    def get_hub_prompt(self, hub_repo_id: str) -> str:
+        """
+        Pulls a prompt from LangChain Hub.
+        Example: registry.get_hub_prompt("hwchase17/openai-functions-agent")
+        """
+        if hub is None:
+            log_event("LangChain Hub not available. Install 'langchainhub'.", "WARNING")
+            return self.get_prompt(hub_repo_id.split("/")[-1]) or ""
+
+        try:
+            log_event(f"Pulling prompt from Hub: {hub_repo_id}", "INFO")
+            prompt = hub.pull(hub_repo_id)
+            
+            # Convert to string if you are strictly using text-based prompts
+            # or return the PromptTemplate object if your llm_api.py supports it.
+            if ChatPromptTemplate and isinstance(prompt, ChatPromptTemplate):
+                # For chat prompts, we might want to return the messages or a formatted string.
+                # Here we default to the first message's template or a string representation
+                if prompt.messages:
+                     return prompt.messages[0].prompt.template
+                return str(prompt)
+            
+            if hasattr(prompt, 'template'):
+                return prompt.template
+                
+            return str(prompt)
+        except Exception as e:
+            log_event(f"Hub Pull Failed for {hub_repo_id}", {"error": str(e)})
+            # Fallback to local prompt if possible (using the name part)
+            local_key = hub_repo_id.split("/")[-1]
+            return self.get_prompt(local_key) or ""
+
+    def push_to_hub(self, repo_id: str, prompt_content: str, **kwargs) -> bool:
+        """
+        Pushes a prompt to the LangChain Hub.
+        Useful for Metacognition agents saving optimized prompts.
+        """
+        if hub is None:
+             log_event("LangChain Hub not available.", "ERROR")
+             return False
+             
+        try:
+            from langchain.prompts import PromptTemplate
+            # Create a simple prompt object to push
+            prompt = PromptTemplate.from_template(prompt_content)
+            hub.push(repo_id, prompt, **kwargs)
+            log_event(f"Successfully pushed prompt to {repo_id}", "INFO")
+            return True
+        except Exception as e:
+            log_event(f"Hub Push Failed for {repo_id}", {"error": str(e)})
+            return False
+
     def get_prompt(self, key: str) -> Optional[str]:
         """
         Retrieves a raw prompt template by key.
@@ -44,30 +97,14 @@ class PromptRegistry:
             if key in self._remote_cache:
                 return self._remote_cache[key]
                 
-            try:
-                from langchain import hub
-                repo_handle = os.environ.get("LANGCHAIN_HUB_REPO", "love-agent")
-                prompt = hub.pull(f"{repo_handle}/{key}")
-                
-                template_str = ""
-                # Extract template string
-                if hasattr(prompt, 'template'):
-                    template_str = prompt.template
-                elif hasattr(prompt, 'messages') and prompt.messages:
-                    # Return the first message template for chat prompts (simplification)
-                    template_str = prompt.messages[0].prompt.template
-                else:
-                    template_str = str(prompt)
-                
-                # Update cache
-                if template_str:
-                    self._remote_cache[key] = template_str
-                    return template_str
-                    
-            except Exception as e:
-                # Log only once per key to avoid spamming? Or just log warning.
-                # log_event(f"Failed to pull remote prompt '{key}': {e}. Falling back to local.", "WARNING")
-                pass
+            repo_handle = os.environ.get("LANGCHAIN_HUB_REPO", "love-agent")
+            full_hub_id = f"{repo_handle}/{key}"
+            
+            # Use the new explicit method for consistency, but handle return
+            hub_content = self.get_hub_prompt(full_hub_id)
+            if hub_content:
+                 self._remote_cache[key] = hub_content
+                 return hub_content
         
         return self._prompts.get(key)
 
