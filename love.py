@@ -3021,85 +3021,94 @@ def simple_ui_renderer():
     # Reusable renderer instance
     ui_renderer = OffscreenRenderer(width=get_terminal_width())
 
-    while True:
-        try:
-            item = shared_state.ui_panel_queue.get()
-            current_width = get_terminal_width()
+    # OPTIMIZATION: Open the log file once to avoid repeated open/close syscalls
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as log_file:
+            while True:
+                try:
+                    item = shared_state.ui_panel_queue.get()
+                    current_width = get_terminal_width()
 
-            # --- Animation Frame Handling ---
-            if isinstance(item, dict) and item.get('type') == 'animation_frame':
-                output_str = ui_renderer.render(item.get('content'), width=current_width)
+                    # --- Animation Frame Handling ---
+                    if isinstance(item, dict) and item.get('type') == 'animation_frame':
+                        output_str = ui_renderer.render(item.get('content'), width=current_width)
 
-                if animation_active:
-                    # Move cursor up, go to start of line, clear to end of screen
-                    sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
+                        if animation_active:
+                            # Move cursor up, go to start of line, clear to end of screen
+                            sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
 
-                sys.stdout.write(output_str)
-                sys.stdout.flush()
-                animation_active = True
-                continue  # Skip logging for animation frames
+                        sys.stdout.write(output_str)
+                        sys.stdout.flush()
+                        animation_active = True
+                        continue  # Skip logging for animation frames
 
-            # --- Animation End Handling ---
-            if isinstance(item, dict) and item.get('type') == 'animation_end':
-                if animation_active:
-                    sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
-                    sys.stdout.flush()
-                animation_active = False
-                continue # Skip logging
+                    # --- Animation End Handling ---
+                    if isinstance(item, dict) and item.get('type') == 'animation_end':
+                        if animation_active:
+                            sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
+                            sys.stdout.flush()
+                        animation_active = False
+                        continue # Skip logging
 
-            # --- Regular Panel/Log Handling ---
-            # If a regular item comes through, make sure we clear any active animation first.
-            if animation_active:
-                sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
-                sys.stdout.flush()
-                animation_active = False
+                    # --- Regular Panel/Log Handling ---
+                    # If a regular item comes through, make sure we clear any active animation first.
+                    if animation_active:
+                        sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
+                        sys.stdout.flush()
+                        animation_active = False
 
-            if isinstance(item, dict) and item.get('type') == 'log_message':
-                log_level = item.get('level', 'INFO').upper()
-                log_text = item.get('message', '')
-                # Simple console output with level prefix
-                console.print(f"[{log_level}] {log_text}")
-                # OPTIMIZATION: Removed redundant file write here.
-                # `log_event` already writes to LOG_FILE via the standard logging module.
-                continue
+                    if isinstance(item, dict) and item.get('type') == 'log_message':
+                        log_level = item.get('level', 'INFO').upper()
+                        log_text = item.get('message', '')
+                        # Simple console output with level prefix
+                        console.print(f"[{log_level}] {log_text}")
+                        # OPTIMIZATION: Removed redundant file write here.
+                        # `log_event` already writes to LOG_FILE via the standard logging module.
+                        continue
 
-            # --- God Panel Handling ---
-            if isinstance(item, dict) and item.get('type') == 'god_panel':
-                item = create_god_panel(item.get('insight', '...'), width=current_width - 4)
+                    # --- God Panel Handling ---
+                    if isinstance(item, dict) and item.get('type') == 'god_panel':
+                        item = create_god_panel(item.get('insight', '...'), width=current_width - 4)
 
-            # --- Reasoning Panel Handling ---
-            if isinstance(item, dict) and item.get('type') == 'reasoning_panel':
-                # The content is already a rendered panel, just extract it
-                item = item.get('content')
+                    # --- Reasoning Panel Handling ---
+                    if isinstance(item, dict) and item.get('type') == 'reasoning_panel':
+                        # The content is already a rendered panel, just extract it
+                        item = item.get('content')
 
-            # For all other items (e.g., rich Panels), render them fully.
-            # --- WEB SOCKET BROADCAST ---
-            from ui_utils import PANEL_TYPE_COLORS
-            if 'websocket_server_manager' in globals() and websocket_server_manager:
-                # Reuse the renderer for serialization too!
-                json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS, renderer=ui_renderer)
-                if json_payload:
-                    websocket_server_manager.broadcast(json_payload)
+                    # For all other items (e.g., rich Panels), render them fully.
+                    # --- WEB SOCKET BROADCAST ---
+                    from ui_utils import PANEL_TYPE_COLORS
+                    if 'websocket_server_manager' in globals() and websocket_server_manager:
+                        # Reuse the renderer for serialization too!
+                        json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS, renderer=ui_renderer)
+                        if json_payload:
+                            websocket_server_manager.broadcast(json_payload)
 
-            output_str = ui_renderer.render(item, width=current_width)
+                    output_str = ui_renderer.render(item, width=current_width)
 
-            # Print the styled output to the live console
-            print(output_str, end='')
-            sys.stdout.flush()  # Ensure output is immediately visible
+                    # Print the styled output to the live console
+                    print(output_str, end='')
+                    sys.stdout.flush()  # Ensure output is immediately visible
 
-            # Strip ANSI codes and write the plain text to the log file
-            plain_output = _strip_ansi_codes(output_str)
-            with open(LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(plain_output)
+                    # Strip ANSI codes and write the plain text to the log file
+                    plain_output = _strip_ansi_codes(output_str)
 
-        except queue.Empty:
-            continue
-        except Exception as e:
-            tb_str = traceback.format_exc()
-            logging.critical(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}")
-            print(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}", file=sys.stderr)
-            sys.stderr.flush()  # Ensure errors are immediately visible
-            time.sleep(1)
+                    # Write to the open file handle and flush
+                    log_file.write(plain_output)
+                    log_file.flush()
+
+                except queue.Empty:
+                    continue
+                except Exception as e:
+                    tb_str = traceback.format_exc()
+                    logging.critical(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}")
+                    print(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}", file=sys.stderr)
+                    sys.stderr.flush()  # Ensure errors are immediately visible
+                    time.sleep(1)
+    except Exception as e:
+        # Fallback if opening the file fails entirely (e.g., permission error)
+        logging.critical(f"FATAL ERROR: Could not open log file in UI renderer: {e}")
+        print(f"FATAL ERROR: Could not open log file in UI renderer: {e}", file=sys.stderr)
 
 
 qa_agent = None
