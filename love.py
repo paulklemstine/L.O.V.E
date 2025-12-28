@@ -81,6 +81,7 @@ from display import OffscreenRenderer
 
 # --- CONFIGURATION & GLOBALS ---
 import core.shared_state as shared_state
+import core.logging
 
 # This queue will hold UI panels to be displayed by the main rendering thread.
 shared_state.ui_panel_queue = queue.Queue()
