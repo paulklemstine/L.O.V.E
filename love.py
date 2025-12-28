@@ -35,7 +35,6 @@ import shutil
 import traceback
 import argparse
 import logging
-import core.logging
 from core.patch_utils import patch_attribute
 import platform
 from datetime import datetime, timedelta
@@ -79,8 +78,6 @@ except (ImportError, Exception):
         print(f"Warning: Failed to install langchainhub: {e}")
 # from core.deep_agent_engine import DeepAgentEngine
 from display import OffscreenRenderer
-
-import core.logging
 
 # --- CONFIGURATION & GLOBALS ---
 import core.shared_state as shared_state
@@ -938,7 +935,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, MODEL_STATS, refresh_available_models
+from core.llm_api import run_llm, MODEL_STATS, refresh_available_models
 from display import create_integrated_status_panel, create_llm_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_blessing_panel, get_terminal_width, create_connectivity_panel, create_god_panel, create_tasks_panel, generate_llm_art
 from ui_utils import rainbow_text
 from core.proactive_agent import ProactiveIntelligenceAgent
@@ -955,12 +952,7 @@ from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.social_media_agent import SocialMediaAgent
 from core.qa_agent import QAAgent
 from mcp_manager import MCPManager
-import http.server
-import socketserver
-import websockets
 
-# Initialize evolve.py's global LLM_AVAILABILITY with the one from the API module
-LLM_AVAILABILITY = api_llm_availability
 from bbs import BBS_ART
 
 from ipfs_manager import IPFSManager
