@@ -1,5 +1,5 @@
 import pytest
-from core.tools import SecureExecutor, ToolRegistry
+from core.tools_legacy import SecureExecutor, ToolRegistry
 
 # Define a dummy tool
 async def dummy_tool(arg1, arg2="default"):

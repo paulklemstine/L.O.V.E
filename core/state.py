@@ -1,4 +1,4 @@
-from typing import TypedDict, Annotated, List, Any, Optional
+from typing import TypedDict, Annotated, List, Any, Optional, Dict
 from langgraph.graph.message import add_messages
 from core.memory.schemas import EpisodicMemory, WorkingMemory, ToolMemory
 
@@ -15,3 +15,8 @@ class DeepAgentState(TypedDict):
     retrieved_tools: List[Any]
     # Creator Interaction
     creator_mandate: Optional[str]
+    # Tool Registry Integration (Story 2)
+    tool_schemas: List[Dict[str, Any]]  # JSON schemas for LLM tool binding
+    # Self-Correction Loop Guardrail (Story 4)
+    loop_count: int  # Tracks reasoning-execution cycles, max 5
+
