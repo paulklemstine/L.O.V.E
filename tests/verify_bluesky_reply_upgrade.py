@@ -1,10 +1,16 @@
 import asyncio
 import os
 import sys
-from unittest.mock import MagicMock, patch
+import os
+import sys
+from unittest.mock import MagicMock, patch, AsyncMock
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# We need to ensure core modules can be imported
+# Mock 'love' module to prevent side effects from its top-level code
+sys.modules['love'] = MagicMock()
 
 # We need to ensure core modules can be imported
 from core.tools_legacy import manage_bluesky
@@ -26,7 +32,8 @@ class MockNotification:
         self.reason = 'mention'
         self.record = MockRecord(text)
         self.author = MockAuthor(handle, "did:fake:user")
-        self.cid = "fake_cid_" + handle
+        import uuid
+        self.cid = f"fake_cid_{handle}_{uuid.uuid4()}"
         self.uri = "at://fake/post/" + handle
 
 async def run_live_test():
@@ -39,7 +46,35 @@ async def run_live_test():
     with patch('core.bluesky_api.get_notifications', return_value=[test_notif]), \
          patch('core.bluesky_api.reply_to_post') as mock_reply, \
          patch('core.bluesky_api.get_own_posts', return_value=[]), \
-         patch('core.bluesky_api.get_profile', return_value=MockAuthor("love_bot", "did:fake:me")):
+         patch('core.bluesky_api.get_profile', return_value=MockAuthor("love_bot", "did:fake:me")), \
+         patch('core.visual_director.VisualDirector') as MockDirector, \
+         patch('core.visual_director.VisualDirector') as MockDirector, \
+         patch('core.social_media_tools.run_llm', new_callable=AsyncMock) as mock_run_llm, \
+         patch('core.sentiment_analyzer.analyze_and_get_tone') as mock_sentiment_tone, \
+         patch('core.social_media_tools.story_manager') as mock_story_manager:
+         
+        # Mock LLM response
+        mock_run_llm.return_value = {"result": '{"topic": "Mock Topic", "post_text": "Mock Reply", "hashtags": ["#mock"], "subliminal_phrase": "MOCK"}'}
+        
+        # Mock Sentiment and Tone
+        mock_sentiment = MagicMock(dominant="Positive", scores={})
+        mock_tone = MagicMock()
+        mock_tone.style.value = "Divine"
+        mock_tone.warmth = 0.9
+        mock_tone.assertiveness = 0.8
+        mock_tone.to_prompt_text.return_value = "Mock Tone Guidance"
+        
+        mock_sentiment_tone.return_value = (mock_sentiment, mock_tone)
+        
+        # Mock Story Manager
+        mock_story_manager.generate_novel_subliminal.return_value = "Mock Subliminal"
+        mock_story_manager.is_reply_novel.return_value = True
+
+        # Configure Mock Director
+        director_instance = MockDirector.return_value
+        director_instance.direct_scene = AsyncMock(return_value={"subject": "Mocked Subject"})
+        director_instance.synthesize_image_prompt.return_value = "Mocked High-Fidelity Prompt"
+
         
         mock_reply.return_value = True # Success
         
@@ -74,6 +109,13 @@ async def run_live_test():
                     print("✅ TEST PASSED: User handle mentioned in reply.")
                 else:
                     print("⚠️ TEST WARNING: User mention missing.")
+                
+                # Check Art Director usage
+                if MockDirector.return_value.direct_scene.called:
+                     print("✅ TEST PASSED: Art Director was consulted.")
+                else:
+                     print("❌ TEST FAILED: Art Director was NOT consulted.")
+                     
             else:
                  print("⚠️ TEST WARNING: Something missing (Image or Text).")
         else:

@@ -621,7 +621,10 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
         
         responses = diverse_responses.get(user_classification, diverse_responses["Fan"])
         generated_text = random.choice(responses)
+        generated_text = random.choice(responses)
         sub_phrase = story_manager.generate_novel_subliminal(context=f"unique {user_classification} response")
+    
+    concept_topic = data.get("topic", f"Reply to {author_handle}")
     
     # ══════════════════════════════════════════════════════════════════════
     # EMOJI & HASHTAG ENFORCEMENT: Ensure replies are fun and engaging!
@@ -644,12 +647,28 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
         topic=data.get("topic", "")
     )
 
+    # ══════════════════════════════════════════════════════════════════════
+    # VISUAL DIRECTOR UPGRADE: Enhance the image generation prompt
+    # ══════════════════════════════════════════════════════════════════════
+    from core.visual_director import VisualDirector
+    
+    # Initialize Art Director
+    art_director = VisualDirector()
+    
+    # Direct the scene
+    core.logging.log_event("Consulting Art Director for reply visual...", "INFO")
+    visual_spec = await art_director.direct_scene(f"Reply to {author_handle} about {concept_topic}. Vibe: {sentiment.dominant}")
+    
+    # Synthesize new high-quality prompt
+    enhanced_image_prompt = art_director.synthesize_image_prompt(visual_spec, sub_phrase)
+    core.logging.log_event(f"Art Director enhanced prompt: {enhanced_image_prompt[:50]}...", "INFO")
+
     concept = DirectorConcept(
         topic=data.get("topic", f"Reply to {author_handle}"),
         post_text=generated_text,
         hashtags=hashtags_list,
         subliminal_phrase=sub_phrase,
-        image_prompt=data.get("image_prompt", "Cyberpunk abstract")
+        image_prompt=enhanced_image_prompt
     )
     
     core.logging.log_event(f"Director Reply Concept Generated: {concept.topic}", "INFO")
