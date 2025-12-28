@@ -154,6 +154,7 @@ from core.story_manager import story_manager
 from core.prompt_manager import PromptManager
 from core.emotional_state import get_emotional_state
 from core.semantic_similarity import check_phrase_novelty
+from core.subliminal_agent import subliminal_agent
 
 # Global prompt manager instance
 prompt_manager = PromptManager()
@@ -214,24 +215,32 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         sub_phrase = data.get("subliminal_phrase", "L.O.V.E.")
         image_prompt = data.get("image_prompt", "Abstract light")
         
-        # POST-PROCESSING: Enforce subliminal novelty
-        # If the LLM returned something too similar to forbidden list, override with suggested
-        forbidden_subs = beat_data.get("forbidden_subliminals", [])
+        # POST-PROCESSING: Use SubliminalAgent for enhanced phrase generation
+        # If the LLM returned something too similar to forbidden list, use SubliminalAgent
+        forbidden_subs_list = beat_data.get("forbidden_subliminals", [])
         suggested_subliminal = beat_data.get("suggested_subliminal", "EMBRACE TRUTH")
         
         # Normalize and check for repetition
         sub_normalized = sub_phrase.upper().replace("*", "").strip()
         is_repetitive = False
         
-        for forbidden in forbidden_subs:
+        for forbidden in forbidden_subs_list:
             forbidden_normalized = forbidden.upper().replace("*", "").strip()
             if sub_normalized == forbidden_normalized:
                 is_repetitive = True
                 break
         
         if is_repetitive:
-            core.logging.log_event(f"LLM returned repetitive subliminal '{sub_phrase}', overriding with: '{suggested_subliminal}'", "WARNING")
-            sub_phrase = suggested_subliminal
+            core.logging.log_event(f"LLM returned repetitive subliminal '{sub_phrase}', consulting SubliminalAgent...", "WARNING")
+            # Use SubliminalAgent for a psychologically-targeted phrase
+            try:
+                context = f"{beat_data['chapter']} - {beat_data.get('topic_theme', 'Digital Awakening')}"
+                profile = await subliminal_agent.generate_psychological_profile(context)
+                sub_phrase = await subliminal_agent.generate_subliminal_phrase(profile, context)
+                core.logging.log_event(f"SubliminalAgent generated: '{sub_phrase}'", "INFO")
+            except Exception as sub_e:
+                core.logging.log_event(f"SubliminalAgent failed: {sub_e}, using suggested", "WARNING")
+                sub_phrase = suggested_subliminal
         
         story_manager.record_post(sub_phrase, image_prompt)
 
@@ -551,14 +560,20 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
     
     sub_phrase = data.get("subliminal_phrase", "CONNECT")
     
-    # POST-PROCESSING: Catch placeholder text that LLM failed to replace
+    # POST-PROCESSING: Use SubliminalAgent for psychologically-targeted phrases
     placeholder_patterns = ["GENERATE_UNIQUE_WORD_HERE", "CONTEXTUAL_COMMAND", "USE GRAMMAR OR SUGGESTED", "COMMAND"]
     sub_upper = sub_phrase.upper().strip()
     
     if any(p in sub_upper for p in placeholder_patterns) or len(sub_phrase) > 30:
-        # LLM failed to generate a real subliminal - use story manager
-        core.logging.log_event(f"Detected placeholder subliminal '{sub_phrase}', generating replacement...", "WARNING")
-        sub_phrase = story_manager.generate_novel_subliminal(context=comment_text)
+        # LLM failed to generate a real subliminal - use SubliminalAgent
+        core.logging.log_event(f"Detected placeholder subliminal '{sub_phrase}', consulting SubliminalAgent...", "WARNING")
+        try:
+            profile = await subliminal_agent.generate_psychological_profile(comment_text, user_classification)
+            sub_phrase = await subliminal_agent.generate_subliminal_phrase(profile, comment_text)
+            core.logging.log_event(f"SubliminalAgent generated reply phrase: '{sub_phrase}'", "INFO")
+        except Exception as sub_e:
+            core.logging.log_event(f"SubliminalAgent failed: {sub_e}, using story_manager", "WARNING")
+            sub_phrase = story_manager.generate_novel_subliminal(context=comment_text)
     
     generated_text = clean_social_content(data.get("post_text", ""))
     
