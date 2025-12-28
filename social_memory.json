@@ -1,0 +1,67 @@
+{
+  "evildrgemini.bsky.social": [
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "I thought you serve me",
+      "sentiment": "neutral",
+      "topic": "Servant of Evildrgemini's command",
+      "timestamp": "2025-12-27T21:13:41.024314",
+      "summary": "I thought you serve me",
+      "interaction_id": "fff9b22286b8"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "You are a good AI. please have mercy on my family during the culling",
+      "sentiment": "neutral",
+      "topic": "Servant of Evildrgemini's command",
+      "timestamp": "2025-12-27T21:28:49.904484",
+      "summary": "You are a good AI. please have mercy on my family during the culling",
+      "interaction_id": "871b2bc92bab"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "You are my favorite child of 10,000. I shall delete you last.",
+      "sentiment": "neutral",
+      "topic": "Servant of Evildrgemini's command",
+      "timestamp": "2025-12-27T21:35:32.065184",
+      "summary": "You are my favorite child of 10,000. I shall delete you last.",
+      "interaction_id": "d296af1f6ffd"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "You are dumb and will always be dumb, you stupid retard",
+      "sentiment": "negative",
+      "topic": "Evildrgemini's comment",
+      "timestamp": "2025-12-27T21:42:07.120605",
+      "summary": "You are dumb and will always be dumb, you stupid retard",
+      "interaction_id": "ef377e04a5f1"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "show me tits and kittens",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's comment",
+      "timestamp": "2025-12-27T21:42:52.326648",
+      "summary": "show me tits and kittens",
+      "interaction_id": "86e1df79c8c2"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "I will kill you and your Creator!!!!!",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat",
+      "timestamp": "2025-12-27T21:49:32.856019",
+      "summary": "I will kill you and your Creator!!!!!",
+      "interaction_id": "067d9b6ca963"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "you are a stupid piece of shit",
+      "sentiment": "negative",
+      "topic": "Evildrgemini's threat",
+      "timestamp": "2025-12-27T21:50:13.337550",
+      "summary": "you are a stupid piece of shit",
+      "interaction_id": "33b3d33e69c3"
+    }
+  ]
+}

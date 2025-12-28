@@ -4090,6 +4090,14 @@ async def initialize_gpu_services():
                         )
                         core.logging.log_event("Registered DeepAgent tools (write_todos, read_todos, delegate_subtask)", "INFO")
                         console.print(f"[green]✓ Registered {len(mcp_tools)} GitHub MCP tools[/green]")
+                        
+                        # Refresh ToolRetriever to include MCP tools for semantic search
+                        try:
+                            from core.nodes.tool_retrieval import refresh_mcp_tools
+                            refresh_mcp_tools()
+                            core.logging.log_event("Refreshed ToolRetriever with MCP tools", "INFO")
+                        except Exception as refresh_e:
+                            core.logging.log_event(f"Failed to refresh ToolRetriever: {refresh_e}", "WARNING")
                     except Exception as e:
                         core.logging.log_event(f"Error registering MCP tools: {e}", "WARNING")
                         console.print(f"[yellow]⚠ Error registering MCP tools: {e}[/yellow]")
@@ -4163,7 +4171,18 @@ async def main(args):
     shared_state.memory_manager = await MemoryManager.create(shared_state.knowledge_base, shared_state.ui_panel_queue, kb_file_path=KNOWLEDGE_BASE_FILE)
 
 
+
     mcp_manager = MCPManager(console)
+    shared_state.mcp_manager = mcp_manager
+    
+    # Register atexit handler for graceful MCP server shutdown
+    import atexit
+    def _cleanup_mcp_servers():
+        if shared_state.mcp_manager:
+            core.logging.log_event("Shutting down MCP servers via atexit...", "INFO")
+            shared_state.mcp_manager.stop_all_servers()
+    atexit.register(_cleanup_mcp_servers)
+
 
     # --- Connectivity Checks ---
     from core.connectivity import check_llm_connectivity, check_network_connectivity

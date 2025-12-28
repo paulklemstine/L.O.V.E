@@ -150,6 +150,20 @@ class MCPManager:
                     running.append({"name": name, "pid": info['process'].pid})
             return running
 
+    def list_tools(self, server_name: str) -> dict:
+        """
+        Returns the tool definitions for a server from its configuration.
+        
+        Args:
+            server_name: Name of the MCP server
+            
+        Returns:
+            Dictionary mapping tool names to their descriptions
+        """
+        config = self.server_configs.get(server_name, {})
+        return config.get("tools", {})
+
+
     def call_tool(self, server_name, tool_name, params):
         """
         Calls a tool on a running MCP server using JSON-RPC.
