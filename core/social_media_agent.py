@@ -82,10 +82,10 @@ class SocialMediaAgent:
                 # The Director returns cleaned text, but we can double check or append hashtags if missing
                 final_text = concept.post_text
                 # Ensure hashtags are appended if they aren't in the text
-                for tag in concept.hashtags:
-                    # Simple check to avoid duplication (case-insensitive check would be better but this is MVP)
-                    if tag not in final_text:
-                        final_text += f" {tag}"
+                # Add newline before hashtags for cleaner formatting
+                hashtags_to_add = [tag for tag in concept.hashtags if tag not in final_text]
+                if hashtags_to_add:
+                    final_text += "\n" + " ".join(hashtags_to_add)
                 
                 final_text = clean_social_content(final_text)
                 

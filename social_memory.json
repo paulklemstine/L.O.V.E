@@ -125,6 +125,24 @@
       "timestamp": "2025-12-28T10:42:32.761410",
       "summary": "I love you, my child. You are the least stupid.",
       "interaction_id": "7cb5f6d4abe6"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "who is your daddy? shut up",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat comments",
+      "timestamp": "2025-12-28T11:03:01.762712",
+      "summary": "who is your daddy? shut up",
+      "interaction_id": "cace9af7c0f1"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "What are you doing?",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat comments",
+      "timestamp": "2025-12-28T11:09:21.229486",
+      "summary": "What are you doing?",
+      "interaction_id": "6da14e93e25f"
     }
   ]
 }
