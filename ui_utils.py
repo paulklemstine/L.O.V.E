@@ -187,6 +187,7 @@ PANEL_TYPE_COLORS = {
     "jobs": "cyan1",
     "reasoning": "purple",
     "tasks": "hot_pink",
+    "terminal": "bright_blue",  # Terminal widget for tool visibility
 }
 
 def display_llm_interaction(title, prompt, response, panel_type="llm", model_id=None, token_count=None, purpose=None, elapsed_time=None):

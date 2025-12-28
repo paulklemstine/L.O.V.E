@@ -155,6 +155,43 @@ class GodAgentReActEngine(GeminiReActEngine):
             }
         })
 
+        # --- METACOGNITION TOOLS (Story 1.1) ---
+        from core.reflection_engine import reflect
+        
+        registry.register_tool("reflect", reflect, {
+            "description": "Performs self-reflection on recent interactions. Analyzes the last N interactions for patterns like repetitive commands, tool overuse, and errors. Returns a Reflection Report with improvement suggestions.",
+            "arguments": {
+                "count": "integer (optional: number of interactions to analyze, default 10)",
+                "save": "boolean (optional: whether to save report to file, default True)"
+            }
+        })
+
+        # --- GOAL DECOMPOSITION TOOLS (Story 1.2) ---
+        from core.goal_decomposer import decompose_goal
+        
+        def decompose_goal_wrapper(goal: str, create_todos: bool = True):
+            """Wrapper to call async decompose_goal synchronously."""
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If already in async context, create task
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        return pool.submit(asyncio.run, decompose_goal(goal, create_todos)).result()
+                else:
+                    return loop.run_until_complete(decompose_goal(goal, create_todos))
+            except RuntimeError:
+                return asyncio.run(decompose_goal(goal, create_todos))
+        
+        registry.register_tool("decompose_goal", decompose_goal_wrapper, {
+            "description": "Breaks down a vague goal into a tree of specific, testable sub-tasks. Returns JSON with the task hierarchy. Optionally creates TODO entries for each leaf task.",
+            "arguments": {
+                "goal": "string (required: the high-level goal to decompose, e.g., 'Improve generic performance')",
+                "create_todos": "boolean (optional: whether to create TODO entries, default True)"
+            }
+        })
+
         return registry
 
     async def run(self):

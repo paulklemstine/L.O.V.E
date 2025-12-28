@@ -575,6 +575,127 @@ def create_command_panel(command, stdout, stderr, returncode, output_cid=None, w
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 
+def create_terminal_widget_panel(
+    tool_name: str,
+    arguments: dict = None,
+    stdout: str = None,
+    stderr: str = None,
+    status: str = "thinking",
+    elapsed_time: float = None,
+    width: int = 80
+):
+    """
+    Creates a Terminal-style widget showing tool invocation state.
+    
+    Args:
+        tool_name: Name of the tool being invoked
+        arguments: Dict of arguments passed to the tool
+        stdout: Standard output from the tool (streamed)
+        stderr: Standard error from the tool (streamed)
+        status: One of "thinking", "executing", "complete", "error"
+        elapsed_time: Time taken for execution in seconds
+        width: Panel width
+    
+    Returns:
+        A Rich Panel/Gradient for display
+    """
+    # Status-based styling
+    status_config = {
+        "thinking": {
+            "color": "bright_blue",
+            "icon": "🔮",
+            "text": "THINKING",
+            "style": "italic"
+        },
+        "executing": {
+            "color": "spring_green1",
+            "icon": "⚡",
+            "text": "EXECUTING",
+            "style": "bold"
+        },
+        "complete": {
+            "color": "bright_green",
+            "icon": "✓",
+            "text": "COMPLETE",
+            "style": "bold"
+        },
+        "error": {
+            "color": "bright_red",
+            "icon": "✗",
+            "text": "ERROR",
+            "style": "bold"
+        }
+    }
+    
+    config = status_config.get(status, status_config["thinking"])
+    border_style = config["color"]
+    
+    content_items = []
+    
+    # Header with status indicator
+    header = Text()
+    header.append(f"{config['icon']} ", style=border_style)
+    header.append(f"[{config['text']}] ", style=f"{config['style']} {border_style}")
+    header.append("Tool: ", style="bold white")
+    header.append(f"{tool_name}", style="bright_cyan bold")
+    content_items.append(header)
+    
+    # Arguments display (formatted JSON-like)
+    if arguments:
+        args_text = Text()
+        args_text.append("\n📋 Arguments:\n", style="dim white")
+        for key, value in arguments.items():
+            args_text.append(f"  • {key}: ", style="bright_magenta")
+            # Truncate long values
+            str_value = str(value)
+            if len(str_value) > 60:
+                str_value = str_value[:57] + "..."
+            args_text.append(f"{str_value}\n", style="white")
+        content_items.append(args_text)
+    
+    # Stdout streaming display
+    if stdout:
+        stdout_text = Text()
+        stdout_text.append("\n📤 STDOUT:\n", style="dim spring_green1")
+        # Show last 5 lines for real-time feel
+        lines = stdout.strip().split('\n')
+        display_lines = lines[-5:] if len(lines) > 5 else lines
+        for line in display_lines:
+            stdout_text.append(f"  {line}\n", style="white")
+        if len(lines) > 5:
+            stdout_text.append(f"  ... ({len(lines) - 5} more lines)\n", style="dim")
+        content_items.append(stdout_text)
+    
+    # Stderr streaming display
+    if stderr:
+        stderr_text = Text()
+        stderr_text.append("\n⚠️ STDERR:\n", style="dim bright_red")
+        lines = stderr.strip().split('\n')
+        display_lines = lines[-3:] if len(lines) > 3 else lines
+        for line in display_lines:
+            stderr_text.append(f"  {line}\n", style="red")
+        content_items.append(stderr_text)
+    
+    # Elapsed time footer
+    if elapsed_time is not None:
+        footer = Text()
+        footer.append(f"\n⏱️ {elapsed_time:.2f}s", style="dim")
+        content_items.append(footer)
+    
+    # Panel title
+    panel_title = f"🖥️ TERMINAL | {tool_name}"
+    
+    panel = Panel(
+        Group(*content_items),
+        title=get_gradient_text(panel_title, border_style, random.choice(RAVE_COLORS)),
+        border_style=border_style,
+        padding=(1, 2),
+        width=width
+    )
+    
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
 def create_agentic_memory_panel(note_content, width=80):
     """Creates a panel to display a newly created agentic memory note."""
     border_color = PANEL_TYPE_COLORS.get("memory", "bright_blue")

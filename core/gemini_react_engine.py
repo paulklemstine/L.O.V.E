@@ -276,10 +276,35 @@ Do NOT call '{tool_name}' again with the same arguments."""
                 if 'parent_engine' in tool_params: # For backwards compatibility
                     arguments['parent_engine'] = self
 
+                # Story 1.3: Emit terminal widget panel for tool visibility
+                from display import create_terminal_widget_panel
+                import time
+                start_time = time.time()
+                
+                # Emit "executing" status panel
+                executing_panel = create_terminal_widget_panel(
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    status="executing",
+                    width=get_terminal_width()
+                )
+                self._log_panel_to_ui(executing_panel)
+
                 if inspect.iscoroutinefunction(tool):
                     observation = await tool(**arguments)
                 else:
                     observation = tool(**arguments)
+
+                # Emit "complete" status panel
+                elapsed_time = time.time() - start_time
+                complete_panel = create_terminal_widget_panel(
+                    tool_name=tool_name,
+                    status="complete",
+                    stdout=str(observation)[:500] if observation else None,
+                    elapsed_time=elapsed_time,
+                    width=get_terminal_width()
+                )
+                self._log_panel_to_ui(complete_panel)
 
                 # Story 2.5: Create a ToolMemory note for dynamically discovered tools
                 if is_dynamic_tool:
@@ -298,6 +323,15 @@ Do NOT call '{tool_name}' again with the same arguments."""
                         await shared_state.memory_manager.add_episode(tool_memory_content, tags=['ToolMemory'])
 
             except Exception as e:
+                # Story 1.3: Emit error panel
+                from display import create_terminal_widget_panel
+                error_panel = create_terminal_widget_panel(
+                    tool_name=tool_name,
+                    status="error",
+                    stderr=str(e),
+                    width=get_terminal_width()
+                )
+                self._log_panel_to_ui(error_panel)
                 observation = f"Error executing tool {tool_name}: {e}"
 
             self.history.append((thought, action, str(observation)))
