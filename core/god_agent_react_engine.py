@@ -192,6 +192,27 @@ class GodAgentReActEngine(GeminiReActEngine):
             }
         })
 
+        # --- SANDBOX TOOLS (Story 2.3) ---
+        from core.surgeon.safe_executor import safe_execute_python, verify_code_before_commit
+        
+        registry.register_tool("safe_execute_python", safe_execute_python, {
+            "description": "Executes Python code in an isolated sandbox (Docker or subprocess). Use this to test generated code before committing to the codebase.",
+            "arguments": {
+                "code": "string (required: the Python code to execute)",
+                "timeout": "integer (optional: max execution time in seconds, default 30)",
+                "use_docker": "boolean (optional: whether to use Docker if available, default True)"
+            }
+        })
+        
+        registry.register_tool("verify_code_before_commit", verify_code_before_commit, {
+            "description": "Verifies Python code in sandbox before writing to filesystem. Returns recommendation on whether code is safe to commit.",
+            "arguments": {
+                "code": "string (required: the Python code to verify)",
+                "filepath": "string (required: target path for logging)",
+                "timeout": "integer (optional: execution timeout, default 30)"
+            }
+        })
+
         return registry
 
     async def run(self):
