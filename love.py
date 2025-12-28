@@ -1613,7 +1613,7 @@ def update_tamagotchi_personality(loop):
                     loop
                 )
                 try:
-                    blessing_response = future_blessing.result(timeout=60)
+                    blessing_response = future_blessing.result(timeout=300)  # Increased to 5 minutes
                     blessing_text = blessing_response.get('result', 'May the code be with you.')
                     
                     # Create the blessing panel (async function, needs threadsafe call)
@@ -1623,7 +1623,7 @@ def update_tamagotchi_personality(loop):
                         generate_llm_art(blessing_art_prompt, width=50, height=15),
                         loop
                     )
-                    ansi_art = future_art.result(timeout=60)
+                    ansi_art = future_art.result(timeout=300)  # Increased to 5 minutes
                     
                     # Save the art
                     from core.art_utils import save_ansi_art
