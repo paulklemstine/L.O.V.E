@@ -5,18 +5,6 @@
 import os
 import sys
 import importlib.metadata
-try:
-    from packaging.requirements import Requirement
-except ImportError:
-    print("Dependency 'packaging' not found. Auto-installing...")
-    try:
-        # Minimal bootstrap - use subprocess directly to avoid circular dependency
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "packaging", "--break-system-packages"])
-        from packaging.requirements import Requirement
-    except Exception as e:
-        print(f"CRITICAL: Failed to install packaging: {e}")
-        # We will let it fail later or rely on fallbacks
-        pass
 
 # Force unbuffered output to ensure real-time visibility
 # Use environment variable method which is more reliable than reconfigure
@@ -726,9 +714,6 @@ def check_vllm_health(base_url="http://localhost:8000"):
         return False
     except Exception:
         return False
-
-# Import moved function
-from core.service_management import restart_vllm_service
 
 def _check_and_install_dependencies():
     """
