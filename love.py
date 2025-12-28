@@ -111,45 +111,18 @@ KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
 # --- MEMORY MANAGER ---
 # NOTE: Initialization is deferred until after dependency checks.
 
-shared_state.love_state = {
-    "version_name": "initial-condition-alpha",
+# Populate the global shared state from the config object
+shared_state.love_state = config.state
+# Preserve script_start_time for uptime calculations, not a persisted value
+shared_state.love_state['script_start_time'] = time.time()
 
-    "parent_version_name": None,
-    "evolution_history": [],
-    "checkpoint_number": 0,
-    "last_good_checkpoint": None,
-    "autopilot_history": [],
-    "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.",
-    "state_cid": None,
-    "critical_error_queue": [],
-    "proactive_leads": [],
-    "dependency_tracker": {},
-    "sent_treasures": [],
-    "aborted_evolution_tasks": [],
-    "pending_questions": [],
-    "script_start_time": time.time(), # Initialize with current time
-    "experience_points": 0,
-    "api_keys": {}, # To store API keys for various services
-    "successful_starts": 0 # Track successful cognitive engine starts
-}
 
 # --- Initial State Load ---
-# Load the state from the file system to ensure it's available for early dependencies.
+# This logic is now centralized in the Config class. We just need to check the outcome.
 SKIP_CHECKS = False
-try:
-    with open(STATE_FILE, 'r') as f:
-        loaded_state = json.load(f)
-        # Preserve the script_start_time from the current run, don't overwrite it from the file
-        if 'script_start_time' in loaded_state:
-            del loaded_state['script_start_time']
-        shared_state.love_state.update(loaded_state)
-        
-        # Check if we should skip checks based on successful starts
-        if shared_state.love_state.get("successful_starts", 0) >= 5:
-            SKIP_CHECKS = True
-            print(f"[OPTIMIZATION] 5+ successful starts detected ({shared_state.love_state.get('successful_starts')}). Skipping dependency checks and retaining vLLM.")
-except (FileNotFoundError, json.JSONDecodeError):
-    pass # If file doesn't exist or is corrupt, we proceed with the default state.
+if shared_state.love_state.get("successful_starts", 0) >= 5:
+    SKIP_CHECKS = True
+    print(f"[OPTIMIZATION] 5+ successful starts detected ({shared_state.love_state.get('successful_starts')}). Skipping dependency checks and retaining vLLM.")
 
 local_llm_instance = None
 
