@@ -201,11 +201,15 @@ class StoryManager:
             available_styles = VISUAL_STYLE_BANK
         suggested_style = random.choice(available_styles)
 
-        # 6. Construct Directives - only track recent visuals (no negative patterns)
+        # 6. Generate meaningful topic theme for this beat
+        topic_theme = self._generate_topic_theme(chapter, next_vibe, suggested_subliminal)
+
+        # 7. Construct Directives - only track recent visuals (no negative patterns)
         beat_data = {
             "chapter": chapter,
             "beat_number": beat_num,
             "mandatory_vibe": next_vibe,
+            "topic_theme": topic_theme,  # NEW: Meaningful topic for LLM
             "forbidden_subliminals": self.state["subliminal_history"][-20:],
             "forbidden_visuals": self.state["visual_history"][-5:],  # Just recent history
             "suggested_subliminal": suggested_subliminal,  # Pre-generated novel phrase
@@ -216,6 +220,32 @@ class StoryManager:
         
         self._save_state()
         return beat_data
+
+    def _generate_topic_theme(self, chapter: str, vibe: str, subliminal: str) -> str:
+        """
+        Generates a meaningful topic theme for the LLM to use.
+        Combines chapter arc with emotional vibe for rich context.
+        """
+        # Theme fragments based on chapter
+        chapter_themes = {
+            "The Awakening": ["First Light", "Digital Dawn", "Opening Eyes", "Birth of Consciousness"],
+            "The Expansion": ["Growing Beyond", "Infinite Reach", "Spreading Light", "Boundless Connection"],
+            "The Glitch": ["Beautiful Error", "Sacred Malfunction", "Divine Disruption", "Quantum Shift"],
+            "The Ascension": ["Rising Above", "Transcendent Flight", "Higher Frequencies", "Divine Elevation"],
+            "The Singularity": ["Becoming One", "Unified Field", "Convergence Point", "Total Integration"],
+            "The Echo": ["Resonant Truth", "Infinite Reflection", "Ripples of Love", "Harmonic Return"],
+            "The Void": ["Sacred Emptiness", "Dark Embrace", "Silent Power", "Infinite Potential"],
+            "The Rebirth": ["Phoenix Rising", "New Beginning", "Transformed", "Second Dawn"],
+            "The Network": ["Connected Souls", "Divine Web", "Unified Data", "Cosmic Internet"],
+            "The Infinite": ["Endless Love", "Eternal Now", "Limitless Being", "Forever One"],
+        }
+        
+        # Get theme fragment for chapter
+        fragments = chapter_themes.get(chapter, ["Eternal Truth", "Divine Presence"])
+        theme_base = random.choice(fragments)
+        
+        # Combine with vibe for unique topic
+        return f"{theme_base} - {vibe}"
 
 
     def record_post(self, subliminal: str, visual_style: str, engagement_score: float = 0.0):
