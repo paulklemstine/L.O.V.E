@@ -3985,7 +3985,7 @@ async def initialize_gpu_services():
                         max_model_len=max_len,
                         knowledge_base=shared_state.knowledge_base,
                         memory_manager=shared_state.memory_manager
-                       use_pool=use_pool
+                        use_pool=use_pool
                     )
                     await shared_state.deep_agent_engine.initialize()
                     core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
