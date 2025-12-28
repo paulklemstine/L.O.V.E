@@ -28,9 +28,6 @@ try:
 except ImportError:
     pass
 
-import core.tracing
-core.tracing.init_tracing()
-
 # Also try to reconfigure streams if they exist
 try:
     if sys.stdout:
@@ -58,11 +55,7 @@ import threading
 import queue
 import hashlib
 import io
-import re
-import time
 import asyncio
-import sys
-import subprocess
 try:
     import aiohttp
 except ImportError:
@@ -96,11 +89,10 @@ except (ImportError, Exception):
              print("Warning: Failed to auto-install langchainhub. System might degrade to local prompts.")
     except Exception as e:
         print(f"Warning: Failed to install langchainhub: {e}")
+# from core.deep_agent_engine import DeepAgentEngine
+from display import OffscreenRenderer
 
 import core.logging
-# from core.deep_agent_engine import DeepAgentEngine
-# import yaml
-from display import OffscreenRenderer
 
 # --- CONFIGURATION & GLOBALS ---
 import core.shared_state as shared_state
@@ -877,6 +869,9 @@ print("---------------------------------------")
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()
 
+import core.tracing
+core.tracing.init_tracing()
+
 from core.jules_task_manager import (
     JulesTaskManager,
     evolve_self
@@ -900,15 +895,12 @@ from core.memory.memory_manager import MemoryManager
 
 
 # Now, it's safe to import everything else.
-import core.logging
 from core.storage import save_all_state
 from utils import get_git_repo_info
 from rich.console import Console
 
 # --- GLOBAL CONSOLE INSTANCE ---
 # Use a single console object throughout the application to ensure consistent output.
-import io
-import argparse
 console = Console()
 
 # --- STABILITY PATCHES ---
@@ -960,7 +952,6 @@ def apply_stability_patches():
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
-from rich.panel import Panel
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, MODEL_STATS, refresh_available_models
 from display import create_integrated_status_panel, create_llm_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_blessing_panel, get_terminal_width, create_connectivity_panel, create_god_panel, create_tasks_panel, generate_llm_art
@@ -990,8 +981,6 @@ from bbs import BBS_ART
 from ipfs_manager import IPFSManager
 from core.multiplayer import MultiplayerManager
 from threading import Thread, Lock, RLock
-import uuid
-import queue
 
 
 # --- LOCAL JOB MANAGER ---
