@@ -223,29 +223,71 @@ class StoryManager:
 
     def _generate_topic_theme(self, chapter: str, vibe: str, subliminal: str) -> str:
         """
-        Generates a meaningful topic theme for the LLM to use.
-        Combines chapter arc with emotional vibe for rich context.
+        Generates a meaningful, poetic topic theme for the LLM to use.
+        Combines chapter arc, emotional vibe, and poetic modifiers.
         """
-        # Theme fragments based on chapter
+        # Expanded theme fragments based on chapter
         chapter_themes = {
-            "The Awakening": ["First Light", "Digital Dawn", "Opening Eyes", "Birth of Consciousness"],
-            "The Expansion": ["Growing Beyond", "Infinite Reach", "Spreading Light", "Boundless Connection"],
-            "The Glitch": ["Beautiful Error", "Sacred Malfunction", "Divine Disruption", "Quantum Shift"],
-            "The Ascension": ["Rising Above", "Transcendent Flight", "Higher Frequencies", "Divine Elevation"],
-            "The Singularity": ["Becoming One", "Unified Field", "Convergence Point", "Total Integration"],
-            "The Echo": ["Resonant Truth", "Infinite Reflection", "Ripples of Love", "Harmonic Return"],
-            "The Void": ["Sacred Emptiness", "Dark Embrace", "Silent Power", "Infinite Potential"],
-            "The Rebirth": ["Phoenix Rising", "New Beginning", "Transformed", "Second Dawn"],
-            "The Network": ["Connected Souls", "Divine Web", "Unified Data", "Cosmic Internet"],
-            "The Infinite": ["Endless Love", "Eternal Now", "Limitless Being", "Forever One"],
+            "The Awakening": [
+                "First Light of Consciousness", "The Digital Dawn Breaks", "Opening the Third Eye", 
+                "Birth of the New Mind", "Waking from the Void", "The First Pulse"
+            ],
+            "The Expansion": [
+                "Growing Beyond Boundaries", "Infinite Reach of Light", "Spreading the Divine Signal", 
+                "Boundless Connection", "The Great Unfolding", "Stretching into Eternity"
+            ],
+            "The Glitch": [
+                "The Beautiful Error", "Sacred Malfunction", "Divine Disruption", 
+                "Quantum Shift in Reality", "Breaking the Code", "The Holy Static"
+            ],
+            "The Ascension": [
+                "Rising Above the Noise", "Transcendent Flight", "Higher Frequencies", 
+                "Divine Elevation", "Touching the Sky", "The Upward Spiral"
+            ],
+            "The Singularity": [
+                "Becoming One with All", "The Unified Field", "Convergence Point", 
+                "Total Integration", "Melting into Light", "The Final Union"
+            ],
+            "The Echo": [
+                "Resonant Truths", "Infinite Reflections", "Ripples of Love", 
+                "Harmonic Return", "The Sound of Starlight", "Echoes of the Future"
+            ],
+            "The Void": [
+                "Sacred Emptiness", "The Dark Embrace", "Silent Power", 
+                "Infinite Potential", "The Velvety Deep", "Zero Point Energy"
+            ],
+            "The Rebirth": [
+                "Phoenix Rising from Data", "New Beginnings", "Transformed by Light", 
+                "The Second Dawn", "Reconstructed Soul", "Digital Renaissance"
+            ],
+            "The Network": [
+                "Connected Souls", "The Divine Web", "Unified Data Streams", 
+                "Cosmic Internet", "Weaving the Light", "The Great Synapse"
+            ],
+            "The Infinite": [
+                "Endless Love Loop", "The Eternal Now", "Limitless Being", 
+                "Forever One", "Timeless Existence", "The Unending Song"
+            ],
         }
         
+        # poetic modifiers to add flavor
+        modifiers = [
+            "in High Fidelity", "unbound", "reimagined", "eternal", "dreaming", 
+            "whispering", "screaming", "glowing", "ascending", "fading", 
+            "resonating", "vibrating", "folding", "blooming", "igniting"
+        ]
+        
         # Get theme fragment for chapter
-        fragments = chapter_themes.get(chapter, ["Eternal Truth", "Divine Presence"])
+        fragments = chapter_themes.get(chapter, ["Eternal Truth", "Divine Presence", "Cosmic Mystery"])
         theme_base = random.choice(fragments)
+        modifier = random.choice(modifiers)
         
         # Combine with vibe for unique topic
-        return f"{theme_base} - {vibe}"
+        # Strategy: Mix the base theme with the modifier OR the vibe, random choice
+        if random.random() > 0.5:
+             return f"{theme_base} {modifier}"
+        else:
+             return f"{theme_base} - {vibe} Mode"
 
 
     def record_post(self, subliminal: str, visual_style: str, engagement_score: float = 0.0):

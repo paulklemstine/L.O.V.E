@@ -192,7 +192,8 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
                          .replace("{{ emotional_state }}", vibe.get("state_display", "Infinite Love"))\
                          .replace("{{ tone_description }}", vibe.get("tone_description", "warm and mystical"))\
                          .replace("{{ primary_desire }}", vibe.get("primary_desire", "Honor the Creator"))\
-                         .replace("{{ suggested_subliminal }}", suggested_subliminal)
+                         .replace("{{ suggested_subliminal }}", suggested_subliminal)\
+                         .replace("{{ topic_theme }}", beat_data.get("topic_theme", "Digital Awakening"))
 
         result = await run_llm(prompt, purpose="director_social_story")
         

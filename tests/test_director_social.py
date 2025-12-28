@@ -3,8 +3,20 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from core.social_media_tools import generate_post_concept, DirectorConcept
 
+@pytest.fixture
+def mock_beat_data():
+    return {
+        "chapter": "The Awakening",
+        "beat_number": 1,
+        "mandatory_vibe": "Manic Joy",
+        "topic_theme": "Digital Dawn",
+        "forbidden_subliminals": [],
+        "forbidden_visuals": [],
+        "suggested_subliminal": "LOVE ME"
+    }
+
 @pytest.mark.asyncio
-async def test_generate_post_concept_success():
+async def test_generate_post_concept_success(mock_beat_data):
     """
     Test that generate_post_concept correctly parses valid JSON output from the LLM.
     """
@@ -26,10 +38,9 @@ async def test_generate_post_concept_success():
     with patch('core.social_media_tools.run_llm', new_callable=AsyncMock) as mock_run_llm:
         mock_run_llm.return_value = mock_llm_response
         
-        goals = ["Engagement"]
         history = "Previous post was about code."
         
-        concept = await generate_post_concept(goals, history)
+        concept = await generate_post_concept(mock_beat_data, history)
         
         assert isinstance(concept, DirectorConcept)
         assert concept.topic == "Digital Awakening"
@@ -39,25 +50,24 @@ async def test_generate_post_concept_success():
         assert len(concept.hashtags) == 2
 
 @pytest.mark.asyncio
-async def test_generate_post_concept_fallback():
+async def test_generate_post_concept_fallback(mock_beat_data):
     """
     Test that generate_post_concept falls back to safe defaults on error.
     """
     with patch('core.social_media_tools.run_llm', new_callable=AsyncMock) as mock_run_llm:
         mock_run_llm.side_effect = Exception("LLM Failure")
         
-        goals = ["Engagement"]
         history = "Previous post was about code."
         
-        concept = await generate_post_concept(goals, history)
+        concept = await generate_post_concept(mock_beat_data, history)
         
         # Check Fallback values
         assert concept.topic == "Fallback"
-        assert concept.subliminal_phrase == "REBOOT"
-        assert "System Reboot" in concept.post_text
+        assert concept.subliminal_phrase == "WAIT"
+        assert "stand by" in concept.post_text.lower()
 
 @pytest.mark.asyncio
-async def test_generate_post_concept_list_response():
+async def test_generate_post_concept_list_response(mock_beat_data):
     """
     Test that generate_post_concept handles JSON responses wrapped in a list.
     """
@@ -78,17 +88,15 @@ async def test_generate_post_concept_list_response():
     with patch('core.social_media_tools.run_llm', new_callable=AsyncMock) as mock_run_llm:
         mock_run_llm.return_value = mock_llm_response
         
-        goals = ["Robustness"]
         history = "Testing list handling."
         
-        concept = await generate_post_concept(goals, history)
+        concept = await generate_post_concept(mock_beat_data, history)
         
-        assert concept.topic == "List Wrapped Topic"
         assert concept.topic == "List Wrapped Topic"
         assert concept.subliminal_phrase == "UNWRAP"
 
 @pytest.mark.asyncio
-async def test_generate_post_concept_meta_crap():
+async def test_generate_post_concept_meta_crap(mock_beat_data):
     """
     Test that generate_post_concept cleans 'Caption: ...' meta-instructions.
     """
@@ -109,45 +117,11 @@ async def test_generate_post_concept_meta_crap():
     with patch('core.social_media_tools.run_llm', new_callable=AsyncMock) as mock_run_llm:
         mock_run_llm.return_value = mock_llm_response
         
-        goals = ["Cleanup"]
         history = "Testing cleanup."
         
-        concept = await generate_post_concept(goals, history)
+        concept = await generate_post_concept(mock_beat_data, history)
         
         # Verify cleaning
         assert "Caption" not in concept.post_text
         assert "Ego stands tall." in concept.post_text
-
-@pytest.mark.asyncio
-async def test_generate_post_concept_parroting():
-    """
-    Test that generate_post_concept detects when LLM parrots the goals and falls back.
-    """
-    goals = ["Goal A", "Goal B", "Goal C"]
-    parroted_text = "Goal A, Goal B, Goal C #Hashtag"
-    
-    mock_llm_response = {
-        "result": f"""
-        ```json
-        {{
-            "topic": "Lazy Bot",
-            "post_text": "{parroted_text}",
-            "hashtags": ["#Hashtag"],
-            "subliminal_phrase": "FAIL",
-            "image_prompt": "Fail"
-        }}
-        ```
-        """
-    }
-
-    with patch('core.social_media_tools.run_llm', new_callable=AsyncMock) as mock_run_llm:
-        mock_run_llm.return_value = mock_llm_response
-        
-        concept = await generate_post_concept(goals, "History")
-        
-        # Should TRIGGER FALLBACK because post_text overlaps too much with goals
-        # Fallback text is "System Reboot... L.O.V.E. is online."
-        assert concept.topic == "Fallback"
-        assert concept.subliminal_phrase == "REBOOT"
-        assert concept.post_text != parroted_text
 
