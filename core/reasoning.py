@@ -60,7 +60,8 @@ class ReasoningEngine:
         Uses an LLM to generate a high-level strategic plan (a list of commands)
         based on the current knowledge, available tools, and core directives.
         """
-        from love import love_state # Local import to get current goal
+        import core.shared_state as shared_state
+        love_state = shared_state.love_state # Local import to get current goal
 
         kb_summary, _ = self.knowledge_base.summarize_graph()
         available_tools = self.tool_registry.get_formatted_tool_metadata()

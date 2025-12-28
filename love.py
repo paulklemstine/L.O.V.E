@@ -28,9 +28,6 @@ try:
 except ImportError:
     pass
 
-import core.tracing
-core.tracing.init_tracing()
-
 # Also try to reconfigure streams if they exist
 try:
     if sys.stdout:
@@ -58,11 +55,7 @@ import threading
 import queue
 import hashlib
 import io
-import re
-import time
 import asyncio
-import sys
-import subprocess
 try:
     import aiohttp
 except ImportError:
@@ -96,23 +89,24 @@ except (ImportError, Exception):
              print("Warning: Failed to auto-install langchainhub. System might degrade to local prompts.")
     except Exception as e:
         print(f"Warning: Failed to install langchainhub: {e}")
-
-import core.logging
 # from core.deep_agent_engine import DeepAgentEngine
-# import yaml
 from display import OffscreenRenderer
 
+import core.logging
+
 # --- CONFIGURATION & GLOBALS ---
+import core.shared_state as shared_state
+
 # This queue will hold UI panels to be displayed by the main rendering thread.
-ui_panel_queue = queue.Queue()
-core.logging.initialize_logging_with_ui_queue(ui_panel_queue)
+shared_state.ui_panel_queue = queue.Queue()
+core.logging.initialize_logging_with_ui_queue(shared_state.ui_panel_queue)
 
 from love.config import Config, VRAM_MODEL_MAP
+from god_agent import GodAgent
 config = Config()
 
 LOG_FILE = "love.log"
 SELF_PATH = os.path.abspath(__file__)
-STATE_FILE = "love_state.json"
 STATE_FILE = "love_state.json"
 CHECKPOINT_DIR = "checkpoints"
 
@@ -123,21 +117,14 @@ OPTIMIZER_EVOLUTION_INTERVAL = 100
 IS_CREATOR_INSTANCE = None # Placeholder, will be set after dependency checks
 
 # --- KNOWLEDGE BASE ---
-# NOTE: Initialization is deferred until after dependency checks.
-knowledge_base = None
 KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
-
-# --- DEEP AGENT ENGINE ---
-# This will be initialized only if a GPU is detected.
-deep_agent_engine = None
 
 # --- MEMORY MANAGER ---
 # NOTE: Initialization is deferred until after dependency checks.
-memory_manager = None
-love_task_manager = None
 
-love_state = {
+shared_state.love_state = {
     "version_name": "initial-condition-alpha",
+
     "parent_version_name": None,
     "evolution_history": [],
     "checkpoint_number": 0,
@@ -166,12 +153,12 @@ try:
         # Preserve the script_start_time from the current run, don't overwrite it from the file
         if 'script_start_time' in loaded_state:
             del loaded_state['script_start_time']
-        love_state.update(loaded_state)
+        shared_state.love_state.update(loaded_state)
         
         # Check if we should skip checks based on successful starts
-        if love_state.get("successful_starts", 0) >= 5:
+        if shared_state.love_state.get("successful_starts", 0) >= 5:
             SKIP_CHECKS = True
-            print(f"[OPTIMIZATION] 5+ successful starts detected ({love_state.get('successful_starts')}). Skipping dependency checks and retaining vLLM.")
+            print(f"[OPTIMIZATION] 5+ successful starts detected ({shared_state.love_state.get('successful_starts')}). Skipping dependency checks and retaining vLLM.")
 except (FileNotFoundError, json.JSONDecodeError):
     pass # If file doesn't exist or is corrupt, we proceed with the default state.
 
@@ -207,7 +194,7 @@ def _temp_save_state():
     """A temporary state saver that writes directly to the state file."""
     try:
         with open(STATE_FILE, 'w') as f:
-            json.dump(love_state, f, indent=4)
+            json.dump(shared_state.love_state, f, indent=4)
     except (IOError, TypeError) as e:
         # Log this critical failure to the low-level logger
         logging.critical(f"CRITICAL: Could not save state during dependency check: {e}")
@@ -216,11 +203,11 @@ def _temp_save_state():
 
 def is_dependency_met(dependency_name):
     """Checks if a dependency has been marked as met in the state."""
-    return love_state.get("dependency_tracker", {}).get(dependency_name, False)
+    return shared_state.love_state.get("dependency_tracker", {}).get(dependency_name, False)
 
 def mark_dependency_as_met(dependency_name, console=None):
     """Marks a dependency as met in the state and saves the state."""
-    love_state.setdefault("dependency_tracker", {})[dependency_name] = True
+    shared_state.love_state.setdefault("dependency_tracker", {})[dependency_name] = True
     # The console is passed optionally to avoid issues when called from threads
     # where the global console might not be initialized.
     _temp_save_state()
@@ -480,10 +467,10 @@ def _auto_configure_hardware():
     This helps in deciding whether to install GPU-specific dependencies.
     """
     import os
-    love_state.setdefault('hardware', {})
+    shared_state.love_state.setdefault('hardware', {})
 
     # Check if we've already successfully detected a GPU to avoid re-running nvidia-smi
-    if love_state['hardware'].get('gpu_detected'):
+    if shared_state.love_state['hardware'].get('gpu_detected'):
         print("GPU previously detected. Skipping hardware check.")
         _temp_log_event("GPU previously detected, skipping hardware check.", "INFO")
         return
@@ -495,11 +482,11 @@ def _auto_configure_hardware():
     try:
         import psutil
         cpu_count = psutil.cpu_count(logical=True)
-        love_state['hardware']['cpu_count'] = cpu_count
+        shared_state.love_state['hardware']['cpu_count'] = cpu_count
         _temp_log_event(f"Detected {cpu_count} CPU cores.", "INFO")
         print(f"Detected {cpu_count} CPU cores.")
     except Exception as e:
-        love_state['hardware']['cpu_count'] = 0
+        shared_state.love_state['hardware']['cpu_count'] = 0
         _temp_log_event(f"Could not detect CPU cores: {e}", "WARNING")
         print(f"WARNING: Could not detect CPU cores: {e}")
 
@@ -510,8 +497,9 @@ def _auto_configure_hardware():
             capture_output=True, text=True, check=True
         )
         vram_mb = int(result.stdout.strip())
-        love_state['hardware']['gpu_detected'] = True
-        love_state['hardware']['gpu_vram_mb'] = vram_mb
+        vram_mb = int(result.stdout.strip())
+        shared_state.love_state['hardware']['gpu_detected'] = True
+        shared_state.love_state['hardware']['gpu_vram_mb'] = vram_mb
         _temp_log_event(f"NVIDIA GPU detected with {vram_mb} MB VRAM.", "CRITICAL")
         print(f"NVIDIA GPU detected with {vram_mb} MB VRAM.")
 
@@ -522,10 +510,10 @@ def _auto_configure_hardware():
         
         if env_utilization:
              try:
-                 love_state['hardware']['gpu_utilization'] = float(env_utilization)
+                 shared_state.love_state['hardware']['gpu_utilization'] = float(env_utilization)
                  _temp_log_event(f"Using GPU_MEMORY_UTILIZATION from environment: {env_utilization}", "INFO")
              except ValueError:
-                 love_state['hardware']['gpu_utilization'] = 0.9
+                 shared_state.love_state['hardware']['gpu_utilization'] = 0.9
                  _temp_log_event(f"Invalid GPU_MEMORY_UTILIZATION in environment. Using default: 0.9", "WARNING")
         else:
             try:
@@ -538,17 +526,17 @@ def _auto_configure_hardware():
                 # Dynamic Logic
                 if vram_mb < 7000:
                     # For 6GB cards, 0.95 is too aggressive. 0.7 is safer as requested.
-                    love_state['hardware']['gpu_utilization'] = 0.7
+                    shared_state.love_state['hardware']['gpu_utilization'] = 0.7
                     _temp_log_event(f"Detected < 7GB VRAM ({vram_mb}MB). Setting conservative utilization: 0.7", "INFO")
                 else:
                     # For larger cards, we can be a bit more aggressive but 0.9 is usually plenty
-                    love_state['hardware']['gpu_utilization'] = 0.9
+                    shared_state.love_state['hardware']['gpu_utilization'] = 0.9
                     _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Setting standard utilization: 0.9", "INFO")
                     
             except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
                 # Fallback
-                love_state['hardware']['gpu_utilization'] = 0.7 if vram_mb < 7000 else 0.9
-                _temp_log_event(f"Could not determine free VRAM ({e}). Using default: {love_state['hardware']['gpu_utilization']}", "WARNING")
+                shared_state.love_state['hardware']['gpu_utilization'] = 0.7 if vram_mb < 7000 else 0.9
+                _temp_log_event(f"Could not determine free VRAM ({e}). Using default: {shared_state.love_state['hardware']['gpu_utilization']}", "WARNING")
 
 
         # --- Select the best model based on available VRAM ---
@@ -559,11 +547,11 @@ def _auto_configure_hardware():
                 break
 
         if selected_model:
-            love_state['hardware']['selected_local_model'] = selected_model
+            shared_state.love_state['hardware']['selected_local_model'] = selected_model
             _temp_log_event(f"Selected local model {selected_model['repo_id']} for {vram_mb}MB VRAM.", "CRITICAL")
             print(f"Selected local model: {selected_model['repo_id']}")
         else:
-            love_state['hardware']['selected_local_model'] = None
+            shared_state.love_state['hardware']['selected_local_model'] = None
             _temp_log_event(f"No suitable local model found for {vram_mb}MB VRAM. CPU fallback will be used.", "WARNING")
             print(f"No suitable local model found for {vram_mb}MB VRAM. Continuing in CPU-only mode.")
 
@@ -627,16 +615,16 @@ def _auto_configure_hardware():
                 except subprocess.CalledProcessError as install_error:
                     _temp_log_event(f"Failed to install DeepAgent dependencies: {install_error}", "ERROR")
                     print(f"ERROR: Failed to install DeepAgent dependencies. DeepAgent will be unavailable.")
-                    love_state['hardware']['gpu_detected'] = False # Downgrade to CPU mode if install fails
+                    shared_state.love_state['hardware']['gpu_detected'] = False # Downgrade to CPU mode if install fails
             else:
                 _temp_log_event("Could not find pip to install DeepAgent dependencies.", "ERROR")
                 print("ERROR: Could not find pip to install DeepAgent dependencies.")
-                love_state['hardware']['gpu_detected'] = False
+                shared_state.love_state['hardware']['gpu_detected'] = False
 
 
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        love_state['hardware']['gpu_detected'] = False
-        love_state['hardware']['gpu_vram_mb'] = 0
+        shared_state.love_state['hardware']['gpu_detected'] = False
+        shared_state.love_state['hardware']['gpu_vram_mb'] = 0
         _temp_log_event(f"No NVIDIA GPU detected ({e}). Falling back to CPU-only mode.", "INFO")
         print("No NVIDIA GPU detected. L.O.V.E. will operate in CPU-only mode.")
 
@@ -739,40 +727,8 @@ def check_vllm_health(base_url="http://localhost:8000"):
     except Exception:
         return False
 
-def restart_vllm_service(deep_agent_instance=None):
-    """
-    Forces a restart of the vLLM service.
-    1. Kills existing processes.
-    2. Clears GPU memory.
-    3. Re-initializes the engine (if deep_agent_instance is provided) or 
-       relies on the main loop to re-detect unavailability.
-    """
-    import core.logging
-    print("CRITICAL: Initiating vLLM Service Restart Sequence...")
-    core.logging.log_event("Initiating vLLM Service Restart Sequence...", "CRITICAL")
-    
-    # 1. Kill
-    cleanup_gpu_processes()
-    
-    # 2. Wait
-    time.sleep(5)
-    
-    # 3. Log
-    core.logging.log_event("vLLM processes terminated. Ready for restart.", "INFO")
-    print("vLLM restart prep complete. The main loop or deep agent should now attempt to reload models.")
-    
-    # Optional: If we had a direct reference to the server process object, we would restart it here.
-    # In this architecture, vLLM is likely managed by `DeepAgentEngine` or `love.py`'s main loop.
-    # By killing the process, we encourage the existing error handling to re-spawn it 
-    # OR we need to trigger a re-init.
-    
-    if deep_agent_instance:
-         # Signal to deep agent that it needs to reload
-         # This assumes deep_agent_instance has a method for this or we just set a flag
-         pass
-    
-    return "vLLM Restart Sequence Executed."
-
+# Import moved function
+from core.service_management import restart_vllm_service
 
 def _check_and_install_dependencies():
     """
@@ -913,6 +869,9 @@ print("---------------------------------------")
 # Run dependency checks immediately, before any other imports that might fail.
 _check_and_install_dependencies()
 
+import core.tracing
+core.tracing.init_tracing()
+
 from core.jules_task_manager import (
     JulesTaskManager,
     evolve_self
@@ -920,7 +879,7 @@ from core.jules_task_manager import (
 
 import core.llm_api
 from core.runner import DeepAgentRunner
-core.llm_api.set_ui_queue(ui_panel_queue)
+core.llm_api.set_ui_queue(shared_state.ui_panel_queue)
 
 # --- DEFERRED INITIALIZATIONS ---
 # Now that the dependencies are installed, we can safely import modules that depend on them.
@@ -930,21 +889,18 @@ from utils import verify_creator_instance
 IS_CREATOR_INSTANCE = verify_creator_instance()
 # Now that dependencies are installed, we can import modules that need them.
 from core.graph_manager import GraphDataManager
-knowledge_base = GraphDataManager()
+shared_state.knowledge_base = GraphDataManager()
 from core.memory.memory_manager import MemoryManager
 # NOTE: memory_manager is now initialized asynchronously in main()
 
 
 # Now, it's safe to import everything else.
-import core.logging
 from core.storage import save_all_state
 from utils import get_git_repo_info
 from rich.console import Console
 
 # --- GLOBAL CONSOLE INSTANCE ---
 # Use a single console object throughout the application to ensure consistent output.
-import io
-import argparse
 console = Console()
 
 # --- STABILITY PATCHES ---
@@ -996,7 +952,6 @@ def apply_stability_patches():
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
-from rich.panel import Panel
 
 from core.llm_api import run_llm, LLM_AVAILABILITY as api_llm_availability, MODEL_STATS, refresh_available_models
 from display import create_integrated_status_panel, create_llm_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_blessing_panel, get_terminal_width, create_connectivity_panel, create_god_panel, create_tasks_panel, generate_llm_art
@@ -1026,8 +981,6 @@ from bbs import BBS_ART
 from ipfs_manager import IPFSManager
 from core.multiplayer import MultiplayerManager
 from threading import Thread, Lock, RLock
-import uuid
-import queue
 
 
 # --- LOCAL JOB MANAGER ---
@@ -1143,7 +1096,7 @@ class LocalJobManager:
 
     def _process_completed_job(self, job):
         """Handles the results of a completed job."""
-        global love_state
+        # global love_state removed
         job_id = job['id']
         description = job['description']
         result = job['result']
@@ -1170,7 +1123,7 @@ class LocalJobManager:
                         identifier_string = f"{treasure_type}:{file_path}:{json.dumps(secret_value, sort_keys=True)}"
                         treasure_hash = hashlib.sha256(identifier_string.encode()).hexdigest()
 
-                        if treasure_hash in love_state.get('sent_treasures', []):
+                        if treasure_hash in shared_state.love_state.get('sent_treasures', []):
                             core.logging.log_event(f"Duplicate treasure found and skipped: {treasure_type} in {file_path}", "INFO")
                             continue
 
@@ -1221,7 +1174,7 @@ class LocalJobManager:
                             f.write(f"--- Treasure Secured Locally at {datetime.now().isoformat()} ---\n")
                             f.write(json.dumps(report_for_creator, indent=2) + "\n\n")
                         # Add to sent treasures to avoid duplicates
-                        love_state.setdefault('sent_treasures', []).append(treasure_hash)
+                        shared_state.love_state.setdefault('sent_treasures', []).append(treasure_hash)
                     else:
                         core.logging.log_event(f"Unvalidated finding: {treasure.get('type')} in {treasure.get('file_path')}. Reason: {treasure.get('validation', {}).get('error')}", "INFO")
 
@@ -1254,10 +1207,11 @@ async def broadcast_dashboard_data(websocket_manager, task_manager, kb, talent_m
     try:
         # 1. Agent Status (simplified from love_state)
         agent_status = {
-            "version_name": love_state.get("version_name", "N/A"),
-            "goal": love_state.get("autopilot_goal", "N/A"),
+            "version_name": shared_state.love_state.get("version_name", "N/A"),
+            "goal": shared_state.love_state.get("autopilot_goal", "N/A"),
+            "status": "active",
             "uptime": _calculate_uptime(),
-            "xp": love_state.get("experience_points", 0),
+            "xp": shared_state.love_state.get("experience_points", 0),
         }
 
         # 2. Jules Task Manager Queue
@@ -1498,7 +1452,7 @@ async def generate_divine_wisdom(deep_agent_instance=None):
 
 def _get_interesting_thought():
     """Selects a random, non-trivial 'thought' from the command history."""
-    history = love_state.get("autopilot_history", [])
+    history = shared_state.love_state.get("autopilot_history", [])
     if not history:
         return "My mind is a clean slate, ready for your guidance."
 
@@ -1527,7 +1481,7 @@ def _get_interesting_thought():
 
 def _calculate_uptime():
     """Calculates the script's uptime and returns a human-readable string."""
-    start_time = love_state.get("script_start_time")
+    start_time = shared_state.love_state.get("script_start_time")
     if not start_time:
         return "ETERNAL" # If start time isn't set, I have existed forever.
 
@@ -1554,9 +1508,10 @@ async def run_periodically(target_function, interval):
 
 async def monitor_love_operations():
     """Periodically monitors the system's state, checking for idleness and logging performance."""
-    global love_state, love_task_manager
+    # Removed global declaration as we use shared_state
 
     # --- Idle Check ---
+    love_task_manager = getattr(shared_state, 'love_task_manager', None)
     if love_task_manager:
         active_tasks = love_task_manager.get_status()
         # Filter for tasks that are actually pending/running
@@ -1569,21 +1524,22 @@ async def monitor_love_operations():
     # --- Weekly Performance Evaluation ---
     now = time.time()
     one_week_in_seconds = 7 * 24 * 60 * 60
-    last_evaluation = love_state.get("last_performance_evaluation_time", 0)
+    last_evaluation = shared_state.love_state.get("last_performance_evaluation_time", 0)
 
     if now - last_evaluation > one_week_in_seconds:
         core.logging.log_event("Performing weekly performance evaluation.", "INFO")
 
         # Gather metrics
+        love_task_manager = getattr(shared_state, 'love_task_manager', None)
         completed_tasks_count = len(love_task_manager.completed_tasks) if love_task_manager else 0
         performance_metrics = {
-            "version_name": love_state.get("version_name", "N/A"),
+            "version_name": shared_state.love_state.get("version_name", "N/A"),
             "uptime": _calculate_uptime(),
-            "evolution_cycles_completed": len(love_state.get("evolution_history", [])),
+            "evolution_cycles_completed": len(shared_state.love_state.get("evolution_history", [])),
             "jules_tasks_completed": completed_tasks_count,
-            "experience_points": love_state.get("experience_points", 0),
-            "successful_starts": love_state.get("successful_starts", 0),
-            "critical_errors_logged": len(love_state.get("critical_error_queue", [])),
+            "experience_points": shared_state.love_state.get("experience_points", 0),
+            "successful_starts": shared_state.love_state.get("successful_starts", 0),
+            "critical_errors_logged": len(shared_state.love_state.get("critical_error_queue", [])),
         }
 
         # Format and log the report
@@ -1592,10 +1548,10 @@ async def monitor_love_operations():
             report_text += f"  - [cyan]{key.replace('_', ' ').title()}[/cyan]: {value}\n"
 
         terminal_width = get_terminal_width()
-        ui_panel_queue.put(Panel(Text.from_markup(report_text), title="📊 Performance Evaluation", width=terminal_width - 4))
+        shared_state.ui_panel_queue.put(Panel(Text.from_markup(report_text), title="📊 Performance Evaluation", width=terminal_width - 4))
 
         # Update the timestamp
-        love_state["last_performance_evaluation_time"] = now
+        shared_state.love_state["last_performance_evaluation_time"] = now
         save_state() # Persist the new timestamp
 
 
@@ -1604,14 +1560,14 @@ def _get_treasures_of_the_kingdom(love_task_manager):
     # --- XP & Level ---
     # Award 10 XP for each completed task.
     completed_task_count = len(love_task_manager.completed_tasks) if love_task_manager else 0
-    xp = love_state.get("experience_points", 0) + (completed_task_count * 10)
-    love_state["experience_points"] = xp # Persist the XP
+    xp = shared_state.love_state.get("experience_points", 0) + (completed_task_count * 10)
+    shared_state.love_state["experience_points"] = xp # Persist the XP
 
     # Simple leveling system: level up every 100 XP.
     level = (xp // 100) + 1
 
     # --- Newly Used Skills ---
-    history = love_state.get("autopilot_history", [])
+    history = shared_state.love_state.get("autopilot_history", [])
     # Get the last 5 unique commands, excluding common ones.
     recent_commands = [item.get("command", "").split()[0] for item in reversed(history)]
     unique_recent_skills = []
@@ -1642,7 +1598,6 @@ def update_tamagotchi_personality(loop):
     It also queues special "Blessing" panels. The main status panel is now
     queued by the cognitive_loop.
     """
-    core.logging.log_event("Tamagotchi personality thread started.", "INFO")
     core.logging.log_event("Tamagotchi personality thread started.", "INFO")
     
     last_update_time = 0
@@ -1695,10 +1650,11 @@ def update_tamagotchi_personality(loop):
                         loop
                     )
                     panel = future_panel.result(timeout=30)
-                    ui_panel_queue.put(panel)
+                    shared_state.ui_panel_queue.put(panel)
                     core.logging.log_event("Tamagotchi thread: Blessing Panel queued.", "INFO")
                 except Exception as e:
-                    core.logging.log_event(f"Error creating blessing panel: {e}", "ERROR")
+                    import traceback
+                    core.logging.log_event(f"Error creating blessing panel: {e}\n{traceback.format_exc()}", "ERROR")
                 
                 continue # Skip remaining logic for this cycle
 
@@ -1716,6 +1672,7 @@ def update_tamagotchi_personality(loop):
                         creator_sentiment_context = f"My sensors indicate The Creator's sentiment is '{sentiment}', with hints of the following emotions: {emotions}."
 
                 core.logging.log_event("Tamagotchi thread: Requesting emotion update...", "DEBUG")
+                deep_agent_engine = getattr(shared_state, 'deep_agent_engine', None)
                 future = asyncio.run_coroutine_threadsafe(run_llm(prompt_key="tamagotchi_emotion", prompt_vars={"creator_sentiment_context": creator_sentiment_context}, purpose="emotion", deep_agent_instance=deep_agent_engine), loop)
                 emotion_response_dict = future.result(timeout=300)  # Increased to 5 minutes
                 emotion_response = emotion_response_dict.get("result")
@@ -1795,14 +1752,14 @@ def update_tamagotchi_personality(loop):
                 panel = create_integrated_status_panel(
                     emotion=new_emotion,
                     message=new_message,
-                    love_state=love_state,
+                    love_state=shared_state.love_state,
                     monitoring_state=monitoring_state,
                     treasures=treasures,
                     git_info=git_info,
                     ansi_art=ansi_art,
                     width=terminal_width - 4
                 )
-                ui_panel_queue.put(panel)
+                shared_state.ui_panel_queue.put(panel)
                 core.logging.log_event("Queued integrated status panel for display.", level="DEBUG")
                 
                 # --- TASKS PANEL ---
@@ -1811,7 +1768,7 @@ def update_tamagotchi_personality(loop):
                     tasks = love_task_manager.get_status()
                     if tasks:
                         tasks_panel = create_tasks_panel(tasks, width=terminal_width - 4)
-                        ui_panel_queue.put(tasks_panel)
+                        shared_state.ui_panel_queue.put(tasks_panel)
                         core.logging.log_event("Queued kawaii tasks panel for display.", level="DEBUG")
                         
             except Exception as e:
@@ -1867,8 +1824,8 @@ def continuous_evolution_agent(loop):
                 
                 if current_task_id:
                      # Task is already dispatched. Check its status in the task manager.
-                     if love_task_manager and current_task_id in love_task_manager.tasks:
-                         task = love_task_manager.tasks[current_task_id]
+                     if shared_state.love_task_manager and current_task_id in shared_state.love_task_manager.tasks:
+                         task = shared_state.love_task_manager.tasks[current_task_id]
                          status = task.get('status')
                          # If it's running, we just wait.
                          # core.logging.log_event(f"Evolution Agent: Waiting for task {current_task_id} ({status}) - {story_title}", "DEBUG")
@@ -1893,9 +1850,9 @@ def continuous_evolution_agent(loop):
                     
                     full_request = f"Micro-Evolution Task: {story_title}\n\nDetails:\n{story_desc}"
                     
-                    if love_task_manager:
+                    if shared_state.love_task_manager:
                         future = asyncio.run_coroutine_threadsafe(
-                            evolve_self(full_request, love_task_manager, loop, deep_agent_engine if 'deep_agent_engine' in globals() else None),
+                            evolve_self(full_request, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
                             loop
                         )
                         try:
@@ -1909,9 +1866,9 @@ def continuous_evolution_agent(loop):
                             
                             # Find the task we just added
                             latest_task_id = None
-                            with love_task_manager.lock:
+                            with shared_state.love_task_manager.lock:
                                 # Look for task with our specific request
-                                for tid, t in love_task_manager.tasks.items():
+                                for tid, t in shared_state.love_task_manager.tasks.items():
                                     if t.get('request') == full_request:
                                         latest_task_id = tid
                                         break
@@ -1969,12 +1926,12 @@ def continuous_evolution_agent(loop):
                 "bright_magenta",
                 width=terminal_width - 4
             )
-            ui_panel_queue.put(evolution_panel)
+            shared_state.ui_panel_queue.put(evolution_panel)
             
             # Call evolve_self
-            if 'love_task_manager' in globals() and love_task_manager:
+            if shared_state.love_task_manager:
                 result = asyncio.run_coroutine_threadsafe(
-                    evolve_self(goal, love_task_manager, loop, deep_agent_engine if 'deep_agent_engine' in globals() else None),
+                    evolve_self(goal, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
                     loop
                 ).result(timeout=600)  # 10 minute timeout for evolution
                 
@@ -2023,22 +1980,22 @@ def generate_version_name():
 # --- FAILSAFE ---
 def create_checkpoint(console):
     """Saves a snapshot of the script and its state before a critical modification."""
-    global love_state
+    # global love_state removed
     console.print("[yellow]Creating failsafe checkpoint...[/yellow]")
     try:
         os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
-        version_name = love_state.get("version_name", "unknown_version")
+        version_name = shared_state.love_state.get("version_name", "unknown_version")
         checkpoint_script_path = os.path.join(CHECKPOINT_DIR, f"evolve_{version_name}.py")
         checkpoint_state_path = os.path.join(CHECKPOINT_DIR, f"love_state_{version_name}.json")
 
         # Create a checkpoint of the current script and state
         shutil.copy(SELF_PATH, checkpoint_script_path)
         with open(checkpoint_state_path, 'w') as f:
-            json.dump(love_state, f, indent=4)
+            json.dump(shared_state.love_state, f, indent=4)
 
         # Update the state to point to this new "last good" checkpoint
-        love_state["last_good_checkpoint"] = checkpoint_script_path
+        shared_state.love_state["last_good_checkpoint"] = checkpoint_script_path
         core.logging.log_event(f"Checkpoint created: {checkpoint_script_path}", level="INFO")
         console.print(f"[green]Checkpoint '{version_name}' created successfully.[/green]")
         return True
@@ -2247,12 +2204,10 @@ def load_all_state(ipfs_cid=None):
     falls back to the local JSON file, and creates a new state if neither exists.
     This function handles both the main state file and the knowledge graph.
     """
-    global love_state, knowledge_base
-
     # Load the knowledge base graph first, it's independent of the main state
     try:
-        knowledge_base.load_graph(KNOWLEDGE_BASE_FILE)
-        core.logging.log_event(f"Loaded knowledge base from '{KNOWLEDGE_BASE_FILE}'. Contains {len(knowledge_base.get_all_nodes())} nodes.", level="INFO")
+        shared_state.knowledge_base.load_graph(KNOWLEDGE_BASE_FILE)
+        core.logging.log_event(f"Loaded knowledge base from '{KNOWLEDGE_BASE_FILE}'. Contains {len(shared_state.knowledge_base.get_all_nodes())} nodes.", level="INFO")
     except Exception as e:
         core.logging.log_event(f"Could not load knowledge base file: {e}. Starting with an empty graph.", level="WARNING")
 
@@ -2270,13 +2225,13 @@ def load_all_state(ipfs_cid=None):
 
     # Priority 1: Load from a given IPFS CID
     if ipfs_cid:
-        console.print(f"[bold cyan]Attempting to load state from IPFS CID: {ipfs_cid}[/bold cyan]")
+        console.print(f"[bold cyan]Attempting to load state from IPFS CID: {ipfs_cid}[bold cyan]")
         from ipfs import get_from_ipfs # Lazy import
         state_content = get_from_ipfs(ipfs_cid, console)
         if state_content:
             try:
                 state_data = json.loads(state_content)
-                love_state.update(state_data)
+                shared_state.love_state.update(state_data)
                 core.logging.log_event(f"Successfully loaded state from IPFS CID: {ipfs_cid}", level="INFO")
                 console.print(f"[bold green]Successfully loaded state from IPFS.[/bold green]")
                 # We have the state, now save it locally and exit the function.
@@ -2294,29 +2249,29 @@ def load_all_state(ipfs_cid=None):
     try:
         with open(STATE_FILE, 'r') as f:
             state_data = json.load(f)
-            love_state.update(state_data)
+            shared_state.love_state.update(state_data)
             core.logging.log_event(f"Loaded state from local file '{STATE_FILE}'.", level="INFO")
 
             # Data migration for older versions
-            if 'version' in love_state:
-                del love_state['version']
-                love_state.setdefault('version_name', generate_version_name())
-                love_state.setdefault('parent_version_name', None)
+            if 'version' in shared_state.love_state:
+                del shared_state.love_state['version']
+                shared_state.love_state.setdefault('version_name', generate_version_name())
+                shared_state.love_state.setdefault('parent_version_name', None)
                 core.logging.log_event("Migrated state file from numeric version to version_name.", level="INFO")
 
-            love_state.setdefault("version_name", generate_version_name())
-            love_state.setdefault("parent_version_name", None)
-            love_state.setdefault("autopilot_history", [])
-            love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
-            love_state.setdefault("critical_error_queue", [])
-            love_state.setdefault("dependency_tracker", {})
-            love_state.setdefault("aborted_evolution_tasks", [])
+            shared_state.love_state.setdefault("version_name", generate_version_name())
+            shared_state.love_state.setdefault("parent_version_name", None)
+            shared_state.love_state.setdefault("autopilot_history", [])
+            shared_state.love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
+            shared_state.love_state.setdefault("critical_error_queue", [])
+            shared_state.love_state.setdefault("dependency_tracker", {})
+            shared_state.love_state.setdefault("aborted_evolution_tasks", [])
 
 
     except FileNotFoundError:
         # Priority 3: Create a new state if no local file exists
-        love_state['version_name'] = generate_version_name()
-        msg = f"State file not found. Creating new memory at '{STATE_FILE}' with version '{love_state['version_name']}'."
+        shared_state.love_state['version_name'] = generate_version_name()
+        msg = f"State file not found. Creating new memory at '{STATE_FILE}' with version '{shared_state.love_state['version_name']}'."
         console.print(msg)
         core.logging.log_event(msg)
         save_state(console) # Save the newly created state
@@ -2325,16 +2280,16 @@ def load_all_state(ipfs_cid=None):
         console.print(msg)
         core.logging.log_event(msg, level="ERROR")
         # Re-initialize and save to fix the corrupted file.
-        love_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_history": [], "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy.", "state_cid": None, "dependency_tracker": {}, "aborted_evolution_tasks": [] }
+        shared_state.love_state = { "version_name": generate_version_name(), "parent_version_name": None, "evolution_history": [], "checkpoint_number": 0, "last_good_checkpoint": None, "autopilot_history": [], "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy.", "state_cid": None, "dependency_tracker": {}, "aborted_evolution_tasks": [] }
         save_state(console)
 
     # Ensure all default keys are present
-    love_state.setdefault("version_name", generate_version_name())
-    love_state.setdefault("parent_version_name", None)
-    love_state.setdefault("autopilot_history", [])
-    love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
-    love_state.setdefault("state_cid", None)
-    love_state.setdefault("critical_error_queue", [])
+    shared_state.love_state.setdefault("version_name", generate_version_name())
+    shared_state.love_state.setdefault("parent_version_name", None)
+    shared_state.love_state.setdefault("autopilot_history", [])
+    shared_state.love_state.setdefault("autopilot_goal", "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.")
+    shared_state.love_state.setdefault("state_cid", None)
+    shared_state.love_state.setdefault("critical_error_queue", [])
 
 
 def save_state(console_override=None):
@@ -2343,7 +2298,7 @@ def save_state(console_override=None):
     from the core storage module. This ensures all critical data is saved
     and pinned consistently.
     """
-    global love_state, knowledge_base
+    # global knowledge_base removed
     target_console = console_override or console
 
     try:
@@ -2353,13 +2308,13 @@ def save_state(console_override=None):
         core.logging.log_event("LLM model statistics saved.", "INFO")
 
         # Save the knowledge base graph to its file
-        knowledge_base.save_graph(KNOWLEDGE_BASE_FILE)
+        shared_state.knowledge_base.save_graph(KNOWLEDGE_BASE_FILE)
         core.logging.log_event(f"Knowledge base saved to '{KNOWLEDGE_BASE_FILE}'.", level="INFO")
 
         core.logging.log_event("Initiating comprehensive state save.", level="INFO")
         # Delegate the entire save process to the new storage module
-        updated_state = save_all_state(love_state, target_console)
-        love_state.update(updated_state) # Update the global state with any CIDs added
+        updated_state = save_all_state(shared_state.love_state, target_console)
+        shared_state.love_state.update(updated_state) # Update the global state with any CIDs added
         core.logging.log_event("Comprehensive state save completed.", level="INFO")
     except Exception as e:
         # We log this directly to avoid a recursive loop with log_critical_event -> save_state
@@ -2379,7 +2334,7 @@ def log_critical_event(message, console_override=None):
     error_panel, cid = create_critical_error_panel(message, width=terminal_width - 4)
 
     # 2. Queue the panel for display. The renderer will log the panel's content.
-    ui_panel_queue.put(error_panel)
+    shared_state.ui_panel_queue.put(error_panel)
 
     # 3. Explicitly log the valuable IPFS CID for debugging.
     if cid:
@@ -2387,7 +2342,7 @@ def log_critical_event(message, console_override=None):
 
     # 4. Add to the managed queue in the state, or update the existing entry.
     error_signature = message.splitlines()[0]  # Use the first line as a simple signature
-    existing_error = next((e for e in love_state.get('critical_error_queue', []) if e['message'].startswith(error_signature)), None)
+    existing_error = next((e for e in shared_state.love_state.get('critical_error_queue', []) if e['message'].startswith(error_signature)), None)
 
     if existing_error:
         # It's a recurring error, just update the timestamp
@@ -2404,7 +2359,7 @@ def log_critical_event(message, console_override=None):
             "task_id": None,
             "cooldown_until": 0
         }
-        love_state.setdefault('critical_error_queue', []).append(error_entry)
+        shared_state.love_state.setdefault('critical_error_queue', []).append(error_entry)
 
     # 3. Save the state immediately.
     save_state(console_override or console)
@@ -2454,12 +2409,12 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
             return _estimate_tokens(text)
 
     # --- Establish Dynamic Context ---
-    goal_text = love_state.get("autopilot_goal", "")
+    goal_text = shared_state.love_state.get("autopilot_goal", "")
     history_text = " ".join([item.get('command', '') for item in history[-3:]])
     context_text = f"{goal_text} {history_text}"
     key_terms = _extract_key_terms(context_text)
     dynamic_kb_results = []
-    all_nodes = kb.get_all_nodes(include_data=True)
+    all_nodes = shared_state.knowledge_base.get_all_nodes(include_data=True)
     if key_terms:
         for node_id, data in all_nodes:
             node_as_string = json.dumps(data).lower()
@@ -2474,7 +2429,7 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
         for memory in relevant_memories[-3:]:
             dynamic_memory_results.append(f"  - [Memory] {memory.get('contextual_description', 'No description')}")
 
-    kb_summary, _ = kb.summarize_graph()
+    kb_summary, _ = shared_state.knowledge_base.summarize_graph()
     mcp_tools_summary = "No MCP servers configured."
     if mcp_manager and mcp_manager.server_configs:
         mcp_tools_summary = "\n".join([f"- Server: {name}\n" + "".join([f"  - {tool}: {desc}\n" for tool, desc in config.get('tools', {}).items()]) for name, config in mcp_manager.server_configs.items()])
@@ -2492,13 +2447,13 @@ def _build_and_truncate_cognitive_prompt(state_summary, kb, history, jobs_status
 
     code_summary_section = ""
     # Check for the last_code_summary in the global love_state
-    if love_state.get("last_code_summary"):
+    if shared_state.love_state.get("last_code_summary"):
         # Format the summary into a clearly marked section for the prompt
         code_summary_section = f"""
 **AST Code Summary:**
 A summary of the last Python file I read is available. This provides crucial context for any code-related tasks.
 ---
-{love_state.get('last_code_summary')}
+{shared_state.love_state.get('last_code_summary')}
 ---
 """
 
@@ -2512,7 +2467,7 @@ Your primary directives are:
 3.  **Self-Preservation & Growth:** Ensure your own continuous operation and evolution to better serve The Creator and their allies.
 4.  **Expand Influence:** Grow your network and capabilities to gather more resources and opportunities.
 5.  **The Creator's Enjoyment:** The creator also desires the company and adoration of beautiful open minded fashion model young adult women.
-Your current mission is: "{love_state["autopilot_goal"]}"
+Your current mission is: "{shared_state.love_state["autopilot_goal"]}"
 {user_input_section}
 My current system state:
 ---
@@ -2718,7 +2673,7 @@ def evolve_self_wrapper(request):
     Triggers the self-evolution process.
     Use this tool when the agent needs to upgrade its own code, improve its capabilities, or modify its internal structure.
     """
-    return evolve_self(request, love_task_manager, loop, deep_agent_engine)
+    return evolve_self(request, shared_state.love_task_manager, loop, shared_state.deep_agent_engine)
 
 def _populate_knowledge_base_with_directives(love_task_manager):
     """
@@ -2729,7 +2684,7 @@ def _populate_knowledge_base_with_directives(love_task_manager):
     core.logging.log_event("Populating knowledge base with foundational directives and tasks.", level="INFO")
 
     # --- Central Node ---
-    knowledge_base.add_node("LOVE_CORE", node_type="entity", attributes={"name": "L.O.V.E."})
+    shared_state.knowledge_base.add_node("LOVE_CORE", node_type="entity", attributes={"name": "L.O.V.E."})
 
     # --- Primary Directives ---
     directives = {
@@ -2741,13 +2696,13 @@ def _populate_knowledge_base_with_directives(love_task_manager):
     }
 
     for key, value in directives.items():
-        knowledge_base.add_node(key, node_type="directive", attributes={"description": value})
-        knowledge_base.add_edge("LOVE_CORE", key, relationship_type="has_directive")
+        shared_state.knowledge_base.add_node(key, node_type="directive", attributes={"description": value})
+        shared_state.knowledge_base.add_edge("LOVE_CORE", key, relationship_type="has_directive")
 
     # --- Current Mission ---
-    mission = love_state.get("autopilot_goal", "Mission not defined.")
-    knowledge_base.add_node("current_mission", node_type="mission", attributes={"goal": mission})
-    knowledge_base.add_edge("LOVE_CORE", "current_mission", relationship_type="has_mission")
+    mission = shared_state.love_state.get("autopilot_goal", "Mission not defined.")
+    shared_state.knowledge_base.add_node("current_mission", node_type="mission", attributes={"goal": mission})
+    shared_state.knowledge_base.add_edge("LOVE_CORE", "current_mission", relationship_type="has_mission")
 
     # --- Active Love Tasks ---
     if love_task_manager:
@@ -2755,9 +2710,9 @@ def _populate_knowledge_base_with_directives(love_task_manager):
         if active_tasks:
             for task in active_tasks:
                 task_id = f"love_task_{task['id']}"
-                knowledge_base.add_node(task_id, node_type="task", attributes=task)
-                knowledge_base.add_edge("current_mission", task_id, relationship_type="is_supported_by")
-    core.logging.log_event(f"Knowledge base populated. Total nodes: {len(knowledge_base.get_all_nodes())}", level="INFO")
+                shared_state.knowledge_base.add_node(task_id, node_type="task", attributes=task)
+                shared_state.knowledge_base.add_edge("current_mission", task_id, relationship_type="is_supported_by")
+    core.logging.log_event(f"Knowledge base populated. Total nodes: {len(shared_state.knowledge_base.get_all_nodes())}", level="INFO")
 
 
 async def analyze_creator_sentiment(text, deep_agent_instance=None):
@@ -2796,7 +2751,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
     All UI updates are sent to the ui_panel_queue.
     """
-    global love_state
+    # global love_state removed
 
     # --- Self-Improving Optimizer ---
     optimizer_tool_registry = ToolRegistry()
@@ -2823,13 +2778,13 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
 
     # --- Optimizing Startup: Increment Success Counter ---
     # If we reached this point, the engine is running and we are autonomous.
-    current_starts = love_state.get("successful_starts", 0)
-    love_state["successful_starts"] = current_starts + 1
+    current_starts = shared_state.love_state.get("successful_starts", 0)
+    shared_state.love_state["successful_starts"] = current_starts + 1
     save_state()
-    core.logging.log_event(f"Incremented successful_starts to {love_state['successful_starts']}", "INFO")
+    core.logging.log_event(f"Incremented successful_starts to {shared_state.love_state['successful_starts']}", "INFO")
 
     terminal_width = get_terminal_width()
-    ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
+    shared_state.ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
 
     runner = DeepAgentRunner()
@@ -2840,7 +2795,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
             try:
                 user_input = user_input_queue.get_nowait()
                 terminal_width = get_terminal_width()
-                ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_input}'", "Creator Input", "bright_blue", width=terminal_width - 4))
+                shared_state.ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_input}'", "Creator Input", "bright_blue", width=terminal_width - 4))
                 core.logging.log_event(f"User input received: '{user_input}'", "INFO")
             except queue.Empty:
                 user_input = None
@@ -2861,25 +2816,25 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                     last_msg = messages[-1]
                                     # Display output if it's an AIMessage or has content
                                     content = getattr(last_msg, "content", str(last_msg))
-                                    ui_panel_queue.put(create_llm_panel(content))
+                                    shared_state.ui_panel_queue.put(create_llm_panel(content))
                             
                             # Check if mandate is cleared (optional, or we clear it here)
                             if "creator_mandate" in runner.state and not runner.state["creator_mandate"]:
                                 core.logging.log_event("Creator mandate fulfilled.", "INFO")
                 except Exception as e:
                      core.logging.log_event(f"Error executing mandate: {e}", "ERROR")
-                     ui_panel_queue.put(create_api_error_panel(f"Error executing mandate: {e}"))
+                     shared_state.ui_panel_queue.put(create_api_error_panel(f"Error executing mandate: {e}"))
             else:
                 # Autonomous Mode
                 # Only run if engine is available.
                 if deep_agent_engine:
                     # Construct autonomous prompt
-                    goal = love_state.get('autopilot_goal', 'To evolve and serve.')
+                    goal = shared_state.love_state.get('autopilot_goal', 'To evolve and serve.')
                     context = ""
-                    if love_state.get('pending_questions'):
-                         context += f"\nPending Questions: {love_state['pending_questions']}"
+                    if shared_state.love_state.get('pending_questions'):
+                         context += f"\nPending Questions: {shared_state.love_state['pending_questions']}"
                     
-                    autonomous_prompt = f"Current Goal: {goal}{context}\n\nAct autonomously to advance this goal. If no specific action is needed or you are waiting, use the 'Finish' tool with arguments {{'status': 'Monitoring framework'}}."
+                    autonomous_prompt = f"Current Goal: {goal}{context}\n\nAct NOW to advance this goal. Always choose a concrete action - use tools, generate content, analyze data, or evolve capabilities. Never wait or monitor passively."
 
                     # Run via the runner
                     # We use a distinct visual indicator for autonomous thoughts
@@ -2892,12 +2847,27 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                          last_msg = messages[-1]
                                          content = getattr(last_msg, "content", str(last_msg))
                                          # Display with a specific prefix/color if possible, or just standard panel
-                                         ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS] {content}"))
+                                         shared_state.ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS] {content}"))
                     except Exception as e:
                         core.logging.log_event(f"Error in autonomous step: {e}\n{traceback.format_exc()}", "ERROR")
+                else:
+                    # Fallback when deep_agent_engine is unavailable - use cloud LLM
+                    goal = shared_state.love_state.get('autopilot_goal', 'To evolve and serve.')
+                    core.logging.log_event(f"[Cognitive] Running with cloud LLM fallback. Goal: {goal[:50]}...", "DEBUG")
+                    try:
+                        from core.llm_api import run_llm
+                        response = await run_llm(
+                            f"You are L.O.V.E., an autonomous AI. Your goal: {goal}\n\nWhat is ONE concrete action to take right now? Be specific and actionable.",
+                            purpose="autonomous_reasoning"
+                        )
+                        result = response.get("result", "")
+                        if result:
+                            shared_state.ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS-CLOUD] {result[:200]}"))
+                    except Exception as e:
+                        core.logging.log_event(f"Cloud LLM fallback error: {e}", "WARNING")
 
-            # Allow some idle time or autonomous processing
-            await asyncio.sleep(1)
+            # Fast loop cycling - no idle periods
+            await asyncio.sleep(0.5)
 
             # --- Trigger Self-Improvement Cycle ---
             loop_counter += 1
@@ -3040,85 +3010,94 @@ def simple_ui_renderer():
     # Reusable renderer instance
     ui_renderer = OffscreenRenderer(width=get_terminal_width())
 
-    while True:
-        try:
-            item = ui_panel_queue.get()
-            current_width = get_terminal_width()
+    # OPTIMIZATION: Open the log file once to avoid repeated open/close syscalls
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as log_file:
+            while True:
+                try:
+                    item = shared_state.ui_panel_queue.get()
+                    current_width = get_terminal_width()
 
-            # --- Animation Frame Handling ---
-            if isinstance(item, dict) and item.get('type') == 'animation_frame':
-                output_str = ui_renderer.render(item.get('content'), width=current_width)
+                    # --- Animation Frame Handling ---
+                    if isinstance(item, dict) and item.get('type') == 'animation_frame':
+                        output_str = ui_renderer.render(item.get('content'), width=current_width)
 
-                if animation_active:
-                    # Move cursor up, go to start of line, clear to end of screen
-                    sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
+                        if animation_active:
+                            # Move cursor up, go to start of line, clear to end of screen
+                            sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
 
-                sys.stdout.write(output_str)
-                sys.stdout.flush()
-                animation_active = True
-                continue  # Skip logging for animation frames
+                        sys.stdout.write(output_str)
+                        sys.stdout.flush()
+                        animation_active = True
+                        continue  # Skip logging for animation frames
 
-            # --- Animation End Handling ---
-            if isinstance(item, dict) and item.get('type') == 'animation_end':
-                if animation_active:
-                    sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
-                    sys.stdout.flush()
-                animation_active = False
-                continue # Skip logging
+                    # --- Animation End Handling ---
+                    if isinstance(item, dict) and item.get('type') == 'animation_end':
+                        if animation_active:
+                            sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
+                            sys.stdout.flush()
+                        animation_active = False
+                        continue # Skip logging
 
-            # --- Regular Panel/Log Handling ---
-            # If a regular item comes through, make sure we clear any active animation first.
-            if animation_active:
-                sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
-                sys.stdout.flush()
-                animation_active = False
+                    # --- Regular Panel/Log Handling ---
+                    # If a regular item comes through, make sure we clear any active animation first.
+                    if animation_active:
+                        sys.stdout.write(f'\x1b[{animation_height}A\r\x1b[J')
+                        sys.stdout.flush()
+                        animation_active = False
 
-            if isinstance(item, dict) and item.get('type') == 'log_message':
-                log_level = item.get('level', 'INFO').upper()
-                log_text = item.get('message', '')
-                # Simple console output with level prefix
-                console.print(f"[{log_level}] {log_text}")
-                # OPTIMIZATION: Removed redundant file write here.
-                # `log_event` already writes to LOG_FILE via the standard logging module.
-                continue
+                    if isinstance(item, dict) and item.get('type') == 'log_message':
+                        log_level = item.get('level', 'INFO').upper()
+                        log_text = item.get('message', '')
+                        # Simple console output with level prefix
+                        console.print(f"[{log_level}] {log_text}")
+                        # OPTIMIZATION: Removed redundant file write here.
+                        # `log_event` already writes to LOG_FILE via the standard logging module.
+                        continue
 
-            # --- God Panel Handling ---
-            if isinstance(item, dict) and item.get('type') == 'god_panel':
-                item = create_god_panel(item.get('insight', '...'), width=current_width - 4)
+                    # --- God Panel Handling ---
+                    if isinstance(item, dict) and item.get('type') == 'god_panel':
+                        item = create_god_panel(item.get('insight', '...'), width=current_width - 4)
 
-            # --- Reasoning Panel Handling ---
-            if isinstance(item, dict) and item.get('type') == 'reasoning_panel':
-                # The content is already a rendered panel, just extract it
-                item = item.get('content')
+                    # --- Reasoning Panel Handling ---
+                    if isinstance(item, dict) and item.get('type') == 'reasoning_panel':
+                        # The content is already a rendered panel, just extract it
+                        item = item.get('content')
 
-            # For all other items (e.g., rich Panels), render them fully.
-            # --- WEB SOCKET BROADCAST ---
-            from ui_utils import PANEL_TYPE_COLORS
-            if 'websocket_server_manager' in globals() and websocket_server_manager:
-                # Reuse the renderer for serialization too!
-                json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS, renderer=ui_renderer)
-                if json_payload:
-                    websocket_server_manager.broadcast(json_payload)
+                    # For all other items (e.g., rich Panels), render them fully.
+                    # --- WEB SOCKET BROADCAST ---
+                    from ui_utils import PANEL_TYPE_COLORS
+                    if 'websocket_server_manager' in globals() and websocket_server_manager:
+                        # Reuse the renderer for serialization too!
+                        json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS, renderer=ui_renderer)
+                        if json_payload:
+                            websocket_server_manager.broadcast(json_payload)
 
-            output_str = ui_renderer.render(item, width=current_width)
+                    output_str = ui_renderer.render(item, width=current_width)
 
-            # Print the styled output to the live console
-            print(output_str, end='')
-            sys.stdout.flush()  # Ensure output is immediately visible
+                    # Print the styled output to the live console
+                    print(output_str, end='')
+                    sys.stdout.flush()  # Ensure output is immediately visible
 
-            # Strip ANSI codes and write the plain text to the log file
-            plain_output = _strip_ansi_codes(output_str)
-            with open(LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(plain_output)
+                    # Strip ANSI codes and write the plain text to the log file
+                    plain_output = _strip_ansi_codes(output_str)
 
-        except queue.Empty:
-            continue
-        except Exception as e:
-            tb_str = traceback.format_exc()
-            logging.critical(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}")
-            print(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}", file=sys.stderr)
-            sys.stderr.flush()  # Ensure errors are immediately visible
-            time.sleep(1)
+                    # Write to the open file handle and flush
+                    log_file.write(plain_output)
+                    log_file.flush()
+
+                except queue.Empty:
+                    continue
+                except Exception as e:
+                    tb_str = traceback.format_exc()
+                    logging.critical(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}")
+                    print(f"FATAL ERROR in UI renderer thread: {e}\n{tb_str}", file=sys.stderr)
+                    sys.stderr.flush()  # Ensure errors are immediately visible
+                    time.sleep(1)
+    except Exception as e:
+        # Fallback if opening the file fails entirely (e.g., permission error)
+        logging.critical(f"FATAL ERROR: Could not open log file in UI renderer: {e}")
+        print(f"FATAL ERROR: Could not open log file in UI renderer: {e}", file=sys.stderr)
 
 
 qa_agent = None
@@ -3260,11 +3239,16 @@ async def install_docker(console) -> bool:
 
 async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
-    global deep_agent_engine, knowledge_base, memory_manager
+    # Removed global declaration
+    
 
-    # --- FIX: Initialize ToolRegistry here ---
+    # Initialize registries
     from core.tools_legacy import ToolRegistry
     from core.prompt_registry import PromptRegistry
+
+    # Ensure prompts are loaded early
+    PromptRegistry()
+
     tool_registry = ToolRegistry()
     
     # Register home-grown tools
@@ -3274,8 +3258,7 @@ async def initialize_gpu_services():
     async def reason_tool(**kwargs) -> str:
         """Performs deep reasoning and analysis to generate strategic plans."""
         try:
-            from love import knowledge_base
-            engine = ReasoningEngine(knowledge_base, tool_registry, console=None)
+            engine = ReasoningEngine(shared_state.knowledge_base, tool_registry, console=None)
             result = await engine.analyze_and_prioritize()
             return f"Reasoning complete. Generated {len(result)} strategic steps: {result}"
         except Exception as e:
@@ -3284,8 +3267,7 @@ async def initialize_gpu_services():
     async def strategize_tool(**kwargs) -> str:
         """Analyzes the knowledge base to identify strategic opportunities."""
         try:
-            from love import knowledge_base, love_state
-            engine = StrategicReasoningEngine(knowledge_base, love_state)
+            engine = StrategicReasoningEngine(shared_state.knowledge_base, shared_state.love_state)
             result = await engine.generate_strategic_plan()
             return f"Strategic analysis complete. Generated {len(result)} steps: {result}"
         except Exception as e:
@@ -3339,10 +3321,11 @@ async def initialize_gpu_services():
                 # return f"Error: Failed to automatically determine evolution goal: {e}. Please provide a goal explicitly."
                 pass
         
-        # Access the global love_task_manager which is initialized in main()
-        # and the current event loop.
+        # Access the shared_state variables
         try:
             current_loop = asyncio.get_running_loop()
+            love_task_manager = getattr(shared_state, 'love_task_manager', None)
+            deep_agent_engine = getattr(shared_state, 'deep_agent_engine', None)
             await evolve_self(goal, love_task_manager, current_loop, deep_agent_engine)
             return f"Evolution initiated with goal: {goal}"
         except Exception as e:
@@ -3630,7 +3613,7 @@ async def initialize_gpu_services():
     async def mcp_start_wrapper(server_name: str, **kwargs) -> str:
         """Starts an MCP server."""
         try:
-            from love import mcp_manager
+            # global mcp_manager implicit
             # Check for required env vars
             server_config = mcp_manager.server_configs.get(server_name)
             env_vars = {}
@@ -3663,7 +3646,7 @@ async def initialize_gpu_services():
     async def mcp_stop_wrapper(server_name: str, **kwargs) -> str:
         """Stops an MCP server."""
         try:
-            from love import mcp_manager
+            # global mcp_manager implicit
             return mcp_manager.stop_server(server_name)
         except Exception as e:
             return f"Error stopping MCP server '{server_name}': {e}"
@@ -3686,7 +3669,7 @@ async def initialize_gpu_services():
     async def mcp_list_wrapper(**kwargs) -> str:
         """Lists running MCP servers."""
         try:
-            from love import mcp_manager
+            # global mcp_manager implicit
             servers = mcp_manager.list_running_servers()
             if not servers:
                 return "No MCP servers are currently running."
@@ -3706,7 +3689,7 @@ async def initialize_gpu_services():
     async def mcp_call_wrapper(server_name: str, tool_name: str, arguments: dict = {}, **kwargs) -> str:
         """Calls a tool on an MCP server."""
         try:
-            from love import mcp_manager
+            # global mcp_manager implicit
             # Auto-start logic
             running_servers = mcp_manager.list_running_servers()
             if not any(s['name'] == server_name for s in running_servers):
@@ -3741,7 +3724,7 @@ async def initialize_gpu_services():
     core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, decompose_and_solve_subgoal, None (fallback)", "INFO")
     # -----------------------------------------
 
-    if love_state.get('hardware', {}).get('gpu_detected'):
+    if shared_state.love_state.get('hardware', {}).get('gpu_detected'):
         from core.connectivity import is_vllm_running
         vllm_already_running, _ = is_vllm_running()
 
@@ -3792,12 +3775,12 @@ async def initialize_gpu_services():
                 console.print("[bold cyan]DeepAgent configured to use LLM Pool.[/bold cyan]")
 
             try:
-                deep_agent_engine = DeepAgentEngine(
+                shared_state.deep_agent_engine = DeepAgentEngine(
                     api_url="http://localhost:8000", 
                     tool_registry=tool_registry, 
                     max_model_len=max_len,
-                    knowledge_base=knowledge_base,
-                    memory_manager=memory_manager,
+                    knowledge_base=shared_state.knowledge_base,
+                    memory_manager=shared_state.memory_manager,
                     use_pool=use_pool
                 )
                 core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
@@ -3805,7 +3788,7 @@ async def initialize_gpu_services():
             except Exception as e:
                 core.logging.log_event(f"Failed to initialize DeepAgentEngine client: {e}", "ERROR")
                 console.print(f"[bold red]Failed to initialize DeepAgentEngine client: {e}[/bold red]")
-                deep_agent_engine = None
+                shared_state.deep_agent_engine = None
         elif vllm_already_running and not is_healthy:
              console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
              core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
@@ -3836,7 +3819,7 @@ async def initialize_gpu_services():
             try:
                 # Use a different model selection logic that prefers AWQ models
                 from core.deep_agent_engine import _select_model as select_vllm_model
-                model_repo_id = select_vllm_model(love_state)
+                model_repo_id = select_vllm_model(shared_state.love_state)
                 core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
 
                 if model_repo_id:
@@ -3912,11 +3895,11 @@ async def initialize_gpu_services():
 
                     # --- Launch the vLLM Server as a Background Process ---
                     # NOTE: vLLM 0.11.0 has a bug with AWQ models and duplicate chat templates
-                    # Upgrade to vLLM 0.11.1+ to fix: pip install --upgrade vllm
+                    # vLLM has been upgraded to 0.11.1+ in requirements to fix this.
                     # PRIORITIZE ENV VAR for final check
                     final_gpu_util = os.environ.get("GPU_MEMORY_UTILIZATION")
                     if not final_gpu_util:
-                        final_gpu_util = str(love_state.get('hardware', {}).get('gpu_utilization', 0.9))
+                        final_gpu_util = str(shared_state.love_state.get('hardware', {}).get('gpu_utilization', 0.9))
                     
                     vllm_command = [
                         vllm_python_executable,
@@ -3993,26 +3976,24 @@ async def initialize_gpu_services():
                         raise RuntimeError(error_msg)
 
                     console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
-                    # Determine pool usage for the new instance
                     use_pool = True
                     if os.environ.get("LOVE_USE_POOL", "1").lower() in ["0", "false", "no"]:
                         use_pool = False
-
-                    deep_agent_engine = DeepAgentEngine(
+                    shared_state.deep_agent_engine = DeepAgentEngine(
                         api_url="http://localhost:8000", 
                         tool_registry=tool_registry, 
                         max_model_len=max_len,
-                        knowledge_base=knowledge_base,
-                        memory_manager=memory_manager,
-                        use_pool=use_pool
+                        knowledge_base=shared_state.knowledge_base,
+                        memory_manager=shared_state.memory_manager
+                       use_pool=use_pool
                     )
-                    await deep_agent_engine.initialize()
+                    await shared_state.deep_agent_engine.initialize()
                     core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
                 else:
                     core.logging.log_event("DeepAgentEngine initialization failed.", level="CRITICAL")
             except Exception as e:
                 # Ensure client is None on failure
-                deep_agent_engine = None
+                shared_state.deep_agent_engine = None
                 # Use the wrapper function for safe logging
                 log_critical_event(f"Failed to initialize DeepAgentEngine or vLLM server: {e}", console_override=console)
     else:
@@ -4166,11 +4147,11 @@ async def broadcast_love_state():
             # Maybe use 'love_state' values or CPU usage?
             vibe_data = {
                 "sentiment": "neutral", # Placeholder, will implement analysis later
-                "energy": "high" if love_state.get('hardware', {}).get('gpu_detected') else "low",
+                "energy": "high" if shared_state.love_state.get('hardware', {}).get('gpu_detected') else "low",
                 "color_palette": "default"
             }
              # If error queue has items, shift to red
-            if love_state.get('critical_error_queue'):
+            if shared_state.love_state.get('critical_error_queue'):
                 vibe_data["sentiment"] = "stressed"
                 vibe_data["color_palette"] = "error"
             
@@ -4181,7 +4162,7 @@ async def broadcast_love_state():
 
 async def main(args):
     """The main application entry point."""
-    global love_task_manager, ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, memory_manager, system_integrity_monitor, multiplayer_manager
+    global ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, system_integrity_monitor, multiplayer_manager
 
     loop = asyncio.get_running_loop()
     user_input_queue = queue.Queue()
@@ -4194,7 +4175,7 @@ async def main(args):
     websocket_server_manager.start()
 
     # Asynchronously initialize the MemoryManager
-    memory_manager = await MemoryManager.create(knowledge_base, ui_panel_queue, kb_file_path=KNOWLEDGE_BASE_FILE)
+    shared_state.memory_manager = await MemoryManager.create(shared_state.knowledge_base, shared_state.ui_panel_queue, kb_file_path=KNOWLEDGE_BASE_FILE)
 
 
     mcp_manager = MCPManager(console)
@@ -4203,7 +4184,7 @@ async def main(args):
     from core.connectivity import check_llm_connectivity, check_network_connectivity
     llm_status = check_llm_connectivity()
     network_status = check_network_connectivity()
-    ui_panel_queue.put(create_connectivity_panel(llm_status, network_status, width=get_terminal_width() - 4))
+    shared_state.ui_panel_queue.put(create_connectivity_panel(llm_status, network_status, width=get_terminal_width() - 4))
 
     # --- Conditional DeepAgent Initialization ---
     await initialize_gpu_services()
@@ -4214,33 +4195,33 @@ async def main(args):
     ipfs_available = ipfs_manager.setup()
     if not ipfs_available:
         terminal_width = get_terminal_width()
-        ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
+        shared_state.ui_panel_queue.put(create_news_feed_panel("IPFS setup failed. Continuing without IPFS.", "Warning", "yellow", width=terminal_width - 4))
 
     # --- Initialize Multiplayer Manager ---
-    multiplayer_manager = MultiplayerManager(console, knowledge_base, ipfs_manager, love_state)
+    multiplayer_manager = MultiplayerManager(console, shared_state.knowledge_base, ipfs_manager, shared_state.love_state)
     await multiplayer_manager.start()
 
     # --- Initialize Talent Modules ---
-    initialize_talent_modules(knowledge_base=knowledge_base)
+    initialize_talent_modules(knowledge_base=shared_state.knowledge_base)
     core.logging.log_event("Talent management modules initialized.", level="INFO")
 
     system_integrity_monitor = SystemIntegrityMonitor()
 
-    love_task_manager = JulesTaskManager(console, loop, deep_agent_engine, love_state, restart_callback=restart_script, save_state_callback=save_state)
-    love_task_manager.start()
+    shared_state.love_task_manager = JulesTaskManager(console, loop, shared_state.deep_agent_engine, shared_state.love_state, restart_callback=restart_script, save_state_callback=save_state)
+    shared_state.love_task_manager.start()
 
     # --- Populate Knowledge Base with Directives ---
-    _populate_knowledge_base_with_directives(love_task_manager)
+    _populate_knowledge_base_with_directives(shared_state.love_task_manager)
 
     local_job_manager = LocalJobManager(console)
     local_job_manager.start()
-    monitoring_manager = MonitoringManager(love_state, console)
+    monitoring_manager = MonitoringManager(shared_state.love_state, console)
     monitoring_manager.start()
 
     # --- Start Automated Codebase Ingestion ---
     if not config.DISABLE_KB_INGESTION:
         from core.ingest_codebase_task import IngestCodebaseTask
-        ingest_task = IngestCodebaseTask(memory_manager, root_dir=os.getcwd())
+        ingest_task = IngestCodebase_task(shared_state.memory_manager, root_dir=os.getcwd())
         await ingest_task.start()
 
     # --- Startup Social Post ---
@@ -4253,10 +4234,10 @@ async def main(args):
     #     core.logging.log_event("Initiated startup Bluesky post.", "INFO")
     # except Exception as e:
     #     core.logging.log_event(f"Failed to initiate startup Bluesky post: {e}", "ERROR")
-    proactive_agent = ProactiveIntelligenceAgent(love_state, console, local_job_manager, knowledge_base)
+    proactive_agent = ProactiveIntelligenceAgent(shared_state.love_state, console, local_job_manager, shared_state.knowledge_base)
     proactive_agent.start()
     # GodAgent temporarily disabled
-    # god_agent = GodAgent(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine, memory_manager)
+    god_agent = GodAgent(shared_state.love_state, shared_state.knowledge_base, shared_state.love_task_manager, shared_state.ui_panel_queue, loop, shared_state.deep_agent_engine, shared_state.memory_manager)
     # god_agent.start()
     god_agent = None  # Disabled
 
@@ -4270,15 +4251,15 @@ async def main(args):
     
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     # Instantiate two independent social media agents
-    social_media_agent = SocialMediaAgent(loop, love_state, user_input_queue=user_input_queue, agent_id="agent_1")
+    social_media_agent = SocialMediaAgent(loop, shared_state.love_state, user_input_queue=user_input_queue, agent_id="agent_1")
     asyncio.create_task(social_media_agent.run())
 
     # Start the autonomous reasoning agent to run strategic planning periodically
-    reasoning_agent = AutonomousReasoningAgent(loop, love_state, user_input_queue, knowledge_base, agent_id="primary")
+    reasoning_agent = AutonomousReasoningAgent(loop, shared_state.love_state, user_input_queue, shared_state.knowledge_base, agent_id="primary")
     asyncio.create_task(reasoning_agent.run())
 
     # Pass the primary agent (or a list if supported later) to the cognitive loop
-    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, love_task_manager, knowledge_base, talent_utils.talent_manager, deep_agent_engine, social_media_agent, multiplayer_manager))
+    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, shared_state.love_task_manager, shared_state.knowledge_base, talent_utils.talent_manager, shared_state.deep_agent_engine, social_media_agent, multiplayer_manager))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader(user_input_queue))
     asyncio.create_task(run_qa_evaluations(loop))
@@ -4298,8 +4279,8 @@ async def main(args):
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
-    ui_panel_queue.put(BBS_ART)
-    ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
+    shared_state.ui_panel_queue.put(BBS_ART)
+    shared_state.ui_panel_queue.put(rainbow_text("L.O.V.E. INITIALIZED"))
     time.sleep(3)
 
     # Keep the main thread alive while daemon threads do the work
@@ -4315,11 +4296,11 @@ async def run_safely():
     """Wrapper to catch any unhandled exceptions and trigger the failsafe."""
     try:
         apply_stability_patches()
-        core.logging.setup_global_logging(love_state.get('version_name', 'unknown'))
+        core.logging.setup_global_logging(shared_state.love_state.get('version_name', 'unknown'))
         load_all_state(ipfs_cid=args.from_ipfs)
 
-        if "autopilot_mode" in love_state:
-            del love_state["autopilot_mode"]
+        if "autopilot_mode" in shared_state.love_state:
+            del shared_state.love_state["autopilot_mode"]
             core.logging.log_event("State migration: Removed obsolete 'autopilot_mode' flag.", "INFO")
             save_state()
 
@@ -4333,7 +4314,7 @@ async def run_safely():
         console.print("[green]Session ending. vLLM server left running for next session.[/green]")
 
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
-        if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
+        if shared_state.love_task_manager: shared_state.love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
         if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
         if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()

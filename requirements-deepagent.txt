@@ -1,4 +1,4 @@
-vllm
+vllm>=0.11.1
 transformers
 sentence-transformers
 aiohttp

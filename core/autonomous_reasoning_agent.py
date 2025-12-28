@@ -106,7 +106,7 @@ class AutonomousReasoningAgent:
         last_reasoning_time = self.love_state.get('reasoning_agent', {}).get(self.agent_id, {}).get('last_reasoning_time', 0)
         log_event(f"[{self.agent_id}] Loaded last reasoning time: {last_reasoning_time}", level='DEBUG')
         
-        reasoning_interval = 600  # 10 minutes
+        reasoning_interval = 120  # 2 minutes - L.O.V.E. should never idle
 
         while True:
             try:
@@ -124,7 +124,7 @@ class AutonomousReasoningAgent:
                     # The state will be saved by the main loop or other savers
 
                 # Sleep for a short interval to prevent a busy loop
-                await asyncio.sleep(60)
+                await asyncio.sleep(15)  # Fast loop - no idle periods
 
             except Exception as e:
                 log_event(f"Critical error in Autonomous Reasoning Agent loop: {e}\n{traceback.format_exc()}", level='CRITICAL')

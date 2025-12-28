@@ -363,7 +363,8 @@ async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
     highlighted_message.append(" ✨", style="bright_yellow")
     
     # Create Rainbow Liquid Divider
-    from ui_utils import matrix_rain
+    # from ui_utils import matrix_rain  <-- Removed redundant import
+
     divider_chars = "﹏" * (width // 2)
     liquid_divider = Text()
     for i, char in enumerate(divider_chars):

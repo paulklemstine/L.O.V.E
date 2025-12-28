@@ -5,19 +5,16 @@ import os
 
 from core.agents.orchestrator import Orchestrator
 from core.tools import crypto_scan_tool
-from love import memory_manager
+import core.shared_state as shared_state
 
 async def main():
     """
-    The main entry point for the General Intelligence Agent.
-    This script initializes and runs the entire cognitive architecture,
-    demonstrating the successful integration of all three phases.
+    Main entry point for the agent.
     """
+    print("Agent starting...")
     console = Console()
     console.print(Rule("[bold yellow]General Intelligence Agent: Online[/bold yellow]"))
 
-    # The Orchestrator now encapsulates the entire cognitive architecture.
-    agent_orchestrator = Orchestrator(memory_manager)
     # agent_orchestrator.tool_registry.register_tool("crypto_scan", crypto_scan_tool)
 
     # Start the cognitive loop as a background task

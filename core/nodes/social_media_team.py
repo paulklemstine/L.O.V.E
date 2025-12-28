@@ -108,6 +108,22 @@ async def _handle_interactions() -> str:
             if p_cid in processed_cids["replied"] or p_cid in processed_cids["ignored"]:
                 continue
             
+            # Filter: Age Check - Ignore notifications older than 1 hour
+            try:
+                from datetime import datetime, timezone
+                indexed_at = getattr(notif, 'indexed_at', None)
+                if indexed_at:
+                    if isinstance(indexed_at, str):
+                        notif_time = datetime.fromisoformat(indexed_at.replace('Z', '+00:00'))
+                    else:
+                        notif_time = indexed_at
+                    age_seconds = (datetime.now(timezone.utc) - notif_time).total_seconds()
+                    if age_seconds > 3600:  # 1 hour = 3600 seconds
+                        logging.debug(f"Skipping old notification (age: {age_seconds/60:.0f} min)")
+                        continue
+            except Exception as e:
+                logging.debug(f"Failed to check notification age: {e}")
+            
             # Analyze
             try:
                 p_text = notif.record.text

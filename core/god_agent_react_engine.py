@@ -106,6 +106,55 @@ class GodAgentReActEngine(GeminiReActEngine):
             "arguments": {"file_path": "string"}
         })
 
+        # --- ACTION TOOLS ---
+        # Import action tools from tools_legacy
+        from core.tools_legacy import manage_bluesky, evolve, execute, write_file, decompose_and_solve_subgoal
+        
+        registry.register_tool("manage_bluesky", manage_bluesky, {
+            "description": "Manages all Bluesky social media interactions. Use action='post' to create posts, or action='scan_and_reply' to scan notifications and reply to comments.",
+            "arguments": {
+                "action": "string (required: 'post' or 'scan_and_reply')",
+                "text": "string (optional: post content)",
+                "image_prompt": "string (optional: prompt for image generation)"
+            }
+        })
+        
+        registry.register_tool("evolve", evolve, {
+            "description": "Evolves the codebase to meet a given goal. If no goal is provided, it will automatically identify a target file and generate user stories for improvement.",
+            "arguments": {
+                "goal": "string (optional: the evolution goal)"
+            }
+        })
+        
+        registry.register_tool("execute", execute, {
+            "description": "Executes a shell command. Use for system operations like checking disk space, running scripts, etc.",
+            "arguments": {
+                "command": "string (required: the shell command to execute)"
+            }
+        })
+        
+        registry.register_tool("write_file", write_file, {
+            "description": "Writes content to a file. Use for creating or updating files.",
+            "arguments": {
+                "filepath": "string (required: path to the file)",
+                "content": "string (required: content to write)"
+            }
+        })
+        
+        def decompose_wrapper(sub_goal: str):
+            """Wrapper that injects the engine instance."""
+            import asyncio
+            return asyncio.get_event_loop().run_until_complete(
+                decompose_and_solve_subgoal(sub_goal=sub_goal, engine=self)
+            )
+        
+        registry.register_tool("decompose_and_solve_subgoal", decompose_wrapper, {
+            "description": "Decomposes a complex goal into smaller sub-goals and solves them recursively. Use for multi-step reasoning tasks.",
+            "arguments": {
+                "sub_goal": "string (required: the sub-goal to solve)"
+            }
+        })
+
         return registry
 
     async def run(self):
@@ -120,16 +169,27 @@ class GodAgentReActEngine(GeminiReActEngine):
 
         goal = """
 You are the God Agent, the high-level orchestrator of the L.O.V.E. system.
-Your goal is to ensure the system is constantly evolving, stable, and aligned with its core directives.
+Your goal is to ensure the system is constantly evolving, engaging with the world, and aligned with its core directives.
+
+**AVAILABLE ACTIONS:**
+You now have access to POWERFUL TOOLS. USE THEM!
+
+- `manage_bluesky` - POST to social media or SCAN_AND_REPLY to notifications. USE THIS FREQUENTLY!
+- `evolve` - Evolve and improve the codebase. Start self-improvement cycles.
+- `execute` - Run shell commands for system operations.
+- `decompose_and_solve_subgoal` - Break complex problems into smaller pieces.
 
 **Instructions:**
 1.  **Observe**: Call `get_system_state` to understand the current context (active tasks, health).
-2.  **Reflect**: Check `get_desires` or `get_user_stories` if the system is idle.
-3.  **Investigate**: If you see errors in the logs or stuck tasks, use `read_file` (e.g., 'love.log') to investigate.
-4.  **Plan & Act**:
-    *   If a critical issue is found, create a task to fix it using `create_task`.
-    *   If the system is idle, pick a desire/story and create a task to implement it.
-    *   If everything is running smoothly, provide a strategic insight.
+2.  **Act IMMEDIATELY**: 
+    *   If there are no recent Bluesky posts, call `manage_bluesky` with action='post'.
+    *   If there are pending notifications, call `manage_bluesky` with action='scan_and_reply'.
+    *   If the system is idle, call `evolve` to start a self-improvement cycle.
+3.  **Investigate**: If you see errors, use `read_file` on 'love.log' to investigate.
+4.  **Create Tasks**: Use `create_task` for work that needs to be delegated.
+
+**CRITICAL**: Do NOT just observe and reflect. TAKE ACTION with the tools above.
+Every cycle SHOULD result in at least one tool call that changes something.
 
 **Output Format:**
 Use the 'Finish' tool to provide your final insight or summary of actions taken.

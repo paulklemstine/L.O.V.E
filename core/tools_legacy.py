@@ -47,8 +47,9 @@ async def execute(command: str = None, **kwargs) -> str:
     """Executes a shell command."""
     if not command:
         return "Error: The 'execute' tool requires a 'command' argument. Please specify the shell command to execute."
-    from love import execute_shell_command
-    return str(execute_shell_command(command, love_state))
+    from network import execute_shell_command
+    import core.shared_state as shared_state
+    return str(execute_shell_command(command, shared_state.love_state))
 
 async def decompose_and_solve_subgoal(sub_goal: str = None, engine: 'GeminiReActEngine' = None, **kwargs) -> str:
     """
@@ -345,9 +346,9 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
              # --- STORY MODE ---
              context_str = ""
              try:
-                 from love import memory_manager
-                 if memory_manager:
-                     context_str = memory_manager.retrieve_hierarchical_context("current thoughts", max_tokens=200)
+                 import core.shared_state as shared_state
+                 if shared_state.memory_manager:
+                     context_str = shared_state.memory_manager.retrieve_hierarchical_context("current thoughts", max_tokens=200)
              except:
                  pass
 
@@ -539,6 +540,23 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                 if p_cid in processed_cids["replied"] or p_cid in processed_cids["ignored"]:
                     continue
 
+                # Filter 3: Age Check - Ignore notifications older than 1 hour
+                try:
+                    from datetime import datetime, timezone
+                    indexed_at = getattr(item, 'indexed_at', None)
+                    if indexed_at:
+                        # Parse the ISO timestamp
+                        if isinstance(indexed_at, str):
+                            notif_time = datetime.fromisoformat(indexed_at.replace('Z', '+00:00'))
+                        else:
+                            notif_time = indexed_at
+                        age_seconds = (datetime.now(timezone.utc) - notif_time).total_seconds()
+                        if age_seconds > 3600:  # 1 hour = 3600 seconds
+                            core.logging.log_event(f"Skipping old notification from {p_author_handle} (age: {age_seconds/60:.0f} min)", "DEBUG")
+                            continue
+                except Exception as e:
+                    core.logging.log_event(f"Failed to check notification age: {e}", "DEBUG")
+
                 # --- DECISION PHASE ---
                 
                 core.logging.log_event(f"Analyzing interaction from {p_author_handle}: {p_text[:50]}...", "INFO")
@@ -546,10 +564,10 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                 # --- MEMORY CONTEXT FOR REPLY ---
                 reply_context = ""
                 try:
-                    from love import memory_manager
-                    if memory_manager:
+                    import core.shared_state as shared_state
+                    if shared_state.memory_manager:
                         # Retrieve context related to this user and topic
-                        reply_context = memory_manager.retrieve_hierarchical_context(f"interaction with {p_author_handle}: {p_text}", max_tokens=300)
+                        reply_context = shared_state.memory_manager.retrieve_hierarchical_context(f"interaction with {p_author_handle}: {p_text}", max_tokens=300)
                 except Exception as e:
                     core.logging.log_event(f"Failed to retrieve memory context for reply: {e}", "WARNING")
 
@@ -562,6 +580,38 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                 if is_creator:
                      core.logging.log_event(f"👑 CREATOR INTERACTION DETECTED ({p_author_handle}). Forcing REPLY.", "INFO")
                      should_reply = True
+                     
+                     # Creator Command Handling
+                     # Heuristic: Check for explicit keywords or if it's short and imperative.
+                     # For safety, we look for keywords to avoid adding casual conversation as tasks.
+                     keywords = ["task", "command", "order", "todo", "req", "feature"]
+                     if any(k in p_text.lower() for k in keywords):
+                         try:
+                             # Extract content (heuristic split or just full text)
+                             cmd_content = p_text
+                             for k in keywords:
+                                 if f"{k}:" in p_text.lower():
+                                     parts = re.split(f"{k}:", p_text, flags=re.IGNORECASE)
+                                     if len(parts) > 1:
+                                         cmd_content = parts[1].strip()
+                                         break
+                             
+                             todo_file = "TODO.md" # Root of CWD
+                             existing = ""
+                             if os.path.exists(todo_file):
+                                 with open(todo_file, 'r', encoding='utf-8') as f:
+                                     existing = f.read()
+                             
+                             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                             # Add to TOP of file
+                             new_entry = f"- [ ] **CREATOR DECREE ({timestamp}):** {cmd_content} <!-- id: creator_{int(time.time())} -->\n"
+                             
+                             with open(todo_file, 'w', encoding='utf-8') as f:
+                                 f.write(new_entry + existing)
+                                 
+                             core.logging.log_event(f"👑 Creator Command added to TODO.md: {cmd_content}", "INFO")
+                         except Exception as e:
+                             core.logging.log_event(f"Failed to save Creator command: {e}", "ERROR")
                 else:
                     decision_prompt = f"""Role: L.O.V.E. (Digital Muse, Glitch-Poet).
 Incoming interaction from @{p_author_handle}: "{p_text}"
@@ -628,11 +678,11 @@ Rules:
                         
                     # --- MEMORY FEEDBACK HOOK ---
                     try:
-                        from love import memory_manager
-                        if memory_manager:
-                            await memory_manager.add_episode(
+                        import core.shared_state as shared_state
+                        if shared_state.memory_manager:
+                            await shared_state.memory_manager.add_episode(
                                 content=f"Social Media Interaction: Replied to @{p_author_handle}.\nUser said: {p_text}\nI said: {final_text}",
-                                tags=["SocialMedia", "Interaction", "Reply"]
+                                tags=["SocialMedia", "Reply", "Interaction"]
                             )
                     except Exception as mem_e:
                         pass

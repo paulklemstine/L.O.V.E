@@ -16,9 +16,9 @@ from core.image_api import generate_image
 
 # Keep the old function for fallback compatibility as requested
 async def solve_with_agent_team(task_description: str) -> str:
-    from love import memory_manager
+    import core.shared_state as shared_state
     from core.agent_framework_manager import create_and_run_workflow
-    orchestrator = Orchestrator(memory_manager)
+    orchestrator = Orchestrator(shared_state.memory_manager)
     result = await create_and_run_workflow(task_description, orchestrator.tool_registry)
     return str(result)
 
