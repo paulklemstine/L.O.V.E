@@ -476,13 +476,24 @@ async def post_to_bluesky(text: str, image: Optional[Image.Image] = None) -> Uni
 async def generate_full_reply_concept(comment_text: str, author_handle: str, history_context: str, is_creator: bool = False) -> DirectorConcept:
     """
     Generates a high-impact social media reply concept using the Director persona.
-    Now includes 3-way user classification for tone modulation.
+    Now includes 3-way user classification for tone modulation with sentiment analysis.
     """
     core.logging.log_event(f"Director generating REPLY for @{author_handle}: {comment_text}", "INFO")
 
     # Classify the user
     user_classification = classify_commenter(comment_text, author_handle, is_creator)
     core.logging.log_event(f"User {author_handle} classified as: {user_classification}", "INFO")
+    
+    # Story 3.1: Analyze sentiment and get dynamic tone parameters
+    from core.sentiment_analyzer import analyze_and_get_tone
+    sentiment, tone = analyze_and_get_tone(comment_text, user_classification)
+    
+    # Log structured tone selection
+    core.logging.log_event(
+        f"TONE SELECTED: style={tone.style.value}, warmth={tone.warmth:.2f}, "
+        f"assertiveness={tone.assertiveness:.2f}, sentiment={sentiment.dominant}",
+        "INFO"
+    )
 
     try:
         # Load prompt template
@@ -492,11 +503,21 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
         if not template:
             raise ValueError("director_reply_concept prompt not found in prompts.yaml")
         
-        # Format the prompt with classification
+        # Format the prompt with classification AND tone guidance
         prompt = template.replace("{{ author_handle }}", author_handle)\
                          .replace("{{ comment_text }}", comment_text)\
                          .replace("{{ is_creator }}", "YES" if is_creator else "NO")\
                          .replace("{{ user_classification }}", user_classification)
+        
+        # Inject tone guidance into prompt
+        tone_guidance = tone.to_prompt_text()
+        prompt = f"{tone_guidance}\n\n{prompt}"
+        
+        # Story 3.3: Inject user history context
+        from core.social_memory import get_user_context
+        user_context = get_user_context(author_handle)
+        if user_context:
+            prompt = f"{user_context}\n\n{prompt}"
 
         result = await run_llm(prompt, purpose="director_reply_concept")
         
@@ -612,6 +633,15 @@ async def generate_full_reply_concept(comment_text: str, author_handle: str, his
 
     # Record this reply to history BEFORE returning to prevent future repetition
     story_manager.record_reply(generated_text)
+    
+    # Story 3.3: Record interaction in social memory for future personalization
+    from core.social_memory import record_user_interaction
+    record_user_interaction(
+        user_handle=author_handle,
+        content=comment_text,
+        sentiment=sentiment.dominant,
+        topic=data.get("topic", "")
+    )
 
     concept = DirectorConcept(
         topic=data.get("topic", f"Reply to {author_handle}"),
