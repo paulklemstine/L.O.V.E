@@ -119,11 +119,6 @@ shared_state.love_state['script_start_time'] = time.time()
 
 # --- Initial State Load ---
 # This logic is now centralized in the Config class. We just need to check the outcome.
-SKIP_CHECKS = False
-if shared_state.love_state.get("successful_starts", 0) >= 5:
-    SKIP_CHECKS = True
-    print(f"[OPTIMIZATION] 5+ successful starts detected ({shared_state.love_state.get('successful_starts')}). Skipping dependency checks and retaining vLLM.")
-
 local_llm_instance = None
 
 
