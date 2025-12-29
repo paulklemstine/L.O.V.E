@@ -3281,6 +3281,16 @@ async def _launch_vllm_server(vllm_python_executable, model_repo_id, max_len):
     
     core.logging.log_event(f"vLLM server process started with command: {' '.join(vllm_command)}. See vllm_server.log for details.", "CRITICAL")
 
+async def _check_vllm_health():
+    """Checks if the vLLM server is responsive by querying the health endpoint."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("http://0.0.0.0:8000/health", timeout=1) as response:
+                if response.status == 200:
+                    return True
+    except Exception:
+        pass
+    return False
 async def _wait_for_vllm_server():
     """Waits for the vLLM server to become online and healthy."""
     console.print("[cyan]Waiting for vLLM server to come online...[/cyan]")
