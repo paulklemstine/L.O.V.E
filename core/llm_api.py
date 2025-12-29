@@ -239,7 +239,21 @@ def get_openrouter_models():
         scored_models = []
         for model in models:
             model_id = model.get('id')
-            if not model_id or "free" not in model_id.lower():
+            if not model_id:
+                continue
+            
+            # Check pricing to ensure model is actually free
+            pricing = model.get('pricing', {})
+            prompt_price = pricing.get('prompt', '0')
+            completion_price = pricing.get('completion', '0')
+            # Convert to float for comparison (prices can be strings like "0" or "0.000001")
+            try:
+                if float(prompt_price) > 0 or float(completion_price) > 0:
+                    log_event(f"Skipping model '{model_id}' - has non-zero pricing: prompt={prompt_price}, completion={completion_price}", "WARNING")
+                    continue
+            except (ValueError, TypeError):
+                # If we can't parse pricing, skip the model to be safe
+                log_event(f"Skipping model '{model_id}' - could not parse pricing", "WARNING")
                 continue
 
             full_model_id = f"openrouter:{model_id}"
