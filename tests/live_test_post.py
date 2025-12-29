@@ -10,16 +10,33 @@ import asyncio
 import sys
 import os
 
-# Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Add project root to path - handle both file execution and module execution
+import os
+import sys
+
+# Get the absolute path of the L.O.V.E directory (parent of tests/)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+print(f"DEBUG: Project Root: {project_root}")
+print(f"DEBUG: sys.path[0]: {sys.path[0]}")
 
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
 
 # Mock shared_state to prevent UI import errors
-import core.shared_state
-core.shared_state.ui_panel_queue = None
+try:
+    import core.shared_state
+    core.shared_state.ui_panel_queue = None
+except ImportError:
+    # If import fails, we might mock it if it's not critical, but let's see
+    print("WARNING: Could not import core.shared_state directly.")
+    sys.modules['core.shared_state'] = type('MockSharedState', (), {'ui_panel_queue': None})
+
 
 from core.social_media_tools import generate_post_concept, generate_image, post_to_bluesky, clean_social_content
 from core.story_manager import story_manager
