@@ -437,6 +437,9 @@ def _auto_configure_hardware():
         _temp_log_event("GPU previously detected, skipping hardware check.", "INFO")
         return
 
+    # Clean up GPU first to ensure accurate VRAM detection
+    cleanup_gpu_processes()
+
     _temp_log_event("Performing hardware auto-configuration check...", "INFO")
     print("Performing hardware auto-configuration check...")
 
@@ -695,9 +698,6 @@ def _check_and_install_dependencies():
     """
     # This function orchestrates the entire dependency and configuration process.
     print("--- L.O.V.E. PRE-FLIGHT CHECK ---")
-    
-    # Clean up GPU first to ensure accurate VRAM detection
-    cleanup_gpu_processes()
     
     _install_system_packages()
     _install_python_requirements()
