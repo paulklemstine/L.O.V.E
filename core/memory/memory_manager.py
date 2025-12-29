@@ -812,6 +812,325 @@ class MemoryManager:
         
         return similarities
 
+    # --- Story 2.1: Semantic Memory Bridge ---
+
+    async def search_similar_interactions(self, query: str, top_k: int = 3) -> List[Dict]:
+        """
+        Performs semantic search on the FAISS index to find similar past interactions.
+        
+        This is the core of the Semantic Memory Bridge (Story 2.1), enabling the
+        Reasoning Agent to query past user stories or code patches before starting
+        a task to avoid repeating mistakes or duplicating effort.
+        
+        Args:
+            query: The user request or task description
+            top_k: Number of similar results to return (default 3)
+            
+        Returns:
+            List of dictionaries containing:
+            - id: Memory note ID
+            - content: The memory content (truncated for context efficiency)
+            - similarity_score: Distance score from FAISS (lower is more similar)
+            - keywords: Associated keywords
+            - tags: Associated tags
+            - contextual_description: LLM-generated description
+        """
+        if self.faiss_index is None or self.faiss_index.ntotal == 0:
+            return []
+        
+        try:
+            # Generate embedding for the query
+            query_embedding = self.embedding_model.encode([query])[0]
+            query_embedding = np.array([query_embedding], dtype=np.float32)
+            
+            # Search FAISS index
+            # Limit top_k to available items
+            actual_k = min(top_k, self.faiss_index.ntotal)
+            distances, indices = self.faiss_index.search(query_embedding, actual_k)
+            
+            results = []
+            for i, idx in enumerate(indices[0]):
+                if idx < 0 or idx >= len(self.faiss_id_map):
+                    continue
+                    
+                node_id = self.faiss_id_map[idx]
+                node_data = self.graph_data_manager.get_node(node_id)
+                
+                if node_data:
+                    note = MemoryNote.from_node_attributes(node_id, node_data)
+                    
+                    # Truncate content for context efficiency (max 500 chars)
+                    truncated_content = note.content[:500] + "..." if len(note.content) > 500 else note.content
+                    
+                    results.append({
+                        "id": node_id,
+                        "content": truncated_content,
+                        "similarity_score": float(distances[0][i]),  # Lower = more similar
+                        "keywords": note.keywords,
+                        "tags": note.tags,
+                        "contextual_description": note.contextual_description
+                    })
+            
+            return results
+            
+        except Exception as e:
+            print(f"Error in search_similar_interactions: {e}")
+            return []
+
+    def format_memory_context_for_prompt(self, similar_interactions: List[Dict]) -> str:
+        """
+        Formats similar interactions into a context string for injection into prompts.
+        
+        Args:
+            similar_interactions: Results from search_similar_interactions()
+            
+        Returns:
+            Formatted string suitable for prompt injection
+        """
+        if not similar_interactions:
+            return ""
+        
+        context_parts = ["## 🧠 Relevant Past Interactions\n"]
+        context_parts.append("The following past interactions may be relevant to this task:\n")
+        
+        for i, interaction in enumerate(similar_interactions, 1):
+            context_parts.append(f"### Memory {i}")
+            if interaction.get("contextual_description"):
+                context_parts.append(f"**Summary:** {interaction['contextual_description']}")
+            context_parts.append(f"**Content:** {interaction['content']}")
+            if interaction.get("keywords"):
+                context_parts.append(f"**Keywords:** {', '.join(interaction['keywords'])}")
+            if interaction.get("tags"):
+                context_parts.append(f"**Tags:** {', '.join(interaction['tags'])}")
+            context_parts.append("")  # Blank line between entries
+        
+        return "\n".join(context_parts)
+
+    # --- Story 2.2: Memory Folding Strategy ---
+
+    def estimate_token_count(self, messages: List) -> int:
+        """
+        Estimates the token count for a list of messages.
+        
+        Uses a simple heuristic: ~4 characters per token (conservative estimate).
+        This is faster than using a real tokenizer and accurate enough for thresholds.
+        
+        Args:
+            messages: List of BaseMessage objects or strings
+            
+        Returns:
+            Estimated token count
+        """
+        total_chars = 0
+        
+        for msg in messages:
+            if hasattr(msg, 'content'):
+                content = msg.content
+            elif isinstance(msg, str):
+                content = msg
+            elif isinstance(msg, dict):
+                content = str(msg.get('content', msg))
+            else:
+                content = str(msg)
+            
+            if isinstance(content, str):
+                total_chars += len(content)
+            elif isinstance(content, (list, dict)):
+                total_chars += len(str(content))
+        
+        # Conservative estimate: 4 chars per token
+        return total_chars // 4
+
+    async def check_and_fold_context(
+        self, 
+        messages: List,
+        token_limit: int = 4096,
+        threshold: float = 0.8
+    ) -> tuple:
+        """
+        Checks if context exceeds threshold and triggers folding.
+        
+        Story 2.2: When token count > 80% of limit:
+        1. Triggers MemoryFoldingAgent to create a summary
+        2. Replaces oldest 50% of messages with the summary
+        3. Stores the Knowledge Nugget in the knowledge base
+        
+        Args:
+            messages: List of BaseMessage objects
+            token_limit: Maximum token limit (default 4096)
+            threshold: Threshold percentage to trigger folding (default 0.8 = 80%)
+            
+        Returns:
+            Tuple of (modified_messages, knowledge_nugget or None)
+        """
+        from core.memory.schemas import KnowledgeNugget
+        from langchain_core.messages import SystemMessage
+        
+        current_tokens = self.estimate_token_count(messages)
+        threshold_tokens = int(token_limit * threshold)
+        
+        if current_tokens <= threshold_tokens:
+            # No folding needed
+            return messages, None
+        
+        print(f"Memory folding triggered: {current_tokens} tokens > {threshold_tokens} threshold")
+        
+        # Determine how many messages to fold (oldest 50%)
+        fold_count = len(messages) // 2
+        if fold_count < 2:
+            # Too few messages to fold meaningfully
+            return messages, None
+        
+        messages_to_fold = messages[:fold_count]
+        messages_to_keep = messages[fold_count:]
+        
+        # Create a summary of the folded messages
+        try:
+            summary = await self._create_fold_summary(messages_to_fold)
+            
+            if not summary:
+                print("Warning: Failed to create fold summary, keeping original messages")
+                return messages, None
+            
+            # Calculate token savings
+            original_tokens = self.estimate_token_count(messages_to_fold)
+            summary_tokens = self.estimate_token_count([summary])
+            token_savings = original_tokens - summary_tokens
+            
+            # Create the Knowledge Nugget
+            nugget = KnowledgeNugget(
+                content=summary,
+                source_message_count=fold_count,
+                key_directives=self._extract_key_directives(messages_to_fold),
+                topics=self._extract_topics(messages_to_fold),
+                token_savings=token_savings
+            )
+            
+            # Store nugget in knowledge base
+            await self._store_knowledge_nugget(nugget)
+            
+            # Create a system message with the summary
+            summary_message = SystemMessage(
+                content=f"[Memory Folded: {fold_count} previous messages summarized]\n\n{summary}"
+            )
+            
+            # Return modified messages: summary + kept messages
+            modified_messages = [summary_message] + messages_to_keep
+            
+            print(f"Memory folding complete: Replaced {fold_count} messages with summary, saved ~{token_savings} tokens")
+            
+            return modified_messages, nugget
+            
+        except Exception as e:
+            print(f"Error during memory folding: {e}")
+            return messages, None
+
+    async def _create_fold_summary(self, messages: List) -> str:
+        """
+        Creates a compressed summary of messages using LLM.
+        
+        Args:
+            messages: Messages to summarize
+            
+        Returns:
+            Summary string
+        """
+        from core.llm_api import run_llm
+        
+        # Format messages for the prompt
+        formatted = []
+        for msg in messages:
+            role = "User" if hasattr(msg, 'type') and msg.type == 'human' else "Assistant"
+            if hasattr(msg, 'content'):
+                formatted.append(f"{role}: {msg.content[:500]}...")
+        
+        messages_text = "\n".join(formatted)
+        
+        prompt = f"""
+        Summarize the following conversation thread into a concise "Knowledge Nugget".
+        
+        CRITICAL: Preserve any direct instructions, mandates, or goals from the user.
+        Focus on: key decisions made, important context, and any ongoing tasks.
+        
+        Conversation:
+        ---
+        {messages_text}
+        ---
+        
+        Provide a 2-3 sentence summary that captures the essential context.
+        Do not include any preamble, just the summary.
+        """
+        
+        try:
+            response = await run_llm(prompt, purpose="memory_folding")
+            return response.get("result", "").strip()
+        except Exception as e:
+            print(f"Error creating fold summary: {e}")
+            return ""
+
+    def _extract_key_directives(self, messages: List) -> List[str]:
+        """
+        Extracts key directives/instructions from messages.
+        
+        Looks for patterns indicating direct user instructions.
+        """
+        directives = []
+        directive_keywords = ["must", "always", "never", "important", "critical", "priority"]
+        
+        for msg in messages:
+            if hasattr(msg, 'type') and msg.type == 'human':
+                content = msg.content if hasattr(msg, 'content') else str(msg)
+                if isinstance(content, str):
+                    # Look for sentences with directive keywords
+                    sentences = content.split('.')
+                    for sentence in sentences:
+                        sentence_lower = sentence.lower()
+                        if any(kw in sentence_lower for kw in directive_keywords):
+                            directive = sentence.strip()
+                            if directive and len(directive) < 200:
+                                directives.append(directive)
+        
+        # Limit to top 5 directives
+        return directives[:5]
+
+    def _extract_topics(self, messages: List) -> List[str]:
+        """
+        Extracts main topics from messages for tagging.
+        """
+        # Simple keyword extraction - in production, could use NLP
+        topics = set()
+        common_topics = [
+            "code", "bug", "fix", "feature", "test", "deploy", 
+            "memory", "agent", "tool", "api", "database", "ui",
+            "bluesky", "post", "image", "evolution"
+        ]
+        
+        for msg in messages:
+            content = msg.content if hasattr(msg, 'content') else str(msg)
+            if isinstance(content, str):
+                content_lower = content.lower()
+                for topic in common_topics:
+                    if topic in content_lower:
+                        topics.add(topic)
+        
+        return list(topics)[:5]
+
+    async def _store_knowledge_nugget(self, nugget) -> None:
+        """
+        Stores a Knowledge Nugget in the knowledge base and memory graph.
+        """
+        from core.memory.schemas import KnowledgeNugget
+        
+        try:
+            # Store as a memory note with special tag
+            await self.add_episode(
+                content=f"[Knowledge Nugget] {nugget.content}\n\nKey Directives: {nugget.key_directives}\nTopics: {nugget.topics}",
+                tags=["KnowledgeNugget", "FoldedMemory"] + nugget.topics
+            )
+            print(f"Stored Knowledge Nugget covering {nugget.source_message_count} messages")
+        except Exception as e:
+            print(f"Warning: Failed to store Knowledge Nugget: {e}")
+
     # --- Tiered Memory Management (Cold Storage) ---
 
     async def archive_to_cold_storage(self):

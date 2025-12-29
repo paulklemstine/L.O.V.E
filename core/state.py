@@ -19,4 +19,8 @@ class DeepAgentState(TypedDict):
     tool_schemas: List[Dict[str, Any]]  # JSON schemas for LLM tool binding
     # Self-Correction Loop Guardrail (Story 4)
     loop_count: int  # Tracks reasoning-execution cycles, max 5
+    # Story 2.1: Semantic Memory Bridge - past interactions context
+    memory_context: List[Dict[str, Any]]  # Similar past interactions from FAISS
+    # Reference to memory manager for memory operations
+    memory_manager: Optional[Any]
 

@@ -11,17 +11,116 @@ class MemoryFoldingAgent:
     def __init__(self, llm_runner=None):
         self.run_llm = llm_runner if llm_runner else run_llm
 
-    async def trigger_folding(self, level_0: List[MemorySummary], level_1: List[MemorySummary], level_2: List[MemorySummary]) -> Dict[str, List[MemorySummary]]:
+    async def trigger_folding(
+        self, 
+        level_0: List[MemorySummary], 
+        level_1: List[MemorySummary], 
+        level_2: List[MemorySummary],
+        level_0_threshold: int = 10,  # Fold when > 10 Level 0 memories
+        level_1_threshold: int = 5     # Fold when > 5 Level 1 summaries
+    ) -> Dict[str, List[MemorySummary]]:
         """
-        Orchestrates the folding process across memory levels.
+        Orchestrates the folding process across memory levels (Story 2.2).
+        
+        Memory Pyramid:
+        - Level 0: Raw interactions (most recent, highest detail)
+        - Level 1: First-level summaries (folded from Level 0)
+        - Level 2: Meta-summaries (folded from Level 1)
+        
+        Triggers:
+        - Level 0 -> Level 1: When len(level_0) > level_0_threshold
+        - Level 1 -> Level 2: When len(level_1) > level_1_threshold
         """
-        # Simple implementation: just return current levels for now to fix the crash
-        # Real logic would involve summarizing level_0 into level_1, etc.
+        import time
+        
+        # Fold Level 0 -> Level 1 if threshold exceeded
+        if len(level_0) > level_0_threshold:
+            # Take oldest items to fold
+            items_to_fold = level_0[:level_0_threshold // 2]
+            items_to_keep = level_0[level_0_threshold // 2:]
+            
+            # Create summary
+            summary = await self._create_level_summary(items_to_fold, target_level=1)
+            if summary:
+                level_1.append(summary)
+                level_0 = items_to_keep
+                print(f"Folded {len(items_to_fold)} Level 0 memories into Level 1 summary")
+        
+        # Fold Level 1 -> Level 2 if threshold exceeded
+        if len(level_1) > level_1_threshold:
+            # Take oldest items to fold
+            items_to_fold = level_1[:level_1_threshold // 2]
+            items_to_keep = level_1[level_1_threshold // 2:]
+            
+            # Create meta-summary
+            summary = await self._create_level_summary(items_to_fold, target_level=2)
+            if summary:
+                level_2.append(summary)
+                level_1 = items_to_keep
+                print(f"Folded {len(items_to_fold)} Level 1 summaries into Level 2 meta-summary")
+        
         return {
             "level_0": level_0,
             "level_1": level_1,
             "level_2": level_2
         }
+
+    async def _create_level_summary(
+        self, 
+        items: List[MemorySummary], 
+        target_level: int
+    ) -> MemorySummary:
+        """
+        Creates a summary for the next memory level.
+        
+        Args:
+            items: MemorySummary items to fold
+            target_level: The level this summary belongs to (1 or 2)
+            
+        Returns:
+            New MemorySummary for the target level
+        """
+        import time
+        
+        # Format items for LLM
+        items_text = "\n".join([
+            f"- [{i+1}] {item.content[:300]}..." if len(item.content) > 300 else f"- [{i+1}] {item.content}"
+            for i, item in enumerate(items)
+        ])
+        
+        level_name = "summary" if target_level == 1 else "meta-summary"
+        
+        prompt = f"""
+        Create a concise {level_name} of the following memory items.
+        
+        Items to summarize:
+        {items_text}
+        
+        IMPORTANT:
+        - Preserve key insights and learnings
+        - Maintain any critical directives or goals
+        - Be concise but comprehensive
+        - Focus on patterns and outcomes
+        
+        Provide only the {level_name} text, no preamble.
+        """
+        
+        try:
+            response = await self.run_llm(prompt, purpose="memory_folding")
+            summary_text = response.get("result", "").strip()
+            
+            if not summary_text:
+                return None
+            
+            return MemorySummary(
+                content=summary_text,
+                level=target_level,
+                source_ids=[item.source_ids[0] if item.source_ids else "" for item in items],
+                timestamp=time.time()
+            )
+        except Exception as e:
+            print(f"Error creating level {target_level} summary: {e}")
+            return None
 
     async def fold_episodic(self, messages: List[BaseMessage], current_memory: EpisodicMemory) -> EpisodicMemory:
         """

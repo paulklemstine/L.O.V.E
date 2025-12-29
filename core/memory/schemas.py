@@ -30,3 +30,21 @@ class MemorySummary(BaseModel):
     timestamp: float = Field(default_factory=lambda: __import__("time").time())
     ipfs_cid: Optional[str] = None
     embedding: Optional[List[float]] = None
+
+
+class KnowledgeNugget(BaseModel):
+    """
+    A compressed summary of a conversation thread (Story 2.2).
+    
+    Created when token count > 80% of limit, this nugget replaces
+    the oldest 50% of messages in the active context while preserving
+    critical directives and key insights.
+    """
+    content: str  # The summarized content
+    source_message_count: int  # How many messages were compressed
+    key_directives: List[str] = Field(default_factory=list)  # Critical instructions preserved
+    topics: List[str] = Field(default_factory=list)  # Main topics covered
+    created_at: float = Field(default_factory=lambda: __import__("time").time())
+    ipfs_cid: Optional[str] = None  # For cold storage
+    token_savings: int = 0  # Approximate tokens saved by this compression
+

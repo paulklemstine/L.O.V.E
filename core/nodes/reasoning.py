@@ -84,11 +84,12 @@ def _format_tools_for_prompt(tool_schemas: List[Dict[str, Any]]) -> str:
 def _messages_to_prompt(
     messages: List[BaseMessage], 
     mandate: str = None,
-    tool_schemas: List[Dict[str, Any]] = None
+    tool_schemas: List[Dict[str, Any]] = None,
+    memory_context: List[Dict[str, Any]] = None  # Story 2.1: Semantic Memory Bridge
 ) -> str:
     """
     Converts a list of messages to a single prompt string, 
-    including tool context and system instructions.
+    including tool context, memory context, and system instructions.
     """
     prompt = ""
     
@@ -99,6 +100,13 @@ def _messages_to_prompt(
     if tool_schemas:
         tools_text = _format_tools_for_prompt(tool_schemas)
         prompt += f"System: {tools_text}\n\n"
+    
+    # Story 2.1: Add memory context (similar past interactions)
+    if memory_context:
+        from core.nodes.memory_bridge import format_memory_context_for_prompt
+        memory_text = format_memory_context_for_prompt(memory_context)
+        if memory_text:
+            prompt += f"System: {memory_text}\n\n"
     
     # Inject Critical Mandate at high priority
     if mandate:
@@ -216,6 +224,7 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
     mandate = state.get("creator_mandate")
     tool_schemas = state.get("tool_schemas", [])
     loop_count = state.get("loop_count", 0)
+    memory_context = state.get("memory_context", [])  # Story 2.1: Semantic Memory Bridge
     
     # Guardrail: Check recursion limit
     MAX_ITERATIONS = 5
@@ -229,8 +238,13 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
             "stop_reason": None  # Force END
         }
     
-    # Build the prompt with tool context
-    prompt = _messages_to_prompt(messages, mandate=mandate, tool_schemas=tool_schemas)
+    # Build the prompt with tool context and memory context
+    prompt = _messages_to_prompt(
+        messages, 
+        mandate=mandate, 
+        tool_schemas=tool_schemas,
+        memory_context=memory_context  # Story 2.1
+    )
     
     reasoning_trace = ""
     stop_reason = None
