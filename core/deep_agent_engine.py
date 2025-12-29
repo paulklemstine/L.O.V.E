@@ -10,7 +10,7 @@ from core.tools_legacy import ToolRegistry, invoke_gemini_react_engine
 import httpx
 import logging
 import core.logging
-from core.harness_tools import read_feature_list, update_feature_status, append_progress, get_next_task
+from typing import List, Dict, Any, Optional
 from core.harness_tools import read_feature_list, update_feature_status, append_progress, get_next_task
 from core.agents.metacognition_agent import MetacognitionAgent
 from core.benchmarker import ModelPerformanceTracker
@@ -240,42 +240,41 @@ class DeepAgentEngine:
         if self.extensions_manager and self.tool_registry:
             self.extensions_manager.load_extensions(self.tool_registry)
 
-        formatted_tools = ""
-        # formatted_tools += "Tool Name: `invoke_gemini_react_engine`\n"
-        # formatted_tools += "Description: Invokes the GeminiReActEngine to solve a sub-task.\n"
-        # formatted_tools += "Arguments JSON Schema:\n```json\n{\"type\": \"object\", \"properties\": {\"prompt\": {\"type\": \"string\"}}}\n```\n---\n"
-
-
-        # Harness Tools
-        formatted_tools += "Tool Name: `read_feature_list`\n"
-        formatted_tools += "Description: Reads the list of features and their status.\n"
-        formatted_tools += "Arguments: None\n---\n"
-
-        formatted_tools += "Tool Name: `update_feature_status`\n"
-        formatted_tools += "Description: Updates the status of a feature (pass/fail).\n"
-        formatted_tools += "Arguments JSON Schema:\n```json\n{\"type\": \"object\", \"properties\": {\"feature_description\": {\"type\": \"string\"}, \"passes\": {\"type\": \"boolean\"}}}\n```\n---\n"
-
-        formatted_tools += "Tool Name: `append_progress`\n"
-        formatted_tools += "Description: Appends a note to the agent progress log.\n"
-        formatted_tools += "Arguments JSON Schema:\n```json\n{\"type\": \"object\", \"properties\": {\"message\": {\"type\": \"string\"}}}\n```\n---\n"
-
         if not self.tool_registry:
-             formatted_tools += "No additional tools available.\n"
-             return formatted_tools
+             return "No tools available."
 
-        for name, data in self.tool_registry.list_tools().items():
-            metadata = data['metadata']
-            description = metadata.get('description', 'No description available.')
-            args_schema = metadata.get('arguments', {})
+        # Fetch schemas directly from registry
+        schemas = self.tool_registry.get_all_tool_schemas()
+        
+        # Add Harness Tools manually if they aren't in registry yet (or ensure they are registered elsewhere)
+        # For now, we will assume they might be missing and add them if needed, 
+        # but the cleaner way is to rely on registry. 
+        # Let's assume registry is the source of truth.
+        
+        return self._format_tool_schemas(schemas)
 
+    def _format_tool_schemas(self, schemas: List[Dict[str, Any]]) -> str:
+        """
+        Formats tool schemas into a clear, prompt-friendly structure.
+        Compatible with OpenAI function calling conventions but rendered as text.
+        """
+        formatted_tools = ""
+        
+        for schema in schemas:
+            name = schema.get('name', 'unknown')
+            description = schema.get('description', 'No description available.')
+            params = schema.get('parameters', {})
+            
             formatted_tools += f"Tool Name: `{name}`\n"
             formatted_tools += f"Description: {description}\n"
-            if args_schema and args_schema.get('properties'):
-                formatted_tools += f"Arguments JSON Schema:\n```json\n{json.dumps(args_schema, indent=2)}\n```\n"
+            
+            if params and params.get('properties'):
+                formatted_tools += f"Arguments JSON Schema:\n```json\n{json.dumps(params, indent=2)}\n```\n"
             else:
                 formatted_tools += "Arguments: None\n"
+            
             formatted_tools += "---\n"
-
+            
         return formatted_tools
 
     def _get_kb_context(self, prompt: str, max_tokens: int = 400) -> str:

@@ -64,6 +64,32 @@ class ThoughtChain:
         self.current_node_id: Optional[str] = None
         self.created_at = datetime.now()
     
+    def add_subagent_step(
+        self,
+        agent_name: str,
+        prompt: str,
+        parent_id: str = None
+    ) -> str:
+        """
+        Adds a subagent invocation step with hierarchical tracking.
+        
+        Args:
+            agent_name: Name of the subagent
+            prompt: The prompt sent to the subagent
+            parent_id: Parent node ID
+            
+        Returns:
+            ID of the new node
+        """
+        content = f"Invoke Subagent: {agent_name}"
+        metadata = {
+            "type": "subagent_call",
+            "agent_name": agent_name,
+            "prompt_preview": prompt[:100] + "..." if len(prompt) > 100 else prompt,
+            "full_prompt": prompt
+        }
+        return self.add_step(content, "thinking", parent_id, metadata)
+
     def add_step(
         self,
         content: str,

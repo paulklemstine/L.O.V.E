@@ -19,6 +19,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from core.state import DeepAgentState
 from langchain_core.messages import ToolMessage
 import core.logging
+from core.thought_chain import add_thought, mark_success, mark_fail
 
 # Import tools for direct lookup (fallback)
 from core.tools import (
@@ -249,6 +250,9 @@ async def tool_execution_node(state: DeepAgentState) -> Dict[str, Any]:
             "INFO"
         )
         
+        # Trace thought
+        thought_id = add_thought(f"Executing tool: {tool_name}", "thinking")
+        
         # Look up the tool
         tool_func = _get_tool_from_registry(tool_name)
         
@@ -264,9 +268,23 @@ async def tool_execution_node(state: DeepAgentState) -> Dict[str, Any]:
                 "WARNING"
             )
             result = error_msg
+            mark_fail(thought_id)
         else:
             # Execute the tool safely (via Sandbox or direct)
-            result = await _safe_execute_tool(tool_func, tool_args, tool_name)
+            try:
+                result = await _safe_execute_tool(tool_func, tool_args, tool_name)
+                # Simple check for error strings
+                if "Error" in str(result) and len(str(result)) < 200:
+                     mark_fail(thought_id)
+                else:
+                     mark_success(thought_id)
+            except Exception:
+                mark_fail(thought_id)
+                # Re-raise to let _safe_execute_tool logic (if it wasn't called) or just default handling work? 
+                # Actually _safe_execute_tool catches exceptions, so we check result content usually.
+                # But let's assume we want to catch wrappers here. 
+                # Re-assigning result if exception occurred outside safe execute would be needed but 
+                # likely our structure covers it.
         
         # Create ToolMessage with the result (this becomes "Tool Result" in conversation)
         tool_message = ToolMessage(

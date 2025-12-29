@@ -42,25 +42,32 @@ def read_todos() -> str:
     except Exception as e:
         return f"Error reading todos: {e}"
 
-async def delegate_subtask(task_description: str) -> str:
+async def delegate_subtask(task_description: str, agent_type: str = "general") -> str:
     """
     Delegates a complex reasoning task to a sub-agent (recurses into the LLM logic).
     Useful for breaking down large problems into isolated execution contexts.
     
     Args:
         task_description: A detailed description of the sub-task to solve.
+        agent_type: The type of subagent to load (e.g., 'general', 'coder', 'critic').
         
     Returns:
         The result or answer provided by the sub-agent.
     """
     from core.llm_api import run_llm
+    from core.subagent_loader import SubagentLoader
     
-    logging.info(f"[DeepAgentTools] Delegating subtask: {task_description[:100]}...")
+    logging.info(f"[DeepAgentTools] Delegating subtask to '{agent_type}' agent: {task_description[:100]}...")
     
     try:
-        # We explicitly use a fresh context for the subtask
-        prompt = f"""
-        You are a specialized Sub-Agent tasked with solving a specific problem.
+        # Load specialized prompt from Hub or fallback
+        base_prompt = SubagentLoader.load_subagent_prompt(
+            agent_type,
+            fallback_prompt=f"You are a specialized {agent_type} assistant."
+        )
+        
+        full_prompt = f"""
+        {base_prompt}
         
         TASK:
         {task_description}
@@ -71,13 +78,13 @@ async def delegate_subtask(task_description: str) -> str:
         
         # Call run_llm with a specific purpose to potentially trigger different handling or smaller models
         # We pass deep_agent_instance=None to ensure we don't get stuck in a loop of the same agent instance trying to handle it if that logic exists
-        result_dict = await run_llm(prompt, purpose="subagent_delegation", deep_agent_instance=None)
+        result_dict = await run_llm(full_prompt, purpose=f"subagent_{agent_type}", deep_agent_instance=None)
         
         answer = result_dict.get("result", "").strip()
         if not answer:
             return "Sub-agent returned no result."
             
-        return f"Sub-agent Result:\n{answer}"
+        return f"Sub-agent ({agent_type}) Result:\n{answer}"
         
     except Exception as e:
         logging.error(f"Error in delegate_subtask: {e}")

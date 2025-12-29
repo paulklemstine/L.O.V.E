@@ -1098,76 +1098,91 @@ class WaitingAnimation:
             # Signal the UI to clear the animation line
             self.ui_queue.put({"type": "animation_end"})
 
-def create_file_op_panel(operation, path, content=None, diff=None, output_cid=None, width=80):
-    """Creates a panel for file operations."""
-    panel_title = f"Filesystem | {operation.capitalize()}"
-    border_style = PANEL_TYPE_COLORS["file_op"]
-
-    content_items = []
-    header = Text()
-    header.append("Path: ", style="bold white")
-    header.append(f"`{path}`\n", style="hot_pink")
-    content_items.append(header)
-
-    if content:
-        content_renderable, _ = _format_and_link(content)
-        content_panel = Panel(content_renderable, title="Content", border_style="bright_black", expand=True)
-        content_items.append(content_panel)
-
-    if diff:
-        diff_renderable, _ = _format_and_link(diff)
-        diff_panel = Panel(diff_renderable, title="Diff", border_style="bright_black", expand=True)
-        content_items.append(diff_panel)
-
-    panel = Panel(
-        Group(*content_items),
-        title=get_gradient_text(panel_title, border_style, "bright_yellow"),
-        border_style=border_style,
-        padding=(1, 2),
-        width=width
-    )
-    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
-
-def create_skyvern_panel(prompt, result, output_cid=None, width=80):
-    """Creates a panel to display the results of a Skyvern web automation task."""
-    title = f"SKYVERN AUTOMATION - {prompt}"
-    border_style = PANEL_TYPE_COLORS["skyvern"]
-
-    content = Text(str(result), justify="left")
-
-    if output_cid:
-        link = f"https://ipfs.io/ipfs/{output_cid}"
-        content.append(f"\n\n[dim]Full output available at: [link={link}]{link}[/link][/dim]")
-
-    panel = Panel(
-        content,
-        title=get_gradient_text(title, border_style, "bright_cyan"),
-        border_style=border_style,
-        width=width
-    )
-    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
-class OffscreenRenderer:
+def create_active_tool_panel(
+    tools: list[dict],  
+    width: int = 80
+) -> Panel:
     """
-    A reusable renderer that renders Rich renderables to a string
-    without re-instantiating the Console object every time.
+    Creates a colorful panel showing active tool invocations.
+    
+    Args:
+        tools: List of dicts with:
+               {'name': str, 'args': dict, 'status': str, 
+                'result': str (opt), 'elapsed': float (opt)}
+        width: Panel width
+        
+    Status colors:
+    - xx pending (yellow pulse)
+    - x  running (blue spinner)  
+    - xx complete (green checkmark)
+    - x  failed (red X)
     """
-    def __init__(self, width=80):
-        self._buffer = io.StringIO()
-        self._console = Console(
-            file=self._buffer,
-            force_terminal=True,
-            color_system="truecolor",
-            width=width
-        )
+    
+    # 1. Define Styles & Icons
+    status_styles = {
+        "pending":  {"color": "yellow", "icon": "⏳"},
+        "running":  {"color": "blue",   "icon": "xR "},
+        "complete": {"color": "green",  "icon": "S& "},
+        "failed":   {"color": "red",    "icon": "R"},
+    }
+    
+    # Border & Title Styles (Rave Theme)
+    border_style = random.choice(RAVE_COLORS)
+    title_style = f"bold {random.choice(RAVE_COLORS)}"
+    
+    content_group = []
+    
+    # 2. Build Tool Lines
+    for idx, tool in enumerate(tools):
+        name = tool.get("name", "unknown")
+        args = tool.get("args", {})
+        status = tool.get("status", "pending").lower()
+        result = tool.get("result", "")
+        elapsed = tool.get("elapsed")
+        
+        style = status_styles.get(status, status_styles["pending"])
+        icon = style["icon"]
+        color = style["color"]
+        
+        # Header Line: Icon + Name
+        header_text = Text()
+        header_text.append(f"{icon} ", style=f"bold {color}")
+        header_text.append(f"{name}", style=f"bold white")
+        
+        if elapsed:
+             header_text.append(f" ({elapsed:.2f}s)", style="dim italic")
+             
+        content_group.append(header_text)
+        
+        # Args Line (if present)
+        if args:
+            args_str = json.dumps(args, default=str)
+            if len(args_str) > width - 10:
+                args_str = args_str[:width-15] + "..."
+            content_group.append(Text(f"       {args_str}", style="dim cyan"))
+            
+        # Result Line (if complete/failed)
+        if status in ["complete", "failed"] and result:
+            res_preview = str(result).replace("\n", " ")
+            if len(res_preview) > width - 10:
+                res_preview = res_preview[:width-15] + "..."
+            
+            res_style = "green" if status == "complete" else "red"
+            content_group.append(Text(f"  Result: {res_preview}", style=f"italic {res_style}"))
+            
+        # Add separator if not last
+        if idx < len(tools) - 1:
+            content_group.append(Text("  " + " " * (width//2), style="dim white"))
+            
+    if not content_group:
+        content_group.append(Text("Waiting for tool calls...", style="italic dim white"))
 
-    def render(self, renderable, width=None):
-        """Renders the object to a string."""
-        if width is not None and width != self._console.width:
-            self._console.width = width
-
-        # Reset buffer
-        self._buffer.seek(0)
-        self._buffer.truncate(0)
-
-        self._console.print(renderable)
-        return self._buffer.getvalue()
+    # 3. Create Panel
+    return Panel(
+        Group(*content_group),
+        title=f"[{title_style}]x: ️ ACTIVE TOOLS[/]",
+        subtitle=f"[dim]DeepAgent Execution[/dim]",
+        border_style=border_style,
+        width=width,
+        padding=(0, 1)
+    )
