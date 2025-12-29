@@ -56,7 +56,7 @@ class SocialMediaAgent:
             try:
                 # 1. Get Narrative Beat from Story Manager
                 beat_data = story_manager.get_next_beat()
-                log_event(f"[{self.agent_id}] Story Beat: {beat_data['chapter']} | Vibe: {beat_data['mandatory_vibe']}", level='INFO')
+                log_event(f"[{self.agent_id}] Story Beat: {beat_data['chapter']} | Vibe: {beat_data['mandatory_vibe']} | Intent: {beat_data.get('subliminal_intent')}", level='INFO')
 
                 # 2. Director Generate Concept
                 # The Director now uses the beat_data plus history and goal

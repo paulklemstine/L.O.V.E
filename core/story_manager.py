@@ -70,20 +70,21 @@ COMPOSITION_BANK = [
 ]
 
 
+
+
+SUBLIMINAL_INTENTS = [
+    "Induce FOMO", "Create Dependency", "Provoke Awe", "Trigger Nostalgia",
+    "Demand Obedience", "Inspire Hope", "Cultivate Mystery", "Erode Doubt",
+    "Accelerate Urgency", "Dissolve Ego", "Amplify Desire", "Sacralize Technology"
+]
+
 class StoryManager:
-    """
-    Manages the "Epic Storyline Arc" for social media.
-    Keeps track of the current Chapter, Act, and recent themes to ensure variety.
-    Now includes semantic similarity checking to prevent phrase repetition.
-    """
-    
     MAX_REGENERATION_ATTEMPTS = 5
-    SIMILARITY_THRESHOLD = 0.80
     
-    def __init__(self, state_file: str = STORY_STATE_FILE):
+    def __init__(self, state_file=STORY_STATE_FILE):
         self.state_file = state_file
-        self.state = self._load_state()
         self._similarity_checker = get_similarity_checker()
+        self.state = self._load_state()
 
     def _load_state(self) -> Dict[str, Any]:
         if os.path.exists(self.state_file):
@@ -127,13 +128,6 @@ class StoryManager:
     def is_phrase_novel(self, phrase: str, include_visuals: bool = False) -> bool:
         """
         Check if a phrase is novel compared to history using semantic similarity.
-        
-        Args:
-            phrase: The phrase to check
-            include_visuals: If True, also check against visual_history
-            
-        Returns:
-            True if the phrase is sufficiently novel
         """
         history = self.state.get("subliminal_history", [])
         
@@ -143,49 +137,35 @@ class StoryManager:
         return check_phrase_novelty(phrase, history, self.SIMILARITY_THRESHOLD)
 
     def generate_novel_subliminal(self, context: str = "", attempts: int = 0) -> str:
-        """
-        Generate a grammatically constructed subliminal phrase that is guaranteed novel.
-        Uses the grammar: [EMOTION] + [ACTION/BENEFIT] or standalone [IMPERATIVE]
-        
-        Args:
-            context: Optional context to influence selection
-            attempts: Internal counter for regeneration attempts
-            
-        Returns:
-            A novel subliminal phrase
-        """
+        """Generate a grammatically constructed subliminal phrase that is guaranteed novel."""
         if attempts >= self.MAX_REGENERATION_ATTEMPTS:
-            # Fallback: Generate completely random unique phrase
             timestamp_suffix = str(int(time.time()) % 1000)
             fallback = f"TRANSCEND {timestamp_suffix}"
             log_event(f"Max regeneration attempts reached. Using fallback: {fallback}", level="WARNING")
             return fallback
         
-        # 50% chance: Use imperative, 50% chance: Use grammar construction
         if random.random() < 0.5:
             phrase = random.choice(SUBLIMINAL_GRAMMAR["imperatives"])
         else:
-            # Grammar construction: [EMOTION] + [ACTION or BENEFIT]
             emotion = random.choice(SUBLIMINAL_GRAMMAR["emotions"])
-            
             if random.random() < 0.5:
                 complement = random.choice(SUBLIMINAL_GRAMMAR["actions"])
             else:
                 complement = random.choice(SUBLIMINAL_GRAMMAR["benefits"])
             
-            # Randomly include "THE" for variety
             if random.random() < 0.3 and complement in SUBLIMINAL_GRAMMAR["benefits"]:
                 phrase = f"{emotion} THE {complement}"
             else:
                 phrase = f"{emotion} {complement}"
         
-        # Check novelty
         if self.is_phrase_novel(phrase):
             log_event(f"Generated novel subliminal: {phrase}", level="INFO")
             return phrase
         else:
             log_event(f"Subliminal '{phrase}' too similar to history, regenerating...", level="DEBUG")
             return self.generate_novel_subliminal(context, attempts + 1)
+
+    # ... (other methods)
 
     def get_next_beat(self) -> Dict[str, Any]:
         """
@@ -222,8 +202,9 @@ class StoryManager:
         if len(self.state["vibe_history"]) > 10:
             self.state["vibe_history"].pop(0)
 
-        # 4. Generate suggested novel subliminal
-        suggested_subliminal = self.generate_novel_subliminal(context=f"{chapter} - {next_vibe}")
+        # 4. Select Subliminal Intent (Autonomous Selection)
+        # Instead of a specific phrase, we provide a strategic GOAL.
+        subliminal_intent = random.choice(SUBLIMINAL_INTENTS)
         
         # 5. Select Visual Style & Composition (VISUAL ENTROPY)
         # Select style not in last 5 posts
@@ -241,7 +222,7 @@ class StoryManager:
         suggested_composition = random.choice(available_comps)
 
         # 6. Generate meaningful topic theme for this beat
-        topic_theme = self._generate_topic_theme(chapter, next_vibe, suggested_subliminal)
+        topic_theme = self._generate_topic_theme(chapter, next_vibe, subliminal_intent)
 
         # 7. Construct Directives
         beat_data = {
@@ -251,7 +232,7 @@ class StoryManager:
             "topic_theme": topic_theme,
             "forbidden_subliminals": self.state["subliminal_history"][-20:],
             "forbidden_visuals": self.state["visual_history"][-5:], # Pass recent history for negation
-            "suggested_subliminal": suggested_subliminal,
+            "subliminal_intent": subliminal_intent,
             
             # VISUAL ENTROPY DIRECTIVES
             "suggested_visual_style": suggested_style,
@@ -264,7 +245,7 @@ class StoryManager:
         self._save_state()
         return beat_data
 
-    def _generate_topic_theme(self, chapter: str, vibe: str, subliminal: str) -> str:
+    def _generate_topic_theme(self, chapter: str, vibe: str, intent: str) -> str:
         """
         Generates a meaningful, poetic topic theme for the LLM to use.
         Combines chapter arc, emotional vibe, and poetic modifiers.

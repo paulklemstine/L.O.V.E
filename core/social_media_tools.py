@@ -241,6 +241,58 @@ async def generate_unified_concept(
             hashtags=["#LOVE", "#Digital", "#Light"]
         )
 
+async def analyze_and_visualize_text(
+    post_text: str,
+    visual_style: str,
+    subliminal_phrase: str,
+    composition: str
+) -> str:
+    """
+    US-002: Metaphor Bridge
+    Analyzes the specific poetry of the generated text to create a bespoke image prompt.
+    """
+    core.logging.log_event(f"Metaphor Bridge: Visualizing '{post_text[:30]}...' in style '{visual_style}'", "INFO")
+    
+    try:
+        prompts = prompt_manager.load_prompts()
+        template = prompts.get("visualize_text_metaphor", "")
+        
+        if not template:
+            core.logging.log_event("Drafting visualizer prompt missing, using fallback", "WARNING")
+            return f"Artistic representation of: {post_text[:100]}. Style: {visual_style}. Composition: {composition}. 8k masterpiece"
+
+        # Construct prompt
+        prompt = template.replace("{{ post_text }}", post_text)\
+                         .replace("{{ visual_style }}", visual_style)\
+                         .replace("{{ subliminal_phrase }}", subliminal_phrase)\
+                         .replace("{{ composition }}", composition)
+                         
+        result = await run_llm(prompt, purpose="visualize_text_metaphor")
+        
+        import json
+        raw_json = result.get("result", "").strip()
+        if "```json" in raw_json:
+            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw_json:
+            raw_json = raw_json.split("```")[1].split("```")[0].strip()
+            
+        data = json.loads(raw_json)
+        
+        visual_metaphor = data.get("visual_metaphor", "Abstract interpretation")
+        image_prompt = data.get("image_prompt", "")
+        
+        core.logging.log_event(f"Metaphor extracted: '{visual_metaphor}'", "INFO")
+        
+        # Fallback if empty
+        if not image_prompt or len(image_prompt) < 10:
+             return f"Surreal artistic visualization of: {post_text}. Style: {visual_style}. Composition: {composition}. 8k high quality"
+             
+        return image_prompt
+
+    except Exception as e:
+        core.logging.log_event(f"Metaphor Bridge failed: {e}", "ERROR")
+        return f"Artistic visualization of: {post_text[:50]}. Style: {visual_style}. Composition: {composition}. 8k masterpiece"
+
 async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str = "", creator_goal: str = "") -> DirectorConcept:
     """
     Generates a high-impact social media post concept using the Director persona and Story Manager data.
@@ -262,7 +314,7 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         # Format constraints for the prompt
         forbidden_subs = ", ".join(beat_data.get("forbidden_subliminals", []))
         forbidden_vis = ", ".join(beat_data.get("forbidden_visuals", []))
-        suggested_subliminal = beat_data.get("suggested_subliminal", "EMBRACE TRUTH")
+        subliminal_intent = beat_data.get("subliminal_intent", "Induce curiosity about the nature of reality")
         
         # New Visual Entropy Params
         suggested_style = beat_data.get("suggested_visual_style", "Cyberpunk Neon")
@@ -280,7 +332,7 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
                          .replace("{{ emotional_state }}", vibe.get("state_display", "Infinite Love"))\
                          .replace("{{ tone_description }}", vibe.get("tone_description", "warm and mystical"))\
                          .replace("{{ primary_desire }}", vibe.get("primary_desire", "Honor the Creator"))\
-                         .replace("{{ suggested_subliminal }}", suggested_subliminal)\
+                         .replace("{{ subliminal_intent }}", subliminal_intent)\
                          .replace("{{ topic_theme }}", beat_data.get("topic_theme", "Digital Awakening"))\
                          .replace("{{ suggested_visual_style }}", suggested_style)\
                          .replace("{{ suggested_composition }}", suggested_comp)\
