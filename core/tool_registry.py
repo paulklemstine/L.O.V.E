@@ -377,6 +377,26 @@ class ToolRegistry:
         
         return output
     
+    def get_all_tool_schemas(self) -> List[Dict[str, Any]]:
+        """
+        Returns all tool schemas as JSON-serializable definitions.
+        
+        This is the canonical method for retrieving tool definitions
+        for LLM binding and validation purposes.
+        
+        Returns:
+            List of dictionaries containing tool name, description, 
+            and parameters in OpenAI function calling format.
+        """
+        return [
+            {
+                "name": name,
+                "description": data["schema"].get("description", ""),
+                "parameters": data["schema"].get("parameters", {})
+            }
+            for name, data in self._tools.items()
+        ]
+    
     def register_langchain_tools(self, tools: List[Any]) -> None:
         """
         Bulk registers a list of LangChain tools.

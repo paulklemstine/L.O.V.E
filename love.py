@@ -918,7 +918,8 @@ from ui_utils import rainbow_text
 from core.proactive_agent import ProactiveIntelligenceAgent
 from core.autonomous_reasoning_agent import AutonomousReasoningAgent
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
-from core.tools_legacy import ToolRegistry
+# Story 1.4: Migrated from tools_legacy to legacy_compat
+from core.legacy_compat import ToolRegistry
 from core.tools import code_modifier
 from core import talent_utils
 from core.talent_utils import (
@@ -3197,7 +3198,8 @@ async def initialize_gpu_services():
     
 
     # Initialize registries
-    from core.tools_legacy import ToolRegistry
+    # Story 1.4: Migrated ToolRegistry to legacy_compat
+    from core.legacy_compat import ToolRegistry
     from core.prompt_registry import PromptRegistry
 
     # Ensure prompts are loaded early
@@ -3246,6 +3248,7 @@ async def initialize_gpu_services():
     )
     
     # Register evolve tool
+    # Note: These tools remain in tools_legacy until full migration
     from core.tools_legacy import execute, read_file, write_file, decompose_and_solve_subgoal
     from core.tools_legacy import talent_scout
     

@@ -5,14 +5,15 @@ from typing import List, Dict, Any, Tuple
 
 from display import create_reasoning_panel, get_terminal_width
 from core.llm_api import execute_reasoning_task
-import core.tools_legacy
+# Story 1.4: Migrated from tools_legacy to legacy_compat
+from core.legacy_compat import ToolRegistry
 
 class GeminiReActEngine:
     """Manages the state of a Thought-Action-Observation loop."""
 
-    def __init__(self, tool_registry: 'core.tools_legacy.ToolRegistry', ui_panel_queue=None, memory_manager=None, caller="Unknown", deep_agent_instance=None):
+    def __init__(self, tool_registry: ToolRegistry, ui_panel_queue=None, memory_manager=None, caller="Unknown", deep_agent_instance=None):
         self.tool_registry = tool_registry
-        self.session_tool_registry = core.tools_legacy.ToolRegistry()
+        self.session_tool_registry = ToolRegistry()
         self.history: List[Tuple[str, str, str]] = []
         self.memory_manager = memory_manager
         self.caller = caller

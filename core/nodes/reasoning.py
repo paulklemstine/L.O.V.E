@@ -41,18 +41,25 @@ When you determine a tool is needed:
 
 
 def _format_tools_for_prompt(tool_schemas: List[Dict[str, Any]]) -> str:
-    """Formats tool schemas into a readable string for prompt injection."""
+    """
+    Formats tool schemas into OpenAI/Gemini function calling format for prompt injection.
+    
+    This format includes both human-readable descriptions and JSON schema,
+    ensuring compatibility with various LLM function calling standards.
+    """
     if not tool_schemas:
         return "No tools are currently available."
     
     output = "## Available Tools\n\n"
+    output += "To use a tool, respond with a JSON block or use the tool_use XML format.\n\n"
+    
     for schema in tool_schemas:
         name = schema.get("name", "unknown")
         description = schema.get("description", "No description available.")
         params = schema.get("parameters", {})
         
         output += f"### {name}\n"
-        output += f"{description}\n"
+        output += f"**Description:** {description}\n"
         
         if params.get("properties"):
             output += "**Parameters:**\n"
@@ -62,6 +69,13 @@ def _format_tools_for_prompt(tool_schemas: List[Dict[str, Any]]) -> str:
                 required = param_name in params.get("required", [])
                 req_marker = " (required)" if required else " (optional)"
                 output += f"- `{param_name}` ({param_type}){req_marker}: {param_desc}\n"
+            
+            # Also include JSON schema for function calling
+            output += "\n**JSON Schema:**\n```json\n"
+            output += json.dumps(params, indent=2)
+            output += "\n```\n"
+        else:
+            output += "**Parameters:** None\n"
         output += "\n"
     
     return output

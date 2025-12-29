@@ -1,5 +1,6 @@
-from typing import Dict, List
+from typing import Dict, List, Optional, Any
 import asyncio
+import json
 
 from core.agents.memory_folding_agent import MemoryFoldingAgent
 from core.llm_api import execute_reasoning_task
@@ -10,11 +11,62 @@ class UnifiedReasoningAgent:
     """
     An agent designed for open-ended reasoning, equipped with a brain-inspired memory schema.
     It manages its own episodic, working, and tool memory in a unified reasoning process.
+    
+    Supports dynamic tool context injection via the tools and tool_registry parameters.
     """
-    def __init__(self, memory_manager: MemoryManager):
+    def __init__(
+        self, 
+        memory_manager: MemoryManager,
+        tools: Optional[List[Any]] = None,
+        tool_registry: Optional['ToolRegistry'] = None
+    ):
         self.memory_manager = memory_manager
         self.internal_history = []
         self.history_threshold = 5
+        self.tools = tools or []
+        self.tool_registry = tool_registry
+    
+    def _build_available_tools_section(self) -> str:
+        """
+        Builds the ## Available Tools section for system prompts.
+        
+        Uses OpenAI/Gemini function calling schema format for tool definitions.
+        Prefers tool_registry schemas if available, falls back to tools list.
+        
+        Returns:
+            Formatted string with tool definitions, or empty string if no tools.
+        """
+        if not self.tool_registry and not self.tools:
+            return ""
+        
+        output = "\n## Available Tools\n\n"
+        output += "You have access to the following tools. To use a tool, respond with a JSON block containing 'tool' and 'arguments' keys.\n\n"
+        
+        # Prefer registry schemas if available
+        if self.tool_registry:
+            try:
+                schemas = self.tool_registry.get_all_tool_schemas()
+                for schema in schemas:
+                    output += f"### {schema['name']}\n"
+                    output += f"**Description:** {schema.get('description', 'No description')}\n"
+                    params = schema.get('parameters', {})
+                    if params.get('properties'):
+                        output += "**Parameters (JSON Schema):**\n```json\n"
+                        output += json.dumps(params, indent=2)
+                        output += "\n```\n"
+                    else:
+                        output += "**Parameters:** None\n"
+                    output += "\n"
+            except Exception as e:
+                output += f"(Error loading tool schemas: {e})\n"
+        elif self.tools:
+            for tool in self.tools:
+                tool_name = getattr(tool, 'name', str(tool))
+                tool_desc = getattr(tool, 'description', 'No description')
+                output += f"### {tool_name}\n"
+                output += f"**Description:** {tool_desc}\n\n"
+        
+        return output
 
     async def execute_task(self, task_details: Dict) -> str:
         """
@@ -42,12 +94,15 @@ class UnifiedReasoningAgent:
             # For this integration, let's incorporate it into our context.
             
             history_str = "\n".join(self.internal_history)
-            prompt = f"""
-You are a Unified Reasoning Agent. Your goal is to solve complex, open-ended problems.
+            
+            # Build available tools section for dynamic context injection
+            tools_section = self._build_available_tools_section()
+            
+            prompt = f"""You are a Unified Reasoning Agent. Your goal is to solve complex, open-ended problems.
 
 **Community Wisdom (Hub Prompt):**
 {remote_prompt}
-
+{tools_section}
 **Your Goal:**
 {goal}
 
@@ -89,3 +144,4 @@ Your response should be ONLY the thought process and the command to execute.
         final_answer = self.internal_history[-1] if self.internal_history else "No result was generated."
         print(f"--- UnifiedReasoningAgent finished task. Final Answer: {final_answer} ---")
         return final_answer
+

@@ -11,7 +11,15 @@ from core.agents.web_automation_agent import WebAutomationAgent
 from core.agents.memory_folding_agent import MemoryFoldingAgent
 from core.agents.unified_reasoning_agent import UnifiedReasoningAgent
 from core.llm_api import run_llm # Using a direct LLM call for planning
-from core.tools_legacy import ToolRegistry, SecureExecutor, talent_scout
+# Migrated from tools_legacy to new modules (Story 1.4)
+from core.legacy_compat import ToolRegistry
+from core.secure_executor import SecureExecutor
+from core.tools import read_file, write_file  # Import commonly needed tools
+# Temporary: talent_scout still in tools_legacy until full migration
+try:
+    from core.tools_legacy import talent_scout
+except ImportError:
+    talent_scout = None
 from core.image_api import generate_image
 
 # Keep the old function for fallback compatibility as requested
@@ -46,19 +54,6 @@ class Orchestrator:
         self.secure_executor = SecureExecutor()
         self.goal_counter = 0
         self._register_tools()
-
-        # Register tools
-        self.tool_registry.register_tool("talent_scout", talent_scout, {
-            "description": "Scouts for talent on specified platforms based on keywords.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "keywords": {"type": "string", "description": "Comma-separated keywords to search for"},
-                    "platforms": {"type": "string", "description": "Comma-separated platforms to search on (e.g., 'bluesky,instagram,tiktok')"}
-                },
-                "required": ["keywords"]
-            }
-        })
         print("Supervisor Orchestrator is ready.")
 
     def _register_tools(self):

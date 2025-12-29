@@ -165,3 +165,61 @@ class Sandbox:
             except Exception as e:
                 logging.error(f"Failed to destroy sandbox: {e}")
                 self.console.print(f"[bold red]Error destroying sandbox: {e}[/bold red]")
+    
+    def execute_tool(self, tool_name: str, tool_func, arguments: dict) -> tuple:
+        """
+        Executes a tool function securely within the sandbox context.
+        
+        This method provides a controlled environment for executing tools,
+        with proper logging and error handling. It supports both sync and
+        async tool functions.
+        
+        Args:
+            tool_name: Name of the tool being executed
+            tool_func: The callable tool function
+            arguments: Dictionary of arguments to pass to the tool
+        
+        Returns:
+            Tuple of (success: bool, output: str)
+        """
+        import asyncio
+        import traceback
+        
+        self.console.print(f"[cyan]Sandbox executing tool: {tool_name}[/cyan]")
+        logging.info(f"Sandbox executing tool '{tool_name}' with arguments: {arguments}")
+        
+        try:
+            # Execute the tool
+            if asyncio.iscoroutinefunction(tool_func):
+                # Handle async tools
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(tool_func(**arguments))
+            elif hasattr(tool_func, "invoke"):
+                # LangChain tool with invoke method
+                result = tool_func.invoke(arguments)
+            else:
+                # Regular sync function
+                result = tool_func(**arguments)
+            
+            output = str(result)
+            self.console.print(f"[green]Tool '{tool_name}' completed successfully[/green]")
+            logging.info(f"Tool '{tool_name}' completed. Output length: {len(output)} chars")
+            return True, output
+        
+        except TypeError as e:
+            # Usually indicates wrong arguments
+            error_msg = f"Argument error for tool '{tool_name}': {e}. Check parameter names and types."
+            self.console.print(f"[red]{error_msg}[/red]")
+            logging.warning(error_msg)
+            return False, error_msg
+        
+        except Exception as e:
+            error_trace = traceback.format_exc()
+            error_msg = f"Tool '{tool_name}' execution failed: {e}\n{error_trace}"
+            self.console.print(f"[red]Tool '{tool_name}' failed: {e}[/red]")
+            logging.error(error_msg)
+            return False, error_msg
