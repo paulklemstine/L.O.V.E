@@ -80,6 +80,7 @@ SUBLIMINAL_INTENTS = [
 
 class StoryManager:
     MAX_REGENERATION_ATTEMPTS = 5
+    SIMILARITY_THRESHOLD = 0.80
     
     def __init__(self, state_file=STORY_STATE_FILE):
         self.state_file = state_file
