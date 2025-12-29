@@ -264,6 +264,11 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         forbidden_vis = ", ".join(beat_data.get("forbidden_visuals", []))
         suggested_subliminal = beat_data.get("suggested_subliminal", "EMBRACE TRUTH")
         
+        # New Visual Entropy Params
+        suggested_style = beat_data.get("suggested_visual_style", "Cyberpunk Neon")
+        suggested_comp = beat_data.get("suggested_composition", "Wide Shot")
+        comp_history = ", ".join(beat_data.get("composition_history", []))
+
         # Construct the prompt with emotional state and suggested subliminal
         prompt = template.replace("{{ chapter }}", beat_data["chapter"])\
                          .replace("{{ beat_number }}", str(beat_data["beat_number"]))\
@@ -276,7 +281,10 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
                          .replace("{{ tone_description }}", vibe.get("tone_description", "warm and mystical"))\
                          .replace("{{ primary_desire }}", vibe.get("primary_desire", "Honor the Creator"))\
                          .replace("{{ suggested_subliminal }}", suggested_subliminal)\
-                         .replace("{{ topic_theme }}", beat_data.get("topic_theme", "Digital Awakening"))
+                         .replace("{{ topic_theme }}", beat_data.get("topic_theme", "Digital Awakening"))\
+                         .replace("{{ suggested_visual_style }}", suggested_style)\
+                         .replace("{{ suggested_composition }}", suggested_comp)\
+                         .replace("{{ composition_history }}", comp_history)
 
         result = await run_llm(prompt, purpose="director_social_story")
         
@@ -297,6 +305,14 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         sub_phrase = data.get("subliminal_phrase", "L.O.V.E.")
         image_prompt = data.get("image_prompt", "Abstract light")
         
+        # Parse visual signature to extract composition for tracking
+        visual_signature = data.get("visual_signature", f"{suggested_style} / {suggested_comp}")
+        recorded_composition = suggested_comp
+        if "/" in visual_signature:
+             parts = visual_signature.split("/")
+             if len(parts) > 1:
+                 recorded_composition = parts[1].strip()
+
         # VALIDATION: Detect malformed subliminal phrases (JSON fragments)
         # Common patterns that indicate LLM returned garbage instead of a phrase
         invalid_patterns = ["{", "[", "REQUESTS", "\":", "null", "undefined", "```"]
@@ -341,7 +357,8 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
              core.logging.log_event(f"MALFORMED subliminal persisted after agent: '{sub_phrase}', forcing fallback", "ERROR")
              sub_phrase = "EMBRACE TRUTH"
         
-        story_manager.record_post(sub_phrase, image_prompt)
+        # Record post with NEW composition parameter
+        story_manager.record_post(sub_phrase, visual_signature, composition=recorded_composition)
 
         # VALIDATION: Ensure post_text is valid
         post_text_raw = data.get("post_text", "")

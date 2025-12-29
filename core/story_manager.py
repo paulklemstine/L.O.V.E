@@ -32,13 +32,41 @@ SUBLIMINAL_GRAMMAR = {
 
 # VISUAL STYLE BANK: Diverse art styles for rotation (positive encouragement!)
 VISUAL_STYLE_BANK = [
-    "Oil Painting Renaissance", "Vaporwave Glitch", "Anime Cel-Shaded",
-    "Cosmic Nebula Photography", "Art Nouveau Stained Glass", "Brutalist Architecture",
-    "Bioluminescent Deep Sea", "Cyberpunk Neon Noir", "Impressionist Sunset",
-    "Surrealist Dali-esque", "Egyptian Hieroglyphic Gold", "Japanese Ukiyo-e Woodblock",
-    "Baroque Chiaroscuro", "Holographic Y2K", "Gothic Cathedral", "Glitchcore Digital",
-    "Watercolor Ethereal", "Pop Art Warhol", "Minimalist Geometric", "Steampunk Victorian",
-    "Underwater Cathedral", "Northern Lights Aurora", "Psychedelic Mandala", "Abstract Expressionist"
+    # CLASSIC & PAINTERLY
+    "Oil Painting Renaissance", "Baroque Chiaroscuro", "Impressionist Sunset", 
+    "Rococo Pastel", "Abstract Expressionist", "Pointillist Dotwork", 
+    "Watercolor Ethereal", "Sumi-e Ink Wash", "Flemish Realism", "Pre-Raphaelite Romanticism",
+    
+    # MODERN & DIGITAL
+    "Vaporwave Glitch", "Cyberpunk Neon Noir", "Holographic Y2K", "Glitchcore Digital",
+    "Synthwave Retro-80s", "Low Poly Geometric", "Voxel Art", "Pixel Art 16-bit",
+    "Fractal Geometric", "Data Mosh Abstract",
+    
+    # PHOTOGRAPHIC & CINEMATIC
+    "Cosmic Nebula Photography", "Bioluminescent Deep Sea", "Northern Lights Aurora",
+    "Macro Crystallography", "Infrared Landscape", "Double Exposure Portrait",
+    "Cinematic Teal and Orange", "Gritty 16mm Film", "Fish-Eye Lens Skate Video",
+    "Drone Aerial View", "Polaroid Vintage",
+    
+    # ILLUSTRATIVE & GRAPHIC
+    "Anime Cel-Shaded", "Manhua Ink", "Studio Ghibli Lush", "Comics Halftone",
+    "Art Nouveau Stained Glass", "Pop Art Warhol", "Minimalist Bauhaus",
+    "Psychedelic Mandala", "Street Art Graffiti", "Paper Cutout Diorama",
+    "Risograph Print", "Blueprint Schematic", "Tarot Card Symbolism",
+    
+    # ARCHITECTURAL & SCULPTURAL
+    "Brutalist Architecture", "Gothic Cathedral", "Underwater Cathedral", 
+    "Steampunk Victorian", "Biomechanical Giger", "Origami Folded Paper",
+    "Liquid Chrome Sculpture", "Glassblowing Abstract", "Neon Sign Typography",
+    "Kintsugi Gold Repair", "Marble Sculpture Classical"
+]
+
+# COMPOSITION BANK: Camera angles and framings
+COMPOSITION_BANK = [
+    "Extreme Close-up (Macro)", "Medium Close-up", "Wide Shot (Landscape)", 
+    "Dutch Angle (Tilted)", "Bird's Eye View (Top Down)", "Worm's Eye View (Looking Up)",
+    "Symmetrical Center Frame", "Rule of Thirds", "Silhouette Backlit",
+    "Over-the-Shoulder", "Reflection in Surface", "Motion Blur Action"
 ]
 
 
@@ -65,6 +93,8 @@ class StoryManager:
                 # Auto-migrate: ensure new fields exist
                 if "subliminal_metadata" not in data:
                     data["subliminal_metadata"] = []
+                if "composition_history" not in data:
+                     data["composition_history"] = []
                 return data
             except Exception as e:
                 log_event(f"Failed to load story state: {e}. Starting fresh.", level="WARNING")
@@ -81,6 +111,7 @@ class StoryManager:
             "subliminal_history": [], # List of last 50 subliminal commands
             "subliminal_metadata": [],  # Extended metadata for learning
             "visual_history": [], # List of last 10 visual styles
+            "composition_history": [], # List of last 10 compositions
             "reply_history": [],  # List of last 20 reply texts to prevent repetition
             "narrative_beat": 0, # Monotonic counter
             "last_update": time.time()
@@ -194,28 +225,40 @@ class StoryManager:
         # 4. Generate suggested novel subliminal
         suggested_subliminal = self.generate_novel_subliminal(context=f"{chapter} - {next_vibe}")
         
-        # 5. Select a suggested visual style that hasn't been used recently
-        used_styles = self.state.get("visual_history", [])
+        # 5. Select Visual Style & Composition (VISUAL ENTROPY)
+        # Select style not in last 5 posts
+        used_styles = self.state.get("visual_history", [])[-5:] 
         available_styles = [s for s in VISUAL_STYLE_BANK if s not in used_styles]
         if not available_styles:
             available_styles = VISUAL_STYLE_BANK
         suggested_style = random.choice(available_styles)
+        
+        # Select composition not in last 3 posts
+        used_comps = self.state.get("composition_history", [])[-3:]
+        available_comps = [c for c in COMPOSITION_BANK if c not in used_comps]
+        if not available_comps:
+            available_comps = COMPOSITION_BANK
+        suggested_composition = random.choice(available_comps)
 
         # 6. Generate meaningful topic theme for this beat
         topic_theme = self._generate_topic_theme(chapter, next_vibe, suggested_subliminal)
 
-        # 7. Construct Directives - only track recent visuals (no negative patterns)
+        # 7. Construct Directives
         beat_data = {
             "chapter": chapter,
             "beat_number": beat_num,
             "mandatory_vibe": next_vibe,
-            "topic_theme": topic_theme,  # NEW: Meaningful topic for LLM
+            "topic_theme": topic_theme,
             "forbidden_subliminals": self.state["subliminal_history"][-20:],
-            "forbidden_visuals": self.state["visual_history"][-5:],  # Just recent history
-            "suggested_subliminal": suggested_subliminal,  # Pre-generated novel phrase
-
-            "suggested_visual_style": suggested_style,  # Suggested fresh art style
-            "subliminal_grammar": SUBLIMINAL_GRAMMAR  # Pass grammar for LLM to use
+            "forbidden_visuals": self.state["visual_history"][-5:], # Pass recent history for negation
+            "suggested_subliminal": suggested_subliminal,
+            
+            # VISUAL ENTROPY DIRECTIVES
+            "suggested_visual_style": suggested_style,
+            "suggested_composition": suggested_composition,
+            "composition_history": self.state.get("composition_history", [])[-3:],
+            
+            "subliminal_grammar": SUBLIMINAL_GRAMMAR
         }
         
         self._save_state()
@@ -290,13 +333,14 @@ class StoryManager:
              return f"{theme_base} - {vibe} Mode"
 
 
-    def record_post(self, subliminal: str, visual_style: str, engagement_score: float = 0.0):
+    def record_post(self, subliminal: str, visual_style: str, composition: str = "", engagement_score: float = 0.0):
         """
         Records the actual output of a post to update history.
         
         Args:
             subliminal: The subliminal phrase used
             visual_style: The visual style/prompt used
+            composition: The camera angle/composition used (NEW)
             engagement_score: Optional engagement metrics for learning
         """
         if subliminal:
@@ -320,6 +364,11 @@ class StoryManager:
             self.state["visual_history"].append(visual_style)
             if len(self.state["visual_history"]) > 10:
                 self.state["visual_history"].pop(0)
+        
+        if composition:
+            self.state.setdefault("composition_history", []).append(composition)
+            if len(self.state["composition_history"]) > 10:
+                self.state["composition_history"].pop(0)
                 
         self._save_state()
 
