@@ -1,6 +1,3 @@
-## 2024-05-24 - Parallel Requests
-**Learning:** Sequential network requests are a major bottleneck. Parallelizing them using `concurrent.futures.ThreadPoolExecutor` provides massive speedups (1.5s -> 0.5s for 3 concurrent mock requests).
-**Action:** Always look for opportunities to parallelize I/O bound operations, especially when fetching data from multiple sources.
-## 2024-05-24 - Parallel Requests
-**Learning:** Sequential network requests are a major bottleneck. Parallelizing them using `concurrent.futures.ThreadPoolExecutor` provides massive speedups (1.5s -> 0.5s for 3 concurrent mock requests).
-**Action:** Always look for opportunities to parallelize I/O bound operations, especially when fetching data from multiple sources.
+## 2024-05-23 - Logging Performance in High-Frequency Loops
+**Learning:** In the `simple_ui_renderer` loop of `love.py`, calling `log_file.flush()` after every single write created a significant I/O bottleneck. This forces the OS to commit data to disk immediately, bypassing efficient buffering mechanisms.
+**Action:** When implementing logging or file writing in high-frequency loops (like UI renderers or data processors), rely on standard OS/Python buffering unless immediate durability is strictly required for debugging crashes. If real-time logs are needed, consider a dedicated logging thread with batched writes or a configurable flush interval.
