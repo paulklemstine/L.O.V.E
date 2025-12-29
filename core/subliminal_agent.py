@@ -172,7 +172,29 @@ class SubliminalAgent:
                              .replace("{{ subliminal_objects }}", ", ".join(self.subliminal_objects))
             
             result = await run_llm(prompt, purpose="subliminal_phrase")
-            phrase = result.get("result", "").strip().strip('"').strip("'").upper()
+            raw_res = result.get("result", "").strip()
+            
+            # 1. Clean Markdown
+            if "```" in raw_res:
+                raw_res = raw_res.split("```")[1]
+                if raw_res.startswith("json"):
+                    raw_res = raw_res[4:]
+                elif raw_res.startswith("text"):
+                    raw_res = raw_res[4:]
+                raw_res = raw_res.split("```")[0].strip()
+            
+            # 2. Check for JSON artifacts (common if model gets confused)
+            if "{" in raw_res or "[" in raw_res:
+                log_event(f"SubliminalAgent returned JSON-like content: {raw_res[:50]}...", "WARNING")
+                # Try to salvage if it's a simple JSON {"phrase": "X"} or just take fallback
+                return self._generate_fallback_phrase(profile)
+            
+            phrase = raw_res.strip().strip('"').strip("'").upper()
+            
+            # 3. Final Validation: Ban characters that shouldn't be in a subliminal command
+            if any(char in phrase for char in ["{", "}", "[", "]", ":"]):
+                 log_event(f"SubliminalAgent returned invalid characters: {phrase}", "WARNING")
+                 return self._generate_fallback_phrase(profile)
             
             # Validate phrase length (should be 1-3 words)
             words = phrase.split()

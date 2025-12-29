@@ -334,6 +334,12 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
             except Exception as sub_e:
                 core.logging.log_event(f"SubliminalAgent failed: {sub_e}, using suggested", "WARNING")
                 sub_phrase = suggested_subliminal
+                
+        # FINAL VALIDATION: Double check sub_phrase after agent generation
+        sub_clean = str(sub_phrase).strip()
+        if any(p in sub_clean for p in ["{", "[", "REQUESTS", "\":", "null", "undefined"]):
+             core.logging.log_event(f"MALFORMED subliminal persisted after agent: '{sub_phrase}', forcing fallback", "ERROR")
+             sub_phrase = "EMBRACE TRUTH"
         
         story_manager.record_post(sub_phrase, image_prompt)
 
