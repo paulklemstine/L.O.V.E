@@ -3037,9 +3037,10 @@ def simple_ui_renderer():
                     # Strip ANSI codes and write the plain text to the log file
                     plain_output = _strip_ansi_codes(output_str)
 
-                    # Write to the open file handle and flush
+                    # Write to the open file handle (buffered)
                     log_file.write(plain_output)
-                    log_file.flush()
+                    # OPTIMIZATION: Removed flush() for performance. OS/Python will handle buffering.
+                    # log_file.flush()
 
                 except queue.Empty:
                     continue
