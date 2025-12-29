@@ -459,7 +459,6 @@ def _auto_configure_hardware():
             capture_output=True, text=True, check=True
         )
         vram_mb = int(result.stdout.strip())
-        vram_mb = int(result.stdout.strip())
         shared_state.love_state['hardware']['gpu_detected'] = True
         shared_state.love_state['hardware']['gpu_vram_mb'] = vram_mb
         _temp_log_event(f"NVIDIA GPU detected with {vram_mb} MB VRAM.", "CRITICAL")
