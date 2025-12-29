@@ -289,3 +289,6 @@ async def tool_execution_node(state: DeepAgentState) -> Dict[str, Any]:
         "loop_count": new_loop_count
     }
 
+
+# Export TOOL_MAP for backward compatibility
+TOOL_MAP = FALLBACK_TOOL_MAP
