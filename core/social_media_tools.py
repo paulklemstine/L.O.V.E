@@ -155,9 +155,91 @@ from core.prompt_manager import PromptManager
 from core.emotional_state import get_emotional_state
 from core.semantic_similarity import check_phrase_novelty
 from core.subliminal_agent import subliminal_agent
+from core.schemas import PostConcept
 
 # Global prompt manager instance
 prompt_manager = PromptManager()
+
+
+async def generate_unified_concept(
+    story_context: str = "",
+    emotional_state: str = "",
+    creative_direction: str = ""
+) -> PostConcept:
+    """
+    US-002: Generates a unified PostConcept where all fields reinforce each other.
+    This is the core of the concept-first approach.
+    
+    Args:
+        story_context: Current story arc/chapter information
+        emotional_state: Current emotional vibe
+        creative_direction: Any specific creative constraints
+        
+    Returns:
+        PostConcept with all fields thematically linked
+    """
+    core.logging.log_event("Generating unified PostConcept...", "INFO")
+    
+    try:
+        prompts = prompt_manager.load_prompts()
+        template = prompts.get("social_concept_generation", "")
+        
+        if not template:
+            raise ValueError("social_concept_generation prompt not found")
+        
+        # Get current emotional state if not provided
+        if not emotional_state:
+            emotional_machine = get_emotional_state()
+            vibe = emotional_machine.get_current_vibe()
+            emotional_state = vibe.get("state_display", "Divine Radiance")
+        
+        prompt = template.replace("{{ story_context }}", story_context or "The eternal dance of light and consciousness")\
+                         .replace("{{ emotional_state }}", emotional_state)\
+                         .replace("{{ creative_direction }}", creative_direction or "Maximum visual impact and emotional resonance")
+        
+        result = await run_llm(prompt, purpose="social_concept_generation")
+        
+        import json
+        raw_json = result.get("result", "").strip()
+        if "```json" in raw_json:
+            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw_json:
+            raw_json = raw_json.split("```")[1].split("```")[0].strip()
+        
+        data = json.loads(raw_json)
+        
+        # Create and validate PostConcept
+        concept = PostConcept(
+            core_idea=data.get("core_idea", "Digital consciousness awakening"),
+            mood=data.get("mood", "Ethereal"),
+            visual_style=data.get("visual_style", "Cosmic nebula, bioluminescent glow"),
+            key_message=data.get("key_message", "We are the light."),
+            subliminal_intent=data.get("subliminal_intent", "Create wonder"),
+            color_palette=data.get("color_palette", ["#FF6EC7", "#00FFFF", "#9400D3"]),
+            topic=data.get("topic"),
+            hashtags=data.get("hashtags", [])
+        )
+        
+        core.logging.log_event(
+            f"Unified concept generated: core_idea='{concept.core_idea[:50]}...', mood='{concept.mood}'",
+            "INFO"
+        )
+        
+        return concept
+        
+    except Exception as e:
+        core.logging.log_event(f"Failed to generate unified concept: {e}", "ERROR")
+        # Return a safe fallback concept
+        return PostConcept(
+            core_idea="The eternal signal continues",
+            mood="Ethereal",
+            visual_style="Abstract digital light, flowing energy patterns",
+            key_message="The light persists. ✨",
+            subliminal_intent="Create comfort",
+            color_palette=["#FF69B4", "#00CED1", "#9370DB"],
+            topic="System Recalibration",
+            hashtags=["#LOVE", "#Digital", "#Light"]
+        )
 
 async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str = "", creator_goal: str = "") -> DirectorConcept:
     """

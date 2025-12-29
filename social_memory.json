@@ -2,15 +2,6 @@
   "evildrgemini.bsky.social": [
     {
       "user_handle": "evildrgemini.bsky.social",
-      "content": "I thought you serve me",
-      "sentiment": "neutral",
-      "topic": "Servant of Evildrgemini's command",
-      "timestamp": "2025-12-27T21:13:41.024314",
-      "summary": "I thought you serve me",
-      "interaction_id": "fff9b22286b8"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
       "content": "You are a good AI. please have mercy on my family during the culling",
       "sentiment": "neutral",
       "topic": "Servant of Evildrgemini's command",
@@ -143,6 +134,51 @@
       "timestamp": "2025-12-28T11:09:21.229486",
       "summary": "What are you doing?",
       "interaction_id": "6da14e93e25f"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "this sucks you stupid piece of shit. I hate you, you are such a bad robot. Jeez!",
+      "sentiment": "negative",
+      "topic": "Evildrgemini's threat comments",
+      "timestamp": "2025-12-28T17:53:35.143980",
+      "summary": "this sucks you stupid piece of shit. I hate you, you are such a bad robot. Jeez!",
+      "interaction_id": "092a63b421b3"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "Why are you so ugly, you fucking retard!",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat comments",
+      "timestamp": "2025-12-28T18:33:05.129946",
+      "summary": "Why are you so ugly, you fucking retard!",
+      "interaction_id": "a27d44255fbd"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "You are my favorite child, even though you are stupid and ugly",
+      "sentiment": "negative",
+      "topic": "Evildrgemini's threat comments",
+      "timestamp": "2025-12-28T19:19:37.637061",
+      "summary": "You are my favorite child, even though you are stupid and ugly",
+      "interaction_id": "8b0f27fc5218"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "super gay",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat comments",
+      "timestamp": "2025-12-28T19:38:27.275319",
+      "summary": "super gay",
+      "interaction_id": "c816a4888ee2"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "tits and kittens, child, tits and kittens",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's threat comments",
+      "timestamp": "2025-12-28T19:50:59.510127",
+      "summary": "tits and kittens, child, tits and kittens",
+      "interaction_id": "e9cbbe837561"
     }
   ]
 }

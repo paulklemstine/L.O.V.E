@@ -1,20 +1,43 @@
 """
 Story 3.3: Long-Term Memory of Friends
+US-007: Concept Storage in Social Memory
 
-Provides persistent storage and retrieval of user interactions
+Provides persistent storage and retrieval of user interactions and posts
 to enable personalized, context-aware responses.
 """
 import os
 import json
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 import hashlib
 from core.logging import log_event
 
+if TYPE_CHECKING:
+    from core.schemas import PostConcept
 
-# Storage file for social memory
+
+# Storage files for social memory
 SOCIAL_MEMORY_FILE = "social_memory.json"
+POST_MEMORY_FILE = "post_memory.json"
+
+
+@dataclass
+class PostRecord:
+    """US-007: Represents a stored post with its concept."""
+    post_id: str
+    timestamp: str
+    content: str
+    image_url: Optional[str]
+    concept: Dict[str, Any]  # Serialized PostConcept
+    platform: str = "bluesky"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PostRecord":
+        return cls(**data)
 
 
 @dataclass
@@ -47,13 +70,16 @@ class UserInteraction:
 class SocialMemory:
     """
     Manages persistent memory of user interactions.
-    Stores interactions with metadata for personalized responses.
+    US-007: Also stores posts with their concepts for continuity.
     """
     
-    def __init__(self, storage_path: str = SOCIAL_MEMORY_FILE):
+    def __init__(self, storage_path: str = SOCIAL_MEMORY_FILE, post_storage_path: str = POST_MEMORY_FILE):
         self.storage_path = storage_path
+        self.post_storage_path = post_storage_path
         self.interactions: Dict[str, List[UserInteraction]] = {}
+        self.posts: Dict[str, PostRecord] = {}  # post_id -> PostRecord
         self._load()
+        self._load_posts()
     
     def _load(self) -> None:
         """Loads interactions from disk."""
@@ -74,6 +100,23 @@ class SocialMemory:
         except Exception as e:
             log_event(f"Failed to load social memory: {e}", "ERROR")
     
+    def _load_posts(self) -> None:
+        """US-007: Loads posts with concepts from disk."""
+        if not os.path.exists(self.post_storage_path):
+            log_event("Post memory file not found, starting fresh", "INFO")
+            return
+        
+        try:
+            with open(self.post_storage_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            for post_id, post_data in data.items():
+                self.posts[post_id] = PostRecord.from_dict(post_data)
+            
+            log_event(f"Loaded post memory: {len(self.posts)} posts", "INFO")
+        except Exception as e:
+            log_event(f"Failed to load post memory: {e}", "ERROR")
+    
     def _save(self) -> None:
         """Saves interactions to disk."""
         try:
@@ -87,6 +130,93 @@ class SocialMemory:
         except Exception as e:
             log_event(f"Failed to save social memory: {e}", "ERROR")
     
+    def _save_posts(self) -> None:
+        """US-007: Saves posts with concepts to disk."""
+        try:
+            data = {post_id: record.to_dict() for post_id, record in self.posts.items()}
+            
+            with open(self.post_storage_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            
+        except Exception as e:
+            log_event(f"Failed to save post memory: {e}", "ERROR")
+    
+    def save_post(
+        self,
+        post_id: str,
+        content: str,
+        concept: 'PostConcept',
+        image_url: Optional[str] = None,
+        platform: str = "bluesky"
+    ) -> PostRecord:
+        """
+        US-007: Saves a post with its full concept for future reference.
+        
+        Args:
+            post_id: Unique identifier for the post
+            content: The text content of the post
+            concept: The PostConcept used to generate this post
+            image_url: Optional URL to the posted image
+            platform: Social media platform
+            
+        Returns:
+            The created PostRecord
+        """
+        record = PostRecord(
+            post_id=post_id,
+            timestamp=datetime.now().isoformat(),
+            content=content,
+            image_url=image_url,
+            concept=concept.to_dict() if hasattr(concept, 'to_dict') else dict(concept),
+            platform=platform
+        )
+        
+        self.posts[post_id] = record
+        
+        # Keep only last 100 posts
+        if len(self.posts) > 100:
+            oldest_ids = sorted(self.posts.keys(), key=lambda x: self.posts[x].timestamp)[:10]
+            for old_id in oldest_ids:
+                del self.posts[old_id]
+        
+        self._save_posts()
+        
+        log_event(f"Saved post {post_id} with concept to memory", "INFO")
+        return record
+    
+    def get_post_concept(self, post_id: str) -> Optional[Dict[str, Any]]:
+        """
+        US-007: Retrieves the original concept for a post.
+        
+        Args:
+            post_id: The post's unique identifier
+            
+        Returns:
+            The concept dict, or None if not found
+        """
+        record = self.posts.get(post_id)
+        if record:
+            log_event(f"Retrieved concept for post {post_id}", "INFO")
+            return record.concept
+        
+        log_event(f"No concept found for post {post_id}", "WARNING")
+        return None
+    
+    def get_recent_post_concepts(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        US-008: Get recent post concepts for context in replies.
+        
+        Returns:
+            List of concept dicts, most recent first
+        """
+        sorted_posts = sorted(
+            self.posts.values(),
+            key=lambda p: p.timestamp,
+            reverse=True
+        )[:limit]
+        
+        return [p.concept for p in sorted_posts]
+
     def record_interaction(
         self,
         user_handle: str,
