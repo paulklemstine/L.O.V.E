@@ -1,16 +1,146 @@
 """
 Story 2.3: The "Surgeon" Sandbox - safe_execute_python tool
+Story 3.1: The Surgeon's Sandbox - syntax check and dry run mode
 
 Provides isolated execution of Python code using Docker or subprocess fallback.
 Code is tested in sandbox before being committed to the main codebase.
 """
+import ast
 import os
 import sys
 import subprocess
 import tempfile
 import time
+import importlib.util
 from typing import Dict, Any, Optional
 from core.logging import log_event
+
+
+# --- Story 3.1: Syntax Check and Dry Run ---
+
+def check_syntax(code: str) -> Dict[str, Any]:
+    """
+    Gate 1: Run ast.parse() on code string before any execution.
+    
+    Story 3.1: If ast.parse() fails, return the error to the LLM immediately.
+    This prevents wasting execution cycles on syntactically invalid code.
+    
+    Args:
+        code: Python code string to check
+        
+    Returns:
+        {
+            "valid": bool,
+            "error": Optional[str],  # Error message
+            "line": Optional[int],   # Line number of error
+            "column": Optional[int], # Column offset of error
+            "text": Optional[str]    # The problematic line text
+        }
+    """
+    try:
+        ast.parse(code)
+        return {
+            "valid": True,
+            "error": None,
+            "line": None,
+            "column": None,
+            "text": None
+        }
+    except SyntaxError as e:
+        log_event(f"Syntax check failed at line {e.lineno}: {e.msg}", "WARNING")
+        return {
+            "valid": False,
+            "error": str(e.msg),
+            "line": e.lineno,
+            "column": e.offset,
+            "text": e.text.strip() if e.text else None
+        }
+
+
+def dry_run_import(code: str, module_name: str = "temp_module") -> Dict[str, Any]:
+    """
+    Gate 2: Saves code to temp file and attempts import to verify integrity.
+    
+    Story 3.1: "Dry Run" mode where code is saved to a temp file and imported
+    to verify integrity before committing to the main codebase.
+    
+    This catches issues that ast.parse() doesn't find, such as:
+    - Missing dependencies at import time
+    - Circular imports
+    - Invalid module-level expressions
+    
+    Args:
+        code: Python code string to test
+        module_name: Name for the temporary module
+        
+    Returns:
+        {
+            "success": bool,
+            "error": Optional[str],
+            "error_type": Optional[str],  # "ImportError", "AttributeError", etc.
+            "module_loaded": bool
+        }
+    """
+    result = {
+        "success": False,
+        "error": None,
+        "error_type": None,
+        "module_loaded": False
+    }
+    
+    # First pass syntax check
+    syntax_result = check_syntax(code)
+    if not syntax_result["valid"]:
+        result["error"] = f"Syntax error: {syntax_result['error']}"
+        result["error_type"] = "SyntaxError"
+        return result
+    
+    # Write to temp file
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".py",
+            prefix=f"{module_name}_",
+            delete=False,
+            encoding="utf-8"
+        ) as f:
+            f.write(code)
+            temp_path = f.name
+        
+        # Attempt to load the module using importlib
+        spec = importlib.util.spec_from_file_location(module_name, temp_path)
+        if spec is None or spec.loader is None:
+            result["error"] = "Failed to create module spec"
+            result["error_type"] = "ImportError"
+            return result
+        
+        module = importlib.util.module_from_spec(spec)
+        
+        # Actually execute the module to catch runtime import errors
+        try:
+            spec.loader.exec_module(module)
+            result["success"] = True
+            result["module_loaded"] = True
+            log_event(f"Dry run import successful for {module_name}", "INFO")
+        except Exception as e:
+            result["error"] = str(e)
+            result["error_type"] = type(e).__name__
+            log_event(f"Dry run import failed: {type(e).__name__}: {e}", "WARNING")
+            
+    except Exception as e:
+        result["error"] = str(e)
+        result["error_type"] = type(e).__name__
+        
+    finally:
+        # Cleanup temp file
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+    
+    return result
 
 
 # Check if Docker is available
@@ -31,16 +161,21 @@ def safe_execute_python(
     code: str,
     timeout: int = 30,
     use_docker: bool = True,
-    network_disabled: bool = True
+    network_disabled: bool = True,
+    skip_syntax_check: bool = False  # Story 3.1: Option to skip if already checked
 ) -> Dict[str, Any]:
     """
     Executes Python code in an isolated environment.
+    
+    Story 3.1 Enhancement: Now runs ast.parse() syntax check FIRST.
+    If syntax check fails, returns error immediately without execution.
     
     Args:
         code: Python code to execute
         timeout: Maximum execution time in seconds
         use_docker: Whether to try Docker first (falls back to subprocess)
         network_disabled: Whether to disable network access in Docker
+        skip_syntax_check: Skip syntax check if already performed
     
     Returns:
         {
@@ -49,7 +184,8 @@ def safe_execute_python(
             "stderr": str,
             "exit_code": int,
             "execution_time": float,
-            "sandbox_type": str  # "docker" or "subprocess"
+            "sandbox_type": str,  # "docker", "subprocess", or "syntax_check_failed"
+            "syntax_error": Optional[dict]  # Details if syntax check failed
         }
     """
     result = {
@@ -58,10 +194,29 @@ def safe_execute_python(
         "stderr": "",
         "exit_code": -1,
         "execution_time": 0.0,
-        "sandbox_type": "unknown"
+        "sandbox_type": "unknown",
+        "syntax_error": None
     }
     
     start_time = time.time()
+    
+    # --- Story 3.1: GATE 1 - Syntax Check ---
+    # Fail fast before any execution attempt
+    if not skip_syntax_check:
+        syntax_result = check_syntax(code)
+        if not syntax_result["valid"]:
+            result["success"] = False
+            result["stderr"] = (
+                f"Syntax Error at line {syntax_result['line']}, "
+                f"column {syntax_result['column']}: {syntax_result['error']}\n"
+                f"Problematic code: {syntax_result['text']}"
+            )
+            result["exit_code"] = 1
+            result["sandbox_type"] = "syntax_check_failed"
+            result["syntax_error"] = syntax_result
+            result["execution_time"] = time.time() - start_time
+            log_event(f"Syntax check gate blocked execution: {syntax_result['error']}", "WARNING")
+            return result
     
     # Try Docker first if requested and available
     if use_docker and is_docker_available():
@@ -203,49 +358,97 @@ def _execute_in_subprocess(code: str, timeout: int) -> Dict[str, Any]:
 def verify_code_before_commit(
     code: str,
     filepath: str,
-    timeout: int = 30
+    timeout: int = 30,
+    run_dry_import: bool = True  # Story 3.1: Enable dry run import
 ) -> Dict[str, Any]:
     """
     Verifies generated code in sandbox before writing to filesystem.
+    
+    Story 3.1 Enhancement: Now includes:
+    - Gate 1: ast.parse() syntax check
+    - Gate 2: Dry run import (optional)
+    - Gate 3: Full sandbox execution
     
     Args:
         code: Python code to verify
         filepath: Target path for the code (for logging)
         timeout: Execution timeout
+        run_dry_import: Whether to run dry import verification (Gate 2)
     
     Returns:
         {
             "verified": bool,
             "can_commit": bool,
-            "execution_result": dict,
-            "recommendation": str
+            "syntax_result": dict,   # Gate 1 results
+            "dry_run_result": dict,  # Gate 2 results (if enabled)
+            "execution_result": dict, # Gate 3 results
+            "recommendation": str,
+            "gates_passed": list[str]  # Which gates passed
         }
     """
     result = {
         "verified": False,
         "can_commit": False,
+        "syntax_result": None,
+        "dry_run_result": None,
         "execution_result": None,
-        "recommendation": ""
+        "recommendation": "",
+        "gates_passed": []
     }
     
-    # Execute in sandbox
-    exec_result = safe_execute_python(code, timeout=timeout)
+    # --- GATE 1: Syntax Check ---
+    syntax_result = check_syntax(code)
+    result["syntax_result"] = syntax_result
+    
+    if not syntax_result["valid"]:
+        result["verified"] = True
+        result["can_commit"] = False
+        result["recommendation"] = (
+            f"GATE 1 FAILED - Syntax Error at line {syntax_result['line']}: "
+            f"{syntax_result['error']}. Do not commit."
+        )
+        log_event(f"Code verification for {filepath}: GATE 1 FAILED (syntax)", "WARNING")
+        return result
+    
+    result["gates_passed"].append("syntax")
+    
+    # --- GATE 2: Dry Run Import (optional) ---
+    if run_dry_import:
+        dry_result = dry_run_import(code)
+        result["dry_run_result"] = dry_result
+        
+        if not dry_result["success"]:
+            result["verified"] = True
+            result["can_commit"] = False
+            result["recommendation"] = (
+                f"GATE 2 FAILED - Import Error ({dry_result['error_type']}): "
+                f"{dry_result['error']}. Do not commit."
+            )
+            log_event(f"Code verification for {filepath}: GATE 2 FAILED (import)", "WARNING")
+            return result
+        
+        result["gates_passed"].append("dry_import")
+    
+    # --- GATE 3: Full Sandbox Execution ---
+    exec_result = safe_execute_python(code, timeout=timeout, skip_syntax_check=True)
     result["execution_result"] = exec_result
     
     if exec_result["success"]:
         result["verified"] = True
         result["can_commit"] = True
-        result["recommendation"] = f"Code verified successfully. Safe to write to {filepath}"
+        result["gates_passed"].append("execution")
+        result["recommendation"] = (
+            f"All gates passed ({', '.join(result['gates_passed'])}). "
+            f"Safe to write to {filepath}"
+        )
     else:
-        result["verified"] = True  # Verification ran, just failed
+        result["verified"] = True
         result["can_commit"] = False
         
-        if "SyntaxError" in exec_result["stderr"]:
-            result["recommendation"] = "Code has syntax errors. Do not commit."
-        elif "Timed out" in exec_result["stderr"]:
-            result["recommendation"] = "Code execution timed out. May have infinite loop."
+        if "Timed out" in exec_result["stderr"]:
+            result["recommendation"] = "GATE 3 FAILED - Execution timed out. May have infinite loop."
         else:
-            result["recommendation"] = f"Code failed execution: {exec_result['stderr'][:200]}"
+            result["recommendation"] = f"GATE 3 FAILED - Execution error: {exec_result['stderr'][:200]}"
     
-    log_event(f"Code verification for {filepath}: can_commit={result['can_commit']}")
+    log_event(f"Code verification for {filepath}: can_commit={result['can_commit']}, gates={result['gates_passed']}")
     return result
