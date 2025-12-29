@@ -80,7 +80,7 @@ except (ImportError, Exception):
     except Exception as e:
         print(f"Warning: Failed to install langchainhub: {e}")
 # from core.deep_agent_engine import DeepAgentEngine
-from display import OffscreenRenderer
+from core.offscreen_renderer import OffscreenRenderer
 
 # --- CONFIGURATION & GLOBALS ---
 import core.shared_state as shared_state

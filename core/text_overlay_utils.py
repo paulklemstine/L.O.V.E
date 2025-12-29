@@ -20,6 +20,7 @@ STYLE_FONT_MAP = {
     "neon": ["arial", "helvetica", "sans-serif"],
     "vaporwave": ["arial", "helvetica", "impact"],
     "gothic": ["times", "blackletter"],
+    "gyaru": ["arial", "impact", "sans-serif"],
 }
 
 

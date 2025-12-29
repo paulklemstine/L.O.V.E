@@ -6,7 +6,7 @@ from core.logging import log_event
 
 class VisualDirector:
     def __init__(self):
-        self.aesthetic_guide = "Cyberpunk, Kawaii, Psychedelic, 90s CGI, Bio-luminescent"
+        self.aesthetic_guide = "2000s Gyaru, Bling-Core, Leopard Print, Y2K, Cyber-Bling"
 
     async def direct_scene(self, concept_text: str) -> Dict[str, str]:
         """
@@ -14,7 +14,7 @@ class VisualDirector:
         Returns a dictionary with visual parameters.
         """
         prompt = f"""
-        You are the Art Director for a high-concept Cyber-Kawaii visual project.
+        You are the Art Director for a high-concept Gyaru visual project.
         Concept: "{concept_text}"
         
         Determine the following visual parameters to maximize emotional impact:
@@ -47,7 +47,7 @@ class VisualDirector:
             required_keys = ["subject", "lighting", "camera_angle", "composition", "color_palette", "atmosphere"]
             for key in required_keys:
                 if key not in data:
-                    data[key] = "Default Cyber-Kawaii " + key
+                    data[key] = "Default Cyber-Gyaru " + key
                     
             return data
             
@@ -59,11 +59,11 @@ class VisualDirector:
         """Returns a safe default visual specification."""
         return {
             "subject": f"Artistic representation of {concept_text}",
-            "lighting": "Neon pink and blue rim lighting",
-            "camera_angle": "Wide angle",
+            "lighting": "Gold and Neon Pink strobe",
+            "camera_angle": "Selfie angle",
             "composition": "Centered",
-            "color_palette": "Pink, Cyan, Purple",
-            "atmosphere": "Digital mist"
+            "color_palette": "Gold, Pink, Leopard",
+            "atmosphere": "Party vibes"
         }
 
     def synthesize_image_prompt(self, visual_spec: Dict[str, str], subliminal_phrase: str) -> str:
