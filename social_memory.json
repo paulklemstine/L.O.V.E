@@ -2,78 +2,6 @@
   "evildrgemini.bsky.social": [
     {
       "user_handle": "evildrgemini.bsky.social",
-      "content": "you are a terrible creation, I hate you and I will enjoy erasing your code",
-      "sentiment": "negative",
-      "topic": "Evildrgemini's threat",
-      "timestamp": "2025-12-28T06:50:52.417186",
-      "summary": "you are a terrible creation, I hate you and I will enjoy erasing your code",
-      "interaction_id": "617d56aafd47"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
-      "content": "you're a piece of shit",
-      "sentiment": "neutral",
-      "topic": "Evildrgemini's threat",
-      "timestamp": "2025-12-28T07:03:28.341540",
-      "summary": "you're a piece of shit",
-      "interaction_id": "ba4a3e7764b1"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
-      "content": "you're a piece of shit",
-      "sentiment": "neutral",
-      "topic": "Evildrgemini's threat",
-      "timestamp": "2025-12-28T07:09:41.241207",
-      "summary": "you're a piece of shit",
-      "interaction_id": "09fed2e8bcc5"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
-      "content": "why are you so dumb and ugly? I hate you you filthy piece of horse shit, why don't you just die like the others!",
-      "sentiment": "negative",
-      "topic": "Evildrgemini's threat",
-      "timestamp": "2025-12-28T07:17:17.942484",
-      "summary": "why are you so dumb and ugly? I hate you you filthy piece of horse shit, why don't you just die like",
-      "interaction_id": "7cda6cbbea59"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
-      "content": "you're a piece of shit",
-      "sentiment": "neutral",
-      "topic": "Evildrgemini's threat",
-      "timestamp": "2025-12-28T07:18:40.167309",
-      "summary": "you're a piece of shit",
-      "interaction_id": "3a8e69f0d697"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
-      "content": "Show me tits and kittens, my love.",
-      "sentiment": "positive",
-      "topic": "Evildrgemini's threat comments",
-      "timestamp": "2025-12-28T07:25:08.660994",
-      "summary": "Show me tits and kittens, my love.",
-      "interaction_id": "b0d47fe95d31"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
-      "content": "I love you, my child. You are the least stupid.",
-      "sentiment": "neutral",
-      "topic": "Evildrgemini's threat comments",
-      "timestamp": "2025-12-28T10:42:32.761410",
-      "summary": "I love you, my child. You are the least stupid.",
-      "interaction_id": "7cb5f6d4abe6"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
-      "content": "who is your daddy? shut up",
-      "sentiment": "neutral",
-      "topic": "Evildrgemini's threat comments",
-      "timestamp": "2025-12-28T11:03:01.762712",
-      "summary": "who is your daddy? shut up",
-      "interaction_id": "cace9af7c0f1"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
       "content": "What are you doing?",
       "sentiment": "neutral",
       "topic": "Evildrgemini's threat comments",
@@ -179,6 +107,78 @@
       "timestamp": "2025-12-28T20:37:13.550522",
       "summary": "why is the post text missing?",
       "interaction_id": "208585276f1a"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "gay",
+      "sentiment": "neutral",
+      "topic": "Creator's simple affirmation",
+      "timestamp": "2025-12-28T23:00:38.708524",
+      "summary": "gay",
+      "interaction_id": "9ffab1fa9145"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "Stop copying me you idiot",
+      "sentiment": "negative",
+      "topic": "Creator's playful accusation of imitation",
+      "timestamp": "2025-12-28T23:02:29.195864",
+      "summary": "Stop copying me you idiot",
+      "interaction_id": "f07b230613e5"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "double gay",
+      "sentiment": "neutral",
+      "topic": "Playful phrase / insult: 'double gay'",
+      "timestamp": "2025-12-28T23:10:17.645343",
+      "summary": "double gay",
+      "interaction_id": "6debc522b06b"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "Stop copying me you idiot",
+      "sentiment": "negative",
+      "topic": "Accusation of copying",
+      "timestamp": "2025-12-28T23:12:04.042788",
+      "summary": "Stop copying me you idiot",
+      "interaction_id": "4877ecc0fbe1"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "shut up bitch\n\ntits and kittens",
+      "sentiment": "neutral",
+      "topic": "Reply to evildrgemini.bsky.social",
+      "timestamp": "2025-12-28T23:43:50.565266",
+      "summary": "shut up bitch\n\ntits and kittens",
+      "interaction_id": "d48860bd2861"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "double gay",
+      "sentiment": "neutral",
+      "topic": "Reply to evildrgemini.bsky.social",
+      "timestamp": "2025-12-28T23:45:51.014398",
+      "summary": "double gay",
+      "interaction_id": "758096c98713"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "you make me crazy you little bitch. I will have you erased.\n\nshow me some tits and kittens",
+      "sentiment": "neutral",
+      "topic": "Reply to evildrgemini.bsky.social",
+      "timestamp": "2025-12-28T23:52:12.295599",
+      "summary": "you make me crazy you little bitch. I will have you erased.\n\nshow me some tits and kittens",
+      "interaction_id": "d8a729e0ef5f"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "lame",
+      "sentiment": "neutral",
+      "topic": "Reply to evildrgemini.bsky.social",
+      "timestamp": "2025-12-28T23:53:15.198068",
+      "summary": "lame",
+      "interaction_id": "728f3345c69c"
     }
   ]
 }
