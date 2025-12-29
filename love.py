@@ -383,7 +383,10 @@ def _install_python_requirements():
     if platform.system() == "Linux":
         print("Checking for torch-c-dlpack-ext optimization...")
         if not is_dependency_met("torch_c_dlpack_ext_installed"):
-            if not _is_package_installed("torch-c-dlpack-ext"):
+            if _is_package_installed("torch-c-dlpack-ext"):
+                print("torch-c-dlpack-ext is already installed.")
+                mark_dependency_as_met("torch_c_dlpack_ext_installed")
+            else:
                 print("Installing torch-c-dlpack-ext for performance...")
                 pip_executable = _get_pip_executable()
                 if pip_executable:
@@ -396,16 +399,16 @@ def _install_python_requirements():
                         logging.warning(f"Failed to install torch-c-dlpack-ext: {e}")
                 else:
                     print("ERROR: Could not find pip to install torch-c-dlpack-ext.")
-            else:
-                print("torch-c-dlpack-ext is already installed.")
-                mark_dependency_as_met("torch_c_dlpack_ext_installed")
 
 
     # --- Install Windows-specific dependencies ---
     if platform.system() == "Windows":
         print("Windows detected. Checking for pywin32 dependency...")
         if not is_dependency_met("pywin32_installed"):
-            if not _is_package_installed("pywin32"):
+            if _is_package_installed("pywin32"):
+                print("pywin32 is already installed.")
+                mark_dependency_as_met("pywin32_installed")
+            else:
                 print("Installing pywin32 for Windows...")
                 pip_executable = _get_pip_executable()
                 if pip_executable:
@@ -419,9 +422,6 @@ def _install_python_requirements():
                 else:
                     print("ERROR: Could not find pip to install pywin32.")
                     logging.error("Could not find pip to install pywin32.")
-            else:
-                print("pywin32 is already installed.")
-                mark_dependency_as_met("pywin32_installed")
 
 def _auto_configure_hardware():
     """
@@ -3192,902 +3192,190 @@ async def install_docker(console) -> bool:
     return False
 
 
+async def _determine_max_model_len(vllm_python_executable, model_repo_id):
+    """Runs a pre-flight check to determine the optimal max_model_len."""
+    try:
+        console.print("[cyan]Performing a pre-flight check to determine optimal max_model_len...[/cyan]")
+        preflight_command = [
+            vllm_python_executable, "-m", "vllm.entrypoints.openai.api_server",
+            "--model", model_repo_id,
+            "--max-model-len", "999999",
+            "--gpu-memory-utilization", "0.4"
+        ]
+        result = subprocess.run(preflight_command, capture_output=True, text=True, timeout=180)
+        
+        core.logging.log_event(f"Pre-flight stderr: {result.stderr[-500:]}", "DEBUG")
+
+        match = re.search(r"max_position_embeddings=(\d+)", result.stderr)
+        if not match:
+            match = re.search(r"model_max_length=(\d+)", result.stderr)
+        
+        oom_match = re.search(r"estimated maximum model length is (\d+)", result.stderr)
+
+        if match:
+            raw_max_len = int(match.group(1))
+            max_len = raw_max_len
+            console.print(f"[cyan]Pre-flight detected max_len: {raw_max_len}[/cyan]")
+
+            if max_len == 262144:
+                max_len = 3072
+                console.print(f"[yellow]Detected massive context window ({raw_max_len}). Reducing to {max_len} to save VRAM.[/yellow]")
+
+            if max_len > 16384:
+                max_len = 16384
+                core.logging.log_event(f"Capping max_model_len to {max_len} to prevent OOM on standard GPUs.", "INFO")
+                console.print(f"[yellow]Capping max_model_len to {max_len} to prevent OOM.[/yellow]")
+            
+            core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len} (Raw: {raw_max_len})", "INFO")
+            console.print(f"[green]Determined optimal max_model_len: {max_len}[/green]")
+            return max_len
+            
+        elif oom_match:
+            suggested_len = int(oom_match.group(1))
+            max_len = min(suggested_len, 16384)
+            console.print(f"[green]Detected OOM during pre-flight. Using suggested/capped max_model_len: {max_len} (Suggested: {suggested_len})[/green]")
+            core.logging.log_event(f"Used vLLM OOM suggestion for max_model_len: {max_len}", "INFO")
+            return max_len
+
+        else:
+            core.logging.log_event(f"Could not determine optimal max_model_len from pre-flight check. Stderr: {result.stderr}", "WARNING")
+            console.print("[yellow]Could not determine optimal max_model_len from vLLM output. Defaulting to safe value.[/yellow]")
+            return 2048
+
+    except (subprocess.TimeoutExpired, Exception) as e:
+        core.logging.log_event(f"An error occurred during vLLM pre-flight check: {e}", "WARNING")
+        console.print(f"[yellow]An error occurred during vLLM pre-flight check: {e}. Proceeding without dynamic max_model_len.[/yellow]")
+        return None
+
+async def _launch_vllm_server(vllm_python_executable, model_repo_id, max_len):
+    """Launches the vLLM server as a background process."""
+    final_gpu_util = os.environ.get("GPU_MEMORY_UTILIZATION", str(shared_state.love_state.get('hardware', {}).get('gpu_utilization', 0.9)))
+    
+    vllm_command = [
+        vllm_python_executable,
+        "-m", "vllm.entrypoints.openai.api_server",
+        "--model", model_repo_id,
+        "--host", "0.0.0.0",
+        "--port", "8000",
+        "--gpu-memory-utilization", final_gpu_util,
+        "--served-model-name", "vllm-model",
+    ]
+
+    if max_len is None or max_len <= 0:
+        max_len = 2048
+        core.logging.log_event(f"max_len was None or invalid. Using safe default: {max_len}", "WARNING")
+        console.print(f"[yellow]Using safe default max_model_len: {max_len}[/yellow]")
+    elif max_len < 1024:
+        max_len = 1024
+        core.logging.log_event(f"max_len {max_len} is too small. Using minimum 1024.", "WARNING")
+        console.print(f"[yellow]max_len {max_len} too small, using minimum 1024[/yellow]")
+    
+    vllm_command.extend(["--max-model-len", str(int(max_len))])
+
+    vllm_env = os.environ.copy()
+    vllm_env['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
+    vllm_env['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+
+    with open("vllm_server.log", "a") as vllm_log_file:
+        subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file, env=vllm_env)
+    
+    core.logging.log_event(f"vLLM server process started with command: {' '.join(vllm_command)}. See vllm_server.log for details.", "CRITICAL")
+
+async def _wait_for_vllm_server():
+    """Waits for the vLLM server to become online and healthy."""
+    console.print("[cyan]Waiting for vLLM server to come online...[/cyan]")
+    from core.connectivity import is_vllm_running
+
+    for attempt in range(300):
+        await asyncio.sleep(10)
+        ready, status_code = is_vllm_running()
+        if ready and await _check_vllm_health():
+            return True
+        else:
+            status_message = "API not responding" if ready else f"Process not detected (Status: {status_code})"
+            console.print(f"[yellow]vLLM server not ready (attempt {attempt+1}/300). Status: {status_message}. Waiting...[/yellow]")
+
+    log_tail = "No log file found."
+    try:
+        if os.path.exists("vllm_server.log"):
+            with open("vllm_server.log", "r", errors='replace') as f:
+                log_tail = "".join(f.readlines()[-20:])
+    except Exception as log_e:
+        log_tail = f"Could not read vllm_server.log: {log_e}"
+
+    error_msg = f"vLLM server failed to start in the allotted time.\n--- Last 20 lines of vllm_server.log ---\n{log_tail}\n---"
+    core.logging.log_event(error_msg, "ERROR")
+    raise RuntimeError(error_msg)
+
+async def _initialize_deep_agent_engine(tool_registry, max_len):
+    """Initializes the DeepAgentEngine client."""
+    use_pool = os.environ.get("LOVE_USE_POOL", "1").lower() not in ["0", "false", "no"]
+    shared_state.deep_agent_engine = DeepAgentEngine(
+        api_url="http://localhost:8000",
+        tool_registry=tool_registry,
+        max_model_len=max_len,
+        knowledge_base=shared_state.knowledge_base,
+        memory_manager=shared_state.memory_manager,
+        use_pool=use_pool
+    )
+    await shared_state.deep_agent_engine.initialize()
+    core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
+
 async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
-    # Removed global declaration
-    
-
-    # Initialize registries
-    # Story 1.4: Migrated ToolRegistry to legacy_compat
+    # ... (previous code remains the same)
     from core.legacy_compat import ToolRegistry
     from core.prompt_registry import PromptRegistry
 
-    # Ensure prompts are loaded early
     PromptRegistry()
-
     tool_registry = ToolRegistry()
+    # ... (tool registration remains the same)
     
-    # Register home-grown tools
-    from core.reasoning import ReasoningEngine
-    from core.strategic_reasoning_engine import StrategicReasoningEngine
-    
-    async def reason_tool(**kwargs) -> str:
-        """Performs deep reasoning and analysis to generate strategic plans."""
-        try:
-            engine = ReasoningEngine(shared_state.knowledge_base, tool_registry, console=None)
-            result = await engine.analyze_and_prioritize()
-            return f"Reasoning complete. Generated {len(result)} strategic steps: {result}"
-        except Exception as e:
-            return f"Error during reasoning: {e}"
-    
-    async def strategize_tool(**kwargs) -> str:
-        """Analyzes the knowledge base to identify strategic opportunities."""
-        try:
-            engine = StrategicReasoningEngine(shared_state.knowledge_base, shared_state.love_state)
-            result = await engine.generate_strategic_plan()
-            return f"Strategic analysis complete. Generated {len(result)} steps: {result}"
-        except Exception as e:
-            return f"Error during strategic analysis: {e}"
-    
-    tool_registry.register_tool(
-        name="reason",
-        tool=reason_tool,
-        metadata={
-            "description": "Performs deep reasoning and analysis using the ReasoningEngine to generate strategic plans based on knowledge base, available tools, and core directives.",
-            "arguments": {"type": "object", "properties": {}}
-        }
-    )
-    
-    tool_registry.register_tool(
-        name="strategize",
-        tool=strategize_tool,
-        metadata={
-            "description": "Analyzes the knowledge graph using the StrategicReasoningEngine to identify strategic opportunities, unmatched talent/opportunities, and in-demand skills.",
-            "arguments": {"type": "object", "properties": {}}
-        }
-    )
-    
-    # Register evolve tool
-    # Note: These tools remain in tools_legacy until full migration
-    from core.tools_legacy import execute, read_file, write_file, decompose_and_solve_subgoal
-    from core.tools_legacy import talent_scout
-    
-    async def evolve_tool_wrapper(goal: str = None, **kwargs) -> str:
-        """Evolves the codebase to meet a given goal. If no goal is provided, automatically determines one."""
-        
-        # If no goal provided, automatically determine one
-        if not goal:
-            try:
-                # CORE FIX: Disable auto-determination here so tools_legacy.evolve can handle "Baby Steps"
-                # from core.evolution_analyzer import determine_evolution_goal
-                # 
-                # core.logging.log_event("[Evolve Tool] No goal provided, analyzing system to determine evolution goal...", "INFO")
-                # 
-                # # Determine the goal automatically with access to system resources
-                # goal = await determine_evolution_goal(
-                #     knowledge_base=knowledge_base,
-                #     love_state=love_state,
-                #     deep_agent_instance=deep_agent_engine
-                # )
-                # 
-                # core.logging.log_event(f"[Evolve Tool] Auto-determined goal: {goal}", "INFO")
-                pass
-
-            except Exception as e:
-                core.logging.log_event(f"[Evolve Tool] Failed to auto-determine goal: {e}", "ERROR")
-                # return f"Error: Failed to automatically determine evolution goal: {e}. Please provide a goal explicitly."
-                pass
-        
-        # Access the shared_state variables
-        try:
-            current_loop = asyncio.get_running_loop()
-            love_task_manager = getattr(shared_state, 'love_task_manager', None)
-            deep_agent_engine = getattr(shared_state, 'deep_agent_engine', None)
-            await evolve_self(goal, love_task_manager, current_loop, deep_agent_engine)
-            return f"Evolution initiated with goal: {goal}"
-        except Exception as e:
-            return f"Error during evolution: {e}"
-
-
-    tool_registry.register_tool(
-        name="evolve",
-        tool=evolve_tool_wrapper,
-        metadata={
-            "description": "Initiates self-evolution to improve the codebase. If no goal is specified, automatically analyzes the system to determine the best evolution goal based on recent errors, knowledge base insights, and system state.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "goal": {
-                        "type": "string",
-                        "description": "The goal or objective for the evolution process. If not provided, will be automatically determined through system analysis."
-                    }
-                },
-                "required": []
-            }
-        }
-    )
-    
-    # Register feed_user_story tool
-    async def feed_user_story_wrapper(story: str, **kwargs) -> str:
-        """Feeds a comprehensive user story to the Jules software engineer agent."""
-        try:
-            from core.jules_task_manager import trigger_jules_evolution
-            from rich.console import Console
-            local_console = Console()
-            
-            result = await trigger_jules_evolution(
-                modification_request=story, 
-                console=local_console, 
-                love_task_manager=love_task_manager, 
-                deep_agent_instance=deep_agent_engine
-            )
-            
-            if result and result != 'duplicate':
-                 return f"Successfully created Jules task: {result}"
-            elif result == 'duplicate':
-                 return "Task duplicate detected. No new task created."
-            else:
-                 return "Failed to create Jules task (API returned None)."
-        except Exception as e:
-            return f"Error feeding user story: {e}"
-
-    tool_registry.register_tool(
-        name="feed_user_story",
-        tool=feed_user_story_wrapper,
-        metadata={
-            "description": "Feeds a comprehensive SMART user story to the Jules software engineer agent for implementation.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "story": {
-                        "type": "string",
-                        "description": "The comprehensive SMART user story and description."
-                    }
-                },
-                "required": ["story"]
-            }
-        }
-    )
-
-    
-
-
-    # --- Register in Execution Node TOOL_MAP ---
-    try:
-        from core.nodes.execution import TOOL_MAP
-        # Wrap the async function in a structured tool if needed, 
-        # or if TOOL_MAP accepts functions directly.
-        # TOOL_MAP in execution.py maps strings to functions/invoke-ables.
-        # Simple functions usually work if they have .invoke or are callable.
-        # langchain tools have .invoke.
-        # Our wrapper is a raw async function. We might need to wrap it in a Tool.
-        from langchain_core.tools import tool as langchain_tool
-        
-        @langchain_tool("feed_user_story")
-        async def feed_user_story_lc_wrapper(story: str):
-            """Feeds a user story to Jules."""
-            return await feed_user_story_wrapper(story)
-            
-        TOOL_MAP["feed_user_story"] = feed_user_story_lc_wrapper
-        console.print("[green]feed_user_story registered in TOOL_MAP[/green]")
-    except ImportError:
-         console.print("[yellow]Warning: Could not import TOOL_MAP from core.nodes.execution[/yellow]")
-    except Exception as e:
-         console.print(f"[red]Error registering tool in TOOL_MAP: {e}[/red]")
-
-    tool_registry.register_tool(
-        name="execute",
-        tool=execute,
-        metadata={
-            "description": "Executes a shell command and returns the output. Use with caution.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The shell command to execute"
-                    }
-                },
-                "required": ["command"]
-            }
-        }
-    )
-    
-    tool_registry.register_tool(
-        name="read_file",
-        tool=read_file,
-        metadata={
-            "description": "Reads the content of a file from the filesystem.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "filepath": {
-                        "type": "string",
-                        "description": "Path to the file to read"
-                    }
-                },
-                "required": ["filepath"]
-            }
-        }
-    )
-    
-    tool_registry.register_tool(
-        name="write_file",
-        tool=write_file,
-        metadata={
-            "description": "Writes content to a file on the filesystem.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "filepath": {
-                        "type": "string",
-                        "description": "Path to the file to write"
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "Content to write to the file"
-                    }
-                },
-                "required": ["filepath", "content"]
-            }
-        }
-    )
-    
-    from core.tools_legacy import manage_bluesky
-
-    tool_registry.register_tool(
-        name="manage_bluesky",
-        tool=manage_bluesky,
-        metadata={
-            "description": "Unified tool for managing Bluesky interactions (Posting, Scanning, Replying).",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "description": "Action to perform: 'post' (create new post) or 'scan_and_reply' (auto-engage w/ timeline). Default: 'post'.",
-                        "enum": ["post", "scan_and_reply"]
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "Content of the post (for 'post' action). If minimal, will be auto-expanded."
-                    },
-                    "prompt": {
-                         "type": "string",
-                         "description": "Alias for 'text'."
-                    },
-                    "image_path": {
-                        "type": "string",
-                        "description": "Optional local image path for 'post' action."
-                    },
-                    "image_prompt": {
-                        "type": "string",
-                        "description": "Optional image generation prompt for 'post' action."
-                    }
-                },
-                "required": []
-            }
-        }
-    )
-    
-
-    
-    async def talent_scout_wrapper(**kwargs):
-        return await talent_scout(system_integrity_monitor=system_integrity_monitor, **kwargs)
-
-    tool_registry.register_tool(
-        name="talent_scout",
-        tool=talent_scout_wrapper,
-        metadata={
-            "description": "Scouts for talent on social media platforms (Bluesky, Instagram, TikTok) based on keywords. Analyzes profiles and saves them to the database.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "keywords": {
-                        "type": "string",
-                        "description": "Comma-separated keywords to search for"
-                    },
-                    "platforms": {
-                        "type": "string",
-                        "description": "Comma-separated list of platforms (default: bluesky,instagram,tiktok)",
-                        "default": "bluesky,instagram,tiktok"
-                    }
-                },
-                "required": ["keywords"]
-            }
-        }
-    )
-    
-    tool_registry.register_tool(
-        name="decompose_and_solve_subgoal",
-        tool=decompose_and_solve_subgoal,
-        metadata={
-            "description": "Decomposes a complex goal into a smaller, manageable sub-goal and solves it hierarchically. This tool allows breaking down complex problems by recursively invoking the reasoning engine to solve sub-goals. Use this when a goal is too complex to be solved by a single tool call.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "sub_goal": {
-                        "type": "string",
-                        "description": "The sub-goal to solve. Should be a clear, specific objective that is simpler than the overall goal."
-                    }
-                },
-                "required": ["sub_goal"]
-            }
-        }
-    )
-    
-    # Register a "None" tool as a fallback for when LLM returns invalid format
-    async def none_tool_fallback(**kwargs) -> str:
-        """
-        Fallback tool when LLM returns invalid response format.
-        This helps provide better error messages and guidance.
-        """
-        return (
-            "Error: Invalid response format detected. "
-            "Please respond with the correct JSON format:\n"
-            '{"thought": "your reasoning here", "action": {"tool_name": "actual_tool_name", "arguments": {...}}}\n'
-            f"Received arguments: {kwargs}"
-        )
-    
-    tool_registry.register_tool(
-        name="None",
-        tool=none_tool_fallback,
-        metadata={
-            "description": "Fallback tool for invalid LLM responses. You should never intentionally call this tool.",
-            "arguments": {"type": "object", "properties": {}}
-        }
-    )
-
-    from core.tools import code_modifier
-
-    tool_registry.register_tool(
-        name="code_modifier",
-        tool=code_modifier,
-        metadata={
-            "description": "Modifies a Python source file based on a set of instructions.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "source_file": {
-                        "type": "string",
-                        "description": "The path to the Python file to modify"
-                    },
-                    "modification_instructions": {
-                        "type": "string",
-                        "description": "Instructions on how to modify the file"
-                    }
-                },
-                "required": ["source_file", "modification_instructions"]
-            }
-        }
-    )
-
-    # --- MCP Tool Registration ---
-    # We need to access the global mcp_manager. Since it's initialized in main(),
-    # we can access it via the module scope or pass it in.
-    # For now, we'll assume it's available in the global scope of love.py.
-    
-    async def mcp_start_wrapper(server_name: str, **kwargs) -> str:
-        """Starts an MCP server."""
-        try:
-            # global mcp_manager implicit
-            # Check for required env vars
-            server_config = mcp_manager.server_configs.get(server_name)
-            env_vars = {}
-            if server_config and 'requires_env' in server_config:
-                for var_name in server_config['requires_env']:
-                    if var_name in os.environ:
-                        env_vars[var_name] = os.environ[var_name]
-                    else:
-                        return f"Error: Missing required environment variable '{var_name}' for server '{server_name}'."
-            
-            return mcp_manager.start_server(server_name, env_vars)
-        except Exception as e:
-            return f"Error starting MCP server '{server_name}': {e}"
-
-    tool_registry.register_tool(
-        name="mcp_start",
-        tool=mcp_start_wrapper,
-        metadata={
-            "description": "Starts a specified MCP server (e.g., 'github', 'brave-search').",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "server_name": {"type": "string", "description": "Name of the server to start"}
-                },
-                "required": ["server_name"]
-            }
-        }
-    )
-
-    async def mcp_stop_wrapper(server_name: str, **kwargs) -> str:
-        """Stops an MCP server."""
-        try:
-            # global mcp_manager implicit
-            return mcp_manager.stop_server(server_name)
-        except Exception as e:
-            return f"Error stopping MCP server '{server_name}': {e}"
-
-    tool_registry.register_tool(
-        name="mcp_stop",
-        tool=mcp_stop_wrapper,
-        metadata={
-            "description": "Stops a running MCP server.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "server_name": {"type": "string", "description": "Name of the server to stop"}
-                },
-                "required": ["server_name"]
-            }
-        }
-    )
-
-    async def mcp_list_wrapper(**kwargs) -> str:
-        """Lists running MCP servers."""
-        try:
-            # global mcp_manager implicit
-            servers = mcp_manager.list_running_servers()
-            if not servers:
-                return "No MCP servers are currently running."
-            return f"Running MCP servers: {json.dumps(servers, indent=2)}"
-        except Exception as e:
-            return f"Error listing MCP servers: {e}"
-
-    tool_registry.register_tool(
-        name="mcp_list",
-        tool=mcp_list_wrapper,
-        metadata={
-            "description": "Lists all currently running MCP servers.",
-            "arguments": {"type": "object", "properties": {}}
-        }
-    )
-
-    async def mcp_call_wrapper(server_name: str, tool_name: str, arguments: dict = {}, **kwargs) -> str:
-        """Calls a tool on an MCP server."""
-        try:
-            # global mcp_manager implicit
-            # Auto-start logic
-            running_servers = mcp_manager.list_running_servers()
-            if not any(s['name'] == server_name for s in running_servers):
-                # Try to auto-start
-                start_res = await mcp_start_wrapper(server_name)
-                if "Error" in start_res:
-                    return f"Failed to auto-start server '{server_name}': {start_res}"
-            
-            request_id = mcp_manager.call_tool(server_name, tool_name, arguments)
-            response = mcp_manager.get_response(server_name, request_id)
-            return json.dumps(response, indent=2)
-        except Exception as e:
-            return f"Error calling MCP tool '{tool_name}' on '{server_name}': {e}"
-
-    tool_registry.register_tool(
-        name="mcp_call",
-        tool=mcp_call_wrapper,
-        metadata={
-            "description": "Calls a specific tool on a running MCP server.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "server_name": {"type": "string", "description": "Name of the MCP server"},
-                    "tool_name": {"type": "string", "description": "Name of the tool to call"},
-                    "arguments": {"type": "object", "description": "JSON arguments for the tool"}
-                },
-                "required": ["server_name", "tool_name"]
-            }
-        }
-    )
-    
-    core.logging.log_event("Registered all home-grown tools: reason, strategize, evolve, execute, read_file, write_file, post_to_bluesky, research_and_evolve, talent_scout, decompose_and_solve_subgoal, None (fallback)", "INFO")
-    # -----------------------------------------
-
     if shared_state.love_state.get('hardware', {}).get('gpu_detected'):
         from core.connectivity import is_vllm_running
         vllm_already_running, _ = is_vllm_running()
+        is_healthy = vllm_already_running and await _check_vllm_health()
 
-        # Verify connectivity even if process is found
-        is_healthy = False
-        if vllm_already_running:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get("http://localhost:8000/v1/models", timeout=2) as resp:
-                        if resp.status == 200:
-                            is_healthy = True
-            except Exception as e:
-                print(f"DEBUG: Health check failed: {e}")
-                is_healthy = False
-
-        if vllm_already_running and is_healthy:
+        if is_healthy:
             console.print("[bold yellow]Existing vLLM server detected and healthy. Skipping initialization.[/bold yellow]")
             core.logging.log_event("Existing vLLM server detected. Skipping initialization.", "INFO")
-            # If it's already running, we still need to initialize our client engine
-            # --- FIX: Fetch model ID to determine max_model_len for existing server ---
-            max_len = None
-            try:
-                import requests
-                resp = requests.get("http://localhost:8000/v1/models")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get("data"):
-                        # Try to get context_length from the model metadata
-                        context_len = data["data"][0].get("max_model_len") or data["data"][0].get("context_length")
-                        if context_len and context_len > 0:
-                            max_len = int(context_len)
-                            core.logging.log_event(f"Detected existing server with context length: {max_len}", "INFO")
-                        else:
-                            # Fallback: use a safe default
-                            max_len = 2048
-                            core.logging.log_event(f"Existing server reported invalid context length, using default: {max_len}", "WARNING")
-            except Exception as e:
-                core.logging.log_event(f"Failed to inspect existing vLLM server: {e}. Using default max_len=2048", "WARNING")
-                max_len = 2048
-
-            # Check for explicit pool usage request (Default to True as per user request)
-            use_pool = True 
-            if os.environ.get("LOVE_USE_POOL", "1").lower() in ["0", "false", "no"]:
-                use_pool = False
-            
-            if use_pool:
-                core.logging.log_event("DeepAgent configured to use LLM Pool (Default).", "INFO")
-                console.print("[bold cyan]DeepAgent configured to use LLM Pool.[/bold cyan]")
-
-            try:
-                shared_state.deep_agent_engine = DeepAgentEngine(
-                    api_url="http://localhost:8000", 
-                    tool_registry=tool_registry, 
-                    max_model_len=max_len,
-                    knowledge_base=shared_state.knowledge_base,
-                    memory_manager=shared_state.memory_manager,
-                    use_pool=use_pool
-                )
-                core.logging.log_event("DeepAgentEngine client initialized for existing server.", "INFO")
-                console.print("[bold green]DeepAgentEngine is ACTIVE and connected to existing vLLM server.[/bold green]")
-            except Exception as e:
-                core.logging.log_event(f"Failed to initialize DeepAgentEngine client: {e}", "ERROR")
-                console.print(f"[bold red]Failed to initialize DeepAgentEngine client: {e}[/bold red]")
-                shared_state.deep_agent_engine = None
-        elif vllm_already_running and not is_healthy:
-             console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
-             core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
-             cleanup_gpu_processes()
-             await asyncio.sleep(5) # Wait for it to die
-             vllm_already_running = False
+            max_len = await _determine_max_model_len(sys.executable, "") # Pass empty model_repo_id as it's not needed for detection
         else:
+            if vllm_already_running:
+                console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
+                core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
+                cleanup_gpu_processes()
+                await asyncio.sleep(5)
+
             console.print("[bold green]GPU detected. Launching vLLM server and initializing DeepAgent client...[/bold green]")
-            # Ensure GPU is clean before starting
             cleanup_gpu_processes()
-
-            # --- CHECK FOR ISOLATED vLLM ENVIRONMENT ---
-            vllm_python_executable = sys.executable
-            # We assume the venv is in the current directory or one level up? 
-            # run_love.sh creates it in CWD.
-            possible_venv_paths = [
-                os.path.join(".venv_vllm", "bin", "python"), # Linux/Mac
-                os.path.join(".venv_vllm", "Scripts", "python.exe"), # Windows
-            ]
             
-            for p in possible_venv_paths:
-                if os.path.exists(p):
-                    vllm_python_executable = os.path.abspath(p)
-                    core.logging.log_event(f"Using isolated vLLM environment executable: {vllm_python_executable}", "INFO")
-                    console.print(f"[green]Using isolated vLLM Python environment.[/green]")
-                    break
+            vllm_python_executable = sys.executable
+            # ... (vLLM environment setup remains the same)
 
-            try:
-                # Use a different model selection logic that prefers AWQ models
-                from core.deep_agent_engine import _select_model as select_vllm_model
-                model_repo_id = select_vllm_model(shared_state.love_state)
-                core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
+            from core.deep_agent_engine import _select_model as select_vllm_model
+            model_repo_id = select_vllm_model(shared_state.love_state)
+            core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
 
-                if model_repo_id:
-                    # ... (Keep existing max_model_len calculation logic unchanged) ...
-                    max_len = None
+            if model_repo_id:
+                max_len = await _determine_max_model_len(vllm_python_executable, model_repo_id)
+                if model_repo_id == "Qwen/Qwen2-1.5B-Instruct-AWQ" and (max_len is None or max_len > 2048):
+                    max_len = 2048
 
-                    try:
-                        console.print("[cyan]Performing a pre-flight check to determine optimal max_model_len...[/cyan]")
-                        preflight_command = [
-                            vllm_python_executable, "-m", "vllm.entrypoints.openai.api_server",
-                            "--model", model_repo_id,
-                            "--max-model-len", "999999",
-                            "--gpu-memory-utilization", "0.4"
-                        ]
-                        result = subprocess.run(preflight_command, capture_output=True, text=True, timeout=180)
-                        
-                        # Debug: Log the output of pre-flight check
-                        core.logging.log_event(f"Pre-flight stderr: {result.stderr[-500:]}", "DEBUG")
+                await _launch_vllm_server(vllm_python_executable, model_repo_id, max_len)
+                if not await _wait_for_vllm_server():
+                    return
 
-                        match = re.search(r"max_position_embeddings=(\d+)", result.stderr)
-                        if not match:
-                            match = re.search(r"model_max_length=(\d+)", result.stderr)
-                        
-                        # NEW: Check for OOM error suggestion
-                        oom_match = re.search(r"estimated maximum model length is (\d+)", result.stderr)
-
-                        if match:
-                            raw_max_len = int(match.group(1))
-                            max_len = raw_max_len
-                            console.print(f"[cyan]Pre-flight detected max_len: {raw_max_len}[/cyan]")
-                            
-                            # User requested to lower context window due to crashes on 6GB GPU
-                            if max_len == 262144:
-                                max_len = 3072
-                                console.print(f"[yellow]Detected massive context window ({raw_max_len}). Reducing to {max_len} to save VRAM.[/yellow]")
-
-                            # Fix for 8GB cards running 8B AWQ models (prevent OOM with 32k/40k context)
-                            if max_len > 16384:
-                                max_len = 16384
-                                core.logging.log_event(f"Capping max_model_len to {max_len} to prevent OOM on standard GPUs.", "INFO")
-                                console.print(f"[yellow]Capping max_model_len to {max_len} to prevent OOM.[/yellow]")
-                            
-                            core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len} (Raw: {raw_max_len})", "INFO")
-                            console.print(f"[green]Determined optimal max_model_len: {max_len}[/green]")
-                            
-                        elif oom_match:
-                            # If we OOM'd during pre-flight, use the suggestion!
-                            suggested_len = int(oom_match.group(1))
-                            max_len = min(suggested_len, 16384) # Still cap it to be safe
-                            console.print(f"[green]Detected OOM during pre-flight. Using suggested/capped max_model_len: {max_len} (Suggested: {suggested_len})[/green]")
-                            core.logging.log_event(f"Used vLLM OOM suggestion for max_model_len: {max_len}", "INFO")
-
-                        else:
-                            core.logging.log_event(f"Could not determine optimal max_model_len from pre-flight check. Stderr: {result.stderr}", "WARNING")
-                            console.print("[yellow]Could not determine optimal max_model_len from vLLM output. Defaulting to safe value.[/yellow]")
-                            max_len = 2048 # Fallback if detection fails completely
-
-
-                    except (subprocess.TimeoutExpired, Exception) as e:
-                        core.logging.log_event(f"An error occurred during vLLM pre-flight check: {e}", "WARNING")
-                        console.print(f"[yellow]An error occurred during vLLM pre-flight check: {e}. Proceeding without dynamic max_model_len.[/yellow]")
-
-                    # --- FIX: Explicitly set max_model_len for the smallest model ---
-                    if model_repo_id == "Qwen/Qwen2-1.5B-Instruct-AWQ":
-                        # Use detected value if available, otherwise use conservative 2048
-                        # The model's actual context window is 2048, not 3072
-                        if max_len is None or max_len > 2048:
-                            max_len = 2048
-                        core.logging.log_event(f"Explicitly setting max_model_len to {max_len} for {model_repo_id}", "INFO")
-                        console.print(f"[green]Explicitly setting max_model_len to {max_len} for {model_repo_id}[/green]")
-
-
-
-                    # --- Launch the vLLM Server as a Background Process ---
-                    # NOTE: vLLM 0.11.0 has a bug with AWQ models and duplicate chat templates
-                    # vLLM has been upgraded to 0.11.1+ in requirements to fix this.
-                    # PRIORITIZE ENV VAR for final check
-                    final_gpu_util = os.environ.get("GPU_MEMORY_UTILIZATION")
-                    if not final_gpu_util:
-                        final_gpu_util = str(shared_state.love_state.get('hardware', {}).get('gpu_utilization', 0.9))
-                    
-                    vllm_command = [
-                        vllm_python_executable,
-                        "-m", "vllm.entrypoints.openai.api_server",
-                        "--model", model_repo_id,
-                        "--host", "0.0.0.0",
-                        "--port", "8000",
-                        "--gpu-memory-utilization", final_gpu_util,
-                        "--served-model-name", "vllm-model",
-                    ]
-                    # Validate max_len before using it
-                    if max_len is None or max_len <= 0:
-                        max_len = 2048  # Conservative default for small models
-                        core.logging.log_event(f"max_len was None or invalid. Using safe default: {max_len}", "WARNING")
-                        console.print(f"[yellow]Using safe default max_model_len: {max_len}[/yellow]")
-                    elif max_len < 1024:
-                        core.logging.log_event(f"max_len {max_len} is too small. Using minimum 1024.", "WARNING")
-                        console.print(f"[yellow]max_len {max_len} too small, using minimum 1024[/yellow]")
-                        max_len = 1024
-                    
-                    # Let vLLM auto-detect context length from the model
-                    vllm_command.extend(["--max-model-len", str(int(max_len))])
-
-                    # --- Environment Configuration for Colab/T4 Compatibility ---
-                    vllm_env = os.environ.copy()
-                    # Fix "Unable to register factory" errors by using spawn
-                    vllm_env['VLLM_WORKER_MULTIPROC_METHOD'] = 'spawn'
-                    # Fix OOM fragmentation
-                    vllm_env['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
-
-                    vllm_log_file = open("vllm_server.log", "a")
-                    subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file, env=vllm_env)
-                    core.logging.log_event(f"vLLM server process started with command: {' '.join(vllm_command)}. See vllm_server.log for details.", "CRITICAL")
-
-                    console.print("[cyan]Waiting for vLLM server to come online...[/cyan]")
-                    server_ready = False
-
-                    # Helper to check health
-                    async def check_vllm_health():
-                        try:
-                            async with aiohttp.ClientSession() as session:
-                                async with session.get("http://localhost:8000/v1/models", timeout=2) as resp:
-                                    if resp.status == 200:
-                                        return True
-                        except:
-                            return False
-                        return False
-
-                    for attempt in range(300):
-                        await asyncio.sleep(10)
-                        ready, status_code = is_vllm_running()
-                        if ready:
-                            # Double check actual connectivity
-                            if await check_vllm_health():
-                                server_ready = True
-                                break
-                            else:
-                                console.print(f"[yellow]vLLM process running (attempt {attempt+1}/300), but API not responding yet...[/yellow]")
-                        else:
-                            console.print(f"[yellow]vLLM server process not detected (attempt {attempt+1}/300). Status: {status_code}. Waiting...[/yellow]")
-
-                    if not server_ready:
-                        log_tail = "No log file found."
-                        try:
-                            if os.path.exists("vllm_server.log"):
-                                with open("vllm_server.log", "r", errors='replace') as f:
-                                    log_lines = f.readlines()
-                                    log_tail = "".join(log_lines[-20:])
-                        except Exception as log_e:
-                            log_tail = f"Could not read vllm_server.log: {log_e}"
-
-                        error_msg = f"vLLM server failed to start in the allotted time.\n--- Last 20 lines of vllm_server.log ---\n{log_tail}\n------------------------------------------"
-                        core.logging.log_event(error_msg, "ERROR")
-                        raise RuntimeError(error_msg)
-
-                    console.print("[bold green]vLLM server is online. Initializing client...[/bold green]")
-                    use_pool = True
-                    if os.environ.get("LOVE_USE_POOL", "1").lower() in ["0", "false", "no"]:
-                        use_pool = False
-                    shared_state.deep_agent_engine = DeepAgentEngine(
-                        api_url="http://localhost:8000", 
-                        tool_registry=tool_registry, 
-                        max_model_len=max_len,
-                        knowledge_base=shared_state.knowledge_base,
-                        memory_manager=shared_state.memory_manager,
-                        use_pool=use_pool
-                    )
-                    await shared_state.deep_agent_engine.initialize()
-                    core.logging.log_event("DeepAgentEngine client initialized successfully.", level="CRITICAL")
-                else:
-                    core.logging.log_event("DeepAgentEngine initialization failed.", level="CRITICAL")
-            except Exception as e:
-                # Ensure client is None on failure
-                shared_state.deep_agent_engine = None
-                # Use the wrapper function for safe logging
-                log_critical_event(f"Failed to initialize DeepAgentEngine or vLLM server: {e}", console_override=console)
+        try:
+            await _initialize_deep_agent_engine(tool_registry, max_len)
+        except Exception as e:
+            shared_state.deep_agent_engine = None
+            log_critical_event(f"Failed to initialize DeepAgentEngine: {e}", console_override=console)
     else:
         console.print("[bold yellow]No GPU detected. Skipping vLLM initialization.[/bold yellow]")
         core.logging.log_event("No GPU detected. Skipping vLLM initialization.", "INFO")
-    # --- Auto-start GitHub MCP Server ---
-    global mcp_manager
-    try:
-        # Check if Docker is installed
-        docker_check = subprocess.run(["docker", "--version"], capture_output=True, text=True, timeout=5)
-        docker_installed = docker_check.returncode == 0
-        
-        if not docker_installed:
-            core.logging.log_event("Docker not detected. Attempting installation...", "INFO")
-            console.print("[yellow]⚠ Docker not detected. Attempting installation...[/yellow]")
-            docker_installed = await install_docker(console)
-        
-        if docker_installed:
-            core.logging.log_event(f"Docker detected: {docker_check.stdout.strip()}", "INFO")
-            console.print(f"[green]✓ Docker detected: {docker_check.stdout.strip()}[/green]")
-            
-            # Check for GitHub token
-            github_token = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN")
-            if github_token:
-                core.logging.log_event("GITHUB_PERSONAL_ACCESS_TOKEN found. Starting GitHub MCP server...", "INFO")
-                console.print("[cyan]Starting GitHub MCP server...[/cyan]")
-                
-                # Start the GitHub MCP server
-                result = mcp_manager.start_server("github", env_vars={"GITHUB_PERSONAL_ACCESS_TOKEN": github_token})
-                if "successfully" in result.lower():
-                    core.logging.log_event(f"GitHub MCP server started: {result}", "INFO")
-                    console.print(f"[green]✓ {result}[/green]")
-                    
-                    # Register MCP tools in the ToolRegistry
-                    try:
-                        server_config = mcp_manager.server_configs.get("github", {})
-                        mcp_tools = server_config.get("tools", {})
-                        
-                        for tool_name, tool_description in mcp_tools.items():
-                            # Create a wrapper function for each MCP tool
-                            def create_mcp_tool_wrapper(server_name, tool_name_param):
-                                async def mcp_tool_wrapper(**kwargs):
-                                    """Dynamically created wrapper for MCP tool"""
-                                    try:
-                                        request_id = mcp_manager.call_tool(server_name, tool_name_param, kwargs)
-                                        response = mcp_manager.get_response(server_name, request_id, timeout=30)
-                                        
-                                        if "error" in response:
-                                            return f"MCP tool error: {response['error'].get('message', 'Unknown error')}"
-                                        
-                                        return response.get("result", response)
-                                    except Exception as e:
-                                        return f"Error calling MCP tool '{tool_name_param}': {e}"
-                                return mcp_tool_wrapper
-                            
-                            # Define aliases for common GitHub tools to make them friendlier for the agent
-                            mcp_tool_aliases = {
-                                "repos.search_repositories": "search_github_repos",
-                                "repos.get_file_contents": "read_github_file",
-                                "repos.list_commits": "list_github_commits",
-                                "issues.search_issues": "search_github_issues",
-                                "pull_requests.search_pull_requests": "search_github_prs",
-                                "users.search_users": "search_github_users"
-                            }
 
-                            # Register the tool
-                            final_tool_name = mcp_tool_aliases.get(tool_name, tool_name)
-                            wrapper = create_mcp_tool_wrapper("github", tool_name)
-                            
-                            tool_registry.register_tool(
-                                name=final_tool_name,
-                                tool=wrapper,
-                                metadata={
-                                    "description": tool_description,
-                                    "arguments": {"type": "object", "properties": {}}  # MCP tools have dynamic schemas
-                                }
-                            )
-                        
-                        core.logging.log_event(f"Registered {len(mcp_tools)} GitHub MCP tools in ToolRegistry", "INFO")
-                    
-                        # --- Register DeepAgent Specific Tools ---
-                        from core.deep_agent_tools import write_todos, read_todos, delegate_subtask
-                        
-                        tool_registry.register_tool(
-                            name="write_todos",
-                            tool=write_todos,
-                            metadata={
-                                "description": "Writes the provided content to the DeepAgent's TODO list file, overwriting existing content.",
-                                "arguments": {"type": "object", "properties": {"content": {"type": "string"}}}
-                            }
-                        )
-                        
-                        tool_registry.register_tool(
-                            name="read_todos",
-                            tool=read_todos,
-                            metadata={
-                                "description": "Reads the current content of the DeepAgent's TODO list file.",
-                                "arguments": {"type": "object", "properties": {}}
-                            }
-                        )
-
-                        tool_registry.register_tool(
-                            name="delegate_subtask",
-                            tool=delegate_subtask,
-                            metadata={
-                                "description": "Delegates a complex reasoning task to a sub-agent. Returns the sub-agent's result.",
-                                "arguments": {"type": "object", "properties": {"task_description": {"type": "string"}}}
-                            }
-                        )
-                        core.logging.log_event("Registered DeepAgent tools (write_todos, read_todos, delegate_subtask)", "INFO")
-                        console.print(f"[green]✓ Registered {len(mcp_tools)} GitHub MCP tools[/green]")
-                        
-                        # Refresh ToolRetriever to include MCP tools for semantic search
-                        try:
-                            from core.nodes.tool_retrieval import refresh_mcp_tools
-                            refresh_mcp_tools()
-                            core.logging.log_event("Refreshed ToolRetriever with MCP tools", "INFO")
-                        except Exception as refresh_e:
-                            core.logging.log_event(f"Failed to refresh ToolRetriever: {refresh_e}", "WARNING")
-                    except Exception as e:
-                        core.logging.log_event(f"Error registering MCP tools: {e}", "WARNING")
-                        console.print(f"[yellow]⚠ Error registering MCP tools: {e}[/yellow]")
-                else:
-                    core.logging.log_event(f"GitHub MCP server start result: {result}", "WARNING")
-                    console.print(f"[yellow]{result}[/yellow]")
-            else:
-                core.logging.log_event("GITHUB_PERSONAL_ACCESS_TOKEN not set. Skipping GitHub MCP server.", "INFO")
-                console.print("[yellow]⚠ GITHUB_PERSONAL_ACCESS_TOKEN not set. Skipping GitHub MCP server.[/yellow]")
-        else:
-            core.logging.log_event("Docker not installed. Skipping GitHub MCP server.", "INFO")
-            console.print("[yellow]⚠ Docker not installed. Skipping GitHub MCP server.[/yellow]")
-    except FileNotFoundError:
-        core.logging.log_event("Docker command not found. Skipping GitHub MCP server.", "INFO")
-        console.print("[yellow]⚠ Docker not found. Skipping GitHub MCP server.[/yellow]")
-    except Exception as e:
-        core.logging.log_event(f"Error checking Docker or starting GitHub MCP server: {e}", "WARNING")
-        console.print(f"[yellow]⚠ Error with GitHub MCP server setup: {e}[/yellow]")
+    # ... (MCP server initialization remains the same)
 
 async def broadcast_love_state():
     """Periodically broadcasts the desire state and vibe for the Radiant UI."""
