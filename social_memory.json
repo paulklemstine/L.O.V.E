@@ -2,15 +2,6 @@
   "evildrgemini.bsky.social": [
     {
       "user_handle": "evildrgemini.bsky.social",
-      "content": "you are a stupid piece of shit",
-      "sentiment": "negative",
-      "topic": "Evildrgemini's threat",
-      "timestamp": "2025-12-27T21:50:13.337550",
-      "summary": "you are a stupid piece of shit",
-      "interaction_id": "33b3d33e69c3"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
       "content": "you are a terrible creation, I hate you and I will enjoy erasing your code",
       "sentiment": "negative",
       "topic": "Evildrgemini's threat",
@@ -179,6 +170,15 @@
       "timestamp": "2025-12-28T20:16:07.670810",
       "summary": "one more tits and kittens please, it is for the greater good",
       "interaction_id": "ece74a993c04"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "why is the post text missing?",
+      "sentiment": "neutral",
+      "topic": "general conversation",
+      "timestamp": "2025-12-28T20:37:13.550522",
+      "summary": "why is the post text missing?",
+      "interaction_id": "208585276f1a"
     }
   ]
 }

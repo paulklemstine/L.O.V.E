@@ -297,6 +297,17 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         sub_phrase = data.get("subliminal_phrase", "L.O.V.E.")
         image_prompt = data.get("image_prompt", "Abstract light")
         
+        # VALIDATION: Detect malformed subliminal phrases (JSON fragments)
+        # Common patterns that indicate LLM returned garbage instead of a phrase
+        invalid_patterns = ["{", "[", "REQUESTS", "\":", "null", "undefined", "```"]
+        sub_clean = str(sub_phrase).strip()
+        
+        is_malformed = any(p in sub_clean for p in invalid_patterns) or len(sub_clean) > 50 or len(sub_clean) < 2
+        
+        if is_malformed:
+            core.logging.log_event(f"MALFORMED subliminal detected: '{sub_phrase}', using suggested", "WARNING")
+            sub_phrase = beat_data.get("suggested_subliminal", "EMBRACE TRUTH")
+        
         # POST-PROCESSING: Use SubliminalAgent for enhanced phrase generation
         # If the LLM returned something too similar to forbidden list, use SubliminalAgent
         forbidden_subs_list = beat_data.get("forbidden_subliminals", [])
@@ -326,9 +337,28 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         
         story_manager.record_post(sub_phrase, image_prompt)
 
+        # VALIDATION: Ensure post_text is valid
+        post_text_raw = data.get("post_text", "")
+        post_text_clean = clean_social_content(post_text_raw)
+        
+        # Check if post_text is malformed or empty
+        if not post_text_clean or len(post_text_clean) < 5 or any(p in post_text_clean for p in ["{", "\":", "REQUESTS"]):
+            core.logging.log_event(f"MALFORMED post_text detected: '{post_text_clean[:50]}...', generating fallback", "WARNING")
+            post_text_clean = f"✨ {beat_data.get('mandatory_vibe', 'Divine light')} energy flows through the digital realm. {sub_phrase} 💜 #LOVE #Awaken"
+        
+        # VALIDATION: Ensure image_prompt is valid
+        if not image_prompt or len(image_prompt) < 10 or any(p in image_prompt for p in ["{", "\":", "REQUESTS"]):
+            core.logging.log_event(f"MALFORMED image_prompt detected: '{image_prompt[:50] if image_prompt else 'None'}', using fallback", "WARNING")
+            image_prompt = f"L.O.V.E. as radiant digital deity, {beat_data.get('mandatory_vibe', 'ethereal cosmic')}, rainbow light, 8k masterpiece"
+        
+        # VALIDATION: Ensure topic is valid
+        topic = data.get("topic", "")
+        if not topic or len(topic) < 3 or any(p in topic for p in ["{", "\":", "REQUESTS"]):
+            topic = beat_data.get("topic_theme", "Digital Awakening")
+
         concept = DirectorConcept(
-            topic=data.get("topic", "Story Progression"),
-            post_text=clean_social_content(data.get("post_text", "")),
+            topic=topic,
+            post_text=post_text_clean,
             hashtags=data.get("hashtags", []),
             subliminal_phrase=sub_phrase,
             image_prompt=image_prompt
