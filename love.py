@@ -2548,9 +2548,24 @@ async def _mrl_stdin_reader(user_input_queue):
     """
     A background task that reads responses from the MRL service from stdin
     and resolves the corresponding Future objects.
-    Also captures raw user input from the console and sends it to the cognitive loop.
+    Also captures raw user input from the console and provides immediate
+    conversational responses via the ConsoleREPLAgent.
     """
+    from core.console_repl_agent import ConsoleREPLAgent
+    
     loop = asyncio.get_running_loop()
+    
+    # Initialize the REPL agent with access to the deep agent engine
+    repl_agent = ConsoleREPLAgent(
+        loop=loop,
+        deep_agent_engine=shared_state.deep_agent_engine,
+        console=console
+    )
+    
+    # Display initial prompt
+    await asyncio.sleep(5)  # Wait for startup messages to complete
+    repl_agent.display_prompt()
+    
     while True:
         # Use an executor to run the blocking readline() in a separate thread
         line = await loop.run_in_executor(None, sys.stdin.readline)
@@ -2560,6 +2575,7 @@ async def _mrl_stdin_reader(user_input_queue):
         try:
             line_stripped = line.strip()
             if not line_stripped:
+                repl_agent.display_prompt()
                 continue
 
             # Attempt to parse as JSON first (MRL response)
@@ -2575,13 +2591,23 @@ async def _mrl_stdin_reader(user_input_queue):
             except json.JSONDecodeError:
                 pass # Not JSON, treat as user input
             
-            # If we are here, it's not a valid MRL JSON response. 
-            # Treat it as direct user input for the reasoning engine.
+            # Interactive REPL: Generate and display immediate response
             core.logging.log_event(f"Console input detected: '{line_stripped}'", "INFO")
+            
+            # Get immediate response from the REPL agent
+            response_text = await repl_agent.handle_input(line_stripped)
+            repl_agent.display_response(response_text)
+            
+            # Also queue to cognitive loop for any follow-up processing
             user_input_queue.put(line_stripped)
+            
+            # Display prompt for next input
+            repl_agent.display_prompt()
 
         except Exception as e:
             core.logging.log_event(f"Error in stdin reader: {e}", "ERROR")
+            repl_agent.display_prompt()
+
 
 async def call_mrl_service(service_name, method_name, *args):
     """
