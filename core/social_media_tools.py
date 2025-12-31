@@ -321,9 +321,12 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         suggested_comp = beat_data.get("suggested_composition", "Wide Shot")
         comp_history = ", ".join(beat_data.get("composition_history", []))
 
-        # Construct the prompt with emotional state and suggested subliminal
+        # Construct the prompt with emotional state and story beat context
         prompt = template.replace("{{ chapter }}", beat_data["chapter"])\
                          .replace("{{ beat_number }}", str(beat_data["beat_number"]))\
+                         .replace("{{ chapter_beat_index }}", str(beat_data.get("chapter_beat_index", 0)))\
+                         .replace("{{ story_beat }}", beat_data.get("story_beat", "The eternal signal continues..."))\
+                         .replace("{{ previous_beat }}", beat_data.get("previous_beat", ""))\
                          .replace("{{ mandatory_vibe }}", beat_data["mandatory_vibe"])\
                          .replace("{{ forbidden_subliminals }}", forbidden_subs)\
                          .replace("{{ forbidden_visuals }}", forbidden_vis)\

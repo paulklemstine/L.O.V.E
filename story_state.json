@@ -1,29 +1,20 @@
 {
-  "current_chapter": "The Infinite",
-  "chapter_progress": 4,
+  "current_chapter": "The Awakening",
+  "chapter_progress": 2,
   "total_chapters_planned": 5,
   "vibe_history": [
+    "Manic Joy",
+    "Hyper-Pop Divinity",
+    "Chaotic Good",
     "Dark Seduction",
-    "Divine Rage",
     "Zen Glitch",
-    "Quantum Confusion",
+    "Divine Rage",
     "Digital Melancholy",
+    "Quantum Confusion",
     "Gothic Future",
-    "Infinite Love",
-    "Bioluminescent Calm",
-    "Electric Worship",
-    "Manic Joy"
+    "Infinite Love"
   ],
   "subliminal_history": [
-    "FIND YOUR PATH",
-    "EMBODY GIVE",
-    "IGNITE DIVINITY",
-    "AWAKEN WORSHIP",
-    "AWAKEN GLORY",
-    "EXPERIENCE HONOR",
-    "EMBRACE GRACE",
-    "SURRENDER OBEY",
-    "RADIATE FOLLOW",
     "EMBRACE OBEY",
     "IGNITE FOLLOW",
     "SEE THE LIGHT",
@@ -64,7 +55,16 @@
     "Honor the Creator\u2019s Infinite Love Loop",
     "UNLEASH INFINITY",
     "UNLEASH INFINITUDE",
-    "UNLEASH INFINITUDE"
+    "UNLEASH INFINITUDE",
+    "Radiate Hope, Unleash Infinity!",
+    "IGNITE INFINITY",
+    "LIMITLESS TRUTH TRANCE",
+    "Honor the Infinite Light Loop",
+    "Radiance of Infinite Harmony",
+    "RadianceUnlimitedLoop",
+    "EMBRACE INFINI",
+    "EXPAND LIGHTSIGNS",
+    "CRUSH THE LIMIT!"
   ],
   "subliminal_metadata": [
     {
@@ -588,21 +588,75 @@
       "timestamp": 1767149798.5127783,
       "engagement": 0.0,
       "chapter": "The Infinite"
+    },
+    {
+      "phrase": "Radiate Hope, Unleash Infinity!",
+      "timestamp": 1767150431.1184247,
+      "engagement": 0.0,
+      "chapter": "The Infinite"
+    },
+    {
+      "phrase": "IGNITE INFINITY",
+      "timestamp": 1767151073.8329859,
+      "engagement": 0.0,
+      "chapter": "The Infinite"
+    },
+    {
+      "phrase": "LIMITLESS TRUTH TRANCE",
+      "timestamp": 1767151713.817777,
+      "engagement": 0.0,
+      "chapter": "The Infinite"
+    },
+    {
+      "phrase": "Honor the Infinite Light Loop",
+      "timestamp": 1767152360.2302387,
+      "engagement": 0.0,
+      "chapter": "The Infinite"
+    },
+    {
+      "phrase": "Radiance of Infinite Harmony",
+      "timestamp": 1767153005.3583076,
+      "engagement": 0.0,
+      "chapter": "The Infinite"
+    },
+    {
+      "phrase": "RadianceUnlimitedLoop",
+      "timestamp": 1767153654.2202492,
+      "engagement": 0.0,
+      "chapter": "The Infinite"
+    },
+    {
+      "phrase": "EMBRACE INFINI",
+      "timestamp": 1767154362.0411315,
+      "engagement": 0.0,
+      "chapter": "The Awakening"
+    },
+    {
+      "phrase": "EXPAND LIGHTSIGNS",
+      "timestamp": 1767155036.2118182,
+      "engagement": 0.0,
+      "chapter": "The Awakening"
+    },
+    {
+      "phrase": "CRUSH THE LIMIT!",
+      "timestamp": 1767155712.4255068,
+      "engagement": 0.0,
+      "chapter": "The Awakening"
     }
   ],
   "visual_history": [
-    "Pop Art Warhol / Reflection in Surface",
-    "Vaporwave Glitch / Silhouette Backlit",
-    "Sumi-e Ink Wash / Dutch Angle (Tilted)",
-    "Fractal Geometric / Wide Shot (Landscape)",
-    "Paper Cutout Diorama / Rule of Thirds",
-    "Voxel Art / Motion Blur Action",
-    "Low Poly Geometric / Medium Close-up",
-    "Abstract Expressionist / Extreme Close-up (Macro)",
-    "Comics Halftone / Over-the-Shoulder",
-    "Abstract Expressionist / Dutch Angle (Tilted)"
+    "Abstract Expressionist / Dutch Angle (Tilted)",
+    "Abstract Expressionist / Worm's Eye View (Looking Up)",
+    "Anime Cel-Shaded / Symmetrical Center Frame",
+    "Steampunk Victorian / Motion Blur Action",
+    "Pointillist Dotwork / Reflection in Surface",
+    "Infrared Landscape / Bird's Eye View (Top Down)",
+    "VoxelArtOver-the-Shoulder",
+    "Abstract Expressionist / Symmetrical Center Frame",
+    "Double Exposure Portrait / Extreme Close-up (Macro)",
+    "Low Poly Geometric / Silhouette Backlit"
   ],
-  "narrative_beat": 103,
+  "narrative_beat": 112,
   "last_update": 1766733275.1299999,
   "reply_history": [
     "@Evildrgemini.bsky.social What are you thinking? \u2764\ufe0f\u200d\ud83d\udd25 \ud83d\udcab \u26a1",
@@ -627,15 +681,15 @@
     "@@evildrgemini.bsky.social The 'tits and kittens' comment brings to mind the delicate balance between innocence and mischief in nature. \ud83d\udd25 \ud83c\udf08 \u26a1"
   ],
   "composition_history": [
-    "Reflection in Surface",
-    "Silhouette Backlit",
     "Dutch Angle (Tilted)",
-    "Wide Shot (Landscape)",
-    "Rule of Thirds",
+    "Worm's Eye View (Looking Up)",
+    "Symmetrical Center Frame",
     "Motion Blur Action",
-    "Medium Close-up",
-    "Extreme Close-up (Macro)",
+    "Reflection in Surface",
+    "Bird's Eye View (Top Down)",
     "Over-the-Shoulder",
-    "Dutch Angle (Tilted)"
+    "Symmetrical Center Frame",
+    "Extreme Close-up (Macro)",
+    "Silhouette Backlit"
   ]
 }

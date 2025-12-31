@@ -23,6 +23,43 @@ STYLE_FONT_MAP = {
     "gyaru": ["arial", "impact", "sans-serif"],
 }
 
+# --- Subliminal Text Overlay Pools ---
+# Font paths for subliminal text - bold, high-impact fonts
+SUBLIMINAL_FONT_PATHS = [
+    # Windows fonts
+    "C:\\Windows\\Fonts\\impact.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf",
+    "C:\\Windows\\Fonts\\ariblk.ttf",
+    "C:\\Windows\\Fonts\\trebucbd.ttf",
+    # Linux fonts
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+]
+
+# High-contrast colors for subliminal text
+SUBLIMINAL_COLORS = [
+    (255, 0, 128),    # Hot Pink / Magenta
+    (0, 255, 255),    # Cyan
+    (255, 255, 0),    # Yellow
+    (0, 255, 0),      # Lime Green
+    (255, 165, 0),    # Orange
+    (255, 255, 255),  # White
+    (0, 0, 0),        # Black
+    (255, 0, 0),      # Red
+    (128, 0, 255),    # Purple
+    (0, 128, 255),    # Electric Blue
+]
+
+# Stroke colors that contrast well
+SUBLIMINAL_STROKE_COLORS = [
+    (0, 0, 0),        # Black
+    (255, 255, 255),  # White
+    (0, 0, 128),      # Dark Blue
+    (128, 0, 0),      # Dark Red
+]
+
 
 def hex_to_rgb(hex_color: str) -> tuple:
     """Convert hex color string to RGB tuple."""
@@ -54,6 +91,79 @@ def get_contrasting_color(bg_colors: list) -> tuple:
         return (255, 255, 255)  # White
     else:
         return (0, 0, 0)  # Black
+
+
+def analyze_image_region_brightness(image: Image.Image, region: str = "center") -> float:
+    """
+    Analyze the average brightness of an image region.
+    
+    Args:
+        image: PIL Image to analyze
+        region: 'top', 'center', or 'bottom'
+        
+    Returns:
+        Average brightness value (0-255)
+    """
+    width, height = image.size
+    
+    # Define region bounds (20% of image height)
+    region_height = int(height * 0.2)
+    if region == "top":
+        box = (0, 0, width, region_height)
+    elif region == "bottom":
+        box = (0, height - region_height, width, height)
+    else:  # center
+        center_start = (height - region_height) // 2
+        box = (0, center_start, width, center_start + region_height)
+    
+    # Crop and analyze
+    region_img = image.crop(box)
+    
+    # Convert to grayscale for brightness analysis
+    gray = region_img.convert('L')
+    
+    # Calculate average brightness
+    pixels = list(gray.getdata())
+    avg_brightness = sum(pixels) / len(pixels) if pixels else 128
+    
+    return avg_brightness
+
+
+def get_contrasting_subliminal_colors(image: Image.Image, position: str = "center") -> tuple:
+    """
+    Select contrasting fill and stroke colors based on image region brightness.
+    
+    Args:
+        image: PIL Image to analyze
+        position: 'top', 'center', or 'bottom'
+        
+    Returns:
+        Tuple of (fill_color, stroke_color)
+    """
+    brightness = analyze_image_region_brightness(image, position)
+    
+    # For dark backgrounds, use bright colors
+    if brightness < 100:
+        # Dark background - use bright fill, dark stroke
+        bright_colors = [(255, 0, 128), (0, 255, 255), (255, 255, 0), (0, 255, 0), (255, 165, 0), (255, 255, 255)]
+        fill_color = random.choice(bright_colors)
+        stroke_color = (0, 0, 0)
+    elif brightness > 180:
+        # Light background - use dark fill, light stroke
+        dark_colors = [(0, 0, 0), (128, 0, 128), (0, 0, 128), (128, 0, 0)]
+        fill_color = random.choice(dark_colors)
+        stroke_color = (255, 255, 255)
+    else:
+        # Medium brightness - use high contrast pairs
+        contrast_pairs = [
+            ((255, 255, 255), (0, 0, 0)),
+            ((255, 255, 0), (0, 0, 0)),
+            ((0, 255, 255), (0, 0, 0)),
+            ((255, 0, 128), (255, 255, 255)),
+        ]
+        fill_color, stroke_color = random.choice(contrast_pairs)
+    
+    return fill_color, stroke_color
 
 
 def overlay_text_from_concept(
@@ -280,17 +390,48 @@ def overlay_text_on_image(image: Image.Image, text: str, position: str = "bottom
     # --- Rendering Styles ---
     # Story 2.3 Requirement: Black stroke (2px) + hot pink/main color fill
     
-    if style == "neon" or style == "subliminal":
+    if style == "subliminal":
+        # SUBLIMINAL STYLE: Smart contrast + random font from pool
+        # Analyze image region to get contrasting colors
+        fill_color, stroke_color = get_contrasting_subliminal_colors(image, position)
+        stroke_width = 3  # Thicker stroke for subliminal visibility
+        
+        # Try to use a random font from the subliminal pool
+        subliminal_font = None
+        random.shuffle(SUBLIMINAL_FONT_PATHS)  # Randomize font selection
+        for path in SUBLIMINAL_FONT_PATHS:
+            try:
+                if os.path.exists(path):
+                    subliminal_font = ImageFont.truetype(path, font_size)
+                    logging.info(f"Subliminal using font: {path}")
+                    break
+            except Exception:
+                continue
+        
+        if subliminal_font:
+            font = subliminal_font
+            # Recalculate text dimensions with new font
+            text_bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+            x = (width - text_width) // 2
+            
+            # Recalculate Y position based on position argument
+            if position == "top":
+                y = padding
+            elif position == "center":
+                y = (height - text_height) // 2
+            else:  # bottom
+                y = int(height * 0.8) - (text_height // 2)
+        
+        logging.info(f"Subliminal overlay: fill={fill_color}, stroke={stroke_color}, pos={position}")
+        draw.text((x, y), text, font=font, fill=fill_color, stroke_width=stroke_width, stroke_fill=stroke_color)
+        
+    elif style == "neon":
         # Stroke
         stroke_width = 2
-        stroke_color = (0, 0, 0)
-        
-        # Fill - Hot Pink for high visibility/Ero-Kakkoii
-        fill_color = (255, 105, 180) # Hot Pink
-        if style == "neon":
-             # Keeps cyan glow for "neon" style if requested
-             fill_color = (255, 255, 255)
-             stroke_color = (0, 255, 255) # Cyan stroke for neon
+        stroke_color = (0, 255, 255)  # Cyan stroke for neon
+        fill_color = (255, 255, 255)
         
         draw.text((x, y), text, font=font, fill=fill_color, stroke_width=stroke_width, stroke_fill=stroke_color)
         
