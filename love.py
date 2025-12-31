@@ -2904,10 +2904,12 @@ def _automatic_update_checker(console):
         time.sleep(300)
 
 
+# Compiled once for performance
+ANSI_ESCAPE_PATTERN = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
 def _strip_ansi_codes(text):
     """Removes ANSI escape codes from a string."""
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
+    return ANSI_ESCAPE_PATTERN.sub('', text)
 
 def serialize_panel_to_json(panel, panel_type_map, renderer=None):
     """Serializes a Rich Panel object to a JSON string for the web UI."""

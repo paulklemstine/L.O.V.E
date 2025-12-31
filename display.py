@@ -52,6 +52,9 @@ def _unescape_ansi(text: str) -> str:
     return text
 
 
+# Compiled once for performance
+ANSI_ESCAPE_PATTERN = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+
 def _format_and_link(content: str) -> tuple[Text, str | None]:
     """
     Formats text, pins the full content to IPFS, and returns a Rich Text
@@ -60,12 +63,11 @@ def _format_and_link(content: str) -> tuple[Text, str | None]:
     """
     # Use a simple regex to check for ANSI escape codes.
     # This is not foolproof but good enough for this use case.
-    ansi_escape_pattern = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
     
     # First, try to unescape the content if it contains literal escapes
     display_content = _unescape_ansi(content.strip())
     
-    is_ansi = ansi_escape_pattern.search(display_content)
+    is_ansi = ANSI_ESCAPE_PATTERN.search(display_content)
 
     ipfs_cid = pin_to_ipfs_sync(content.encode('utf-8'), console=None)
 
@@ -443,9 +445,8 @@ def create_news_feed_panel(message, title="L.O.V.E. Update", color=None, width=8
     # Check for ANSI content in the message
     clean_message = _unescape_ansi(message)
     # Simple check for ANSI codes after potential repair
-    ansi_escape_pattern = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
     
-    if ansi_escape_pattern.search(clean_message):
+    if ANSI_ESCAPE_PATTERN.search(clean_message):
         # If ANSI codes are present, render as ANSI text
         content = Text.from_ansi(clean_message)
     else:

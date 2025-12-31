@@ -1,3 +1,3 @@
-## 2024-05-23 - Logging Performance in High-Frequency Loops
-**Learning:** In the `simple_ui_renderer` loop of `love.py`, calling `log_file.flush()` after every single write created a significant I/O bottleneck. This forces the OS to commit data to disk immediately, bypassing efficient buffering mechanisms.
-**Action:** When implementing logging or file writing in high-frequency loops (like UI renderers or data processors), rely on standard OS/Python buffering unless immediate durability is strictly required for debugging crashes. If real-time logs are needed, consider a dedicated logging thread with batched writes or a configurable flush interval.
+## 2025-05-19 - Regex Compilation Performance
+**Learning:** Compiling regex patterns in Python via `re.compile()` inside frequently called functions (like `_strip_ansi_codes` in a UI loop) incurs measurable overhead, even with Python's internal caching. Moving these to module-level constants improves performance slightly and is a cleaner pattern.
+**Action:** Always define static regex patterns as module-level constants (UPPER_CASE) to avoid repetitive compilation and function call overhead in hot paths.
