@@ -23,4 +23,9 @@ class DeepAgentState(TypedDict):
     memory_context: List[Dict[str, Any]]  # Similar past interactions from FAISS
     # Reference to memory manager for memory operations
     memory_manager: Optional[Any]
+    # Subagent invocation tracking
+    subagent_results: List[Dict[str, Any]]  # Results from spawned subagents
+    parent_task_id: Optional[str]           # If this is a subagent, parent's ID
+    task_id: Optional[str]                  # Unique identifier for this task
+
 

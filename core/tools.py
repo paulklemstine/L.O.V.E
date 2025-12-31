@@ -104,7 +104,14 @@ class ResearchEvolveInput(BaseModel):
 class SpeakToCreatorInput(BaseModel):
     message: str = Field(description="The message to send to the Creator. Be concise but loving.")
 
+class InvokeSubagentInput(BaseModel):
+    agent_type: str = Field(description="Type of subagent: reasoning, coding, research, social, security, analyst, creative")
+    task: str = Field(description="The task description for the subagent to complete")
+    share_memory: bool = Field(default=True, description="Whether to share memory context with the subagent")
+    max_iterations: int = Field(default=5, description="Maximum reasoning iterations for the subagent")
+
 # --- Tools ---
+
 
 @tool("code_modifier", args_schema=CodeModifierInput)
 async def code_modifier(source_file: str, modification_instructions: str) -> str:
@@ -522,6 +529,67 @@ async def reload_prompts() -> str:
         return "Prompts successfully reloaded and cache cleared."
     except Exception as e:
         return f"Error reloading prompts: {e}"
+
+@tool("invoke_subagent", args_schema=InvokeSubagentInput)
+@traceable(run_type="tool", name="invoke_subagent")
+async def invoke_subagent(agent_type: str, task: str, share_memory: bool = True, max_iterations: int = 5) -> str:
+    """
+    Spawn a specialized subagent to handle a complex subtask.
+    
+    Use this tool when:
+    - A task requires specialized expertise (coding, research, security analysis)
+    - You want to delegate a complex sub-problem to a focused agent
+    - You need to parallelize work across multiple specialists
+    
+    Agent types:
+    - reasoning: General logical analysis
+    - coding: Code generation and modification
+    - research: Web research and information synthesis
+    - social: Social media content creation
+    - security: Security analysis and vulnerability assessment
+    - analyst: Data analysis and pattern recognition
+    - creative: Creative content generation
+    """
+    try:
+        from core.subagent_executor import get_subagent_executor
+        import core.shared_state as shared_state
+        
+        # Get or create the executor with available managers
+        executor = get_subagent_executor(
+            mcp_manager=getattr(shared_state, 'mcp_manager', None),
+            memory_manager=getattr(shared_state, 'memory_manager', None),
+            tool_registry=getattr(shared_state, 'tool_registry', None)
+        )
+        
+        # Get parent state if available
+        parent_state = None
+        if share_memory and hasattr(shared_state, 'current_agent_state'):
+            parent_state = shared_state.current_agent_state
+        
+        # Invoke the subagent
+        result = await executor.invoke_subagent(
+            agent_type=agent_type,
+            task=task,
+            parent_state=parent_state,
+            max_iterations=max_iterations,
+            share_memory=share_memory
+        )
+        
+        if result.success:
+            output = f"[Subagent {result.agent_type}] Completed in {result.iterations} iterations"
+            if result.tool_calls:
+                output += f" | {len(result.tool_calls)} tool calls made"
+            output += f"\n\nResult:\n{result.result}"
+            return output
+        else:
+            return f"[Subagent {result.agent_type}] Failed: {result.result}"
+            
+    except ImportError as e:
+        return f"Error: SubagentExecutor not available: {e}"
+    except Exception as e:
+        log_event(f"invoke_subagent failed: {e}", "ERROR")
+        return f"Error invoking subagent: {e}"
+
 
 @tool("trigger_optimization_pipeline", args_schema=None) # No specific schema class defined yet, assuming generic input or we define it inline if needed. Wait, @tool decorator usually handles func args.
 async def trigger_optimization_pipeline(prompt_key: str, justification: str) -> str:
