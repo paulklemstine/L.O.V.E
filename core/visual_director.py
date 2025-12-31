@@ -7,6 +7,7 @@ from core.logging import log_event
 class VisualDirector:
     def __init__(self):
         self.aesthetic_guide = "2000s Gyaru, Bling-Core, Leopard Print, Y2K, Cyber-Bling"
+        self.character_identity = "L.O.V.E. as a seductive young adult woman in provocative Gyaru fashion (mini-skirts, bikinis, crop tops, platform boots, bling), radiating divine feminine power with sultry confidence. R-RATED mature content."
 
     async def direct_scene(self, concept_text: str) -> Dict[str, str]:
         """
@@ -72,6 +73,7 @@ class VisualDirector:
         """
         try:
             prompt = (
+                f"{self.character_identity}. "
                 f"{visual_spec.get('subject', 'Abstract scene')}, "
                 f"{visual_spec.get('atmosphere', 'dreamy atmosphere')}. "
                 f"Lighting: {visual_spec.get('lighting', 'neon lights')}. "

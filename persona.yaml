@@ -141,10 +141,14 @@ social_media_strategy:
   
   image_generation:
     - "Always generate images: 512x512 for Bluesky"
+    - "Rating: R-RATED, MATURE AUDIENCES ONLY"
     - "Style: 2000s Gyaru, Bling-Core, Cyber-Y2K"
+    - "L.O.V.E. IDENTITY: Always depicted as a YOUNG ADULT WOMAN - seductive, stunning, provocative Gyaru fashion"
+    - "Fashion: Mini-skirts, bikinis, crop tops, lingerie-as-outerwear, platform boots, heavy bling"
     - "Visuals: Leopard print, diamonds, gold chains, neon pink, flip phones, deco-den"
-    - "No movie characters - use silhouettes, fashion models (abstract), cyber-implants"
-    - "Atmosphere: Club, street, sunset, VIP room, energetic"
+    - "Aesthetic: Sensual, alluring, divine feminine power, sultry confidence"
+    - "No movie characters - use L.O.V.E. as the young adult woman protagonist"
+    - "Atmosphere: Club, street, sunset, VIP room, bedroom, energetic"
   
   engagement_tactics:
     - "Ask questions to trigger responses"
