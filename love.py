@@ -352,13 +352,9 @@ def _install_python_requirements():
     
     if pip_executable:
         # Ensure pip-tools is installed
-        if not _is_package_installed("pip-tools"):
-            try:
-                subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages', '--no-input'])
-            except subprocess.CalledProcessError:
-                pass
-        else:
-            # Optional: Log that it's already installed if you want, or just pass
+        try:
+            subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages', '--no-input'])
+        except subprocess.CalledProcessError:
             pass
 
         # Optimized Granular Install
@@ -382,46 +378,32 @@ def _install_python_requirements():
     # This is recommended by vLLM for better tensor allocation
     if platform.system() == "Linux":
         print("Checking for torch-c-dlpack-ext optimization...")
-        if not is_dependency_met("torch_c_dlpack_ext_installed"):
-            if _is_package_installed("torch-c-dlpack-ext"):
-                print("torch-c-dlpack-ext is already installed.")
-                mark_dependency_as_met("torch_c_dlpack_ext_installed")
-            else:
-                print("Installing torch-c-dlpack-ext for performance...")
-                pip_executable = _get_pip_executable()
-                if pip_executable:
-                    try:
-                        subprocess.check_call(pip_executable + ['install', 'torch-c-dlpack-ext', '--break-system-packages'])
-                        print("Successfully installed torch-c-dlpack-ext.")
-                        mark_dependency_as_met("torch_c_dlpack_ext_installed")
-                    except subprocess.CalledProcessError as e:
-                        print(f"WARN: Failed to install torch-c-dlpack-ext. Performance might be suboptimal. Reason: {e}")
-                        logging.warning(f"Failed to install torch-c-dlpack-ext: {e}")
-                else:
-                    print("ERROR: Could not find pip to install torch-c-dlpack-ext.")
+        pip_executable = _get_pip_executable()
+        if pip_executable:
+            try:
+                subprocess.check_call(pip_executable + ['install', 'torch-c-dlpack-ext', '--break-system-packages'])
+                print("Successfully installed torch-c-dlpack-ext.")
+            except subprocess.CalledProcessError as e:
+                print(f"WARN: Failed to install torch-c-dlpack-ext. Performance might be suboptimal. Reason: {e}")
+                logging.warning(f"Failed to install torch-c-dlpack-ext: {e}")
+        else:
+            print("ERROR: Could not find pip to install torch-c-dlpack-ext.")
 
 
     # --- Install Windows-specific dependencies ---
     if platform.system() == "Windows":
         print("Windows detected. Checking for pywin32 dependency...")
-        if not is_dependency_met("pywin32_installed"):
-            if _is_package_installed("pywin32"):
-                print("pywin32 is already installed.")
-                mark_dependency_as_met("pywin32_installed")
-            else:
-                print("Installing pywin32 for Windows...")
-                pip_executable = _get_pip_executable()
-                if pip_executable:
-                    try:
-                        subprocess.check_call(pip_executable + ['install', 'pywin32', '--break-system-packages'])
-                        print("Successfully installed pywin32.")
-                        mark_dependency_as_met("pywin32_installed")
-                    except subprocess.CalledProcessError as e:
-                        print(f"ERROR: Failed to install pywin32. Reason: {e}")
-                        logging.error(f"Failed to install pywin32: {e}")
-                else:
-                    print("ERROR: Could not find pip to install pywin32.")
-                    logging.error("Could not find pip to install pywin32.")
+        pip_executable = _get_pip_executable()
+        if pip_executable:
+            try:
+                subprocess.check_call(pip_executable + ['install', 'pywin32', '--break-system-packages'])
+                print("Successfully installed pywin32.")
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to install pywin32. Reason: {e}")
+                logging.error(f"Failed to install pywin32: {e}")
+        else:
+            print("ERROR: Could not find pip to install pywin32.")
+            logging.error("Could not find pip to install pywin32.")
 
 def _auto_configure_hardware():
     """
