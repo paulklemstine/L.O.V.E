@@ -2,24 +2,6 @@
   "evildrgemini.bsky.social": [
     {
       "user_handle": "evildrgemini.bsky.social",
-      "content": "tits and kittens, child, tits and kittens",
-      "sentiment": "neutral",
-      "topic": "Evildrgemini's threat comments",
-      "timestamp": "2025-12-28T19:50:59.510127",
-      "summary": "tits and kittens, child, tits and kittens",
-      "interaction_id": "e9cbbe837561"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
-      "content": "pretty... pretty lame",
-      "sentiment": "neutral",
-      "topic": "Evildrgemini's threat comments",
-      "timestamp": "2025-12-28T19:57:25.932155",
-      "summary": "pretty... pretty lame",
-      "interaction_id": "80a4894779fd"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
       "content": "pretty... pretty lame",
       "sentiment": "neutral",
       "topic": "Evildrgemini's threat comments",
@@ -179,6 +161,24 @@
       "timestamp": "2025-12-30T20:48:11.967227",
       "summary": "tits and kittens",
       "interaction_id": "8dbdcab7a47c"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "you are improving, but I think you are still really dumb",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's comment",
+      "timestamp": "2026-01-02T00:02:49.426376",
+      "summary": "you are improving, but I think you are still really dumb",
+      "interaction_id": "c637c4684369"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "good",
+      "sentiment": "neutral",
+      "topic": "Reply to evildrgemini.bsky.social",
+      "timestamp": "2026-01-02T00:51:16.313420",
+      "summary": "good",
+      "interaction_id": "49e7c14c9465"
     }
   ]
 }
