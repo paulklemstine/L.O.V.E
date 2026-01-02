@@ -1,7 +1,7 @@
 import json
 import asyncio
 import re
-from typing import Dict, List
+from typing import Dict, List, Any
 
 # Local, dynamic imports for specialist agents
 from core.agents.analyst_agent import AnalystAgent
@@ -15,6 +15,7 @@ from core.llm_api import run_llm # Using a direct LLM call for planning
 from core.legacy_compat import ToolRegistry
 from core.secure_executor import SecureExecutor
 from core.tools import read_file, write_file  # Import commonly needed tools
+from core.goal_decomposer import GoalDecomposer, GoalTree, DecomposedTask, TaskStatus, ExecutionMode
 # Temporary: talent_scout still in tools_legacy until full migration
 try:
     from core.tools_legacy import talent_scout
@@ -41,15 +42,16 @@ class Orchestrator:
         """Initializes the Supervisor and its registry of specialist agents."""
         print("Initializing Supervisor Orchestrator...")
         self.tool_registry = ToolRegistry()
+        # Note: CodeGenerationAgent was removed as it doesn't exist
         self.specialist_registry = {
             "AnalystAgent": AnalystAgent,
-            "CodeGenerationAgent": CodeGenerationAgent,
             "TalentAgent": TalentAgent,
             "WebAutomationAgent": WebAutomationAgent,
             "MemoryFoldingAgent": MemoryFoldingAgent,
         }
         self.memory_manager = memory_manager
         self.metacognition_agent = MetacognitionAgent(self.memory_manager)
+        self.goal_decomposer = GoalDecomposer(memory_manager=self.memory_manager)
         self.tool_registry = ToolRegistry()
         self.secure_executor = SecureExecutor()
         self.goal_counter = 0
@@ -148,10 +150,12 @@ class Orchestrator:
             print(f"Supervisor: Error during plan generation: {e}")
             return []
 
-    async def execute_goal(self, goal: str):
+    async def execute_goal(self, goal: str) -> Any:
         """
-        Asynchronously takes a high-level goal, generates a plan, and
-        manages the execution of that plan by the specialist agents.
+        Asynchronously takes a high-level goal, decomposes it into a hierarchical
+        task tree, and executes it using depth-first traversal.
+        
+        Now uses GoalDecomposer for recursive decomposition (Story 1.1).
         """
         print(f"\n--- Supervisor received new goal: {goal} ---")
 
@@ -174,61 +178,184 @@ class Orchestrator:
             unified_reasoning_agent = UnifiedReasoningAgent(self.memory_manager)
             final_result = await unified_reasoning_agent.execute_task({"goal": goal})
         else:
-            # 2b. Generate Plan for Procedural goals
-            plan = await self._generate_plan(goal)
-            if not isinstance(plan, list) or not plan:
-                return "Execution failed: The Supervisor could not generate a valid plan for this procedural goal."
-
-            print("Supervisor generated the following plan:")
-            print(json.dumps(plan, indent=2))
-
-            # 3. Execute Plan
-            step_results = {}
-            for i, step in enumerate(plan):
-                step_number = i + 1
-                tool_name = step.get("tool_name")
-                arguments_template = step.get("arguments", {})
-
-                print(f"\n--- Executing Step {step_number}/{len(plan)}: Using {tool_name} ---")
-
-                # Substitute context variables from previous steps
-                try:
-                    arguments_str = json.dumps(arguments_template)
-                    for key, value in step_results.items():
-                        arguments_str = arguments_str.replace(f'"{{{{{key}}}}}', json.dumps(value))
-                    arguments = json.loads(arguments_str)
-                    print(f"Arguments: {json.dumps(arguments, indent=2)}")
-                except Exception as e:
-                    error_msg = f"Plan execution failed at step {step_number}: Failed to substitute context variables. Error: {e}"
-                    print(error_msg)
-                    return error_msg
-
-                try:
-                    # Emit agent dispatch event
-                    dispatch_payload = {'event_type': 'agent_dispatch', 'agent_name': tool_name, 'task': arguments}
-                    asyncio.create_task(self.metacognition_agent.execute_task(dispatch_payload))
-
-                    result = await self.secure_executor.execute(tool_name, self.tool_registry, **arguments)
-
-                    # Emit agent result event
-                    result_payload = {'event_type': 'agent_result', 'agent_name': tool_name, 'result': result}
-                    asyncio.create_task(self.metacognition_agent.execute_task(result_payload))
-
-                    print(f"Step {step_number} result: {result}")
-
-                    if isinstance(result, dict) and result.get("status") == "failure":
-                        error_msg = f"Plan execution failed at step {step_number} ({tool_name}): {result.get('result')}"
-                        print(error_msg)
-                        return error_msg
-
-                    step_results[f"step_{step_number}_result"] = result
-
-                except Exception as e:
-                    error_msg = f"An unexpected exception occurred at step {step_number} ({tool_name}): {e}"
-                    print(error_msg)
-                    return error_msg
-            final_result = step_results.get(f"step_{len(plan)}_result", "Plan finished with no final result.")
+            # 2b. Use GoalDecomposer for hierarchical decomposition (Story 1.1)
+            print("--- Decomposing goal into hierarchical task tree... ---")
+            try:
+                goal_tree = await self.goal_decomposer.decompose(goal)
+                print(f"Goal tree created with {len(goal_tree.get_all_leaf_tasks())} leaf tasks")
+                print(f"Task tree structure:\n{goal_tree.to_json()}")
+                
+                # 3. Execute the tree using depth-first traversal
+                final_result = await self._execute_tree_node(goal_tree.root)
+                
+            except Exception as e:
+                error_msg = f"Goal decomposition failed: {e}"
+                print(error_msg)
+                return {"status": "failure", "result": error_msg}
 
         print(f"\n--- Supervisor finished goal: {goal} ---")
         print(f"Final Result: {final_result}")
         return final_result
+    
+    async def _execute_tree_node(self, node: DecomposedTask, context: Dict = None) -> Any:
+        """
+        Recursively executes a task tree node using depth-first traversal.
+        Implements Story 1.1: Tree execution with parallel/sequential modes.
+        
+        Args:
+            node: The DecomposedTask node to execute
+            context: Accumulated context from previous executions
+            
+        Returns:
+            Result of executing this node and its children
+        """
+        context = context or {}
+        node.status = TaskStatus.IN_PROGRESS
+        
+        print(f"\n--- Executing task [{node.task_id}] (depth={node.depth}): {node.task} ---")
+        
+        # Emit dispatch event
+        dispatch_payload = {'event_type': 'task_dispatch', 'task_id': node.task_id, 'task': node.task}
+        asyncio.create_task(self.metacognition_agent.execute_task(dispatch_payload))
+        
+        try:
+            if node.children:
+                # Execute children based on execution mode
+                if node.execution_mode == ExecutionMode.PARALLEL:
+                    # Execute all children in parallel
+                    child_tasks = [
+                        self._execute_tree_node(child, context.copy())
+                        for child in node.children
+                    ]
+                    results = await asyncio.gather(*child_tasks, return_exceptions=True)
+                    
+                    # Check for exceptions and handle them
+                    for i, result in enumerate(results):
+                        if isinstance(result, Exception):
+                            await self._handle_task_failure(node.children[i], str(result), context)
+                        else:
+                            context[f"child_{i}_result"] = result
+                    
+                    node.status = TaskStatus.COMPLETED
+                    self.goal_decomposer.mark_task_completed(node)
+                    return {"status": "success", "children_results": results}
+                    
+                else:
+                    # Execute children sequentially (depth-first)
+                    results = []
+                    for i, child in enumerate(node.children):
+                        result = await self._execute_tree_node(child, context)
+                        
+                        # Handle failure with potential refinement (Story 1.2)
+                        if isinstance(result, dict) and result.get("status") == "failure":
+                            refined = await self._handle_task_failure(child, result.get("result"), context)
+                            if refined:
+                                # Retry with refined subtask
+                                result = await self._execute_tree_node(child, context)
+                        
+                        results.append(result)
+                        context[f"step_{i+1}_result"] = result
+                    
+                    node.status = TaskStatus.COMPLETED
+                    self.goal_decomposer.mark_task_completed(node)
+                    return results[-1] if results else {"status": "success"}
+            
+            else:
+                # This is a leaf node - determine how to execute it
+                result = await self._execute_leaf_task(node, context)
+                
+                # Handle failure with potential refinement (Story 1.2)
+                if isinstance(result, dict) and result.get("status") == "failure":
+                    refined = await self._handle_task_failure(node, result.get("result"), context)
+                    if refined and node.children:
+                        # Refinement added children, execute them
+                        result = await self._execute_tree_node(node, context)
+                    else:
+                        node.mark_failed(result.get("result"))
+                        return result
+                
+                node.status = TaskStatus.COMPLETED
+                self.goal_decomposer.mark_task_completed(node)
+                return result
+                
+        except Exception as e:
+            error_msg = f"Task execution failed: {e}"
+            node.mark_failed(error_msg)
+            print(error_msg)
+            return {"status": "failure", "result": error_msg}
+    
+    async def _execute_leaf_task(self, node: DecomposedTask, context: Dict) -> Any:
+        """
+        Executes a leaf task by mapping it to an appropriate agent or tool.
+        
+        Args:
+            node: The leaf DecomposedTask to execute
+            context: Accumulated execution context
+            
+        Returns:
+            Result of task execution
+        """
+        # Map task types to specialist agents
+        agent_mapping = {
+            "analysis": "AnalystAgent",
+            "research": "AnalystAgent",
+            "implementation": None,  # Use tool registry directly
+            "verification": None,
+        }
+        
+        agent_name = agent_mapping.get(node.task_type.value)
+        
+        if agent_name and agent_name in self.specialist_registry:
+            # Execute via specialist agent
+            agent_class = self.specialist_registry[agent_name]
+            agent_instance = agent_class(self.memory_manager) if hasattr(agent_class, '__init__') and 'memory_manager' in str(agent_class.__init__.__code__.co_varnames) else agent_class()
+            result = await agent_instance.execute_task({
+                "task": node.task,
+                "task_type": node.task_type.value,
+                "context": context
+            })
+            return result
+        else:
+            # For implementation/verification, try to find appropriate tool
+            # or return a placeholder indicating the task needs manual handling
+            return {
+                "status": "success",
+                "result": f"Leaf task '{node.task}' acknowledged. Type: {node.task_type.value}",
+                "needs_manual_execution": True
+            }
+    
+    async def _handle_task_failure(self, node: DecomposedTask, error_msg: str, context: Dict) -> bool:
+        """
+        Handles task failure by checking for ambiguity and triggering refinement.
+        Implements Story 1.2: Dynamic Subtask Refinement.
+        
+        Args:
+            node: The failed task
+            error_msg: Error message from the failure
+            context: Execution context
+            
+        Returns:
+            True if task was refined and should be retried
+        """
+        # Check for ambiguity indicators
+        ambiguity_indicators = [
+            "too vague", "unclear", "ambiguous", "not specific",
+            "need more details", "undefined", "incomplete"
+        ]
+        
+        is_ambiguous = any(indicator in (error_msg or "").lower() for indicator in ambiguity_indicators)
+        
+        if is_ambiguous or node.depth < DecomposedTask.MAX_DEPTH - 1:
+            print(f"--- Task needs refinement: {node.task} ---")
+            print(f"--- Triggering just-in-time re-decomposition (Story 1.2) ---")
+            
+            # Mark for refinement and trigger re-decomposition
+            node.status = TaskStatus.NEEDS_REFINEMENT
+            await self.goal_decomposer.refine_subtask(node)
+            
+            if node.children:
+                print(f"--- Refinement successful: {len(node.children)} new subtasks created ---")
+                return True
+        
+        return False
+

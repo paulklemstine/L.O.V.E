@@ -21,3 +21,5 @@ ui_panel_queue: Optional[queue.Queue] = None
 # Task Management
 love_task_manager: Any = None
 
+# Completed Tasks Registry (Epic 1: Hierarchical Task Decomposition)
+completed_tasks: Dict[str, Dict[str, Any]] = {}
