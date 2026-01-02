@@ -301,6 +301,74 @@ def create_critical_error_panel(traceback_str, width=80):
     return Gradient(panel, colors=["bright_red", random.choice(RAVE_COLORS)]), cid
 
 
+def _extract_art_from_json_response(content: str) -> str:
+    """
+    Extracts actual ANSI art content from potentially malformed LLM responses.
+    
+    Some models (especially free OpenRouter models) may return responses that:
+    - Echo back the original request structure as JSON
+    - Wrap content in JSON metadata
+    - Include explanatory text after the art
+    
+    This function attempts to extract just the art content.
+    """
+    if not content or not isinstance(content, str):
+        return ""
+    
+    content = content.strip()
+    
+    # If it looks like JSON, try to parse and extract useful content
+    if content.startswith("{") or content.startswith("["):
+        try:
+            parsed = json.loads(content)
+            
+            # Handle OpenRouter request echo: {"requests": [{"model": ..., "messages": [...]}]}
+            if isinstance(parsed, dict):
+                if "requests" in parsed:
+                    # This is an echoed request, not a valid response - return empty
+                    logging.warning("Detected echoed API request in LLM response, ignoring.")
+                    return ""
+                
+                # Handle {"choices": [{"message": {"content": "..."}}]} format
+                if "choices" in parsed:
+                    choices = parsed.get("choices", [])
+                    if choices and isinstance(choices, list):
+                        msg = choices[0].get("message", {})
+                        if isinstance(msg, dict):
+                            return msg.get("content", "")
+                
+                # Handle {"content": "..."} format
+                if "content" in parsed:
+                    return parsed.get("content", "")
+                
+                # Handle {"result": "..."} format
+                if "result" in parsed:
+                    return parsed.get("result", "")
+        except json.JSONDecodeError:
+            # Not valid JSON, continue with text processing
+            pass
+    
+    # Check for ANSI art before explanatory text
+    # Many models add "The ANSI art above..." or similar explanations after the art
+    explanation_markers = [
+        "\n\nThe ANSI art",
+        "\n\nThis ANSI art",
+        "\n\nAbove is",
+        "\n\nI created",
+        "\n\nHere is",
+        "\n\n---",
+        "\nThe above",
+    ]
+    
+    for marker in explanation_markers:
+        if marker in content:
+            # Take everything before the explanation
+            content = content.split(marker)[0].strip()
+            break
+    
+    return content
+
+
 async def generate_llm_art(prompt, width=50, height=6):
     """Generates ANSI art using the LLM."""
     from core.llm_api import run_llm
@@ -328,6 +396,12 @@ async def generate_llm_art(prompt, width=50, height=6):
         response = await run_llm(art_prompt, purpose="creative_art")
         art_content = response.get("result", "")
         if not art_content:
+            return generate_binary_art(width, height)
+        
+        # Extract actual art content from potentially malformed responses
+        art_content = _extract_art_from_json_response(art_content)
+        if not art_content:
+            logging.warning("No valid art content extracted from LLM response, using fallback.")
             return generate_binary_art(width, height)
             
         # Clean up the art (remove markdown blocks if present)

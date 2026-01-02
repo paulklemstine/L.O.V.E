@@ -1,7 +1,74 @@
 import json
 import re
 import ast
-from typing import Dict, Any, Optional
+import logging
+from typing import Dict, Any, Optional, Union
+
+
+def extract_clean_text_content(response: str) -> str:
+    """
+    Extracts clean text content from LLM responses that may contain unwanted metadata.
+    
+    Some free OpenRouter models may return responses that:
+    - Echo back the original API request structure as JSON
+    - Wrap content in JSON with keys like 'requests', 'model', 'messages'
+    - Include explanatory text after the actual content
+    
+    This function attempts to extract just the useful text content.
+    
+    Args:
+        response: Raw LLM response string
+        
+    Returns:
+        Cleaned text content, or empty string if the response is malformed/echoed
+    """
+    if not response or not isinstance(response, str):
+        return ""
+    
+    response = response.strip()
+    
+    # Check if it looks like an echoed API request (JSON with 'requests' key)
+    if response.startswith("{") or response.startswith("["):
+        try:
+            parsed = json.loads(response)
+            
+            if isinstance(parsed, dict):
+                # Detect echoed API request patterns
+                if "requests" in parsed and isinstance(parsed["requests"], list):
+                    # This is an echoed API request, not a valid response
+                    logging.warning("Detected echoed API request in LLM response - model may be malfunctioning")
+                    return ""
+                
+                # Extract from standard response formats
+                if "choices" in parsed and isinstance(parsed["choices"], list):
+                    if parsed["choices"]:
+                        msg = parsed["choices"][0].get("message", {})
+                        if isinstance(msg, dict) and "content" in msg:
+                            return msg.get("content", "")
+                
+                # Direct content extraction
+                for key in ["content", "text", "result", "response", "output"]:
+                    if key in parsed and isinstance(parsed[key], str):
+                        return parsed[key]
+                        
+        except json.JSONDecodeError:
+            # Not valid JSON, continue with the original content
+            pass
+    
+    # Remove common explanatory suffixes that models add
+    explanation_patterns = [
+        r"\n\nThe (?:ANSI art|above|output).*$",
+        r"\n\nThis (?:ANSI art|representation).*$", 
+        r"\n\nI (?:created|generated|made).*$",
+        r"\n\nHere (?:is|are).*$",
+        r"\n\n---.*$",
+        r"\n\nNote:.*$",
+    ]
+    
+    for pattern in explanation_patterns:
+        response = re.sub(pattern, "", response, flags=re.DOTALL | re.IGNORECASE)
+    
+    return response.strip()
 
 
 def smart_parse_llm_response(response: str, expected_keys: Optional[list] = None) -> Dict[str, Any]:
