@@ -256,3 +256,87 @@ class MCPManager:
         for name in server_names:
             self.stop_server(name)
         core.logging.log_event("All MCP servers stopped.", "INFO")
+    
+    def reload_servers(self):
+        """
+        Hot-reload server configurations from mcp_servers.json.
+        Epic 3: Story 3.2 - Enables adding new servers without restart.
+        
+        Returns:
+            dict with 'added', 'removed', and 'unchanged' server names
+        """
+        old_configs = set(self.server_configs.keys())
+        self.server_configs = self._load_server_configs()
+        new_configs = set(self.server_configs.keys())
+        
+        added = new_configs - old_configs
+        removed = old_configs - new_configs
+        unchanged = old_configs & new_configs
+        
+        result = {
+            "added": list(added),
+            "removed": list(removed),
+            "unchanged": list(unchanged)
+        }
+        
+        core.logging.log_event(
+            f"MCP configs reloaded: {len(added)} added, {len(removed)} removed, {len(unchanged)} unchanged",
+            "INFO"
+        )
+        
+        return result
+    
+    def add_server_config(self, server_name: str, config: dict) -> bool:
+        """
+        Dynamically add a new server configuration and save to mcp_servers.json.
+        Epic 3: Story 3.2 - Autonomous server installation.
+        
+        Args:
+            server_name: Name for the new server
+            config: Configuration dict with 'command', 'args', 'requires_env', 'tools'
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Validate config structure
+            required_keys = ["command"]
+            for key in required_keys:
+                if key not in config:
+                    core.logging.log_event(
+                        f"Invalid server config: missing '{key}'",
+                        "ERROR"
+                    )
+                    return False
+            
+            # Load current configs
+            config_path = "mcp_servers.json"
+            current_configs = {}
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    current_configs = json.load(f)
+            
+            # Add new config
+            current_configs[server_name] = config
+            
+            # Write back
+            with open(config_path, 'w') as f:
+                json.dump(current_configs, f, indent=4)
+            
+            # Reload configs
+            self.reload_servers()
+            
+            core.logging.log_event(
+                f"Added new MCP server config: {server_name}",
+                "INFO"
+            )
+            
+            return True
+            
+        except Exception as e:
+            core.logging.log_event(
+                f"Failed to add server config '{server_name}': {e}",
+                "ERROR"
+            )
+            return False
+

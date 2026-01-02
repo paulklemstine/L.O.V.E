@@ -1,7 +1,8 @@
 import json
 import asyncio
 import re
-from typing import Dict, List, Any
+import os
+from typing import Dict, List, Any, Optional
 
 # Local, dynamic imports for specialist agents
 from core.agents.analyst_agent import AnalystAgent
@@ -182,6 +183,117 @@ class Orchestrator:
                 
         except Exception as e:
             log_event(f"Error registering MCP tools: {e}", "ERROR")
+    
+    async def install_mcp_server(self, capability: str) -> Dict[str, Any]:
+        """
+        Install a new MCP server for a given capability.
+        Epic 3: Story 3.2 - Autonomous Server Installation.
+        
+        Args:
+            capability: The capability to search for (e.g., "postgres", "slack")
+            
+        Returns:
+            Dict with status and details of the installation
+        """
+        from core.agents.mcp_scout import MCPScout
+        
+        log_event(f"Orchestrator: Installing MCP server for capability: {capability}", "INFO")
+        
+        try:
+            # Initialize MCPScout with our MCP manager
+            scout = MCPScout(mcp_manager=self.mcp_manager, tool_registry=self.tool_registry)
+            
+            # Hunt for the capability
+            config = await scout.hunt_capability(capability)
+            
+            if not config:
+                return {
+                    "status": "not_found",
+                    "message": f"No suitable MCP server found for '{capability}'"
+                }
+            
+            # Get server name from config (first key)
+            server_name = list(config.keys())[0]
+            server_config = config[server_name]
+            
+            # Check for required env vars
+            required_env = server_config.get("requires_env", [])
+            missing_env = [v for v in required_env if v not in os.environ]
+            
+            if missing_env:
+                return {
+                    "status": "env_required",
+                    "message": f"MCP server '{server_name}' requires environment variables: {missing_env}",
+                    "server_name": server_name,
+                    "config": config
+                }
+            
+            # Add the server config
+            if self.mcp_manager and hasattr(self.mcp_manager, 'add_server_config'):
+                success = self.mcp_manager.add_server_config(server_name, server_config)
+                
+                if success:
+                    # Re-register MCP tools to include the new server
+                    self._register_mcp_tools()
+                    
+                    # Verify by listing tools
+                    tools = self.mcp_manager.list_tools(server_name)
+                    
+                    return {
+                        "status": "installed",
+                        "message": f"Successfully installed MCP server '{server_name}'",
+                        "server_name": server_name,
+                        "tools": list(tools.keys()) if tools else []
+                    }
+            
+            return {
+                "status": "error",
+                "message": "MCP manager not available or add_server_config failed"
+            }
+            
+        except Exception as e:
+            log_event(f"Error installing MCP server: {e}", "ERROR")
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+    
+    async def _check_capability_gap(self, task_description: str) -> Optional[str]:
+        """
+        Check if the task requires a capability we don't have.
+        Epic 3: Story 3.3 - Self-Correction of Missing Tools.
+        
+        Args:
+            task_description: Description of the task to analyze
+            
+        Returns:
+            Capability name if gap detected, None otherwise
+        """
+        # Keywords that suggest specific capabilities
+        capability_keywords = {
+            "database": ["sql", "database", "query", "postgres", "mysql", "sqlite"],
+            "slack": ["slack", "message", "channel", "notification"],
+            "email": ["email", "mail", "smtp", "send email"],
+            "calendar": ["calendar", "schedule", "meeting", "event"],
+            "jira": ["jira", "ticket", "issue tracker", "sprint"],
+            "aws": ["aws", "s3", "lambda", "ec2", "cloud"],
+            "azure": ["azure", "microsoft cloud"],
+            "kubernetes": ["kubernetes", "k8s", "container", "pod"],
+        }
+        
+        task_lower = task_description.lower()
+        available_tools = self.tool_registry.list_tools()
+        available_tools_lower = " ".join(available_tools).lower()
+        
+        for capability, keywords in capability_keywords.items():
+            # Check if task mentions this capability
+            if any(kw in task_lower for kw in keywords):
+                # Check if we have a tool for this capability
+                if not any(kw in available_tools_lower for kw in keywords):
+                    log_event(f"Capability gap detected: {capability}", "INFO")
+                    return capability
+        
+        return None
 
     async def _classify_goal(self, goal: str) -> str:
         """
