@@ -222,6 +222,8 @@ def get_openrouter_models():
     """
     Fetches the list of free models from the OpenRouter API, ranks them based
     on a scoring algorithm, and updates their provider in MODEL_STATS.
+    
+    All returned model IDs will have the :free suffix to ensure free tier usage.
     """
     global MODEL_STATS, MODEL_CONTEXT_SIZES
     blacklist = _load_model_blacklist()
@@ -256,6 +258,10 @@ def get_openrouter_models():
                 log_event(f"Skipping model '{model_id}' - could not parse pricing", "WARNING")
                 continue
 
+            # Ensure the model ID has the :free suffix for OpenRouter free tier
+            if not model_id.endswith(':free'):
+                model_id = f"{model_id}:free"
+            
             full_model_id = f"openrouter:{model_id}"
             if full_model_id in blacklist:
                 log_event(f"Model '{full_model_id}' is in the blacklist and will be ignored.", "INFO")
@@ -291,7 +297,7 @@ def get_openrouter_models():
         sorted_models = sorted(scored_models, key=lambda x: x['score'], reverse=True)
         ranked_models = [model['name'] for model in sorted_models]
 
-        log_event(f"Top 3 OpenRouter models: {ranked_models[:3]}", "INFO")
+        log_event(f"Top 3 OpenRouter models (all :free tier): {ranked_models[:3]}", "INFO")
 
     except Exception as e:
         # Log the error, but don't crash the application
