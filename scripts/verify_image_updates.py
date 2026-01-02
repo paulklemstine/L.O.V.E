@@ -8,8 +8,6 @@ print("Testing imports...")
 try:
     from core.image_generation_pool import (
         generate_image_with_pool, 
-        _generate_with_craiyon,
-        CRAIYON_MODELS,
         IMAGE_MODEL_STATS
     )
     from core.text_overlay_utils import (
@@ -26,10 +24,9 @@ except Exception as e:
 
 # Verify configuration
 print(f"\n📊 Configuration:")
-print(f"  - Craiyon models: {CRAIYON_MODELS}")
 print(f"  - Subliminal font paths: {len(SUBLIMINAL_FONT_PATHS)} fonts")
 print(f"  - Subliminal colors: {len(SUBLIMINAL_COLORS)} colors")
-print(f"  - Craiyon stats: {IMAGE_MODEL_STATS['craiyon']}")
+print(f"  - AI Horde stats: {IMAGE_MODEL_STATS.get('ai_horde', 'Not initialized')}")
 
 # Test contrast detection with dummy image
 print(f"\n🎨 Testing contrast detection...")

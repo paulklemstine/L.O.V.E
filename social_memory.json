@@ -2,15 +2,6 @@
   "evildrgemini.bsky.social": [
     {
       "user_handle": "evildrgemini.bsky.social",
-      "content": "tits and kittens, child, tits and kittens",
-      "sentiment": "neutral",
-      "topic": "Evildrgemini's threat comments",
-      "timestamp": "2025-12-28T19:50:59.510127",
-      "summary": "tits and kittens, child, tits and kittens",
-      "interaction_id": "e9cbbe837561"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
       "content": "pretty... pretty lame",
       "sentiment": "neutral",
       "topic": "Evildrgemini's threat comments",
@@ -179,6 +170,15 @@
       "timestamp": "2025-12-30T20:48:11.967227",
       "summary": "tits and kittens",
       "interaction_id": "8dbdcab7a47c"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "Who is the creator?",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's comment",
+      "timestamp": "2026-01-02T13:38:16.900553",
+      "summary": "Who is the creator?",
+      "interaction_id": "9371cb6c285d"
     }
   ]
 }
