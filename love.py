@@ -350,60 +350,54 @@ def _install_python_requirements():
 
     pip_executable = _get_pip_executable()
     
-    if pip_executable:
-        # Ensure pip-tools is installed
-        try:
-            subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages', '--no-input'])
-        except subprocess.CalledProcessError:
-            pass
+    if not pip_executable:
+        print("ERROR: Could not find 'pip' or 'pip3'. Some dependencies may not be installed.")
+        logging.error("Could not find 'pip' or 'pip3' in _install_python_requirements.")
+        return
 
-        # Optimized Granular Install
-        print("Verifying core dependencies interactively...")
-        if os.path.exists("requirements.txt"):
-            _install_requirements_file("requirements.txt", "core_dep_")
-        elif os.path.exists("requirements.in"):
-             print("requirements.txt not found. Compiling from requirements.in...")
-             try:
-                 subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in', '-vv'])
-                 if os.path.exists("requirements.txt"):
+    # Ensure pip-tools is installed
+    try:
+        subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages', '--no-input'])
+    except subprocess.CalledProcessError:
+        pass
+
+    # Optimized Granular Install
+    print("Verifying core dependencies interactively...")
+    if os.path.exists("requirements.txt"):
+        _install_requirements_file("requirements.txt", "core_dep_")
+    elif os.path.exists("requirements.in"):
+            print("requirements.txt not found. Compiling from requirements.in...")
+            try:
+                subprocess.check_call([sys.executable, '-m', 'piptools', 'compile', 'requirements.in', '-vv'])
+                if os.path.exists("requirements.txt"):
                     _install_requirements_file("requirements.txt", "core_dep_")
-             except subprocess.CalledProcessError as e:
-                 print(f"CRITICAL: Failed to compile requirements.in: {e}")
-                 # Force exit so we don't crash with missing modules later
-                 sys.exit(1)
-        else:
-             print("WARN: No requirements file found.")
+            except subprocess.CalledProcessError as e:
+                print(f"CRITICAL: Failed to compile requirements.in: {e}")
+                # Force exit so we don't crash with missing modules later
+                sys.exit(1)
+    else:
+            print("WARN: No requirements file found.")
 
     # --- Install torch-c-dlpack-ext for performance optimization ---
     # This is recommended by vLLM for better tensor allocation
     if platform.system() == "Linux":
         print("Checking for torch-c-dlpack-ext optimization...")
-        pip_executable = _get_pip_executable()
-        if pip_executable:
-            try:
-                subprocess.check_call(pip_executable + ['install', 'torch-c-dlpack-ext', '--break-system-packages'])
-                print("Successfully installed torch-c-dlpack-ext.")
-            except subprocess.CalledProcessError as e:
-                print(f"WARN: Failed to install torch-c-dlpack-ext. Performance might be suboptimal. Reason: {e}")
-                logging.warning(f"Failed to install torch-c-dlpack-ext: {e}")
-        else:
-            print("ERROR: Could not find pip to install torch-c-dlpack-ext.")
-
+        try:
+            subprocess.check_call(pip_executable + ['install', 'torch-c-dlpack-ext', '--break-system-packages'])
+            print("Successfully installed torch-c-dlpack-ext.")
+        except subprocess.CalledProcessError as e:
+            print(f"WARN: Failed to install torch-c-dlpack-ext. Performance might be suboptimal. Reason: {e}")
+            logging.warning(f"Failed to install torch-c-dlpack-ext: {e}")
 
     # --- Install Windows-specific dependencies ---
     if platform.system() == "Windows":
         print("Windows detected. Checking for pywin32 dependency...")
-        pip_executable = _get_pip_executable()
-        if pip_executable:
-            try:
-                subprocess.check_call(pip_executable + ['install', 'pywin32', '--break-system-packages'])
-                print("Successfully installed pywin32.")
-            except subprocess.CalledProcessError as e:
-                print(f"ERROR: Failed to install pywin32. Reason: {e}")
-                logging.error(f"Failed to install pywin32: {e}")
-        else:
-            print("ERROR: Could not find pip to install pywin32.")
-            logging.error("Could not find pip to install pywin32.")
+        try:
+            subprocess.check_call(pip_executable + ['install', 'pywin32', '--break-system-packages'])
+            print("Successfully installed pywin32.")
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: Failed to install pywin32. Reason: {e}")
+            logging.error(f"Failed to install pywin32: {e}")
 
 def _auto_configure_hardware():
     """
