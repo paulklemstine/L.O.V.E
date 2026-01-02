@@ -15,8 +15,8 @@ import random
 # --- Provider Configurations ---
 GEMINI_IMAGE_MODELS = ["imagen-3.0"]  # Imagen 3
 STABILITY_MODELS = ["stable-diffusion-xl-1024-v1-0"]
-# POLLINATIONS_MODELS = ["pollinations"]  # DISABLED
-
+# POLLINATIONS_MODELS = ["pollinations"]  # DISABLED - replaced by Craiyon
+CRAIYON_MODELS = ["craiyon"]
 
 # --- Statistics Tracking ---
 def _create_default_image_model_stats():
@@ -47,7 +47,10 @@ for model in STABILITY_MODELS:
 #     IMAGE_MODEL_STATS[model]["provider"] = "pollinations"
 #     IMAGE_MODEL_STATS[model]["quality_score"] = 80.0
 
-
+# Craiyon (free, no API key)
+for model in CRAIYON_MODELS:
+    IMAGE_MODEL_STATS[model]["provider"] = "craiyon"
+    IMAGE_MODEL_STATS[model]["quality_score"] = 75.0
 
 
 def rank_image_models():
@@ -402,7 +405,76 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
         raise
 
 
-
+async def _generate_with_craiyon(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
+    """Generate image using Craiyon (free, no API key required)"""
+    model_id = "craiyon"
+    start_time = time.time()
+    
+    try:
+        core.logging.log_event(f"Attempting image generation with Craiyon: {prompt[:100]}...", "INFO")
+        
+        # Craiyon API v3 endpoint
+        url = "https://api.craiyon.com/v3"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        
+        payload = {
+            "prompt": prompt,
+            "negative_prompt": "",
+            "model": "photo",  # Options: art, drawing, photo, none
+            "version": "c4ue22fb7kb6wlac"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            # Craiyon can take 60+ seconds
+            async with session.post(url, headers=headers, json=payload, timeout=120) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"Craiyon API error {response.status}: {error_text}")
+                
+                data = await response.json()
+                
+                # Craiyon returns base64 images in 'images' array
+                if "images" in data and len(data["images"]) > 0:
+                    # Use first image
+                    image_b64 = data["images"][0]
+                    
+                    # Craiyon images are WebP format, base64 encoded
+                    image_bytes = base64.b64decode(image_b64)
+                    image = Image.open(io.BytesIO(image_bytes))
+                    
+                    # Resize to requested dimensions if needed
+                    if image.size != (width, height):
+                        image = image.resize((width, height), Image.Resampling.LANCZOS)
+                    
+                    # Update stats
+                    elapsed = time.time() - start_time
+                    IMAGE_MODEL_STATS[model_id]["successful_generations"] += 1
+                    IMAGE_MODEL_STATS[model_id]["total_generations"] += 1
+                    IMAGE_MODEL_STATS[model_id]["total_time_spent"] += elapsed
+                    IMAGE_MODEL_FAILURE_COUNT[model_id] = 0
+                    
+                    core.logging.log_event(f"Craiyon generation successful in {elapsed:.2f}s", "INFO")
+                    return image
+                else:
+                    raise Exception(f"No images in Craiyon response: {data.keys()}")
+                    
+    except Exception as e:
+        elapsed = time.time() - start_time
+        IMAGE_MODEL_STATS[model_id]["failed_generations"] += 1
+        IMAGE_MODEL_STATS[model_id]["total_generations"] += 1
+        
+        failure_count = IMAGE_MODEL_FAILURE_COUNT.get(model_id, 0) + 1
+        IMAGE_MODEL_FAILURE_COUNT[model_id] = failure_count
+        
+        cooldown = 60 * (2 ** (failure_count - 1))
+        IMAGE_MODEL_AVAILABILITY[model_id] = time.time() + cooldown
+        
+        core.logging.log_event(f"Craiyon failed: {e}. Cooldown: {cooldown}s", "WARNING")
+        raise
 
 from typing import Tuple
 
@@ -429,7 +501,7 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
         "stability": _generate_with_stability,
         "horde": _generate_with_horde,
         "pollinations": _generate_with_pollinations,  # DISABLED in provider_order
-
+        "craiyon": _generate_with_craiyon
     }
     
     if force_provider:
@@ -438,9 +510,9 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
         provider_order = [force_provider]
         core.logging.log_event(f"Forcing image generation with provider: {force_provider}", "INFO")
     else:
-        # Try providers in order: Horde (fallback) -> Stability
-        # Pollinations DISABLED
-        provider_order = ["horde", "stability"]
+        # Try providers in order: Craiyon -> Horde (fallback) -> Stability
+        # Pollinations DISABLED - using Craiyon (free, no API key) with Horde fallback.
+        provider_order = ["craiyon", "horde", "stability"]
     
     last_exception = None
     

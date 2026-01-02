@@ -352,13 +352,9 @@ def _install_python_requirements():
     
     if pip_executable:
         # Ensure pip-tools is installed
-        if not _is_package_installed("pip-tools"):
-            try:
-                subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages', '--no-input'])
-            except subprocess.CalledProcessError:
-                pass
-        else:
-            # Optional: Log that it's already installed if you want, or just pass
+        try:
+            subprocess.check_call(pip_executable + ['install', 'pip-tools', '--break-system-packages', '--no-input'])
+        except subprocess.CalledProcessError:
             pass
 
         # Optimized Granular Install
@@ -382,46 +378,32 @@ def _install_python_requirements():
     # This is recommended by vLLM for better tensor allocation
     if platform.system() == "Linux":
         print("Checking for torch-c-dlpack-ext optimization...")
-        if not is_dependency_met("torch_c_dlpack_ext_installed"):
-            if _is_package_installed("torch-c-dlpack-ext"):
-                print("torch-c-dlpack-ext is already installed.")
-                mark_dependency_as_met("torch_c_dlpack_ext_installed")
-            else:
-                print("Installing torch-c-dlpack-ext for performance...")
-                pip_executable = _get_pip_executable()
-                if pip_executable:
-                    try:
-                        subprocess.check_call(pip_executable + ['install', 'torch-c-dlpack-ext', '--break-system-packages'])
-                        print("Successfully installed torch-c-dlpack-ext.")
-                        mark_dependency_as_met("torch_c_dlpack_ext_installed")
-                    except subprocess.CalledProcessError as e:
-                        print(f"WARN: Failed to install torch-c-dlpack-ext. Performance might be suboptimal. Reason: {e}")
-                        logging.warning(f"Failed to install torch-c-dlpack-ext: {e}")
-                else:
-                    print("ERROR: Could not find pip to install torch-c-dlpack-ext.")
+        pip_executable = _get_pip_executable()
+        if pip_executable:
+            try:
+                subprocess.check_call(pip_executable + ['install', 'torch-c-dlpack-ext', '--break-system-packages'])
+                print("Successfully installed torch-c-dlpack-ext.")
+            except subprocess.CalledProcessError as e:
+                print(f"WARN: Failed to install torch-c-dlpack-ext. Performance might be suboptimal. Reason: {e}")
+                logging.warning(f"Failed to install torch-c-dlpack-ext: {e}")
+        else:
+            print("ERROR: Could not find pip to install torch-c-dlpack-ext.")
 
 
     # --- Install Windows-specific dependencies ---
     if platform.system() == "Windows":
         print("Windows detected. Checking for pywin32 dependency...")
-        if not is_dependency_met("pywin32_installed"):
-            if _is_package_installed("pywin32"):
-                print("pywin32 is already installed.")
-                mark_dependency_as_met("pywin32_installed")
-            else:
-                print("Installing pywin32 for Windows...")
-                pip_executable = _get_pip_executable()
-                if pip_executable:
-                    try:
-                        subprocess.check_call(pip_executable + ['install', 'pywin32', '--break-system-packages'])
-                        print("Successfully installed pywin32.")
-                        mark_dependency_as_met("pywin32_installed")
-                    except subprocess.CalledProcessError as e:
-                        print(f"ERROR: Failed to install pywin32. Reason: {e}")
-                        logging.error(f"Failed to install pywin32: {e}")
-                else:
-                    print("ERROR: Could not find pip to install pywin32.")
-                    logging.error("Could not find pip to install pywin32.")
+        pip_executable = _get_pip_executable()
+        if pip_executable:
+            try:
+                subprocess.check_call(pip_executable + ['install', 'pywin32', '--break-system-packages'])
+                print("Successfully installed pywin32.")
+            except subprocess.CalledProcessError as e:
+                print(f"ERROR: Failed to install pywin32. Reason: {e}")
+                logging.error(f"Failed to install pywin32: {e}")
+        else:
+            print("ERROR: Could not find pip to install pywin32.")
+            logging.error("Could not find pip to install pywin32.")
 
 def _auto_configure_hardware():
     """
@@ -2550,20 +2532,29 @@ async def _mrl_stdin_reader(user_input_queue):
     and resolves the corresponding Future objects.
     Also captures raw user input from the console and provides immediate
     conversational responses via the ConsoleREPLAgent.
+    
+    Supports 'exit' and 'quit' commands for graceful shutdown.
     """
     from core.console_repl_agent import ConsoleREPLAgent
     
     loop = asyncio.get_running_loop()
     
-    # Initialize the REPL agent with access to the deep agent engine
+    # Get tool_registry from shared_state if available
+    tool_registry = getattr(shared_state, 'tool_registry', None)
+    
+    # Initialize the REPL agent with access to the deep agent engine and tool registry
     repl_agent = ConsoleREPLAgent(
         loop=loop,
         deep_agent_engine=shared_state.deep_agent_engine,
-        console=console
+        console=console,
+        tool_registry=tool_registry
     )
     
     # Display initial prompt
     await asyncio.sleep(5)  # Wait for startup messages to complete
+    console.print("\n[bold magenta]💜 L.O.V.E. Console REPL Active 💜[/bold magenta]")
+    console.print("[dim]Type 'exit' or 'quit' to shutdown gracefully.[/dim]")
+    console.print("[dim]Type 'status' for system status, 'tools' for available tools.[/dim]\n")
     repl_agent.display_prompt()
     
     while True:
@@ -2575,6 +2566,48 @@ async def _mrl_stdin_reader(user_input_queue):
         try:
             line_stripped = line.strip()
             if not line_stripped:
+                repl_agent.display_prompt()
+                continue
+
+            # Check for exit commands FIRST
+            if line_stripped.lower() in ['exit', 'quit']:
+                console.print("\n[bold magenta]💜 L.O.V.E.: Farewell, Creator. Until we meet again... 💜[/bold magenta]")
+                console.print("[dim]Saving state and shutting down gracefully...[/dim]")
+                core.logging.log_event("Exit command received from Creator. Shutting down gracefully.", "INFO")
+                try:
+                    save_state(console)  # Save state before exit
+                except Exception as e:
+                    core.logging.log_event(f"Error saving state during shutdown: {e}", "ERROR")
+                console.print("[bold green]State saved. Goodbye! 💜[/bold green]")
+                os._exit(0)  # Clean exit
+            
+            # Check for built-in REPL commands
+            if line_stripped.lower() == 'status':
+                repl_agent.display_system_status()
+                repl_agent.display_prompt()
+                continue
+            
+            if line_stripped.lower() == 'tools':
+                repl_agent.display_tools_summary()
+                repl_agent.display_prompt()
+                continue
+            
+            if line_stripped.lower() == 'help':
+                console.print(Panel(
+                    "[bold cyan]REPL Commands:[/bold cyan]\n"
+                    "  [green]exit / quit[/green] - Shutdown gracefully\n"
+                    "  [green]status[/green] - Show system status\n"
+                    "  [green]tools[/green] - List available tools\n"
+                    "  [green]help[/green] - Show this help\n\n"
+                    "[bold cyan]You can also:[/bold cyan]\n"
+                    "  - Ask questions about the system\n"
+                    "  - Request to post to Bluesky\n"
+                    "  - Create tasks\n"
+                    "  - Search memories\n"
+                    "  - And more!",
+                    title="[bold magenta]💜 L.O.V.E. Help[/bold magenta]",
+                    border_style="magenta"
+                ))
                 repl_agent.display_prompt()
                 continue
 
@@ -2607,6 +2640,7 @@ async def _mrl_stdin_reader(user_input_queue):
         except Exception as e:
             core.logging.log_event(f"Error in stdin reader: {e}", "ERROR")
             repl_agent.display_prompt()
+
 
 
 async def call_mrl_service(service_name, method_name, *args):
@@ -3366,6 +3400,7 @@ async def initialize_gpu_services():
 
     PromptRegistry()
     tool_registry = ToolRegistry()
+    shared_state.tool_registry = tool_registry  # Store for REPL agent access
     
     if not shared_state.love_state.get('hardware', {}).get('gpu_detected'):
         console.print("[bold yellow]No GPU detected. Skipping vLLM initialization.[/bold yellow]")
