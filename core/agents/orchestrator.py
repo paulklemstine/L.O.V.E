@@ -16,6 +16,9 @@ from core.legacy_compat import ToolRegistry
 from core.secure_executor import SecureExecutor
 from core.tools import read_file, write_file  # Import commonly needed tools
 from core.goal_decomposer import GoalDecomposer, GoalTree, DecomposedTask, TaskStatus, ExecutionMode
+# MCP Integration (Epic 2: Story 2.1)
+from core.mcp_adapter import get_all_mcp_langchain_tools, convert_mcp_to_langchain_tools
+from core.logging import log_event
 # Temporary: talent_scout still in tools_legacy until full migration
 try:
     from core.tools_legacy import talent_scout
@@ -55,7 +58,12 @@ class Orchestrator:
         self.tool_registry = ToolRegistry()
         self.secure_executor = SecureExecutor()
         self.goal_counter = 0
+        
+        # Initialize MCP (Epic 2: Story 2.1)
+        self.mcp_manager = self._initialize_mcp()
+        
         self._register_tools()
+        self._register_mcp_tools()  # Epic 2: Register MCP tools
         print("Supervisor Orchestrator is ready.")
 
     def _register_tools(self):
@@ -111,6 +119,69 @@ class Orchestrator:
                 }
             }
         )
+    
+    def _initialize_mcp(self):
+        """
+        Initializes the MCPManager for MCP tool integration.
+        Epic 2: Story 2.1 - Auto-discovery of MCP servers.
+        
+        Returns:
+            MCPManager instance or None if initialization fails
+        """
+        try:
+            from mcp_manager import MCPManager
+            
+            # Create a simple console interface for MCP logging
+            class MCPConsole:
+                def print(self, msg):
+                    log_event(f"[MCP] {msg}", "DEBUG")
+            
+            mcp_manager = MCPManager(MCPConsole())
+            
+            # Log available servers
+            server_configs = getattr(mcp_manager, 'server_configs', {})
+            if server_configs:
+                log_event(f"MCP servers discovered: {list(server_configs.keys())}", "INFO")
+            else:
+                log_event("No MCP servers configured in mcp_servers.json", "WARNING")
+            
+            return mcp_manager
+            
+        except ImportError as e:
+            log_event(f"MCPManager not available: {e}", "WARNING")
+            return None
+        except Exception as e:
+            log_event(f"Failed to initialize MCP: {e}", "ERROR")
+            return None
+    
+    def _register_mcp_tools(self):
+        """
+        Registers all available MCP tools as LangChain tools in the registry.
+        Epic 2: Story 2.1 - Tool wrapping and registry population.
+        """
+        if not self.mcp_manager:
+            log_event("MCP not initialized, skipping MCP tool registration", "DEBUG")
+            return
+        
+        try:
+            # Get all MCP tools from all configured servers
+            mcp_tools = get_all_mcp_langchain_tools(self.mcp_manager)
+            
+            if mcp_tools:
+                # Register all MCP tools in our registry
+                for tool in mcp_tools:
+                    try:
+                        self.tool_registry.register(tool)
+                        log_event(f"Registered MCP tool: {tool.name}", "DEBUG")
+                    except Exception as e:
+                        log_event(f"Failed to register MCP tool {tool.name}: {e}", "WARNING")
+                
+                log_event(f"Registered {len(mcp_tools)} MCP tools in ToolRegistry", "INFO")
+            else:
+                log_event("No MCP tools available (servers may not be running)", "DEBUG")
+                
+        except Exception as e:
+            log_event(f"Error registering MCP tools: {e}", "ERROR")
 
     async def _classify_goal(self, goal: str) -> str:
         """

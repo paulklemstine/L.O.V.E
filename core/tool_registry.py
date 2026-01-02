@@ -357,23 +357,71 @@ class ToolRegistry:
         """
         Returns a formatted string of all tool metadata, suitable for
         injection into an LLM prompt.
+        
+        Epic 2: Story 2.2 - Enhanced to distinguish MCP tools for semantic selection.
         """
         if not self._tools:
             return "No tools are available."
         
-        output = "You have access to the following tools:\n\n"
+        # Categorize tools into MCP and Native
+        mcp_tools = {}
+        native_tools = {}
+        
         for name, data in self._tools.items():
             schema = data["schema"]
             description = schema.get("description", "No description available.")
-            params = schema.get("parameters", {})
             
-            output += f"Tool Name: `{name}`\n"
-            output += f"Description: {description}\n"
-            if params.get("properties"):
-                output += f"Parameters:\n```json\n{json.dumps(params, indent=2)}\n```\n"
+            # Check if this is an MCP tool by looking for [MCP: prefix
+            if description.startswith("[MCP:"):
+                mcp_tools[name] = data
             else:
-                output += "Parameters: None\n"
-            output += "---\n"
+                native_tools[name] = data
+        
+        output = "You have access to the following tools:\n\n"
+        
+        # Native Tools Section
+        if native_tools:
+            output += "## Native Tools\n\n"
+            for name, data in native_tools.items():
+                schema = data["schema"]
+                description = schema.get("description", "No description available.")
+                params = schema.get("parameters", {})
+                
+                output += f"**Tool Name:** `{name}`\n"
+                output += f"**Description:** {description}\n"
+                if params.get("properties"):
+                    output += f"**Parameters:**\n```json\n{json.dumps(params, indent=2)}\n```\n"
+                else:
+                    output += "**Parameters:** None\n"
+                output += "---\n"
+        
+        # MCP Tools Section (Epic 2: Story 2.2)
+        if mcp_tools:
+            output += "\n## MCP External Tools\n\n"
+            output += "These tools connect to external services via the Model Context Protocol.\n\n"
+            
+            for name, data in mcp_tools.items():
+                schema = data["schema"]
+                description = schema.get("description", "No description available.")
+                params = schema.get("parameters", {})
+                
+                # Extract server name from [MCP:server_name] prefix
+                server_name = ""
+                if description.startswith("[MCP:"):
+                    end_bracket = description.find("]")
+                    if end_bracket > 5:
+                        server_name = description[5:end_bracket]
+                        description = description[end_bracket+1:].strip()
+                
+                output += f"**Tool Name:** `{name}`\n"
+                if server_name:
+                    output += f"**Server:** {server_name}\n"
+                output += f"**Description:** {description}\n"
+                if params.get("properties"):
+                    output += f"**Parameters:**\n```json\n{json.dumps(params, indent=2)}\n```\n"
+                else:
+                    output += "**Parameters:** None\n"
+                output += "---\n"
         
         return output
     
