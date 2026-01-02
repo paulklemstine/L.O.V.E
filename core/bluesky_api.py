@@ -78,6 +78,18 @@ def post_to_bluesky_with_image(text: str, image: Image.Image = None):
         text: The text content of the post.
         image: A PIL Image object to be attached to the post (optional).
     """
+    # BLUESKY CHARACTER LIMIT: 300 graphemes (using chars as proxy)
+    # Final safety net truncation to prevent API errors
+    MAX_LENGTH = 300
+    if len(text) > MAX_LENGTH:
+        print(f"[Bluesky] Warning: Post text too long ({len(text)} chars). Truncating to {MAX_LENGTH}.")
+        # Truncate intelligently at word boundary if possible
+        truncated = text[:MAX_LENGTH - 3]
+        last_space = truncated.rfind(' ')
+        if last_space > MAX_LENGTH // 2:
+            truncated = truncated[:last_space]
+        text = truncated + "..."
+    
     client = get_bluesky_client()
     
     # Prepare the post content using TextBuilder for proper facet (hashtag/link) detection
@@ -170,6 +182,18 @@ def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None, im
         parent_cid: CID of the parent post.
         image: Optional PIL Image to attach.
     """
+    # BLUESKY CHARACTER LIMIT: 300 graphemes (using chars as proxy)
+    # Final safety net truncation to prevent API errors
+    MAX_LENGTH = 300
+    if len(text) > MAX_LENGTH:
+        print(f"[Bluesky] Warning: Reply text too long ({len(text)} chars). Truncating to {MAX_LENGTH}.")
+        # Truncate intelligently at word boundary if possible
+        truncated = text[:MAX_LENGTH - 3]
+        last_space = truncated.rfind(' ')
+        if last_space > MAX_LENGTH // 2:
+            truncated = truncated[:last_space]
+        text = truncated + "..."
+    
     client = get_bluesky_client()
 
     # If CIDs are not provided, we MUST fetch them or extract them. 
