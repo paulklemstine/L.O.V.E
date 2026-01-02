@@ -414,6 +414,22 @@ def overlay_text_on_image(image: Image.Image, text: str, position: str = "bottom
             text_bbox = draw.textbbox((0, 0), text, font=font)
             text_width = text_bbox[2] - text_bbox[0]
             text_height = text_bbox[3] - text_bbox[1]
+            
+            # Shrink font if text is too wide for the image
+            current_font_size = font_size
+            while text_width > width * 0.9 and current_font_size > 10:
+                current_font_size -= 2
+                try:
+                    if hasattr(font, 'path'):
+                        font = ImageFont.truetype(font.path, current_font_size)
+                    else:
+                        break
+                except:
+                    break
+                text_bbox = draw.textbbox((0, 0), text, font=font)
+                text_width = text_bbox[2] - text_bbox[0]
+                text_height = text_bbox[3] - text_bbox[1]
+            
             x = (width - text_width) // 2
             
             # Recalculate Y position based on position argument
