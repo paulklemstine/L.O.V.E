@@ -21,6 +21,8 @@ RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     liblapack-dev \
     cmake \
+    llvm-dev \
+    golang-go \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust for building Python packages that need it
