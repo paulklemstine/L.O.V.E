@@ -244,6 +244,11 @@ def get_openrouter_models():
             if not model_id:
                 continue
             
+            # Skip models that start with "openrouter/" as these are meta-models
+            if model_id.startswith('openrouter/'):
+                log_event(f"Skipping model '{model_id}' - openrouter/ prefix models should not be called directly", "INFO")
+                continue
+            
             # Check pricing to ensure model is actually free
             pricing = model.get('pricing', {})
             prompt_price = pricing.get('prompt', '0')
