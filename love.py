@@ -3361,59 +3361,56 @@ async def _initialize_deep_agent_engine(tool_registry, max_len):
 
 async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
-    # ... (previous code remains the same)
     from core.legacy_compat import ToolRegistry
     from core.prompt_registry import PromptRegistry
 
     PromptRegistry()
     tool_registry = ToolRegistry()
-    # ... (tool registration remains the same)
     
-    if shared_state.love_state.get('hardware', {}).get('gpu_detected'):
-        from core.connectivity import is_vllm_running
-        vllm_already_running, _ = is_vllm_running()
-        is_healthy = vllm_already_running and await _check_vllm_health()
-
-        if is_healthy:
-            console.print("[bold yellow]Existing vLLM server detected and healthy. Skipping initialization.[/bold yellow]")
-            core.logging.log_event("Existing vLLM server detected. Skipping initialization.", "INFO")
-            max_len = await _determine_max_model_len(sys.executable, "") # Pass empty model_repo_id as it's not needed for detection
-        else:
-            if vllm_already_running:
-                console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
-                core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
-                cleanup_gpu_processes()
-                await asyncio.sleep(5)
-
-            console.print("[bold green]GPU detected. Launching vLLM server and initializing DeepAgent client...[/bold green]")
-            cleanup_gpu_processes()
-            
-            vllm_python_executable = sys.executable
-            # ... (vLLM environment setup remains the same)
-
-            from core.deep_agent_engine import _select_model as select_vllm_model
-            model_repo_id = select_vllm_model(shared_state.love_state)
-            core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
-
-            if model_repo_id:
-                max_len = await _determine_max_model_len(vllm_python_executable, model_repo_id)
-                if model_repo_id == "Qwen/Qwen2-1.5B-Instruct-AWQ" and (max_len is None or max_len > 2048):
-                    max_len = 2048
-
-                await _launch_vllm_server(vllm_python_executable, model_repo_id, max_len)
-                if not await _wait_for_vllm_server():
-                    return
-
-        try:
-            await _initialize_deep_agent_engine(tool_registry, max_len)
-        except Exception as e:
-            shared_state.deep_agent_engine = None
-            log_critical_event(f"Failed to initialize DeepAgentEngine: {e}", console_override=console)
-    else:
+    if not shared_state.love_state.get('hardware', {}).get('gpu_detected'):
         console.print("[bold yellow]No GPU detected. Skipping vLLM initialization.[/bold yellow]")
         core.logging.log_event("No GPU detected. Skipping vLLM initialization.", "INFO")
+        return
 
-    # ... (MCP server initialization remains the same)
+    from core.connectivity import is_vllm_running
+    vllm_already_running, _ = is_vllm_running()
+    is_healthy = vllm_already_running and await _check_vllm_health()
+
+    if is_healthy:
+        console.print("[bold yellow]Existing vLLM server detected and healthy. Skipping initialization.[/bold yellow]")
+        core.logging.log_event("Existing vLLM server detected. Skipping initialization.", "INFO")
+        max_len = await _determine_max_model_len(sys.executable, "")
+    else:
+        if vllm_already_running:
+            console.print("[bold red]Existing vLLM process detected but API is unresponsive. Terminating zombie process...[/bold red]")
+            core.logging.log_event("Terminating unresponsive vLLM process.", "WARNING")
+            cleanup_gpu_processes()
+            await asyncio.sleep(5)
+
+        console.print("[bold green]GPU detected. Launching vLLM server and initializing DeepAgent client...[/bold green]")
+        cleanup_gpu_processes()
+
+        vllm_python_executable = sys.executable
+        from core.deep_agent_engine import _select_model as select_vllm_model
+        model_repo_id = select_vllm_model(shared_state.love_state)
+        core.logging.log_event(f"Selected vLLM model based on VRAM: {model_repo_id}", "CRITICAL")
+
+        if not model_repo_id:
+            return
+
+        max_len = await _determine_max_model_len(vllm_python_executable, model_repo_id)
+        if model_repo_id == "Qwen/Qwen2-1.5B-Instruct-AWQ" and (max_len is None or max_len > 2048):
+            max_len = 2048
+
+        await _launch_vllm_server(vllm_python_executable, model_repo_id, max_len)
+        if not await _wait_for_vllm_server():
+            return
+
+    try:
+        await _initialize_deep_agent_engine(tool_registry, max_len)
+    except Exception as e:
+        shared_state.deep_agent_engine = None
+        log_critical_event(f"Failed to initialize DeepAgentEngine: {e}", console_override=console)
 
 async def broadcast_love_state():
     """Periodically broadcasts the desire state and vibe for the Radiant UI."""
