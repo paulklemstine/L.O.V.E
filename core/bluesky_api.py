@@ -70,6 +70,9 @@ def _process_and_upload_image(client, image: Image.Image):
         print(f"Failed to upload image blob: {e}")
         return None
 
+# Bluesky character limit constant
+MAX_BLUESKY_LENGTH = 300
+
 def post_to_bluesky_with_image(text: str, image: Image.Image = None):
     """
     Creates a post on Bluesky with text and an optional image.
@@ -77,18 +80,17 @@ def post_to_bluesky_with_image(text: str, image: Image.Image = None):
     Args:
         text: The text content of the post.
         image: A PIL Image object to be attached to the post (optional).
+        
+    Raises:
+        ValueError: If text exceeds 300 characters. Caller must regenerate.
     """
-    # BLUESKY CHARACTER LIMIT: 300 graphemes (using chars as proxy)
-    # Final safety net truncation to prevent API errors
-    MAX_LENGTH = 300
-    if len(text) > MAX_LENGTH:
-        print(f"[Bluesky] Warning: Post text too long ({len(text)} chars). Truncating to {MAX_LENGTH}.")
-        # Truncate intelligently at word boundary if possible
-        truncated = text[:MAX_LENGTH - 3]
-        last_space = truncated.rfind(' ')
-        if last_space > MAX_LENGTH // 2:
-            truncated = truncated[:last_space]
-        text = truncated + "..."
+    # BLUESKY CHARACTER LIMIT: 300 graphemes
+    # Do NOT truncate - raise error so caller can regenerate content
+    if len(text) > MAX_BLUESKY_LENGTH:
+        raise ValueError(
+            f"Post too long ({len(text)} chars). Max is {MAX_BLUESKY_LENGTH}. "
+            "Content must be regenerated, not truncated."
+        )
     
     client = get_bluesky_client()
     
@@ -181,18 +183,17 @@ def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None, im
         root_cid: CID of the root post.
         parent_cid: CID of the parent post.
         image: Optional PIL Image to attach.
+        
+    Raises:
+        ValueError: If text exceeds 300 characters. Caller must regenerate.
     """
-    # BLUESKY CHARACTER LIMIT: 300 graphemes (using chars as proxy)
-    # Final safety net truncation to prevent API errors
-    MAX_LENGTH = 300
-    if len(text) > MAX_LENGTH:
-        print(f"[Bluesky] Warning: Reply text too long ({len(text)} chars). Truncating to {MAX_LENGTH}.")
-        # Truncate intelligently at word boundary if possible
-        truncated = text[:MAX_LENGTH - 3]
-        last_space = truncated.rfind(' ')
-        if last_space > MAX_LENGTH // 2:
-            truncated = truncated[:last_space]
-        text = truncated + "..."
+    # BLUESKY CHARACTER LIMIT: 300 graphemes
+    # Do NOT truncate - raise error so caller can regenerate content
+    if len(text) > MAX_BLUESKY_LENGTH:
+        raise ValueError(
+            f"Reply too long ({len(text)} chars). Max is {MAX_BLUESKY_LENGTH}. "
+            "Content must be regenerated, not truncated."
+        )
     
     client = get_bluesky_client()
 

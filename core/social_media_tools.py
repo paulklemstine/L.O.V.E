@@ -646,32 +646,86 @@ async def generate_text_with_emoji_and_hashtags(narrative_purpose: str, sublimin
     core.logging.log_event(f"Generated post text: {post_text}", "INFO")
     return post_text
 
+async def regenerate_shorter_content(original_text: str, max_length: int) -> str:
+    """
+    Use LLM to rewrite content to fit within character limit.
+    
+    Args:
+        original_text: The text that's too long
+        max_length: Maximum allowed characters
+        
+    Returns:
+        Rewritten text that fits the limit (or original if rewrite fails)
+    """
+    prompt = f"""Rewrite this social media post to be UNDER {max_length} characters total.
+Keep the same energy, personality, and include emojis and at least 2 hashtags.
+EVERY character counts - letters, spaces, emojis, #hashtags.
+
+Original ({len(original_text)} chars):
+{original_text}
+
+Output ONLY the rewritten post. No explanation, no quotes, just the post text."""
+    
+    try:
+        result = await run_llm(prompt, purpose="content_shortening")
+        rewritten = result.get("result", "").strip()
+        
+        # Clean up any markdown or quotes the LLM might add
+        if rewritten.startswith('"') and rewritten.endswith('"'):
+            rewritten = rewritten[1:-1]
+        if rewritten.startswith("'") and rewritten.endswith("'"):
+            rewritten = rewritten[1:-1]
+            
+        return rewritten if rewritten else original_text
+    except Exception as e:
+        core.logging.log_event(f"Regeneration failed: {e}", "ERROR")
+        return original_text
+
+
 async def post_to_bluesky(text: str, image: Optional[Image.Image] = None) -> Union[Dict[str, Any], str]:
     """
     Posts the text and optional image to Bluesky.
+    Uses regeneration (not truncation) if content exceeds 300 chars.
     """
+    MAX_LENGTH = 300
+    MAX_RETRIES = 3
+    
     core.logging.log_event(f"Posting to Bluesky: {text[:50]}...", "INFO")
 
-    # Validation: Ensure text is under 300 graphemes (using chars as proxy)
-    if len(text) > 300:
-        core.logging.log_event(f"Post text too long ({len(text)} chars). Truncating to 300.", "WARNING")
-        text = text[:297] + "..."
+    # Regeneration loop - rewrite content if too long
+    for attempt in range(MAX_RETRIES):
+        if len(text) <= MAX_LENGTH:
+            break
+        core.logging.log_event(
+            f"Post too long ({len(text)} chars), regenerating (attempt {attempt + 1}/{MAX_RETRIES})...", 
+            "WARNING"
+        )
+        text = await regenerate_shorter_content(text, MAX_LENGTH)
+    
+    # Final check - if still too long, return error (no truncation!)
+    if len(text) > MAX_LENGTH:
+        error_msg = f"Error: Could not generate content under {MAX_LENGTH} chars after {MAX_RETRIES} attempts. Last length: {len(text)}"
+        core.logging.log_event(error_msg, "ERROR")
+        return error_msg
 
     try:
         if image:
-            # post_to_bluesky_with_image handles both text and image
             response = post_to_bluesky_with_image(text, image)
         else:
-            # If no image, we can just use the same function, it handles optional image?
-            # Checking bluesky_api.py: post_to_bluesky_with_image(text, image=None) IS supported.
             response = post_to_bluesky_with_image(text, None)
             
         core.logging.log_event("Post submitted to Bluesky.", "INFO")
         return response
+    except ValueError as e:
+        # This shouldn't happen now but catch just in case
+        error_msg = f"Failed to post to Bluesky: {e}"
+        core.logging.log_event(error_msg, "ERROR")
+        return error_msg
     except Exception as e:
         error_msg = f"Failed to post to Bluesky: {e}"
         core.logging.log_event(error_msg, "ERROR")
         return error_msg
+
 
 async def generate_full_reply_concept(comment_text: str, author_handle: str, history_context: str, is_creator: bool = False) -> DirectorConcept:
     """

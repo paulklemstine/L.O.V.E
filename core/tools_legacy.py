@@ -407,10 +407,24 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
              except Exception as e:
                  core.logging.log_event(f"Failed to save story state: {e}", "WARNING") 
         
-        # Smart truncate
-        # Intelligent truncate to handle partial sentences if LLM failed constraints
-        from core.text_processing import intelligent_truncate
-        text = await intelligent_truncate(text, max_length=295)
+        # Regeneration loop - rewrite content if too long (NO TRUNCATION!)
+        from core.social_media_tools import regenerate_shorter_content
+        MAX_LENGTH = 300
+        MAX_RETRIES = 3
+        
+        for attempt in range(MAX_RETRIES):
+            if len(text) <= MAX_LENGTH:
+                break
+            core.logging.log_event(
+                f"Post too long ({len(text)} chars), regenerating (attempt {attempt + 1}/{MAX_RETRIES})...", 
+                "WARNING"
+            )
+            text = await regenerate_shorter_content(text, MAX_LENGTH)
+        
+        # Final check - abort if still too long
+        if len(text) > MAX_LENGTH:
+            return f"Error: Could not generate content under {MAX_LENGTH} chars after {MAX_RETRIES} attempts."
+
 
         # Internal Reasoning Check
         reasoning_indicators = ["i have attempted", "I cannot", "failed due to", "thought:"]
