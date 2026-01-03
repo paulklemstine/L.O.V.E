@@ -293,7 +293,11 @@ You can:
     def display_tools_summary(self):
         """Display a summary of available tools."""
         if not self.tool_registry:
-            self.console.print("[yellow]No tool registry available.[/yellow]")
+            # Debug: show exactly what's happening
+            cached = self._tool_registry
+            from_shared = getattr(shared_state, 'tool_registry', 'ATTR_MISSING')
+            self.console.print(f"[yellow]No tool registry available.[/yellow]")
+            self.console.print(f"[dim]Debug: _tool_registry={cached}, shared_state.tool_registry={from_shared}[/dim]")
             return
         
         try:
