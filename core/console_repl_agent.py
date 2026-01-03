@@ -302,22 +302,34 @@ You can:
                 self.console.print("[yellow]Tool registry exists but no tools are registered.[/yellow]")
                 return
             
-            table = Table(title="Available Tools", border_style="blue")
-            table.add_column("Tool Name", style="cyan")
+            table = Table(title=f"Available Tools ({len(tool_names)} total)", border_style="blue")
+            table.add_column("Tool Name", style="cyan", no_wrap=True)
             table.add_column("Description", style="green")
             
-            for name in tool_names[:15]:  # Limit to 15 tools
+            for name in sorted(tool_names):
+                desc = "No description"
                 try:
+                    # Try to get description from multiple sources
                     schema = self.tool_registry.get_schema(name)
-                    desc = schema.get('description', 'No description')[:60] if schema else 'No description'
-                    table.add_row(name, desc)
+                    if schema and schema.get('description'):
+                        desc = schema['description']
+                    else:
+                        # Try to get from tool function itself
+                        tool_func = self.tool_registry.get_tool(name)
+                        if hasattr(tool_func, 'description') and tool_func.description:
+                            desc = tool_func.description
+                        elif hasattr(tool_func, '__doc__') and tool_func.__doc__:
+                            desc = tool_func.__doc__.strip().split('\n')[0]  # First line
+                    
+                    # Truncate long descriptions
+                    desc = desc[:80] + "..." if len(desc) > 80 else desc
                 except Exception:
-                    table.add_row(name, "Unknown")
-            
-            if len(tool_names) > 15:
-                table.add_row("...", f"and {len(tool_names) - 15} more tools")
+                    pass
+                
+                table.add_row(name, desc)
             
             self.console.print(table)
+            self.console.print("\n[dim]💡 Tip: Use [bold]!toolname arg1 arg2[/bold] to call a tool directly[/dim]")
         except Exception as e:
             self.console.print(f"[red]Error listing tools: {e}[/red]")
 
