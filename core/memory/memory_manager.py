@@ -101,10 +101,16 @@ class MemoryManager:
         
         # Hierarchical Memory System (Level 0 → Level 1 → Level 2)
         from core.memory.memory_folding_agent import MemoryFoldingAgent
-        from core.memory.schemas import MemorySummary
+        from core.memory.schemas import MemorySummary, WisdomEntry
         self.level_0_memories: List[MemorySummary] = []  # Raw recent interactions
         self.level_1_summaries: List[MemorySummary] = []  # Folded summaries
         self.level_2_summaries: List[MemorySummary] = []  # Meta summaries
+        
+        # Story 2.1: Wisdom Store for Recursive Learning
+        # Stores distilled lessons learned from operational experience
+        self.wisdom_store: List[WisdomEntry] = []
+        self.wisdom_file_path = "wisdom_store.json"
+        self._load_wisdom_store()  # Load persisted wisdom on init
         
         # Initialize MemoryFoldingAgent
         from core.llm_api import run_llm
@@ -811,6 +817,231 @@ class MemoryManager:
         similarities = np.dot(vectors_norm, query_norm)
         
         return similarities
+
+    # =========================================================================
+    # Story 2.1: Wisdom Store - Recursive Learning
+    # =========================================================================
+
+    def _load_wisdom_store(self) -> None:
+        """Loads persisted wisdom entries from disk."""
+        from core.memory.schemas import WisdomEntry
+        
+        if os.path.exists(self.wisdom_file_path):
+            try:
+                with open(self.wisdom_file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.wisdom_store = [WisdomEntry(**entry) for entry in data]
+                print(f"📚 Loaded {len(self.wisdom_store)} wisdom entries from {self.wisdom_file_path}")
+            except Exception as e:
+                print(f"Warning: Could not load wisdom store: {e}")
+                self.wisdom_store = []
+        else:
+            self.wisdom_store = []
+    
+    def _save_wisdom_store(self) -> None:
+        """Persists wisdom entries to disk."""
+        try:
+            data = [entry.model_dump() for entry in self.wisdom_store]
+            with open(self.wisdom_file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            print(f"💾 Saved {len(self.wisdom_store)} wisdom entries to {self.wisdom_file_path}")
+        except Exception as e:
+            print(f"Warning: Could not save wisdom store: {e}")
+    
+    def add_wisdom(self, wisdom: 'WisdomEntry') -> None:
+        """
+        Adds a new wisdom entry to the store.
+        
+        Story 2.1: Wisdom entries are distilled lessons learned that update
+        the prompt context dynamically for recursive improvement.
+        
+        Args:
+            wisdom: A WisdomEntry object containing the distilled lesson.
+        """
+        from core.memory.schemas import WisdomEntry
+        
+        # Generate embedding for semantic retrieval
+        if wisdom.embedding is None:
+            wisdom.embedding = self.embedding_model.encode([wisdom.principle]).tolist()[0]
+        
+        self.wisdom_store.append(wisdom)
+        
+        # Keep top 50 entries by confidence, removing lowest if over limit
+        if len(self.wisdom_store) > 50:
+            self.wisdom_store = sorted(
+                self.wisdom_store,
+                key=lambda w: w.confidence,
+                reverse=True
+            )[:50]
+        
+        # Persist to disk
+        self._save_wisdom_store()
+        print(f"🧠 Added wisdom: '{wisdom.principle[:50]}...' (confidence: {wisdom.confidence})")
+    
+    def get_relevant_wisdom(
+        self, 
+        context: str, 
+        top_k: int = 5
+    ) -> List['WisdomEntry']:
+        """
+        Retrieves the top K most relevant wisdom entries for the given context.
+        
+        Story 2.1: Uses semantic similarity to find wisdom entries that are
+        most applicable to the current situation.
+        
+        Args:
+            context: The current task/situation description
+            top_k: Number of wisdom entries to retrieve (default 5)
+            
+        Returns:
+            List of WisdomEntry objects, sorted by relevance.
+        """
+        from core.memory.schemas import WisdomEntry
+        
+        if not self.wisdom_store:
+            return []
+        
+        # Generate embedding for context
+        context_embedding = self.embedding_model.encode([context])[0]
+        
+        # Gather wisdom embeddings
+        wisdom_with_embeddings = []
+        for wisdom in self.wisdom_store:
+            if wisdom.embedding is not None:
+                wisdom_with_embeddings.append(wisdom)
+            else:
+                # Generate embedding on the fly
+                wisdom.embedding = self.embedding_model.encode([wisdom.principle]).tolist()[0]
+                wisdom_with_embeddings.append(wisdom)
+        
+        if not wisdom_with_embeddings:
+            return []
+        
+        # Calculate similarities
+        wisdom_embeddings = np.array([w.embedding for w in wisdom_with_embeddings])
+        similarities = self._cosine_similarity(context_embedding, wisdom_embeddings)
+        
+        # Get top_k indices
+        top_indices = np.argsort(similarities)[-top_k:][::-1]
+        
+        # Filter by minimum similarity threshold (0.3)
+        relevant_wisdom = []
+        for idx in top_indices:
+            if similarities[idx] > 0.3:
+                relevant_wisdom.append(wisdom_with_embeddings[idx])
+        
+        return relevant_wisdom
+    
+    def format_wisdom_for_prompt(self, wisdom_entries: List['WisdomEntry']) -> str:
+        """
+        Formats wisdom entries for injection into System Prompt.
+        
+        Story 2.1: Creates the "## Recursive Wisdom" section that enables
+        the agent to reference lessons learned in its reasoning.
+        
+        Args:
+            wisdom_entries: List of relevant WisdomEntry objects
+            
+        Returns:
+            Formatted string ready for prompt injection.
+        """
+        if not wisdom_entries:
+            return ""
+        
+        lines = ["## 🔄 Recursive Wisdom\n"]
+        lines.append("The following lessons were learned from previous operational cycles:\n")
+        
+        for i, wisdom in enumerate(wisdom_entries, 1):
+            lines.append(f"### Lesson {i} (Confidence: {wisdom.confidence:.0%})")
+            lines.append(wisdom.to_prompt_format())
+            lines.append("")  # Blank line separator
+        
+        lines.append("**Apply these principles to avoid repeating mistakes and reinforce successful patterns.**\n")
+        
+        return "\n".join(lines)
+    
+    async def extract_wisdom_from_episode(
+        self, 
+        episode_content: str,
+        outcome: str = "unknown"
+    ) -> 'WisdomEntry | None':
+        """
+        Uses an LLM to extract wisdom from an operational episode.
+        
+        Story 2.1: This is the core of the Ouroboros Memory Fold - converting
+        raw experience into distilled wisdom that informs future decisions.
+        
+        Args:
+            episode_content: Description of what happened
+            outcome: Whether the episode was successful, failed, or unknown
+            
+        Returns:
+            A WisdomEntry object if extraction was successful, None otherwise.
+        """
+        from core.llm_api import run_llm
+        from core.memory.schemas import WisdomEntry
+        
+        prompt = f"""
+You are the Wisdom Extractor for an autonomous AI agent. Your task is to distill a lesson learned from an operational episode.
+
+## Episode Content
+{episode_content}
+
+## Outcome
+{outcome}
+
+## Task
+Analyze this episode and extract a reusable principle that the agent should remember. The principle should be:
+1. **Actionable**: Something the agent can apply in future situations
+2. **Specific**: Not vague generalizations
+3. **Derived from evidence**: Based on what actually happened
+
+## Output Format
+Return a JSON object with this schema:
+{{
+    "situation": "Brief description of the context/problem (1-2 sentences)",
+    "action": "What action was taken (1 sentence)",
+    "outcome": "What the result was (1 sentence)",
+    "principle": "The lesson to remember and apply in future (1 sentence, imperative voice)",
+    "confidence": 0.0-1.0,
+    "source": "success" | "failure" | "experience",
+    "tags": ["relevant", "categorization", "tags"]
+}}
+
+Return ONLY the JSON object.
+"""
+        
+        try:
+            response_dict = await run_llm(prompt)
+            response_str = response_dict.get("result", '{}')
+            
+            # Clean markdown fences
+            match = re.search(r"```json\n(.*?)\n```", response_str, re.DOTALL)
+            if match:
+                response_str = match.group(1)
+            
+            wisdom_data = json.loads(response_str)
+            
+            # Create WisdomEntry
+            wisdom = WisdomEntry(
+                situation=wisdom_data.get("situation", ""),
+                action=wisdom_data.get("action", ""),
+                outcome=wisdom_data.get("outcome", ""),
+                principle=wisdom_data.get("principle", ""),
+                confidence=float(wisdom_data.get("confidence", 0.7)),
+                source=wisdom_data.get("source", "experience"),
+                tags=wisdom_data.get("tags", [])
+            )
+            
+            return wisdom
+            
+        except json.JSONDecodeError as e:
+            print(f"Error parsing wisdom extraction response: {e}")
+            return None
+        except Exception as e:
+            print(f"Error extracting wisdom: {e}")
+            return None
+
 
     # --- Story 2.1: Semantic Memory Bridge ---
 

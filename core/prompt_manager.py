@@ -215,3 +215,247 @@ class PromptManager:
         self.use_modified = False
         self.load_prompts(use_modified=False)
         core.logging.log_event("Switched to master prompts", "INFO")
+
+
+# =============================================================================
+# Story 2.2: Self-Guided Prompt Optimization
+# =============================================================================
+
+def update_prompt_registry(
+    prompt_key: str,
+    new_prompt_content: str,
+    reason: str = ""
+) -> Dict[str, Any]:
+    """
+    Updates a specific prompt in prompts.yaml with safety checks.
+    
+    Story 2.2: Allows the MetacognitionAgent to evolve prompts autonomously
+    while maintaining safety through backups and validation.
+    
+    Args:
+        prompt_key: The key of the prompt to update (e.g., 'react_reasoning')
+        new_prompt_content: The new prompt text
+        reason: Why this change is being made (for logging)
+        
+    Returns:
+        {
+            "success": bool,
+            "backup_path": str,
+            "previous_content": str,
+            "message": str
+        }
+    
+    Safety:
+        - Creates backup at prompts.yaml.bak before any modification
+        - Validates YAML syntax before saving
+        - Logs all changes to EVOLUTION_LOG.md
+    """
+    result = {
+        "success": False,
+        "backup_path": "",
+        "previous_content": "",
+        "message": ""
+    }
+    
+    # Get the prompts.yaml path
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    prompts_path = os.path.join(base_dir, "prompts.yaml")
+    backup_path = os.path.join(base_dir, "prompts.yaml.bak")
+    
+    try:
+        # Step 1: Load current prompts
+        if not os.path.exists(prompts_path):
+            result["message"] = f"Prompts file not found: {prompts_path}"
+            return result
+        
+        with open(prompts_path, 'r', encoding='utf-8') as f:
+            prompts = yaml.safe_load(f)
+        
+        # Step 2: Check if the prompt key exists
+        if prompt_key not in prompts:
+            result["message"] = f"Prompt key '{prompt_key}' not found in prompts.yaml. Available keys: {list(prompts.keys())[:10]}..."
+            return result
+        
+        # Step 3: Store previous content
+        previous_content = prompts[prompt_key]
+        result["previous_content"] = previous_content if isinstance(previous_content, str) else str(previous_content)[:500]
+        
+        # Step 4: Create backup
+        import shutil
+        shutil.copy2(prompts_path, backup_path)
+        result["backup_path"] = backup_path
+        core.logging.log_event(f"Created backup at {backup_path}", "INFO")
+        
+        # Step 5: Update the prompt
+        prompts[prompt_key] = new_prompt_content
+        
+        # Step 6: Validate YAML syntax by dumping and re-parsing
+        try:
+            yaml_str = yaml.dump(prompts, default_flow_style=False, allow_unicode=True)
+            yaml.safe_load(yaml_str)  # Re-parse to validate
+        except yaml.YAMLError as e:
+            result["message"] = f"YAML validation failed: {e}. Changes not saved."
+            return result
+        
+        # Step 7: Write the updated prompts
+        with open(prompts_path, 'w', encoding='utf-8') as f:
+            yaml.dump(prompts, f, default_flow_style=False, allow_unicode=True)
+        
+        # Step 8: Log the change to EVOLUTION_LOG.md
+        _log_prompt_evolution(prompt_key, reason, previous_content, new_prompt_content)
+        
+        result["success"] = True
+        result["message"] = f"Successfully updated prompt '{prompt_key}'. Backup saved at {backup_path}."
+        
+        core.logging.log_event(f"Updated prompt '{prompt_key}': {reason}", "INFO")
+        
+        return result
+        
+    except Exception as e:
+        result["message"] = f"Error updating prompt: {str(e)}"
+        core.logging.log_event(f"Error in update_prompt_registry: {e}", "ERROR")
+        return result
+
+
+def _log_prompt_evolution(
+    prompt_key: str,
+    reason: str,
+    previous_content: str,
+    new_content: str
+) -> None:
+    """
+    Logs a prompt evolution event to EVOLUTION_LOG.md.
+    
+    Story 2.2: Maintains an audit trail of all prompt self-modifications.
+    """
+    from datetime import datetime
+    
+    # Find the project root (parent of core/)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(base_dir)
+    evolution_log_path = os.path.join(project_root, "EVOLUTION_LOG.md")
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Truncate content for readability
+    prev_preview = previous_content[:100] + "..." if len(str(previous_content)) > 100 else str(previous_content)
+    new_preview = new_content[:100] + "..." if len(new_content) > 100 else new_content
+    
+    log_entry = f"| {timestamp} | prompt_update:{prompt_key} | SUCCESS | Reason: {reason}. Changed from: '{prev_preview}' to: '{new_preview}' |\n"
+    
+    try:
+        with open(evolution_log_path, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
+    except Exception as e:
+        core.logging.log_event(f"Failed to log prompt evolution: {e}", "WARNING")
+
+
+def restore_prompts_from_backup() -> Dict[str, Any]:
+    """
+    Restores prompts.yaml from the backup file.
+    
+    Story 2.2: Safety mechanism to revert a bad prompt mutation.
+    
+    Returns:
+        {
+            "success": bool,
+            "message": str
+        }
+    """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    prompts_path = os.path.join(base_dir, "prompts.yaml")
+    backup_path = os.path.join(base_dir, "prompts.yaml.bak")
+    
+    result = {
+        "success": False,
+        "message": ""
+    }
+    
+    try:
+        if not os.path.exists(backup_path):
+            result["message"] = "No backup file found to restore from."
+            return result
+        
+        import shutil
+        shutil.copy2(backup_path, prompts_path)
+        
+        result["success"] = True
+        result["message"] = f"Successfully restored prompts.yaml from backup."
+        
+        core.logging.log_event("Restored prompts.yaml from backup", "INFO")
+        
+        return result
+        
+    except Exception as e:
+        result["message"] = f"Error restoring backup: {str(e)}"
+        return result
+
+
+def critique_prompt(prompt_key: str) -> Dict[str, Any]:
+    """
+    Analyzes a prompt for potential improvements.
+    
+    Story 2.2: Used by the MetacognitionAgent to evaluate prompt effectiveness.
+    
+    Args:
+        prompt_key: The key of the prompt to critique
+        
+    Returns:
+        {
+            "prompt_key": str,
+            "current_content": str,
+            "analysis": str,
+            "suggested_improvements": list
+        }
+    """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    prompts_path = os.path.join(base_dir, "prompts.yaml")
+    
+    result = {
+        "prompt_key": prompt_key,
+        "current_content": "",
+        "analysis": "",
+        "suggested_improvements": []
+    }
+    
+    try:
+        with open(prompts_path, 'r', encoding='utf-8') as f:
+            prompts = yaml.safe_load(f)
+        
+        if prompt_key not in prompts:
+            result["analysis"] = f"Prompt key '{prompt_key}' not found."
+            return result
+        
+        current_content = prompts[prompt_key]
+        result["current_content"] = current_content if isinstance(current_content, str) else str(current_content)
+        
+        # Basic heuristic analysis
+        content_str = str(current_content)
+        
+        improvements = []
+        
+        # Check for common issues
+        if len(content_str) > 2000:
+            improvements.append("Prompt is very long (>2000 chars). Consider compression.")
+        
+        if "JSON" in content_str and "schema" not in content_str.lower():
+            improvements.append("Prompt mentions JSON but may lack a clear schema definition.")
+        
+        if "MUST" in content_str or "CRITICAL" in content_str:
+            improvements.append("Prompt uses strong directives. Verify they are necessary.")
+        
+        if content_str.count("###") > 5:
+            improvements.append("Prompt has many sections. Consider simplifying structure.")
+        
+        if "example" not in content_str.lower():
+            improvements.append("Consider adding examples for clearer guidance.")
+        
+        result["suggested_improvements"] = improvements
+        result["analysis"] = f"Analyzed prompt '{prompt_key}' ({len(content_str)} chars). Found {len(improvements)} potential improvements."
+        
+        return result
+        
+    except Exception as e:
+        result["analysis"] = f"Error analyzing prompt: {str(e)}"
+        return result
+
