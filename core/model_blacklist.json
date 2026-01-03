@@ -1,11 +1,2 @@
 [
-    "openrouter:minimax/minimax-m2:free",
-    "openrouter:openrouter/auto",
-    "openrouter:auto",
-    "openrouter:openrouter/bodybuilder:free",
-    "openrouter:openrouter/bodybuilder",
-    "openrouter:openrouter/optimus-alpha",
-    "openrouter:openrouter/optimus-alpha:free",
-    "openrouter:openrouter/quasar-alpha",
-    "openrouter:openrouter/quasar-alpha:free"
 ]
