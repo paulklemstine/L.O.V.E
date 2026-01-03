@@ -99,7 +99,7 @@ class ConsoleREPLAgent:
         
         # Available Tools
         context_parts.append("\n## AVAILABLE TOOLS")
-        if self.tool_registry:
+        if self.tool_registry is not None:
             try:
                 tool_names = self.tool_registry.get_tool_names()
                 context_parts.append(f"Registered Tools ({len(tool_names)} available):")
@@ -292,16 +292,16 @@ You can:
     
     def display_tools_summary(self):
         """Display a summary of available tools."""
-        if not self.tool_registry:
-            # Debug: show exactly what's happening
-            cached = self._tool_registry
-            from_shared = getattr(shared_state, 'tool_registry', 'ATTR_MISSING')
-            self.console.print(f"[yellow]No tool registry available.[/yellow]")
-            self.console.print(f"[dim]Debug: _tool_registry={cached}, shared_state.tool_registry={from_shared}[/dim]")
+        if self.tool_registry is None:
+            self.console.print("[yellow]No tool registry available.[/yellow]")
             return
         
         try:
             tool_names = self.tool_registry.get_tool_names()
+            if not tool_names:
+                self.console.print("[yellow]Tool registry exists but no tools are registered.[/yellow]")
+                return
+            
             table = Table(title="Available Tools", border_style="blue")
             table.add_column("Tool Name", style="cyan")
             table.add_column("Description", style="green")
