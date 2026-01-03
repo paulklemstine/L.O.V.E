@@ -16,6 +16,8 @@ import csv
 import io
 import functools
 
+from core.openrouter_rate_limiter import get_openrouter_rate_limiter
+
 class EmergencyMemoryFold(Exception):
     """Raised when the context window is exhausted and memory must be folded immediately."""
     pass
@@ -1120,6 +1122,18 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
 
                 # --- OPENROUTER MODEL LOGIC ---
                 elif model_id in OPENROUTER_MODELS:
+                    # --- Rate Limit Check ---
+                    rate_limiter = get_openrouter_rate_limiter()
+                    if rate_limiter.is_rate_limited():
+                        info = rate_limiter.get_rate_limit_info()
+                        next_slot = info.get('next_slot_available', 0)
+                        log_event(
+                            f"OpenRouter rate limit reached ({info['calls_made']}/{info['limit']} calls in 24h). "
+                            f"Next slot available in {next_slot/60:.1f} minutes. Skipping to next model.",
+                            level="WARNING"
+                        )
+                        continue
+                    
                     log_event(f"Attempting LLM call with OpenRouter model: {model_id} (Purpose: {purpose})", level="DEBUG")
                     api_key = os.environ.get("OPENROUTER_API_KEY")
                     headers = {
@@ -1156,7 +1170,10 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                             silent=True
                         )
                     )
-                    log_event(f"OpenRouter call successful with {model_id}.")
+                    # --- Record successful call for rate limiting ---
+                    rate_limiter.record_call()
+                    remaining = rate_limiter.get_remaining_calls()
+                    log_event(f"OpenRouter call successful with {model_id}. Rate limit: {remaining}/{rate_limiter.limit} remaining.", level="INFO")
 
                 # --- VLLM PROVIDER LOGIC ---
                 elif provider == "vllm":
