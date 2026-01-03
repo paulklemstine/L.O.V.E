@@ -113,6 +113,10 @@ class LegacyToolRegistry:
         """Returns formatted metadata for prompt injection."""
         return self._new_registry.get_formatted_tool_metadata()
     
+    def get_schema(self, name: str):
+        """Returns the schema for a specific tool."""
+        return self._new_registry.get_schema(name)
+    
     def get_schemas(self):
         """New-style: Returns list of schemas."""
         return self._new_registry.get_schemas()

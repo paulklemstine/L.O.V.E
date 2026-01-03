@@ -309,22 +309,36 @@ You can:
             for name in sorted(tool_names):
                 desc = "No description"
                 try:
-                    # Try to get description from multiple sources
+                    # Method 1: Get from schema
                     schema = self.tool_registry.get_schema(name)
-                    if schema and schema.get('description'):
-                        desc = schema['description']
-                    else:
-                        # Try to get from tool function itself
-                        tool_func = self.tool_registry.get_tool(name)
-                        if hasattr(tool_func, 'description') and tool_func.description:
-                            desc = tool_func.description
-                        elif hasattr(tool_func, '__doc__') and tool_func.__doc__:
-                            desc = tool_func.__doc__.strip().split('\n')[0]  # First line
+                    if schema and isinstance(schema, dict):
+                        desc = schema.get('description', '')
                     
-                    # Truncate long descriptions
-                    desc = desc[:80] + "..." if len(desc) > 80 else desc
-                except Exception:
-                    pass
+                    # Method 2: Try tool's description attribute (LangChain StructuredTool)
+                    if not desc or desc == '':
+                        tool_func = self.tool_registry.get_tool(name)
+                        if tool_func is not None:
+                            # LangChain tools have .description
+                            if hasattr(tool_func, 'description') and tool_func.description:
+                                desc = str(tool_func.description)
+                            # Also try .func for wrapped functions
+                            elif hasattr(tool_func, 'func') and hasattr(tool_func.func, '__doc__'):
+                                if tool_func.func.__doc__:
+                                    desc = tool_func.func.__doc__.strip().split('\n')[0]
+                            # Fall back to __doc__
+                            elif hasattr(tool_func, '__doc__') and tool_func.__doc__:
+                                desc = tool_func.__doc__.strip().split('\n')[0]
+                    
+                    # Clean up description
+                    if desc:
+                        desc = desc.strip()
+                        if len(desc) > 80:
+                            desc = desc[:77] + "..."
+                    else:
+                        desc = "No description"
+                        
+                except Exception as e:
+                    desc = f"Error: {str(e)[:30]}"
                 
                 table.add_row(name, desc)
             
