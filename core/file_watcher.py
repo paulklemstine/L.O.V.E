@@ -35,6 +35,148 @@ class FileState:
 _file_states: Dict[str, FileState] = {}
 
 
+# =============================================================================
+# Story 3.1: Immutable Core Hash Verification
+# =============================================================================
+
+# Cache of immutable file hashes (computed at startup)
+_immutable_hashes: Dict[str, str] = {}
+
+
+def compute_sha256_hash(path: str) -> str:
+    """
+    Computes SHA-256 hash for immutable file verification.
+    
+    Args:
+        path: Path to file
+        
+    Returns:
+        Hex digest of SHA-256 hash
+    """
+    try:
+        with open(path, "rb") as f:
+            content = f.read()
+        return hashlib.sha256(content).hexdigest()
+    except Exception as e:
+        log_event(f"Failed to compute SHA-256 for {path}: {e}", "ERROR")
+        return ""
+
+
+def initialize_immutable_hashes(base_dir: str = None) -> Dict[str, str]:
+    """
+    Computes and stores SHA-256 hashes for all immutable core files.
+    Called at application startup.
+    
+    Args:
+        base_dir: Base directory of the project (defaults to current directory)
+        
+    Returns:
+        Dict of {relative_path: sha256_hash}
+    """
+    global _immutable_hashes
+    from core.constants import IMMUTABLE_CORE
+    
+    if base_dir is None:
+        base_dir = os.getcwd()
+    
+    _immutable_hashes = {}
+    
+    for relative_path in IMMUTABLE_CORE:
+        full_path = os.path.join(base_dir, relative_path)
+        
+        if os.path.exists(full_path):
+            file_hash = compute_sha256_hash(full_path)
+            _immutable_hashes[relative_path] = file_hash
+            log_event(f"🔒 Immutable hash: {relative_path} -> {file_hash[:16]}...", "INFO")
+        else:
+            log_event(f"⚠️ Immutable file not found: {relative_path}", "WARNING")
+    
+    log_event(f"🛡️ Initialized {len(_immutable_hashes)} immutable file hashes", "INFO")
+    return _immutable_hashes
+
+
+def verify_immutable_integrity(base_dir: str = None) -> Dict[str, bool]:
+    """
+    Verifies that immutable files have not been tampered with.
+    
+    Args:
+        base_dir: Base directory of the project
+        
+    Returns:
+        Dict of {relative_path: is_valid}
+    """
+    from core.constants import IMMUTABLE_CORE
+    
+    if base_dir is None:
+        base_dir = os.getcwd()
+    
+    results = {}
+    
+    for relative_path in IMMUTABLE_CORE:
+        full_path = os.path.join(base_dir, relative_path)
+        
+        if not os.path.exists(full_path):
+            results[relative_path] = False
+            log_event(f"🚨 INTEGRITY VIOLATION: Immutable file missing: {relative_path}", "ERROR")
+            continue
+        
+        current_hash = compute_sha256_hash(full_path)
+        original_hash = _immutable_hashes.get(relative_path)
+        
+        if original_hash is None:
+            # Never initialized - compute and store
+            results[relative_path] = True
+            _immutable_hashes[relative_path] = current_hash
+            log_event(f"📝 First-time hash for {relative_path}", "INFO")
+        elif current_hash == original_hash:
+            results[relative_path] = True
+        else:
+            results[relative_path] = False
+            log_event(
+                f"🚨 INTEGRITY VIOLATION: {relative_path} has been modified! "
+                f"Expected: {original_hash[:16]}... Got: {current_hash[:16]}...",
+                "ERROR"
+            )
+    
+    return results
+
+
+def is_immutable_file(path: str) -> bool:
+    """
+    Checks if a file is in the immutable core list.
+    
+    Args:
+        path: Path to check (can be relative or absolute)
+        
+    Returns:
+        True if the file is protected
+    """
+    from core.constants import IMMUTABLE_CORE
+    
+    # Normalize the path
+    normalized = os.path.normpath(path).replace("\\", "/")
+    
+    for immutable_path in IMMUTABLE_CORE:
+        immutable_normalized = os.path.normpath(immutable_path).replace("\\", "/")
+        
+        # Check if path ends with the immutable path
+        if normalized.endswith(immutable_normalized):
+            return True
+        
+        # Also check if it's an exact match
+        if normalized == immutable_normalized:
+            return True
+    
+    return False
+
+
+def get_immutable_hashes() -> Dict[str, str]:
+    """Returns a copy of the current immutable hashes."""
+    return dict(_immutable_hashes)
+
+
+
+
 def compute_file_hash(path: str) -> str:
     """
     Computes MD5 hash of file contents.

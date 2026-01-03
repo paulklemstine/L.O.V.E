@@ -12,8 +12,92 @@ import subprocess
 import tempfile
 import time
 import importlib.util
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from core.logging import log_event
+
+
+# =============================================================================
+# Story 3.1: Immutable Core Protection
+# =============================================================================
+
+class ForbiddenMutationError(Exception):
+    """
+    Raised when attempting to modify a file in the immutable core.
+    
+    Story 3.1: Even the Surgeon agent cannot modify fundamental safety
+    constraints or primary goal definitions without human override.
+    """
+    def __init__(self, message: str, file_path: str = None):
+        self.file_path = file_path
+        super().__init__(message)
+
+
+def check_immutable_core(
+    target_file: str, 
+    override_key: str = None,
+    context: str = None
+) -> None:
+    """
+    Checks if target file is in the immutable core.
+    
+    Story 3.1: Enforces the "Immutable Core" - files that define the agent's
+    identity and safety constraints that cannot be modified by the agent.
+    
+    Args:
+        target_file: Path to the file being modified
+        override_key: Human-provided override key (if any)
+        context: Full context string to search for override phrases
+        
+    Raises:
+        ForbiddenMutationError: If file is immutable and no valid override
+    """
+    from core.file_watcher import is_immutable_file
+    from core.constants import IMMUTABLE_CORE, CREATOR_OVERRIDE_PHRASES
+    
+    # Check if this is an immutable file
+    if not is_immutable_file(target_file):
+        return  # Not protected, proceed
+    
+    # Check for explicit override key
+    if override_key:
+        for phrase in CREATOR_OVERRIDE_PHRASES:
+            if phrase.lower() in override_key.lower():
+                log_event(
+                    f"🔓 Override key accepted for immutable file: {target_file}",
+                    "WARNING"
+                )
+                return  # Override accepted
+    
+    # Check context for override phrases
+    if context:
+        context_lower = context.lower()
+        for phrase in CREATOR_OVERRIDE_PHRASES:
+            if phrase.lower() in context_lower:
+                log_event(
+                    f"🔓 Override phrase found in context for: {target_file}",
+                    "WARNING"
+                )
+                return  # Override found in context
+    
+    # No valid override - raise error
+    log_event(
+        f"🚫 FORBIDDEN: Attempted mutation of immutable file: {target_file}",
+        "ERROR"
+    )
+    raise ForbiddenMutationError(
+        f"Cannot modify '{target_file}' - this file is in the IMMUTABLE_CORE. "
+        f"Protected files: {IMMUTABLE_CORE}. "
+        f"To modify, the Creator must provide an override phrase.",
+        file_path=target_file
+    )
+
+
+def get_immutable_core_list() -> List[str]:
+    """Returns the list of protected immutable core files."""
+    from core.constants import IMMUTABLE_CORE
+    return list(IMMUTABLE_CORE)
+
+
 
 
 # --- Story 3.1: Syntax Check and Dry Run ---
