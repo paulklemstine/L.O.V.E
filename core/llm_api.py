@@ -145,6 +145,10 @@ MODEL_CONTEXT_SIZES = {
     "gemini-2.5-flash": 1000000,
     "gemini-2.5-flash-lite": 1000000,
 
+    # DeepSeek Models
+    "deepseek-chat": 64000,
+    "deepseek-reasoner": 64000,
+
     # Local Models
     "bartowski/Llama-3.3-70B-Instruct-ablated-GGUF": 8192,
     "TheBloke/CodeLlama-70B-Instruct-GGUF": 4096,
@@ -169,6 +173,20 @@ for model in GEMINI_MODELS:
 # --- OpenRouter Configuration ---
 DISABLE_OPENROUTER = True  # Set to False to enable OpenRouter models
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
+
+# --- DeepSeek Configuration ---
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1"
+DEEPSEEK_MODELS = []
+
+# Load DeepSeek models from environment or use defaults
+_deepseek_env_models = os.environ.get("DEEPSEEK_MODEL_LIST")
+if _deepseek_env_models:
+    DEEPSEEK_MODELS = [m.strip() for m in _deepseek_env_models.split(",") if m.strip()]
+elif os.environ.get("DEEPSLEEP_API_KEY"):  # Using user-specified env var name
+    DEEPSEEK_MODELS = ["deepseek-chat", "deepseek-reasoner"]
+
+for model in DEEPSEEK_MODELS:
+    MODEL_STATS[model]["provider"] = "deepseek"
 
 # --- vLLM Configuration ---
 VLLM_API_URL = "http://localhost:8000/v1"
@@ -689,6 +707,9 @@ def rank_models(purpose="general"):
         elif provider == "openrouter":
             final_score += 2000
             #log_event(f"Applying priority boost to OpenRouter model: {model_id}", "DEBUG")
+        elif provider == "deepseek":
+            final_score += 1500  # Between OpenRouter (2000) and vLLM (1000)
+            #log_event(f"Applying priority boost to DeepSeek model: {model_id}", "DEBUG")
         elif provider == "vllm":
             if purpose == "emotion" or purpose == "scoring":
                  final_score += 100000 # Massive boost for routine/aesthetic tasks
@@ -1286,6 +1307,50 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         )
                     )
                     log_event(f"OpenAI call successful with {model_id}.")
+
+                # --- DEEPSEEK MODEL LOGIC ---
+                elif model_id in DEEPSEEK_MODELS:
+                    log_event(f"Attempting LLM call with DeepSeek model: {model_id} (Purpose: {purpose})", level="DEBUG")
+                    api_key = os.environ.get("DEEPSLEEP_API_KEY")
+                    if not api_key:
+                        log_event("DEEPSLEEP_API_KEY not found in environment. Skipping DeepSeek.", level="WARNING")
+                        continue
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": model_id,
+                        "messages": [{"role": "user", "content": prompt_text}],
+                        "stream": False
+                    }
+
+                    def _deepseek_call():
+                        max_retries = 3
+                        for attempt in range(max_retries + 1):
+                            try:
+                                response = requests.post(f"{DEEPSEEK_API_URL}/chat/completions", headers=headers, json=payload, timeout=600)
+                                response.raise_for_status()
+                                return response.json()["choices"][0]["message"]["content"]
+                            except requests.exceptions.RequestException as e:
+                                if attempt < max_retries and e.response is not None and e.response.status_code == 429:
+                                    delay = (2 ** attempt) + random.uniform(0, 1)
+                                    log_event(f"429 Rate Limit on {model_id}. Sleeping {delay:.2f}s before retry...", "WARNING")
+                                    time.sleep(delay)
+                                    continue
+                                raise e
+
+                    result_text = await loop.run_in_executor(
+                        None,
+                        functools.partial(
+                            run_hypnotic_progress,
+                            console,
+                            f"Accessing cognitive matrix via [bold cyan]DeepSeek ({model_id})[/bold cyan] (Purpose: {purpose})",
+                            _deepseek_call,
+                            silent=True
+                        )
+                    )
+                    log_event(f"DeepSeek call successful with {model_id}.")
 
                 # --- Success Case ---
                 if result_text is not None:
