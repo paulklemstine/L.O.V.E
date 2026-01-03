@@ -40,9 +40,20 @@ class ConsoleREPLAgent:
         self.loop = loop
         self.deep_agent_engine = deep_agent_engine
         self.console = console or Console()
-        self.tool_registry = tool_registry
+        self._tool_registry = tool_registry  # May be None initially
         self.conversation_history = []
         self.max_history = 10  # Keep last 10 exchanges for context
+    
+    @property
+    def tool_registry(self):
+        """Dynamically get tool registry from shared_state if not set directly."""
+        if self._tool_registry:
+            return self._tool_registry
+        # Fall back to shared_state.tool_registry
+        try:
+            return shared_state.tool_registry
+        except AttributeError:
+            return None
         
     def _get_situational_context(self) -> str:
         """
