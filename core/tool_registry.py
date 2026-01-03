@@ -457,7 +457,161 @@ class ToolRegistry:
                 self.register(tool)
             except ToolDefinitionError as e:
                 print(f"Warning: Failed to register tool: {e}")
+
+    # =========================================================================
+    # Story 4.1: Dynamic Tool Loading (Tool Fabrication)
+    # =========================================================================
     
+    CUSTOM_TOOLS_DIR = "tools/custom"
+    
+    def load_custom_tools(self, custom_dir: str = None) -> List[str]:
+        """
+        Dynamically loads all Python modules from the custom tools directory.
+        
+        Story 4.1: Enables just-in-time tool fabrication by loading tools
+        created by the agent at runtime.
+        
+        Args:
+            custom_dir: Path to custom tools directory (defaults to tools/custom)
+            
+        Returns:
+            List of loaded tool names
+        """
+        import os
+        import sys
+        import importlib.util
+        
+        if custom_dir is None:
+            custom_dir = self.CUSTOM_TOOLS_DIR
+        
+        # Get absolute path
+        if not os.path.isabs(custom_dir):
+            # Assume relative to project root
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            custom_dir = os.path.join(project_root, custom_dir)
+        
+        if not os.path.exists(custom_dir):
+            return []
+        
+        loaded_tools = []
+        
+        for filename in os.listdir(custom_dir):
+            if filename.endswith(".py") and not filename.startswith("_"):
+                module_name = filename[:-3]  # Remove .py extension
+                file_path = os.path.join(custom_dir, filename)
+                
+                try:
+                    # Load the module dynamically
+                    spec = importlib.util.spec_from_file_location(
+                        f"tools.custom.{module_name}",
+                        file_path
+                    )
+                    if spec is None or spec.loader is None:
+                        print(f"Warning: Could not load spec for {file_path}")
+                        continue
+                    
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[spec.name] = module
+                    spec.loader.exec_module(module)
+                    
+                    # Find functions with __tool_schema__ attribute
+                    for attr_name in dir(module):
+                        if attr_name.startswith("_"):
+                            continue
+                        
+                        attr = getattr(module, attr_name)
+                        if callable(attr) and hasattr(attr, "__tool_schema__"):
+                            try:
+                                self.register(attr)
+                                loaded_tools.append(attr.__tool_schema__["name"])
+                                print(f"🔧 Loaded custom tool: {attr_name} from {filename}")
+                            except ToolDefinitionError as e:
+                                print(f"Warning: Failed to register {attr_name}: {e}")
+                    
+                except Exception as e:
+                    print(f"Warning: Failed to load module {file_path}: {e}")
+        
+        return loaded_tools
+    
+    def refresh(self) -> Dict[str, Any]:
+        """
+        Refreshes the tool registry by reloading custom tools.
+        
+        Story 4.1: Called after agent writes a new tool to tools/custom/
+        to make it immediately available in the same execution trace.
+        
+        Returns:
+            {
+                "loaded": List[str],     # Names of newly loaded tools
+                "failed": List[str],     # Names of tools that failed to load
+                "total": int             # Total tools in registry
+            }
+        """
+        # Track what we have before
+        before_tools = set(self._tools.keys())
+        
+        # Clear custom tools before reloading
+        custom_tools_to_remove = []
+        for name, data in self._tools.items():
+            # Check if this is a custom tool by checking module
+            func = data.get("func")
+            if func and hasattr(func, "__module__"):
+                if "tools.custom" in str(func.__module__):
+                    custom_tools_to_remove.append(name)
+        
+        for name in custom_tools_to_remove:
+            self.unregister(name)
+        
+        # Reload custom tools
+        loaded = self.load_custom_tools()
+        
+        # Determine what's new
+        after_tools = set(self._tools.keys())
+        new_tools = list(after_tools - before_tools)
+        
+        result = {
+            "loaded": loaded,
+            "new": new_tools,
+            "total": len(self._tools)
+        }
+        
+        print(f"🔄 Registry refreshed: {len(loaded)} custom tools loaded, {result['total']} total")
+        
+        return result
+    
+    def unregister(self, name: str) -> bool:
+        """
+        Removes a tool from the registry.
+        
+        Story 4.1: Allows removing tools that are no longer needed
+        or need to be replaced.
+        
+        Args:
+            name: Name of tool to remove
+            
+        Returns:
+            True if tool was removed, False if not found
+        """
+        if name in self._tools:
+            del self._tools[name]
+            return True
+        return False
+    
+    def get_custom_tools(self) -> List[str]:
+        """
+        Returns a list of tool names that were dynamically loaded.
+        
+        Returns:
+            List of custom tool names
+        """
+        custom_tools = []
+        for name, data in self._tools.items():
+            func = data.get("func")
+            if func and hasattr(func, "__module__"):
+                if "tools.custom" in str(func.__module__):
+                    custom_tools.append(name)
+        return custom_tools
+
     def __len__(self) -> int:
         return len(self._tools)
     
