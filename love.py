@@ -3396,6 +3396,35 @@ async def initialize_gpu_services():
     tool_registry = ToolRegistry()
     shared_state.tool_registry = tool_registry  # Store for REPL agent access
     
+    # Register all core tools so REPL and other components have access
+    try:
+        from core import tools as core_tools
+        core_tool_functions = [
+            core_tools.code_modifier,
+            core_tools.speak_to_creator,
+            core_tools.execute,
+            core_tools.decompose_and_solve_subgoal,
+            core_tools.evolve,
+            core_tools.post_to_bluesky,
+            core_tools.reply_to_bluesky,
+            core_tools.read_file,
+            core_tools.write_file,
+            core_tools.scan_network,
+            core_tools.probe_target,
+            core_tools.perform_webrequest,
+            core_tools.analyze_json_file,
+            core_tools.research_and_evolve,
+            core_tools.search_web,
+            core_tools.restart_vllm,
+            core_tools.reload_prompts,
+            core_tools.invoke_subagent,
+            core_tools.trigger_optimization_pipeline,
+        ]
+        tool_registry.register_langchain_tools(core_tool_functions)
+        core.logging.log_event(f"Registered {len(core_tool_functions)} core tools with the registry.", "INFO")
+    except Exception as e:
+        core.logging.log_event(f"Error registering core tools: {e}", "WARNING")
+    
     if not shared_state.love_state.get('hardware', {}).get('gpu_detected'):
         console.print("[bold yellow]No GPU detected. Skipping vLLM initialization.[/bold yellow]")
         core.logging.log_event("No GPU detected. Skipping vLLM initialization.", "INFO")

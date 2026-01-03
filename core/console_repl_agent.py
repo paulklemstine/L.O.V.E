@@ -50,10 +50,10 @@ class ConsoleREPLAgent:
         if self._tool_registry:
             return self._tool_registry
         # Fall back to shared_state.tool_registry
-        try:
-            return shared_state.tool_registry
-        except AttributeError:
-            return None
+        registry = getattr(shared_state, 'tool_registry', None)
+        if registry is not None:
+            return registry
+        return None
         
     def _get_situational_context(self) -> str:
         """
