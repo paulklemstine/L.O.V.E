@@ -165,6 +165,7 @@ for model in GEMINI_MODELS:
     MODEL_STATS[model]["provider"] = "gemini"
 
 # --- OpenRouter Configuration ---
+DISABLE_OPENROUTER = True  # Set to False to enable OpenRouter models
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
 # --- vLLM Configuration ---
@@ -226,6 +227,12 @@ def get_openrouter_models():
     All returned model IDs will have the :free suffix to ensure free tier usage.
     """
     global MODEL_STATS, MODEL_CONTEXT_SIZES
+    
+    # Check if OpenRouter is disabled
+    if DISABLE_OPENROUTER:
+        log_event("OpenRouter is disabled via DISABLE_OPENROUTER flag.", "INFO")
+        return []
+    
     blacklist = _load_model_blacklist()
     ranked_models = []
     try:
