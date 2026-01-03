@@ -249,6 +249,11 @@ def get_openrouter_models():
                 log_event(f"Skipping model '{model_id}' - openrouter/ prefix models should not be called directly", "INFO")
                 continue
             
+            # Skip Gemini models from OpenRouter - use direct Gemini API instead
+            if 'gemini' in model_id.lower():
+                log_event(f"Skipping model '{model_id}' - Gemini models should not be accessed via OpenRouter", "INFO")
+                continue
+            
             # Check pricing to ensure model is actually free
             pricing = model.get('pricing', {})
             prompt_price = pricing.get('prompt', '0')
