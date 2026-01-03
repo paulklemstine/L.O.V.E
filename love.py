@@ -2651,7 +2651,26 @@ async def _mrl_stdin_reader(user_input_queue):
                             result = tool_func(tool_args) if tool_args else tool_func()
                         
                         # Display result
-                        result_str = str(result)[:2000]
+                        result_str = str(result)
+
+                        # Try to parse tuple outputs (like from !execute) to show clean stdout
+                        try:
+                            import ast
+                            # Only attempt if it looks like a tuple representation
+                            if result_str.strip().startswith('('):
+                                parsed = ast.literal_eval(result_str)
+                                if isinstance(parsed, tuple) and len(parsed) >= 1:
+                                    # For (stdout, stderr, rc) tuples, just show the content
+                                    stdout = str(parsed[0])
+                                    stderr = str(parsed[1]) if len(parsed) > 1 and parsed[1] else ""
+                                    
+                                    result_str = stdout
+                                    if stderr:
+                                        result_str += f"\n\n[STDERR]\n{stderr}"
+                        except Exception:
+                            pass 
+                        
+                        result_str = result_str[:2000]
                         console.print(Panel(
                             result_str,
                             title=f"[bold green]✓ {tool_name} Result[/bold green]",
