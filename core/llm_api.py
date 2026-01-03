@@ -182,7 +182,7 @@ DEEPSEEK_MODELS = []
 _deepseek_env_models = os.environ.get("DEEPSEEK_MODEL_LIST")
 if _deepseek_env_models:
     DEEPSEEK_MODELS = [m.strip() for m in _deepseek_env_models.split(",") if m.strip()]
-elif os.environ.get("DEEPSLEEP_API_KEY"):  # Using user-specified env var name
+elif os.environ.get("DEEPSEEK_API_KEY"):
     DEEPSEEK_MODELS = ["deepseek-chat", "deepseek-reasoner"]
 
 for model in DEEPSEEK_MODELS:
@@ -1311,9 +1311,9 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 # --- DEEPSEEK MODEL LOGIC ---
                 elif model_id in DEEPSEEK_MODELS:
                     log_event(f"Attempting LLM call with DeepSeek model: {model_id} (Purpose: {purpose})", level="DEBUG")
-                    api_key = os.environ.get("DEEPSLEEP_API_KEY")
+                    api_key = os.environ.get("DEEPSEEK_API_KEY")
                     if not api_key:
-                        log_event("DEEPSLEEP_API_KEY not found in environment. Skipping DeepSeek.", level="WARNING")
+                        log_event("DEEPSEEK_API_KEY not found in environment. Skipping DeepSeek.", level="WARNING")
                         continue
                     headers = {
                         "Authorization": f"Bearer {api_key}",
