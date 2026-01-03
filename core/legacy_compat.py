@@ -121,6 +121,10 @@ class LegacyToolRegistry:
         """New-style: Returns JSON-serializable schemas."""
         return self._new_registry.get_all_tool_schemas()
     
+    def register_langchain_tools(self, tools) -> None:
+        """Bulk registers a list of LangChain tools."""
+        self._new_registry.register_langchain_tools(tools)
+    
     def __contains__(self, name: str) -> bool:
         return name in self._new_registry
     
