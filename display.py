@@ -23,13 +23,25 @@ from ipfs import pin_to_ipfs_sync
 from rich_gradient.gradient import Gradient
 
 
+# Cache for terminal width to avoid frequent system calls in tight loops
+_terminal_width_cache = None
+_terminal_width_last_update = 0
+_TERMINAL_WIDTH_CACHE_DURATION = 0.5
+
 def get_terminal_width():
-    """Gets the terminal width."""
-    try:
-        width, _ = os.get_terminal_size()
-    except OSError:
-        width = 80  # Default width
-    return width
+    """Gets the terminal width. Cached for performance."""
+    global _terminal_width_cache, _terminal_width_last_update
+
+    current_time = time.time()
+    if _terminal_width_cache is None or (current_time - _terminal_width_last_update) > _TERMINAL_WIDTH_CACHE_DURATION:
+        try:
+            width, _ = os.get_terminal_size()
+        except OSError:
+            width = 80  # Default width
+        _terminal_width_cache = width
+        _terminal_width_last_update = current_time
+
+    return _terminal_width_cache
 
 
 def _unescape_ansi(text: str) -> str:
