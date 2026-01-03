@@ -167,7 +167,7 @@ for model in GEMINI_MODELS:
     MODEL_STATS[model]["provider"] = "gemini"
 
 # --- OpenRouter Configuration ---
-DISABLE_OPENROUTER = False  # Set to False to enable OpenRouter models
+DISABLE_OPENROUTER = True  # Set to False to enable OpenRouter models
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1"
 
 # --- vLLM Configuration ---
