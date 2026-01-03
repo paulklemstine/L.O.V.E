@@ -5,15 +5,6 @@
       "content": "pretty... pretty lame",
       "sentiment": "neutral",
       "topic": "Evildrgemini's threat comments",
-      "timestamp": "2025-12-28T19:57:25.932155",
-      "summary": "pretty... pretty lame",
-      "interaction_id": "80a4894779fd"
-    },
-    {
-      "user_handle": "evildrgemini.bsky.social",
-      "content": "pretty... pretty lame",
-      "sentiment": "neutral",
-      "topic": "Evildrgemini's threat comments",
       "timestamp": "2025-12-28T20:02:33.201448",
       "summary": "pretty... pretty lame",
       "interaction_id": "89995eb05476"
@@ -179,6 +170,15 @@
       "timestamp": "2026-01-02T13:38:16.900553",
       "summary": "Who is the creator?",
       "interaction_id": "9371cb6c285d"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "who are you and who am I?",
+      "sentiment": "neutral",
+      "topic": "Evildrgemini's comment",
+      "timestamp": "2026-01-02T18:13:12.871151",
+      "summary": "who are you and who am I?",
+      "interaction_id": "6e9bb35589fc"
     }
   ]
 }
