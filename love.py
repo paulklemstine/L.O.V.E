@@ -2636,12 +2636,18 @@ async def _mrl_stdin_reader(user_input_queue):
                         console.print(f"[cyan]Executing tool: {tool_name}...[/cyan]")
                         tool_func = shared_state.tool_registry.get_tool(tool_name)
                         
-                        # Execute the tool - try invoke() for LangChain tools
-                        if hasattr(tool_func, 'invoke'):
-                            result = tool_func.invoke(tool_args)
+                        # Execute the tool - handle LangChain async tools properly
+                        if hasattr(tool_func, 'ainvoke'):
+                            # LangChain async tool - use ainvoke
+                            result = await tool_func.ainvoke(tool_args if tool_args else {})
+                        elif hasattr(tool_func, 'invoke'):
+                            # LangChain sync tool - use invoke
+                            result = tool_func.invoke(tool_args if tool_args else {})
                         elif asyncio.iscoroutinefunction(tool_func):
+                            # Regular async function
                             result = await tool_func(tool_args) if tool_args else await tool_func()
                         else:
+                            # Regular sync function
                             result = tool_func(tool_args) if tool_args else tool_func()
                         
                         # Display result
