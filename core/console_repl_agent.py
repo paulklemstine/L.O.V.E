@@ -302,22 +302,48 @@ You can:
                 self.console.print("[yellow]Tool registry exists but no tools are registered.[/yellow]")
                 return
             
-            table = Table(title="Available Tools", border_style="blue")
-            table.add_column("Tool Name", style="cyan")
+            table = Table(title=f"Available Tools ({len(tool_names)} total)", border_style="blue")
+            table.add_column("Tool Name", style="cyan", no_wrap=True)
             table.add_column("Description", style="green")
             
-            for name in tool_names[:15]:  # Limit to 15 tools
+            for name in sorted(tool_names):
+                desc = "No description"
                 try:
+                    # Method 1: Get from schema
                     schema = self.tool_registry.get_schema(name)
-                    desc = schema.get('description', 'No description')[:60] if schema else 'No description'
-                    table.add_row(name, desc)
-                except Exception:
-                    table.add_row(name, "Unknown")
-            
-            if len(tool_names) > 15:
-                table.add_row("...", f"and {len(tool_names) - 15} more tools")
+                    if schema and isinstance(schema, dict):
+                        desc = schema.get('description', '')
+                    
+                    # Method 2: Try tool's description attribute (LangChain StructuredTool)
+                    if not desc or desc == '':
+                        tool_func = self.tool_registry.get_tool(name)
+                        if tool_func is not None:
+                            # LangChain tools have .description
+                            if hasattr(tool_func, 'description') and tool_func.description:
+                                desc = str(tool_func.description)
+                            # Also try .func for wrapped functions
+                            elif hasattr(tool_func, 'func') and hasattr(tool_func.func, '__doc__'):
+                                if tool_func.func.__doc__:
+                                    desc = tool_func.func.__doc__.strip().split('\n')[0]
+                            # Fall back to __doc__
+                            elif hasattr(tool_func, '__doc__') and tool_func.__doc__:
+                                desc = tool_func.__doc__.strip().split('\n')[0]
+                    
+                    # Clean up description
+                    if desc:
+                        desc = desc.strip()
+                        if len(desc) > 80:
+                            desc = desc[:77] + "..."
+                    else:
+                        desc = "No description"
+                        
+                except Exception as e:
+                    desc = f"Error: {str(e)[:30]}"
+                
+                table.add_row(name, desc)
             
             self.console.print(table)
+            self.console.print("\n[dim]💡 Tip: Use [bold]!toolname arg1 arg2[/bold] to call a tool directly[/dim]")
         except Exception as e:
             self.console.print(f"[red]Error listing tools: {e}[/red]")
 

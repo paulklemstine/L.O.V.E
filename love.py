@@ -2592,16 +2592,94 @@ async def _mrl_stdin_reader(user_input_queue):
                     "  [green]exit / quit[/green] - Shutdown gracefully\n"
                     "  [green]status[/green] - Show system status\n"
                     "  [green]tools[/green] - List available tools\n"
+                    "  [green]!toolname args[/green] - Call a tool directly\n"
                     "  [green]help[/green] - Show this help\n\n"
+                    "[bold cyan]Direct Tool Examples:[/bold cyan]\n"
+                    "  [dim]!read_file /path/to/file[/dim]\n"
+                    "  [dim]!execute ls -la[/dim]\n"
+                    "  [dim]!search_web python async[/dim]\n\n"
                     "[bold cyan]You can also:[/bold cyan]\n"
-                    "  - Ask questions about the system\n"
+                    "  - Ask questions naturally\n"
                     "  - Request to post to Bluesky\n"
-                    "  - Create tasks\n"
-                    "  - Search memories\n"
                     "  - And more!",
                     title="[bold magenta]💜 L.O.V.E. Help[/bold magenta]",
                     border_style="magenta"
                 ))
+                repl_agent.display_prompt()
+                continue
+
+            # Direct tool invocation with ! prefix
+            if line_stripped.startswith('!'):
+                tool_command = line_stripped[1:].strip()
+                if not tool_command:
+                    console.print("[yellow]Usage: !toolname [arg1] [arg2] ...[/yellow]")
+                    console.print("[dim]Example: !read_file /path/to/file[/dim]")
+                    console.print("[dim]Example: !execute ls -la[/dim]")
+                    repl_agent.display_prompt()
+                    continue
+                
+                # Parse tool name and arguments
+                parts = tool_command.split(maxsplit=1)
+                tool_name = parts[0]
+                tool_args = parts[1] if len(parts) > 1 else ""
+                
+                try:
+                    if shared_state.tool_registry is None:
+                        console.print("[red]Tool registry not available.[/red]")
+                    elif tool_name not in shared_state.tool_registry:
+                        console.print(f"[red]Tool '{tool_name}' not found.[/red]")
+                        tool_names = shared_state.tool_registry.get_tool_names()
+                        similar = [t for t in tool_names if tool_name.lower() in t.lower()][:5]
+                        if similar:
+                            console.print(f"[dim]Did you mean: {', '.join(similar)}?[/dim]")
+                    else:
+                        console.print(f"[cyan]Executing tool: {tool_name}...[/cyan]")
+                        tool_func = shared_state.tool_registry.get_tool(tool_name)
+                        
+                        # Execute the tool - handle LangChain async tools properly
+                        if hasattr(tool_func, 'ainvoke'):
+                            # LangChain async tool - use ainvoke
+                            result = await tool_func.ainvoke(tool_args if tool_args else {})
+                        elif hasattr(tool_func, 'invoke'):
+                            # LangChain sync tool - use invoke
+                            result = tool_func.invoke(tool_args if tool_args else {})
+                        elif asyncio.iscoroutinefunction(tool_func):
+                            # Regular async function
+                            result = await tool_func(tool_args) if tool_args else await tool_func()
+                        else:
+                            # Regular sync function
+                            result = tool_func(tool_args) if tool_args else tool_func()
+                        
+                        # Display result
+                        result_str = str(result)
+
+                        # Try to parse tuple outputs (like from !execute) to show clean stdout
+                        try:
+                            import ast
+                            # Only attempt if it looks like a tuple representation
+                            if result_str.strip().startswith('('):
+                                parsed = ast.literal_eval(result_str)
+                                if isinstance(parsed, tuple) and len(parsed) >= 1:
+                                    # For (stdout, stderr, rc) tuples, just show the content
+                                    stdout = str(parsed[0])
+                                    stderr = str(parsed[1]) if len(parsed) > 1 and parsed[1] else ""
+                                    
+                                    result_str = stdout
+                                    if stderr:
+                                        result_str += f"\n\n[STDERR]\n{stderr}"
+                        except Exception:
+                            pass 
+                        
+                        result_str = result_str[:2000]
+                        console.print(Panel(
+                            result_str,
+                            title=f"[bold green]✓ {tool_name} Result[/bold green]",
+                            border_style="green"
+                        ))
+                except Exception as e:
+                    console.print(f"[red]Error executing tool '{tool_name}': {e}[/red]")
+                    core.logging.log_event(f"Tool execution error: {e}", "ERROR")
+                
                 repl_agent.display_prompt()
                 continue
 

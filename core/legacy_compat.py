@@ -113,6 +113,10 @@ class LegacyToolRegistry:
         """Returns formatted metadata for prompt injection."""
         return self._new_registry.get_formatted_tool_metadata()
     
+    def get_schema(self, name: str):
+        """Returns the schema for a specific tool."""
+        return self._new_registry.get_schema(name)
+    
     def get_schemas(self):
         """New-style: Returns list of schemas."""
         return self._new_registry.get_schemas()
@@ -120,6 +124,10 @@ class LegacyToolRegistry:
     def get_all_tool_schemas(self):
         """New-style: Returns JSON-serializable schemas."""
         return self._new_registry.get_all_tool_schemas()
+    
+    def register_langchain_tools(self, tools) -> None:
+        """Bulk registers a list of LangChain tools."""
+        self._new_registry.register_langchain_tools(tools)
     
     def __contains__(self, name: str) -> bool:
         return name in self._new_registry
