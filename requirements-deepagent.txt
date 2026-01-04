@@ -10,7 +10,7 @@ fuzzywuzzy
 func-timeout
 lxml
 nltk
-numpy<2.0.0
+numpy>=2.2.6,<2.3
 openai
 openai-whisper
 pandas>=2.2.0
