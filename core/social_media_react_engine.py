@@ -29,8 +29,8 @@ class SocialMediaReActEngine(GeminiReActEngine):
                         metadata={"description": schema.get("description", ""), "arguments": schema.get("parameters", {}).get("properties", {})}
                     )
             except Exception as e:
-                import core.logging
-                core.logging.log_event(f"SocialMediaAgent: Failed to merge shared tools: {e}", "WARNING")
+                from core.logging import log_event
+                log_event(f"SocialMediaAgent: Failed to merge shared tools: {e}", "WARNING")
 
         async def generate_post_content(strategy: str):
             """Generates content for a new social media post based on a given strategy."""

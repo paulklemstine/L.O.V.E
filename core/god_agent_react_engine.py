@@ -37,8 +37,8 @@ class GodAgentReActEngine(GeminiReActEngine):
                         metadata={"description": schema.get("description", ""), "arguments": schema.get("parameters", {}).get("properties", {})}
                     )
             except Exception as e:
-                import core.logging
-                core.logging.log_event(f"GodAgent: Failed to merge shared tools: {e}", "WARNING")
+                from core.logging import log_event
+                log_event(f"GodAgent: Failed to merge shared tools: {e}", "WARNING")
 
         # Define tools as simple callables (lambdas or functions)
         def get_system_state():
