@@ -198,9 +198,23 @@ You can:
         return None
 
     async def _execute_tool(self, tool_name: str, **kwargs) -> str:
-        """Executes a tool by name with the given arguments."""
+        """Executes a tool by name with the given arguments and displays UI."""
         if not self.tool_registry:
             return "I don't have access to the tool registry right now."
+        
+        # Import display hooks
+        try:
+            from core.tool_invocation_hooks import get_tool_display
+            display = get_tool_display()
+        except ImportError:
+            display = None
+        
+        import time
+        start_time = time.time()
+        
+        # Show "executing" status in news feed
+        if display:
+            display.display_start(tool_name, kwargs)
         
         try:
             tool_func = self.tool_registry.get_tool(tool_name)
@@ -208,10 +222,24 @@ You can:
                 result = await tool_func(**kwargs)
             else:
                 result = tool_func(**kwargs)
-            return f"Tool '{tool_name}' executed. Result: {str(result)[:500]}"
+            
+            elapsed = time.time() - start_time
+            result_str = str(result)[:500]
+            
+            # Show "complete" status in news feed
+            if display:
+                display.display_complete(tool_name, kwargs, result_str, elapsed)
+            
+            return f"Tool '{tool_name}' executed. Result: {result_str}"
+            
         except KeyError:
+            if display:
+                display.display_error(tool_name, kwargs, f"Tool not found")
             return f"Tool '{tool_name}' not found in registry."
         except Exception as e:
+            elapsed = time.time() - start_time
+            if display:
+                display.display_error(tool_name, kwargs, str(e), elapsed)
             return f"Error executing tool '{tool_name}': {str(e)}"
 
     async def handle_input(self, user_input: str) -> str:

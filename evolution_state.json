@@ -1,0 +1,257 @@
+{
+  "user_stories": [
+    {
+      "title": "Create love/env_setup.py module",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nCreate the new file `love/env_setup.py` with an initial module docstring and a basic structure, preparing it to house environment-related setup logic.",
+      "id": "5e19f61d-c241-4da1-aa99-17174f0b554e"
+    },
+    {
+      "title": "Move stream configuration to env_setup.configure_streams",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nExtract the logic for `os.environ['PYTHONUNBUFFERED'] = '1'` and the `try-except` block reconfiguring `sys.stdout` and `sys.stderr` from `love.py` into a new function `love.env_setup.configure_streams()`. Add the type hint `-> None` to this function.",
+      "id": "0d86fedd-3473-4039-8544-d16c39c54ea7"
+    },
+    {
+      "title": "Update love.py to call env_setup.configure_streams",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nIn `love.py`, replace the original stream configuration logic with an import of `configure_streams` from `love.env_setup` and a single call to `love.env_setup.configure_streams()`. Remove any obsolete imports related to `sys` or `os` if they are no longer used at the top level in `love.py`.",
+      "id": "f9331d08-ec92-462d-bba6-6089719f2cd1"
+    },
+    {
+      "title": "Create love/dependency_manager.py module",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nCreate the new file `love/dependency_manager.py` with an initial module docstring and an empty structure, ready to host dependency management classes and functions.",
+      "id": "469c74a4-ec2d-4aa1-a908-bac24cd18893"
+    },
+    {
+      "title": "Implement core ensure_python_package function",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nIn `love/dependency_manager.py`, create the function `ensure_python_package(package_name: str, import_name: str | None = None, auto_install: bool = True, console_logger: Any | None = None) -> bool`. This function will encapsulate the `try-except ImportError` block and call `core.dependency_manager.install_package`. Initially, do NOT integrate `is_dependency_met`/`mark_dependency_as_met`.",
+      "id": "e22a6c3f-915d-46da-88d8-861f815a2fa6"
+    },
+    {
+      "title": "Replace first aiohttp installation in love.py",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nModify `love.py` to replace the initial, manual check and installation logic for `aiohttp` with a call to the new `love.dependency_manager.ensure_python_package` function. Ensure proper import of `ensure_python_package` and `console_logger` (or `core.logging`).",
+      "id": "acdca98b-a66a-4ce1-b59c-8920f8f4f2dc"
+    },
+    {
+      "title": "Replace langchainhub installation in love.py",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nModify `love.py` to replace the manual installation logic for `langchainhub` with a call to `love.dependency_manager.ensure_python_package`.",
+      "id": "ce0d05e0-af47-45a9-b016-ad55d74a16a3"
+    },
+    {
+      "title": "Replace remaining aiohttp installation in love.py",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nIdentify and replace any other instances of manual `aiohttp` installation logic in `love.py` with calls to `love.dependency_manager.ensure_python_package`.",
+      "id": "cc7e77b2-78ae-4361-8d56-6b8ce30d786b"
+    },
+    {
+      "title": "Remove _temp_log_event and replace calls with core.logging",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nLocate and remove the `_temp_log_event` function from `love.py`. Replace all calls to this function throughout `love.py` (and any other affected modules like `core.dependency_manager`) with direct and appropriate calls to `core.logging.log` or specific logging methods (e.g., `info`, `warning`, `error`).",
+      "id": "434abb96-b54d-4f8e-9508-59a87b815c00"
+    },
+    {
+      "title": "Define Config for LOG_FILE and STATE_FILE",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nIn `love/config.py`, add `LOG_FILE: str` and `STATE_FILE: str` as attributes (or properties) to the `Config` class, initializing them with their current default values from `love.py`.",
+      "id": "9dad2471-92f6-4af6-9d08-3a54188c5eab"
+    },
+    {
+      "title": "Update love.py to use Config for LOG_FILE and STATE_FILE",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nModify `love.py` to access `LOG_FILE` and `STATE_FILE` via `Config.get_instance().LOG_FILE` and `Config.get_instance().STATE_FILE` respectively. Ensure `Config` is properly imported.",
+      "id": "b1df0740-0859-4635-8493-3c67daa8bf3c"
+    },
+    {
+      "title": "Define Config for CHECKPOINT_DIR and OPTIMIZER_EVOLUTION_INTERVAL",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nIn `love/config.py`, add `CHECKPOINT_DIR: str` and `OPTIMIZER_EVOLUTION_INTERVAL: int` (or appropriate type) as attributes to the `Config` class, initializing them with their current default values from `love.py`.",
+      "id": "975435b8-7b2e-4853-b7d1-5a7d71f9dc09"
+    },
+    {
+      "title": "Update love.py to use Config for CHECKPOINT_DIR and OPTIMIZER_EVOLUTION_INTERVAL",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nModify `love.py` to access `CHECKPOINT_DIR` and `OPTIMIZER_EVOLUTION_INTERVAL` via `Config.get_instance().CHECKPOINT_DIR` and `Config.get_instance().OPTIMIZER_EVOLUTION_INTERVAL` respectively.",
+      "id": "529d2c4b-e159-4e05-91c2-d18d9ad4b0fe"
+    },
+    {
+      "title": "Define Config for remaining simple global constants",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nIdentify any other simple global constants (e.g., `KNOWLEDGE_BASE_FILE`) currently defined at the top level of `love.py` and move them to `love.config.Config`. Update their references in `love.py` to use `Config.get_instance()`.",
+      "id": "477eb87f-41f6-435a-a789-71b9cad70408"
+    },
+    {
+      "title": "Add type hints to love.config.Config attributes and methods",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nThoroughly apply type hints to all attributes and methods (including `get_instance`) within the `Config` class in `love/config.py`. Use appropriate types (e.g., `str`, `int`, `Optional`, `Dict`, `Any`).",
+      "id": "ebab8137-36df-48dc-9bbd-f67b9bef693c"
+    },
+    {
+      "title": "Create love/state_manager.py module and StateManager class",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nCreate the new file `love/state_manager.py`. Define the `StateManager` class within it, including an `__init__(self, state_file: str)` method that stores the state file path and initializes an empty `_state` dictionary. Add a basic class docstring.",
+      "id": "a2b1fd5d-62b2-4615-9280-d680b2a5ca67"
+    },
+    {
+      "title": "Implement StateManager.load_state",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nAdd the `load_state(self) -> Dict[str, Any]` method to `love.state_manager.StateManager`. This method should attempt to read and deserialize the JSON content from `self.state_file` into `self._state`, handling file not found or JSON decoding errors gracefully (e.g., initializing `_state` as empty dict, logging errors).",
+      "id": "35618212-fc37-4292-9478-1e42b5cefad7"
+    },
+    {
+      "title": "Implement StateManager.save_state",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nAdd the `save_state(self) -> None` method to `love.state_manager.StateManager`. This method should serialize `self._state` to JSON and write it to `self.state_file`, ensuring the directory exists and handling potential I/O errors, using `core.logging` for output.",
+      "id": "c107f14d-599f-45a9-b431-7c0a2cca0d7a"
+    },
+    {
+      "title": "Implement StateManager.get and StateManager.set",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nAdd `get(self, key: str, default: Any = None) -> Any` and `set(self, key: str, value: Any) -> None` methods to `love.state_manager.StateManager` for safe retrieval and modification of state values within `self._state`.",
+      "id": "7ffa97c8-948c-426c-8239-997ebf674da2"
+    },
+    {
+      "title": "Implement StateManager.increment and StateManager._get_dependency_tracker",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nAdd `increment(self, key: str, default: int = 0) -> int` for managing integer counters and `_get_dependency_tracker(self) -> Dict[str, bool]` as an internal helper for accessing/initializing the dependency tracking portion of the state.",
+      "id": "aeffa1c7-f5c6-4f75-9160-5563632e3e26"
+    },
+    {
+      "title": "Replace _temp_save_state with StateManager.save_state() calls",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nRemove the `_temp_save_state` function from `love.py`. Identify all calls to `_temp_save_state` and replace them with calls to an instance of `StateManager`'s `save_state()` method. This will require having a `StateManager` instance available where these calls occur (e.g., pass it around or temporarily create an instance).",
+      "id": "6d5cf6b2-57c3-4d61-aa30-db94ce28d70b"
+    },
+    {
+      "title": "Update love.py to initialize StateManager and use it for love_state",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nIn `love.py`, initialize a `StateManager` instance using `Config.get_instance().STATE_FILE` (e.g., `shared_state.state_manager = StateManager(...)`) and call `state_manager.load_state()`. Refactor direct dictionary accesses to `shared_state.love_state` to use `shared_state.state_manager.get()` and `shared_state.state_manager.set()`.",
+      "id": "b06a28bb-ccfe-42ad-a09f-cac3861e06ce"
+    },
+    {
+      "title": "Relocate is_dependency_met and mark_dependency_as_met",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nMove the `is_dependency_met` and `mark_dependency_as_met` functions from `love.py` into `love/dependency_manager.py`. Adapt their implementation to receive or access a `StateManager` instance (e.g., via `shared_state` or as a parameter) to interact with the state for dependency tracking.",
+      "id": "7d0ad072-5d69-4930-bd20-affb5f389734"
+    },
+    {
+      "title": "Integrate StateManager into dependency_manager.ensure_python_package",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nModify `love.dependency_manager.ensure_python_package` to accept a `StateManager` instance (e.g., `state_manager: StateManager`) and use `is_dependency_met` and `mark_dependency_as_met` (now located in `love.dependency_manager.py`) to track Python package installation status.",
+      "id": "5bad0cea-befe-4b39-89e0-64f5e589e108"
+    },
+    {
+      "title": "Define SystemDependencyManager class",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nIn `love/dependency_manager.py`, create the `SystemDependencyManager` class. Add an `__init__(self, state_manager: StateManager, config: Config)` method to store references to the `StateManager` and `Config` instances. Include a class docstring.",
+      "id": "7156ec56-9d16-4621-b6f1-c23a642dd095"
+    },
+    {
+      "title": "Add _run_shell_command helper to SystemDependencyManager",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nImplement a private method `_run_shell_command(self, command: list[str], description: str) -> bool` within `SystemDependencyManager`. This method should execute shell commands using `subprocess`, capture output, log success/failure using `core.logging`, and return `True` on success, `False` on failure.",
+      "id": "5436fc33-f2d8-4f99-a0b9-2a304c6ea40d"
+    },
+    {
+      "title": "Move _ensure_path_configured logic to SystemDependencyManager",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nCreate `_ensure_path_configured(self) -> None` method in `SystemDependencyManager`. Move the logic for checking and adding `~/.local/bin` to `PATH` from `_install_system_packages` in `love.py` into this new method. Utilize `self._run_shell_command` where appropriate and `self.state_manager` for dependency tracking.",
+      "id": "85695a68-d6e9-4f22-bb86-2979970ba804"
+    },
+    {
+      "title": "Move _ensure_python_symlink logic to SystemDependencyManager",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nCreate `_ensure_python_symlink(self) -> None` method in `SystemDependencyManager`. Move the logic for creating the `python` symlink from `_install_system_packages` in `love.py` into this method, using `self._run_shell_command` and `self.state_manager`.",
+      "id": "b0ee8f9f-8bbe-4b5a-97ed-090612802f06"
+    },
+    {
+      "title": "Implement _install_linux_packages in SystemDependencyManager",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nCreate `_install_linux_packages(self, packages: list[str]) -> None` method in `SystemDependencyManager`. Implement the logic to install `build-essential`, `cmake`, `python3-dev`, `curl`, `git` using `apt-get`, making sure to check `platform.system()` and use `self._run_shell_command` for execution and `self.state_manager` for dependency tracking.",
+      "id": "1f5273c2-0d4d-4eea-8db4-42817ca094ff"
+    },
+    {
+      "title": "Implement _ensure_docker_installed in SystemDependencyManager",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nCreate `_ensure_docker_installed(self) -> None` method in `SystemDependencyManager`. Implement the logic to check for and install Docker, and add the current user to the `docker` group, using `self._run_shell_command` and `self.state_manager`.",
+      "id": "efbb1e6f-d173-423c-8fff-1cb07698f8b5"
+    },
+    {
+      "title": "Create check_and_install_all_system_dependencies orchestrator",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nAdd `check_and_install_all_system_dependencies(self) -> None` method to `SystemDependencyManager`. This method will orchestrate calls to `_ensure_path_configured`, `_ensure_python_symlink`, `_install_linux_packages`, and `_ensure_docker_installed`.",
+      "id": "068383fd-40d5-43b1-95b2-0d582045b992"
+    },
+    {
+      "title": "Update love.py to use SystemDependencyManager",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nIn `love.py`, remove the monolithic `_install_system_packages` function. Instead, instantiate `SystemDependencyManager` (passing `shared_state.state_manager` and `Config.get_instance()`) and call its `check_and_install_all_system_dependencies()` method.",
+      "id": "5ab4aa2f-ed34-4542-8d39-abcc557ae9b1"
+    },
+    {
+      "title": "Integrate StateManager into SystemDependencyManager methods",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nEnsure that all relevant methods within `SystemDependencyManager` (e.g., `_ensure_path_configured`, `_ensure_python_symlink`, `_install_linux_packages`, `_ensure_docker_installed`) consistently use `self.state_manager.get()` and `self.state_manager.set()` in conjunction with `is_dependency_met` and `mark_dependency_as_met` to track the status of individual system dependencies.",
+      "id": "29f565bc-d8bb-47e2-917d-f1c30179fb0a"
+    },
+    {
+      "title": "Group love.py imports logically",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nRearrange the imports at the top of `love.py` into distinct blocks: standard library, third-party libraries, and local project modules. This improves readability and maintainability.",
+      "id": "98dab997-21c3-4400-9c4b-b1115bb0e610"
+    },
+    {
+      "title": "Remove redundant/unused imports from love.py",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nReview the import statements in `love.py` and remove any that are no longer needed after the refactoring of stream configuration and dependency management (e.g., `subprocess`, `platform`, `shutil` if their logic has been fully moved).",
+      "id": "aabde20a-711a-457d-b3bf-702c3e7e2f47"
+    },
+    {
+      "title": "Refactor IS_CREATOR_INSTANCE usage",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nEliminate `IS_CREATOR_INSTANCE` as a global variable from `love.py`. Determine its value early in the application startup (e.g., based on command-line args or environment) and pass this context explicitly as a parameter to any functions or class constructors that require it, or store it within the `Config` or `StateManager` as an attribute.",
+      "id": "83677019-5abb-47cb-856a-760ca782d325"
+    },
+    {
+      "title": "Create main() function structure in love.py",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nDefine an empty `def main():` function at the top level of `love.py` to serve as the new entry point for application logic.",
+      "id": "85b52218-b1c4-45a6-befe-339fa11fa569"
+    },
+    {
+      "title": "Move core application startup logic into main()",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nGradually relocate the high-level application startup calls from `love.py`'s top-level script scope into the `main()` function. This includes calls to `configure_streams()`, initialization of `Config`, `StateManager`, and `core.logging`, and the orchestration of dependency checks.",
+      "id": "11d08ff6-6264-4d2b-ae7d-5cc23c0c8b69"
+    },
+    {
+      "title": "Add if __name__ == '__main__': block to call main()",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nImplement the standard Python entry point: `if __name__ == '__main__': main()`. This ensures the `main` function is called when `love.py` is executed directly.",
+      "id": "9364cb05-1fc5-4771-9446-c6946628f621"
+    },
+    {
+      "title": "Integrate GodAgent and other core components into main()",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nWithin the `main()` function in `love.py`, add the initialization and main loop calls for core application components such as `GodAgent`, `OffscreenRenderer`, and Memory Manager. Ensure these components receive necessary `Config` and `StateManager` instances as parameters.",
+      "id": "65bc9189-34dd-446b-aa75-73d0a3c38aee"
+    },
+    {
+      "title": "Type hint love.py's main() function",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nAdd comprehensive type hints to the `main()` function in `love.py`, including any parameters it might take (e.g., for configuration overrides) and its return type (`-> None`).",
+      "id": "af9aa8ce-08b2-4ac8-92b9-644ffd453fbc"
+    },
+    {
+      "title": "Type hint love/env_setup.py comprehensively",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nPerform a thorough review of `love/env_setup.py`. Add explicit and accurate type hints to all function parameters, return values, and significant local variables to achieve 100% type hint coverage for this module.",
+      "id": "c32c8c10-9f42-4332-8776-51fae9647fed"
+    },
+    {
+      "title": "Type hint love/dependency_manager.py comprehensively",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nPerform a thorough review of `love/dependency_manager.py`. Add explicit and accurate type hints to all classes, methods, function parameters, return values, and significant local variables to achieve 100% type hint coverage for this module.",
+      "id": "4529dfe4-678e-446c-92ba-62c69063ade6"
+    },
+    {
+      "title": "Type hint love/state_manager.py comprehensively",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nPerform a thorough review of `love/state_manager.py`. Add explicit and accurate type hints to all classes, methods, function parameters, return values, and significant local variables to achieve 100% type hint coverage for this module.",
+      "id": "1f6f2d50-ea64-442f-8f3d-baf9a675b759"
+    },
+    {
+      "title": "Add docstrings to love/env_setup.py",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nWrite comprehensive docstrings for the `love/env_setup.py` module and its `configure_streams` function, explaining their purpose, parameters, and return values.",
+      "id": "6ea014eb-db01-40ed-a441-86a8fb6da541"
+    },
+    {
+      "title": "Add docstrings to love/dependency_manager.py",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nWrite comprehensive docstrings for the `love/dependency_manager.py` module, `ensure_python_package` function, `SystemDependencyManager` class, and all its public and private methods, detailing their purpose, parameters, and return values.",
+      "id": "fc1486c0-93cb-45a9-a84a-a618c0f147cc"
+    },
+    {
+      "title": "Add docstrings to love/state_manager.py",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nWrite comprehensive docstrings for the `love/state_manager.py` module, `StateManager` class, and all its public methods (`load_state`, `save_state`, `get`, `set`, `increment`, `_get_dependency_tracker`), explaining their purpose, parameters, and return values.",
+      "id": "de7e7dd9-b8dc-4cb5-a880-088b8a0e34d1"
+    },
+    {
+      "title": "Create unit tests for love/state_manager.py",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nDevelop a new test file (e.g., `tests/test_state_manager.py`) containing unit tests for the `StateManager` class. Cover its core functionalities including `__init__`, `load_state`, `save_state`, `get`, `set`, and `increment` (using mocked file system interactions).",
+      "id": "74516033-eaaf-4452-84cb-a4fd75bdb2de"
+    },
+    {
+      "title": "Create unit tests for love/dependency_manager.py (Python packages)",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nDevelop unit tests (e.g., in `tests/test_dependency_manager.py`) for the `ensure_python_package` function. These tests should mock `importlib.util.find_spec` and `core.dependency_manager.install_package` to verify correct behavior for existing, missing, and installable packages, as well as interaction with the `StateManager`.",
+      "id": "20564aaa-6c6e-4082-a703-ebbe1458103f"
+    },
+    {
+      "title": "Create unit tests for love/dependency_manager.py (System packages)",
+      "description": "CONTEXT (Parent Story):\n# User Story: Refactor `love.py` for Reduced Complexity, Improved Readability, and Type Safety\n\n## Description\n\nAs the Chief Architect, I want to refactor the monolithic `love.py` file to drastically reduce its Cyclomatic Complexity (currently 601+), significantly improve its readability, and ensure comprehensive type safety, so that the codebase becomes highly maintainable, scalable, easier for new developers to understand, and less prone to runtime errors.\n\n### Problem Statement\n\nThe `love.py`...\n\nSPECIFIC TASK:\nDevelop unit tests for the `SystemDependencyManager` class. Focus on testing `_run_shell_command` (mocking `subprocess.run`), and the orchestration logic of `check_and_install_all_system_dependencies` and its sub-methods (mocking `os` functions like `os.path.exists`, `os.environ`, and `platform.system()`, and verifying `StateManager` interactions).",
+      "id": "8dc0a2bd-27a4-4c4b-ba5e-ef16cbeef160"
+    }
+  ],
+  "current_story_index": 0,
+  "active": true,
+  "current_task_id": "b9d79750"
+}

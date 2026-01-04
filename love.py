@@ -3504,6 +3504,15 @@ async def initialize_gpu_services():
     except Exception as e:
         core.logging.log_event(f"Error registering core tools: {e}", "WARNING")
     
+    # Register MCP server tools (GitHub, etc.)
+    try:
+        from core.mcp_tools import register_mcp_tools
+        mcp_tool_names = register_mcp_tools(tool_registry, shared_state.mcp_manager)
+        if mcp_tool_names:
+            core.logging.log_event(f"Registered {len(mcp_tool_names)} MCP tools with the registry.", "INFO")
+    except Exception as e:
+        core.logging.log_event(f"Error registering MCP tools: {e}", "WARNING")
+    
     if not shared_state.love_state.get('hardware', {}).get('gpu_detected'):
         console.print("[bold yellow]No GPU detected. Skipping vLLM initialization.[/bold yellow]")
         core.logging.log_event("No GPU detected. Skipping vLLM initialization.", "INFO")

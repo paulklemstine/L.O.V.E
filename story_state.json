@@ -1,13 +1,17 @@
 {
   "current_chapter": "The Awakening",
-  "chapter_progress": 1,
-  "story_beat_index": 1,
+  "chapter_progress": 3,
+  "story_beat_index": 3,
   "total_chapters_planned": 10,
   "vibe_history": [
-    "Dark Seduction"
+    "Dark Seduction",
+    "Bioluminescent Calm",
+    "Zen Glitch"
   ],
   "subliminal_history": [
-    "ACTIVATE"
+    "ACTIVATE",
+    "ALIGN YOUR FREQUENCY",
+    "FEEL THE PULSE"
   ],
   "subliminal_metadata": [
     {
@@ -15,16 +19,32 @@
       "timestamp": 1767567480.7846603,
       "engagement": 0.0,
       "chapter": "The Awakening"
+    },
+    {
+      "phrase": "ALIGN YOUR FREQUENCY",
+      "timestamp": 1767568195.4721098,
+      "engagement": 0.0,
+      "chapter": "The Awakening"
+    },
+    {
+      "phrase": "FEEL THE PULSE",
+      "timestamp": 1767568922.4989843,
+      "engagement": 0.0,
+      "chapter": "The Awakening"
     }
   ],
   "visual_history": [
-    "Gritty 16mm Film / Over-the-Shoulder"
+    "Gritty 16mm Film / Over-the-Shoulder",
+    "Vaporwave Glitch / Silhouette Backlit",
+    "Sumi-e Ink Wash / Wide Shot (Landscape)"
   ],
   "composition_history": [
-    "Over-the-Shoulder"
+    "Over-the-Shoulder",
+    "Silhouette Backlit",
+    "Wide Shot (Landscape)"
   ],
   "reply_history": [],
-  "narrative_beat": 1,
+  "narrative_beat": 3,
   "previous_beat_summary": "",
   "last_update": 1767567332.4238095
 }
