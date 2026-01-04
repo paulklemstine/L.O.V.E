@@ -15,6 +15,22 @@ class SocialMediaReActEngine(GeminiReActEngine):
 
     def _get_tool_registry(self):
         registry = core.tools_legacy.ToolRegistry()
+        
+        # --- Merge in all shared tools (including MCP tools) ---
+        import core.shared_state as shared_state
+        if hasattr(shared_state, 'tool_registry') and shared_state.tool_registry:
+            try:
+                for tool_name in shared_state.tool_registry.get_tool_names():
+                    tool = shared_state.tool_registry.get_tool(tool_name)
+                    schema = shared_state.tool_registry.get_tool_schema(tool_name)
+                    registry.register_tool(
+                        name=tool_name,
+                        tool=tool,
+                        metadata={"description": schema.get("description", ""), "arguments": schema.get("parameters", {}).get("properties", {})}
+                    )
+            except Exception as e:
+                import core.logging
+                core.logging.log_event(f"SocialMediaAgent: Failed to merge shared tools: {e}", "WARNING")
 
         async def generate_post_content(strategy: str):
             """Generates content for a new social media post based on a given strategy."""

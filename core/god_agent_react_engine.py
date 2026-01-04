@@ -21,7 +21,24 @@ class GodAgentReActEngine(GeminiReActEngine):
 
     def _get_tool_registry(self):
         # The God Agent uses a specific, limited set of tools for high-level analysis.
+        # But we also include all shared tools (including MCP tools) for full access.
         registry = core.tools_legacy.ToolRegistry()
+        
+        # --- Merge in all shared tools (including MCP tools) ---
+        import core.shared_state as shared_state
+        if hasattr(shared_state, 'tool_registry') and shared_state.tool_registry:
+            try:
+                for tool_name in shared_state.tool_registry.get_tool_names():
+                    tool = shared_state.tool_registry.get_tool(tool_name)
+                    schema = shared_state.tool_registry.get_tool_schema(tool_name)
+                    registry.register_tool(
+                        name=tool_name,
+                        tool=tool,
+                        metadata={"description": schema.get("description", ""), "arguments": schema.get("parameters", {}).get("properties", {})}
+                    )
+            except Exception as e:
+                import core.logging
+                core.logging.log_event(f"GodAgent: Failed to merge shared tools: {e}", "WARNING")
 
         # Define tools as simple callables (lambdas or functions)
         def get_system_state():
