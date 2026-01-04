@@ -798,9 +798,11 @@ print("---------------------------------------")
 
 
 # Run dependency checks immediately, before any other imports that might fail.
-# Run dependency checks immediately, before any other imports that might fail.
-if __name__ == "__main__":
+if not SKIP_CHECKS:
     _check_and_install_dependencies()
+else:
+    print("[OPTIMIZATION] Skipping dependency checks as requested.")
+
 
 import core.tracing
 core.tracing.init_tracing()
