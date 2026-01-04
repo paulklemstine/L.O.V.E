@@ -1,3 +1,3 @@
-## 2025-05-19 - Regex Compilation Performance
-**Learning:** Compiling regex patterns in Python via `re.compile()` inside frequently called functions (like `_strip_ansi_codes` in a UI loop) incurs measurable overhead, even with Python's internal caching. Moving these to module-level constants improves performance slightly and is a cleaner pattern.
-**Action:** Always define static regex patterns as module-level constants (UPPER_CASE) to avoid repetitive compilation and function call overhead in hot paths.
+## 2025-02-23 - Rich Console Instantiation Overhead
+**Learning:** Instantiating `rich.console.Console()` is expensive (approx. 0.18ms per call) because it performs system calls to detect terminal size and color capabilities. In UI rendering loops where color resolution happens frequently (e.g., generating gradients for every panel title), this overhead accumulates significantly.
+**Action:** Reuse a single global or module-level `Console` instance for operations like `get_style()` or color resolution instead of creating a new one inside the function. Cache it at the module level.

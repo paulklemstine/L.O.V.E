@@ -224,27 +224,24 @@ def _install_system_packages():
     # 3. Install necessary system packages (build-essential, cmake, curl)
     if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ and shutil.which("apt-get"):
         print("Ensuring system dependencies are installed...")
-        packages = []
-        if not shutil.which("make") or not shutil.which("gcc"):
-            packages.append("build-essential")
-        if not shutil.which("cmake"):
-            packages.append("cmake")
-        if not shutil.which("python3-dev"):
-             packages.append("python3-dev")
-        if not shutil.which("curl"):
-             packages.append("curl")
-        if not shutil.which("git"):
-             packages.append("git")
 
-        if packages:
-            try:
-                print(f"Installing missing system packages: {', '.join(packages)}...")
-                cmd = f"sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {' '.join(packages)}"
-                subprocess.check_call(cmd, shell=True)
-                print("Successfully installed system packages.")
-            except subprocess.CalledProcessError as e:
-                print(f"WARN: Failed to install system packages: {e}")
-                print("Builds for some dependencies may fail.")
+        # Define all required packages in a single list for easier management.
+        required_packages = ["build-essential", "cmake", "python3-dev", "curl", "git"]
+
+        try:
+            print(f"Updating package lists and installing: {', '.join(required_packages)}...")
+            # Group the installation into a single command to be more efficient.
+            # apt-get will automatically skip packages that are already installed.
+            update_cmd = "sudo apt-get update -q"
+            install_cmd = f"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {' '.join(required_packages)}"
+
+            subprocess.check_call(update_cmd, shell=True)
+            subprocess.check_call(install_cmd, shell=True)
+
+            print("Successfully ensured all system packages are installed.")
+        except subprocess.CalledProcessError as e:
+            print(f"WARN: Failed to install system packages: {e}")
+            print("Builds for some dependencies may fail.")
 
     # 4. Ensure Docker is installed (User Request)
     if platform.system() == "Linux" and "TERMUX_VERSION" not in os.environ:
