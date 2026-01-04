@@ -708,7 +708,7 @@ def rank_models(purpose="general"):
             final_score += 2000
             #log_event(f"Applying priority boost to OpenRouter model: {model_id}", "DEBUG")
         elif provider == "deepseek":
-            final_score += 1500  # Between OpenRouter (2000) and vLLM (1000)
+            final_score += 100  # Low priority - DeepSeek is a paid service
             #log_event(f"Applying priority boost to DeepSeek model: {model_id}", "DEBUG")
         elif provider == "vllm":
             if purpose == "emotion" or purpose == "scoring":
