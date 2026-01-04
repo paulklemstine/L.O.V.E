@@ -25,7 +25,6 @@ class PromptManager:
             # prompts.yaml is in the same directory as this file (core/)
             base_dir = os.path.dirname(os.path.abspath(__file__))
         
-        print(f"DEBUG: base_dir={base_dir}")
         self.base_dir = base_dir
         self.master_path = os.path.join(base_dir, "prompts.yaml")
         self.modified_path = os.path.join(base_dir, "prompts-modified.yaml")

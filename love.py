@@ -801,7 +801,9 @@ print("---------------------------------------")
 
 
 # Run dependency checks immediately, before any other imports that might fail.
-_check_and_install_dependencies()
+# Run dependency checks immediately, before any other imports that might fail.
+if __name__ == "__main__":
+    _check_and_install_dependencies()
 
 import core.tracing
 core.tracing.init_tracing()

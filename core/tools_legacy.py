@@ -267,6 +267,7 @@ async def evolve(goal: str = None, **kwargs) -> str:
              goal = expanded_story
 
         # Validate the expanded story (just for logging purposes)
+        validator = UserStoryValidator() # Instantiate validator here
         validation = validator.validate(goal)
         
         if validation.is_valid:
@@ -302,7 +303,7 @@ async def evolve(goal: str = None, **kwargs) -> str:
     # Proceed with evolution
     core.logging.log_event(f"[Evolve Tool] Proceeding with evolution.", "INFO")
     
-    from love import evolve_self
+    from core.jules_task_manager import evolve_self
     evolve_self(goal)
     
     # Show both original and expanded if they differ
@@ -483,9 +484,9 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
             
             # --- MEMORY FEEDBACK HOOK ---
             try:
-                from love import memory_manager
-                if memory_manager:
-                    await memory_manager.add_episode(
+                import core.shared_state as shared_state
+                if shared_state.memory_manager:
+                    await shared_state.memory_manager.add_episode(
                         content=f"Social Media Event: Posted to Bluesky.\nContent: {text}",
                         tags=["SocialMedia", "CreativeOutput", "PublicStatement"]
                     )
@@ -1285,7 +1286,10 @@ async def recommend_tool_for_persistence(tool_name: str, reason: str, **kwargs) 
     """
     # This tool's purpose is to create a memory that the self-improvement
     # agents can act upon later.
-    from love import memory_manager
+    import core.shared_state as shared_state
+
+    if not shared_state.memory_manager:
+        return "Error: Memory manager not initialized in shared_state. Cannot record persistence recommendation."
 
     recommendation_content = (
         f"Tool Persistence Recommendation:\n"
@@ -1295,7 +1299,7 @@ async def recommend_tool_for_persistence(tool_name: str, reason: str, **kwargs) 
     )
 
     # Using add_episode to create a structured memory with the 'ToolMemory' tag
-    await memory_manager.add_episode(recommendation_content, tags=['ToolMemory', 'SelfImprovement'])
+    await shared_state.memory_manager.add_episode(recommendation_content, tags=['ToolMemory', 'SelfImprovement'])
 
     message = f"Recommendation to persist tool '{tool_name}' has been recorded in memory."
     print(f"--- {message} ---")
