@@ -15,6 +15,7 @@ import aiohttp
 import csv
 import io
 import functools
+import threading
 
 from core.openrouter_rate_limiter import get_openrouter_rate_limiter
 
@@ -495,7 +496,8 @@ for model in OPENAI_MODELS:
     MODEL_STATS[model]["provider"] = "openai"
 
 # --- Leaderboard Fetching ---
-_fetch_static_leaderboard_csv()
+# Run this in a background thread to avoid blocking startup/import time
+threading.Thread(target=_fetch_static_leaderboard_csv, daemon=True).start()
 
 # --- Dynamic Model List ---
 # A comprehensive list of all possible models for initializing availability tracking.
