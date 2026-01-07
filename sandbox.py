@@ -166,7 +166,7 @@ class Sandbox:
                 logging.error(f"Failed to destroy sandbox: {e}")
                 self.console.print(f"[bold red]Error destroying sandbox: {e}[/bold red]")
     
-    def execute_tool(self, tool_name: str, tool_func, arguments: dict) -> tuple:
+    async def execute_tool(self, tool_name: str, tool_func, arguments: dict) -> tuple:
         """
         Executes a tool function securely within the sandbox context.
         
@@ -190,17 +190,19 @@ class Sandbox:
         
         try:
             # Execute the tool
-            if asyncio.iscoroutinefunction(tool_func):
-                # Handle async tools
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(tool_func(**arguments))
+            
+            # Check for LangChain tool with async invoke (ainvoke)
+            if hasattr(tool_func, "ainvoke"):
+                result = await tool_func.ainvoke(arguments)
+                
+            elif asyncio.iscoroutinefunction(tool_func):
+                # Handle raw async functions
+                result = await tool_func(**arguments)
+                
             elif hasattr(tool_func, "invoke"):
-                # LangChain tool with invoke method
+                # LangChain tool with sync invoke only
                 result = tool_func.invoke(arguments)
+                
             else:
                 # Regular sync function
                 result = tool_func(**arguments)

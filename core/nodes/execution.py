@@ -157,7 +157,7 @@ async def _safe_execute_tool(tool_func, tool_args: Dict[str, Any], tool_name: st
         try:
             from sandbox import Sandbox
             sandbox = Sandbox(repo_url=".", base_dir="/tmp/love_sandbox")
-            success, output = sandbox.execute_tool(tool_name, tool_func, tool_args)
+            success, output = await sandbox.execute_tool(tool_name, tool_func, tool_args)
             if success:
                 return output
             # If sandbox execution failed, fall through to direct execution
