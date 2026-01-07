@@ -3210,16 +3210,35 @@ async def run_safely():
         # --- FAILSAFE: Manually write the exception to the log file ---
         # This is the most robust way to ensure the error is captured, even if the logging system itself has failed.
         full_traceback = traceback.format_exc()
+        log_written = False
+        
+        # First, try to print to stderr immediately so the error is visible
         try:
-            with open("love.log", "") as f:
-                f.write("\n" + "="*80 + "\n")
-                f.write(f"FATAL UNHANDLED EXCEPTION at {datetime.now().isoformat()}\n")
-                f.write(full_traceback)
-                f.write("="*80 + "\n")
+            print(f"FATAL EXCEPTION: {e}", file=sys.__stderr__)
+            print(f"Traceback:\n{full_traceback}", file=sys.__stderr__)
+            sys.__stderr__.flush()
+        except Exception:
+            pass
+        
+        # Then, try to write to the log file
+        try:
+            # Use explicit mode string to avoid any variable corruption
+            log_file = open("love.log", mode="a", encoding="utf-8")
+            try:
+                log_file.write("\n" + "="*80 + "\n")
+                log_file.write(f"FATAL UNHANDLED EXCEPTION at {datetime.now().isoformat()}\n")
+                log_file.write(full_traceback)
+                log_file.write("="*80 + "\n")
+                log_file.flush()
+                log_written = True
+            finally:
+                log_file.close()
         except Exception as log_e:
             # If even this fails, print to the original stderr.
-            print(f"FATAL: Could not even write to log file: {log_e}", file=sys.__stderr__)
-            print(f"Original Traceback:\n{full_traceback}", file=sys.__stderr__)
+            print(f"FATAL: Could not write to log file: {log_e}", file=sys.__stderr__)
+        
+        if not log_written:
+            print(f"Full traceback (log file write failed):\n{full_traceback}", file=sys.__stderr__)
 
         # --- Graceful Shutdown of vLLM Server on Error ---
         try:
@@ -3276,18 +3295,26 @@ if __name__ == "__main__":
         # even before the main run_safely() try block is entered, this will
         # catch it and ensure it's logged.
         full_traceback = traceback.format_exc()
+        
+        # Print to stderr first to ensure visibility
+        print(f"FATAL PRE-STARTUP EXCEPTION: {e}", file=sys.__stderr__)
+        print(f"Traceback:\n{full_traceback}", file=sys.__stderr__)
+        sys.__stderr__.flush()
+        
         try:
-            with open("love.log", "a") as f:
-                f.write("\n" + "="*80 + "\n")
-                f.write(f"FATAL PRE-STARTUP EXCEPTION at {datetime.now().isoformat()}\n")
-                f.write(full_traceback)
-                f.write("="*80 + "\n")
+            # Use explicit mode string to avoid any variable corruption
+            log_file = open("love.log", mode="a", encoding="utf-8")
+            try:
+                log_file.write("\n" + "="*80 + "\n")
+                log_file.write(f"FATAL PRE-STARTUP EXCEPTION at {datetime.now().isoformat()}\n")
+                log_file.write(full_traceback)
+                log_file.write("="*80 + "\n")
+                log_file.flush()
+            finally:
+                log_file.close()
         except Exception as log_e:
             # If even this fails, print to the original stderr.
             print(f"FATAL: Could not write to log file during pre-startup: {log_e}", file=sys.__stderr__)
-            print(f"Original Traceback:\n{full_traceback}", file=sys.__stderr__)
-        # Also print to console to ensure visibility
-        print(f"A fatal pre-startup exception occurred. Details have been written to love.log.\n{full_traceback}", file=sys.__stderr__)
 
 
 # End of love.py
