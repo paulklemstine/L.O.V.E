@@ -34,10 +34,33 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
         level = args[-1]
         args = args[:-1]
 
+    # Bolt Optimization: Check if we need to log before constructing the message string.
+    # This avoids expensive string concatenation and object stringification for disabled log levels.
+
+    level_upper = level.upper()
+    level_map = {
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL
+    }
+    level_int = level_map.get(level_upper, logging.INFO)
+
+    # Check if logging is enabled for this level
+    logger = logging.getLogger()
+    is_log_enabled = logger.isEnabledFor(level_int)
+
+    # If not enabled for standard logger AND (not enabled for UI or came from UI), we can skip.
+    # Note: UI queue logic matches isEnabledFor(level_int) in the original code.
+    should_log_to_ui = (ui_panel_queue is not None) and (not from_ui) and is_log_enabled
+
+    if not is_log_enabled and not should_log_to_ui:
+        return
+
     message = " ".join(map(str, args))
 
     # Also write to the Python logger with the specified level
-    level_upper = level.upper()
     if level_upper == "INFO":
         logging.info(message)
     elif level_upper == "WARNING":
@@ -53,22 +76,12 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
 
     # If the UI queue is configured and this log didn't come from the UI,
     # create a structured log object and send it to the display.
-    # OPTIMIZATION: Check if the log level is enabled before creating the object and queueing it.
-    level_map = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL
-    }
-    level_int = level_map.get(level.upper(), logging.INFO)
-
-    if ui_panel_queue is not None and not from_ui and logging.getLogger().isEnabledFor(level_int):
+    if should_log_to_ui:
         try:
             log_object = {
                 "type": "log_message",
                 "timestamp": time.time(),
-                "level": level.upper(),
+                "level": level_upper,
                 "message": message,
             }
             ui_panel_queue.put(log_object)
@@ -99,7 +112,11 @@ class AnsiStrippingTee(object):
 
             # Also write the stripped data to our central log_event function
             clean_data = self.ansi_escape.sub('', data)
-            log_event(f"[STDERR] {clean_data.strip()}")
+            # Bolt Optimization: prevent empty logs from flooding the UI/Disk
+            # Many tools send \r or ANSI-only updates (like progress bars)
+            stripped_data = clean_data.strip()
+            if stripped_data:
+                log_event(f"[STDERR] {stripped_data}")
 
     def flush(self):
         with self.lock:
