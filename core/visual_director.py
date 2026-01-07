@@ -42,7 +42,15 @@ class VisualDirector:
             if start != -1 and end != -1:
                 clean_res = clean_res[start:end+1]
             
-            data = json.loads(clean_res)
+            # Attempt primary JSON parse
+            try:
+                data = json.loads(clean_res)
+            except json.JSONDecodeError:
+                # Try recovery: iteratively remove trailing content
+                data = self._recover_json(clean_res)
+            
+            if not data:
+                return self._get_fallback_spec(concept_text)
             
             # Helper to ensure keys exist
             required_keys = ["subject", "lighting", "camera_angle", "composition", "color_palette", "atmosphere"]
@@ -55,6 +63,33 @@ class VisualDirector:
         except Exception as e:
             log_event(f"VisualDirector failed to direct scene: {e}", "WARNING")
             return self._get_fallback_spec(concept_text)
+
+    def _recover_json(self, json_str: str) -> Optional[Dict[str, Any]]:
+        """
+        Attempts to recover a valid JSON object from a malformed string.
+        Tries progressively shorter substrings until valid JSON is found.
+        """
+        if not json_str or "{" not in json_str:
+            return None
+        
+        # Find the start of JSON
+        start = json_str.find("{")
+        working = json_str[start:]
+        
+        # Try parsing, removing characters from the end
+        while len(working) > 2:
+            try:
+                return json.loads(working)
+            except json.JSONDecodeError:
+                # Find the last closing brace and trim there
+                last_brace = working.rfind("}")
+                if last_brace == -1 or last_brace == len(working) - 1:
+                    # If brace at end, try trimming one char before it
+                    working = working[:-1]
+                else:
+                    working = working[:last_brace + 1]
+        
+        return None
 
     def _get_fallback_spec(self, concept_text: str) -> Dict[str, str]:
         """Returns a safe default visual specification."""

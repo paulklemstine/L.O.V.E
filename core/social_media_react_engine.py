@@ -20,9 +20,22 @@ class SocialMediaReActEngine(GeminiReActEngine):
         import core.shared_state as shared_state
         if hasattr(shared_state, 'tool_registry') and shared_state.tool_registry:
             try:
-                for tool_name in shared_state.tool_registry.get_tool_names():
+                # Support both old (LegacyToolRegistry) and new (ToolRegistry) interfaces
+                tool_names = []
+                if hasattr(shared_state.tool_registry, 'list_tools'):
+                    tool_names = shared_state.tool_registry.list_tools()
+                elif hasattr(shared_state.tool_registry, 'get_tool_names'):
+                    tool_names = shared_state.tool_registry.get_tool_names()
+                
+                for tool_name in tool_names:
                     tool = shared_state.tool_registry.get_tool(tool_name)
-                    schema = shared_state.tool_registry.get_tool_schema(tool_name)
+                    # Support both old and new schema retrieval
+                    schema = {}
+                    if hasattr(shared_state.tool_registry, 'get_schema'):
+                        schema = shared_state.tool_registry.get_schema(tool_name) or {}
+                    elif hasattr(shared_state.tool_registry, 'get_tool_schema'):
+                        schema = shared_state.tool_registry.get_tool_schema(tool_name) or {}
+                    
                     registry.register_tool(
                         name=tool_name,
                         tool=tool,
