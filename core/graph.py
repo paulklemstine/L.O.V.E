@@ -9,6 +9,7 @@ Key Features:
 - Reasoning node with tool call detection
 - Self-correction loop: tool_execution -> reasoning (up to MAX_ITERATIONS)
 - Memory folding and tool retrieval integration
+- DeepAgent Protocol: Plan -> Execute -> Critic cycle
 """
 from typing import Literal
 from langgraph.graph import StateGraph, END
@@ -22,6 +23,11 @@ from core.nodes.social_media_team import social_media_node
 from core.nodes.evolution_team import evolution_node
 from core.graphs.coding_team import create_coding_graph
 
+# DeepAgent Protocol imports - Plan/Critic cycle
+from core.agents.planner_agent import create_plan
+from core.agents.critic_agent import critique_execution, decide_next_node
+from core.logging import log_event
+
 # Maximum iterations for the ReAct loop before forcing termination
 MAX_ITERATIONS = 5
 
@@ -32,9 +38,11 @@ def create_deep_agent_graph():
     
     Architecture:
     - Entry: supervisor
-    - Supervisor routes to: coding_team, reasoning_node, social_media_team, evolution_team
+    - Supervisor routes to: coding_team, reasoning_node, social_media_team, evolution_team, planner_node
+    - Planner node decomposes complex goals into steps
     - Reasoning node routes to: tool_execution_node, fold_memory_node, retrieve_tools_node, or END
     - Self-correction loop: tool_execution_node -> reasoning_node (capped at MAX_ITERATIONS)
+    - Critic node evaluates execution quality
     """
     workflow = StateGraph(DeepAgentState)
     
@@ -47,6 +55,10 @@ def create_deep_agent_graph():
     workflow.add_node("social_media_team", social_media_node)
     workflow.add_node("evolution_team", evolution_node)
     
+    # DeepAgent Protocol: Planner and Critic nodes
+    workflow.add_node("planner_node", create_plan)
+    workflow.add_node("critic_node", critique_execution)
+    
     # Add Subgraphs
     coding_graph = create_coding_graph()
     workflow.add_node("coding_team", coding_graph)
@@ -58,7 +70,18 @@ def create_deep_agent_graph():
     def route_supervisor(state: DeepAgentState):
         """Routes from supervisor to appropriate team or reasoning node."""
         next_node = state.get("next_node")
-        if next_node in ["coding_team", "reasoning_node", "social_media_team", "evolution_team"]:
+        
+        # Check for complex goals that need planning
+        plan = state.get("plan", [])
+        input_text = state.get("input", "")
+        
+        # DeepAgent Protocol: Route to planner for complex goals without a plan
+        if not plan and input_text and len(input_text) > 50:
+            # Complex input without a plan - route to planner first
+            log_event("Supervisor: Complex goal detected, routing to planner", "DEBUG")
+            return "planner_node"
+        
+        if next_node in ["coding_team", "reasoning_node", "social_media_team", "evolution_team", "planner_node"]:
             return next_node
         # Default fallback
         return "reasoning_node"
@@ -70,9 +93,13 @@ def create_deep_agent_graph():
             "coding_team": "coding_team",
             "social_media_team": "social_media_team",
             "evolution_team": "evolution_team",
-            "reasoning_node": "reasoning_node"
+            "reasoning_node": "reasoning_node",
+            "planner_node": "planner_node"
         }
     )
+    
+    # Planner routes to reasoning for execution
+    workflow.add_edge("planner_node", "reasoning_node")
     
     # Reasoning Routing (Story 2 & 4 implementation)
     def route_reasoning(state: DeepAgentState):
@@ -111,6 +138,13 @@ def create_deep_agent_graph():
             if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
                 return "tool_execution_node"
         
+        # DeepAgent Protocol: Route to critic if we have executed plan steps
+        plan = state.get("plan", [])
+        past_steps = state.get("past_steps", [])
+        if plan and past_steps:
+            log_event("Reasoning: Plan steps executed, routing to critic for evaluation", "DEBUG")
+            return "critic_node"
+        
         # No tool calls, no control tokens -> direct response, end
         return END
         
@@ -121,6 +155,7 @@ def create_deep_agent_graph():
             "fold_memory_node": "fold_memory_node",
             "retrieve_tools_node": "retrieve_tools_node",
             "tool_execution_node": "tool_execution_node",
+            "critic_node": "critic_node",
             END: END
         }
     )
@@ -134,6 +169,16 @@ def create_deep_agent_graph():
     # Memory and tool retrieval also loop back to reasoning
     workflow.add_edge("retrieve_tools_node", "reasoning_node")
     workflow.add_edge("fold_memory_node", "reasoning_node")
+    
+    # DeepAgent Protocol: Critic routing with conditional edges
+    workflow.add_conditional_edges(
+        "critic_node",
+        decide_next_node,
+        {
+            "planner": "planner_node",  # Replan if not approved
+            "finalize": END             # End if approved
+        }
+    )
     
     # Team nodes route back to supervisor
     workflow.add_edge("coding_team", "supervisor") 
