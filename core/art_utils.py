@@ -104,12 +104,51 @@ def save_ansi_art(art_content: str | Text, filename_prefix: str, output_dir: str
             img = Image.new('RGB', (img_width, img_height), color=(41, 41, 41))
             draw = ImageDraw.Draw(img)
             
-            # Draw each line of text with default color
-            y = 10
-            for line in lines:
-                draw.text((10, y), line, font=font, fill=(197, 200, 198))
-                y += char_height
+            # Helper to parse color
+            def get_rgb_from_style(style):
+                if not style or not style.color:
+                    return (197, 200, 198) # Default gray
+                try:
+                    if style.color.triplet:
+                        return style.color.triplet.rgb
+                    elif style.color.name:
+                         # Handle standard colors if needed, but triplet usually covers it for truecolor
+                         pass
+                except:
+                    pass
+                return (197, 200, 198)
+
+            # Draw text with colors
+            # We need a dummy console to render the text into segments
+            temp_console = Console(width=1000, force_terminal=True, color_system="truecolor")
             
+            y = 10
+            current_idx = 0
+             
+            for line in lines:
+                x = 10
+                # We need to render THIS line with its styles. 
+                # Extracting substring from Rich Text keeps styles!
+                line_text_obj = text_obj[current_idx : current_idx + len(line)]
+                
+                # Now render this single line into segments
+                for segment in temp_console.render(line_text_obj):
+                    if segment.text == '\n': continue # Should not happen if we sliced correctly
+                    
+                    color = (197, 200, 198)
+                    if segment.style and segment.style.color:
+                        try:
+                            if segment.style.color.triplet:
+                                color = segment.style.color.triplet.rgb
+                        except:
+                            pass
+                    
+                    draw.text((x, y), segment.text, font=font, fill=color)
+                    x += len(segment.text) * char_width
+                
+                y += char_height
+                current_idx += len(line) + 1 # +1 for newline
+                
             img.save(png_path, 'PNG')
             core.logging.log_event(f"Saved artwork to {ansi_path}, {svg_path}, and {png_path}", "INFO")
             return ansi_path, svg_path, png_path
