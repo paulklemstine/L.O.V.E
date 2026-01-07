@@ -138,10 +138,16 @@ def save_ansi_art(art_content: str | Text, filename_prefix: str, output_dir: str
                     color = (197, 200, 198)
                     if segment.style and segment.style.color:
                         try:
-                            if segment.style.color.triplet:
-                                color = segment.style.color.triplet.rgb
-                        except:
-                            pass
+                            # Try to get truecolor first (handles RGB and palette)
+                            tc = segment.style.color.get_truecolor()
+                            color = (tc.red, tc.green, tc.blue)
+                        except Exception:
+                            # Fallback to triplet if get_truecolor fails (e.g. strict RGB objects)
+                            try:
+                                if segment.style.color.triplet:
+                                    color = segment.style.color.triplet.rgb
+                            except:
+                                pass
                     
                     draw.text((x, y), segment.text, font=font, fill=color)
                     x += len(segment.text) * char_width
