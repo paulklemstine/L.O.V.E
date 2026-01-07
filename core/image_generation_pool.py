@@ -7,7 +7,7 @@ import base64
 from collections import defaultdict
 from PIL import Image
 import io
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageStat
 import core.logging
 import urllib.parse
 import random
@@ -96,6 +96,38 @@ def rank_image_models():
 
 # _overlay_text removed in favor of core.text_overlay_utils.overlay_text_on_image
 from core.text_overlay_utils import overlay_text_on_image
+
+def _is_image_black(image: Image.Image, threshold: int = 5) -> bool:
+    """
+    Checks if an image is substantially black or empty.
+    Returns True if the image is considered 'black' and should be rejected.
+    """
+    if not image:
+        return False # None is handled elsewhere
+        
+    try:
+        # Convert to grayscale for analysis
+        gray = image.convert("L")
+        
+        # Check 1: Pure black extrema
+        extrema = gray.getextrema()
+        if extrema == (0, 0):
+             core.logging.log_event("Image validation failed: Image is pure black (0,0).", "WARNING")
+             return True
+        
+        # Check 2: Average brightness
+        stat = ImageStat.Stat(gray)
+        avg_brightness = stat.mean[0]
+        
+        if avg_brightness < threshold:
+             core.logging.log_event(f"Image validation failed: Image is too dark. Avg brightness: {avg_brightness:.2f} < {threshold}", "WARNING")
+             return True
+             
+        return False
+    except Exception as e:
+        core.logging.log_event(f"Image validation error: {e}", "WARNING")
+        return False
+
 
 
 async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
@@ -474,6 +506,17 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
             image = await providers[provider_name](current_prompt, width=width, height=height)
             
             if image:
+                # --- VALIDATION ---
+                # Check for black/blank images
+                if _is_image_black(image):
+                    core.logging.log_event(f"Provider {provider_name} returned a black/blank image. Skipping.", "WARNING")
+                    # Treat as failure -> Cooldown?
+                    # For now just skip to next provider to avoid punishing transient errors too hard, 
+                    # but we should probably record it.
+                    last_exception = Exception("Generated image was black/blank")
+                    continue
+                # ------------------
+
                 # --- POST-GENERATION OVERLAY LOGIC ---
                 # ALWAYS apply subliminal text overlay if text is provided
                 if manual_overlay_text:
