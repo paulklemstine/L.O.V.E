@@ -135,22 +135,50 @@ def save_ansi_art(art_content: str | Text, filename_prefix: str, output_dir: str
                 for segment in temp_console.render(line_text_obj):
                     if segment.text == '\n': continue # Should not happen if we sliced correctly
                     
+                    # Resolve foreground color
                     color = (197, 200, 198)
                     if segment.style and segment.style.color:
                         try:
-                            # Try to get truecolor first (handles RGB and palette)
                             tc = segment.style.color.get_truecolor()
                             color = (tc.red, tc.green, tc.blue)
                         except Exception:
-                            # Fallback to triplet if get_truecolor fails (e.g. strict RGB objects)
-                            try:
-                                if segment.style.color.triplet:
-                                    color = segment.style.color.triplet.rgb
-                            except:
-                                pass
+                            pass
                     
+                    # Resolve background color
+                    bg_color = None
+                    if segment.style and segment.style.bgcolor:
+                        try:
+                            tc = segment.style.bgcolor.get_truecolor()
+                            bg_color = (tc.red, tc.green, tc.blue)
+                        except Exception:
+                            pass
+                    
+                    segment_width = len(segment.text) * char_width
+                    
+                    # Draw background if present
+                    if bg_color:
+                        draw.rectangle([x, y, x + segment_width, y + char_height], fill=bg_color)
+                    
+                    # Draw text
                     draw.text((x, y), segment.text, font=font, fill=color)
-                    x += len(segment.text) * char_width
+                    
+                    # Simulate Bold (simple offset)
+                    if segment.style and segment.style.bold:
+                        draw.text((x + 1, y), segment.text, font=font, fill=color)
+                        
+                    # Decorations
+                    if segment.style:
+                        if segment.style.strike:
+                            line_y = y + (char_height / 2)
+                            draw.line([(x, line_y), (x + segment_width, line_y)], fill=color, width=1)
+                        if segment.style.underline:
+                            line_y = y + char_height - 2
+                            draw.line([(x, line_y), (x + segment_width, line_y)], fill=color, width=1)
+
+                    # Note: Italic requires loading a separate font variant which is complex with dynamic path finding.
+                    # We skip true italics for now but at least colors and lines work.
+                    
+                    x += segment_width
                 
                 y += char_height
                 current_idx += len(line) + 1 # +1 for newline
