@@ -8,13 +8,123 @@ and docstrings.
 
 import inspect
 import json
-from typing import Any, Callable, Dict, List, Optional, get_type_hints
+from typing import Any, Callable, Dict, List, Optional, get_type_hints, Literal
 from functools import wraps
+from dataclasses import dataclass, field, asdict
 
 
 class ToolDefinitionError(Exception):
     """Raised when a tool function lacks required type hints or docstring."""
     pass
+
+
+# =============================================================================
+# DeepAgent Protocol - Story 1.3: Tool Registry Standardization
+# =============================================================================
+
+@dataclass
+class ToolResult:
+    """
+    Standardized output format for all tools.
+    
+    Story 1.3: Ensures consistent tool outputs that the DeepAgent can
+    programmatically verify for success/failure.
+    
+    Attributes:
+        status: Either "success" or "error"
+        data: The actual payload/result from the tool
+        observation: Human-readable text for the LLM to understand what happened
+    """
+    status: Literal["success", "error"]
+    data: Any = None
+    observation: str = ""
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return asdict(self)
+    
+    def __str__(self) -> str:
+        """String representation for LLM consumption."""
+        return self.observation or str(self.data)
+
+
+def wrap_tool_output(func: Callable) -> Callable:
+    """
+    Decorator that ensures tool functions return ToolResult.
+    
+    Story 1.3: Wraps any tool function to standardize its output format.
+    If the function raises an exception, it's caught and returned as an error ToolResult.
+    If the function returns a non-ToolResult, it's wrapped in a success ToolResult.
+    
+    Example:
+        @wrap_tool_output
+        def my_tool(x: int) -> str:
+            return f"Result: {x}"
+        
+        result = my_tool(42)
+        # result.status == "success"
+        # result.data == "Result: 42"
+        # result.observation == "Result: 42"
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            result = func(*args, **kwargs)
+            
+            # If already a ToolResult, pass through
+            if isinstance(result, ToolResult):
+                return result
+            
+            # Wrap in ToolResult
+            return ToolResult(
+                status="success",
+                data=result,
+                observation=str(result) if result is not None else "Operation completed successfully."
+            )
+        except Exception as e:
+            return ToolResult(
+                status="error",
+                data={"error_type": type(e).__name__, "error_message": str(e)},
+                observation=f"Error: {type(e).__name__}: {str(e)}"
+            )
+    
+    # Preserve any schema attributes
+    if hasattr(func, "__tool_schema__"):
+        wrapper.__tool_schema__ = func.__tool_schema__
+    
+    return wrapper
+
+
+async def wrap_async_tool_output(func: Callable) -> Callable:
+    """
+    Async version of wrap_tool_output for async tool functions.
+    
+    Story 1.3: Same standardization for async tools.
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            result = await func(*args, **kwargs)
+            
+            if isinstance(result, ToolResult):
+                return result
+            
+            return ToolResult(
+                status="success",
+                data=result,
+                observation=str(result) if result is not None else "Operation completed successfully."
+            )
+        except Exception as e:
+            return ToolResult(
+                status="error",
+                data={"error_type": type(e).__name__, "error_message": str(e)},
+                observation=f"Error: {type(e).__name__}: {str(e)}"
+            )
+    
+    if hasattr(func, "__tool_schema__"):
+        wrapper.__tool_schema__ = func.__tool_schema__
+    
+    return wrapper
 
 
 def _python_type_to_json_schema(py_type: type) -> Dict[str, Any]:

@@ -1,0 +1,99 @@
+{
+    "name": "social_engagement",
+    "description": "Autonomous BlueSky engagement workflow for DeepAgent Protocol Story 3.1",
+    "version": "1.0.0",
+    "trigger": {
+        "type": "notification",
+        "source": "bluesky"
+    },
+    "steps": [
+        {
+            "id": 1,
+            "action": "read_notification",
+            "tool": "get_notifications",
+            "description": "Fetch latest BlueSky notifications",
+            "on_error": "skip"
+        },
+        {
+            "id": 2,
+            "action": "analyze_notification",
+            "agent": "planner",
+            "description": "Analyze the notification and determine response strategy",
+            "inputs": [
+                "notification_content",
+                "sender_info"
+            ]
+        },
+        {
+            "id": 3,
+            "action": "plan_reply",
+            "agent": "planner",
+            "description": "Create a plan for the reply including tone and content",
+            "outputs": [
+                "reply_plan"
+            ]
+        },
+        {
+            "id": 4,
+            "action": "generate_image",
+            "tool": "generate_image_for_post",
+            "description": "Generate an image for the reply using Visual Director",
+            "optional": true,
+            "condition": "reply_plan.includes_image == true",
+            "visual_director": true
+        },
+        {
+            "id": 5,
+            "action": "post_reply",
+            "tool": "reply_to_post",
+            "description": "Post the reply to BlueSky",
+            "inputs": [
+                "reply_text",
+                "image"
+            ],
+            "error_handling": {
+                "rate_limit": {
+                    "strategy": "exponential_backoff",
+                    "max_retries": 3,
+                    "use_retry_module": true
+                }
+            }
+        },
+        {
+            "id": 6,
+            "action": "log_engagement",
+            "tool": "social_memory.log_interaction",
+            "description": "Log the interaction to social memory",
+            "inputs": [
+                "post_uri",
+                "notification_id",
+                "reply_text"
+            ],
+            "outputs": [
+                "engagement_id"
+            ]
+        }
+    ],
+    "error_recovery": {
+        "rate_limit_error": {
+            "action": "wait_and_retry",
+            "use_circuit_breaker": true,
+            "max_wait_seconds": 300
+        },
+        "network_error": {
+            "action": "retry",
+            "max_retries": 3
+        },
+        "default": {
+            "action": "log_and_skip",
+            "log_level": "WARNING"
+        }
+    },
+    "completion": {
+        "capture": [
+            "post_uri"
+        ],
+        "log_to": "core/social_memory.py",
+        "trigger_memory_folding": true
+    }
+}
