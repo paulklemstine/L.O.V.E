@@ -2907,10 +2907,11 @@ async def _initialize_deep_agent_engine(tool_registry, max_len):
 async def initialize_gpu_services():
     """Initializes GPU-specific services like the vLLM client."""
     from core.legacy_compat import ToolRegistry
+    from core.tool_registry import get_global_registry
     from core.prompt_registry import PromptRegistry
 
     PromptRegistry()
-    tool_registry = ToolRegistry()
+    tool_registry = get_global_registry()
     shared_state.tool_registry = tool_registry  # Store for REPL agent access
     
     # Register all core tools so REPL and other components have access
