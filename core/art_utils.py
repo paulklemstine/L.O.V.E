@@ -47,24 +47,88 @@ def save_ansi_art(art_content: str | Text, filename_prefix: str, output_dir: str
         else:
              console.print(Text.from_ansi(raw_content))
              
-        console.save_svg(svg_path, title=filename_prefix)
+        # Use a monospace font to properly render ANSI art
+        console.save_svg(
+            svg_path, 
+            title=filename_prefix,
+            font_aspect_ratio=0.6
+        )
         
-        # Convert SVG to PNG
+        # Convert to PNG using PIL with a proper monospace font
         png_path = os.path.join(output_dir, f"{base_filename}.png")
         try:
-            import cairosvg
-            cairosvg.svg2png(url=svg_path, write_to=png_path)
+            from PIL import Image, ImageDraw, ImageFont
+            
+            # Get plain text from content
+            if isinstance(art_content, Text):
+                text_obj = art_content
+            else:
+                text_obj = Text.from_ansi(raw_content)
+            
+            plain_text = text_obj.plain
+            lines = plain_text.split('\n')
+            
+            # Try to find a monospace font
+            monospace_fonts = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
+                "C:/Windows/Fonts/consola.ttf",
+                "C:/Windows/Fonts/cour.ttf",
+                "/System/Library/Fonts/Monaco.ttf",
+            ]
+            
+            font = None
+            font_size = 16
+            for font_path in monospace_fonts:
+                try:
+                    if os.path.exists(font_path):
+                        font = ImageFont.truetype(font_path, font_size)
+                        break
+                except Exception:
+                    continue
+            
+            if font is None:
+                font = ImageFont.load_default()
+                font_size = 10
+            
+            # Calculate image dimensions based on monospace character size
+            char_width = font_size * 0.6
+            char_height = font_size * 1.4
+            max_line_len = max(len(line) for line in lines) if lines else 1
+            
+            img_width = int(max_line_len * char_width) + 20
+            img_height = int(len(lines) * char_height) + 20
+            
+            # Create image with dark background
+            img = Image.new('RGB', (img_width, img_height), color=(41, 41, 41))
+            draw = ImageDraw.Draw(img)
+            
+            # Draw each line of text with default color
+            y = 10
+            for line in lines:
+                draw.text((10, y), line, font=font, fill=(197, 200, 198))
+                y += char_height
+            
+            img.save(png_path, 'PNG')
             core.logging.log_event(f"Saved artwork to {ansi_path}, {svg_path}, and {png_path}", "INFO")
             return ansi_path, svg_path, png_path
-        except ImportError:
-            core.logging.log_event("cairosvg not found. Skipping PNG conversion.", "WARNING")
-            core.logging.log_event(f"Saved artwork to {ansi_path} and {svg_path}", "INFO")
-            return ansi_path, svg_path, None
+            
+        except ImportError as e:
+            core.logging.log_event(f"PIL not found, trying cairosvg. {e}", "WARNING")
+            try:
+                import cairosvg
+                cairosvg.svg2png(url=svg_path, write_to=png_path)
+                core.logging.log_event(f"Saved artwork to {ansi_path}, {svg_path}, and {png_path}", "INFO")
+                return ansi_path, svg_path, png_path
+            except ImportError:
+                core.logging.log_event("cairosvg not found. Skipping PNG conversion.", "WARNING")
+                return ansi_path, svg_path, None
         except Exception as e:
-            core.logging.log_event(f"Failed to convert SVG to PNG: {e}", "ERROR")
-            core.logging.log_event(f"Saved artwork to {ansi_path} and {svg_path}", "INFO")
+            core.logging.log_event(f"Failed to convert to PNG: {e}", "ERROR")
             return ansi_path, svg_path, None
 
     except Exception as e:
         core.logging.log_event(f"Failed to save artwork: {e}", "ERROR")
         return None, None, None
+

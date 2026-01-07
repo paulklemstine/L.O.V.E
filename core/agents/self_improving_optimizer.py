@@ -24,9 +24,14 @@ class SelfImprovingOptimizer:
             tool_registry: The tool registry to use for code modifications. It must
                            contain the 'code_modifier' tool.
             model: The name of the LLM model to use for generating improvements.
+                   Note: This parameter is kept for interface compatibility but model
+                   selection is now handled by run_llm.
         """
         self.tool_registry = tool_registry
-        self.engine = GeminiReActEngine(tool_registry=self.tool_registry, model=model)
+        self.model = model  # Store for reference if needed
+        # GeminiReActEngine doesn't accept model parameter - model selection 
+        # is handled internally by run_llm based on purpose
+        self.engine = GeminiReActEngine(tool_registry=self.tool_registry, caller="SelfImprovingOptimizer")
 
     async def perform_self_improvement(self, target_module):
         """
