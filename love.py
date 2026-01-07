@@ -2936,6 +2936,7 @@ async def initialize_gpu_services():
             core_tools.reload_prompts,
             core_tools.invoke_subagent,
             core_tools.trigger_optimization_pipeline,
+            core_tools.feed_user_story,
         ]
         tool_registry.register_langchain_tools(core_tool_functions)
         core.logging.log_event(f"Registered {len(core_tool_functions)} core tools with the registry.", "INFO")

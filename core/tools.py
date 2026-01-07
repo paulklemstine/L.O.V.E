@@ -110,6 +110,10 @@ class InvokeSubagentInput(BaseModel):
     share_memory: bool = Field(default=True, description="Whether to share memory context with the subagent")
     max_iterations: int = Field(default=5, description="Maximum reasoning iterations for the subagent")
 
+class FeedUserStoryInput(BaseModel):
+    story: str = Field(description="The SMART user story to feed to the system.")
+
+
 # --- Tools ---
 
 
@@ -257,6 +261,43 @@ async def evolve(goal: str, verification_script: str = None) -> str:
     await evolve_self(goal, shared_state.love_task_manager, asyncio.get_running_loop(), deep_agent_instance=shared_state.deep_agent_engine, verification_script=verification_script)
     
     return f"Evolution initiated with goal: {goal}"
+    return f"Evolution initiated with goal: {goal}"
+
+@tool("feed_user_story", args_schema=FeedUserStoryInput)
+async def feed_user_story(story: str) -> str:
+    """
+    Feeds a SMART user story to the Jules Task Manager for execution.
+    """
+    import core.logging
+    import core.shared_state as shared_state
+    
+    if not story:
+        return "Error: User story content is required."
+        
+    if not getattr(shared_state, 'love_task_manager', None):
+        return "Error: Jules Task Manager is not initialized."
+
+    # Extract a title or summary from the story for the session name
+    lines = story.split('\n')
+    title = "New User Story"
+    for line in lines:
+        if line.strip().lower().startswith("title:"):
+            title = line.split(":", 1)[1].strip()
+            break
+        elif line.strip().startswith("#"):
+            title = line.strip("# ").strip()
+            break
+            
+    # Add the task to Jules
+    try:
+        shared_state.love_task_manager.add_task(
+            session_name=title,
+            request=story
+        )
+        return f"Successfully added user story to Jules pending queue: '{title}'"
+    except Exception as e:
+        core.logging.log_event(f"Error feeding user story: {e}", "ERROR")
+        return f"Error adding user story: {e}"
 
 @tool("post_to_bluesky", args_schema=PostToBlueskyInput)
 async def post_to_bluesky(text: str, image_prompt: str) -> str:
