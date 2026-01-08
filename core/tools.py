@@ -270,6 +270,8 @@ async def feed_user_story(story: str) -> str:
     """
     import core.logging
     import core.shared_state as shared_state
+    from core.jules_task_manager import trigger_jules_evolution
+    from rich.console import Console
     
     if not story:
         return "Error: User story content is required."
@@ -277,24 +279,27 @@ async def feed_user_story(story: str) -> str:
     if not getattr(shared_state, 'love_task_manager', None):
         return "Error: Jules Task Manager is not initialized."
 
-    # Extract a title or summary from the story for the session name
-    lines = story.split('\n')
-    title = "New User Story"
-    for line in lines:
-        if line.strip().lower().startswith("title:"):
-            title = line.split(":", 1)[1].strip()
-            break
-        elif line.strip().startswith("#"):
-            title = line.strip("# ").strip()
-            break
-            
-    # Add the task to Jules
+    # Use trigger_jules_evolution for correct API session creation
     try:
-        shared_state.love_task_manager.add_task(
-            session_name=title,
-            request=story
+        # We need a console for the function, usually passed in. 
+        # We'll create a local one or use the shared one if available.
+        console = Console()
+        
+        # trigger_jules_evolution is async
+        result = await trigger_jules_evolution(
+            modification_request=story,
+            console=console,
+            love_task_manager=shared_state.love_task_manager,
+            deep_agent_instance=shared_state.deep_agent_engine
         )
-        return f"Successfully added user story to Jules pending queue: '{title}'"
+        
+        if result == 'duplicate':
+             return "Task ignored: A similar user story is already being processed."
+        elif result:
+            return f"Successfully added user story to Jules. Task ID: {result}"
+        else:
+            return "Failed to feed user story. Check logs for API details."
+            
     except Exception as e:
         core.logging.log_event(f"Error feeding user story: {e}", "ERROR")
         return f"Error adding user story: {e}"

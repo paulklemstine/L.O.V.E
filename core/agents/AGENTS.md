@@ -10,3 +10,8 @@ Contains specific agent implementations and heads (personas).
 ## Registration
 - New agents must be registered in the `AgentFrameworkManager` or `ToolRegistry` to be discoverable.
 - Ensure unique Agent IDs.
+
+## Anti-patterns
+- **God Objects**: Agents should be specialized. Do not create a single agent that does everything (unless it's the actual God Agent).
+- **Blocking Calls**: Agents running in an async loop must not make blocking HTTP/File calls.
+
