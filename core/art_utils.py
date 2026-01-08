@@ -93,7 +93,16 @@ def save_ansi_art(art_content: str | Text, filename_prefix: str, output_dir: str
                 font_size = 10
             
             # Calculate image dimensions based on monospace character size
-            char_width = font_size * 0.6
+            # Measure actual character width from the font
+            try:
+                char_width = font.getlength("X")
+            except AttributeError:
+                # Fallback for older Pillow versions
+                char_width = font.getsize("X")[0]
+            
+            # Ensure char_width is enough (some fonts might report tight bounding boxes)
+            # For monospace, it should be the advance width.
+            
             char_height = font_size * 1.4
             max_line_len = max(len(line) for line in lines) if lines else 1
             

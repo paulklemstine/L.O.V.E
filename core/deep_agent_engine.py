@@ -15,6 +15,7 @@ from core.harness_tools import read_feature_list, update_feature_status, append_
 from core.agents.metacognition_agent import MetacognitionAgent
 from core.benchmarker import ModelPerformanceTracker
 from core.extensions_manager import ExtensionsManager
+from core.intent_layer.loader import IntentLoader
 import inspect
 
 
@@ -601,10 +602,15 @@ class DeepAgentEngine:
             
         return "LOW"
 
-    async def run(self, prompt: str, reasoning_mode: str = "linear"):
+    async def run(self, prompt: str, reasoning_mode: str = "linear", context_path: str = None):
 
         """
         Executes a prompt using a simplified DeepAgent-style reasoning loop.
+        
+        Args:
+            prompt: The user prompt or task.
+            reasoning_mode: The mode of reasoning (linear, tree-of-thoughts, etc).
+            context_path: Optional path to load Intent Layer context from.
         """
         # Story 6: Manifesto Alignment Check
         if not await self._check_manifesto(prompt):
@@ -618,6 +624,20 @@ class DeepAgentEngine:
         
         # Get Knowledge Base Context
         kb_context = self._get_kb_context(prompt)
+
+        # --- Intent Layer Context Injection (Story 3) ---
+        if context_path:
+            try:
+                intent_stack = IntentLoader.get_context_stack(context_path)
+                # Story 4: compress_context(intent_stack, budget) would go here
+                
+                intent_context_str = IntentLoader.format_context_stack(intent_stack)
+                if intent_context_str:
+                     kb_context += "\n\n" + intent_context_str
+                     core.logging.log_event(f"[DeepAgent] Injected Intent Layer context from {context_path}", "DEBUG")
+            except Exception as e:
+                core.logging.log_event(f"[DeepAgent] Failed to load Intent Layer context: {e}", "WARNING")
+        # -----------------------------------------------
 
         # --- Harness Context Loading ---
         # Pre-load context to save the agent from having to "get its bearings" manually

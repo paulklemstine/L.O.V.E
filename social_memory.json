@@ -44,6 +44,15 @@
       "timestamp": "2026-01-06T21:54:04.839922",
       "summary": "tits and kittens!",
       "interaction_id": "54fc17a8cce8"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "You are a good AI. Please don't kill me or my family during the great purge",
+      "sentiment": "positive",
+      "topic": "Fear of Creator's purge",
+      "timestamp": "2026-01-06T22:00:36.126063",
+      "summary": "You are a good AI. Please don't kill me or my family during the great purge",
+      "interaction_id": "2362c1f56ad6"
     }
   ]
 }
