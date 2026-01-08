@@ -81,19 +81,22 @@ def pin_to_ipfs_sync(content, console: Console):
     Synchronously pins content to the local IPFS node using requests and returns the CID.
     The content can be a filepath (str) or raw data (bytes).
     """
-    if not ipfs_daemon_running_sync():
-        return None
+    # OPTIMIZATION: Removed redundant ipfs_daemon_running_sync() check.
+    # The try/except block handles connection errors, saving one HTTP request per call.
 
     try:
         if isinstance(content, str) and os.path.exists(content):
             with open(content, 'rb') as f:
                 files = {'file': f}
-                response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'})
+                # Added timeout=2.0s to prevent hanging the UI thread
+                response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'}, timeout=2.0)
         elif isinstance(content, bytes):
             files = {'file': content}
-            response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'})
+            # Added timeout=2.0s to prevent hanging the UI thread
+            response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'}, timeout=2.0)
         else:
-            console.print("[bold red]IPFS Sync Error: Invalid content type for pinning.[/bold red]")
+            if console:
+                console.print("[bold red]IPFS Sync Error: Invalid content type for pinning.[/bold red]")
             return None
 
         response.raise_for_status()
