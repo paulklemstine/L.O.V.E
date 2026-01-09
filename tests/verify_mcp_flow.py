@@ -157,6 +157,98 @@ def test_adapter_creates_langchain_tools():
     return True
 
 
+# ============================================================================
+# Dynamic Discovery Tests (Epic: MCP Dynamic Discovery)
+# ============================================================================
+
+def test_dynamic_discovery_imports():
+    """Test that the new dynamic discovery module can be imported."""
+    console.print("\n[bold]Test 7: Dynamic discovery module imports[/bold]")
+    
+    from core.mcp_dynamic_discovery import (
+        MCPDynamicDiscovery,
+        get_discovery,
+        reset_discovery
+    )
+    
+    console.print("[green]✓ core.mcp_dynamic_discovery imports successfully[/green]")
+    return True
+
+
+def test_dynamic_discovery_servers():
+    """Test that dynamic discovery can list servers."""
+    console.print("\n[bold]Test 8: Dynamic discovery lists servers[/bold]")
+    
+    from core.mcp_dynamic_discovery import MCPDynamicDiscovery
+    from mcp_manager import MCPManager
+    
+    manager = MCPManager(console)
+    discovery = MCPDynamicDiscovery(mcp_manager=manager)
+    
+    servers = discovery.discover_servers()
+    
+    assert isinstance(servers, list), "discover_servers should return a list"
+    console.print(f"[green]✓ discover_servers returned {len(servers)} servers[/green]")
+    
+    if servers:
+        for s in servers:
+            console.print(f"  - {s['name']}: {s['tool_count']} tools [{s['status']}]")
+    
+    return True
+
+
+def test_dynamic_discovery_tools():
+    """Test that dynamic discovery can list tools for a server."""
+    console.print("\n[bold]Test 9: Dynamic discovery lists tools[/bold]")
+    
+    from core.mcp_dynamic_discovery import MCPDynamicDiscovery
+    from mcp_manager import MCPManager
+    
+    manager = MCPManager(console)
+    discovery = MCPDynamicDiscovery(mcp_manager=manager)
+    
+    tools = discovery.discover_tools("github")
+    
+    assert isinstance(tools, dict), "discover_tools should return a dict"
+    
+    if "error" not in tools:
+        console.print(f"[green]✓ discover_tools('github') returned {len(tools)} tools[/green]")
+        for name in list(tools.keys())[:3]:
+            console.print(f"  - {name}: {tools[name][:40]}...")
+    else:
+        console.print(f"[yellow]⚠ {tools['error']}[/yellow]")
+    
+    return True
+
+
+def test_meta_tools_registration():
+    """Test that dynamic MCP meta-tools can be registered."""
+    console.print("\n[bold]Test 10: Meta-tools registration[/bold]")
+    
+    from core.legacy_compat import ToolRegistry
+    from core.mcp_tools import register_dynamic_mcp_tools
+    from mcp_manager import MCPManager
+    import core.shared_state as shared_state
+    
+    # Set up mcp_manager in shared_state
+    manager = MCPManager(console)
+    shared_state.mcp_manager = manager
+    
+    # Create a fresh registry
+    registry = ToolRegistry()
+    
+    # Register dynamic tools
+    registered = register_dynamic_mcp_tools(registry, manager)
+    
+    assert len(registered) == 3, f"Expected 3 meta-tools, got {len(registered)}"
+    assert "mcp_list_servers" in registered, "Missing mcp_list_servers"
+    assert "mcp_list_tools" in registered, "Missing mcp_list_tools"
+    assert "mcp_call" in registered, "Missing mcp_call"
+    
+    console.print(f"[green]✓ Registered {len(registered)} meta-tools: {', '.join(registered)}[/green]")
+    return True
+
+
 async def test_live_github_search():
     """
     Live test: Actually calls the GitHub MCP server.
@@ -245,6 +337,11 @@ def main():
         ("MCPManager list_tools", test_mcp_manager_has_list_tools),
         ("ToolRetriever integration", test_tool_retriever_integration),
         ("Adapter creates LangChain tools", test_adapter_creates_langchain_tools),
+        # Dynamic Discovery Tests (Epic: MCP Dynamic Discovery)
+        ("Dynamic discovery imports", test_dynamic_discovery_imports),
+        ("Dynamic discovery servers", test_dynamic_discovery_servers),
+        ("Dynamic discovery tools", test_dynamic_discovery_tools),
+        ("Meta-tools registration", test_meta_tools_registration),
     ]
     
     passed = 0

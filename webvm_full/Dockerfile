@@ -22,6 +22,10 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     proxychains4 \
     dnsutils \
+    byobu \
+    openssh-client \
+    openssh-server \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # SET ROOT PASSWORD TO "love"
@@ -65,12 +69,15 @@ RUN python3 -m pip install -r requirements.txt --break-system-packages || echo "
 RUN apt-get update && apt-get install -y docker.io && rm -rf /var/lib/apt/lists/*
 
 # --- WEBVM NETWORK BRIDGE SETUP ---
-# Copy SOCKS Server
+# Copy SOCKS Server and Bridge Scripts
 COPY src/webvm_full/vm_socks_server.py /usr/local/bin/vm_socks_proxy
+COPY src/webvm_full/socks_connector.py /usr/local/bin/socks_connector.py
+COPY src/webvm_full/start_bridge.sh /usr/local/bin/start_bridge.sh
 
-# Create start script
+# Create start script (Legacy, replaced by start_bridge.sh but kept for compatibility)
 RUN echo '#!/bin/bash\nnohup python3 /usr/local/bin/vm_socks_proxy > /dev/null 2>&1 &\necho "Network Bridge Started on 1080"' > /usr/local/bin/start_net && \
-    chmod +x /usr/local/bin/start_net
+    chmod +x /usr/local/bin/start_net && \
+    chmod +x /usr/local/bin/start_bridge.sh
 
 # Configure Proxychains
 RUN echo "strict_chain\nproxy_dns\nremote_dns_subnet 224\ntcp_read_time_out 15000\ntcp_connect_time_out 8000\n[ProxyList]\nsocks5 127.0.0.1 1080" > /etc/proxychains4.conf

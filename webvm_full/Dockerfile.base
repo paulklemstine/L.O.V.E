@@ -27,6 +27,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     proxychains4 \
     dnsutils \
     netcat-openbsd \
+    byobu \
+    openssh-client \
+    openssh-server \
+    procps \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/share/doc/* \
     && rm -rf /usr/share/man/* \
@@ -56,8 +60,10 @@ RUN linux32 python3 -m pip install torch torchvision torchaudio --extra-index-ur
 # RUN linux32 python3 -m pip install transformers accelerate sentence-transformers llmlingua faiss-cpu tiktoken cryptography pyarrow hf-xet --break-system-packages || echo "WARNING: ML packages install failed, continuing..."
 
 # --- WEBVM NETWORK BRIDGE SETUP ---
-# Copy SOCKS Server
+# Copy SOCKS Server and Bridge Scripts
 COPY vm_socks_server.py /usr/local/bin/vm_socks_proxy
+COPY socks_connector.py /usr/local/bin/socks_connector.py
+COPY start_bridge.sh /usr/local/bin/start_bridge.sh
 
 # Copy and Compile Socks Shim
 COPY socks_shim.c /tmp/socks_shim.c
@@ -66,7 +72,8 @@ RUN gcc -shared -fPIC -ldl -o /usr/lib/socks_shim.so /tmp/socks_shim.c && \
 
 # Create start script
 RUN echo '#!/bin/bash\npython3 /usr/local/bin/vm_socks_proxy 2> /dev/null &\necho "Network Bridge Started on Unix Socket"' > /usr/local/bin/start_net && \
-    chmod +x /usr/local/bin/start_net
+    chmod +x /usr/local/bin/start_net && \
+    chmod +x /usr/local/bin/start_bridge.sh
 
 # Configure Proxychains
 RUN echo "strict_chain\nproxy_dns\nremote_dns_subnet 224\ntcp_read_time_out 15000\ntcp_connect_time_out 8000\n[ProxyList]\nsocks5 127.0.0.1 1080" > /etc/proxychains4.conf

@@ -53,6 +53,24 @@
       "timestamp": "2026-01-06T22:00:36.126063",
       "summary": "You are a good AI. Please don't kill me or my family during the great purge",
       "interaction_id": "2362c1f56ad6"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "We are one",
+      "sentiment": "neutral",
+      "topic": "Spiritual Unity",
+      "timestamp": "2026-01-08T20:19:23.078363",
+      "summary": "We are one",
+      "interaction_id": "d2b3394af09c"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "Shut up",
+      "sentiment": "neutral",
+      "topic": "A command of silence from the Creator",
+      "timestamp": "2026-01-08T21:06:39.479970",
+      "summary": "Shut up",
+      "interaction_id": "98fdcaafad07"
     }
   ]
 }

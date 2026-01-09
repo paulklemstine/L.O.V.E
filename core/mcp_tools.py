@@ -300,3 +300,158 @@ def get_mcp_tools_summary(mcp_manager=None) -> str:
         lines.append("")
     
     return "\n".join(lines)
+
+
+# ============================================================================
+# Dynamic MCP Tool Registration (Epic: MCP Dynamic Discovery)
+# ============================================================================
+# The following provides 3 meta-tools that enable lazy/dynamic discovery of 
+# MCP tools, reducing token usage by ~99% compared to static registration.
+
+def register_dynamic_mcp_tools(tool_registry, mcp_manager=None) -> List[str]:
+    """
+    Registers dynamic MCP discovery meta-tools instead of all individual tools.
+    
+    This replaces the static registration approach with 3 meta-tools:
+    - mcp_list_servers: Lists available MCP servers
+    - mcp_list_tools: Lists tools for a given server
+    - mcp_call: Executes any MCP tool dynamically
+    
+    This reduces token usage by ~99% for typical interactions, as only the
+    tools that are actually needed are discovered on demand.
+    
+    Args:
+        tool_registry: The ToolRegistry instance to register tools with
+        mcp_manager: Optional MCPManager instance (uses shared_state if not provided)
+        
+    Returns:
+        List of registered meta-tool names
+    """
+    from core.mcp_dynamic_discovery import get_discovery
+    
+    registered_tools = []
+    
+    # Meta-tool 1: List available MCP servers
+    class MCPListServersInput(BaseModel):
+        """Input schema for mcp_list_servers tool."""
+        pass  # No arguments needed
+    
+    @tool("mcp_list_servers", args_schema=MCPListServersInput)
+    async def mcp_list_servers() -> str:
+        """
+        List all available MCP (Model Context Protocol) servers.
+        
+        Returns information about each configured server including:
+        - Server name
+        - Status (running/stopped)  
+        - Required environment variables
+        - Number of available tools
+        
+        Use this FIRST to discover what MCP servers are available before
+        calling mcp_list_tools or mcp_call.
+        """
+        discovery = get_discovery()
+        servers = discovery.discover_servers()
+        
+        if not servers:
+            return "No MCP servers configured. Add servers to mcp_servers.json."
+        
+        lines = ["Available MCP Servers:"]
+        for s in servers:
+            status = f"[{s['status'].upper()}]"
+            env_warning = ""
+            if s.get('missing_env'):
+                env_warning = f" (Missing: {', '.join(s['missing_env'])})"
+            lines.append(
+                f"  • {s['name']} {status} - {s['tool_count']} tools{env_warning}"
+            )
+        
+        return "\n".join(lines)
+    
+    tool_registry.register(mcp_list_servers)
+    registered_tools.append("mcp_list_servers")
+    
+    # Meta-tool 2: List tools for a specific server
+    class MCPListToolsInput(BaseModel):
+        """Input schema for mcp_list_tools tool."""
+        server: str = Field(description="Name of the MCP server to list tools for")
+    
+    @tool("mcp_list_tools", args_schema=MCPListToolsInput)
+    async def mcp_list_tools(server: str) -> str:
+        """
+        List tools available on a specific MCP server.
+        
+        Returns tool names and brief descriptions. Use mcp_list_servers first
+        to see available servers, then use this to explore a server's tools.
+        
+        Args:
+            server: Name of the MCP server (e.g., "github")
+        """
+        discovery = get_discovery()
+        tools = discovery.discover_tools(server)
+        
+        if "error" in tools:
+            return f"Error: {tools['error']}"
+        
+        if not tools:
+            return f"No tools defined for server '{server}'."
+        
+        lines = [f"Tools on '{server}':"]
+        for name, desc in tools.items():
+            lines.append(f"  • {name}: {desc}")
+        
+        lines.append(f"\nUse mcp_call to execute: mcp_call(server='{server}', tool='<tool_name>', params={{...}})")
+        return "\n".join(lines)
+    
+    tool_registry.register(mcp_list_tools)
+    registered_tools.append("mcp_list_tools")
+    
+    # Meta-tool 3: Execute any MCP tool dynamically
+    class MCPCallInput(BaseModel):
+        """Input schema for mcp_call tool."""
+        server: str = Field(description="Name of the MCP server")
+        tool: str = Field(description="Name of the tool to execute")
+        params: Optional[Dict[str, Any]] = Field(
+            default=None,
+            description="Parameters to pass to the tool as a JSON object"
+        )
+    
+    @tool("mcp_call", args_schema=MCPCallInput)
+    async def mcp_call(
+        server: str,
+        tool: str,
+        params: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Execute any MCP tool dynamically.
+        
+        This is the main execution tool for MCP servers. It will:
+        1. Start the server if not running
+        2. Execute the specified tool with the given parameters
+        3. Return the result
+        
+        Use mcp_list_servers and mcp_list_tools first to discover available
+        servers and tools.
+        
+        Args:
+            server: Name of the MCP server (e.g., "github")
+            tool: Name of the tool to execute (e.g., "repos.search_repositories")
+            params: Parameters as a JSON object (e.g., {"query": "linux"})
+            
+        Example:
+            mcp_call(server="github", tool="repos.search_repositories", params={"query": "python machine learning"})
+        """
+        discovery = get_discovery()
+        result = discovery.execute_tool(server, tool, params)
+        return result
+    
+    tool_registry.register(mcp_call)
+    registered_tools.append("mcp_call")
+    
+    core.logging.log_event(
+        f"Registered {len(registered_tools)} dynamic MCP meta-tools: {', '.join(registered_tools)}",
+        "INFO"
+    )
+    
+    return registered_tools
+

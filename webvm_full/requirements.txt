@@ -69,3 +69,4 @@ protobuf
 grpcio
 libcst
 coverage
+websockets

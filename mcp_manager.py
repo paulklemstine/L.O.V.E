@@ -162,6 +162,17 @@ class MCPManager:
         """
         config = self.server_configs.get(server_name, {})
         return config.get("tools", {})
+    
+    def get_available_servers(self) -> list:
+        """
+        Returns a list of all configured MCP servers (for dynamic discovery).
+        
+        Epic: MCP Dynamic Discovery
+        
+        Returns:
+            List of server names from configuration
+        """
+        return list(self.server_configs.keys())
 
 
     def call_tool(self, server_name, tool_name, params):

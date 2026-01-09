@@ -79,6 +79,24 @@ except (ImportError, Exception):
              print("Warning: Failed to auto-install langchainhub. System might degrade to local prompts.")
     except Exception as e:
         print(f"Warning: Failed to install langchainhub: {e}")
+
+# Auto-install MCP package for Model Context Protocol support
+try:
+    try:
+        importlib.metadata.distribution("mcp")
+    except importlib.metadata.PackageNotFoundError:
+        raise ImportError
+except (ImportError, Exception):
+    print("Dependency 'mcp' not found. Auto-installing...")
+    try:
+        from core.dependency_manager import install_package
+        if install_package("mcp"):
+            print("Successfully installed mcp package.")
+        else:
+            print("Warning: Failed to auto-install mcp. MCP features may not work.")
+    except Exception as e:
+        print(f"Warning: Failed to install mcp: {e}")
+
 # from core.deep_agent_engine import DeepAgentEngine
 from core.offscreen_renderer import OffscreenRenderer
 
@@ -2958,12 +2976,14 @@ async def initialize_gpu_services():
     except Exception as e:
         core.logging.log_event(f"Error registering core tools: {e}", "WARNING")
     
-    # Register MCP server tools (GitHub, etc.)
+    # Register MCP server tools dynamically (Epic: MCP Dynamic Discovery)
+    # Using dynamic registration instead of static - registers only 3 meta-tools
+    # (mcp_list_servers, mcp_list_tools, mcp_call) reducing token usage by ~99%
     try:
-        from core.mcp_tools import register_mcp_tools
-        mcp_tool_names = register_mcp_tools(tool_registry, shared_state.mcp_manager)
+        from core.mcp_tools import register_dynamic_mcp_tools
+        mcp_tool_names = register_dynamic_mcp_tools(tool_registry, shared_state.mcp_manager)
         if mcp_tool_names:
-            core.logging.log_event(f"Registered {len(mcp_tool_names)} MCP tools with the registry.", "INFO")
+            core.logging.log_event(f"Registered {len(mcp_tool_names)} dynamic MCP meta-tools with the registry.", "INFO")
     except Exception as e:
         core.logging.log_event(f"Error registering MCP tools: {e}", "WARNING")
     
