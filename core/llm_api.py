@@ -18,6 +18,7 @@ import functools
 import threading
 
 from core.openrouter_rate_limiter import get_openrouter_rate_limiter
+from core.model_quality_controller import get_quality_controller
 
 class EmergencyMemoryFold(Exception):
     """Raised when the context window is exhausted and memory must be folded immediately."""
@@ -302,7 +303,13 @@ def get_openrouter_models():
             
             full_model_id = f"openrouter:{model_id}"
             if full_model_id in blacklist:
-                log_event(f"Model '{full_model_id}' is in the blacklist and will be ignored.", "INFO")
+                log_event(f"Model '{full_model_id}' is in the manual blacklist and will be ignored.", "INFO")
+                continue
+            
+            # Check auto-blacklist from quality controller
+            quality_controller = get_quality_controller()
+            if quality_controller.is_blacklisted(model_id, "openrouter"):
+                log_event(f"Model '{full_model_id}' is auto-blacklisted due to poor quality and will be ignored.", "INFO")
                 continue
 
             MODEL_STATS[model_id]["provider"] = "openrouter"
@@ -397,7 +404,13 @@ def get_top_horde_models(count=10, get_all=False):
             model_name = model['name']
             full_model_id = f"horde:{model_name}"
             if full_model_id in blacklist:
-                log_event(f"Model '{full_model_id}' is in the blacklist and will be ignored.", "INFO")
+                log_event(f"Model '{full_model_id}' is in the manual blacklist and will be ignored.", "INFO")
+                continue
+            
+            # Check auto-blacklist from quality controller
+            quality_controller = get_quality_controller()
+            if quality_controller.is_blacklisted(model_name, "horde"):
+                log_event(f"Model '{full_model_id}' is auto-blacklisted due to poor quality and will be ignored.", "INFO")
                 continue
 
             MODEL_STATS[model_name]["provider"] = "horde"
@@ -1361,6 +1374,12 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
 
                     PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
                     LLM_AVAILABILITY[model_id] = time.time()
+                    
+                    # Record success with quality controller for tracked providers
+                    if provider in ["openrouter", "horde"]:
+                        quality_controller = get_quality_controller()
+                        quality_controller.record_success(model_id, provider)
+                    
                     response_cid = await _pin_to_ipfs_async(result_text.encode('utf-8'), console)
                     final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": model_id}
                     break
@@ -1368,6 +1387,15 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 # print(f"DEBUG: Caught RequestException: {e}")
                 if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
                 last_exception = e
+                
+                # Record failure with quality controller for tracked providers
+                if model_id and provider in ["openrouter", "horde"]:
+                    error_type = "general"
+                    if e.response and e.response.status_code == 404:
+                        error_type = "http_404"
+                    quality_controller = get_quality_controller()
+                    quality_controller.record_failure(model_id, provider, error_type)
+                
                 # --- Enhanced Error Logging ---
                 error_details = str(e)
                 if e.response:
@@ -1439,6 +1467,12 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
             except Exception as e:
                 if model_id: MODEL_STATS[model_id]["failed_calls"] += 1
                 last_exception = e
+                
+                # Record failure with quality controller for tracked providers
+                if model_id and provider in ["openrouter", "horde"]:
+                    quality_controller = get_quality_controller()
+                    quality_controller.record_failure(model_id, provider, "general")
+                
                 log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
                 if isinstance(e, FileNotFoundError):
                     console.print(display_error_oneliner("CONNECTION FAILED", "Error: 'llm' command not found."))
