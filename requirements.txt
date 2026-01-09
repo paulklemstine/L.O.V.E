@@ -79,3 +79,4 @@ grpcio
 libcst
 coverage
 websockets
+paramiko
