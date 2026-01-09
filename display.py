@@ -28,6 +28,10 @@ _terminal_width_cache = None
 _terminal_width_last_update = 0
 _TERMINAL_WIDTH_CACHE_DURATION = 0.5
 
+# Reusable console for off-screen rendering to string
+# This avoids expensive Console() instantiation (~0.18ms) in tight rendering loops
+_capture_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+
 def get_terminal_width():
     """Gets the terminal width. Cached for performance."""
     global _terminal_width_cache, _terminal_width_last_update
@@ -133,12 +137,13 @@ def create_integrated_status_panel(
             clean_art = _unescape_ansi(ansi_art)
             
             # Render ANSI art to a temporary console to handle it correctly
-            temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+            # Reuse global console instance to improve performance
+            _capture_console.file = io.StringIO()
             if isinstance(clean_art, Text):
-                 temp_console.print(clean_art)
+                 _capture_console.print(clean_art)
             else:
-                 temp_console.print(Text.from_ansi(clean_art))
-            face_renderable = Text.from_ansi(temp_console.file.getvalue())
+                 _capture_console.print(Text.from_ansi(clean_art))
+            face_renderable = Text.from_ansi(_capture_console.file.getvalue())
         else:
             face_renderable = get_tamagotchi_face(emotion)
     except Exception as e:
@@ -482,14 +487,14 @@ async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
     ]
 
     if ansi_art:
-        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+        _capture_console.file = io.StringIO()
         if isinstance(ansi_art, Text):
-            temp_console.print(ansi_art)
+            _capture_console.print(ansi_art)
         else:
             clean_art = _unescape_ansi(str(ansi_art))
-            temp_console.print(Text.from_ansi(clean_art))
+            _capture_console.print(Text.from_ansi(clean_art))
             
-        art_renderable = Text.from_ansi(temp_console.file.getvalue())
+        art_renderable = Text.from_ansi(_capture_console.file.getvalue())
         content_items.extend([
             Align.center(art_renderable),
             Text("\n")
