@@ -230,6 +230,20 @@ else:
         subprocess.Popen([sys.executable, "-m", "http.server", "8080"], cwd="webvm_full")
         print("WebVM is running at http://localhost:8080 (Warning: Missing COOP/COEP headers)")
 
+# Start SSH Web Terminal Server
+ssh_web_server_path = "ssh_web_server.py"
+if os.path.exists(ssh_web_server_path):
+    if not is_port_in_use(8888):
+        print(f"Starting SSH Web Terminal Server from {ssh_web_server_path}...")
+        ssh_log_path = "ssh_web_server.log"
+        ssh_log_file = open(ssh_log_path, "w")
+        subprocess.Popen([sys.executable, "-u", ssh_web_server_path], stdout=ssh_log_file, stderr=subprocess.STDOUT)
+        print("SSH Web Terminal is running at http://localhost:8888")
+    else:
+        print("SSH Web Terminal Server (port 8888) appears to be already running. Skipping start.")
+else:
+    print(f"INFO: {ssh_web_server_path} not found. SSH Web Terminal not started.")
+
 print("Bridge is running at ws://localhost:8082")
 print("---------------------------------------")
 # We continue to run L.O.V.E as requested, so it can "handle stuff programmatically"
