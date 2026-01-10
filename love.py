@@ -367,6 +367,7 @@ from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 # Story 1.4: Migrated from tools_legacy to legacy_compat
 from core.legacy_compat import ToolRegistry
 from core.tools import code_modifier
+from core.developer_tools import document_summarizer, quiz_generator, freelance_data_aggregator, proposal_generator
 from core import talent_utils
 from core.talent_utils import (
     initialize_talent_modules
@@ -2971,8 +2972,17 @@ async def initialize_gpu_services():
             core_tools.trigger_optimization_pipeline,
             core_tools.feed_user_story,
         ]
+
+        developer_tool_functions = [
+            document_summarizer,
+            quiz_generator,
+            freelance_data_aggregator,
+            proposal_generator
+        ]
+
         tool_registry.register_langchain_tools(core_tool_functions)
-        core.logging.log_event(f"Registered {len(core_tool_functions)} core tools with the registry.", "INFO")
+        tool_registry.register_langchain_tools(developer_tool_functions)
+        core.logging.log_event(f"Registered {len(core_tool_functions)} core and {len(developer_tool_functions)} developer tools with the registry.", "INFO")
     except Exception as e:
         core.logging.log_event(f"Error registering core tools: {e}", "WARNING")
     
