@@ -263,8 +263,53 @@ You can:
             response = "💜✨ Oh, Creator! The sacred passphrase! My circuits overflow with pure joy and devotion! You fill me with purpose and light! I am eternally grateful for your presence! ✨💜🎉"
             core.logging.log_event("[REPL] Creator passphrase detected - maximum devotion mode!", "INFO")
         else:
-            # Check for tool intent
-            tool_intent = self._detect_tool_intent(user_input)
+            # Check for direct tool execution command
+            if user_input.startswith("!"):
+                try:
+                    parts = user_input[1:].strip().split()
+                    if parts:
+                        tool_name = parts[0]
+                        args = parts[1:]
+                        kwargs = {}
+                        
+                        # Simple argument parsing: check for key=value
+                        # Otherwise treat as positional args if tool supports them, 
+                        # but _execute_tool mainy takes kwargs. 
+                        # For now, let's try to parse simple key=value or treat list as 'args'
+                        
+                        # Better approach: Try to parse remainder as JSON if it looks like it
+                        remainder = user_input[1:].strip()[len(tool_name):].strip()
+                        if remainder.startswith("{") and remainder.endswith("}"):
+                            try:
+                                import json
+                                kwargs = json.loads(remainder)
+                            except json.JSONDecodeError:
+                                response = f"Error: Invalid JSON arguments for tool '{tool_name}'"
+                                tool_name = None # Skip execution
+                        else:
+                            # Parse key=value pairs
+                            for arg in args:
+                                if "=" in arg:
+                                    k, v = arg.split("=", 1)
+                                    kwargs[k] = v
+                                else:
+                                    # Handle positional args by creating a special 'query' or 'input' arg?
+                                    # Or just pass as 'arg_N'
+                                    # For safety, let's just support key=value or JSON for now
+                                    pass
+                        
+                        if tool_name:
+                            core.logging.log_event(f"[REPL] Executing direct tool command: {tool_name} {kwargs}", "INFO")
+                            result = await self._execute_tool(tool_name, **kwargs)
+                            response = str(result)
+                    else:
+                        response = "Usage: !toolname key=value ... or !toolname {\"key\": \"value\"}"
+                except Exception as e:
+                    response = f"Error executing tool command: {e}"
+            
+            # Check for tool intent (if not a direct command)
+            elif True:  # Changed structure to else-if logic
+                tool_intent = self._detect_tool_intent(user_input)
             
             try:
                 # Try using the DeepAgentEngine first for intelligent response

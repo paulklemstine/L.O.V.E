@@ -2979,6 +2979,19 @@ async def initialize_gpu_services():
     PromptRegistry()
     tool_registry = get_global_registry()
     shared_state.tool_registry = tool_registry  # Store for REPL agent access
+
+    # Initialize MCP Manager for dynamic tool discovery
+    # Note: console is a global variable in love.py
+    try:
+        from mcp_manager import MCPManager
+        from core.mcp_tools import register_dynamic_mcp_tools
+        
+        shared_state.mcp_manager = MCPManager(console)
+        register_dynamic_mcp_tools(tool_registry, shared_state.mcp_manager)
+        core.logging.log_event("MCP Dynamic Discovery initialized.", "INFO")
+    except Exception as e:
+        core.logging.log_event(f"Failed to initialize MCP Dynamic Discovery: {e}", "WARNING")
+
     
     # Register all core tools so REPL and other components have access
     try:

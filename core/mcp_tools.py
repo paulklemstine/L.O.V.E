@@ -329,6 +329,10 @@ def register_dynamic_mcp_tools(tool_registry, mcp_manager=None) -> List[str]:
     """
     from core.mcp_dynamic_discovery import get_discovery
     
+    # Inject provided manager into the singleton if available
+    if mcp_manager:
+        get_discovery()._mcp_manager = mcp_manager
+    
     registered_tools = []
     
     # Meta-tool 1: List available MCP servers
