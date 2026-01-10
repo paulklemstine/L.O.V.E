@@ -2631,7 +2631,17 @@ def simple_ui_renderer():
                         log_level = item.get('level', 'INFO').upper()
                         log_text = item.get('message', '')
                         # Simple console output with level prefix
-                        console.print(f"[{log_level}] {log_text}")
+                        fmt_log = f"[{log_level}] {log_text}"
+                        console.print(fmt_log)
+                        
+                        # Fix: Broadcast log messages too!
+                        if 'websocket_server_manager' in globals() and websocket_server_manager:
+                             from ui_utils import SSHBroadcaster
+                             import json
+                             payload = json.dumps(fmt_log) 
+                             websocket_server_manager.broadcast(payload)
+                             SSHBroadcaster.send(payload)
+
                         # OPTIMIZATION: Removed redundant file write here.
                         # `log_event` already writes to LOG_FILE via the standard logging module.
                         continue
