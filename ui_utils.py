@@ -267,4 +267,38 @@ def display_error_oneliner(title, message, model_id=None):
         error_text.append(f"({model_id}) ", style="dim red")
     error_text.append(message, style="red")
     
-    return error_text
+
+import threading
+import queue
+import urllib.request
+import json
+
+class SSHBroadcaster:
+    """Helper to broadcast logs to the local SSH web server via HTTP POST."""
+    _queue = queue.Queue()
+    _worker_thread = None
+
+    @classmethod
+    def send(cls, payload):
+        if not cls._worker_thread:
+            cls._worker_thread = threading.Thread(target=cls._worker, daemon=True)
+            cls._worker_thread.start()
+        cls._queue.put(payload)
+
+    @classmethod
+    def _worker(cls):
+        while True:
+            payload = cls._queue.get()
+            try:
+                # payload is already a JSON string from serialize_panel_to_json
+                req = urllib.request.Request(
+                    "http://localhost:8888/api/broadcast", 
+                    data=payload.encode('utf-8'),
+                    headers={'Content-Type': 'application/json'}
+                )
+                with urllib.request.urlopen(req, timeout=0.2) as _:
+                    pass
+            except Exception:
+                pass # Connection refused if server down, etc.
+            finally:
+                cls._queue.task_done()

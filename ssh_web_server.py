@@ -793,12 +793,41 @@ async def health_handler(request):
     })
 
 
+async def broadcast_handler(request):
+    """
+    Internal API endpoint for receiving console broadcasts from love.py.
+    """
+    # Simple security check: only allow localhost
+    if request.remote not in ('127.0.0.1', '::1', 'localhost'):
+        return web.Response(status=403, text="Forbidden")
+        
+    try:
+        data = await request.json()
+        # Broadcast the raw JSON payload to observers
+        # We need to re-serialize it because broadcast_to_observers expects a JSON string
+        # or we update broadcast_to_observers to handle dicts. 
+        # Actually our implementation of broadcast_to_observers handles both.
+        # But let's pass the text directly if possible or re-dump.
+        # simple_ui_renderer sends a JSON string. request.json() parses it.
+        # Let's just read text to avoid double parsing overhead.
+        text_data = await request.text()
+        
+        # Dispatch to observers
+        await _async_broadcast_to_observers(text_data)
+        
+        return web.Response(text="OK")
+    except Exception as e:
+        logger.error(f"Broadcast API error: {e}")
+        return web.Response(status=500, text=str(e))
+
+
 def create_app():
     """Create the aiohttp application."""
     app = web.Application()
     app.router.add_get('/', index_handler)
     app.router.add_get('/ws', websocket_handler)
     app.router.add_get('/health', health_handler)
+    app.router.add_post('/api/broadcast', broadcast_handler)
     return app
 
 

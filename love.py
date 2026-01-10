@@ -2629,18 +2629,14 @@ def simple_ui_renderer():
 
                     # For all other items (e.g., rich Panels), render them fully.
                     # --- WEB SOCKET BROADCAST ---
-                    from ui_utils import PANEL_TYPE_COLORS
+                    from ui_utils import PANEL_TYPE_COLORS, SSHBroadcaster
                     if 'websocket_server_manager' in globals() and websocket_server_manager:
                         # Reuse the renderer for serialization too!
                         json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS, renderer=ui_renderer)
                         if json_payload:
                             websocket_server_manager.broadcast(json_payload)
-                            # Also broadcast to SSH web terminal observers
-                            try:
-                                from ssh_web_server import broadcast_to_observers
-                                broadcast_to_observers(json_payload)
-                            except Exception:
-                                pass  # SSH server may not be running
+                            # Also broadcast to SSH web terminal observers via HTTP/IPC
+                            SSHBroadcaster.send(json_payload)
 
                     output_str = ui_renderer.render(item, width=current_width)
 
