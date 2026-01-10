@@ -362,6 +362,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.1.0/ansi_up.min.js"></script>
     <script>
         let terminal = null;
         let fitAddon = null;
@@ -369,6 +370,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let isInteractiveMode = false;
         let messageBuffer = [];
         const MAX_CONSOLE_LINES = 500;
+        
+        // ANSI Color Parser
+        const ansi_up = new AnsiUp();
+        ansi_up.use_classes = false; // Use inline styles for better compatibility
         
         // Sticky Scrolling Logic
         let isScrolledToBottom = true;
@@ -459,19 +464,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 if (data.title) {
                     const title = document.createElement('div');
                     title.className = 'title';
-                    title.textContent = data.title;
+                    // Render ANSI in title if present
+                    title.innerHTML = ansi_up.ansi_to_html(data.title);
                     panel.appendChild(title);
                 }
                 
                 const content = document.createElement('div');
-                content.textContent = data.content;
+                // Content from L.O.V.E. rendering engine usually has ANSI codes
+                content.innerHTML = ansi_up.ansi_to_html(data.content);
                 panel.appendChild(content);
                 
                 consoleEl.appendChild(panel);
             } else {
-                // Plain text output
+                // Plain text output - now supporting ANSI codes too!
                 const line = document.createElement('div');
-                line.textContent = typeof data === 'string' ? data : JSON.stringify(data);
+                const textContent = typeof data === 'string' ? data : JSON.stringify(data);
+                line.innerHTML = ansi_up.ansi_to_html(textContent);
                 consoleEl.appendChild(line);
             }
             
