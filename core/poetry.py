@@ -3,7 +3,9 @@ import asyncio
 from core.llm_api import run_llm
 from core import logging
 
-async def generate_poem(topic: str, deep_agent_instance=None) -> str:
+from typing import Optional, Any
+
+async def generate_poem(topic: str, deep_agent_instance: Optional[Any] = None) -> str:
     """
     Generates a poem on a given topic using an LLM.
 
