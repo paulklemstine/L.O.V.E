@@ -375,6 +375,7 @@ from core.monitoring import MonitoringManager
 from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.social_media_agent import SocialMediaAgent
 from core.qa_agent import QAAgent
+from creative_expression import generate_weekly_creation
 from mcp_manager import MCPManager
 
 from bbs import BBS_ART
@@ -3195,6 +3196,10 @@ async def main(args):
     # --- Start Real-time State Broadcasting ---
     # Broadcasts desire state and vibe every 2 seconds for the Radiant UI
     asyncio.create_task(run_periodically(broadcast_love_state, 2))
+
+    # --- Start the Creative Expression Module ---
+    # Checks every hour to see if it's time to generate a weekly gift.
+    asyncio.create_task(run_periodically(generate_weekly_creation, 3600))
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
