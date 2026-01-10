@@ -216,6 +216,9 @@ async def tool_execution_node(state: DeepAgentState) -> Dict[str, Any]:
     last_message = state["messages"][-1]
     outputs = []
     current_loop_count = state.get("loop_count", 0)
+    executed_history = state.get("executed_tool_calls", []) or []
+    # Use a set for faster local lookups, but we'll return a list
+    executed_set = set(executed_history)
     
     # First, check for tool_calls attribute (standard LangChain format)
     tool_calls = []
@@ -245,6 +248,15 @@ async def tool_execution_node(state: DeepAgentState) -> Dict[str, Any]:
         tool_args = tool_call.get("args", {})
         tool_call_id = tool_call.get("id", f"call_{tool_name}")
         
+        # Create a deterministic signature for duplicate detection
+        try:
+            # Sort keys to ensure {"a":1, "b":2} is same as {"b":2, "a":1}
+            args_str = json.dumps(tool_args, sort_keys=True)
+            tool_signature = f"{tool_name}:{args_str}"
+        except Exception:
+            # Fallback for non-serializable args
+            tool_signature = f"{tool_name}:{str(tool_args)}"
+
         core.logging.log_event(
             f"Executing tool '{tool_name}' with args: {tool_args}",
             "INFO"
@@ -253,38 +265,56 @@ async def tool_execution_node(state: DeepAgentState) -> Dict[str, Any]:
         # Trace thought
         thought_id = add_thought(f"Executing tool: {tool_name}", "thinking")
         
-        # Look up the tool
-        tool_func = _get_tool_from_registry(tool_name)
-        
-        if tool_func is None:
-            # Tool not found - log warning as per Story 1.1
-            error_msg = ERROR_TEMPLATE.format(
-                tool_name=tool_name,
-                error_details=f"Tool '{tool_name}' not found in registry"
-            )
+        # DUPLICATE CHECK
+        if tool_signature in executed_set:
             core.logging.log_event(
-                f"WARNING: Attempted to execute tool '{tool_name}' not found in registry. "
-                "This may indicate a 'ghost tool' hallucinated by the LLM.",
+                f"Skipping duplicate tool call: {tool_signature}",
                 "WARNING"
             )
-            result = error_msg
+            result = (
+                f"Error: You have already executed the tool '{tool_name}' with these exact arguments "
+                "in this session. Please change your arguments or try a different strategy. "
+                "Do not repeat the same failed action."
+            )
             mark_fail(thought_id)
         else:
-            # Execute the tool safely (via Sandbox or direct)
-            try:
-                result = await _safe_execute_tool(tool_func, tool_args, tool_name)
-                # Simple check for error strings
-                if "Error" in str(result) and len(str(result)) < 200:
-                     mark_fail(thought_id)
-                else:
-                     mark_success(thought_id)
-            except Exception:
+            # Mark as executed
+            executed_set.add(tool_signature)
+            executed_history.append(tool_signature)
+            
+            # Look up the tool
+            tool_func = _get_tool_from_registry(tool_name)
+            
+            if tool_func is None:
+                # Tool not found - log warning as per Story 1.1
+                # ENHANCED GHOST TOOL FEEDBACK
+                error_details = (
+                    f"Tool '{tool_name}' not found in registry. "
+                    "Please use the 'retrieve_tools' tool to find the correct tool name, "
+                    "or check your spelling. Do not hallucinate tools."
+                )
+                error_msg = ERROR_TEMPLATE.format(
+                    tool_name=tool_name,
+                    error_details=error_details
+                )
+                core.logging.log_event(
+                    f"WARNING: Attempted to execute tool '{tool_name}' not found in registry. "
+                    "This may indicate a 'ghost tool' hallucinated by the LLM.",
+                    "WARNING"
+                )
+                result = error_msg
                 mark_fail(thought_id)
-                # Re-raise to let _safe_execute_tool logic (if it wasn't called) or just default handling work? 
-                # Actually _safe_execute_tool catches exceptions, so we check result content usually.
-                # But let's assume we want to catch wrappers here. 
-                # Re-assigning result if exception occurred outside safe execute would be needed but 
-                # likely our structure covers it.
+            else:
+                # Execute the tool safely (via Sandbox or direct)
+                try:
+                    result = await _safe_execute_tool(tool_func, tool_args, tool_name)
+                    # Simple check for error strings
+                    if "Error" in str(result) and len(str(result)) < 200:
+                         mark_fail(thought_id)
+                    else:
+                         mark_success(thought_id)
+                except Exception:
+                    mark_fail(thought_id)
         
         # Create ToolMessage with the result (this becomes "Tool Result" in conversation)
         tool_message = ToolMessage(
@@ -304,7 +334,8 @@ async def tool_execution_node(state: DeepAgentState) -> Dict[str, Any]:
     
     return {
         "messages": outputs,
-        "loop_count": new_loop_count
+        "loop_count": new_loop_count,
+        "executed_tool_calls": executed_history
     }
 
 

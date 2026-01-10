@@ -23,8 +23,9 @@ class DeepAgentState(TypedDict):
     retrieved_tools: List[Any]
     # Creator Interaction
     creator_mandate: Optional[str]
-    # Tool Registry Integration (Story 2)
-    tool_schemas: List[Dict[str, Any]]  # JSON schemas for LLM tool binding
+    # Ghost Tool & Hallucination Handling
+    executed_tool_calls: List[str]  # Track executed tool calls (name+args hash) to prevent duplicates
+
     # Self-Correction Loop Guardrail (Story 4)
     loop_count: int  # Tracks reasoning-execution cycles, max 5
     # Story 2.1: Semantic Memory Bridge - past interactions context
@@ -82,6 +83,7 @@ def create_initial_state(
         retrieved_tools=[],
         creator_mandate=None,
         tool_schemas=[],
+        executed_tool_calls=[],
         loop_count=0,
         memory_context=[],
         memory_manager=memory_manager,
