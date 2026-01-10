@@ -2631,6 +2631,12 @@ def simple_ui_renderer():
                         json_payload = serialize_panel_to_json(item, PANEL_TYPE_COLORS, renderer=ui_renderer)
                         if json_payload:
                             websocket_server_manager.broadcast(json_payload)
+                            # Also broadcast to SSH web terminal observers
+                            try:
+                                from ssh_web_server import broadcast_to_observers
+                                broadcast_to_observers(json_payload)
+                            except Exception:
+                                pass  # SSH server may not be running
 
                     output_str = ui_renderer.render(item, width=current_width)
 
