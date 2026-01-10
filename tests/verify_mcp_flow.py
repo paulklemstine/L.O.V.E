@@ -110,19 +110,21 @@ def test_mcp_manager_has_list_tools():
 
 
 def test_tool_retriever_integration():
-    """Test that ToolRetriever can be initialized with MCP tools."""
+    """Test that ToolRetriever can be initialized for semantic tool search."""
     console.print("\n[bold]Test 5: ToolRetriever integration[/bold]")
     
     from core.nodes.tool_retrieval import get_retriever, refresh_mcp_tools
+    from core.tool_retriever import ToolRetriever
     
     # Get the retriever (will attempt to load MCP tools if available)
     retriever = get_retriever()
     
     assert retriever is not None, "Failed to get retriever"
-    assert hasattr(retriever, 'query_tools'), "Retriever missing 'query_tools' method"
-    assert hasattr(retriever, 'add_tools'), "Retriever missing 'add_tools' method"
+    assert isinstance(retriever, ToolRetriever), "Retriever should be a ToolRetriever instance"
+    assert hasattr(retriever, 'retrieve'), "Retriever missing 'retrieve' method"
+    assert hasattr(retriever, 'index_tools'), "Retriever missing 'index_tools' method"
     
-    console.print(f"[green]✓ ToolRetriever initialized with {len(retriever.tools)} tools[/green]")
+    console.print(f"[green]✓ ToolRetriever initialized with {len(retriever._tool_cache)} cached tools[/green]")
     
     # Test refresh function exists
     assert callable(refresh_mcp_tools), "refresh_mcp_tools should be callable"
@@ -249,6 +251,116 @@ def test_meta_tools_registration():
     return True
 
 
+def test_get_tool_schema():
+    """Test that tool schema can be retrieved on demand."""
+    console.print("\n[bold]Test 11: Get tool schema on demand[/bold]")
+    
+    from core.mcp_dynamic_discovery import MCPDynamicDiscovery
+    from mcp_manager import MCPManager
+    
+    manager = MCPManager(console)
+    discovery = MCPDynamicDiscovery(mcp_manager=manager)
+    
+    # Get schema for a known tool
+    schema = discovery.get_tool_schema("github", "repos.search_repositories")
+    
+    assert isinstance(schema, dict), "get_tool_schema should return a dict"
+    assert "error" not in schema, f"Got error: {schema.get('error')}"
+    assert "name" in schema, "Schema should have 'name' field"
+    assert "description" in schema, "Schema should have 'description' field"
+    assert "parameters" in schema, "Schema should have 'parameters' field"
+    
+    console.print(f"[green]✓ Retrieved schema for repos.search_repositories[/green]")
+    console.print(f"  - Name: {schema['name']}")
+    console.print(f"  - Description: {schema['description'][:60]}...")
+    
+    return True
+
+
+def test_discovery_error_handling():
+    """Test error handling for non-existent servers/tools."""
+    console.print("\n[bold]Test 12: Error handling for non-existent servers/tools[/bold]")
+    
+    from core.mcp_dynamic_discovery import MCPDynamicDiscovery
+    from mcp_manager import MCPManager
+    
+    manager = MCPManager(console)
+    discovery = MCPDynamicDiscovery(mcp_manager=manager)
+    
+    # Test non-existent server
+    tools = discovery.discover_tools("nonexistent_server")
+    assert "error" in tools, "Should return error for non-existent server"
+    console.print(f"[green]✓ Non-existent server returns error: {tools['error']}[/green]")
+    
+    # Test non-existent tool
+    schema = discovery.get_tool_schema("github", "nonexistent_tool")
+    assert "error" in schema, "Should return error for non-existent tool"
+    console.print(f"[green]✓ Non-existent tool returns error: {schema['error']}[/green]")
+    
+    return True
+
+
+def test_execute_tool_method():
+    """Test that execute_tool method works correctly."""
+    console.print("\n[bold]Test 13: Execute tool method structure[/bold]")
+    
+    from core.mcp_dynamic_discovery import MCPDynamicDiscovery
+    from mcp_manager import MCPManager
+    
+    manager = MCPManager(console)
+    discovery = MCPDynamicDiscovery(mcp_manager=manager)
+    
+    # Verify method exists and has correct signature
+    assert hasattr(discovery, 'execute_tool'), "Discovery should have execute_tool method"
+    
+    import inspect
+    sig = inspect.signature(discovery.execute_tool)
+    params = list(sig.parameters.keys())
+    
+    assert "server_name" in params, "execute_tool should accept server_name"
+    assert "tool_name" in params, "execute_tool should accept tool_name"
+    assert "params" in params, "execute_tool should accept params"
+    
+    console.print(f"[green]✓ execute_tool has correct signature: {list(params)}[/green]")
+    
+    # Test without starting server (should fail gracefully)
+    result = discovery.execute_tool("github", "repos.search_repositories", {"query": "test"})
+    # Should return an error message (server not running)
+    assert isinstance(result, str), "execute_tool should return a string"
+    console.print(f"[green]✓ execute_tool returns string result[/green]")
+    
+    return True
+
+
+def test_discovery_singleton():
+    """Test that the discovery singleton pattern works correctly."""
+    console.print("\n[bold]Test 14: Discovery singleton pattern[/bold]")
+    
+    from core.mcp_dynamic_discovery import get_discovery, reset_discovery, MCPDynamicDiscovery
+    
+    # Reset first to ensure clean state
+    reset_discovery()
+    
+    # Get instance
+    instance1 = get_discovery()
+    assert isinstance(instance1, MCPDynamicDiscovery), "get_discovery should return MCPDynamicDiscovery"
+    
+    # Get again - should be same instance
+    instance2 = get_discovery()
+    assert instance1 is instance2, "get_discovery should return same singleton instance"
+    
+    console.print("[green]✓ Singleton pattern works correctly[/green]")
+    
+    # Test reset
+    reset_discovery()
+    instance3 = get_discovery()
+    assert instance3 is not instance1, "After reset, should get new instance"
+    
+    console.print("[green]✓ reset_discovery creates new instance[/green]")
+    
+    return True
+
+
 async def test_live_github_search():
     """
     Live test: Actually calls the GitHub MCP server.
@@ -342,6 +454,10 @@ def main():
         ("Dynamic discovery servers", test_dynamic_discovery_servers),
         ("Dynamic discovery tools", test_dynamic_discovery_tools),
         ("Meta-tools registration", test_meta_tools_registration),
+        ("Get tool schema", test_get_tool_schema),
+        ("Discovery error handling", test_discovery_error_handling),
+        ("Execute tool method", test_execute_tool_method),
+        ("Discovery singleton", test_discovery_singleton),
     ]
     
     passed = 0

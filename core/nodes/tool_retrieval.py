@@ -1,66 +1,61 @@
 from typing import Dict, Any, List
 from core.state import DeepAgentState
-from core.tool_retriever import ToolRetriever
-from core.tools import (
-    execute, decompose_and_solve_subgoal, evolve, post_to_bluesky,
-    read_file, write_file, scan_network, probe_target,
-    perform_webrequest, analyze_json_file, research_and_evolve,
-    speak_to_creator
-)
+from core.tool_retriever import get_tool_retriever, ToolRetriever
 
-ALL_TOOLS = [
-    execute, decompose_and_solve_subgoal, evolve, post_to_bluesky,
-    read_file, write_file, scan_network, probe_target,
-    perform_webrequest, analyze_json_file, research_and_evolve,
-    speak_to_creator
-]
 
-_retriever = None
+_retriever_initialized = False
 
-def get_retriever():
+
+def get_retriever() -> ToolRetriever:
     """
     Gets the ToolRetriever singleton, initializing it with both native tools
     and any available MCP tools from running servers.
     """
-    global _retriever
-    if _retriever is None:
-        _retriever = ToolRetriever(ALL_TOOLS)
-        
-        # Dynamically add MCP tools if available
-        _load_mcp_tools()
+    global _retriever_initialized
+    retriever = get_tool_retriever()
     
-    return _retriever
+    if not _retriever_initialized:
+        # Try to initialize with tool registry
+        _initialize_retriever(retriever)
+        # Load MCP tools if available
+        _load_mcp_tools(retriever)
+        _retriever_initialized = True
+    
+    return retriever
 
 
-def _load_mcp_tools():
+def _initialize_retriever(retriever: ToolRetriever):
     """
-    Loads MCP tools from running servers and adds them to the retriever.
-    Called once during retriever initialization.
+    Initialize the retriever with the global tool registry.
     """
-    global _retriever
-    if _retriever is None:
-        return
-    
     try:
         import core.shared_state as shared_state
-        from core.mcp_adapter import get_all_mcp_langchain_tools
+        if shared_state.tool_registry:
+            retriever.index_tools(shared_state.tool_registry)
+    except Exception as e:
+        import core.logging
+        core.logging.log_event(f"Could not initialize ToolRetriever: {e}", "WARNING")
+
+
+def _load_mcp_tools(retriever: ToolRetriever):
+    """
+    Loads MCP tools from running servers by re-indexing the registry.
+    The MCP tools should already be registered in the tool registry.
+    """
+    try:
+        import core.shared_state as shared_state
         import core.logging
         
         if shared_state.mcp_manager is None:
             return
         
-        # Get all MCP tools as LangChain tools
-        mcp_tools = get_all_mcp_langchain_tools(shared_state.mcp_manager)
-        
-        if mcp_tools:
-            _retriever.add_tools(mcp_tools)
+        # Re-index tools to pick up any MCP tools added to registry
+        if shared_state.tool_registry:
+            retriever.index_tools(shared_state.tool_registry)
             core.logging.log_event(
-                f"Added {len(mcp_tools)} MCP tools to ToolRetriever for semantic search",
-                "INFO"
+                "ToolRetriever re-indexed to include MCP tools",
+                "DEBUG"
             )
-    except ImportError as e:
-        # MCP adapter not available
-        pass
     except Exception as e:
         import core.logging
         core.logging.log_event(
@@ -73,9 +68,9 @@ def refresh_mcp_tools():
     """
     Refreshes MCP tools in the retriever. Call this when MCP servers are started/stopped.
     """
-    global _retriever
-    if _retriever is not None:
-        _load_mcp_tools()
+    global _retriever_initialized
+    retriever = get_tool_retriever()
+    _load_mcp_tools(retriever)
 
 
 async def retrieve_tools_node(state: DeepAgentState) -> Dict[str, Any]:
@@ -87,8 +82,12 @@ async def retrieve_tools_node(state: DeepAgentState) -> Dict[str, Any]:
         return {}
         
     retriever = get_retriever()
-    # Assuming query is a string. If it's a list or something else, handle it.
-    tools = retriever.query_tools(query)
+    
+    # Use retrieve() method with the query as step description
+    tool_matches = retriever.retrieve(query, max_tools=10)
+    
+    # Convert ToolMatch objects to tool references
+    tools = [match.name for match in tool_matches]
     
     return {"retrieved_tools": tools}
 

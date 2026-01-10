@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """
 SSH Web Terminal Server for L.O.V.E.
-Serves a web page with xterm.js that connects via WebSocket to SSH.
-Includes login form for password authentication.
+Serves a web page with xterm.js that connects via WebSocket.
+
+DUAL MODE OPERATION:
+- Observer Mode (default): All visitors see L.O.V.E. console output streaming in read-only mode
+- Interactive Mode: After successful SSH authentication, full terminal access is granted
+
+The console broadcast is received from love.py's simple_ui_renderer() via broadcast_to_observers().
 """
 
 import asyncio
 import os
 import logging
+import json
 from aiohttp import web
 import paramiko
 
@@ -20,13 +26,69 @@ SSH_HOST = os.environ.get('SSH_HOST', 'localhost')
 SSH_PORT = int(os.environ.get('SSH_PORT', 22))
 DEFAULT_USER = os.environ.get('SSH_USER', os.environ.get('USER', 'root'))
 
-# HTML template with login form and embedded xterm.js
+# --- BROADCAST INFRASTRUCTURE ---
+# Set of WebSocket connections in observer mode (read-only)
+observer_clients = set()
+# Lock for thread-safe access to observer_clients
+observer_lock = asyncio.Lock()
+# Event loop reference for cross-thread broadcasting
+_event_loop = None
+
+def set_event_loop(loop):
+    """Set the event loop for cross-thread broadcasting."""
+    global _event_loop
+    _event_loop = loop
+
+def broadcast_to_observers(json_data: str):
+    """
+    Broadcast console output to all observer clients.
+    Called from love.py's simple_ui_renderer() to relay console output.
+    This is thread-safe and can be called from any thread.
+    """
+    global _event_loop
+    if not _event_loop or not observer_clients:
+        return
+    
+    try:
+        asyncio.run_coroutine_threadsafe(
+            _async_broadcast_to_observers(json_data),
+            _event_loop
+        )
+    except Exception as e:
+        logger.debug(f"Broadcast error (non-critical): {e}")
+
+async def _async_broadcast_to_observers(json_data: str):
+    """Async implementation of observer broadcast."""
+    async with observer_lock:
+        if not observer_clients:
+            return
+        
+        # Wrap the data with a type indicator for the client
+        message = json.dumps({
+            "type": "console_output",
+            "data": json.loads(json_data) if isinstance(json_data, str) else json_data
+        })
+        
+        # Send to all observers, removing any that fail
+        disconnected = set()
+        for ws in observer_clients:
+            try:
+                await ws.send_str(message)
+            except Exception:
+                disconnected.add(ws)
+        
+        # Remove disconnected clients
+        for ws in disconnected:
+            observer_clients.discard(ws)
+
+
+# HTML template with observer mode and login form
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>L.O.V.E. SSH Terminal</title>
+    <title>L.O.V.E. Console</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -69,19 +131,44 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             transition: all 0.3s ease;
         }
         .status-dot.connected { background: #00ff88; }
+        .status-dot.observer { background: #00d4ff; }
         .status-dot.connecting { background: #ffaa00; animation: pulse 1s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         
-        /* Login Form */
-        #login-container {
-            flex: 1;
-            display: flex;
+        /* Mode indicator badge */
+        .mode-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .mode-badge.observer {
+            background: rgba(0, 212, 255, 0.2);
+            color: #00d4ff;
+            border: 1px solid rgba(0, 212, 255, 0.4);
+        }
+        .mode-badge.interactive {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            border: 1px solid rgba(0, 255, 136, 0.4);
+        }
+        
+        /* Login Overlay */
+        #login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            z-index: 1000;
         }
         .login-box {
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.9);
             border: 1px solid rgba(0, 255, 136, 0.3);
             border-radius: 12px;
             padding: 30px 40px;
@@ -117,19 +204,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             outline: none;
             border-color: #00ff88;
         }
-        .login-btn {
+        .login-btn, .take-control-btn, .cancel-btn {
             width: 100%;
             padding: 12px;
-            background: linear-gradient(90deg, #00ff88, #00d4ff);
             border: none;
             border-radius: 6px;
-            color: #000;
             font-size: 1em;
             font-weight: bold;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
         }
-        .login-btn:hover {
+        .login-btn {
+            background: linear-gradient(90deg, #00ff88, #00d4ff);
+            color: #000;
+        }
+        .take-control-btn {
+            background: transparent;
+            border: 1px solid rgba(0, 255, 136, 0.5);
+            color: #00ff88;
+        }
+        .cancel-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 100, 100, 0.5);
+            color: #ff6464;
+        }
+        .login-btn:hover, .take-control-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 20px rgba(0, 255, 136, 0.4);
         }
@@ -146,19 +246,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             display: none;
         }
         
-        /* Terminal */
-        #terminal-container {
+        /* Console/Terminal Container */
+        #console-container {
             flex: 1;
             padding: 15px;
-            display: none;
+            display: flex;
             flex-direction: column;
         }
-        #terminal {
+        #console, #terminal {
             flex: 1;
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), 0 0 60px rgba(0, 255, 136, 0.1);
             border: 1px solid rgba(0, 255, 136, 0.15);
+        }
+        #console {
+            background: #0a0a0a;
+            padding: 15px;
+            font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+            font-size: 13px;
+            color: #e0e0e0;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        #terminal {
+            display: none;
         }
         .xterm { height: 100%; padding: 10px; }
         .info-bar {
@@ -168,22 +281,60 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             color: #666;
             display: flex;
             justify-content: space-between;
+            align-items: center;
+        }
+        
+        /* Console output styling */
+        .console-panel {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 3px solid #00ff88;
+            background: rgba(0, 255, 136, 0.05);
+        }
+        .console-panel.error {
+            border-left-color: #ff5555;
+            background: rgba(255, 85, 85, 0.05);
+        }
+        .console-panel.warning {
+            border-left-color: #ffaa00;
+            background: rgba(255, 170, 0, 0.05);
+        }
+        .console-panel .title {
+            color: #00ff88;
+            font-weight: bold;
+            margin-bottom: 5px;
         }
     </style>
 </head>
 <body>
     <header>
-        <div class="logo">🖥️ L.O.V.E. SSH Terminal</div>
+        <div class="logo">🖥️ L.O.V.E. Console</div>
         <div class="status">
-            <div id="status-dot" class="status-dot"></div>
-            <span id="status-text">Not Connected</span>
+            <div id="mode-badge" class="mode-badge observer">Observer</div>
+            <div id="status-dot" class="status-dot connecting"></div>
+            <span id="status-text">Connecting...</span>
         </div>
     </header>
     
-    <!-- Login Form -->
-    <div id="login-container">
+    <!-- Console Output (Observer Mode) -->
+    <div id="console-container">
+        <div id="console"></div>
+        <div id="terminal"></div>
+    </div>
+    
+    <div class="info-bar">
+        <span id="mode-info">Read-only mode - Click "Take Control" to authenticate</span>
+        <button class="take-control-btn" id="take-control-btn" onclick="showLoginOverlay()">🔑 Take Control</button>
+    </div>
+    
+    <!-- Login Overlay -->
+    <div id="login-overlay">
         <div class="login-box">
-            <h2>SSH Login</h2>
+            <h2>SSH Authentication</h2>
+            <p style="color: #888; text-align: center; margin-bottom: 20px; font-size: 0.9em;">
+                Authenticate to take control of the terminal
+            </p>
             <form id="login-form">
                 <div class="form-group">
                     <label for="host">Host</label>
@@ -202,18 +353,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     <input type="password" id="password" placeholder="Enter password" required autofocus>
                 </div>
                 <button type="submit" class="login-btn" id="connect-btn">Connect</button>
+                <button type="button" class="cancel-btn" onclick="hideLoginOverlay()">Cancel</button>
                 <div class="error-msg" id="error-msg"></div>
             </form>
         </div>
-    </div>
-    
-    <!-- Terminal -->
-    <div id="terminal-container">
-        <div id="terminal"></div>
-    </div>
-    <div class="info-bar" id="info-bar" style="display: none;">
-        <span>Press Ctrl+Shift+V to paste | Ctrl+C to interrupt</span>
-        <span id="connection-info"></span>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
@@ -223,12 +366,41 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let terminal = null;
         let fitAddon = null;
         let ws = null;
+        let isInteractiveMode = false;
+        let messageBuffer = [];
+        const MAX_CONSOLE_LINES = 500;
 
         function setStatus(status, text) {
             const dot = document.getElementById('status-dot');
             const statusText = document.getElementById('status-text');
             dot.className = 'status-dot ' + status;
             statusText.textContent = text;
+        }
+
+        function setMode(mode) {
+            const badge = document.getElementById('mode-badge');
+            const modeInfo = document.getElementById('mode-info');
+            const takeControlBtn = document.getElementById('take-control-btn');
+            const consoleEl = document.getElementById('console');
+            const terminalEl = document.getElementById('terminal');
+            
+            if (mode === 'interactive') {
+                badge.className = 'mode-badge interactive';
+                badge.textContent = 'Interactive';
+                modeInfo.textContent = 'Full terminal access - Press Ctrl+Shift+V to paste';
+                takeControlBtn.style.display = 'none';
+                consoleEl.style.display = 'none';
+                terminalEl.style.display = 'block';
+                isInteractiveMode = true;
+            } else {
+                badge.className = 'mode-badge observer';
+                badge.textContent = 'Observer';
+                modeInfo.textContent = 'Read-only mode - Click "Take Control" to authenticate';
+                takeControlBtn.style.display = 'block';
+                consoleEl.style.display = 'block';
+                terminalEl.style.display = 'none';
+                isInteractiveMode = false;
+            }
         }
 
         function showError(msg) {
@@ -239,6 +411,57 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         function hideError() {
             document.getElementById('error-msg').style.display = 'none';
+        }
+
+        function showLoginOverlay() {
+            document.getElementById('login-overlay').style.display = 'flex';
+            document.getElementById('password').focus();
+        }
+
+        function hideLoginOverlay() {
+            document.getElementById('login-overlay').style.display = 'none';
+            hideError();
+        }
+
+        function appendConsoleOutput(data) {
+            const consoleEl = document.getElementById('console');
+            
+            // Handle panel format from love.py
+            if (data.panel_type && data.content) {
+                const panel = document.createElement('div');
+                panel.className = 'console-panel';
+                if (data.panel_type === 'error' || data.panel_type === 'api_error') {
+                    panel.className += ' error';
+                } else if (data.panel_type === 'warning') {
+                    panel.className += ' warning';
+                }
+                
+                if (data.title) {
+                    const title = document.createElement('div');
+                    title.className = 'title';
+                    title.textContent = data.title;
+                    panel.appendChild(title);
+                }
+                
+                const content = document.createElement('div');
+                content.textContent = data.content;
+                panel.appendChild(content);
+                
+                consoleEl.appendChild(panel);
+            } else {
+                // Plain text output
+                const line = document.createElement('div');
+                line.textContent = typeof data === 'string' ? data : JSON.stringify(data);
+                consoleEl.appendChild(line);
+            }
+            
+            // Limit console lines to prevent memory issues
+            while (consoleEl.children.length > MAX_CONSOLE_LINES) {
+                consoleEl.removeChild(consoleEl.firstChild);
+            }
+            
+            // Auto-scroll to bottom
+            consoleEl.scrollTop = consoleEl.scrollHeight;
         }
 
         function initTerminal() {
@@ -284,53 +507,45 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             window.addEventListener('resize', () => fitAddon.fit());
 
             terminal.onData((data) => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                if (ws && ws.readyState === WebSocket.OPEN && isInteractiveMode) {
                     ws.send(JSON.stringify({ type: 'input', data: data }));
                 }
             });
 
             terminal.onResize(({ cols, rows }) => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                if (ws && ws.readyState === WebSocket.OPEN && isInteractiveMode) {
                     ws.send(JSON.stringify({ type: 'resize', cols, rows }));
                 }
             });
         }
 
-        function connect(host, port, username, password) {
+        function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws`;
             
             setStatus('connecting', 'Connecting...');
-            document.getElementById('connect-btn').disabled = true;
-            hideError();
-
+            
             ws = new WebSocket(wsUrl);
             
             ws.onopen = () => {
-                // Send credentials
-                ws.send(JSON.stringify({ 
-                    type: 'auth', 
-                    host: host,
-                    port: parseInt(port),
-                    username: username, 
-                    password: password 
-                }));
+                setStatus('observer', 'Connected (Observer)');
+                setMode('observer');
             };
 
             ws.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'auth_success') {
-                        // Show terminal, hide login
-                        document.getElementById('login-container').style.display = 'none';
-                        document.getElementById('terminal-container').style.display = 'flex';
-                        document.getElementById('info-bar').style.display = 'flex';
+                    const msg = JSON.parse(event.data);
+                    
+                    if (msg.type === 'console_output') {
+                        // Console broadcast for observers
+                        appendConsoleOutput(msg.data);
+                    } else if (msg.type === 'auth_success') {
+                        // Authenticated - switch to interactive mode
+                        hideLoginOverlay();
+                        setMode('interactive');
+                        setStatus('connected', 'Connected (Interactive)');
                         
                         if (!terminal) initTerminal();
-                        
-                        setStatus('connected', 'Connected');
-                        document.getElementById('connection-info').textContent = 
-                            `Connected to ${username}@${host}:${port}`;
                         terminal.focus();
                         
                         // Send terminal size
@@ -338,43 +553,66 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             fitAddon.fit();
                             ws.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }));
                         }, 100);
-                    } else if (data.type === 'auth_failure') {
-                        showError(data.message || 'Authentication failed');
-                        setStatus('', 'Not Connected');
+                    } else if (msg.type === 'auth_failure') {
+                        showError(msg.message || 'Authentication failed');
                         document.getElementById('connect-btn').disabled = false;
-                        ws.close();
-                    } else if (data.type === 'data') {
-                        if (terminal) terminal.write(data.data);
+                    } else if (msg.type === 'data' && isInteractiveMode) {
+                        // Terminal data for interactive mode
+                        if (terminal) terminal.write(msg.data);
                     }
                 } catch (e) {
                     // Plain text data for terminal
-                    if (terminal) terminal.write(event.data);
+                    if (terminal && isInteractiveMode) terminal.write(event.data);
                 }
             };
 
             ws.onclose = () => {
                 setStatus('', 'Disconnected');
-                document.getElementById('connect-btn').disabled = false;
+                setMode('observer');
                 if (terminal) {
                     terminal.writeln('\\r\\n\\x1b[31m[Connection closed]\\x1b[0m');
                 }
+                // Attempt to reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
             };
 
             ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
-                showError('Connection error');
-                document.getElementById('connect-btn').disabled = false;
+                setStatus('', 'Connection Error');
             };
         }
 
-        document.getElementById('login-form').addEventListener('submit', (e) => {
-            e.preventDefault();
+        function authenticate() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                showError('Not connected to server');
+                return;
+            }
+            
             const host = document.getElementById('host').value;
             const port = document.getElementById('port').value;
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-            connect(host, port, username, password);
+            
+            document.getElementById('connect-btn').disabled = true;
+            hideError();
+            setStatus('connecting', 'Authenticating...');
+            
+            ws.send(JSON.stringify({ 
+                type: 'auth', 
+                host: host,
+                port: parseInt(port),
+                username: username, 
+                password: password 
+            }));
+        }
+
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            authenticate();
         });
+        
+        // Connect on page load
+        connectWebSocket();
     </script>
 </body>
 </html>
@@ -444,11 +682,21 @@ class SSHSession:
 
 
 async def websocket_handler(request):
-    """Handle WebSocket connections for SSH terminal."""
+    """
+    Handle WebSocket connections for the console terminal.
+    
+    DUAL MODE OPERATION:
+    - Starts in Observer mode: receives console broadcasts, read-only
+    - Can upgrade to Interactive mode: after SSH authentication, full terminal access
+    """
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     
     logger.info(f"New WebSocket connection from {request.remote}")
+    
+    # Add to observer clients immediately (read-only mode)
+    async with observer_lock:
+        observer_clients.add(ws)
     
     ssh = None
     authenticated = False
@@ -456,12 +704,11 @@ async def websocket_handler(request):
     try:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
-                import json
                 try:
                     data = json.loads(msg.data)
                     
                     if data.get('type') == 'auth' and not authenticated:
-                        # Handle authentication
+                        # Handle authentication - attempt to switch to interactive mode
                         host = data.get('host', SSH_HOST)
                         port = data.get('port', SSH_PORT)
                         username = data.get('username', DEFAULT_USER)
@@ -471,6 +718,11 @@ async def websocket_handler(request):
                         try:
                             ssh.connect(host, port, username, password)
                             authenticated = True
+                            
+                            # Remove from observer clients - now in interactive mode
+                            async with observer_lock:
+                                observer_clients.discard(ws)
+                            
                             await ws.send_str(json.dumps({'type': 'auth_success'}))
                             
                             # Start reading from SSH
@@ -499,6 +751,9 @@ async def websocket_handler(request):
                 logger.error(f"WebSocket error: {ws.exception()}")
                 break
     finally:
+        # Clean up
+        async with observer_lock:
+            observer_clients.discard(ws)
         if ssh:
             ssh.close()
     
@@ -508,7 +763,6 @@ async def websocket_handler(request):
 
 async def ssh_reader(ws, ssh):
     """Background task to read from SSH and send to WebSocket."""
-    import json
     while not ws.closed and ssh.is_active():
         try:
             data = ssh.recv()
@@ -531,7 +785,12 @@ async def index_handler(request):
 
 async def health_handler(request):
     """Health check endpoint."""
-    return web.json_response({'status': 'ok', 'ssh_host': SSH_HOST, 'ssh_port': SSH_PORT})
+    return web.json_response({
+        'status': 'ok', 
+        'ssh_host': SSH_HOST, 
+        'ssh_port': SSH_PORT,
+        'observer_count': len(observer_clients)
+    })
 
 
 def create_app():
@@ -543,19 +802,37 @@ def create_app():
     return app
 
 
-def main():
-    """Start the SSH web terminal server."""
+async def run_server():
+    """Run the SSH web terminal server with event loop reference."""
+    global _event_loop
+    _event_loop = asyncio.get_running_loop()
+    
+    app = create_app()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', WEB_PORT)
+    await site.start()
+    
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
-║           L.O.V.E. SSH Web Terminal Server                   ║
+║           L.O.V.E. Console Viewer (SSH Web Terminal)         ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Web UI:    http://localhost:{WEB_PORT:<5}                          ║
 ║  Default SSH: {DEFAULT_USER}@{SSH_HOST}:{SSH_PORT:<5}                         ║
+║                                                              ║
+║  MODES:                                                      ║
+║    • Observer: View console output (no login required)       ║
+║    • Interactive: Full SSH access (requires authentication)  ║
 ╚══════════════════════════════════════════════════════════════╝
     """)
     
-    app = create_app()
-    web.run_app(app, host='0.0.0.0', port=WEB_PORT, print=None)
+    # Keep the server running
+    await asyncio.Event().wait()
+
+
+def main():
+    """Start the SSH web terminal server."""
+    asyncio.run(run_server())
 
 
 if __name__ == '__main__':
