@@ -463,6 +463,10 @@ class ToolRegistry:
         """Returns a list of all registered tool names."""
         return list(self._tools.keys())
     
+    def get_tool_names(self) -> List[str]:
+        """Returns a list of all registered tool names (alias for list_tools)."""
+        return self.list_tools()
+    
     def get_formatted_tool_metadata(self) -> str:
         """
         Returns a formatted string of all tool metadata, suitable for
