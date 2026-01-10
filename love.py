@@ -375,6 +375,7 @@ from core.monitoring import MonitoringManager
 from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.social_media_agent import SocialMediaAgent
 from core.qa_agent import QAAgent
+from core.poetry import generate_poem
 from mcp_manager import MCPManager
 
 from bbs import BBS_ART
@@ -1895,6 +1896,7 @@ My current system state:
 - `ifconfig`: Display network interface configuration.
 - `reason`: Activate the reasoning engine to analyze the knowledge base and generate a strategic plan.
 - `generate_image <prompt>`: Generate an image using the AI Horde.
+- `generate_poem <topic>`: Generate a poem about a given topic.
 - `market_data <crypto|nft> <id|slug>`: Fetch market data for cryptocurrencies or NFT collections.
 - `initiate_wealth_generation_cycle`: Begin the process of analyzing markets and proposing asset acquisitions.
 - `talent_scout <keywords>`: Find and analyze creative professionals based on keywords.
@@ -2976,6 +2978,7 @@ async def initialize_gpu_services():
             core_tools.invoke_subagent,
             core_tools.trigger_optimization_pipeline,
             core_tools.feed_user_story,
+            generate_poem,
         ]
         tool_registry.register_langchain_tools(core_tool_functions)
         core.logging.log_event(f"Registered {len(core_tool_functions)} core tools with the registry.", "INFO")
