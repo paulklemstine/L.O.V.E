@@ -369,6 +369,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         let isInteractiveMode = false;
         let messageBuffer = [];
         const MAX_CONSOLE_LINES = 500;
+        
+        // Sticky Scrolling Logic
+        let isScrolledToBottom = true;
+        
+        // Initial setup for scroll monitoring
+        window.addEventListener('load', () => {
+            const consoleEl = document.getElementById('console');
+            consoleEl.addEventListener('scroll', () => {
+                const threshold = 5; // px tolerance
+                // Check if user is near bottom
+                const currentFn = consoleEl.scrollTop + consoleEl.clientHeight;
+                const totalH = consoleEl.scrollHeight;
+                isScrolledToBottom = (totalH - currentFn) <= threshold;
+            });
+        });
 
         function setStatus(status, text) {
             const dot = document.getElementById('status-dot');
@@ -400,6 +415,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 consoleEl.style.display = 'block';
                 terminalEl.style.display = 'none';
                 isInteractiveMode = false;
+                
+                // Force scroll to bottom when switching back
+                setTimeout(() => {
+                    consoleEl.scrollTop = consoleEl.scrollHeight;
+                }, 100);
             }
         }
 
@@ -460,8 +480,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 consoleEl.removeChild(consoleEl.firstChild);
             }
             
-            // Auto-scroll to bottom
-            consoleEl.scrollTop = consoleEl.scrollHeight;
+            // Auto-scroll ONLY if previously at bottom
+            if (isScrolledToBottom) {
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
         }
 
         function initTerminal() {
