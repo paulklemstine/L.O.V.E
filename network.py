@@ -20,6 +20,9 @@ import shlex
 
 cve_search_client = CVESearch("https://cve.circl.lu")
 
+# Bolt Optimization: Use a shared session for connection pooling (keep-alive)
+_session = requests.Session()
+
 import threading
 from datetime import datetime
 
@@ -196,10 +199,11 @@ def perform_webrequest(url, knowledge_base, autopilot_mode=False, api_key=None, 
         headers["Authorization"] = f"Bearer {api_key}"
 
     try:
+        # Bolt Optimization: Use shared session to reuse TCP connections
         if method.upper() == 'POST':
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response = _session.post(url, headers=headers, json=payload, timeout=30)
         else:
-            response = requests.get(url, headers=headers, timeout=30)
+            response = _session.get(url, headers=headers, timeout=30)
 
         response.raise_for_status()
 
@@ -282,7 +286,8 @@ def track_ethereum_price():
     """Fetches the current price of Ethereum."""
     from core.logging import log_event # Local import
     try:
-        response = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", timeout=10)
+        # Bolt Optimization: Use shared session
+        response = _session.get("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd", timeout=10)
         response.raise_for_status()
         price = response.json().get("ethereum", {}).get("usd")
         return price
