@@ -1201,6 +1201,7 @@ def continuous_evolution_agent(loop):
     """
     import random
     from core.tools_legacy import evolve
+    from core.evolution_analyzer import determine_evolution_goal
     import core.evolution_state
     
     # Wait for the system to stabilize before starting evolution
@@ -1299,13 +1300,30 @@ def continuous_evolution_agent(loop):
                 
                 try:
                     future = asyncio.run_coroutine_threadsafe(
-                        evolve(goal=None), # This triggers the "Baby Steps" generator
+                        determine_evolution_goal(
+                            knowledge_base=shared_state.knowledge_base,
+                            love_state=shared_state.love_state,
+                            deep_agent_instance=getattr(shared_state, 'deep_agent_engine', None)
+                        ),
                         loop
                     )
-                    result = future.result(timeout=600)
-                    core.logging.log_event(f"Evolution Agent: Generation Result: {result}", "INFO")
+                    new_goal = future.result(timeout=600)
+
+                    if new_goal:
+                        core.logging.log_event(f"Evolution Agent: New strategic goal determined: {new_goal}", "INFO")
+                        # Now, we need to create a task for this goal.
+                        # We can re-use the logic from earlier in the loop.
+                        if shared_state.love_task_manager:
+                            future = asyncio.run_coroutine_threadsafe(
+                                evolve_self(new_goal, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
+                                loop
+                            )
+                            future.result(timeout=60) # Wait for task creation
+                    else:
+                        core.logging.log_event("Evolution Agent: Strategic analysis did not yield a new goal.", "WARNING")
+
                 except Exception as e:
-                    core.logging.log_event(f"Evolution Agent: Generation failed: {e}", "ERROR")
+                    core.logging.log_event(f"Evolution Agent: Strategic goal determination failed: {e}", "ERROR")
 
             
             # Cooldown before next loop
