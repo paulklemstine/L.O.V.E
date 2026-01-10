@@ -37,6 +37,7 @@ from rich.syntax import Syntax
 from core.desire_state import load_desire_state, get_current_desire, advance_to_next_desire, set_current_task_id_for_desire, clear_desire_state
 from core.evolution_state import load_evolution_state, get_current_story, advance_to_next_story, clear_evolution_state, set_current_task_id
 from openevolve import run_evolution
+from openevolve.config import Config, LLMModelConfig
 from core.openevolve_evaluator import evaluate_evolution
 
 # --- JULES ASYNC TASK MANAGER ---
@@ -967,10 +968,44 @@ def _run_openevolve_in_background(initial_program_path, evaluator_func, iteratio
     try:
         # openevolve's run_evolution is a synchronous, blocking function.
         # We run it in a separate thread to avoid blocking the main cognitive loop.
+
+        # --- CONFIGURE MODELS ---
+        config = Config()
+        config.llm.models = []
+        
+        # 1. Gemini (Preferred)
+        gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if gemini_key:
+             # Add Flash 2.0 or Pro as primary
+             config.llm.models.append(LLMModelConfig(name='gemini-2.0-flash-exp', api_key=gemini_key, provider='gemini'))
+             config.llm.models.append(LLMModelConfig(name='gemini-1.5-pro', api_key=gemini_key, provider='gemini'))
+
+        # 2. OpenAI
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key:
+             config.llm.models.append(LLMModelConfig(name='gpt-4o', api_key=openai_key, provider='openai'))
+
+        # 3. OpenRouter
+        openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+        if openrouter_key:
+             # Use a good reasoning model from OpenRouter if available
+             config.llm.models.append(LLMModelConfig(name='anthropic/claude-3.5-sonnet', api_key=openrouter_key, provider='openrouter', base_url="https://openrouter.ai/api/v1"))
+        
+        # 4. DeepSeek
+        deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
+        if deepseek_key:
+            config.llm.models.append(LLMModelConfig(name='deepseek-chat', api_key=deepseek_key, provider='deepseek'))
+
+        if not config.llm.models:
+             console.print("[bold red]OpenEvolve Error: No API keys found in environment (Gemini, OpenAI, OpenRouter, or DeepSeek).[/bold red]")
+             core.logging.log_event("OpenEvolve aborted: No LLM models configured.", level="CRITICAL")
+             return
+
         result = run_evolution(
             initial_program=open(initial_program_path).read(),
             evaluator=lambda path: asyncio.run(evaluator_func(path)), # Wrap the async evaluator
-            iterations=iterations
+            iterations=iterations,
+            config=config
         )
         if result and result.best_code:
             console.print(Panel(f"[bold green]OpenEvolve has discovered a superior version of me! Score: {result.best_score}[/bold green]", title="[bold magenta]Evolutionary Breakthrough[/bold magenta]", border_style="magenta"))
