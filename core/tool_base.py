@@ -49,13 +49,12 @@ class ToolBase:
         elapsed = time.time() - self._start_time if self._start_time else 0
         if self.ui_queue:
             from display import create_terminal_widget_panel, get_terminal_width
-            # Truncate result for display
+            # Pass full result for display logic to handle (truncation + IPFS linking)
             result_str = str(result)
-            stdout = result_str[:500] if len(result_str) > 500 else result_str
             panel = create_terminal_widget_panel(
                 tool_name=self.name,
                 status="complete",
-                stdout=stdout,
+                stdout=result_str,
                 elapsed_time=elapsed,
                 width=get_terminal_width()
             )
@@ -137,12 +136,12 @@ class ToolWrapper:
         elapsed = time.time() - self._start_time if self._start_time else 0
         if self.ui_queue:
             from display import create_terminal_widget_panel, get_terminal_width
+            # Pass full result for display logic to handle (truncation + IPFS linking)
             result_str = str(result)
-            stdout = result_str[:500] if len(result_str) > 500 else result_str
             panel = create_terminal_widget_panel(
                 tool_name=self.name,
                 status="complete",
-                stdout=stdout,
+                stdout=result_str,
                 elapsed_time=elapsed,
                 width=get_terminal_width()
             )
