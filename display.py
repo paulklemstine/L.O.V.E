@@ -760,7 +760,9 @@ def create_terminal_widget_panel(
         lines = stdout.strip().split('\n')
         display_lines = lines[-5:] if len(lines) > 5 else lines
         for line in display_lines:
-            stdout_text.append(f"  {line}\n", style="white")
+            # Truncate extremely long lines for display to prevent UI flooding
+            display_line = line[:200] + "..." if len(line) > 200 else line
+            stdout_text.append(f"  {display_line}\n", style="white")
         if len(lines) > 5:
             stdout_text.append(f"  ... ({len(lines) - 5} more lines)\n", style="dim")
         content_items.append(stdout_text)
@@ -772,7 +774,9 @@ def create_terminal_widget_panel(
         lines = stderr.strip().split('\n')
         display_lines = lines[-3:] if len(lines) > 3 else lines
         for line in display_lines:
-            stderr_text.append(f"  {line}\n", style="red")
+            # Truncate extremely long lines for display
+            display_line = line[:200] + "..." if len(line) > 200 else line
+            stderr_text.append(f"  {display_line}\n", style="red")
         content_items.append(stderr_text)
     
     # Elapsed time footer
@@ -780,6 +784,27 @@ def create_terminal_widget_panel(
         footer = Text()
         footer.append(f"\n⏱️ {elapsed_time:.2f}s", style="dim")
         content_items.append(footer)
+
+    # Full Output Link (IPFS) for completed/failed tasks with significant output
+    if status in ["complete", "error"] and (stdout or stderr):
+        full_output = f"TOOL: {tool_name}\nSTATUS: {status.upper()}\n"
+        if arguments:
+             full_output += f"ARGS: {json.dumps(arguments, indent=2, default=str)}\n"
+
+        full_output += f"\n--- STDOUT ---\n{stdout if stdout else '[No stdout]'}"
+        full_output += f"\n\n--- STDERR ---\n{stderr if stderr else '[No stderr]'}"
+
+        # Only create link if output is reasonably large or truncated in view
+        # The visual truncation is ~5 lines or long lines.
+        is_visually_truncated = (
+            (stdout and (len(stdout.split('\n')) > 5 or len(stdout) > 500)) or
+            (stderr and (len(stderr.split('\n')) > 3 or len(stderr) > 300))
+        )
+
+        if is_visually_truncated:
+            more_info_link = _create_more_info_link(full_output)
+            if more_info_link:
+                content_items.extend([Rule(style="bright_black"), more_info_link])
     
     # Panel title
     panel_title = f"🖥️ TERMINAL | {tool_name}"
