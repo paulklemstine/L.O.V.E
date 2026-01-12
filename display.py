@@ -64,13 +64,15 @@ def _unescape_ansi(text: str) -> str:
     # 2. Repair "headerless" ANSI codes (common LLM hallucination/artifact)
     # Matches [ followed by digits/semicolons and ending with m, BUT not preceded by ESC
     # We use a negative lookbehind (?<!\x1b) to ensure we don't double-escape valid codes
-    text = re.sub(r'(?<!\x1b)\[(\d+(?:;\d+)*m)', chr(27) + r'[\1', text)
+    text = ANSI_HEADER_FIX_PATTERN.sub(chr(27) + r'[\1', text)
     
     return text
 
 
 # Compiled once for performance
 ANSI_ESCAPE_PATTERN = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+# Pre-compile the regex for fixing "headerless" ANSI codes (common LLM artifact)
+ANSI_HEADER_FIX_PATTERN = re.compile(r'(?<!\x1b)\[(\d+(?:;\d+)*m)')
 
 def _format_and_link(content: str) -> tuple[Text, str | None]:
     """
