@@ -15,8 +15,13 @@ import random
 # --- Provider Configurations ---
 GEMINI_IMAGE_MODELS = ["imagen-3.0"]  # Imagen 3
 STABILITY_MODELS = ["stable-diffusion-xl-1024-v1-0"]
-# POLLINATIONS_MODELS = ["pollinations"]  # DISABLED
+POLLINATIONS_MODELS = ["pollinations"]  # Primary provider
 # CRAIYON_MODELS = ["craiyon"]  # DISABLED
+
+
+class PollinationsCreditExhaustedException(Exception):
+    """Raised when Pollinations API credits (pollen) are exhausted."""
+    pass
 
 # --- Statistics Tracking ---
 def _create_default_image_model_stats():
@@ -42,10 +47,10 @@ for model in STABILITY_MODELS:
     IMAGE_MODEL_STATS[model]["provider"] = "stability"
     IMAGE_MODEL_STATS[model]["quality_score"] = 85.0
 
-# Pollinations DISABLED
-# for model in POLLINATIONS_MODELS:
-#     IMAGE_MODEL_STATS[model]["provider"] = "pollinations"
-#     IMAGE_MODEL_STATS[model]["quality_score"] = 80.0
+# Pollinations - Primary provider with in-scene subliminal text
+for model in POLLINATIONS_MODELS:
+    IMAGE_MODEL_STATS[model]["provider"] = "pollinations"
+    IMAGE_MODEL_STATS[model]["quality_score"] = 88.0  # High quality, between Gemini and Stability
 
 # Craiyon DISABLED
 # for model in CRAIYON_MODELS:
@@ -385,26 +390,64 @@ async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 102
         raise
 
 
-async def _generate_with_pollinations(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
-    """Generate image using Pollinations.ai"""
+async def _generate_with_pollinations(prompt: str, width: int = 1024, height: int = 1024, subliminal_text: str = None) -> Image.Image:
+    """
+    Generate image using Pollinations.ai with authenticated API.
+    
+    Args:
+        prompt: Text description of image to generate
+        width: Image width (default 1024)
+        height: Image height (default 1024)
+        subliminal_text: Optional text to embed IN the image generation prompt.
+                        This instructs the LLM to render the text as an in-scene element
+                        (graffiti, neon sign, holographic display, etc.)
+    """
     model_id = "pollinations"
     start_time = time.time()
     
     try:
+        api_key = os.environ.get("POLLINATIONS_API_KEY")
+        if not api_key:
+            raise ValueError("POLLINATIONS_API_KEY not set")
+        
         core.logging.log_event(f"Attempting image generation with Pollinations: {prompt[:100]}...", "INFO")
         
-        # URL Encode the prompt
-        encoded_prompt = urllib.parse.quote(prompt)
+        # Embed subliminal text directly into the prompt for in-scene rendering
+        enhanced_prompt = prompt
+        if subliminal_text:
+            # Add specific instructions to render the subliminal/manipulative text in-scene
+            subliminal_instruction = (
+                f" CRITICAL: Prominently render the exact text \"{subliminal_text}\" "
+                f"as a visible in-scene element - as graffiti on a wall, "
+                f"neon signage, holographic floating text, LED display, "
+                f"tattoo on skin, or light projection in the environment. "
+                f"The text must be clearly legible and integrated naturally into the scene."
+            )
+            enhanced_prompt = prompt + subliminal_instruction
+            core.logging.log_event(f"Pollinations prompt enhanced with subliminal: '{subliminal_text}'", "INFO")
+        
+        # URL Encode the enhanced prompt
+        encoded_prompt = urllib.parse.quote(enhanced_prompt)
         
         # Generate a random seed
-        seed = random.randint(0, 100000)
+        seed = random.randint(0, 2147483647)  # Max seed per API docs
         
-        # Construct URL
-        # Format: https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&seed={seed}&nologo=true&safe=false
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&seed={seed}&nologo=true&safe=false"
+        # Use gen.pollinations.ai with API key authentication
+        # Models: flux (default), turbo, gptimage, kontext, seedream
+        model = "flux"  # High quality model
+        url = f"https://gen.pollinations.ai/image/{encoded_prompt}?model={model}&width={width}&height={height}&seed={seed}&safe=false&enhance=true"
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}"
+        }
         
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=60) as response:
+            async with session.get(url, headers=headers, timeout=120) as response:
+                # Check for credit exhaustion (401 Unauthorized or 402 Payment Required)
+                if response.status in (401, 402):
+                    error_text = await response.text()
+                    raise PollinationsCreditExhaustedException(f"Pollinations credits exhausted (HTTP {response.status}): {error_text}")
+                
                 if response.status != 200:
                     error_text = await response.text()
                     raise Exception(f"Pollinations API error {response.status}: {error_text}")
@@ -422,6 +465,9 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
                 core.logging.log_event(f"Pollinations generation successful in {elapsed:.2f}s", "INFO")
                 return image
                 
+    except PollinationsCreditExhaustedException:
+        # Re-raise credit exhaustion to be handled specially by the pool
+        raise
     except Exception as e:
         elapsed = time.time() - start_time
         IMAGE_MODEL_STATS[model_id]["failed_generations"] += 1
@@ -473,9 +519,10 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
         provider_order = [force_provider]
         core.logging.log_event(f"Forcing image generation with provider: {force_provider}", "INFO")
     else:
-        # Try providers in order: Horde -> Stability
-        # Pollinations and Craiyon DISABLED.
-        provider_order = ["horde", "stability"]
+        # Try providers in order: Pollinations (with in-scene text) -> Horde (with overlay)
+        # Pollinations embeds subliminal text IN the generation prompt for in-scene rendering
+        # Horde falls back to manual text overlay post-generation
+        provider_order = ["pollinations", "horde"]
     
     last_exception = None
     
@@ -492,18 +539,26 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
             continue
         if provider_name == "stability" and not os.environ.get("STABILITY_API_KEY"):
             continue
+        if provider_name == "pollinations" and not os.environ.get("POLLINATIONS_API_KEY"):
+            continue
         
         try:
             core.logging.log_event(f"Trying image generation with provider: {provider_name}", "INFO")
             
             # --- PRE-GENERATION PROVIDER LOGIC ---
-            # Always use clean prompt - subliminal text added via manual overlay
             current_prompt = prompt
-            manual_overlay_text = text_content  # Always overlay if provided
-                
-            # -------------------------------------
-
-            image = await providers[provider_name](current_prompt, width=width, height=height)
+            
+            # For Pollinations: Pass subliminal text to be embedded in prompt (rendered in-scene by LLM)
+            # For other providers: Generate clean image, apply overlay after
+            if provider_name == "pollinations":
+                # Pollinations gets subliminal text embedded in prompt for in-scene rendering
+                image = await providers[provider_name](current_prompt, width=width, height=height, subliminal_text=text_content)
+                # No overlay needed - text rendered in-scene by the model
+                manual_overlay_text = None
+            else:
+                # Non-Pollinations: generate without subliminal, apply overlay after
+                image = await providers[provider_name](current_prompt, width=width, height=height)
+                manual_overlay_text = text_content  # Will be overlaid after generation
             
             if image:
                 # --- VALIDATION ---
@@ -535,6 +590,13 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
                 core.logging.log_event(f"Image generation successful with provider: {provider_name}", "INFO")
                 return image, provider_name
             
+        except PollinationsCreditExhaustedException as e:
+            # Credit exhaustion - immediately fall back to next provider, set long cooldown
+            core.logging.log_event(f"Pollinations credits exhausted, falling back to next provider: {e}", "WARNING")
+            # Set a 24-hour cooldown on Pollinations when credits are exhausted
+            IMAGE_MODEL_AVAILABILITY["pollinations_provider"] = time.time() + (24 * 60 * 60)
+            last_exception = e
+            continue
         except Exception as e:
             last_exception = e
             core.logging.log_event(f"Provider {provider_name} failed: {e}", "WARNING")
