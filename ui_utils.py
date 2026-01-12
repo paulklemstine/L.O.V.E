@@ -164,8 +164,11 @@ def get_gradient_text(text, color1=None, color2=None, emojis=True):
         r = int(start_triplet.red + (end_triplet.red - start_triplet.red) * (i / max(1, text_len - 1)))
         g = int(start_triplet.green + (end_triplet.green - start_triplet.green) * (i / max(1, text_len - 1)))
         b = int(start_triplet.blue + (end_triplet.blue - start_triplet.blue) * (i / max(1, text_len - 1)))
-        interpolated_color = f"rgb({r},{g},{b})"
-        gradient.append(char, style=Style(color=interpolated_color, bold=True))
+
+        # Bolt Optimization: Construct Color object directly to avoid f-string parsing overhead
+        # interpolated_color = f"rgb({r},{g},{b})"
+        # gradient.append(char, style=Style(color=interpolated_color, bold=True))
+        gradient.append(char, style=Style(color=Color.from_rgb(r, g, b), bold=True))
     return gradient
 
 def format_duration(seconds):
