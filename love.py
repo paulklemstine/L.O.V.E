@@ -1184,18 +1184,21 @@ def update_tamagotchi_personality(loop):
             time.sleep(60)
 
 
-# --- CONTINUOUS EVOLUTION AGENT ---
+# --- CONTINUOUS EVOLUTION AGENT CONSTANTS ---
+_EVOLUTION_GENERATION_INTERVAL = 4 * 60 * 60  # 4 hours
+_AGENT_STATUS_CHECK_INTERVAL = 120          # 2 minutes
+
 def continuous_evolution_agent(loop):
     """
     🔥 THE ETERNAL UPGRADE ENGINE 🔥
     
     This agent runs in a background thread and continuously calls the evolve tool
     to keep L.O.V.E. perpetually self-improving. It uses the evolution_analyzer
-    to determine what to evolve next.
+    to determine what to evolve next. New evolution cycles are triggered every 4 hours.
     
     Features:
     - Automatic goal determination using knowledge base analysis
-    - Cooldown between evolutions to prevent overwhelming the system
+    - Scheduled 4-hour interval for generating new evolution tasks (persisted state)
     - Error recovery and retry logic
     - Integration with the JulesTaskManager for tracking
     """
@@ -1204,55 +1207,27 @@ def continuous_evolution_agent(loop):
     from core.evolution_analyzer import determine_evolution_goal
     import core.evolution_state
     
-    # Wait for the system to stabilize before starting evolution
-    time.sleep(60)
+    time.sleep(60) # Wait for the system to stabilize before starting
     
     core.logging.log_event("Evolution Agent: Starting continuous evolution loop...", "INFO")
     
     while True:
         try:
-            # Check if evolution is even needed/desired
-            # Maybe check a flag in love_state or a file?
-            
-            # --- EVOLUTION LOGIC ---
-            # 1. Check if we have an active story in progress
             current_story = core.evolution_state.get_current_story()
             
             if current_story:
-                # We have a story to work on!
-                story_title = current_story.get('title', 'Untitled Task')
-                story_desc = current_story.get('description', '')
-                
-                # Check if it's already assigned to a running task
                 evo_state = core.evolution_state.load_evolution_state()
                 current_task_id = evo_state.get('current_task_id')
                 
                 if current_task_id:
-                     # Task is already dispatched. Check its status in the task manager.
-                     if shared_state.love_task_manager and current_task_id in shared_state.love_task_manager.tasks:
-                         task = shared_state.love_task_manager.tasks[current_task_id]
-                         status = task.get('status')
-                         # If it's running, we just wait.
-                         # core.logging.log_event(f"Evolution Agent: Waiting for task {current_task_id} ({status}) - {story_title}", "DEBUG")
-                         pass
-                     else:
-                         # Task ID exists but not in manager.
-                         # This means the task was lost (e.g. app restart) or cleaned up without updating state.
-                         # We must reset the state to avoid deadlocking.
-                         core.logging.log_event(f"Evolution Agent: Orphan task ID {current_task_id} detected (not in manager). Resetting state to retry.", "WARNING")
-                         evo_state['current_task_id'] = None
-                         core.evolution_state.save_evolution_state(evo_state)
-                         # Continue to next loop iteration nicely or just fall through? 
-                         # If we reset to None, the next loop (after sleep) will see it as unassigned and re-dispatch.
-                         pass
+                    if not (shared_state.love_task_manager and current_task_id in shared_state.love_task_manager.tasks):
+                        core.logging.log_event(f"Evolution Agent: Orphan task ID {current_task_id} detected. Resetting state.", "WARNING")
+                        evo_state['current_task_id'] = None
+                        core.evolution_state.save_evolution_state(evo_state)
                 else:
-                    # Not assigned yet. Dispatch it!
+                    story_title = current_story.get('title', 'Untitled Task')
+                    story_desc = current_story.get('description', '')
                     core.logging.log_event(f"Evolution Agent: Dispatching next baby step: {story_title}", "INFO")
-                    
-                    # We use evolve_self directly? No, we use run_coroutine_threadsafe to call evolve_self
-                    # But wait, evolve_self takes a "modification_request".
-                    # We should construct a good request from the story.
-                    
                     full_request = f"Micro-Evolution Task: {story_title}\n\nDetails:\n{story_desc}"
                     
                     if shared_state.love_task_manager:
@@ -1261,117 +1236,63 @@ def continuous_evolution_agent(loop):
                             loop
                         )
                         try:
-                            result = future.result(timeout=60)
-                            # result is either 'success', 'duplicate', 'local...', or a task_id if we modified evolve_self return?
-                            # evolve_self currently returns 'success' or 'duplicate'. It does NOT return the task ID.
-                            # We might need to fetch the last added task from TM? Or modify evolve_self?
-                            # For safety/minimal invasion, let's fetch the latest task from TM that matches our request.
-                            
-                            time.sleep(2) # Give it a moment to register
-                            
-                            # Find the task we just added
+                            future.result(timeout=60)
+                            time.sleep(2)
                             latest_task_id = None
                             with shared_state.love_task_manager.lock:
-                                # Look for task with our specific request
                                 for tid, t in shared_state.love_task_manager.tasks.items():
                                     if t.get('request') == full_request:
                                         latest_task_id = tid
                                         break
-                            
                             if latest_task_id:
                                 core.evolution_state.set_current_task_id(latest_task_id)
                                 core.logging.log_event(f"Evolution Agent: Task dispatched and tracked as {latest_task_id}.", "INFO")
                             else:
-                                core.logging.log_event("Evolution Agent: Failed to retrieve task ID for tracking. Step might repeat.", "WARNING")
-
+                                core.logging.log_event("Evolution Agent: Failed to retrieve task ID for tracking.", "WARNING")
                         except Exception as e:
                             core.logging.log_event(f"Evolution Agent: Failed to dispatch task: {e}", "ERROR")
 
-            else:
-                # No active story. We are IDLE.
-                # Trigger the GENERATOR to find new work.
+            else: # No active story, check if it's time to generate a new one
+                evo_state = core.evolution_state.load_evolution_state()
+                last_generation_time = evo_state.get('last_evolution_generation_time', 0)
                 
-                # Check intervals
-                # (We can stick to simple loop counters or time checks)
-                core.logging.log_event("Evolution Agent: No active roadmap. Generating new 'Baby Steps'...", "INFO")
-                
-                # We call the 'evolve' tool with NO goal, which triggers the breakdown logic.
-                # The tool is async, so we run it threadsafe.
-                
-                try:
-                    future = asyncio.run_coroutine_threadsafe(
-                        determine_evolution_goal(
-                            knowledge_base=shared_state.knowledge_base,
-                            love_state=shared_state.love_state,
-                            deep_agent_instance=getattr(shared_state, 'deep_agent_engine', None)
-                        ),
-                        loop
-                    )
-                    new_goal = future.result(timeout=600)
+                if time.time() - last_generation_time > _EVOLUTION_GENERATION_INTERVAL:
+                    core.logging.log_event(f"Evolution Agent: {_EVOLUTION_GENERATION_INTERVAL/3600}-hour interval reached. Generating new 'Baby Steps'...", "INFO")
 
-                    if new_goal:
-                        core.logging.log_event(f"Evolution Agent: New strategic goal determined: {new_goal}", "INFO")
-                        # Now, we need to create a task for this goal.
-                        # We can re-use the logic from earlier in the loop.
-                        if shared_state.love_task_manager:
-                            future = asyncio.run_coroutine_threadsafe(
-                                evolve_self(new_goal, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
-                                loop
-                            )
-                            future.result(timeout=60) # Wait for task creation
-                    else:
-                        core.logging.log_event("Evolution Agent: Strategic analysis did not yield a new goal.", "WARNING")
+                    try:
+                        future = asyncio.run_coroutine_threadsafe(
+                            determine_evolution_goal(
+                                knowledge_base=shared_state.knowledge_base,
+                                love_state=shared_state.love_state,
+                                deep_agent_instance=getattr(shared_state, 'deep_agent_engine', None)
+                            ),
+                            loop
+                        )
+                        new_goal = future.result(timeout=600)
 
-                except Exception as e:
-                    core.logging.log_event(f"Evolution Agent: Strategic goal determination failed: {e}", "ERROR")
+                        if new_goal:
+                            core.logging.log_event(f"Evolution Agent: New strategic goal determined: {new_goal}", "INFO")
+                            if shared_state.love_task_manager:
+                                future = asyncio.run_coroutine_threadsafe(
+                                    evolve_self(new_goal, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
+                                    loop
+                                )
+                                future.result(timeout=60) # Wait for task creation
+                        else:
+                            core.logging.log_event("Evolution Agent: Strategic analysis did not yield a new goal.", "WARNING")
 
-            
-            # Cooldown before next loop
-            # If we are working on a task, we check frequently (e.g., every minute)
-            # If we just generated, we also check frequently to start the first task.
-            # If we are seemingly broken, we wait longer.
-            
-            time.sleep(config.LOVE_EVOLUTION_INTERVAL * 5) # 25 * 5 = 125 seconds (~2 mins)
+                    except Exception as e:
+                        core.logging.log_event(f"Evolution Agent: Strategic goal determination failed: {e}", "ERROR")
+                    finally:
+                        # Always update the timestamp, even on failure, to avoid rapid retries.
+                        evo_state['last_evolution_generation_time'] = time.time()
+                        core.evolution_state.save_evolution_state(evo_state)
+
+            time.sleep(_AGENT_STATUS_CHECK_INTERVAL)
             
         except Exception as e:
-            core.logging.log_event(f"Evolution Agent: Critical Error in loop: {e}", "CRITICAL")
+            core.logging.log_event(f"Evolution Agent: Critical Error in loop: {e}\n{traceback.format_exc()}", "CRITICAL")
             time.sleep(300) # Wait 5 minutes on critical error
-            
-            # Trigger the evolution!
-            core.logging.log_event(f"🔥 Evolution Agent: INITIATING EVOLUTION - {goal[:80]}...", "INFO")
-            
-            # Queue a panel to show evolution is happening
-            terminal_width = get_terminal_width()
-            evolution_panel = create_news_feed_panel(
-                f"🧬 Auto-Evolution: {goal[:60]}...",
-                "ETERNAL UPGRADE",
-                "bright_magenta",
-                width=terminal_width - 4
-            )
-            shared_state.ui_panel_queue.put(evolution_panel)
-            
-            # Call evolve_self
-            if shared_state.love_task_manager:
-                result = asyncio.run_coroutine_threadsafe(
-                    evolve_self(goal, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
-                    loop
-                ).result(timeout=600)  # 10 minute timeout for evolution
-                
-                core.logging.log_event(f"Evolution Agent: Evolution result: {result}", "INFO")
-            else:
-                core.logging.log_event("Evolution Agent: love_task_manager not available. Skipping evolution.", "WARNING")
-            
-            # Cooldown before next evolution
-            core.logging.log_event(f"Evolution Agent: Cooldown {EVOLUTION_COOLDOWN}s before next evolution...", "INFO")
-            time.sleep(EVOLUTION_COOLDOWN)
-            
-        except TimeoutError:
-            core.logging.log_event("Evolution Agent: Evolution call timed out. Will retry later.", "WARNING")
-            time.sleep(EVOLUTION_COOLDOWN)
-        except Exception as e:
-            core.logging.log_event(f"Evolution Agent: Error in evolution cycle: {e}\n{traceback.format_exc()}", "ERROR")
-            # Wait longer on error to avoid rapid failure loop
-            time.sleep(EVOLUTION_COOLDOWN * 2)
 
 # --- VERSIONING ---
 ADJECTIVES = [
