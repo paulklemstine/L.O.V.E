@@ -858,6 +858,14 @@ def create_app():
     app.router.add_get('/ws', websocket_handler)
     app.router.add_get('/health', health_handler)
     app.router.add_post('/api/broadcast', broadcast_handler)
+    
+    # Integrate Live API routes for external session access
+    try:
+        from core.live_api import setup_live_api_routes
+        setup_live_api_routes(app)
+    except ImportError as e:
+        logger.warning(f"Live API not available: {e}")
+    
     return app
 
 

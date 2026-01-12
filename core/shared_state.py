@@ -26,3 +26,8 @@ tool_registry: Any = None
 
 # Completed Tasks Registry (Epic 1: Hierarchical Task Decomposition)
 completed_tasks: Dict[str, Dict[str, Any]] = {}
+
+# Live API Configuration
+api_enabled: bool = True  # Feature flag for live API
+api_key: Optional[str] = None  # Override key (if None, auto-generated)
+hooks_manager: Any = None  # HooksManager instance
