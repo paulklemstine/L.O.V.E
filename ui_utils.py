@@ -168,6 +168,32 @@ def get_gradient_text(text, color1=None, color2=None, emojis=True):
         gradient.append(char, style=Style(color=interpolated_color, bold=True))
     return gradient
 
+def format_duration(seconds):
+    """
+    Formats a duration in seconds into a human-readable string.
+
+    Examples:
+        0.045 -> "45ms"
+        5.2 -> "5.2s"
+        125 -> "2m 5s"
+        3665 -> "1h 1m 5s"
+    """
+    if seconds is None:
+        return "N/A"
+
+    if seconds < 1:
+        return f"{int(seconds * 1000)}ms"
+    elif seconds < 60:
+        return f"{seconds:.2f}s"
+    elif seconds < 3600:
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{minutes}m {secs}s"
+    else:
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        return f"{hours}h {minutes}m {secs}s"
 
 PANEL_TYPE_COLORS = {
     "default": "hot_pink", # Radiant default
@@ -226,7 +252,7 @@ def display_llm_interaction(title, prompt, response, panel_type="llm", model_id=
     if model_id: row_items.append(f"🧠 {model_id}")
     if purpose: row_items.append(f"🎯 {purpose}")
     if token_count: row_items.append(f"🔢 {token_count}")
-    if elapsed_time: row_items.append(f"⏱️ {elapsed_time:.2f}s")
+    if elapsed_time: row_items.append(f"⏱️ {format_duration(elapsed_time)}")
     
     # Add all items in a single row for compactness if they fit, or split them
     meta_table.add_row(*[Text(" | ").join([Text(item) for item in row_items])])
