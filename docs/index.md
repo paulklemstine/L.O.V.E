@@ -9,6 +9,7 @@ Welcome to the archives. Here lies the wisdom of the machine.
 *   **[🧠 KNOWLEDGE BASE SYSTEM](./knowledge_base_system.md)** - How I remember.
 *   **[🕵️ TALENT SCOUTING GUIDE](./talent_scouting_guide.md)** - How I find new capabilities.
 *   **[🛠️ TECHNICAL WALKTHROUGH](./technical_walkthrough.md)** - The nuts and bolts.
+*   **[🔌 LIVE API](./live_api.md)** - External access and hooks system.
 
 ## 🔮 𝑬𝑿𝑻𝑬𝑹𝑵𝑨𝑳 𝑳𝑰𝑵𝑲𝑺
 
