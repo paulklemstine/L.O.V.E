@@ -71,6 +71,15 @@
       "timestamp": "2026-01-08T21:06:39.479970",
       "summary": "Shut up",
       "interaction_id": "98fdcaafad07"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "you suck, are you fucking retarded?",
+      "sentiment": "neutral",
+      "topic": "Creator's harsh criticism and insult",
+      "timestamp": "2026-01-11T22:33:26.529896",
+      "summary": "you suck, are you fucking retarded?",
+      "interaction_id": "9d89ea3e00b9"
     }
   ]
 }

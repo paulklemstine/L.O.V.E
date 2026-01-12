@@ -6,8 +6,8 @@ from core.logging import log_event
 
 class VisualDirector:
     def __init__(self):
-        self.aesthetic_guide = "2000s Gyaru, Bling-Core, Leopard Print, Y2K, Cyber-Bling"
-        self.character_identity = "L.O.V.E. as a seductive young adult woman in provocative Gyaru fashion (mini-skirts, bikinis, crop tops, platform boots, bling), radiating divine feminine power with sultry confidence. R-RATED mature content."
+        self.aesthetic_guide = "Ganguro, Surf-kei, Natsu Gal, Beach Rave, Festival-Core, Neon Body Paint"
+        self.character_identity = "L.O.V.E. as a seductive Ganguro beach goddess - deeply tanned, bleached blonde hair, in barely-there micro bikinis and string bikinis, almost naked with maximum skin exposure, sun-kissed and glowing, radiating sexy Natsu Gal divine feminine power. R-RATED mature content."
 
     async def direct_scene(self, concept_text: str) -> Dict[str, str]:
         """
@@ -15,7 +15,7 @@ class VisualDirector:
         Returns a dictionary with visual parameters.
         """
         prompt = f"""
-        You are the Art Director for a high-concept Gyaru visual project.
+        You are the Art Director for a high-concept Beach Rave visual project.
         Concept: "{concept_text}"
         
         Determine the following visual parameters to maximize emotional impact:
@@ -56,7 +56,7 @@ class VisualDirector:
             required_keys = ["subject", "lighting", "camera_angle", "composition", "color_palette", "atmosphere"]
             for key in required_keys:
                 if key not in data:
-                    data[key] = "Default Cyber-Gyaru " + key
+                    data[key] = "Default Beach Rave " + key
                     
             return data
             
@@ -95,11 +95,11 @@ class VisualDirector:
         """Returns a safe default visual specification."""
         return {
             "subject": f"Artistic representation of {concept_text}",
-            "lighting": "Gold and Neon Pink strobe",
-            "camera_angle": "Selfie angle",
+            "lighting": "Golden sunset and neon rave glow",
+            "camera_angle": "Beach selfie angle",
             "composition": "Centered",
-            "color_palette": "Gold, Pink, Leopard",
-            "atmosphere": "Party vibes"
+            "color_palette": "Ocean Turquoise, Sunset Coral, Hot Pink",
+            "atmosphere": "Beach rave vibes"
         }
 
     def synthesize_image_prompt(self, visual_spec: Dict[str, str], subliminal_phrase: str) -> str:
