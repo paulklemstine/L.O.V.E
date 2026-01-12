@@ -415,16 +415,16 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
         # Embed subliminal text directly into the prompt for in-scene rendering
         enhanced_prompt = prompt
         if subliminal_text:
-            # Add specific instructions to render the subliminal/manipulative text in-scene
+            # Let LLM creatively place text - use visual style descriptors, not font terms
+            # Text should be emphasized but subtle, integrated into the scene
             subliminal_instruction = (
-                f" CRITICAL: Prominently render the exact text \"{subliminal_text}\" "
-                f"as a visible in-scene element - as graffiti on a wall, "
-                f"neon signage, holographic floating text, LED display, "
-                f"tattoo on skin, or light projection in the environment. "
-                f"The text must be clearly legible and integrated naturally into the scene."
+                f" Seamlessly integrate the text \"{subliminal_text}\" into the scene - "
+                f"rendered in a style that fits naturally (glowing neon, flickering fire, crystalline ice, "
+                f"liquid chrome, ethereal light, smoky wisps, or electric plasma). "
+                f"Place it where it feels right within the composition. Emphasized but not overpowering."
             )
             enhanced_prompt = prompt + subliminal_instruction
-            core.logging.log_event(f"Pollinations prompt enhanced with subliminal: '{subliminal_text}'", "INFO")
+            core.logging.log_event(f"Pollinations prompt enhanced with subliminal text: '{subliminal_text}'", "INFO")
         
         # URL Encode the enhanced prompt
         encoded_prompt = urllib.parse.quote(enhanced_prompt)
