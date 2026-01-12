@@ -17,7 +17,8 @@ from rich.padding import Padding
 from ui_utils import (
     get_rave_emoji, rainbow_text, get_tamagotchi_face, matrix_rain,
     rave_text, generate_binary_art, RAVE_COLORS,
-    get_random_rave_color, get_gradient_text, PANEL_TYPE_COLORS
+    get_random_rave_color, get_gradient_text, PANEL_TYPE_COLORS,
+    format_duration
 )
 from ipfs import pin_to_ipfs_sync
 from rich_gradient.gradient import Gradient
@@ -782,7 +783,7 @@ def create_terminal_widget_panel(
     # Elapsed time footer
     if elapsed_time is not None:
         footer = Text()
-        footer.append(f"\n⏱️ {elapsed_time:.2f}s", style="dim")
+        footer.append(f"\n⏱️ {format_duration(elapsed_time)}", style="dim")
         content_items.append(footer)
 
     # Full Output Link (IPFS) for completed/failed tasks with significant output
@@ -1229,18 +1230,18 @@ def create_active_tool_panel(
         width: Panel width
         
     Status colors:
-    - xx pending (yellow pulse)
-    - x  running (blue spinner)  
-    - xx complete (green checkmark)
-    - x  failed (red X)
+    - x x  pending (yellow pulse)
+    - x    running (blue spinner)
+    - x x  complete (green checkmark)
+    - x    failed (red X)
     """
     
     # 1. Define Styles & Icons
     status_styles = {
         "pending":  {"color": "yellow", "icon": "⏳"},
-        "running":  {"color": "blue",   "icon": "xR "},
-        "complete": {"color": "green",  "icon": "S& "},
-        "failed":   {"color": "red",    "icon": "R"},
+        "running":  {"color": "blue",   "icon": "x R  "},
+        "complete": {"color": "green",  "icon": "S & "},
+        "failed":   {"color": "red",    "icon": "R "},
     }
     
     # Border & Title Styles (Rave Theme)
@@ -1267,7 +1268,7 @@ def create_active_tool_panel(
         header_text.append(f"{name}", style=f"bold white")
         
         if elapsed:
-             header_text.append(f" ({elapsed:.2f}s)", style="dim italic")
+             header_text.append(f" ({format_duration(elapsed)})", style="dim italic")
              
         content_group.append(header_text)
         
@@ -1276,7 +1277,7 @@ def create_active_tool_panel(
             args_str = json.dumps(args, default=str)
             if len(args_str) > width - 10:
                 args_str = args_str[:width-15] + "..."
-            content_group.append(Text(f"       {args_str}", style="dim cyan"))
+            content_group.append(Text(f"          {args_str}", style="dim cyan"))
             
         # Result Line (if complete/failed)
         if status in ["complete", "failed"] and result:
@@ -1289,7 +1290,7 @@ def create_active_tool_panel(
             
         # Add separator if not last
         if idx < len(tools) - 1:
-            content_group.append(Text("  " + " " * (width//2), style="dim white"))
+            content_group.append(Text("  " + "   " * (width//2), style="dim white"))
             
     if not content_group:
         content_group.append(Text("Waiting for tool calls...", style="italic dim white"))
@@ -1297,7 +1298,7 @@ def create_active_tool_panel(
     # 3. Create Panel
     return Panel(
         Group(*content_group),
-        title=f"[{title_style}]x: ️ ACTIVE TOOLS[/]",
+        title=f"[{title_style}]x : ️ ACTIVE TOOLS[/]",
         subtitle=f"[dim]DeepAgent Execution[/dim]",
         border_style=border_style,
         width=width,
