@@ -35,6 +35,13 @@ def _process_and_upload_image(client, image: Image.Image):
     if not image:
         return None
 
+    # Apply intelligent watermark before processing
+    try:
+        from core.watermark import apply_watermark
+        image = apply_watermark(image, opacity=0.25)
+    except Exception as e:
+        print(f"Warning: Could not apply watermark: {e}")
+
     import io
     from atproto import models
 
