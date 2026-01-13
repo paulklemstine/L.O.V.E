@@ -13,14 +13,32 @@ and code review phases.
 """
 import os
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Union
 from langgraph.graph import StateGraph, END
 from core.state import DeepAgentState
+from core.memory.schemas import WorkingMemory
 from core.llm_api import run_llm
 from langchain_core.messages import AIMessage, HumanMessage
 from core.nodes.static_analysis import static_analysis_node
 
 logger = logging.getLogger(__name__)
+
+
+def get_working_memory_dict(state: DeepAgentState) -> Dict[str, Any]:
+    """
+    Safely extracts the working memory as a dictionary.
+    
+    Handles both WorkingMemory Pydantic model and plain dict cases.
+    Uses active_variables field for dynamic data storage.
+    """
+    raw_wm = state.get("working_memory", {})
+    if isinstance(raw_wm, WorkingMemory):
+        return raw_wm.active_variables
+    elif hasattr(raw_wm, 'model_dump'):
+        return raw_wm.model_dump().get('active_variables', {})
+    elif isinstance(raw_wm, dict):
+        return raw_wm
+    return {}
 
 # --- Utility Functions ---
 
@@ -73,7 +91,7 @@ async def planner_node(state: DeepAgentState) -> Dict[str, Any]:
     storing it in working_memory for downstream nodes.
     """
     messages = state["messages"]
-    working_memory = state.get("working_memory", {})
+    working_memory = get_working_memory_dict(state)
     
     # Determine file path from request or use default
     request_content = messages[-1].content if messages else ""
@@ -110,7 +128,7 @@ async def planner_node(state: DeepAgentState) -> Dict[str, Any]:
     plan_content = response.get('result', 'No plan generated')
     
     # Update working memory with plan info
-    new_working_memory = {
+    new_active_vars = {
         **working_memory,
         "current_subgoal": "coding_plan_created",
         "current_file_path": filepath,
@@ -120,7 +138,7 @@ async def planner_node(state: DeepAgentState) -> Dict[str, Any]:
     
     return {
         "messages": [AIMessage(content=f"Plan:\n{plan_content}")],
-        "working_memory": new_working_memory
+        "working_memory": WorkingMemory(active_variables=new_active_vars)
     }
 
 
@@ -131,7 +149,7 @@ async def coder_node(state: DeepAgentState) -> Dict[str, Any]:
     Generates code and writes it to the file specified in working_memory.
     """
     messages = state["messages"]
-    working_memory = state.get("working_memory", {})
+    working_memory = get_working_memory_dict(state)
     
     # Get filepath from working_memory
     filepath = working_memory.get("current_file_path", "sandbox_output/generated_code.py")
@@ -186,11 +204,11 @@ async def coder_node(state: DeepAgentState) -> Dict[str, Any]:
     if not success:
         return {
             "messages": [AIMessage(content=f"Error: Failed to write code to {filepath}")],
-            "working_memory": working_memory
+            "working_memory": WorkingMemory(active_variables=working_memory)
         }
     
     # Update working memory
-    new_working_memory = {
+    new_active_vars = {
         **working_memory,
         "current_code_content": code,
         "code_written": True
@@ -198,7 +216,7 @@ async def coder_node(state: DeepAgentState) -> Dict[str, Any]:
     
     return {
         "messages": [AIMessage(content=f"```python\n{code}\n```")],
-        "working_memory": new_working_memory
+        "working_memory": WorkingMemory(active_variables=new_active_vars)
     }
 
 
@@ -209,7 +227,7 @@ async def reviewer_node(state: DeepAgentState) -> Dict[str, Any]:
     Integrates with static analysis results from working_memory.
     """
     messages = state["messages"]
-    working_memory = state.get("working_memory", {})
+    working_memory = get_working_memory_dict(state)
     
     # Get the code from working_memory (cleaner than parsing messages)
     code = working_memory.get("current_code_content", "")
@@ -260,7 +278,7 @@ async def test_runner_node(state: DeepAgentState) -> Dict[str, Any]:
     Runs pytest on the generated code in a secure container.
     Falls back to local execution if Docker is unavailable.
     """
-    working_memory = state.get("working_memory", {})
+    working_memory = get_working_memory_dict(state)
     filepath = working_memory.get("current_file_path", "sandbox_output/generated_code.py")
     
     # Get the code content
@@ -335,7 +353,7 @@ async def test_runner_node(state: DeepAgentState) -> Dict[str, Any]:
     result = "\n".join(result_lines)
     
     # Update working memory with test results
-    new_working_memory = {
+    new_active_vars = {
         **working_memory,
         "test_passed": test_passed,
         "test_output": result
@@ -343,7 +361,7 @@ async def test_runner_node(state: DeepAgentState) -> Dict[str, Any]:
     
     return {
         "messages": [AIMessage(content=result)],
-        "working_memory": new_working_memory
+        "working_memory": WorkingMemory(active_variables=new_active_vars)
     }
 
 
@@ -377,7 +395,7 @@ def create_coding_graph():
         """
         Determines next step based on analysis results.
         """
-        working_memory = state.get("working_memory", {})
+        working_memory = get_working_memory_dict(state)
         status = working_memory.get("analysis_status", "failed")
         
         # Safety Check: Infinite Loop Prevention
