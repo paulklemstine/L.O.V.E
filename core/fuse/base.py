@@ -368,124 +368,227 @@ class FilesystemAdapter(ABC):
 
 class ScratchFilesystem(FilesystemAdapter):
     """
-    A simple in-memory filesystem for scratch/working files.
+    A filesystem for scratch/working files, optionally backed by disk.
     
-    This allows agents to create temporary files for planning,
-    notes, intermediate results, etc.
+    If 'root_path' is provided, files are stored on disk (enabling Docker mounts).
+    If not, it behaves as an in-memory filesystem.
     """
     
-    def __init__(self, mount_point: str = "/scratch"):
+    def __init__(self, mount_point: str = "/scratch", root_path: Optional[str] = None):
         super().__init__(mount_point)
-        self._files: Dict[str, VirtualFile] = {}
-        self._dirs: Dict[str, VirtualDirectory] = {
-            "/": VirtualDirectory(name="")
-        }
+        self.root_path = root_path
+        if self.root_path:
+            os.makedirs(self.root_path, exist_ok=True)
+            self._files = {} # Unused in disk mode
+            self._dirs = {}  # Unused in disk mode
+        else:
+            self._files: Dict[str, VirtualFile] = {}
+            self._dirs: Dict[str, VirtualDirectory] = {
+                "/": VirtualDirectory(name="")
+            }
     
+    def _get_real_path(self, virtual_path: str) -> str:
+        """Convert virtual path to real disk path."""
+        if not self.root_path:
+             raise FilesystemError("Not a disk-backed filesystem")
+        # Remove leading slash/mount point relative logic if needed
+        # virtual_path is relative to mount point (e.g. "plan.txt" or "subdir/file.txt")
+        # FilesystemAdapter generic logic usually passes 'path' relative to mount point?
+        # Wait, readdir/read receive relative paths in the adapter?
+        # Let's check: VirtualFilesystem routes with: adapter.readdir(relative_path)
+        # Yes.
+        
+        # Security check: prevent traversal
+        safe_path = os.path.normpath(os.path.join(self.root_path, virtual_path.lstrip("/")))
+        if not safe_path.startswith(os.path.abspath(self.root_path)):
+             raise PermissionError(f"Path traversal denied: {virtual_path}")
+        return safe_path
+
     def readdir(self, path: str) -> List[str]:
-        path = self._normalize_path(path)
-        if path not in self._dirs:
-            raise FileNotFoundError(f"Directory not found: {path}")
-        
-        entries = set()
-        
-        # Find all files and subdirs in this path
-        prefix = path if path == "/" else path + "/"
-        
-        for file_path in self._files:
-            if file_path.startswith(prefix):
-                remainder = file_path[len(prefix):]
-                if "/" not in remainder:
-                    entries.add(remainder)
-                else:
-                    entries.add(remainder.split("/")[0])
-        
-        for dir_path in self._dirs:
-            if dir_path.startswith(prefix) and dir_path != path:
-                remainder = dir_path[len(prefix):]
-                if "/" not in remainder:
-                    entries.add(remainder)
-                else:
-                    entries.add(remainder.split("/")[0])
-        
-        return sorted(entries)
+        if self.root_path:
+            real_path = self._get_real_path(path)
+            if not os.path.exists(real_path):
+                raise FileNotFoundError(f"Directory not found: {path}")
+            if not os.path.isdir(real_path):
+                raise NotADirectoryError(f"Not a directory: {path}")
+            return sorted(os.listdir(real_path))
+        else:
+            # Memory implementation
+            path = self._normalize_path(path)
+            if path not in self._dirs:
+                raise FileNotFoundError(f"Directory not found: {path}")
+            
+            entries = set()
+            prefix = path if path == "/" else path + "/"
+            
+            for file_path in self._files:
+                if file_path.startswith(prefix):
+                    remainder = file_path[len(prefix):]
+                    if "/" not in remainder:
+                        entries.add(remainder)
+                    else:
+                        entries.add(remainder.split("/")[0])
+            
+            for dir_path in self._dirs:
+                if dir_path.startswith(prefix) and dir_path != path:
+                    remainder = dir_path[len(prefix):]
+                    if "/" not in remainder:
+                        entries.add(remainder)
+                    else:
+                        entries.add(remainder.split("/")[0])
+            
+            return sorted(entries)
     
     def read(self, path: str) -> str:
-        path = self._normalize_path(path)
-        if path in self._dirs:
-            raise IsADirectoryError(f"Is a directory: {path}")
-        if path not in self._files:
-            raise FileNotFoundError(f"File not found: {path}")
-        
-        content = self._files[path].content
-        return content if isinstance(content, str) else content.decode()
+        if self.root_path:
+            real_path = self._get_real_path(path)
+            if os.path.isdir(real_path):
+                raise IsADirectoryError(f"Is a directory: {path}")
+            if not os.path.exists(real_path):
+                raise FileNotFoundError(f"File not found: {path}")
+            try:
+                with open(real_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except Exception as e:
+                raise FilesystemError(f"Read error: {e}")
+        else:
+            path = self._normalize_path(path)
+            if path in self._dirs:
+                raise IsADirectoryError(f"Is a directory: {path}")
+            if path not in self._files:
+                raise FileNotFoundError(f"File not found: {path}")
+            
+            content = self._files[path].content
+            return content if isinstance(content, str) else content.decode()
     
     def write(self, path: str, content: str, append: bool = False) -> bool:
-        path = self._normalize_path(path)
-        if path in self._dirs:
-            raise IsADirectoryError(f"Is a directory: {path}")
-        
-        # Ensure parent directory exists
-        parent = os.path.dirname(path)
-        if parent and parent != "/" and parent not in self._dirs:
-            self.mkdir(parent)
-        
-        if path in self._files and append:
-            existing = self._files[path].content
-            existing = existing if isinstance(existing, str) else existing.decode()
-            content = existing + content
-        
-        self._files[path] = VirtualFile(
-            name=os.path.basename(path),
-            content=content
-        )
-        return True
+        if self.root_path:
+            real_path = self._get_real_path(path)
+            if os.path.isdir(real_path):
+                 raise IsADirectoryError(f"Is a directory: {path}")
+            
+            mode = 'a' if append else 'w'
+            try:
+                os.makedirs(os.path.dirname(real_path), exist_ok=True)
+                with open(real_path, mode, encoding='utf-8') as f:
+                    f.write(content)
+                return True
+            except Exception as e:
+                raise FilesystemError(f"Write error: {e}")
+        else:
+            path = self._normalize_path(path)
+            if path in self._dirs:
+                raise IsADirectoryError(f"Is a directory: {path}")
+            
+            # Ensure parent directory exists
+            parent = os.path.dirname(path)
+            if parent and parent != "/" and parent not in self._dirs:
+                self.mkdir(parent)
+            
+            if path in self._files and append:
+                existing = self._files[path].content
+                existing = existing if isinstance(existing, str) else existing.decode()
+                content = existing + content
+            
+            self._files[path] = VirtualFile(
+                name=os.path.basename(path),
+                content=content
+            )
+            return True
     
     def getattr(self, path: str) -> FileAttributes:
-        path = self._normalize_path(path)
-        
-        if path in self._dirs:
-            return self._dirs[path].attributes
-        if path in self._files:
-            return self._files[path].attributes
-        
-        raise FileNotFoundError(f"Path not found: {path}")
+        if self.root_path:
+            real_path = self._get_real_path(path)
+            if not os.path.exists(real_path):
+                 if path == "" or path == "/": # Root always exists
+                     return FileAttributes(mode=0o755, file_type=FileType.DIRECTORY)
+                 raise FileNotFoundError(f"Path not found: {path}")
+            
+            stat = os.stat(real_path)
+            ftype = FileType.DIRECTORY if os.path.isdir(real_path) else FileType.FILE
+            mode = 0o755 if ftype == FileType.DIRECTORY else 0o644
+            
+            return FileAttributes(
+                mode=mode,
+                file_type=ftype,
+                size=stat.st_size,
+                mtime=stat.st_mtime
+            )
+        else:
+            path = self._normalize_path(path)
+            
+            if path in self._dirs:
+                return self._dirs[path].attributes
+            if path in self._files:
+                return self._files[path].attributes
+            
+            raise FileNotFoundError(f"Path not found: {path}")
     
     def mkdir(self, path: str) -> bool:
-        path = self._normalize_path(path)
-        if path in self._dirs:
-            raise FileExistsError(f"Directory exists: {path}")
-        if path in self._files:
-            raise FileExistsError(f"File exists at path: {path}")
-        
-        # Create parent directories recursively
-        parent = os.path.dirname(path)
-        if parent and parent != "/" and parent not in self._dirs:
-            self.mkdir(parent)
-        
-        self._dirs[path] = VirtualDirectory(name=os.path.basename(path))
-        return True
+        if self.root_path:
+            real_path = self._get_real_path(path)
+            try:
+                os.makedirs(real_path, exist_ok=True)
+                return True
+            except Exception as e:
+                raise FilesystemError(f"Mkdir error: {e}")
+        else:
+            path = self._normalize_path(path)
+            if path in self._dirs:
+                raise FileExistsError(f"Directory exists: {path}")
+            if path in self._files:
+                raise FileExistsError(f"File exists at path: {path}")
+            
+            # Create parent directories recursively
+            parent = os.path.dirname(path)
+            if parent and parent != "/" and parent not in self._dirs:
+                self.mkdir(parent)
+            
+            self._dirs[path] = VirtualDirectory(name=os.path.basename(path))
+            return True
     
     def remove(self, path: str) -> bool:
-        path = self._normalize_path(path)
-        if path in self._dirs:
-            raise IsADirectoryError(f"Is a directory: {path}")
-        if path not in self._files:
-            raise FileNotFoundError(f"File not found: {path}")
-        
-        del self._files[path]
-        return True
+        if self.root_path:
+             real_path = self._get_real_path(path)
+             if os.path.isdir(real_path):
+                 raise IsADirectoryError(f"Is a directory: {path}")
+             try:
+                 os.remove(real_path)
+                 return True
+             except FileNotFoundError:
+                 raise FileNotFoundError(f"File not found: {path}")
+             except Exception as e:
+                 raise FilesystemError(f"Remove error: {e}")
+        else:
+            path = self._normalize_path(path)
+            if path in self._dirs:
+                raise IsADirectoryError(f"Is a directory: {path}")
+            if path not in self._files:
+                raise FileNotFoundError(f"File not found: {path}")
+            
+            del self._files[path]
+            return True
     
     def rmdir(self, path: str) -> bool:
-        path = self._normalize_path(path)
-        if path not in self._dirs:
-            raise FileNotFoundError(f"Directory not found: {path}")
-        if path in self._files:
-            raise NotADirectoryError(f"Not a directory: {path}")
-        
-        # Check if empty
-        contents = self.readdir(path)
-        if contents:
-            raise PermissionError(f"Directory not empty: {path}")
-        
-        del self._dirs[path]
-        return True
+        if self.root_path:
+            real_path = self._get_real_path(path)
+            if not os.path.isdir(real_path):
+                raise NotADirectoryError(f"Not a directory: {path}")
+            try:
+                os.rmdir(real_path)
+                return True
+            except OSError:
+                 raise PermissionError(f"Directory not empty: {path}")
+        else:
+            path = self._normalize_path(path)
+            if path not in self._dirs:
+                raise FileNotFoundError(f"Directory not found: {path}")
+            if path in self._files:
+                raise NotADirectoryError(f"Not a directory: {path}")
+            
+            # Check if empty
+            if self.readdir(path):
+                raise PermissionError(f"Directory not empty: {path}")
+            
+            del self._dirs[path]
+            return True

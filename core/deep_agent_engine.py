@@ -153,7 +153,8 @@ class DeepAgentEngine:
         # We initialize it if components are available
         # It defaults to dormant unless enabled via flag or dynamically
         self.fuse_harness = None
-        if os.getenv("ENABLE_FUSE_HARNESS", "false").lower() == "true": # Feature flag for now
+        # Defaulting to true as per user directive to switch to FUSE system
+        if os.getenv("ENABLE_FUSE_HARNESS", "true").lower() == "true": 
             self.fuse_harness = FuseAgentHarness(
                 tool_registry=tool_registry,
                 memory_manager=memory_manager,

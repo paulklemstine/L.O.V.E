@@ -8,6 +8,7 @@ Provides the `bash` tool for agents to interact with the environment.
 
 import logging
 import asyncio
+import os
 from typing import Dict, Any, List, Optional, Callable
 
 from core.fuse.virtual_filesystem import VirtualFilesystem
@@ -37,6 +38,7 @@ class FuseAgentHarness:
         knowledge_base=None,
         social_manager=None,
         love_state: Dict = None,
+        scratch_path: Optional[str] = None
     ):
         """
         Initialize the harness.
@@ -47,8 +49,12 @@ class FuseAgentHarness:
             knowledge_base: The knowledge base
             social_manager: The social media manager (e.g. Bluesky)
             love_state: Global state dictionary
+            scratch_path: Optional path for persistent scratch storage
         """
-        self.vfs = VirtualFilesystem()
+        if scratch_path is None:
+             scratch_path = os.getenv("FS_SCRATCH_PATH")
+             
+        self.vfs = VirtualFilesystem(scratch_path=scratch_path)
         self.shell = ShellExecutor(self.vfs)
         
         # Mount adapters if components are available

@@ -5,17 +5,19 @@ import os
 from typing import Tuple, List
 
 class DockerSandbox:
-    def __init__(self, image_name: str = "love_surgeon_sandbox", base_dir: str = None):
+    def __init__(self, image_name: str = "love_surgeon_sandbox", base_dir: str = None, scratch_dir: str = None):
         """
         Args:
             image_name: Name of the docker image to use/build.
             base_dir: Root directory of the project to mount. Defaults to current working directory.
+            scratch_dir: Path to scratch directory on host to mount at /scratch.
         """
         self.image_name = image_name
         # Default to the root of the repo (assuming we are running from root or finding it relative)
         # Ideally this should be passed in or reliably detected.
         # For now, we assume os.getcwd() is the project root if not specified.
         self.base_dir = base_dir if base_dir else os.getcwd()
+        self.scratch_dir = scratch_dir if scratch_dir else os.environ.get("FS_SCRATCH_PATH")
         
     def ensure_image_exists(self) -> None:
         """
@@ -103,6 +105,9 @@ class DockerSandbox:
             "-w", "/app",
         ]
         
+        if self.scratch_dir:
+            docker_cmd.extend(["-v", f"{self.scratch_dir}:/scratch"])
+
         if network_disabled:
             docker_cmd.extend(["--network", "none"])
             

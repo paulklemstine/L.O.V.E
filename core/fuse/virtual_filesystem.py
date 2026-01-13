@@ -40,12 +40,12 @@ class VirtualFilesystem:
         vfs.write("/tools/execute/invoke", '{"command": "ls -la"}')  # Invoke tool
     """
     
-    def __init__(self):
+    def __init__(self, scratch_path: Optional[str] = None):
         self._mounts: Dict[str, FilesystemAdapter] = {}
         self._mount_order: List[str] = []  # For proper path resolution
         
         # Always include scratch filesystem for working files
-        self._scratch = ScratchFilesystem("/scratch")
+        self._scratch = ScratchFilesystem("/scratch", root_path=scratch_path)
         self.mount("/scratch", self._scratch)
     
     def mount(self, mount_point: str, adapter: FilesystemAdapter) -> None:
