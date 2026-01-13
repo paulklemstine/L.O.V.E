@@ -65,6 +65,46 @@ WIDTH = 512  # Icon size
 HEIGHT = 512
 MODEL = "gptimage"  # Only model supporting transparency
 
+# Background removal threshold (0-255) - pixels darker than this become transparent
+BLACK_THRESHOLD = 30
+
+
+def remove_black_background(image: Image.Image, threshold: int = BLACK_THRESHOLD) -> Image.Image:
+    """
+    Remove black/dark background from an image and make it transparent.
+    
+    Uses color distance from pure black to determine which pixels to make transparent.
+    
+    Args:
+        image: PIL Image (will be converted to RGBA)
+        threshold: Pixels with RGB values all below this are made transparent (0-255)
+    
+    Returns:
+        RGBA image with black background removed
+    """
+    import numpy as np
+    
+    # Convert to RGBA
+    if image.mode != 'RGBA':
+        image = image.convert('RGBA')
+    
+    # Convert to numpy array
+    data = np.array(image)
+    
+    # Get RGB channels
+    r, g, b, a = data[:, :, 0], data[:, :, 1], data[:, :, 2], data[:, :, 3]
+    
+    # Find dark/black pixels (where all RGB values are below threshold)
+    # This catches pure black and near-black pixels
+    is_dark = (r < threshold) & (g < threshold) & (b < threshold)
+    
+    # Make dark pixels transparent
+    data[:, :, 3] = np.where(is_dark, 0, a)
+    
+    return Image.fromarray(data, 'RGBA')
+
+
+
 
 async def generate_transparent_logo(prompt: str, filename: str, api_key: str) -> bool:
     """
@@ -109,21 +149,29 @@ async def generate_transparent_logo(prompt: str, filename: str, api_key: str) ->
                     print(f"  ⚠ Converting to RGBA (was {image.mode})")
                     image = image.convert('RGBA')
                 
-                # Check for actual transparency
+                # Check for actual transparency BEFORE processing
                 alpha = image.split()[-1]
                 alpha_extrema = alpha.getextrema()
                 has_transparency = alpha_extrema[0] < 255
                 
                 if has_transparency:
-                    print(f"  ✓ Transparency verified (alpha range: {alpha_extrema})")
+                    print(f"  ✓ API returned transparent image (alpha range: {alpha_extrema})")
                 else:
-                    print(f"  ⚠ No transparent pixels detected")
+                    print(f"  ⚠ No transparent pixels from API - applying background removal...")
+                    # Remove black background post-processing
+                    image = remove_black_background(image)
+                    
+                    # Re-check transparency
+                    alpha = image.split()[-1]
+                    alpha_extrema = alpha.getextrema()
+                    print(f"  ✓ Background removed (new alpha range: {alpha_extrema})")
                 
                 # Save as PNG to preserve transparency
                 output_path = os.path.join(LOGOS_DIR, filename)
                 image.save(output_path, "PNG")
                 print(f"  ✓ Saved: {output_path} ({os.path.getsize(output_path):,} bytes)")
                 return True
+
                 
     except asyncio.TimeoutError:
         print(f"  ✗ Timeout generating {filename}")
