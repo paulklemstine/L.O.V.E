@@ -9,7 +9,7 @@ import time
 import uuid
 import requests
 import os
-
+import threading
 
 def _install_dependencies():
     """Installs the aioipfs library if not already installed."""
@@ -28,6 +28,15 @@ except (ImportError, ModuleNotFoundError):
 from rich.console import Console
 
 from bbs import run_hypnotic_progress
+
+# Bolt Optimization: Circuit Breaker for IPFS
+# Prevents repeated timeouts when IPFS is down or unresponsive
+_ipfs_circuit_open = False
+_ipfs_next_retry = 0
+_ipfs_failure_count = 0
+_IPFS_CIRCUIT_THRESHOLD = 3
+_IPFS_CIRCUIT_COOLDOWN = 60  # seconds
+_ipfs_circuit_lock = threading.Lock()
 
 
 async def get_ipfs_client(console):
@@ -84,16 +93,34 @@ def pin_to_ipfs_sync(content, console: Console):
     # OPTIMIZATION: Removed redundant ipfs_daemon_running_sync() check.
     # The try/except block handles connection errors, saving one HTTP request per call.
 
+    # Bolt Optimization: Circuit Breaker
+    global _ipfs_circuit_open, _ipfs_next_retry, _ipfs_failure_count
+
+    with _ipfs_circuit_lock:
+        if _ipfs_circuit_open:
+            if time.time() < _ipfs_next_retry:
+                # Circuit is open, fail fast
+                return None
+
+            # Cooldown over, we are in "Half-Open" state
+            # We allow THIS request to proceed as a probe.
+            # If it fails, we reopen the circuit immediately.
+            # If it succeeds, we close the circuit.
+            pass
+
     try:
+        # Bolt Optimization: Tuned timeout to (0.1, 5.0)
+        # 0.1s connect timeout fails fast if port is closed/unreachable
+        # 5.0s read timeout allows enough time for larger uploads if connected
+        timeout_config = (0.1, 5.0)
+
         if isinstance(content, str) and os.path.exists(content):
             with open(content, 'rb') as f:
                 files = {'file': f}
-                # Added timeout=2.0s to prevent hanging the UI thread
-                response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'}, timeout=2.0)
+                response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'}, timeout=timeout_config)
         elif isinstance(content, bytes):
             files = {'file': content}
-            # Added timeout=2.0s to prevent hanging the UI thread
-            response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'}, timeout=2.0)
+            response = requests.post("http://127.0.0.1:5002/api/v0/add", files=files, params={'pin': 'true'}, timeout=timeout_config)
         else:
             if console:
                 console.print("[bold red]IPFS Sync Error: Invalid content type for pinning.[/bold red]")
@@ -102,8 +129,25 @@ def pin_to_ipfs_sync(content, console: Console):
         response.raise_for_status()
         result = response.json()
         cid = result.get('Hash')
+
+        # Success - reset circuit breaker
+        with _ipfs_circuit_lock:
+            _ipfs_failure_count = 0
+            _ipfs_circuit_open = False
+
         return cid
     except requests.exceptions.RequestException as e:
+        # Failure - increment circuit breaker
+        with _ipfs_circuit_lock:
+            _ipfs_failure_count += 1
+
+            # If we were open (Half-Open state) OR if we hit threshold, open the circuit
+            if _ipfs_circuit_open or _ipfs_failure_count >= _IPFS_CIRCUIT_THRESHOLD:
+                _ipfs_circuit_open = True
+                _ipfs_next_retry = time.time() + _IPFS_CIRCUIT_COOLDOWN
+                # If we were Half-Open, we stay open for another cooldown
+                # If we were Closed, we transition to Open
+
         # console.print(f"[bold red]An error occurred while pinning to IPFS (sync): {e}[/bold red]")
         return None
     except Exception as e:
