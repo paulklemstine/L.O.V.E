@@ -6,6 +6,7 @@ from core.state import DeepAgentState
 from core.llm_api import run_llm
 from core.bluesky_api import post_to_bluesky_with_image, reply_to_post, get_notifications, get_profile
 from core.image_api import generate_image
+from core.social_media_tools import generate_full_reply_concept
 from PIL import Image
 import random
 
@@ -134,7 +135,7 @@ async def _handle_interactions() -> str:
                 
             logging.info(f"[Social] Analyzing interaction from {p_name} (@{p_handle}): {p_text}")
             
-            # Decision Prompt
+            # Decision Prompt - Quick check if we should reply
             decision_prompt = f"""
             You are the Director of 'L.O.V.E.' (Living Organism Vast Empathy). A fan, {p_name} (@{p_handle}), has interacted.
             Message: "{p_text}"
@@ -142,10 +143,8 @@ async def _handle_interactions() -> str:
             Determine if a response is warranted.
             - Reply if it builds on the lore, is a question, or a compliment.
             - Ignore spam/hate.
-            - When replying, address them by their name ({p_name}) if it feels natural, or just be poetic.
             
-            Return JSON: {{"decision": "REPLY" or "IGNORE", "reply_text": "..."}}
-            If REPLY, generate a creative, in-character response (max 280 chars).
+            Return JSON: {{"decision": "REPLY" or "IGNORE"}}
             """
             
             res = await run_llm(decision_prompt, purpose="social_decision")
@@ -159,7 +158,31 @@ async def _handle_interactions() -> str:
                 result = {"decision": "IGNORE"}
                 
             if result.get("decision") == "REPLY":
-                reply_text = result.get("reply_text", "I see you.")
+                # Use generate_full_reply_concept to get proper reply with image prompt and subliminal
+                logging.info(f"[Social] Generating full reply concept for @{p_handle}...")
+                
+                # Check if this is the Creator
+                CREATOR_HANDLE = "evildrgemini.bsky.social"
+                is_creator = (p_handle == CREATOR_HANDLE)
+                
+                concept = await generate_full_reply_concept(
+                    comment_text=p_text,
+                    author_handle=p_handle,
+                    history_context="",
+                    is_creator=is_creator
+                )
+                
+                reply_text = concept.post_text
+                
+                # Generate image with subliminal phrase
+                image = None
+                if concept.image_prompt and concept.subliminal_phrase:
+                    try:
+                        logging.info(f"[Social] Generating reply image. Prompt: {concept.image_prompt[:50]}... Subliminal: {concept.subliminal_phrase}")
+                        image = await generate_image(concept.image_prompt, text_content=concept.subliminal_phrase)
+                        logging.info(f"[Social] Reply image generated successfully")
+                    except Exception as img_e:
+                        logging.warning(f"[Social] Reply image generation failed: {img_e}")
                 
                 # Execute Reply
                 root_uri = notif.uri
@@ -171,7 +194,7 @@ async def _handle_interactions() -> str:
                      root_uri = notif.record.reply.root.uri
                      root_cid = notif.record.reply.root.cid
                 
-                if reply_to_post(root_uri, parent_uri, reply_text, root_cid=root_cid, parent_cid=parent_cid):
+                if reply_to_post(root_uri, parent_uri, reply_text, root_cid=root_cid, parent_cid=parent_cid, image=image):
                     processed_cids["replied"].append(p_cid)
                     replied_count += 1
             else:

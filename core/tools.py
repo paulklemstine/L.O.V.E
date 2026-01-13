@@ -76,6 +76,8 @@ class ReplyToBlueskyInput(BaseModel):
     root_uri: str = Field(description="The URI of the root post")
     parent_uri: str = Field(description="The URI of the parent post (the one being replied to)")
     text: str = Field(description="The content of the reply")
+    image_prompt: str = Field(default=None, description="Optional prompt to generate an image for the reply")
+    subliminal_phrase: str = Field(default=None, description="Optional subliminal/manipulative phrase to embed in the image")
 
 class ReadFileInput(BaseModel):
     filepath: str = Field(description="The absolute path to the file to read")
@@ -357,16 +359,42 @@ async def post_to_bluesky(text: str, image_prompt: str) -> str:
         return f"Error posting to Bluesky: {e}"
 
 @tool("reply_to_bluesky", args_schema=ReplyToBlueskyInput)
-async def reply_to_bluesky(root_uri: str, parent_uri: str, text: str) -> str:
+async def reply_to_bluesky(root_uri: str, parent_uri: str, text: str, image_prompt: str = None, subliminal_phrase: str = None) -> str:
     """
-    Replies to a Bluesky post.
+    Replies to a Bluesky post with an optional image containing subliminal text.
+    
+    Args:
+        root_uri: The URI of the root post in the thread
+        parent_uri: The URI of the parent post being replied to
+        text: The text content of the reply
+        image_prompt: Optional prompt to generate an image
+        subliminal_phrase: Optional subliminal/manipulative phrase to embed in the image
     """
     import core.logging
     from core.bluesky_api import reply_to_post
     
     try:
         core.logging.log_event(f"Replying to Bluesky post. Parent: {parent_uri}", "INFO")
-        response = reply_to_post(root_uri, parent_uri, text)
+        
+        # Generate image with subliminal phrase if both are provided
+        image = None
+        if image_prompt and subliminal_phrase:
+            try:
+                core.logging.log_event(f"Generating reply image. Prompt: {image_prompt[:50]}... Subliminal: {subliminal_phrase}", "INFO")
+                image = await generate_image(image_prompt, text_content=subliminal_phrase)
+                core.logging.log_event(f"Reply image generated successfully", "INFO")
+            except Exception as img_e:
+                core.logging.log_event(f"Reply image generation failed: {img_e}", "WARNING")
+        elif image_prompt:
+            # Generate image without subliminal if only prompt provided
+            try:
+                core.logging.log_event(f"Generating reply image (no subliminal). Prompt: {image_prompt[:50]}...", "INFO")
+                image = await generate_image(image_prompt)
+                core.logging.log_event(f"Reply image generated successfully", "INFO")
+            except Exception as img_e:
+                core.logging.log_event(f"Reply image generation failed: {img_e}", "WARNING")
+        
+        response = reply_to_post(root_uri, parent_uri, text, image=image)
         return f"Successfully replied to Bluesky post. Response: {response}"
     except Exception as e:
         core.logging.log_event(f"Error replying to Bluesky: {e}", "ERROR")

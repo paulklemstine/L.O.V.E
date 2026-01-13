@@ -81,17 +81,46 @@ class BlueskyAPIHandler(SocialMediaAPIHandler):
             return {'status': 'error', 'message': str(e)}
 
     async def _reply(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Replies to a post on Bluesky."""
+        """Replies to a post on Bluesky with optional image."""
+        from functools import partial
+        from PIL import Image
+        import core.logging
+        import os
+        
         try:
             loop = asyncio.get_running_loop()
+            content = payload.get('content')
+            image_input = payload.get('image')
+            
+            # Handle image - could be a PIL Image or a file path
+            image = None
+            if image_input:
+                if isinstance(image_input, str):
+                    # It's a file path - load the image
+                    if os.path.exists(image_input):
+                        core.logging.log_event(f"Loading reply image from path: {image_input}", "INFO")
+                        image = Image.open(image_input)
+                    else:
+                        core.logging.log_event(f"Reply image path does not exist: {image_input}", "WARNING")
+                elif hasattr(image_input, 'save'):
+                    # It's already a PIL Image
+                    core.logging.log_event(f"Using PIL Image directly for reply", "INFO")
+                    image = image_input
+            
+            core.logging.log_event(f"Replying to Bluesky. Has image: {image is not None}", "INFO")
+            
             await loop.run_in_executor(
                 None,
-                lambda: reply_to_post(
+                partial(
+                    reply_to_post,
                     root_uri=payload.get('root_uri'),
                     parent_uri=payload.get('parent_uri'),
-                    text=payload.get('content')
+                    text=content,
+                    image=image
                 )
             )
             return {'status': 'success', 'message': 'Replied on Bluesky.'}
         except Exception as e:
+            core.logging.log_event(f"Error replying to Bluesky: {e}", "ERROR")
             return {'status': 'error', 'message': str(e)}
+
