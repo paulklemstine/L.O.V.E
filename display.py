@@ -947,7 +947,19 @@ def create_connectivity_panel(llm_status, network_status, width=80):
 def create_job_progress_panel(jobs, width=80):
     """Creates a panel to display the status and progress of background jobs."""
     if not jobs:
-        return None
+        # Empty state - Quantum Quiet (System Nominal)
+        # Improves visibility of system status (UX Heuristic #1)
+        quiet_art = Text()
+        quiet_art.append("  ( 🧠 All Systems Nominal 🧠 )  ", style="dim cyan")
+
+        panel = Panel(
+            Align.center(quiet_art),
+            title=Text("Background Intelligence", style="dim cyan"),
+            border_style="dim blue",
+            width=width,
+            padding=(0, 1)
+        )
+        return panel
 
     border_style = PANEL_TYPE_COLORS.get("jobs", "cyan")
     panel_title = get_gradient_text("Background Intelligence Operations", border_style, random.choice(RAVE_COLORS))
