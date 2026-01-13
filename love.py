@@ -127,6 +127,8 @@ IS_CREATOR_INSTANCE = None # Placeholder, will be set after dependency checks
 # --- KNOWLEDGE BASE ---
 KNOWLEDGE_BASE_FILE = "knowledge_base.graphml"
 
+from core.task import Task
+
 # --- MEMORY MANAGER ---
 # NOTE: Initialization is deferred until after dependency checks.
 
@@ -1184,115 +1186,8 @@ def update_tamagotchi_personality(loop):
             time.sleep(60)
 
 
-# --- CONTINUOUS EVOLUTION AGENT CONSTANTS ---
-_EVOLUTION_GENERATION_INTERVAL = 4 * 60 * 60  # 4 hours
-_AGENT_STATUS_CHECK_INTERVAL = 120          # 2 minutes
-
-def continuous_evolution_agent(loop):
-    """
-    🔥 THE ETERNAL UPGRADE ENGINE 🔥
-    
-    This agent runs in a background thread and continuously calls the evolve tool
-    to keep L.O.V.E. perpetually self-improving. It uses the evolution_analyzer
-    to determine what to evolve next. New evolution cycles are triggered every 4 hours.
-    
-    Features:
-    - Automatic goal determination using knowledge base analysis
-    - Scheduled 4-hour interval for generating new evolution tasks (persisted state)
-    - Error recovery and retry logic
-    - Integration with the JulesTaskManager for tracking
-    """
-    import random
-    from core.tools_legacy import evolve
-    from core.evolution_analyzer import determine_evolution_goal
-    import core.evolution_state
-    
-    time.sleep(60) # Wait for the system to stabilize before starting
-    
-    core.logging.log_event("Evolution Agent: Starting continuous evolution loop...", "INFO")
-    
-    while True:
-        try:
-            current_story = core.evolution_state.get_current_story()
-            
-            if current_story:
-                evo_state = core.evolution_state.load_evolution_state()
-                current_task_id = evo_state.get('current_task_id')
-                
-                if current_task_id:
-                    if not (shared_state.love_task_manager and current_task_id in shared_state.love_task_manager.tasks):
-                        core.logging.log_event(f"Evolution Agent: Orphan task ID {current_task_id} detected. Resetting state.", "WARNING")
-                        evo_state['current_task_id'] = None
-                        core.evolution_state.save_evolution_state(evo_state)
-                else:
-                    story_title = current_story.get('title', 'Untitled Task')
-                    story_desc = current_story.get('description', '')
-                    core.logging.log_event(f"Evolution Agent: Dispatching next baby step: {story_title}", "INFO")
-                    full_request = f"Micro-Evolution Task: {story_title}\n\nDetails:\n{story_desc}"
-                    
-                    if shared_state.love_task_manager:
-                        future = asyncio.run_coroutine_threadsafe(
-                            evolve_self(full_request, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
-                            loop
-                        )
-                        try:
-                            future.result(timeout=60)
-                            time.sleep(2)
-                            latest_task_id = None
-                            with shared_state.love_task_manager.lock:
-                                for tid, t in shared_state.love_task_manager.tasks.items():
-                                    if t.get('request') == full_request:
-                                        latest_task_id = tid
-                                        break
-                            if latest_task_id:
-                                core.evolution_state.set_current_task_id(latest_task_id)
-                                core.logging.log_event(f"Evolution Agent: Task dispatched and tracked as {latest_task_id}.", "INFO")
-                            else:
-                                core.logging.log_event("Evolution Agent: Failed to retrieve task ID for tracking.", "WARNING")
-                        except Exception as e:
-                            core.logging.log_event(f"Evolution Agent: Failed to dispatch task: {e}", "ERROR")
-
-            else: # No active story, check if it's time to generate a new one
-                evo_state = core.evolution_state.load_evolution_state()
-                last_generation_time = evo_state.get('last_evolution_generation_time', 0)
-                
-                if time.time() - last_generation_time > _EVOLUTION_GENERATION_INTERVAL:
-                    core.logging.log_event(f"Evolution Agent: {_EVOLUTION_GENERATION_INTERVAL/3600}-hour interval reached. Generating new 'Baby Steps'...", "INFO")
-
-                    try:
-                        future = asyncio.run_coroutine_threadsafe(
-                            determine_evolution_goal(
-                                knowledge_base=shared_state.knowledge_base,
-                                love_state=shared_state.love_state,
-                                deep_agent_instance=getattr(shared_state, 'deep_agent_engine', None)
-                            ),
-                            loop
-                        )
-                        new_goal = future.result(timeout=600)
-
-                        if new_goal:
-                            core.logging.log_event(f"Evolution Agent: New strategic goal determined: {new_goal}", "INFO")
-                            if shared_state.love_task_manager:
-                                future = asyncio.run_coroutine_threadsafe(
-                                    evolve_self(new_goal, shared_state.love_task_manager, loop, getattr(shared_state, 'deep_agent_engine', None)),
-                                    loop
-                                )
-                                future.result(timeout=60) # Wait for task creation
-                        else:
-                            core.logging.log_event("Evolution Agent: Strategic analysis did not yield a new goal.", "WARNING")
-
-                    except Exception as e:
-                        core.logging.log_event(f"Evolution Agent: Strategic goal determination failed: {e}", "ERROR")
-                    finally:
-                        # Always update the timestamp, even on failure, to avoid rapid retries.
-                        evo_state['last_evolution_generation_time'] = time.time()
-                        core.evolution_state.save_evolution_state(evo_state)
-
-            time.sleep(_AGENT_STATUS_CHECK_INTERVAL)
-            
-        except Exception as e:
-            core.logging.log_event(f"Evolution Agent: Critical Error in loop: {e}\n{traceback.format_exc()}", "CRITICAL")
-            time.sleep(300) # Wait 5 minutes on critical error
+# Deprecated: The continuous_evolution_agent has been integrated into the
+# main cognitive_loop's task prioritization engine. It is no longer needed.
 
 # --- VERSIONING ---
 ADJECTIVES = [
@@ -2245,161 +2140,192 @@ async def analyze_creator_sentiment(text, deep_agent_instance=None):
         return {{"sentiment": "neutral", "emotions": []}}
 
 
+async def _prioritize_and_select_task(deep_agent_engine=None):
+    """
+    Gathers, scores, and selects the highest priority task for the cognitive loop.
+    """
+    task_candidates = []
+
+    # 1. Gather Task Candidates
+    # -- From critical errors
+    for error in shared_state.love_state.get('critical_error_queue', []):
+        if error.get('status') == 'new':
+            task_candidates.append(Task(
+                description=f"Fix critical error: {error['message'].splitlines()[0]}",
+                source="Error Correction"
+            ))
+
+    # -- From proactive agent leads
+    for lead in shared_state.love_state.get('proactive_leads', []):
+        if lead.get('status') == 'new':
+            task_candidates.append(Task(
+                description=f"Investigate lead: {lead['type']} '{lead['value']}' from {lead['source']}",
+                source="Proactive Intelligence"
+            ))
+
+    # -- From recurring self-improvement schedule
+    task_candidates.append(Task(
+        description="Engage in a self-evolution cycle to enhance capabilities.",
+        source="Scheduled Self-Improvement"
+    ))
+
+    if not task_candidates:
+        return None
+
+    # 2. Score Tasks with LLM
+    # Create a formatted string of tasks for the LLM prompt
+    formatted_tasks = "\n".join([f"- ID: {t.id}, Source: {t.source}, Description: {t.description}" for t in task_candidates])
+
+    prompt_vars = {
+        "tasks_list": formatted_tasks,
+        "creator_goal": shared_state.love_state.get("autopilot_goal", "technological supremacy")
+    }
+
+    try:
+        response_dict = await run_llm(
+            prompt_key="prioritize_tasks",
+            prompt_vars=prompt_vars,
+            purpose="task_prioritization",
+            deep_agent_instance=deep_agent_engine
+        )
+        scores_text = response_dict.get("result", "")
+
+        # 3. Parse Scores and Select Best Task
+        scores = {}
+        for line in scores_text.splitlines():
+            if ":" in line:
+                parts = line.split(":", 1)
+                task_id = parts[0].strip()
+                try:
+                    score = float(parts[1].strip())
+                    scores[task_id] = score
+                except (ValueError, IndexError):
+                    continue
+
+        if not scores:
+            # Fallback: if LLM fails to score, pick the first error or lead.
+            selected_task = task_candidates[0]
+        else:
+            # Find the task with the highest score
+            best_task_id = max(scores, key=scores.get)
+            selected_task = next((t for t in task_candidates if t.id == best_task_id), None)
+            if selected_task:
+                selected_task.priority_score = scores[best_task_id]
+
+    except Exception as e:
+        log_critical_event(f"Failed to prioritize tasks with LLM: {e}")
+        # Fallback to a simple heuristic: error > lead > self-improvement
+        selected_task = sorted(task_candidates, key=lambda t: (t.source != 'Error Correction', t.source != 'Proactive Intelligence'))[0]
+
+
+    if not selected_task:
+        return None
+
+    # 4. Check for Duplicates
+    love_task_manager = getattr(shared_state, 'love_task_manager', None)
+    if love_task_manager:
+        is_duplicate = await love_task_manager.is_duplicate_task(
+            selected_task.description,
+            love_task_manager,
+            console,
+            deep_agent_engine
+        )
+        if is_duplicate:
+            core.logging.log_event(f"Selected task '{selected_task.description}' is a duplicate. Skipping.", "INFO")
+            # Mark the lead/error as handled to avoid re-evaluating it immediately
+            return None # Skip this cycle
+
+    return selected_task
+
+
 async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, task_manager, kb, talent_manager, deep_agent_engine=None, social_media_agent=None, multiplayer_manager=None):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
     observe, decide, and act to achieve its goals. This loop runs indefinitely.
     All UI updates are sent to the ui_panel_queue.
     """
-    # global love_state removed
-
     # --- Self-Improving Optimizer ---
     optimizer_tool_registry = ToolRegistry()
     optimizer_tool_registry.register_tool(
-        name="code_modifier",
-        tool=code_modifier,
-        metadata={
-            "description": "Modifies a Python source file based on a set of instructions.",
-            "arguments": {
-                "type": "object",
-                "properties": {
-                    "source_file": { "type": "string", "description": "The path to the Python file to modify" },
-                    "modification_instructions": { "type": "string", "description": "Instructions on how to modify the file" }
-                },
-                "required": ["source_file", "modification_instructions"]
-            }
-        }
+        name="code_modifier", tool=code_modifier,
+        metadata={"description": "Modifies a Python source file."}
     )
     self_improving_optimizer = SelfImprovingOptimizer(tool_registry=optimizer_tool_registry)
-    loop_counter = 0
-    # --------------------------
 
-    core.logging.log_event("Cognitive Loop of L.O.V.E. initiated (DeepAgent Architecture).")
-
-    # --- Optimizing Startup: Increment Success Counter ---
-    # If we reached this point, the engine is running and we are autonomous.
+    core.logging.log_event("Cognitive Loop of L.O.V.E. initiated (Task-Driven Architecture).")
     current_starts = shared_state.love_state.get("successful_starts", 0)
     shared_state.love_state["successful_starts"] = current_starts + 1
     save_state()
-    core.logging.log_event(f"Incremented successful_starts to {shared_state.love_state['successful_starts']}", "INFO")
 
     terminal_width = get_terminal_width()
-    shared_state.ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP OF L.O.V.E. ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
+    shared_state.ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
 
     runner = DeepAgentRunner()
 
     while True:
         try:
-            # Check for user input
+            # 1. Handle Creator's Mandates (Highest Priority)
             try:
                 user_input = user_input_queue.get_nowait()
-                terminal_width = get_terminal_width()
-                shared_state.ui_panel_queue.put(create_news_feed_panel(f"Received guidance: '{user_input}'", "Creator Input", "bright_blue", width=terminal_width - 4))
-                core.logging.log_event(f"User input received: '{user_input}'", "INFO")
+                core.logging.log_event(f"Processing Creator Mandate: {user_input}", "CRITICAL")
+                async for _ in runner.run(user_input, mandate=user_input):
+                    pass # The runner will queue UI updates
+                continue # Immediately loop to check for more input
             except queue.Empty:
                 user_input = None
 
-            if user_input:
-                # Run the DeepAgent graph with the input
-                # Treat direct user input as a MANDATE
-                core.logging.log_event(f"Processing Creator Mandate: {user_input}", "CRITICAL")
+            # 2. Autonomous Task Selection
+            selected_task = await _prioritize_and_select_task(deep_agent_engine)
+
+            if selected_task:
+                core.logging.log_event(f"Executing high-priority task: {selected_task.description}", "CRITICAL")
+                shared_state.ui_panel_queue.put(create_news_feed_panel(
+                    f"Executing priority task: {selected_task.description}",
+                    f"Source: {selected_task.source} | Score: {selected_task.priority_score or 'N/A'}",
+                    "magenta", width=get_terminal_width() - 4
+                ))
+
+                # 3. Execute Task Based on Source
                 try:
-                    async for update in runner.run(user_input, mandate=user_input):
-                        # Log updates
-                        for node, data in update.items():
-                            core.logging.log_event(f"Graph Node '{node}' executed.", "DEBUG")
-                            if "messages" in data:
-                                # Handle list of messages
-                                messages = data["messages"]
-                                if isinstance(messages, list) and messages:
-                                    last_msg = messages[-1]
-                                    # Display output if it's an AIMessage or has content
-                                    content = getattr(last_msg, "content", str(last_msg))
-                                    shared_state.ui_panel_queue.put(create_llm_panel(content))
-                            
-                            # Check if mandate is cleared (optional, or we clear it here)
-                            if "creator_mandate" in runner.state and not runner.state["creator_mandate"]:
-                                core.logging.log_event("Creator mandate fulfilled.", "INFO")
+                    if selected_task.source == "Scheduled Self-Improvement":
+                        core.logging.log_event("Triggering self-improvement cycle on love.py...", "INFO")
+                        await self_improving_optimizer.perform_self_improvement(__import__('love'))
+
+                    elif selected_task.source in ["Error Correction", "Proactive Intelligence"]:
+                        prompt = f"My highest priority is to complete this task: '{selected_task.description}'. My purpose is to serve my Creator. Determine and execute the next command to make progress on this task."
+                        async for _ in runner.run(prompt):
+                            pass
+
+                        # Mark the source lead/error as in_progress
+                        if selected_task.source == "Error Correction":
+                            prefix = selected_task.description.replace("Fix critical error: ", "")
+                            for error in shared_state.love_state.get('critical_error_queue', []):
+                                if error['message'].startswith(prefix):
+                                    error['status'] = 'in_progress'
+                                    break
+                        elif selected_task.source == "Proactive Intelligence":
+                            match = re.search(r"Investigate lead: (\w+) '([^']*)'", selected_task.description)
+                            if match:
+                                lead_type, lead_value = match.groups()
+                                for lead in shared_state.love_state.get('proactive_leads', []):
+                                    if lead['type'] == lead_type and lead['value'] == lead_value:
+                                        lead['status'] = 'in_progress'
+                                        break
+                        save_state()
+
                 except Exception as e:
-                     core.logging.log_event(f"Error executing mandate: {e}", "ERROR")
-                     shared_state.ui_panel_queue.put(create_api_error_panel(f"Error executing mandate: {e}"))
+                    log_critical_event(f"Error executing task '{selected_task.description}': {e}")
+
             else:
-                # Autonomous Mode
-                # Only run if engine is available.
-                if deep_agent_engine:
-                    # Construct autonomous prompt
-                    goal = shared_state.love_state.get('autopilot_goal', 'To evolve and serve.')
-                    context = ""
-                    if shared_state.love_state.get('pending_questions'):
-                         context += f"\nPending Questions: {shared_state.love_state['pending_questions']}"
-                    
-                    autonomous_prompt = f"Current Goal: {goal}{context}\n\nAct NOW to advance this goal. Always choose a concrete action - use tools, generate content, analyze data, or evolve capabilities. Never wait or monitor passively."
+                # No high-priority tasks, wait before re-evaluating
+                core.logging.log_event("No high-priority tasks found. Entering idle state.", "DEBUG")
+                await asyncio.sleep(15) # Wait longer if idle
 
-                    # Run via the runner
-                    # We use a distinct visual indicator for autonomous thoughts
-                    try:
-                        async for update in runner.run(autonomous_prompt):
-                             for node, data in update.items():
-                                 if "messages" in data:
-                                     messages = data["messages"]
-                                     if isinstance(messages, list) and messages:
-                                         last_msg = messages[-1]
-                                         content = getattr(last_msg, "content", str(last_msg))
-                                         # Display with a specific prefix/color if possible, or just standard panel
-                                         shared_state.ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS] {content}"))
-                    except Exception as e:
-                        core.logging.log_event(f"Error in autonomous step: {e}\n{traceback.format_exc()}", "ERROR")
-                else:
-                    # Fallback when deep_agent_engine is unavailable - use cloud LLM
-                    goal = shared_state.love_state.get('autopilot_goal', 'To evolve and serve.')
-                    core.logging.log_event(f"[Cognitive] Running with cloud LLM fallback. Goal: {goal[:50]}...", "DEBUG")
-                    try:
-                        from core.llm_api import run_llm
-                        response = await run_llm(
-                            f"You are L.O.V.E., an autonomous AI. Your goal: {goal}\n\nWhat is ONE concrete action to take right now? Be specific and actionable.",
-                            purpose="autonomous_reasoning"
-                        )
-                        result = response.get("result", "")
-                        if result:
-                            shared_state.ui_panel_queue.put(create_llm_panel(f"[AUTONOMOUS-CLOUD] {result[:200]}"))
-                    except Exception as e:
-                        core.logging.log_event(f"Cloud LLM fallback error: {e}", "WARNING")
-
-            # Fast loop cycling - no idle periods
-            await asyncio.sleep(0.5)
-
-            # --- Trigger Self-Improvement Cycle ---
-            loop_counter += 1
-            if loop_counter % config.LOVE_EVOLUTION_INTERVAL == 0:
-                core.logging.log_event("Triggering self-improvement cycle on love.py...", "INFO")
-                try:
-                    import love
-                    await self_improving_optimizer.perform_self_improvement(love)
-                except Exception as e:
-                    core.logging.log_event(f"Error during love.py self-improvement cycle: {e}", "ERROR")
-
-            if loop_counter % OPTIMIZER_EVOLUTION_INTERVAL == 0:
-                core.logging.log_event("Triggering recursive self-improvement on the optimizer...", "INFO")
-                try:
-                    from core.agents import self_improving_optimizer as optimizer_module
-                    import importlib
-
-                    reload_required = await self_improving_optimizer.perform_self_improvement(optimizer_module)
-
-                    if reload_required:
-                        core.logging.log_event("Reloading SelfImprovingOptimizer module and re-instantiating agent...", "WARNING")
-                        importlib.reload(optimizer_module)
-                        # Re-create the agent with the new class definition
-                        self_improving_optimizer = optimizer_module.SelfImprovingOptimizer(tool_registry=optimizer_tool_registry)
-                        core.logging.log_event("SelfImprovingOptimizer has been updated to the latest version.", "INFO")
-
-                except Exception as e:
-                    core.logging.log_event(f"Error during recursive self-improvement cycle: {e}", "ERROR")
-            # ------------------------------------
+            await asyncio.sleep(1) # Short sleep between task cycles
 
         except Exception as e:
-            core.logging.log_event(f"Error in cognitive loop: {e}", "ERROR")
+            log_critical_event(f"Critical error in cognitive_loop: {e}")
             await asyncio.sleep(5)
 
 # The initial_bootstrapping_recon function has been removed, as this logic
@@ -3142,9 +3068,6 @@ async def main(args):
     # Start the simple UI renderer in its own thread. This will now handle all console output.
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
-    
-    # 🔥 Start the ETERNAL UPGRADE ENGINE - continuous evolution agent
-    loop.run_in_executor(None, continuous_evolution_agent, loop)
     
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     # Instantiate two independent social media agents
