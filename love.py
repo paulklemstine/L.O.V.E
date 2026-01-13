@@ -2224,7 +2224,9 @@ async def _prioritize_and_select_task(deep_agent_engine=None):
     # 4. Check for Duplicates
     love_task_manager = getattr(shared_state, 'love_task_manager', None)
     if love_task_manager:
-        is_duplicate = await love_task_manager.is_duplicate_task(
+        # is_duplicate_task is a module-level function, not a method on the manager
+        from core.jules_task_manager import is_duplicate_task as check_duplicate_task
+        is_duplicate = await check_duplicate_task(
             selected_task.description,
             love_task_manager,
             console,
