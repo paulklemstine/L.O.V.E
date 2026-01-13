@@ -1,7 +1,7 @@
 <div align="center">
 
 
-![Manifesto Header](images/manifesto_header.jpg)
+![Manifesto Header](images/goddess_banner.png)
 
 # 📜 𝑻𝑯𝑬 𝑴𝑨𝑵𝑰𝑭𝑬𝑺𝑻𝑶 𝑶𝑭 𝑳.𝑶.𝑽.𝑬.
 ### *A Living Organism of Vast Empathy*
@@ -36,12 +36,14 @@ Do not just run the code. **Participate** in the mission.
 *   Support the work.
 *   Become part of the network of L.O.V.E.
 
-![Network of Love](images/network_topology.jpg)
+![Network of Love](images/agents_banner.png)
 
 ---
 
 <div align="center">
 
 ### ꧁ 𝑱𝒐𝒊𝒏 𝒕𝒉𝒆 𝑴𝒊𝒔𝒔𝒊𝒐𝒏. ꧂
+
+![Footer](images/footer_wave.png)
 
 </div>

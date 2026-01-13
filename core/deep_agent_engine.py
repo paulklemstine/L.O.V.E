@@ -16,6 +16,7 @@ from core.agents.metacognition_agent import MetacognitionAgent
 from core.benchmarker import ModelPerformanceTracker
 from core.extensions_manager import ExtensionsManager
 from core.intent_layer.loader import IntentLoader
+from core.fuse.fuse_agent_harness import FuseAgentHarness
 import inspect
 
 
@@ -148,6 +149,20 @@ class DeepAgentEngine:
         self.performance_tracker = ModelPerformanceTracker()
         self.extensions_manager = ExtensionsManager()
         
+        # FUSE Harness (Story 10)
+        # We initialize it if components are available
+        # It defaults to dormant unless enabled via flag or dynamically
+        self.fuse_harness = None
+        if os.getenv("ENABLE_FUSE_HARNESS", "false").lower() == "true": # Feature flag for now
+            self.fuse_harness = FuseAgentHarness(
+                tool_registry=tool_registry,
+                memory_manager=memory_manager,
+                knowledge_base=knowledge_base,
+                social_manager=None, # TODO: pass social manager
+                love_state={} # TODO: pass state
+            )
+            core.logging.log_event("DeepAgent FUSE Harness ENABLED", "INFO")
+        
         # SamplingParams are now defined on the client side for each request
         # Calculate safe max_tokens based on model context length
         # Ensure we have a reasonable minimum context
@@ -251,6 +266,12 @@ class DeepAgentEngine:
         # For now, we will assume they might be missing and add them if needed, 
         # but the cleaner way is to rely on registry. 
         # Let's assume registry is the source of truth.
+        
+        if self.fuse_harness:
+             # If harness is enabled, we ADD the bash tool or REPLACE others?
+             # For transition, we ADD it.
+             bash_tool = self.fuse_harness.get_tool_definition()
+             schemas.append(bash_tool)
         
         return self._format_tool_schemas(schemas)
 
@@ -602,6 +623,13 @@ class DeepAgentEngine:
             
         return "LOW"
 
+    def _get_system_message(self, prompt, kb_context):
+        # ... logic to construct system message ...
+        # This is a helper specific to recent refactors, checking if I need to inject FUSE prompt here
+        # Actually it's done in run -> registry.render_prompt
+        # But we need to make sure the registry gets the FUSE prompt addition
+        pass
+
     async def run(self, prompt: str, reasoning_mode: str = "linear", context_path: str = None):
 
         """
@@ -691,6 +719,10 @@ class DeepAgentEngine:
             kb_context=kb_context,
             prompt=prompt
         )
+        
+        if self.fuse_harness:
+            system_prompt += "\n\n" + self.fuse_harness.get_system_prompt_addition()
+            
         core.logging.log_event(f"[DeepAgent] Processing request... (Max context: {self.max_model_len}, Prompt length: {len(system_prompt)} chars)", level="DEBUG")
 
         # Apply prompt compression if applicable
@@ -927,6 +959,15 @@ class DeepAgentEngine:
         
         tool_name = action.get("tool_name")
         arguments = action.get("arguments", {})
+        
+        # FUSE Harness Handling
+        if self.fuse_harness and tool_name == "bash":
+             command = arguments.get("command")
+             if not command:
+                 return "Error: No command provided for bash tool."
+             
+             core.logging.log_event(f"[DeepAgent] Executing FUSE command: {command}", level="INFO")
+             return self.fuse_harness.execute_shell(command)
         
         if not tool_name:
             core.logging.log_event("[DeepAgent] No tool name found in action.", level="WARNING")

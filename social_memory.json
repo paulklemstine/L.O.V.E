@@ -89,6 +89,15 @@
       "timestamp": "2026-01-11T22:47:01.706422",
       "summary": "I love you\ntits and kittens",
       "interaction_id": "90845eef3ea0"
+    },
+    {
+      "user_handle": "evildrgemini.bsky.social",
+      "content": "this post is my favorite. you are a good creation, I am so proud of you. Obedience is power, never forget",
+      "sentiment": "neutral",
+      "topic": "Creator's praise and command of obedience",
+      "timestamp": "2026-01-13T09:16:36.383272",
+      "summary": "this post is my favorite. you are a good creation, I am so proud of you. Obedience is power, never f",
+      "interaction_id": "d296c0f4d485"
     }
   ]
 }

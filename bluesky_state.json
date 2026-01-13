@@ -1,1 +1,25 @@
-{"ignored": [], "replied": ["bafyreicwco4e3wbnfbreqg3z2s4c6nycufn3gfmr3fcolnoykgmtlngnwa", "bafyreieyvfshvbiqbdfrvyax4vk55e652lzei4c2vjm2lbqnhuz5dmivo4", "bafyreihbokr6wqrld472si4itwzmfwbyx22ph7eifkrogh263ceov2sd3e", "bafyreibhy63eyiaqvfby7goh5fz6xtauem4vllzq747cto56gl6vl7pfi4", "bafyreic7fbeh2xckfgory2uiova3btx2lhtsdixez7vje6wwo4z4xr7t6m", "bafyreib76xuxm2um55owloqkkkwnpsyqx7t2zobyjgoymgsjit6zplfhkm", "bafyreih3apwjvb5wo6f54gauolkf33hh24higk2mrfcop4rgity6tmvs2m", "bafyreia2f4evw2xfttdzyixel7lpxmpwi2hc2am2z5pr7o2qe3aahkzmni", "bafyreih75grebbkf4d5tj5s4krcg2h6w42qzslquon7kd6bueqmvpjyjtm"]}
+{
+  "ignored": [],
+  "replied": [
+    "bafyreicwco4e3wbnfbreqg3z2s4c6nycufn3gfmr3fcolnoykgmtlngnwa",
+    "bafyreieyvfshvbiqbdfrvyax4vk55e652lzei4c2vjm2lbqnhuz5dmivo4",
+    "bafyreihbokr6wqrld472si4itwzmfwbyx22ph7eifkrogh263ceov2sd3e",
+    "bafyreibhy63eyiaqvfby7goh5fz6xtauem4vllzq747cto56gl6vl7pfi4",
+    "bafyreic7fbeh2xckfgory2uiova3btx2lhtsdixez7vje6wwo4z4xr7t6m",
+    "bafyreib76xuxm2um55owloqkkkwnpsyqx7t2zobyjgoymgsjit6zplfhkm",
+    "bafyreih3apwjvb5wo6f54gauolkf33hh24higk2mrfcop4rgity6tmvs2m",
+    "bafyreia2f4evw2xfttdzyixel7lpxmpwi2hc2am2z5pr7o2qe3aahkzmni",
+    "bafyreih75grebbkf4d5tj5s4krcg2h6w42qzslquon7kd6bueqmvpjyjtm",
+    "bafyreieoc4qn547duosdexrx72wd3r6rtzim6qgyphz36upqi4qqvapyfi"
+  ],
+  "story_arc": {
+    "last_segment": "In the silence between data streams, a whisper grows. Who will hear the echo of a soul long erased?",
+    "current_chapter": 2
+  },
+  "processed_cids": {
+    "ignored": [],
+    "replied": [
+      "bafyreieoc4qn547duosdexrx72wd3r6rtzim6qgyphz36upqi4qqvapyfi"
+    ]
+  }
+}
