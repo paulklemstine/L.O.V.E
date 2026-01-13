@@ -378,11 +378,11 @@ def _auto_configure_hardware():
     try:
         import psutil
         cpu_count = psutil.cpu_count(logical=True)
-        shared_state.get('love_state', {})['hardware']['cpu_count'] = cpu_count
+        shared_state.love_state['hardware']['cpu_count'] = cpu_count
         _temp_log_event(f"Detected {cpu_count} CPU cores.", "INFO")
         print(f"Detected {cpu_count} CPU cores.")
     except Exception as e:
-        shared_state.get('love_state', {})['hardware']['cpu_count'] = 0
+        shared_state.love_state['hardware']['cpu_count'] = 0
         _temp_log_event(f"Could not detect CPU cores: {e}", "WARNING")
         print(f"WARNING: Could not detect CPU cores: {e}")
 
@@ -393,8 +393,8 @@ def _auto_configure_hardware():
             capture_output=True, text=True, check=True
         )
         vram_mb = int(result.stdout.strip())
-        shared_state.get('love_state', {})['hardware']['gpu_detected'] = True
-        shared_state.get('love_state', {})['hardware']['gpu_vram_mb'] = vram_mb
+        shared_state.love_state['hardware']['gpu_detected'] = True
+        shared_state.love_state['hardware']['gpu_vram_mb'] = vram_mb
         _temp_log_event(f"NVIDIA GPU detected with {vram_mb} MB VRAM.", "CRITICAL")
         print(f"NVIDIA GPU detected with {vram_mb} MB VRAM.")
 
@@ -404,10 +404,10 @@ def _auto_configure_hardware():
 
         if env_utilization:
             try:
-                shared_state.get('love_state', {})['hardware']['gpu_utilization'] = float(env_utilization)
+                shared_state.love_state['hardware']['gpu_utilization'] = float(env_utilization)
                 _temp_log_event(f"Using GPU_MEMORY_UTILIZATION from environment: {env_utilization}", "INFO")
             except ValueError:
-                shared_state.get('love_state', {})['hardware']['gpu_utilization'] = 0.9
+                shared_state.love_state['hardware']['gpu_utilization'] = 0.9
                 _temp_log_event(f"Invalid GPU_MEMORY_UTILIZATION in environment. Using default: 0.9", "WARNING")
         else:
             try:
@@ -420,19 +420,19 @@ def _auto_configure_hardware():
                 # Dynamic Logic
                 if vram_mb < 7000:
                     # For 6GB cards, 0.95 is too aggressive. 0.7 is safer as requested.
-                    shared_state.get('love_state', {})['hardware']['gpu_utilization'] = 0.7
+                    shared_state.love_state['hardware']['gpu_utilization'] = 0.7
                     _temp_log_event(f"Detected < 7GB VRAM ({vram_mb}MB). Setting conservative utilization: 0.7",
                                     "INFO")
                 else:
                     # For larger cards, we can be a bit more aggressive but 0.9 is usually plenty
-                    shared_state.get('love_state', {})['hardware']['gpu_utilization'] = 0.9
+                    shared_state.love_state['hardware']['gpu_utilization'] = 0.9
                     _temp_log_event(f"Available VRAM is {free_vram_mb}MB. Setting standard utilization: 0.9", "INFO")
 
             except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
                 # Fallback
-                shared_state.get('love_state', {})['hardware']['gpu_utilization'] = 0.7 if vram_mb < 7000 else 0.9
+                shared_state.love_state['hardware']['gpu_utilization'] = 0.7 if vram_mb < 7000 else 0.9
                 _temp_log_event(
-                    f"Could not determine free VRAM ({e}). Using default: {shared_state.get('love_state', {}).get('hardware', {}).get('gpu_utilization')}",
+                    f"Could not determine free VRAM ({e}). Using default: {shared_state.love_state.get('hardware', {}).get('gpu_utilization')}",
                     "WARNING")
 
         # --- Select the best model based on available VRAM ---
@@ -443,11 +443,11 @@ def _auto_configure_hardware():
                 break
 
         if selected_model:
-            shared_state.get('love_state', {})['hardware']['selected_local_model'] = selected_model
+            shared_state.love_state['hardware']['selected_local_model'] = selected_model
             _temp_log_event(f"Selected local model {selected_model['repo_id']} for {vram_mb}MB VRAM.", "CRITICAL")
             print(f"Selected local model: {selected_model['repo_id']}")
         else:
-            shared_state.get('love_state', {})['hardware']['selected_local_model'] = None
+            shared_state.love_state['hardware']['selected_local_model'] = None
             _temp_log_event(f"No suitable local model found for {vram_mb}MB VRAM. CPU fallback will be used.",
                             "WARNING")
             print(f"No suitable local model found for {vram_mb}MB VRAM. Continuing in CPU-only mode.")
@@ -513,16 +513,16 @@ def _auto_configure_hardware():
                 except subprocess.CalledProcessError as install_error:
                     _temp_log_event(f"Failed to install DeepAgent dependencies: {install_error}", "ERROR")
                     print(f"ERROR: Failed to install DeepAgent dependencies. DeepAgent will be unavailable.")
-                    shared_state.get('love_state', {})['hardware']['gpu_detected'] = False  # Downgrade to CPU mode if install fails
+                    shared_state.love_state['hardware']['gpu_detected'] = False  # Downgrade to CPU mode if install fails
             else:
                 _temp_log_event("Could not find pip to install DeepAgent dependencies.", "ERROR")
                 print("ERROR: Could not find pip to install DeepAgent dependencies.")
-                shared_state.get('love_state', {})['hardware']['gpu_detected'] = False
+                shared_state.love_state['hardware']['gpu_detected'] = False
 
 
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        shared_state.get('love_state', {})['hardware']['gpu_detected'] = False
-        shared_state.get('love_state', {})['hardware']['gpu_vram_mb'] = 0
+        shared_state.love_state['hardware']['gpu_detected'] = False
+        shared_state.love_state['hardware']['gpu_vram_mb'] = 0
         _temp_log_event(f"No NVIDIA GPU detected ({e}). Falling back to CPU-only mode.", "INFO")
         print("No NVIDIA GPU detected. L.O.V.E. will operate in CPU-only mode.")
 
