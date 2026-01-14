@@ -118,7 +118,8 @@ class Sandbox:
 
         # 2. Pytest Suite
         self.console.print("[cyan]Running pytest suite in sandbox...[/cyan]")
-        test_cmd = ["python3", "-m", "pytest"]
+        # Exclude the integration lifecycle tests to prevent recursion/inception
+        test_cmd = ["python3", "-m", "pytest", "--ignore=tests/test_jules_lifecycle.py"]
         returncode, stdout, stderr = self._run_command(test_cmd, cwd=self.sandbox_path)
 
         if returncode == 0:

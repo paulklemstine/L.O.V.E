@@ -42,6 +42,11 @@ from display import WaitingAnimation
 from ui_utils import display_llm_interaction, display_error_oneliner
 import signal
 def graceful_shutdown(signum, frame):
+    # Safety check: Don't shut down if running in a pytest environment
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        Console().print(f"[bold yellow]Signal {signum} received, but ignoring due to active test environment.[/bold yellow]")
+        return
+
     Console().print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
 
     # Trigger the existing cleanup logic
@@ -58,8 +63,10 @@ def graceful_shutdown(signum, frame):
     sys.exit(0)
 
 # Register the signal in main or global scope (before main loop)
-signal.signal(signal.SIGTERM, graceful_shutdown)
-signal.signal(signal.SIGINT, graceful_shutdown) # Handle Ctrl+C same way
+# Skip signal registration if running under pytest to avoid SystemExit conflicts
+if "PYTEST_CURRENT_TEST" not in os.environ:
+    signal.signal(signal.SIGTERM, graceful_shutdown)
+    signal.signal(signal.SIGINT, graceful_shutdown) # Handle Ctrl+C same way
 
 _global_ui_queue = None
 def set_ui_queue(queue_instance):

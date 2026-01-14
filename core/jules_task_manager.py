@@ -350,6 +350,8 @@ class JulesTaskManager:
                 if session_resp.ok:
                     session_data = session_resp.json()
                     state = session_data.get("state", "").upper()
+                    # DEBUG: Print the raw session data to see what Jules is returning
+                    self.console.print(f"[dim cyan]DEBUG: Session state = '{state}' | Raw: {session_data.get('state', 'NONE')}[/dim cyan]")
                     
                     # Handle feedback/waiting states - Jules is asking for user input
                     if state in ["WAITING_FOR_USER_INPUT", "WAITING_FOR_FEEDBACK", "PAUSED"]:
@@ -359,7 +361,7 @@ class JulesTaskManager:
                              core.logging.log_event(f"Jules task {task_id} is waiting for feedback. Use reply_to_task() or abort_task().", level="IMPORTANT")
                     
                     # Handle review states - nudge to publish PR
-                    elif state in ["WAITING_FOR_REVIEW", "REVIEW_REQUESTED", "READY", "READY_FOR_REVIEW"]:
+                    elif state in ["WAITING_FOR_REVIEW", "REVIEW_REQUESTED", "READY", "READY_FOR_REVIEW", "AWAITING_USER_REVIEW"]:
                          self._update_task_status(task_id, 'waiting_for_feedback', f"Jules is waiting for review (session state: {state}). Auto-nudging...")
                          self.reply_to_task(task_id, "Please publish the pull request now.")
                     
@@ -417,9 +419,53 @@ class JulesTaskManager:
                 # Check for PR creation in new activities
                 for activity in new_activities:
                     self._handle_stream_activity(task_id, activity)
+            
+            # FALLBACK: If still no PR URL found, check GitHub directly for open PRs
+            if not task.get('pr_url') and task.get('status') in ['pending_pr', 'waiting_for_feedback']:
+                self._check_github_for_jules_pr(task_id)
 
         except requests.exceptions.RequestException as e:
             core.logging.log_event(f"Error checking for PR for task {task_id}: {e}", level="ERROR")
+    
+    def _check_github_for_jules_pr(self, task_id):
+        """Fallback: Checks GitHub for open PRs created by Jules for this task."""
+        task = self.tasks.get(task_id)
+        if not task or task.get('pr_url'):
+            return
+        
+        github_token = os.environ.get("GITHUB_TOKEN")
+        if not github_token:
+            return
+        
+        git_info = get_git_repo_info()
+        if not git_info:
+            return
+        repo_owner, repo_name = git_info['owner'], git_info['repo']
+        
+        headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+        url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls?state=open&per_page=10"
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                return
+            
+            prs = response.json()
+            for pr in prs:
+                # Look for PRs created by Jules (user is typically "jules-google" or similar)
+                user = pr.get('user', {}).get('login', '')
+                head_ref = pr.get('head', {}).get('ref', '')
+                
+                # Match by user or branch pattern (jules often uses specific branch patterns)
+                if 'jules' in user.lower() or 'jules' in head_ref.lower() or 'feat/' in head_ref or 'test-autogen' in head_ref:
+                    pr_url = pr.get('html_url')
+                    if pr_url:
+                        self.console.print(f"[bold green]Found Jules PR via GitHub API: {pr_url}[/bold green]")
+                        self._update_task_status(task_id, 'pr_ready', f"PR detected via GitHub: {pr_url}", pr_url=pr_url)
+                        return
+        
+        except Exception as e:
+            core.logging.log_event(f"Error checking GitHub for Jules PR: {e}", level="WARNING")
 
     def _check_for_manual_merge(self, task_id):
         """
@@ -485,46 +531,96 @@ class JulesTaskManager:
 
     def _handle_stream_activity(self, task_id, activity):
         """Parses a single activity and updates the task."""
-        activity_type = activity.get("type")
+        activity_type = activity.get("type", "")
         detail = activity.get("detail", {})
+        activity_str = str(activity).lower()  # For keyword searching
         
-        # Log all activities for debugging
-        # core.logging.log_event(f"Task {task_id} RAW ACTIVITY: {activity}", level="DEBUG")
+        # DEBUG: Log full activity JSON for debugging
+        import json
+        self.console.print(f"[dim magenta]DEBUG FULL: {json.dumps(activity, default=str)[:300]}[/dim magenta]")
         
-        # Check for PR creation
+        # Check for PR creation - primary path
         pull_request = detail.get("pullRequest")
         if pull_request and pull_request.get("url"):
             pr_url = pull_request["url"]
             self._update_task_status(task_id, 'pr_ready', f"Pull request created: {pr_url}", pr_url=pr_url)
             return
+        
+        # FALLBACK: Search for GitHub PR URL pattern anywhere in activity JSON
+        pr_url_pattern = r'https://github\.com/[^/]+/[^/]+/pull/\d+'
+        pr_match = re.search(pr_url_pattern, activity_str)
+        if pr_match:
+            pr_url = pr_match.group(0)
+            self.console.print(f"[bold green]Found PR URL via regex: {pr_url}[/bold green]")
+            self._update_task_status(task_id, 'pr_ready', f"Pull request detected: {pr_url}", pr_url=pr_url)
+            return
+
+        # ENHANCED: Detect "Ready for Review" via activity content
+        # Look for activities that contain branch/commit/diff information indicating work is done
+        has_diff = "diff" in activity_str or "patch" in activity_str
+        has_branch = "branch" in detail or "branchName" in detail
+        has_commit = "commit" in activity_str or "suggestedCommitMessage" in detail
+        has_submit = "submitchanges" in activity_type.lower() or "submit" in activity_type.lower()
+        
+        # Check for activities that signal completion
+        ready_indicators = [
+            has_diff and has_commit,  # Has diff AND commit info = code is ready
+            "submitChanges" in detail,  # Explicit submit changes
+            "branchReady" in activity_type,  # Branch ready activity type
+            "codeComplete" in activity_type,  # Code complete activity type
+            has_submit,  # Submit-type activity
+        ]
+        
+        if any(ready_indicators):
+            task = self.tasks.get(task_id)
+            # Only nudge if we haven't already detected a PR
+            if task and not task.get('pr_url') and task.get('status') == 'pending_pr':
+                self.console.print(f"[bold yellow]Detected code ready activity! Nudging Jules to publish PR...[/bold yellow]")
+                self._update_task_status(task_id, 'waiting_for_feedback', "Jules has code ready. Auto-nudging to publish PR...")
+                self.reply_to_task(task_id, "Please publish the pull request now.")
+                return
 
         # Check specifically for "READY_FOR_REVIEW" state or "REVIEW_REQUESTED" (Case insensitive check)
         state_raw = activity.get("state", "")
         state_upper = state_raw.upper()
-        # core.logging.log_event(f"Task {task_id} STATE: {state_raw}", level="DEBUG")
 
         if state_upper in ["WAITING_FOR_REVIEW", "REVIEW_REQUESTED", "READY", "READY_FOR_REVIEW"] or "REVIEW" in state_upper:
              self._update_task_status(task_id, 'waiting_for_feedback', f"Jules is waiting for review (state: {state_raw}). Auto-nudging...")
-             # Automatically nudge to publish
              self.reply_to_task(task_id, "Please publish the pull request now.")
              return
 
         # Check for other relevant status updates
-        state = activity.get("state") # Activity state, not session state
-        # Jules API structure might vary, checking known fields
-        
-        # If the session itself is marked as COMPLETED in the activity (if applicable)
-        # Usually we check session state separately, but sometimes activity indicates it.
-        # Check for other relevant status updates
         state = activity.get("state") 
         
         # Detect "WAITING_FOR_INPUT" or similar if API supports it, or infer from text
-        # If the last activity is a system message asking for info
         if activity_type == "SYSTEM_MESSAGE" or activity_type == "AGENT_MESSAGE":
             text = detail.get("text", "")
             if "?" in text or "feedback" in text.lower():
                  self._update_task_status(task_id, 'waiting_for_feedback', f"Jules requests feedback: {text[:100]}...")
 
+
+
+    def _archive_jules_session(self, session_name):
+        """Archives (deletes) the Jules session to clean up remote resources."""
+        if not session_name:
+            return
+            
+        jules_api_key = os.environ.get("JULES_API_KEY")
+        if not jules_api_key:
+            return
+
+        headers = {"X-Goog-Api-Key": jules_api_key}
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}"
+        
+        try:
+             self.console.print(f"[dim]Archiving Jules session {session_name}...[/dim]")
+             response = requests.delete(url, headers=headers, timeout=10)
+             if response.status_code in [200, 204]:
+                 core.logging.log_event(f"Successfully archived Jules session {session_name}.", level="INFO")
+             else:
+                 core.logging.log_event(f"Failed to archive Jules session {session_name}: {response.text}", level="WARNING")
+        except Exception as e:
+            core.logging.log_event(f"Error archiving Jules session: {e}", level="WARNING")
 
     def _attempt_merge(self, task_id):
         """
@@ -574,53 +670,72 @@ class JulesTaskManager:
         # Store test output in task for potential self-correction
         task['test_output'] = test_output
 
-        if tests_passed:
-            self._update_task_status(task_id, 'merging', "Tests passed. Analyzing changes for software engineering best practices...")
+        try:
+            if tests_passed:
+                self._update_task_status(task_id, 'merging', "Tests passed. Analyzing changes for software engineering best practices...")
 
-            # 2.5. Good Software Engineering Analysis
-            diff_text, error = sandbox.get_diff()
-            if not diff_text:
-                self._update_task_status(task_id, 'failed', f"Failed to get diff: {error}")
-                sandbox.destroy()
-                return
+                # 2.5. Good Software Engineering Analysis
+                diff_text, error = sandbox.get_diff()
+                if not diff_text:
+                    self._update_task_status(task_id, 'failed', f"Failed to get diff: {error}")
+                    sandbox.destroy()
+                    return
 
-            analysis_passed, analysis_feedback = self._analyze_changes(diff_text)
-            if not analysis_passed:
-                 self._update_task_status(task_id, 'tests_failed', f"Change analysis failed. Feedback: {analysis_feedback}")
-                 self._trigger_self_correction(task_id, feedback=analysis_feedback)
-                 sandbox.destroy()
-                 return
+                analysis_passed, analysis_feedback = self._analyze_changes(diff_text)
+                if not analysis_passed:
+                     self._update_task_status(task_id, 'tests_failed', f"Change analysis failed. Feedback: {analysis_feedback}")
+                     self._trigger_self_correction(task_id, feedback=analysis_feedback)
+                     sandbox.destroy()
+                     return
 
-            self._update_task_status(task_id, 'merging', "Analysis passed. Conducting final code review...")
+                self._update_task_status(task_id, 'merging', "Analysis passed. Conducting final code review...")
 
 
-            review_feedback = self._conduct_llm_code_review(diff_text)
-            
-            if "APPROVED" in review_feedback.upper():
-                self._update_task_status(task_id, 'merging', "Code review passed. Merging PR...")
-                success, message = self._auto_merge_pull_request(pr_url, task_id)
-                if success:
-                    self._update_task_status(task_id, 'completed', message)
-                    # Trigger restart if callback provided
-                    if self.restart_callback:
-                        self.restart_callback(self.console)
-                else:
-                    # Check if it was a merge conflict
-                    if "conflict" in message.lower():
-                        self._update_task_status(task_id, 'merge_failed', "Merge conflict detected. Attempting resolution...")
-                        self._resolve_merge_conflict(pr_url, task_id)
+                review_feedback = self._conduct_llm_code_review(diff_text)
+                
+                if "APPROVED" in review_feedback.upper():
+                    self._update_task_status(task_id, 'merging', "Code review passed. Merging PR...")
+                    success, message = self._auto_merge_pull_request(pr_url, task_id)
+                    if success:
+                        self._update_task_status(task_id, 'completed', message)
+                        
+                        # Archive the session as requested
+                        self._archive_jules_session(task.get('session_name'))
+
+                        # Trigger restart if callback provided
+                        if self.restart_callback:
+                            try:
+                                self.restart_callback(self.console)
+                            except SystemExit:
+                                # Start fresh? No, if we exit, we exit.
+                                raise
+                            except Exception as e:
+                                core.logging.log_event(f"Restart callback failed: {e}", level="ERROR")
                     else:
-                        self._update_task_status(task_id, 'merge_failed', message)
+                        # Check if it was a merge conflict
+                        if "conflict" in message.lower():
+                            self._update_task_status(task_id, 'merge_failed', "Merge conflict detected. Attempting resolution...")
+                            self._resolve_merge_conflict(pr_url, task_id)
+                        else:
+                            self._update_task_status(task_id, 'merge_failed', message)
+                else:
+                    # NEW LOGIC: Trigger self-correction instead of failing
+                    self.console.print(f"[bold yellow]Code review rejected for task {task_id}. Triggering self-correction...[/bold yellow]")
+                    self._update_task_status(task_id, 'tests_failed', f"Code review rejected. Feedback: {review_feedback}") # Use 'tests_failed' to trigger correction loop
+                    self._trigger_self_correction(task_id, feedback=review_feedback)
             else:
-                # NEW LOGIC: Trigger self-correction instead of failing
-                self.console.print(f"[bold yellow]Code review rejected for task {task_id}. Triggering self-correction...[/bold yellow]")
-                self._update_task_status(task_id, 'tests_failed', f"Code review rejected. Feedback: {review_feedback}") # Use 'tests_failed' to trigger correction loop
-                self._trigger_self_correction(task_id, feedback=review_feedback)
-        else:
-            self._update_task_status(task_id, 'tests_failed', "Sandbox tests failed. Triggering self-correction.")
-            self._trigger_self_correction(task_id)
+                self._update_task_status(task_id, 'tests_failed', "Sandbox tests failed. Triggering self-correction.")
+                self._trigger_self_correction(task_id)
 
-        sandbox.destroy()
+        except BaseException as e:
+            # Catch SystemExit and others to prevent silent thread death during critical sections
+            core.logging.log_event(f"Critical error in _attempt_merge: {e}", level="ERROR")
+            if isinstance(e, Exception): # Update status only if it's a regular exception
+                 self._update_task_status(task_id, 'failed', f"Merge process failed: {e}")
+            raise # Re-raise to ensure proper shutdown if it was a signal
+            
+        finally:
+            sandbox.destroy()
 
     def _trigger_self_correction(self, task_id, feedback=None):
         """
@@ -1345,7 +1460,8 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
     data = {
         "prompt": transformed_request,
         "sourceContext": {"source": target_source, "githubRepoContext": {"startingBranch": "main"}},
-        "title": f"L.O.V.E. Evolution: {modification_request[:50]}"
+        "title": f"L.O.V.E. Evolution: {modification_request[:50]}",
+        "automationMode": "AUTO_CREATE_PR"  # Auto-publish PR when code is ready
     }
     try:
         @retry(exceptions=(requests.exceptions.RequestException,), tries=3, delay=5, backoff=2)
