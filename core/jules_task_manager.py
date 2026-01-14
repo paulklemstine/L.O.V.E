@@ -147,6 +147,7 @@ class JulesTaskManager:
         # Then clean up locally
         self._update_task_status(task_id, 'aborted_by_user', f"Task aborted: {reason}")
         return True
+    def get_status(self):
         """Returns a list of current tasks and their statuses."""
         with self.lock:
             return list(self.tasks.values())
