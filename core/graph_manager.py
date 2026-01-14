@@ -1,5 +1,6 @@
 import networkx as nx
 import json
+import os
 
 class GraphDataManager:
     """
@@ -11,6 +12,8 @@ class GraphDataManager:
         Initializes an empty networkx graph object.
         """
         self.graph = nx.DiGraph()
+        self.dirty = False # Tracks if the graph has been modified since last save/load
+        self._last_saved_path = None # Tracks the filepath of the last save/load
 
     def add_node(self, node_id, node_type, attributes=None):
         """
@@ -26,6 +29,7 @@ class GraphDataManager:
             attributes = {}
         attributes['node_type'] = node_type
         self.graph.add_node(node_id, **attributes)
+        self.dirty = True
 
     def add_edge(self, source_id, target_id, relationship_type, attributes=None):
         """
@@ -44,6 +48,7 @@ class GraphDataManager:
             attributes = {}
         attributes['relationship_type'] = relationship_type
         self.graph.add_edge(source_id, target_id, **attributes)
+        self.dirty = True
 
     def query_nodes(self, attribute_key, attribute_value):
         """
@@ -93,9 +98,16 @@ class GraphDataManager:
         Args:
             filepath: The path to save the file to.
         """
+        # Bolt Optimization: Skip saving if graph is clean, path matches, and file exists.
+        if not self.dirty and self._last_saved_path == filepath and os.path.exists(filepath):
+            return
+
         # Create a serialized copy of the graph for saving
         graph_to_save = self._serialize_attributes()
         nx.write_graphml(graph_to_save, filepath)
+
+        self.dirty = False
+        self._last_saved_path = filepath
 
     def load_graph(self, filepath):
         """
@@ -107,9 +119,13 @@ class GraphDataManager:
         try:
             self.graph = nx.read_graphml(filepath)
             self._deserialize_attributes()
+            self.dirty = False
+            self._last_saved_path = filepath
         except FileNotFoundError:
             # If the file doesn't exist, we can start with an empty graph.
             self.graph = nx.DiGraph()
+            self.dirty = False # Treated as clean empty state until modified
+            self._last_saved_path = None # No file associated yet
 
     def get_all_nodes(self, include_data=False):
         """
