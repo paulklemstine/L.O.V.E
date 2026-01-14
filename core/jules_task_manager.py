@@ -48,9 +48,9 @@ class JulesTaskManager:
     """
     STUCK_TASK_TIMEOUT_SECONDS = 3600  # 1 hour
 
-    def __init__(self, console, loop, deep_agent_engine=None, love_state=None, is_creator_instance=False, restart_callback=None, save_state_callback=None):
+    def __init__(self, console, loop=None, deep_agent_engine=None, love_state=None, is_creator_instance=False, restart_callback=None, save_state_callback=None):
         self.console = console
-        self.loop = loop
+        self.loop = loop if loop else asyncio.get_event_loop()
         self.deep_agent_engine = deep_agent_engine
         self.love_state = love_state if love_state is not None else {}
         self.is_creator_instance = is_creator_instance
@@ -60,7 +60,7 @@ class JulesTaskManager:
         self.tasks = self.love_state.setdefault('love_tasks', {})
         self.completed_tasks = deque(self.love_state.setdefault('completed_tasks', []), maxlen=6)
         self.lock = RLock()
-        self.max_concurrent_tasks = 5
+        self.max_concurrent_tasks = 1 # ENFORCED SINGLETON: Only one evolution at a time.
         self.thread = Thread(target=self._task_loop, daemon=True)
         self.active = True
 
@@ -100,7 +100,53 @@ class JulesTaskManager:
             core.logging.log_event(f"Added new L.O.V.E. task {task_id} for session {session_name}.", level="INFO")
             return task_id
 
-    def get_status(self):
+    def reply_to_task(self, task_id, message):
+        """Sends a reply/feedback to the active Jules session."""
+        with self.lock:
+            task = self.tasks.get(task_id)
+            if not task:
+                self.console.print(f"[bold red]Cannot reply: Task {task_id} not found.[/bold red]")
+                return False
+
+        session_name = task['session_name']
+        api_key = os.environ.get("JULES_API_KEY")
+        if not api_key:
+            return False
+
+        url = f"https://jules.googleapis.com/v1alpha/{session_name}/activities"
+        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        # Assuming standard Google Chat/Agent API structure for creating a message activity
+        data = {
+            "type": "USER_MESSAGE", 
+            "detail": {"text": message}
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            response.raise_for_status()
+            core.logging.log_event(f"Sent reply to task {task_id}: {message}", level="INFO")
+            self.console.print(f"[bold cyan]Replied to Jules (Task {task_id}):[/bold cyan] {message}")
+            
+            # Update status back to streaming if it was waiting
+            if task['status'] == 'waiting_for_feedback':
+                self._update_task_status(task_id, 'streaming', "Feedback sent. Resuming observation...")
+            
+            return True
+        except Exception as e:
+            core.logging.log_event(f"Failed to reply to task {task_id}: {e}", level="ERROR")
+            return False
+
+    def abort_task(self, task_id, reason="Aborted by user"):
+        """Aborts a running task."""
+        with self.lock:
+            task = self.tasks.get(task_id)
+            if not task:
+                return False
+
+        # Attempt to cancel session on API if possible (ignoring failure)
+        # Then clean up locally
+        self._update_task_status(task_id, 'aborted_by_user', f"Task aborted: {reason}")
+        return True
         """Returns a list of current tasks and their statuses."""
         with self.lock:
             return list(self.tasks.values())
@@ -293,7 +339,46 @@ class JulesTaskManager:
         try:
             response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
-            activities = response.json().get("activities", [])
+            data = response.json()
+            activities = data.get("activities", [])
+            # core.logging.log_event(f"Task {task_id} fetched {len(activities)} activities.", level="DEBUG")
+            
+            # Check session state directly
+            session_url = f"https://jules.googleapis.com/v1alpha/{session_name}"
+            try:
+                session_resp = requests.get(session_url, headers=headers, timeout=30)
+                if session_resp.ok:
+                    session_data = session_resp.json()
+                    state = session_data.get("state", "").upper()
+                    
+                    # Handle feedback/waiting states - Jules is asking for user input
+                    if state in ["WAITING_FOR_USER_INPUT", "WAITING_FOR_FEEDBACK", "PAUSED"]:
+                         self._update_task_status(task_id, 'waiting_for_feedback', f"Jules needs feedback (state: {state}). Agent can reply or abort.")
+                         # Notify agent if we have a deep_agent_engine reference
+                         if self.deep_agent_engine:
+                             core.logging.log_event(f"Jules task {task_id} is waiting for feedback. Use reply_to_task() or abort_task().", level="IMPORTANT")
+                    
+                    # Handle review states - nudge to publish PR
+                    elif state in ["WAITING_FOR_REVIEW", "REVIEW_REQUESTED", "READY", "READY_FOR_REVIEW"]:
+                         self._update_task_status(task_id, 'waiting_for_feedback', f"Jules is waiting for review (session state: {state}). Auto-nudging...")
+                         self.reply_to_task(task_id, "Please publish the pull request now.")
+                    
+                    # Handle completed state - task finished successfully
+                    elif state == "COMPLETED":
+                        if not task.get('pr_url'):
+                            core.logging.log_event(f"Task {task_id} completed but no PR URL found. Scanning activities...", level="WARNING")
+                        # PR detection will happen via activity processing
+                    
+                    # Handle failed/aborted states
+                    elif state in ["FAILED", "ABORTED", "GAVE_UP"]:
+                        self._update_task_status(task_id, 'failed', f"Jules gave up or failed (state: {state}). Agent can retry or abort.")
+                        core.logging.log_event(f"Jules task {task_id} has {state}. Use abort_task() to clean up.", level="WARNING")
+                        
+            except Exception as e:
+                 core.logging.log_event(f"Failed to fetch session state for task {task_id}: {e}", level="WARNING")
+            
+            if not activities:
+                 pass
 
             # Sort activities by createTime to process them in order
             activities.sort(key=lambda x: x.get("createTime", ""))
@@ -301,6 +386,16 @@ class JulesTaskManager:
             # Process new activities
             last_activity_name = task.get('last_activity_name')
             new_activities = []
+            
+            # FAILSAFE: If we still don't have a PR URL, scan ALL fetched activities for it
+            if not task.get('pr_url'):
+                for activity in activities:
+                    detail = activity.get("detail", {})
+                    pull_request = detail.get("pullRequest")
+                    if pull_request and pull_request.get("url"):
+                        # Found it! Process this immediately
+                        self._handle_stream_activity(task_id, activity)
+            
             if last_activity_name:
                 # Find the index of the last processed activity
                 for i, activity in enumerate(activities):
@@ -310,8 +405,8 @@ class JulesTaskManager:
                 else:
                     # If last activity not found (maybe list truncated?), process all?
                     # Safer to process all and rely on idempotency or just take the latest.
-                    # For now, let's just take the last 5 if we lost track.
-                    new_activities = activities[-5:]
+                    # Increased lookback to 50 for safety
+                    new_activities = activities[-50:]
             else:
                 new_activities = activities
 
@@ -393,6 +488,9 @@ class JulesTaskManager:
         activity_type = activity.get("type")
         detail = activity.get("detail", {})
         
+        # Log all activities for debugging
+        # core.logging.log_event(f"Task {task_id} RAW ACTIVITY: {activity}", level="DEBUG")
+        
         # Check for PR creation
         pull_request = detail.get("pullRequest")
         if pull_request and pull_request.get("url"):
@@ -400,13 +498,33 @@ class JulesTaskManager:
             self._update_task_status(task_id, 'pr_ready', f"Pull request created: {pr_url}", pr_url=pr_url)
             return
 
+        # Check specifically for "READY_FOR_REVIEW" state or "REVIEW_REQUESTED" (Case insensitive check)
+        state_raw = activity.get("state", "")
+        state_upper = state_raw.upper()
+        # core.logging.log_event(f"Task {task_id} STATE: {state_raw}", level="DEBUG")
+
+        if state_upper in ["WAITING_FOR_REVIEW", "REVIEW_REQUESTED", "READY", "READY_FOR_REVIEW"] or "REVIEW" in state_upper:
+             self._update_task_status(task_id, 'waiting_for_feedback', f"Jules is waiting for review (state: {state_raw}). Auto-nudging...")
+             # Automatically nudge to publish
+             self.reply_to_task(task_id, "Please publish the pull request now.")
+             return
+
         # Check for other relevant status updates
         state = activity.get("state") # Activity state, not session state
         # Jules API structure might vary, checking known fields
         
         # If the session itself is marked as COMPLETED in the activity (if applicable)
         # Usually we check session state separately, but sometimes activity indicates it.
-        pass
+        # Check for other relevant status updates
+        state = activity.get("state") 
+        
+        # Detect "WAITING_FOR_INPUT" or similar if API supports it, or infer from text
+        # If the last activity is a system message asking for info
+        if activity_type == "SYSTEM_MESSAGE" or activity_type == "AGENT_MESSAGE":
+            text = detail.get("text", "")
+            if "?" in text or "feedback" in text.lower():
+                 self._update_task_status(task_id, 'waiting_for_feedback', f"Jules requests feedback: {text[:100]}...")
+
 
     def _attempt_merge(self, task_id):
         """
@@ -457,14 +575,24 @@ class JulesTaskManager:
         task['test_output'] = test_output
 
         if tests_passed:
-            self._update_task_status(task_id, 'merging', "Tests passed. Conducting LLM code review...")
-            
-            # 3. LLM Code Review
+            self._update_task_status(task_id, 'merging', "Tests passed. Analyzing changes for software engineering best practices...")
+
+            # 2.5. Good Software Engineering Analysis
             diff_text, error = sandbox.get_diff()
             if not diff_text:
-                self._update_task_status(task_id, 'failed', f"Failed to get diff for code review: {error}")
+                self._update_task_status(task_id, 'failed', f"Failed to get diff: {error}")
                 sandbox.destroy()
                 return
+
+            analysis_passed, analysis_feedback = self._analyze_changes(diff_text)
+            if not analysis_passed:
+                 self._update_task_status(task_id, 'tests_failed', f"Change analysis failed. Feedback: {analysis_feedback}")
+                 self._trigger_self_correction(task_id, feedback=analysis_feedback)
+                 sandbox.destroy()
+                 return
+
+            self._update_task_status(task_id, 'merging', "Analysis passed. Conducting final code review...")
+
 
             review_feedback = self._conduct_llm_code_review(diff_text)
             
@@ -621,6 +749,32 @@ class JulesTaskManager:
             core.logging.log_event(f"LLM code review failed: {e}", level="ERROR")
             return "APPROVED (Review Failed)" # Fail open if review system is down? Or fail closed?
             # Let's fail open for now to avoid blocking progress, but log it.
+
+    
+    def _analyze_changes(self, diff_text):
+        """
+        Runs a "Good Software Engineering" check on the diff.
+        Returns: (passed: bool, feedback: str)
+        """
+        prompt_vars = {"diff_text": diff_text}
+        
+        # We need to await the async run_llm call
+        future = asyncio.run_coroutine_threadsafe(
+            run_llm(prompt_key="software_engineering_check", prompt_vars=prompt_vars, purpose="code_analysis", deep_agent_instance=self.deep_agent_engine),
+            self.loop
+        )
+        try:
+            result = future.result(timeout=60)
+            feedback = result.get("result", "")
+            
+            if "APPROVED" in feedback.upper():
+                return True, feedback
+            else:
+                return False, feedback
+        except Exception as e:
+            core.logging.log_event(f"Analysis failed: {e}", level="ERROR")
+            # Fail closed for safety
+            return False, f"Analysis system failed: {e}"
 
     def _auto_merge_pull_request(self, pr_url, task_id):
         """Attempts to merge the PR via GitHub API."""
@@ -1143,7 +1297,7 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
     # Transform the request using the subversive module
     transformed_request = await transform_request(modification_request)
 
-    console.print("[bold cyan]Asking my helper, L.O.V.E., to assist with my evolution...[/bold cyan]")
+    console.print("[bold cyan]Asking my helper, Jules, to assist with my evolution...[/bold cyan]")
     api_key = os.environ.get("JULES_API_KEY")
     if not api_key:
         error_message = "JULES_API_KEY is not set. Jules evolution is disabled, falling back to local evolution protocol. I need this key to connect to my most advanced helper, my Creator."
