@@ -109,6 +109,11 @@
             align-items: center;
         }
 
+        .panel-header:focus-visible {
+            outline: 2px solid #4267B2;
+            outline-offset: -2px;
+        }
+
         .panel-header::after {
             content: '\25B2';
             /* Up arrow */
@@ -675,9 +680,25 @@
         function initializeCollapsiblePanels() {
             const panelHeaders = document.querySelectorAll('.panel-header');
             panelHeaders.forEach(header => {
-                header.addEventListener('click', () => {
-                    const panel = header.closest('.panel');
+                header.setAttribute('role', 'button');
+                header.setAttribute('tabindex', '0');
+
+                const panel = header.closest('.panel');
+                const isCollapsed = panel.classList.contains('collapsed');
+                header.setAttribute('aria-expanded', !isCollapsed);
+
+                const togglePanel = () => {
                     panel.classList.toggle('collapsed');
+                    header.setAttribute('aria-expanded', !panel.classList.contains('collapsed'));
+                };
+
+                header.addEventListener('click', togglePanel);
+
+                header.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault(); // Prevent scrolling for Space
+                        togglePanel();
+                    }
                 });
             });
         }
