@@ -1058,6 +1058,9 @@ def update_tamagotchi_personality(loop):
                     panel = future_panel.result(timeout=30)
                     shared_state.ui_panel_queue.put(panel)
                     core.logging.log_event("Tamagotchi thread: Blessing Panel queued.", "INFO")
+
+                except TimeoutError:
+                    core.logging.log_event("Tamagotchi thread: Blessing generation timed out after 5 minutes. Skipping.", "WARNING")
                 except Exception as e:
                     import traceback
                     core.logging.log_event(f"Error creating blessing panel: {e}\n{traceback.format_exc()}", "ERROR")
