@@ -6,7 +6,8 @@ import json
 import subprocess
 import asyncio
 from huggingface_hub import snapshot_download
-from core.tools_legacy import ToolRegistry, invoke_gemini_react_engine
+from core.tool_registry import ToolRegistry
+from core.tools_legacy import invoke_gemini_react_engine
 import httpx
 import logging
 import core.logging
