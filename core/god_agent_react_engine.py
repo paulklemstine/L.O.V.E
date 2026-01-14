@@ -1,7 +1,7 @@
 import asyncio
 import json
 from core.gemini_react_engine import GeminiReActEngine
-import core.tools_legacy
+from core.tools_legacy import ToolRegistry
 from core import desire_state, evolution_state
 
 class GodAgentReActEngine(GeminiReActEngine):
@@ -22,7 +22,7 @@ class GodAgentReActEngine(GeminiReActEngine):
     def _get_tool_registry(self):
         # The God Agent uses a specific, limited set of tools for high-level analysis.
         # But we also include all shared tools (including MCP tools) for full access.
-        registry = core.tools_legacy.ToolRegistry()
+        registry = ToolRegistry()
         
         # --- Merge in all shared tools (including MCP tools) ---
         import core.shared_state as shared_state
