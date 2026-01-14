@@ -630,47 +630,48 @@ class JulesTaskManager:
         3. LLM Code Review
         4. Merge or Reject (and trigger self-correction)
         """
-        task = self.tasks[task_id]
-        pr_url = task.get('pr_url')
-        if not pr_url:
-            self._update_task_status(task_id, 'failed', "PR URL missing for merge attempt.")
-            return
-
-        self._update_task_status(task_id, 'merging', "Starting merge process: Sandbox testing...")
-        
-        # 1. Get Branch Name
-        branch_name = self._get_pr_branch_name(pr_url)
-        if not branch_name:
-            self._update_task_status(task_id, 'failed', "Could not determine branch name from PR.")
-            return
-
-        # 2. Create Sandbox and Run Tests
-        repo_url = f"https://github.com/{get_git_repo_info()[0]}/{get_git_repo_info()[1]}.git"
-        sandbox = Sandbox(repo_url=repo_url)
-        
-        if not sandbox.create(branch_name):
-            self._update_task_status(task_id, 'failed', "Failed to create sandbox for testing.")
-            return
-
-        tests_passed, test_output = sandbox.run_tests()
-        
-        # --- CUSTOM VERIFICATION SCRIPT ---
-        if task.get('verification_script'):
-            self.console.print("[cyan]Running custom verification script...[/cyan]")
-            script_success, script_output = sandbox.run_script(task['verification_script'])
-            
-            # Combine output
-            test_output += f"\n\n--- VERIFICATION SCRIPT OUTPUT ---\n{script_output}"
-            
-            if not script_success:
-                 tests_passed = False
-                 self.console.print(f"[bold red]Verification script failed.[/bold red]")
-        # ----------------------------------
-        
-        # Store test output in task for potential self-correction
-        task['test_output'] = test_output
-
+        sandbox = None
         try:
+            task = self.tasks[task_id]
+            pr_url = task.get('pr_url')
+            if not pr_url:
+                self._update_task_status(task_id, 'failed', "PR URL missing for merge attempt.")
+                return
+
+            self._update_task_status(task_id, 'merging', "Starting merge process: Sandbox testing...")
+            
+            # 1. Get Branch Name
+            branch_name = self._get_pr_branch_name(pr_url)
+            if not branch_name:
+                self._update_task_status(task_id, 'failed', "Could not determine branch name from PR.")
+                return
+
+            # 2. Create Sandbox and Run Tests
+            repo_url = f"https://github.com/{get_git_repo_info()[0]}/{get_git_repo_info()[1]}.git"
+            sandbox = Sandbox(repo_url=repo_url)
+            
+            if not sandbox.create(branch_name):
+                self._update_task_status(task_id, 'failed', "Failed to create sandbox for testing.")
+                return
+
+            tests_passed, test_output = sandbox.run_tests()
+            
+            # --- CUSTOM VERIFICATION SCRIPT ---
+            if task.get('verification_script'):
+                self.console.print("[cyan]Running custom verification script...[/cyan]")
+                script_success, script_output = sandbox.run_script(task['verification_script'])
+                
+                # Combine output
+                test_output += f"\n\n--- VERIFICATION SCRIPT OUTPUT ---\n{script_output}"
+                
+                if not script_success:
+                     tests_passed = False
+                     self.console.print(f"[bold red]Verification script failed.[/bold red]")
+            # ----------------------------------
+            
+            # Store test output in task for potential self-correction
+            task['test_output'] = test_output
+
             if tests_passed:
                 self._update_task_status(task_id, 'merging', "Tests passed. Analyzing changes for software engineering best practices...")
 
@@ -678,14 +679,12 @@ class JulesTaskManager:
                 diff_text, error = sandbox.get_diff()
                 if not diff_text:
                     self._update_task_status(task_id, 'failed', f"Failed to get diff: {error}")
-                    sandbox.destroy()
                     return
 
                 analysis_passed, analysis_feedback = self._analyze_changes(diff_text)
                 if not analysis_passed:
                      self._update_task_status(task_id, 'tests_failed', f"Change analysis failed. Feedback: {analysis_feedback}")
                      self._trigger_self_correction(task_id, feedback=analysis_feedback)
-                     sandbox.destroy()
                      return
 
                 self._update_task_status(task_id, 'merging', "Analysis passed. Conducting final code review...")
@@ -706,11 +705,9 @@ class JulesTaskManager:
                         if self.restart_callback:
                             try:
                                 self.restart_callback(self.console)
-                            except SystemExit:
-                                # Start fresh? No, if we exit, we exit.
-                                raise
                             except Exception as e:
                                 core.logging.log_event(f"Restart callback failed: {e}", level="ERROR")
+                                # Ignore callback error if task completed
                     else:
                         # Check if it was a merge conflict
                         if "conflict" in message.lower():
@@ -728,14 +725,26 @@ class JulesTaskManager:
                 self._trigger_self_correction(task_id)
 
         except BaseException as e:
-            # Catch SystemExit and others to prevent silent thread death during critical sections
-            core.logging.log_event(f"Critical error in _attempt_merge: {e}", level="ERROR")
-            if isinstance(e, Exception): # Update status only if it's a regular exception
-                 self._update_task_status(task_id, 'failed', f"Merge process failed: {e}")
-            raise # Re-raise to ensure proper shutdown if it was a signal
+            core.logging.log_event(f"Critical error wrapper in _attempt_merge: {e}", level="ERROR")
+            if str(e) == '0':
+                 core.logging.log_event("Ignoring SystemExit(0) in _attempt_merge. Validating merge status...", level="INFO")
+                 self.console.print("[yellow]SystemExit(0) caught - checking if merge succeeded...[/yellow]")
+                 
+                 # Verify via GitHub immediately (reuses manual merge check logic)
+                 # This handles cases where the process crashed right after merge but before status update
+                 self._check_for_manual_merge(task_id)
+                 
+                 # If verified as completed, ensure archival
+                 if self.tasks[task_id]['status'] == 'completed':
+                      self._archive_jules_session(self.tasks[task_id].get('session_name'))
+                 
+                 return
+            
+            self._update_task_status(task_id, 'failed', f"Merge process failed with critical error: {e}")
             
         finally:
-            sandbox.destroy()
+            if sandbox:
+                sandbox.destroy()
 
     def _trigger_self_correction(self, task_id, feedback=None):
         """
