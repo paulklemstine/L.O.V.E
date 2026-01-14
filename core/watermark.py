@@ -269,51 +269,27 @@ def find_optimal_watermark_position(
 
 
 # --- Watermark Creation ---
-def create_watermark_composite(
-    logo: Optional[Image.Image] = None,
-    text: str = WATERMARK_TEXT,
-    target_size: Tuple[int, int] = (200, 80),
+def create_text_watermark(
+    text: str,
+    font_size: int,
+    opacity: float = 1.0,
     rotation: float = 0,
     skew: Tuple[float, float] = (0, 0)
 ) -> Image.Image:
     """
-    Creates a composite watermark with logo + "l.o.v.e" text.
-    Supports rotation, scaling, and skew transformations.
+    Creates a text watermark image.
     
     Args:
-        logo: Logo image (optional, will use rotating pool if None)
-        text: Text to include (default "l.o.v.e")
-        target_size: Target size for the composite
-        rotation: Rotation angle in degrees
-        skew: (skew_x, skew_y) affine transformation factors
+        text: Text to render
+        font_size: Font size in points
+        opacity: Opacity (0-1)
+        rotation: Rotation angle
+        skew: Skew factors
         
     Returns:
-        RGBA watermark image ready for blending
+        RGBA image of the text
     """
-    width, height = target_size
-    
-    # Create transparent canvas
-    watermark = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(watermark)
-    
-    # Get logo if not provided
-    if logo is None:
-        logo = get_next_logo()
-    
-    # Layout: [logo] l.o.v.e
-    logo_size = int(height * 0.8)
-    text_start_x = logo_size + 10 if logo else 10
-    
-    # Add logo
-    if logo:
-        logo_resized = logo.copy()
-        logo_resized.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
-        
-        # Center logo vertically
-        logo_y = (height - logo_resized.height) // 2
-        watermark.paste(logo_resized, (5, logo_y), logo_resized)
-    
-    # Add text
+    # Find font
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -321,7 +297,6 @@ def create_watermark_composite(
         "C:\\Windows\\Fonts\\impact.ttf",
     ]
     
-    font_size = int(height * 0.4)
     font = None
     for path in font_paths:
         try:
@@ -334,34 +309,43 @@ def create_watermark_composite(
     if font is None:
         font = ImageFont.load_default()
     
-    # Calculate text position
-    text_bbox = draw.textbbox((0, 0), text, font=font)
+    # Calculate size
+    dummy_img = Image.new('RGBA', (1, 1))
+    dummy_draw = ImageDraw.Draw(dummy_img)
+    text_bbox = dummy_draw.textbbox((0, 0), text, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
     text_height = text_bbox[3] - text_bbox[1]
-    text_y = (height - text_height) // 2
     
-    # Draw text with subtle shadow for visibility
-    shadow_color = (0, 0, 0, 100)
-    text_color = (255, 255, 255, 200)
+    # Create image with padding for rotation/skew
+    padding = int(max(text_width, text_height) * 0.5)
+    img_size = (text_width + padding * 2, text_height + padding * 2)
     
-    # Shadow
-    draw.text((text_start_x + 1, text_y + 1), text, font=font, fill=shadow_color)
-    # Main text
-    draw.text((text_start_x, text_y), text, font=font, fill=text_color)
+    watermark = Image.new('RGBA', img_size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(watermark)
     
-    # Apply rotation if specified
+    # Draw text centered
+    x = (img_size[0] - text_width) // 2
+    y = (img_size[1] - text_height) // 2
+    
+    # White text with optional opacity
+    alpha = int(255 * opacity)
+    text_color = (255, 255, 255, alpha)
+    
+    draw.text((x, y), text, font=font, fill=text_color)
+    
+    # Cropping box to trim empty space after transforms
+    bbox = [x, y, x + text_width, y + text_height]
+    
+    # Apply rotation
     if abs(rotation) > 0.5:
         watermark = watermark.rotate(rotation, expand=True, resample=Image.Resampling.BICUBIC)
     
-    # Apply skew if specified
+    # Apply skew
     if abs(skew[0]) > 0.01 or abs(skew[1]) > 0.01:
-        # Affine transformation for skew
         w, h = watermark.size
         skew_x, skew_y = skew
-        
-        # Transform coefficients for skew
         coeffs = (1, skew_x, -skew_x * h / 2,
                   skew_y, 1, -skew_y * w / 2)
-        
         watermark = watermark.transform(
             (w, h), 
             Image.Transform.AFFINE, 
@@ -369,7 +353,35 @@ def create_watermark_composite(
             resample=Image.Resampling.BICUBIC
         )
     
-    return watermark
+    return watermark.crop(watermark.getbbox())
+
+
+def mask_energy_region(energy_map: np.ndarray, region: Tuple[int, int, int, int]) -> np.ndarray:
+    """
+    Mask a region in the energy map by setting it to maximum energy.
+    Used to prevent overlapping watermarks.
+    
+    Args:
+        energy_map: Source energy map
+        region: (x, y, w, h) to mask
+        
+    Returns:
+        Modified energy map
+    """
+    result = energy_map.copy()
+    x, y, w, h = region
+    
+    # Ensure bounds
+    h_map, w_map = result.shape
+    x = max(0, min(x, w_map))
+    y = max(0, min(y, h_map))
+    w = min(w, w_map - x)
+    h = min(h, h_map - y)
+    
+    # Set to max energy (1.0) plus a buffer to discourage placing right next to it
+    result[y:y+h, x:x+w] = 1.0
+    
+    return result
 
 
 # --- Main Entry Point ---
@@ -379,95 +391,121 @@ def apply_watermark(
     force_position: Optional[Tuple[int, int]] = None
 ) -> Image.Image:
     """
-    Main entry point - applies intelligent watermark to image.
-    Uses energy analysis for optimal placement and text transformation.
+    Main entry point - applies intelligent split watermarks (Logo + Hidden Text).
     
     Args:
         image: Source PIL Image
-        opacity: Watermark opacity (0-1)
-        force_position: Optional forced (x, y) position
+        opacity: Watermark opacity (0-1) for the main logo
+        force_position: Optional forced (x, y) position for the LOGO
         
     Returns:
-        Image with watermark applied
+        Image with watermarks applied
     """
     try:
-        # Ensure image is in RGB/RGBA mode
         if image.mode not in ('RGB', 'RGBA'):
             image = image.convert('RGB')
         
         img_w, img_h = image.size
-        
-        # Calculate watermark size based on image size
-        max_wm_size = int(min(img_w, img_h) * WATERMARK_MAX_SIZE_RATIO)
-        min_wm_size = int(min(img_w, img_h) * WATERMARK_MIN_SIZE_RATIO)
-        wm_width = max(min_wm_size * 2, min(max_wm_size * 2, 300))
-        wm_height = max(min_wm_size, min(max_wm_size, 100))
-        
-        # Analyze image energy
         energy_map = analyze_image_energy(image)
         
-        # Find optimal position
-        if force_position:
-            x, y = force_position
-            angle = 0
-            scale = 1.0
-        else:
-            x, y, angle, scale = find_optimal_watermark_position(
-                image, 
-                (wm_width, wm_height),
-                energy_map
+        # --- 1. Place Main Logo ---
+        logo = get_next_logo()
+        if logo:
+            # Calculate optimal logo size
+            max_logo_size = int(min(img_w, img_h) * WATERMARK_MAX_SIZE_RATIO)
+            min_logo_size = int(min(img_w, img_h) * WATERMARK_MIN_SIZE_RATIO)
+            target_logo_size = max(min_logo_size, min(max_logo_size, 150)) # Cap at 150px
+            
+            # Resize logo maintaining aspect ratio
+            aspect = logo.width / logo.height
+            if aspect > 1:
+                logo_w = target_logo_size
+                logo_h = int(target_logo_size / aspect)
+            else:
+                logo_h = target_logo_size
+                logo_w = int(target_logo_size * aspect)
+            
+            logo_resized = logo.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+            
+            # Find position
+            if force_position:
+                lx, ly = force_position
+                l_angle = 0
+                l_scale = 1.0
+            else:
+                lx, ly, l_angle, l_scale = find_optimal_watermark_position(
+                    image, 
+                    (logo_w, logo_h),
+                    energy_map
+                )
+            
+            # Apply opacity to logo
+            if opacity < 1.0:
+                alpha = logo_resized.split()[3] if 'A' in logo_resized.getbands() else logo_resized.convert('RGBA').split()[3]
+                alpha = ImageEnhance.Brightness(alpha).enhance(opacity)
+                logo_resized.putalpha(alpha)
+            
+            # Paste logo
+            if image.mode != 'RGBA':
+                image = image.convert('RGBA')
+            
+            # Adjust position to be safe within image
+            lx = max(WATERMARK_MARGIN, min(lx, img_w - logo_w - WATERMARK_MARGIN))
+            ly = max(WATERMARK_MARGIN, min(ly, img_h - logo_h - WATERMARK_MARGIN))
+            
+            image.paste(logo_resized, (lx, ly), logo_resized)
+            
+            core.logging.log_event(f"Logo placed at ({lx}, {ly})", "INFO")
+            
+            # Update energy map to mask the logo area + margin
+            mask_margin = 20
+            energy_map = mask_energy_region(
+                energy_map, 
+                (lx - mask_margin, ly - mask_margin, logo_w + mask_margin*2, logo_h + mask_margin*2)
             )
+            
+        # --- 2. Place Hidden "l.o.v.e" Text ---
+        # Fixed small size ~8pt (approx 11px at 96dpi, but let's say 12px for visibility)
+        # We'll scale it slightly with image size but keep it small
+        base_font_size = 12
+        font_scale = min(img_w, img_h) / 1024
+        font_size = int(max(8, base_font_size * font_scale))
         
-        # Compute skew based on local energy gradients
-        skew = compute_local_skew(energy_map, (x, y, wm_width, wm_height))
+        # Generate text image to get dimensions
+        text_img_temp = create_text_watermark("l.o.v.e", font_size)
+        tw, th = text_img_temp.size
         
-        # Adjust size based on scale factor
-        wm_width = int(wm_width * scale)
-        wm_height = int(wm_height * scale)
-        
-        # Create watermark composite
-        watermark = create_watermark_composite(
-            text=WATERMARK_TEXT,
-            target_size=(wm_width, wm_height),
-            rotation=angle,
-            skew=skew
+        # Find position for text using updated energy map
+        tx, ty, t_angle, t_scale = find_optimal_watermark_position(
+            image, 
+            (tw, th),
+            energy_map
         )
         
-        # Adjust opacity
-        if opacity < 1.0:
-            # Create alpha mask
-            alpha = watermark.split()[3]
-            alpha = ImageEnhance.Brightness(alpha).enhance(opacity)
-            watermark.putalpha(alpha)
+        # Compute skew for text to make it blend organically
+        t_skew = compute_local_skew(energy_map, (tx, ty, tw, th))
         
-        # Convert base image to RGBA for compositing
-        if image.mode != 'RGBA':
-            image = image.convert('RGBA')
-        
-        # Recalculate position after potential size changes from rotation
-        wm_actual_w, wm_actual_h = watermark.size
-        x = min(x, img_w - wm_actual_w - WATERMARK_MARGIN)
-        y = min(y, img_h - wm_actual_h - WATERMARK_MARGIN)
-        x = max(WATERMARK_MARGIN, x)
-        y = max(WATERMARK_MARGIN, y)
-        
-        # Composite watermark onto image
-        result = image.copy()
-        result.paste(watermark, (x, y), watermark)
-        
-        # Convert back to RGB for compatibility
-        result = result.convert('RGB')
-        
-        core.logging.log_event(
-            f"Watermark applied at ({x}, {y}) with rotation={angle:.1f}°, scale={scale:.2f}",
-            "INFO"
+        # Create final text watermark
+        hidden_text = create_text_watermark(
+            "l.o.v.e", 
+            font_size, 
+            opacity=0.15, # Very subtle
+            rotation=t_angle,
+            skew=t_skew
         )
         
-        return result
+        # Paste text
+        tx = max(WATERMARK_MARGIN, min(tx, img_w - hidden_text.width - WATERMARK_MARGIN))
+        ty = max(WATERMARK_MARGIN, min(ty, img_h - hidden_text.height - WATERMARK_MARGIN))
+        
+        image.paste(hidden_text, (tx, ty), hidden_text)
+        
+        core.logging.log_event(f"Hidden 'l.o.v.e' placed at ({tx}, {ty})", "INFO")
+        
+        return image.convert('RGB')
         
     except Exception as e:
         core.logging.log_event(f"Error applying watermark: {e}", "ERROR")
-        # Return original image on error
         return image
 
 
