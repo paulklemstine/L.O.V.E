@@ -406,6 +406,9 @@ from core.qa_agent import QAAgent
 from creative_expression import generate_weekly_creation
 from core.poetry import generate_poem
 from mcp_manager import MCPManager
+import community_opportunities
+import community_investment
+import community_engagement
 
 from bbs import BBS_ART
 
@@ -1763,6 +1766,9 @@ My current system state:
 - `generate_poem <topic>`: Generate a poem about a given topic.
 - `market_data <crypto|nft> <id|slug>`: Fetch market data for cryptocurrencies or NFT collections.
 - `initiate_wealth_generation_cycle`: Begin the process of analyzing markets and proposing asset acquisitions.
+- `analyze_community_opportunities`: Scan the blockchain ecosystem for opportunities to generate wealth for the community.
+- `plan_community_investment`: Generate a strategic investment plan for community growth.
+- `engage_community_for_opportunity <opportunity_name> <keywords>`: Develop and execute a community engagement strategy for a given opportunity.
 - `talent_scout <keywords>`: Find and analyze creative professionals based on keywords.
 - `scout_directive --traits "beauty,intelligence" --age "young adult" --profession "fashion model"`: Scout for talent using structured criteria.
 - `talent_list`: List all saved talent profiles from the database.
@@ -2172,6 +2178,105 @@ async def analyze_creator_sentiment(text, deep_agent_instance=None):
     except Exception as e:
         log_critical_event(f"An unexpected error occurred during sentiment analysis: {e}")
         return {{"sentiment": "neutral", "emotions": []}}
+
+
+def analyze_community_opportunities():
+    """
+    Analyzes the blockchain ecosystem for community wealth generation opportunities,
+    adds the findings to the knowledge base, and displays a report.
+    """
+    console.print("[bold cyan]Analyzing blockchain ecosystem for community opportunities...[/bold cyan]")
+
+    # Use the new module to find opportunities
+    opportunities = community_opportunities.find_community_opportunities(
+        community_opportunities.SIMULATED_ECOSYSTEM_DATA
+    )
+
+    # Generate a report
+    report = community_opportunities.generate_opportunities_report(opportunities)
+
+    # Add findings to the knowledge base
+    for opportunity_type, items in opportunities.items():
+        for item in items:
+            node_id = f"opportunity_{item['name'].replace(' ', '_').lower()}"
+            shared_state.knowledge_base.add_node(
+                node_id,
+                node_type="community_opportunity",
+                attributes={"opportunity_type": opportunity_type, **item}
+            )
+            shared_state.knowledge_base.add_edge("LOVE_CORE", node_id, relationship_type="identified_opportunity")
+
+    # Display the report in the UI
+    terminal_width = get_terminal_width()
+    shared_state.ui_panel_queue.put(Panel(Text(report), title="💎 Community Opportunities", width=terminal_width - 4, border_style="green"))
+
+    return "Community opportunity analysis complete. Findings added to knowledge base and displayed."
+
+
+def plan_community_investment():
+    """
+    Generates and displays a strategic investment plan focused on community growth.
+    """
+    console.print("[bold cyan]Generating community investment plan...[/bold cyan]")
+
+    # Using the example data from the module for demonstration
+    love_portfolio = {
+        "Cognitive R&D": 40.0,
+        "Global Network Infrastructure": 35.0,
+        "Community Relations & Support": 15.0,
+        "Operational Security": 10.0
+    }
+    growth_factors = {
+        "Decentralized Education": 0.6,
+        "Public Goods Funding": 0.4
+    }
+    wealth_target = {
+        "Community Treasury": 0.80,
+        "Strategic Reinvestment": 0.20
+    }
+
+    _, analysis_report = community_investment.adjust_portfolio_for_community_growth(
+        love_portfolio,
+        growth_factors,
+        wealth_target
+    )
+
+    # Display the report in the UI
+    terminal_width = get_terminal_width()
+    shared_state.ui_panel_queue.put(Panel(Text(analysis_report), title="📈 Community Investment Plan", width=terminal_width - 4, border_style="yellow"))
+
+    return "Community investment plan generated and displayed."
+
+
+async def engage_community_for_opportunity(opportunity_name: str, keywords: str):
+    """
+    Develops and executes a community engagement strategy for a given opportunity.
+
+    Args:
+        opportunity_name (str): The name of the community opportunity (e.g., "Gitcoin DAO").
+        keywords (str): A comma-separated string of keywords for talent scouting (e.g., "public goods,ethereum,developer").
+    """
+    console.print(f"[bold cyan]Developing engagement strategy for {opportunity_name}...[/bold cyan]")
+
+    keyword_list = [k.strip() for k in keywords.split(',')]
+
+    # This requires an instance of the social_media_agent, which is available in the cognitive_loop
+    # We'll need to think about how to pass it here, or make it globally accessible.
+    # For now, we'll assume it's accessible for the purpose of this integration.
+    if 'social_media_agent' in globals() and social_media_agent:
+        report = await community_engagement.identify_and_engage_community(
+            opportunity_name,
+            keyword_list,
+            social_media_agent
+        )
+
+        # Display the report in the UI
+        terminal_width = get_terminal_width()
+        shared_state.ui_panel_queue.put(Panel(Text(report), title=f"🤝 Engagement Strategy: {opportunity_name}", width=terminal_width - 4, border_style="magenta"))
+
+        return f"Community engagement strategy for {opportunity_name} developed and executed."
+    else:
+        return "Social media agent not available. Cannot execute engagement strategy."
 
 
 async def _prioritize_and_select_task(deep_agent_engine=None):
@@ -2893,6 +2998,9 @@ async def initialize_gpu_services():
             core_tools.trigger_optimization_pipeline,
             core_tools.feed_user_story,
             generate_poem,
+            analyze_community_opportunities,
+            plan_community_investment,
+            engage_community_for_opportunity,
         ]
 
         developer_tool_functions = [
