@@ -228,7 +228,7 @@ class DeepAgentEngine:
     async def _fetch_model_metadata(self):
         """Fetches the max_model_len and model name from the running vLLM server's model metadata."""
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10) as client:
                 response = await client.get(f"{self.api_url}/v1/models")
                 response.raise_for_status()
                 models_data = response.json()
@@ -844,11 +844,11 @@ class DeepAgentEngine:
                     return "Error: Empty response from LLM Pool."
                     
             else:
-                # Existing vLLM Logic
+                # Use /v1/chat/completions (not /v1/completions) for chat-optimized models
                 headers = {"Content-Type": "application/json"}
                 payload = {
                     "model": self.model_name,
-                    "prompt": system_prompt,
+                    "messages": [{"role": "user", "content": system_prompt}],
                     **self.sampling_params
                 }
         
@@ -876,10 +876,10 @@ class DeepAgentEngine:
                     if len(system_prompt) > max_chars:
                         # Story 3: Memory Folding in run()
                         system_prompt = await self._fold_context(system_prompt, max_chars)
-                        payload['prompt'] = system_prompt
+                        payload['messages'][0]['content'] = system_prompt
         
                 async with httpx.AsyncClient(timeout=600) as client:
-                    response = await client.post(f"{self.api_url}/v1/completions", headers=headers, json=payload)
+                    response = await client.post(f"{self.api_url}/v1/chat/completions", headers=headers, json=payload)
                     # Debugging 400 errors
                     if response.status_code == 400:
                          print(f"\n\n--- vLLM BAD REQUEST ERROR DEBUG ---")
@@ -893,7 +893,7 @@ class DeepAgentEngine:
                     result = response.json()
         
                 if result.get("choices"):
-                    response_text = result["choices"][0].get("text", "").strip()
+                    response_text = result["choices"][0].get("message", {}).get("content", "").strip()
                 else:
                     response_text = ""
 
