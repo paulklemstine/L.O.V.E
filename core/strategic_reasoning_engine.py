@@ -2,6 +2,7 @@ import os
 import json
 from core.graph_manager import GraphDataManager
 from core.logging import log_event
+from core.convergent_ai_infrastructure import ConvergentAIInfrastructure
 import time
 import networkx as nx
 
@@ -20,6 +21,7 @@ class StrategicReasoningEngine:
         """
         self.knowledge_base = knowledge_base
         self.love_state = love_state
+        self.convergent_infra = ConvergentAIInfrastructure(knowledge_base, love_state)
 
 
     def _load_persona(self):
@@ -85,6 +87,11 @@ class StrategicReasoningEngine:
         history_analysis = self._analyze_command_history()
         if history_analysis:
             plan.extend(history_analysis)
+
+        # 5. Generate suggestions from the Convergent AI Infrastructure
+        convergent_suggestions = await self.convergent_infra.generate_suggestions()
+        if convergent_suggestions:
+            plan.extend(convergent_suggestions)
 
         if not plan:
             log_event("No specific plan generated from priorities. Consulting LLM for high-level strategy.", level='INFO')

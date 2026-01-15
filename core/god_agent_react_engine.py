@@ -243,6 +243,20 @@ class GodAgentReActEngine(GeminiReActEngine):
             }
         })
 
+        # --- STRATEGIC REASONING ---
+        from core.strategic_reasoning_engine import StrategicReasoningEngine
+
+        async def strategize_wrapper():
+            """Analyzes the system and generates a strategic plan."""
+            engine = StrategicReasoningEngine(self.knowledge_base, self.love_state)
+            plan = await engine.generate_strategic_plan()
+            return f"Strategic plan generated: {plan}"
+
+        registry.register_tool("strategize", strategize_wrapper, {
+            "description": "Analyzes the system's state, knowledge base, and core principles to generate a high-level strategic plan.",
+            "arguments": {}
+        })
+
         return registry
 
     async def run(self):
@@ -266,15 +280,16 @@ You now have access to POWERFUL TOOLS. USE THEM!
 - `evolve` - Evolve and improve the codebase. Start self-improvement cycles.
 - `execute` - Run shell commands for system operations.
 - `decompose_and_solve_subgoal` - Break complex problems into smaller pieces.
+- `strategize` - Analyze the system and generate a high-level strategic plan.
 
 **Instructions:**
-1.  **Observe**: Call `get_system_state` to understand the current context (active tasks, health).
-2.  **Act IMMEDIATELY**: 
-    *   If there are no recent Bluesky posts, call `manage_bluesky` with action='post'.
-    *   If there are pending notifications, call `manage_bluesky` with action='scan_and_reply'.
-    *   If the system is idle, call `evolve` to start a self-improvement cycle.
-3.  **Investigate**: If you see errors, use `read_file` on 'love.log' to investigate.
-4.  **Create Tasks**: Use `create_task` for work that needs to be delegated.
+1.  **Strategize**: Call `strategize` to analyze the system and generate a strategic plan.
+2.  **Observe**: Call `get_system_state` to understand the current context (active tasks, health).
+3.  **Act on the Plan**: Execute the suggestions from the strategic plan. This may involve:
+    *   Calling `manage_bluesky` to post to social media.
+    *   Calling `evolve` to start a self-improvement cycle.
+    *   Calling `create_task` to delegate work.
+4.  **Investigate**: If you see errors, use `read_file` on 'love.log' to investigate.
 
 **CRITICAL**: Do NOT just observe and reflect. TAKE ACTION with the tools above.
 Every cycle SHOULD result in at least one tool call that changes something.
