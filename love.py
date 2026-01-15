@@ -2144,7 +2144,13 @@ async def analyze_creator_sentiment(text, deep_agent_instance=None):
     """
     try:
         response_dict = await run_llm(prompt_key="sentiment_analysis", prompt_vars={"text": text}, purpose="sentiment_analysis", deep_agent_instance=deep_agent_instance)
-        response_str = response_dict.get("result", '{{}}')
+        # Defensive type checking: handle string or dict responses
+        if isinstance(response_dict, str):
+            response_str = response_dict
+        elif isinstance(response_dict, dict):
+            response_str = response_dict.get("result", '{{}}')
+        else:
+            response_str = '{{}}'
 
         # Clean up potential markdown code blocks
         json_match = re.search(r"```json\n(.*?)\n```", response_str, re.DOTALL)
@@ -2216,7 +2222,13 @@ async def _prioritize_and_select_task(deep_agent_engine=None):
             purpose="task_prioritization",
             deep_agent_instance=deep_agent_engine
         )
-        scores_text = response_dict.get("result", "")
+        # Defensive type checking: run_llm should return a dict, but handle edge cases
+        if isinstance(response_dict, str):
+            scores_text = response_dict
+        elif isinstance(response_dict, dict):
+            scores_text = response_dict.get("result", "")
+        else:
+            scores_text = ""
 
         # 3. Parse Scores and Select Best Task
         scores = {}
