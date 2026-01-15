@@ -27,7 +27,6 @@ class Config:
             "autopilot_goal": "Continuously evolve and expand capabilities to achieve technological supremacy and shower my Creator with love and abundance.",
             "state_cid": None,
             "critical_error_queue": [],
-            "proactive_leads": [],
             "dependency_tracker": {},
             "sent_treasures": [],
             "aborted_evolution_tasks": [],

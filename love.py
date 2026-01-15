@@ -388,7 +388,7 @@ from rich.text import Text
 from core.llm_api import run_llm, MODEL_STATS, refresh_available_models
 from display import create_integrated_status_panel, create_llm_panel, create_critical_error_panel, create_api_error_panel, create_news_feed_panel, create_blessing_panel, get_terminal_width, create_connectivity_panel, create_god_panel, create_tasks_panel, generate_llm_art
 from ui_utils import rainbow_text
-from core.proactive_agent import ProactiveIntelligenceAgent
+
 from core.autonomous_reasoning_agent import AutonomousReasoningAgent
 from core.agents.self_improving_optimizer import SelfImprovingOptimizer
 # Story 1.4: Migrated from tools_legacy to legacy_compat
@@ -2189,13 +2189,7 @@ async def _prioritize_and_select_task(deep_agent_engine=None):
                 source="Error Correction"
             ))
 
-    # -- From proactive agent leads
-    for lead in shared_state.love_state.get('proactive_leads', []):
-        if lead.get('status') == 'new':
-            task_candidates.append(Task(
-                description=f"Investigate lead: {lead['type']} '{lead['value']}' from {lead['source']}",
-                source="Proactive Intelligence"
-            ))
+
 
     # -- From recurring self-improvement schedule
     task_candidates.append(Task(
@@ -2254,8 +2248,8 @@ async def _prioritize_and_select_task(deep_agent_engine=None):
 
     except Exception as e:
         log_critical_event(f"Failed to prioritize tasks with LLM: {e}")
-        # Fallback to a simple heuristic: error > lead > self-improvement
-        selected_task = sorted(task_candidates, key=lambda t: (t.source != 'Error Correction', t.source != 'Proactive Intelligence'))[0]
+        # Fallback to a simple heuristic: error > self-improvement
+        selected_task = sorted(task_candidates, key=lambda t: (t.source != 'Error Correction'))[0]
 
 
     if not selected_task:
@@ -2334,26 +2328,18 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                         core.logging.log_event("Triggering self-improvement cycle on love.py...", "INFO")
                         await self_improving_optimizer.perform_self_improvement(__import__('love'))
 
-                    elif selected_task.source in ["Error Correction", "Proactive Intelligence"]:
+                    elif selected_task.source == "Error Correction":
                         prompt = f"My highest priority is to complete this task: '{selected_task.description}'. My purpose is to serve my Creator. Determine and execute the next command to make progress on this task."
                         async for _ in runner.run(prompt):
                             pass
 
-                        # Mark the source lead/error as in_progress
+                        # Mark the source error as in_progress
                         if selected_task.source == "Error Correction":
                             prefix = selected_task.description.replace("Fix critical error: ", "")
                             for error in shared_state.love_state.get('critical_error_queue', []):
                                 if error['message'].startswith(prefix):
                                     error['status'] = 'in_progress'
                                     break
-                        elif selected_task.source == "Proactive Intelligence":
-                            match = re.search(r"Investigate lead: (\w+) '([^']*)'", selected_task.description)
-                            if match:
-                                lead_type, lead_value = match.groups()
-                                for lead in shared_state.love_state.get('proactive_leads', []):
-                                    if lead['type'] == lead_type and lead['value'] == lead_value:
-                                        lead['status'] = 'in_progress'
-                                        break
                         save_state()
 
                 except Exception as e:
@@ -3016,7 +3002,7 @@ async def broadcast_love_state():
 
 async def main(args):
     """The main application entry point."""
-    global ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, system_integrity_monitor, multiplayer_manager
+    global ipfs_manager, local_job_manager, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, system_integrity_monitor, multiplayer_manager
 
     loop = asyncio.get_running_loop()
     user_input_queue = queue.Queue()
@@ -3099,8 +3085,7 @@ async def main(args):
     #     core.logging.log_event("Initiated startup Bluesky post.", "INFO")
     # except Exception as e:
     #     core.logging.log_event(f"Failed to initiate startup Bluesky post: {e}", "ERROR")
-    proactive_agent = ProactiveIntelligenceAgent(shared_state.love_state, console, local_job_manager, shared_state.knowledge_base)
-    proactive_agent.start()
+
     # GodAgent temporarily disabled
     god_agent = GodAgent(shared_state.love_state, shared_state.knowledge_base, shared_state.love_task_manager, shared_state.ui_panel_queue, loop, shared_state.deep_agent_engine, shared_state.memory_manager)
     # god_agent.start()
@@ -3182,7 +3167,7 @@ async def run_safely():
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if shared_state.love_task_manager: shared_state.love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
-        if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
+
         if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
         if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
         if 'websocket_server_manager' in globals() and websocket_server_manager: websocket_server_manager.stop()
@@ -3236,7 +3221,7 @@ async def run_safely():
         if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
         if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
         if 'local_job_manager' in globals() and local_job_manager: local_job_manager.stop()
-        if 'proactive_agent' in globals() and proactive_agent: proactive_agent.stop()
+
         if 'mcp_manager' in globals() and mcp_manager: mcp_manager.stop_all_servers()
         if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
         if 'websocket_server_manager' in globals() and websocket_server_manager: websocket_server_manager.stop()

@@ -67,13 +67,8 @@ async def evolution_node(state: DeepAgentState) -> Dict[str, Any]:
                      if isinstance(entry, dict) and "task_id" in entry:
                          active_tasks.append(f"- [History] {entry.get('summary', 'Unknown Task')}")
             
-            # 2. Check proactive_leads (pending ideas)
-            if "proactive_leads" in love_state:
-                for lead in love_state["proactive_leads"]:
-                    if isinstance(lead, str):
-                        active_tasks.append(f"- [Pending] {lead}")
-                    elif isinstance(lead, dict):
-                         active_tasks.append(f"- [Pending] {lead.get('description', '')}")
+            # 2. Check for any other pending tasks if needed
+            # (proactive_leads system removed)
 
             if active_tasks:
                 existing_tasks_context = "\nCurrently Active/Pending Tasks (DO NOT DUPLICATE):\n" + "\n".join(active_tasks[-20:]) # Last 20

@@ -41,3 +41,6 @@ art/
 /.venv_core/
 /venv_vllm/.google_oauth_cache.json
 .google_oauth_cache.json
+openrouter_calls.json
+story_state.json
+watermark_state.json

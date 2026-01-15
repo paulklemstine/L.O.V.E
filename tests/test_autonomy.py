@@ -20,7 +20,6 @@ class TestAutonomy(unittest.IsolatedAsyncioTestCase):
         # Reset shared_state for each test
         shared_state.love_state = {
             'critical_error_queue': [],
-            'proactive_leads': [],
             'autopilot_goal': 'Test Goal'
         }
         shared_state.love_task_manager = MagicMock()
@@ -52,7 +51,6 @@ class TestAutonomy(unittest.IsolatedAsyncioTestCase):
         # Use mock_uuid to control the generated task IDs
         with patch('uuid.uuid4', side_effect=["task_id_1", "task_id_2", "task_id_3"]):
             shared_state.love_state['critical_error_queue'].append({'status': 'new', 'message': 'Test error'})
-            shared_state.love_state['proactive_leads'].append({'status': 'new', 'type': 'ip', 'value': '127.0.0.1', 'source': 'test'})
 
             selected_task = await _prioritize_and_select_task()
 
@@ -66,7 +64,6 @@ class TestAutonomy(unittest.IsolatedAsyncioTestCase):
         mock_run_llm.side_effect = Exception("LLM API is down")
 
         shared_state.love_state['critical_error_queue'].append({'status': 'new', 'message': 'High priority error'})
-        shared_state.love_state['proactive_leads'].append({'status': 'new', 'type': 'ip', 'value': '127.0.0.1', 'source': 'test'})
 
         selected_task = await _prioritize_and_select_task()
 
