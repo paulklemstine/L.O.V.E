@@ -129,6 +129,12 @@
             display: none;
         }
 
+        .panel-header:focus-visible {
+            outline: 2px solid #4267B2;
+            outline-offset: -2px;
+            background-color: #e7f3ff;
+        }
+
         textarea {
             width: 98%;
             height: 300px;
@@ -283,7 +289,7 @@
         <div id="apiKeyContent">
             <h2>Enter API Key</h2>
             <p>Please enter your Gemini API key to continue.</p>
-            <input type="password" id="apiKeyInput" placeholder="Your API Key">
+            <input type="password" id="apiKeyInput" placeholder="Your API Key" aria-label="Gemini API Key">
             <button id="saveApiKeyBtn">Save and Continue</button>
         </div>
     </div>
@@ -300,7 +306,7 @@
                     <h2>1. Goal</h2>
                 </div>
                 <div class="panel-content">
-                    <textarea id="prompt" placeholder="Describe the change you want to make..."></textarea>
+                    <textarea id="prompt" placeholder="Describe the change you want to make..." aria-label="Goal prompt"></textarea>
                 </div>
             </div>
 
@@ -313,7 +319,7 @@
                     <p>Provide high-level strategic guidance. This will influence the AI's long-term planning and goal
                         generation.</p>
                     <textarea id="dr-gemini-guidance"
-                        placeholder="For example: 'Implement a subscription model for premium features.' or 'Focus on user growth in the education sector.'"></textarea>
+                        placeholder="For example: 'Implement a subscription model for premium features.' or 'Focus on user growth in the education sector.'" aria-label="Strategic Direction Guidance"></textarea>
                 </div>
             </div>
 
@@ -391,7 +397,7 @@
                     <h2>Ask Creator</h2>
                 </div>
                 <div class="panel-content">
-                    <textarea id="question-input" placeholder="Ask a question to the creator..."></textarea>
+                    <textarea id="question-input" placeholder="Ask a question to the creator..." aria-label="Question for Creator"></textarea>
                     <button id="send-question-btn">Send Question</button>
                 </div>
             </div>
@@ -675,9 +681,26 @@
         function initializeCollapsiblePanels() {
             const panelHeaders = document.querySelectorAll('.panel-header');
             panelHeaders.forEach(header => {
-                header.addEventListener('click', () => {
-                    const panel = header.closest('.panel');
+                // Initialize ARIA state
+                const panel = header.closest('.panel');
+                const isCollapsed = panel.classList.contains('collapsed');
+
+                header.setAttribute('role', 'button');
+                header.setAttribute('tabindex', '0');
+                header.setAttribute('aria-expanded', !isCollapsed);
+
+                const toggle = () => {
                     panel.classList.toggle('collapsed');
+                    const isNowCollapsed = panel.classList.contains('collapsed');
+                    header.setAttribute('aria-expanded', !isNowCollapsed);
+                };
+
+                header.addEventListener('click', toggle);
+                header.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggle();
+                    }
                 });
             });
         }
