@@ -312,10 +312,6 @@ async def share_wisdom() -> str:
     if not hasattr(shared_state, 'knowledge_base'):
         return "Error: Knowledge base not initialized."
     return await synthesize_knowledge(shared_state.knowledge_base)
-            
-    except Exception as e:
-        core.logging.log_event(f"Error feeding user story: {e}", "ERROR")
-        return f"Error adding user story: {e}"
 
 @tool("post_to_bluesky", args_schema=PostToBlueskyInput)
 async def post_to_bluesky(text: str, image_prompt: str) -> str:
