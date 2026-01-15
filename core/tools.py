@@ -304,6 +304,10 @@ async def feed_user_story(story: str) -> str:
         else:
             return "Failed to feed user story. Check logs for API details."
 
+    except Exception as e:
+        core.logging.log_event(f"Error feeding user story: {e}", "ERROR")
+        return f"Error adding user story: {e}"
+
 @tool("share_wisdom")
 async def share_wisdom() -> str:
     """
