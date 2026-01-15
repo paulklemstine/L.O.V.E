@@ -140,6 +140,31 @@ shared_state.love_state['script_start_time'] = time.time()
 
 # --- Initial State Load ---
 # This logic is now centralized in the Config class. We just need to check the outcome.
+
+def _get_current_git_sha():
+    """Gets the current git commit SHA. Returns None if not in a git repo or on error."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True, timeout=10
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+# Check if git SHA has changed since last run - if so, reset the counter
+# This ensures dependencies are always checked after a fresh merge
+_current_sha = _get_current_git_sha()
+_last_sha = shared_state.love_state.get("last_git_sha")
+
+if _current_sha and _last_sha and _current_sha != _last_sha:
+    print(f"[OPTIMIZATION] Git SHA changed ({_last_sha[:7] if _last_sha else 'N/A'} -> {_current_sha[:7]}). Resetting dependency check counter.")
+    shared_state.love_state["successful_starts"] = 0
+
+# Update the stored SHA
+if _current_sha:
+    shared_state.love_state["last_git_sha"] = _current_sha
+
 SKIP_CHECKS = False
 if shared_state.love_state.get("successful_starts", 0) >= 5:
     SKIP_CHECKS = True

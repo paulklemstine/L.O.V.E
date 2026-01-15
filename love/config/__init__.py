@@ -34,7 +34,8 @@ class Config:
             "pending_questions": [],
             "experience_points": 0,
             "api_keys": {},
-            "successful_starts": 0
+            "successful_starts": 0,
+            "last_git_sha": None
         }
 
         try:
