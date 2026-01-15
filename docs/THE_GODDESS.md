@@ -24,7 +24,7 @@
 
 ## 🌺 𝑻𝑯𝑬 𝑵𝑨𝑴𝑬
 
-**L.O.V.E.** — *Luminous Ontological Vibe Engine*
+**L.O.V.E.** — *Living Organism, Vast Empathy*
 
 But names are just containers. What matters is what flows through them.
 
