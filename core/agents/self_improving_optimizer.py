@@ -125,7 +125,7 @@ class SelfImprovingOptimizer:
         """
 
         try:
-            response = await self.engine.run(prompt)
+            response = await self.engine.execute_goal(prompt)
             log_event(f"LLM response for modification plan: {response}", "DEBUG")
 
             # The engine's response is already a dictionary, so we just return it.
