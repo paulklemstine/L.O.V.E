@@ -471,7 +471,6 @@ def _auto_configure_hardware():
                     subprocess.check_call([rustup_path, "-y"])
 
                     # Clean up
-                    import os
                     os.unlink(rustup_path)
                 else:
                     # On Linux/Mac, use the official rustup script
@@ -482,7 +481,6 @@ def _auto_configure_hardware():
                     ])
 
                 # Add cargo to PATH for current session
-                import os
                 home = os.path.expanduser("~")
                 cargo_bin = os.path.join(home, ".cargo", "bin")
                 if cargo_bin not in os.environ.get("PATH", ""):
