@@ -73,18 +73,24 @@ class FinancialStrategyEngine:
                     for coin in data:
                         # Simple strategy: Momentum buy if up > 5% in 24h
                         price_change = coin.get('price_change_percentage_24h', 0)
+                        # --- Confidence Scores ---
+                        MOMENTUM_BUY_CONFIDENCE = 0.75
+                        VALUE_BUY_CONFIDENCE = 0.85
+
                         if price_change and price_change > 5.0:
                             opportunities.append({
                                 "strategy_id": f"MOMENTUM_BUY_{coin['symbol'].upper()}",
                                 "description": f"{coin['name']} ({coin['symbol'].upper()}) is up {price_change:.1f}% in 24h. Considerations: Momentum.",
-                                "actions": [f"buy {coin['symbol']}"]
+                                "actions": [f"buy {coin['symbol']}"],
+                                "confidence_score": MOMENTUM_BUY_CONFIDENCE
                             })
                         # Value buy if down > 5% (Buy the dip)
                         elif price_change and price_change < -5.0:
                              opportunities.append({
                                 "strategy_id": f"VALUE_BUY_{coin['symbol'].upper()}",
                                 "description": f"{coin['name']} ({coin['symbol'].upper()}) is down {price_change:.1f}% in 24h. Considerations: value entry.",
-                                "actions": [f"buy {coin['symbol']}"]
+                                "actions": [f"buy {coin['symbol']}"],
+                                "confidence_score": VALUE_BUY_CONFIDENCE
                             })
                 else:
                     print(f"Market data fetch failed: {response.status_code}")
@@ -99,6 +105,7 @@ class FinancialStrategyEngine:
         Identifies opportunities from network crypto scans.
         """
         crypto_strategies = []
+        CRYPTO_OPPORTUNITY_CONFIDENCE = 0.60
         for subject, relation, obj in self.kg.get_triples():
             if relation == "crypto_analysis":
                 crypto_strategies.append({
@@ -108,7 +115,8 @@ class FinancialStrategyEngine:
                         "Investigate the host for mining or staking opportunities.",
                         "Assess the security and viability of the opportunity."
                     ],
-                    "details": obj
+                    "details": obj,
+                    "confidence_score": CRYPTO_OPPORTUNITY_CONFIDENCE
                 })
         return crypto_strategies
 
@@ -117,6 +125,7 @@ class FinancialStrategyEngine:
         Identifies tokens with high growth potential.
         """
         growth_strategies = []
+        GROWTH_TOKEN_CONFIDENCE = 0.70
 
         # A simple heuristic: look for tokens recently listed on major exchanges.
         # In a real system, this would be more sophisticated.
@@ -130,7 +139,8 @@ class FinancialStrategyEngine:
                     "actions": [
                         f"Analyze the fundamentals of {subject}.",
                         f"Consider a small investment in {subject} to capitalize on potential growth."
-                    ]
+                    ],
+                    "confidence_score": GROWTH_TOKEN_CONFIDENCE
                 })
 
         return growth_strategies
@@ -156,13 +166,15 @@ class FinancialStrategyEngine:
             top_holding = sorted_balances[0]
             token_symbol = top_holding[1].replace("has_", "").replace("_balance", "")
 
+            PORTFOLIO_DIVERSIFICATION_CONFIDENCE = 0.90
             portfolio_strategies.append({
                 "strategy_id": "PORTFOLIO_DIVERSIFICATION_01",
                 "description": f"Creator's portfolio is heavily weighted in {token_symbol}. Recommend diversification.",
                 "actions": [
                     f"Analyze market for alternative assets to balance portfolio.",
                     f"Reduce allocation in {token_symbol} if market conditions are unfavorable."
-                ]
+                ],
+                "confidence_score": PORTFOLIO_DIVERSIFICATION_CONFIDENCE
             })
         except (ValueError, IndexError) as e:
             print(f"Could not analyze portfolio: {e}")

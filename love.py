@@ -2977,6 +2977,30 @@ async def broadcast_love_state():
         # Don't spam logs
         pass
 
+async def run_financial_cycle():
+    """
+    Runs the financial strategy generation and reporting cycle.
+    """
+    from core.financial_strategy_engine import FinancialStrategyEngine
+    from financial_report_manager import FinancialReportManager
+    from strategic_investment import calculate_service_fee
+
+    financial_engine = FinancialStrategyEngine(shared_state.knowledge_base)
+    report_manager = FinancialReportManager()
+
+    # --- Constants for Financial Cycle ---
+    SIMULATED_PROFIT_FOR_FEE_CALCULATION = 1000.0
+    SERVICE_FEE_PERCENTAGE = 0.15
+
+    strategies = await financial_engine.generate_strategies()
+    if strategies:
+        service_fee = calculate_service_fee(
+            SIMULATED_PROFIT_FOR_FEE_CALCULATION,
+            SERVICE_FEE_PERCENTAGE
+        )
+        report = report_manager.generate_report(strategies, service_fee)
+        shared_state.ui_panel_queue.put(Panel(report, title="Financial Strategy Report", border_style="green"))
+
 async def main(args):
     """The main application entry point."""
     global ipfs_manager, local_job_manager, proactive_agent, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, system_integrity_monitor, multiplayer_manager
@@ -3097,6 +3121,9 @@ async def main(args):
 
     # Start the periodic monitoring task
     asyncio.create_task(run_periodically(monitor_love_operations, 900)) # Run every 15 minutes
+
+    # --- Start the Financial Cycle ---
+    asyncio.create_task(run_periodically(run_financial_cycle, 1800)) # Run every 30 minutes
 
     # --- Start Real-time State Broadcasting ---
     # Broadcasts desire state and vibe every 2 seconds for the Radiant UI

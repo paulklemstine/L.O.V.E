@@ -69,6 +69,19 @@ def adjust_portfolio_for_growth(current_portfolio, strategic_growth_factors, wea
 
     return new_portfolio, report
 
+def calculate_service_fee(simulated_profit, fee_percentage=0.15):
+    """
+    Calculates the service fee based on simulated profit.
+
+    Args:
+        simulated_profit (float): The simulated profit from the financial strategies.
+        fee_percentage (float): The percentage of the profit to take as a service fee.
+
+    Returns:
+        float: The calculated service fee.
+    """
+    return simulated_profit * fee_percentage
+
 
 if __name__ == '__main__':
     # 1. Portfolio Definition: L.O.V.E.'s Current Resource Allocation
