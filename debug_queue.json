@@ -1,0 +1,47 @@
+[
+  {
+    "id": "380ba6ea-56ff-49fa-8dc1-6fe18a9f5366",
+    "message": "UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.\nTraceback (most recent call last):\n  File \"/home/raver1975/L.O.V.E/love.py\", line 3752, in run_safely\n    await main(args)\n  File \"/home/raver1975/L.O.V.E/love.py\", line 3685, in main\n    god_agent = GodAgent(shared_state.love_state, shared_state.knowledge_base, shared_state.love_task_manager, shared_state.ui_panel_queue, loop, shared_state.deep_agent_engine, shared_state.memory_manager)\n  File \"/home/raver1975/L.O.V.E/god_agent.py\", line 18, in __init__\n    self.engine = GodAgentReActEngine(love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine, memory_manager)\n                  ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/raver1975/L.O.V.E/core/god_agent_react_engine.py\", line 10, in __init__\n    tool_registry=self._get_tool_registry(),\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/home/raver1975/L.O.V.E/core/god_agent_react_engine.py\", line 25, in _get_tool_registry\n    registry = core.tools_legacy.ToolRegistry()\n               ^^^^\nUnboundLocalError: cannot access local variable 'core' where it is not associated with a value\n",
+    "first_seen": 1767569879.5505002,
+    "last_seen": 1768363706.3556163,
+    "status": "new",
+    "task_id": null,
+    "cooldown_until": 0
+  },
+  {
+    "id": "8d724c87-f29a-41cd-8fc0-16c3020f91ea",
+    "message": "Critical error in cognitive_loop: 'JulesTaskManager' object has no attribute 'is_duplicate_task'",
+    "first_seen": 1768316575.501037,
+    "last_seen": 1768316575.5010371,
+    "status": "new",
+    "task_id": null,
+    "cooldown_until": 0
+  },
+  {
+    "id": "b0193250-bac6-45bb-85fb-37fc28b97585",
+    "message": "Error executing task 'Fix critical error: UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.': 'WorkingMemory' object is not a mapping",
+    "first_seen": 1768317470.0413284,
+    "last_seen": 1768318548.7076428,
+    "status": "new",
+    "task_id": null,
+    "cooldown_until": 0
+  },
+  {
+    "id": "5efba85b-ab12-47ef-a20b-8b040e8d26ac",
+    "message": "Critical error in cognitive_loop: 'WorkingMemory' object is not a mapping",
+    "first_seen": 1768318353.2243116,
+    "last_seen": 1768318456.232193,
+    "status": "new",
+    "task_id": null,
+    "cooldown_until": 0
+  },
+  {
+    "id": "5c9bfcda-413e-485a-abc3-d52aa87cd786",
+    "message": "Critical error in cognitive_loop: string indices must be integers, not 'str'",
+    "first_seen": 1768365315.32878,
+    "last_seen": 1768365452.8560011,
+    "status": "new",
+    "task_id": null,
+    "cooldown_until": 0
+  }
+]

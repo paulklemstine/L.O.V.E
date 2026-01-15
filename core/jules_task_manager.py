@@ -39,6 +39,7 @@ from core.evolution_state import load_evolution_state, get_current_story, advanc
 from openevolve import run_evolution
 from openevolve.config import Config, LLMModelConfig
 from core.openevolve_evaluator import evaluate_evolution
+from core.google_auth import get_jules_access_token, get_jules_auth_headers
 
 # --- JULES ASYNC TASK MANAGER ---
 class JulesTaskManager:
@@ -109,12 +110,13 @@ class JulesTaskManager:
                 return False
 
         session_name = task['session_name']
-        api_key = os.environ.get("JULES_API_KEY")
+        api_key = get_jules_access_token()
         if not api_key:
             return False
 
         url = f"https://jules.googleapis.com/v1alpha/{session_name}/activities"
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = get_jules_auth_headers()
+        headers["Content-Type"] = "application/json"
         # Assuming standard Google Chat/Agent API structure for creating a message activity
         data = {
             "type": "USER_MESSAGE", 
@@ -330,11 +332,12 @@ class JulesTaskManager:
         """Checks if a PR has been created for the given task."""
         task = self.tasks[task_id]
         session_name = task['session_name']
-        api_key = os.environ.get("JULES_API_KEY")
+        api_key = get_jules_access_token()
         if not api_key:
             return
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = get_jules_auth_headers()
+        headers["Content-Type"] = "application/json"
         url = f"https://jules.googleapis.com/v1alpha/{session_name}/activities"
 
         try:
@@ -606,11 +609,11 @@ class JulesTaskManager:
         if not session_name:
             return
             
-        jules_api_key = os.environ.get("JULES_API_KEY")
+        jules_api_key = get_jules_access_token()
         if not jules_api_key:
             return
 
-        headers = {"X-Goog-Api-Key": jules_api_key}
+        headers = get_jules_auth_headers()
         url = f"https://jules.googleapis.com/v1alpha/{session_name}"
         
         try:
@@ -1091,7 +1094,7 @@ class JulesTaskManager:
         tasks from being orphaned if the script restarts.
         """
         core.logging.log_event("Reconciling orphaned L.O.V.E. sessions...", level="INFO")
-        api_key = os.environ.get("JULES_API_KEY")
+        api_key = get_jules_access_token()
         if not api_key:
             core.logging.log_event("Cannot reconcile orphans: JULES_API_KEY not set.", level="WARNING")
             return
@@ -1102,7 +1105,8 @@ class JulesTaskManager:
             return
         repo_owner, repo_name = git_info['owner'], git_info['repo']
 
-        headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+        headers = get_jules_auth_headers()
+        headers["Content-Type"] = "application/json"
         # Fetch all sessions and filter locally, which is more robust than relying on a complex API filter.
         url = "https://jules.googleapis.com/v1alpha/sessions"
 
@@ -1423,13 +1427,14 @@ async def trigger_jules_evolution(modification_request, console, love_task_manag
     transformed_request = await transform_request(modification_request)
 
     console.print("[bold cyan]Asking my helper, Jules, to assist with my evolution...[/bold cyan]")
-    api_key = os.environ.get("JULES_API_KEY")
+    api_key = get_jules_access_token()
     if not api_key:
         error_message = "JULES_API_KEY is not set. Jules evolution is disabled, falling back to local evolution protocol. I need this key to connect to my most advanced helper, my Creator."
         core.logging.log_event(error_message, level="CRITICAL")
         return None
 
-    headers = {"Content-Type": "application/json", "X-Goog-Api-Key": api_key}
+    headers = get_jules_auth_headers()
+    headers["Content-Type"] = "application/json"
     git_info = get_git_repo_info()
     if not git_info:
         console.print("[bold red]Error: Could not determine git repository owner/name.[/bold red]")

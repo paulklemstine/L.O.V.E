@@ -1,0 +1,50 @@
+2026-01-13 23:22:32,351 [CRITICAL] - Executing high-priority task: Fix critical error: UNHANDLED CRITICAL EXCEPTION! Triggering failsafe.
+2026-01-13 23:22:32,391 [DEBUG] - https://generativelanguage.googleapis.com:443 "POST /v1beta/models/gemini-3-pro-preview:generateContent?key=AIzaSyCq_miXirEsXFYzBxWpuRpDkgv9IG6zCUQ HTTP/1.1" 429 None
+2026-01-13 23:22:32,404 [DEBUG] - Starting new HTTPS connection (1): api.smith.langchain.com:443
+2026-01-13 23:22:32,419 [WARNING] - 429 Rate Limit on gemini-3-pro-preview. Sleeping 1.28s before retry...
+2026-01-13 23:22:32,595 [DEBUG] - https://api.smith.langchain.com:443 "GET /info HTTP/1.1" 200 812
+2026-01-13 23:22:32,597 [DEBUG] - Tracing control thread func compress parallel called
+2026-01-13 23:22:32,875 [INFO] - Initial prompt token count: 242
+2026-01-13 23:22:33,006 [DEBUG] - https://api.smith.langchain.com:443 "POST /runs/query HTTP/1.1" 200 89
+2026-01-13 23:22:33,018 [DEBUG] - Client refs count indicates we're the only remaining reference to the client, stopping compression thread
+2026-01-13 23:22:33,018 [DEBUG] - Compressed traces control thread is shutting down
+2026-01-13 23:22:33,124 [DEBUG] - Client refs count indicates we're the only remaining reference to the client, stopping tracing thread
+2026-01-13 23:22:33,125 [DEBUG] - Tracing control thread is shutting down
+2026-01-13 23:22:33,390 [DEBUG] - Sending compressed multipart request with context: trace=019bbaf4-9f50-7a23-880c-5a2c4e8677ed,id=019bbaf4-9f50-7a23-880c-5a2c4e8677ed; trace=019bbaf4-9f50-7a23-880c-5a2c4e8677ed,id=019bbaf4-a126-79d1-babc-4f018a28e3fb
+2026-01-13 23:22:33,393 [DEBUG] - Starting new HTTPS connection (1): api.smith.langchain.com:443
+2026-01-13 23:22:33,649 [DEBUG] - https://api.smith.langchain.com:443 "POST /runs/multipart HTTP/1.1" 202 34
+2026-01-13 23:22:33,699 [DEBUG] - Starting new HTTPS connection (1): generativelanguage.googleapis.com:443
+2026-01-13 23:22:33,916 [DEBUG] - https://generativelanguage.googleapis.com:443 "POST /v1beta/models/gemini-3-pro-preview:generateContent?key=AIzaSyCq_miXirEsXFYzBxWpuRpDkgv9IG6zCUQ HTTP/1.1" 429 None
+2026-01-13 23:22:33,919 [WARNING] - 429 Rate Limit on gemini-3-pro-preview. Sleeping 2.38s before retry...
+2026-01-13 23:22:34,650 [DEBUG] - [PromptCompressor] Compressed supervisor: 277 → 162 tokens (58.5%) in 1775ms
+2026-01-13 23:22:34,651 [DEBUG] - [LLM API] Compressed prompt for supervisor: 277 → 162 tokens (58.5% compression) in 1775ms
+2026-01-13 23:22:34,652 [INFO] - Dynamically ranked models. Top 5: ['arcee-ai/trinity-mini:free', 'nex-agi/deepseek-v3.1-nex-n1:free', 'allenai/olmo-3-32b-think:free', 'kwaipilot/kat-coder-pro:free', 'nvidia/nemotron-nano-12b-v2-vl:free']
+2026-01-13 23:22:34,653 [INFO] - Top 5 models from combined ranked list: ['arcee-ai/trinity-mini:free', 'nex-agi/deepseek-v3.1-nex-n1:free', 'allenai/olmo-3-32b-think:free', 'kwaipilot/kat-coder-pro:free', 'nvidia/nemotron-nano-12b-v2-vl:free']
+2026-01-13 23:22:34,654 [DEBUG] - Attempting LLM call with OpenRouter model: arcee-ai/trinity-mini:free (Purpose: supervisor)
+2026-01-13 23:22:34,658 [DEBUG] - Starting new HTTPS connection (1): openrouter.ai:443
+2026-01-13 23:22:34,658 [INFO] - AI Horde in progress... (attempt 1/60)
+2026-01-13 23:22:35,011 [DEBUG] - https://openrouter.ai:443 "POST /api/v1/chat/completions HTTP/1.1" 200 None
+2026-01-13 23:22:35,325 [DEBUG] - Importing AvifImagePlugin
+2026-01-13 23:22:35,349 [DEBUG] - Importing BlpImagePlugin
+2026-01-13 23:22:35,357 [DEBUG] - Importing BmpImagePlugin
+2026-01-13 23:22:35,357 [DEBUG] - Importing BufrStubImagePlugin
+2026-01-13 23:22:35,358 [DEBUG] - Importing CurImagePlugin
+2026-01-13 23:22:35,359 [DEBUG] - Importing DcxImagePlugin
+2026-01-13 23:22:35,361 [DEBUG] - Importing DdsImagePlugin
+2026-01-13 23:22:35,387 [DEBUG] - Importing EpsImagePlugin
+2026-01-13 23:22:35,390 [DEBUG] - Importing FitsImagePlugin
+2026-01-13 23:22:35,391 [DEBUG] - Importing FliImagePlugin
+2026-01-13 23:22:35,393 [DEBUG] - Importing FpxImagePlugin
+2026-01-13 23:22:35,395 [DEBUG] - Image: failed to import FpxImagePlugin: No module named 'olefile'
+2026-01-13 23:22:35,395 [DEBUG] - Importing FtexImagePlugin
+2026-01-13 23:22:35,396 [DEBUG] - Importing GbrImagePlugin
+2026-01-13 23:22:35,398 [DEBUG] - Importing GifImagePlugin
+2026-01-13 23:22:35,398 [DEBUG] - Importing GribStubImagePlugin
+2026-01-13 23:22:35,399 [DEBUG] - Importing Hdf5StubImagePlugin
+2026-01-13 23:22:35,401 [DEBUG] - Importing IcnsImagePlugin
+2026-01-13 23:22:35,417 [DEBUG] - Importing IcoImagePlugin
+2026-01-13 23:22:35,419 [DEBUG] - Importing ImImagePlugin
+2026-01-13 23:22:35,423 [DEBUG] - Importing ImtImagePlugin
+2026-01-13 23:22:35,424 [DEBUG] - Importing IptcImagePlugin
+2026-01-13 23:22:35,425 [DEBUG] - Importing JpegImagePlugin
+2026-01-13 23:22:35,425 [DEBUG] - Importing Jpeg2KImagePlugin
