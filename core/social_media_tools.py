@@ -686,11 +686,25 @@ async def post_to_bluesky(text: str, image: Optional[Image.Image] = None) -> Uni
     """
     Posts the text and optional image to Bluesky.
     Uses regeneration (not truncation) if content exceeds 300 chars.
+    Now includes final draft QA step.
     """
     MAX_LENGTH = 300
     MAX_RETRIES = 3
     
     core.logging.log_event(f"Posting to Bluesky: {text[:50]}...", "INFO")
+    
+    # FINAL DRAFT QA STEP
+    from core.final_draft_fixer import fix_final_draft
+    qa_result = await fix_final_draft(text, auto_fix_only=False)
+    
+    if qa_result["was_modified"]:
+        core.logging.log_event(
+            f"✓ Final draft QA applied {len(qa_result['issues'])} fix(es)", 
+            "INFO"
+        )
+        text = qa_result["fixed_text"]
+    else:
+        core.logging.log_event("✓ Draft passed QA with no issues", "INFO")
 
     # Regeneration loop - rewrite content if too long
     for attempt in range(MAX_RETRIES):
