@@ -1,4 +1,5 @@
 import unittest
+import asyncio
 from unittest.mock import MagicMock
 
 from core.financial_strategy_engine import FinancialStrategyEngine
@@ -16,7 +17,7 @@ class TestFinancialStrategyEngine(unittest.TestCase):
     def test_generate_strategies_with_no_data(self):
         """Test that no strategies are generated when the KG is empty."""
         self.mock_kg.get_triples.return_value = []
-        strategies = self.engine.generate_strategies()
+        strategies = asyncio.run(self.engine.generate_strategies())
         self.assertEqual(len(strategies), 0)
 
     def test_generate_strategies_with_portfolio_data(self):
@@ -25,7 +26,7 @@ class TestFinancialStrategyEngine(unittest.TestCase):
             ("0x419CA6f5b6F795604938054c951c94d8629AE5Ed", "has_eth_balance", "10.5"),
             ("0x419CA6f5b6F795604938054c951c94d8629AE5Ed", "has_USDC_balance", "10000")
         ]
-        strategies = self.engine.generate_strategies()
+        strategies = asyncio.run(self.engine.generate_strategies())
         self.assertEqual(len(strategies), 1)
         self.assertEqual(strategies[0]['strategy_id'], 'PORTFOLIO_DIVERSIFICATION_01')
 
@@ -34,7 +35,7 @@ class TestFinancialStrategyEngine(unittest.TestCase):
         self.mock_kg.get_triples.return_value = [
             ("NEW_TOKEN", "listed_on", "Binance")
         ]
-        strategies = self.engine.generate_strategies()
+        strategies = asyncio.run(self.engine.generate_strategies())
         self.assertEqual(len(strategies), 1)
         self.assertEqual(strategies[0]['strategy_id'], 'INVEST_IN_NEW_TOKEN')
 

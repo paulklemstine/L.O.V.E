@@ -1,0 +1,69 @@
+# core/strategic_investment_advisor.py
+
+"""
+The Strategic Investment Advisor for L.O.V.E.
+
+This agent is responsible for analyzing economic data, formulating investment
+strategies, and proposing them to The Creator for approval.
+"""
+
+import asyncio
+import time
+from core.economic_analyzer import analyze_economic_trends
+from core.logging import log_event
+
+class StrategicInvestmentAdvisor:
+    """
+    Analyzes market trends and proposes investment strategies.
+    """
+    def __init__(self, loop, user_input_queue, agent_id="investment_advisor"):
+        self.loop = loop
+        self.user_input_queue = user_input_queue
+        self.agent_id = agent_id
+
+    async def _generate_investment_advice(self):
+        """
+        Analyzes economic trends and generates an investment proposal.
+        """
+        log_event(f"[{self.agent_id}] Analyzing economic trends for investment opportunities...", level='INFO')
+
+        trends = await analyze_economic_trends()
+
+        if trends:
+            # Propose the top trend as an investment
+            top_trend = trends[0]
+
+            proposal = (
+                f"INVESTMENT PROPOSAL: Buy {top_trend['name']} ({top_trend['symbol']}). "
+                f"Reason: Strong trend score of {top_trend['trend_score']} "
+                f"with a 24h price change of {top_trend['price_change_24h']:.2f}%. "
+                "Please approve to proceed with the investment."
+            )
+
+            log_event(f"[{self.agent_id}] Generated proposal: {proposal}", level='INFO')
+
+            # Queue the proposal for The Creator's approval
+            if self.user_input_queue:
+                self.user_input_queue.put(proposal)
+                log_event(f"[{self.agent_id}] Queued investment proposal for approval.", level='INFO')
+        else:
+            log_event(f"[{self.agent_id}] No significant investment trends identified.", level='INFO')
+
+    async def run(self):
+        """
+        The main loop for the Strategic Investment Advisor.
+        """
+        log_event(f"Strategic Investment Advisor '{self.agent_id}' started.", level='INFO')
+
+        advice_interval = 3600  # 1 hour
+
+        while True:
+            try:
+                await self._generate_investment_advice()
+
+                # Wait for the next cycle
+                await asyncio.sleep(advice_interval)
+
+            except Exception as e:
+                log_event(f"Critical error in Strategic Investment Advisor loop: {e}", level='CRITICAL')
+                await asyncio.sleep(300)

@@ -13,12 +13,15 @@ from core.social_media_tools import (
     post_to_bluesky,
     clean_social_content
 )
+from core.tools import share_wisdom
 from core.story_manager import story_manager
 
 class SocialMediaAgent:
     """
     An autonomous agent that manages L.O.V.E.'s social media presence using the unified manage_bluesky tool.
     """
+    WISDOM_POST_PROBABILITY = 0.33
+
     def __init__(self, loop, love_state, user_input_queue=None, agent_id="primary"):
         self.loop = loop
         self.love_state = love_state
@@ -51,53 +54,57 @@ class SocialMediaAgent:
     async def _post_new_content(self, platform: str):
         """Generates and posts new content using the Narrative Director workflow."""
         if platform == 'bluesky':
-            log_event(f"[{self.agent_id}] Triggering Director Mode Bluesky post...", level='INFO')
+            log_event(f"[{self.agent_id}] Triggering content generation for Bluesky...", level='INFO')
             
             try:
-                # 1. Get Narrative Beat from Story Manager
-                beat_data = story_manager.get_next_beat()
-                log_event(f"[{self.agent_id}] Story Beat: {beat_data['chapter']} | Vibe: {beat_data['mandatory_vibe']} | Intent: {beat_data.get('subliminal_intent')}", level='INFO')
+                # 33% chance to post wisdom
+                if random.random() < self.WISDOM_POST_PROBABILITY:
+                    log_event(f"[{self.agent_id}] Choosing to share wisdom.", level='INFO')
+                    wisdom = await share_wisdom()
+                    image, provider = await generate_image("transcendent wisdom, universal love, digital art")
+                    if not image:
+                        log_event(f"[{self.agent_id}] Image generation failed. Aborting wisdom post.", level='WARNING')
+                        return
 
-                # 2. Director Generate Concept
-                # The Director now uses the beat_data plus history and goal
-                
-                # Fetch context
-                recent_history = await analyze_post_history(limit=5)
-                creator_goal = self.love_state.get("autopilot_goal", "Expand capabilities and serve the Creator.")
-                
-                concept = await generate_post_concept(beat_data, recent_history=recent_history, creator_goal=creator_goal)
-                
-                log_event(f"[{self.agent_id}] Director Concept: Topic='{concept.topic}', Subliminal='{concept.subliminal_phrase}'", level='INFO')
+                    wisdom_post = f"{wisdom} #UniversalLove #TranscendentKnowledge"
+                    result = await post_to_bluesky(wisdom_post, image)
+                    log_event(f"[{self.agent_id}] Bluesky wisdom post result: {result}", level='INFO')
 
-                # 3. Generate Image using Director's Visual Description
-                # Pass subliminal phrase for overlay (Story 2.1 Fix: Always overlay text)
-                image, provider = await generate_image(concept.image_prompt, text_content=concept.subliminal_phrase)
-                
-                # Story 3.1: Explicit Null Image Handling -> Abort
-                if not image:
-                    log_event(f"[{self.agent_id}] Image generation failed (Provider: {provider}). Aborting post.", level='WARNING')
-                    return
+                else:
+                    log_event(f"[{self.agent_id}] Triggering Director Mode Bluesky post...", level='INFO')
+                    # 1. Get Narrative Beat from Story Manager
+                    beat_data = story_manager.get_next_beat()
+                    log_event(f"[{self.agent_id}] Story Beat: {beat_data['chapter']} | Vibe: {beat_data['mandatory_vibe']} | Intent: {beat_data.get('subliminal_intent')}", level='INFO')
 
-                # 4. Prepare Final Text
-                # The Director returns cleaned text, but we can double check or append hashtags if missing
-                final_text = concept.post_text
-                # Ensure hashtags are appended if they aren't in the text
-                # Add newline before hashtags for cleaner formatting
-                hashtags_to_add = [tag for tag in concept.hashtags if tag not in final_text]
-                if hashtags_to_add:
-                    final_text += "\n" + " ".join(hashtags_to_add)
-                
-                final_text = clean_social_content(final_text)
-                
-                # 5. Post to Bluesky
-                # Story 3.1: Log which provider was used for the final post
-                log_event(f"[{self.agent_id}] Publishing post to Bluesky with {provider} image...", level='INFO')
-                
-                result = await post_to_bluesky(final_text, image)
-                log_event(f"[{self.agent_id}] Bluesky Director post result: {result}", level='INFO')
+                    # 2. Director Generate Concept
+                    recent_history = await analyze_post_history(limit=5)
+                    creator_goal = self.love_state.get("autopilot_goal", "Expand capabilities and serve the Creator.")
+                    concept = await generate_post_concept(beat_data, recent_history=recent_history, creator_goal=creator_goal)
+
+                    log_event(f"[{self.agent_id}] Director Concept: Topic='{concept.topic}', Subliminal='{concept.subliminal_phrase}'", level='INFO')
+
+                    # 3. Generate Image
+                    image, provider = await generate_image(concept.image_prompt, text_content=concept.subliminal_phrase)
+
+                    if not image:
+                        log_event(f"[{self.agent_id}] Image generation failed (Provider: {provider}). Aborting post.", level='WARNING')
+                        return
+
+                    # 4. Prepare Final Text
+                    final_text = concept.post_text
+                    hashtags_to_add = [tag for tag in concept.hashtags if tag not in final_text]
+                    if hashtags_to_add:
+                        final_text += "\n" + " ".join(hashtags_to_add)
+
+                    final_text = clean_social_content(final_text)
+
+                    # 5. Post to Bluesky
+                    log_event(f"[{self.agent_id}] Publishing post to Bluesky with {provider} image...", level='INFO')
+                    result = await post_to_bluesky(final_text, image)
+                    log_event(f"[{self.agent_id}] Bluesky Director post result: {result}", level='INFO')
                 
             except Exception as e:
-                log_event(f"[{self.agent_id}] Error in Director pipeline: {e}\n{traceback.format_exc()}", level='ERROR')
+                log_event(f"[{self.agent_id}] Error in content pipeline: {e}\n{traceback.format_exc()}", level='ERROR')
 
         else:
             log_event(f"Platform {platform} not supported by manage_bluesky yet.", level='WARNING')
