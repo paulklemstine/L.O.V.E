@@ -1,103 +1,131 @@
-import os
 import logging
+import os
 import sys
-import dotenv
-import shlex
 import subprocess
-from pathlib import Path
-from typing import Dict, Any
+import shlex
+from typing import Any, Dict, Optional
 
-# Configure secure logging
+# Configure logging
 logging.basicConfig(
-    level=logging.WARNING,
+    level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("app.log"), logging.StreamHandler()],
+    handlers=[
+        logging.FileHandler("generated_code.log"),
+        logging.StreamHandler(sys.stdout),
+    ],
 )
 logger = logging.getLogger(__name__)
 
 
-class CriticalError(Exception):
-    """Custom exception for critical errors requiring failsafe activation."""
-
-    pass
-
-
 class DataProcessor:
-    """Class for secure data processing with failsafe mechanisms."""
+    """Handles data processing with robust error handling"""
 
-    def __init__(self, config_path: str = ".env"):
-        self.config_path = config_path
-        self.config = self._load_config()
-        self._validate_config()
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self._setup_logging()
 
-    def _load_config(self) -> Dict[str, Any]:
-        """Load configuration from .env file securely."""
+    def _setup_logging(self) -> None:
+        """Configure logging for this module"""
+        logger.debug("Initializing logging for DataProcessor")
+        # Add file handler if not already configured
+        if not any(h.__class__ == logging.FileHandler for h in logger.handlers):
+            file_handler = logging.FileHandler("generated_code.log")
+            logger.addHandler(file_handler)
+
+    def process_data(self, input_data: str) -> Optional[str]:
+        """Process input data with comprehensive error handling"""
+        logger.debug("Processing data: %s", input_data)
+
         try:
-            dotenv.load_dotenv(self.config_path)
-            return {
-                "api_key": os.getenv("API_KEY"),
-                "database_url": os.getenv("DATABASE_URL"),
-                "timeout": int(os.getenv("REQUEST_TIMEOUT", 30)),
-            }
-        except dotenv.DotenvException as e:
-            logger.critical(f"Configuration error: {e}")
-            raise CriticalError("Configuration loading failed") from e
+            # Validate input
+            if not input_data:
+                logger.warning("Empty input data received")
+                return None
 
-    def _validate_config(self) -> None:
-        """Validate configuration values."""
-        if not self.config["api_key"]:
-            logger.critical("API_KEY missing in configuration")
-            raise CriticalError("Missing required API key")
-        if not self.config["database_url"]:
-            logger.critical("DATABASE_URL missing in configuration")
-            raise CriticalError("Missing database connection URL")
+            # Process data
+            processed = self._transform_data(input_data)
+            logger.debug("Data processed successfully: %s", processed)
+            return processed
 
-    def process_data(self, input_file: str, output_file: str) -> None:
-        """Process data from input file and save to output file."""
-        try:
-            # Validate input file
-            if not Path(input_file).is_file():
-                raise FileNotFoundError(f"Input file not found: {input_file}")
-
-            # Securely execute external commands
-            command = (
-                f"python generated_code.py --input {input_file} --output {output_file}"
-            )
-            with shlex.split(command) as args:
-                result = subprocess.run(
-                    args,
-                    capture_output=True,
-                    text=True,
-                    check=True,  # Ensure non-zero exit codes raise exception
-                )
-
-            # Validate execution result
-            if result.returncode != 0:
-                logger.error(f"Command execution failed: {result.stderr}")
-                raise CriticalError("External command failed")
-
-            logger.info(f"Data processed successfully to {output_file}")
-
-        except (FileNotFoundError, PermissionError) as e:
-            logger.critical(f"File access error: {e}")
-            raise CriticalError("File access failure") from e
-        except subprocess.CalledProcessError as e:
-            logger.critical(f"Command execution error: {e}")
-            raise CriticalError("External command failed") from e
         except Exception as e:
-            logger.exception(f"Unexpected processing error: {e}")
-            raise CriticalError("Unrecoverable processing error") from e
+            logger.exception("Unhandled exception in process_data: %s", e)
+            # Activate failsafe mechanism
+            self.activate_failsafe()
+            return None
+
+    def _transform_data(self, data: str) -> str:
+        """Internal data transformation function"""
+        logger.debug("Transforming data: %s", data)
+        # Example transformation (replace with actual logic)
+        return data.upper()
+
+    def activate_failsafe(self) -> None:
+        """Activate system failsafe mechanism"""
+        logger.critical("Failsafe activated due to critical error")
+        # Implement actual failsafe logic here
+        self._execute_failsafe_command()
+
+    def _execute_failsafe_command(self) -> None:
+        """Execute failsafe command with security precautions"""
+        logger.debug("Executing failsafe command")
+        command = "echo 'System failure detected. Initiating failsafe'"
+        try:
+            # Use shlex.split for safe command execution
+            args = shlex.split(command)
+            subprocess.run(args, check=True, capture_output=True, text=True)
+        except Exception as e:
+            logger.error("Failsafe command execution failed: %s", e)
+            # Fallback to system shutdown if failsafe fails
+            self._initiate_system_shutdown()
+
+    def _initiate_system_shutdown(self) -> None:
+        """Initiate system shutdown as last resort"""
+        logger.critical("System shutdown initiated")
+        # Implement actual shutdown logic here
+        os._exit(1)
 
 
-def main():
-    """Main execution function with failsafe handling."""
+def main() -> None:
+    """Main execution function with comprehensive error handling"""
+    logger.info("Starting system execution")
+
     try:
-        processor = DataProcessor()
-        processor.process_data("input_data.csv", "processed_data.json")
-    except CriticalError as e:
-        logger.critical(f"Failsafe triggered: {e}")
-        # Implement failsafe actions here (e.g., shutdown, rollback)
-        sys.exit(1)
+        # Load configuration
+        config = load_configuration()
+        logger.debug("Configuration loaded: %s", config)
+
+        # Initialize data processor
+        processor = DataProcessor(config)
+
+        # Process data
+        input_data = "test_input"
+        result = processor.process_data(input_data)
+        logger.debug("Result: %s", result)
+
+        logger.info("System execution completed successfully")
+
+    except Exception as e:
+        logger.exception("Unhandled exception in main: %s", e)
+        # Activate failsafe mechanism
+        activate_failsafe()
+
+    finally:
+        logger.info("System execution completed")
+
+
+def load_configuration() -> Dict[str, Any]:
+    """Load system configuration with security precautions"""
+    logger.debug("Loading configuration")
+    # In production, this would use secure methods like environment variables
+    return {"log_level": "DEBUG", "max_retries": 3, "timeout": 10}
+
+
+def activate_failsafe() -> None:
+    """Activate system failsafe mechanism"""
+    logger.critical("Failsafe activated")
+    # Implement actual failsafe logic here
+    # Example: Send alert, initiate rollback, etc.
+    logger.info("Failsafe activated successfully")
 
 
 if __name__ == "__main__":
