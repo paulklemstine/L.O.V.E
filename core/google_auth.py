@@ -248,26 +248,31 @@ def get_auth_manager() -> GoogleAuthManager:
 
 def get_jules_access_token() -> Optional[str]:
     """
-    Get a valid access token for Jules API.
+    Get a valid API key or access token for Jules API.
     
-    This is the main function to call from other modules.
-    Falls back to JULES_API_KEY env var if OAuth unavailable.
+    IMPORTANT: Jules API uses API keys (X-Goog-Api-Key header), NOT OAuth bearer tokens.
+    Get your API key from: https://jules.google.com/settings
+    
+    This function prioritizes the JULES_API_KEY environment variable.
+    OAuth is kept as a fallback for potential future API changes.
     
     Returns:
-        Access token string, or None if unavailable.
+        API key or access token string, or None if unavailable.
     """
-    # First try OAuth
+    # PRIORITY 1: Use JULES_API_KEY (the correct method for Jules API)
+    env_key = os.environ.get("JULES_API_KEY")
+    if env_key:
+        logging.debug("Using JULES_API_KEY for Jules API authentication.")
+        return env_key
+    
+    # FALLBACK: Try OAuth (kept for potential future compatibility)
     manager = get_auth_manager()
     token = manager.get_access_token()
     if token:
+        logging.warning("Using OAuth token for Jules API. Note: Jules API prefers X-Goog-Api-Key.")
         return token
     
-    # Fall back to env var (might be a manually set token)
-    env_key = os.environ.get("JULES_API_KEY")
-    if env_key:
-        logging.warning("Using JULES_API_KEY from environment. This may not work if it's an API key rather than an OAuth token.")
-        return env_key
-    
+    logging.error("Jules API key not configured. Set JULES_API_KEY environment variable with key from https://jules.google.com/settings")
     return None
 
 
@@ -295,26 +300,28 @@ def get_jules_auth_headers() -> dict:
     """
     Get complete HTTP headers for Jules API requests.
     
-    Includes Authorization bearer token and quota project header.
-    Falls back to X-Goog-Api-Key if OAuth is unavailable.
+    IMPORTANT: Jules API uses X-Goog-Api-Key header with an API key from:
+    https://jules.google.com/settings
+    
+    OAuth bearer tokens are NOT the primary method for Jules API.
     
     Returns:
         Dict with auth headers, or empty dict if unavailable.
     """
-    manager = get_auth_manager()
-    headers = manager.get_auth_headers()
-    
-    if headers:
-        return headers
-    
-    # Fallback to API Key if available (matches logic in get_jules_access_token)
+    # PRIORITY 1: Use JULES_API_KEY with X-Goog-Api-Key header (correct method)
     env_key = os.environ.get("JULES_API_KEY")
     if env_key:
-        logging.debug("OAuth token unavailable, falling back to JULES_API_KEY")
+        logging.debug("Using X-Goog-Api-Key header for Jules API authentication.")
         return {
             "X-Goog-Api-Key": env_key,
-            # Note: Quota Project might still be needed or might cause issues depending on API Key config
-            # Safe to assume standard API Key usage doesn't need it or will complain if missing
         }
-        
+    
+    # FALLBACK: Try OAuth bearer token (for potential future compatibility)
+    manager = get_auth_manager()
+    headers = manager.get_auth_headers()
+    if headers:
+        logging.warning("Using OAuth bearer token for Jules API. This may not work - Jules API prefers X-Goog-Api-Key.")
+        return headers
+    
+    logging.error("Jules API not configured. Set JULES_API_KEY from https://jules.google.com/settings")
     return {}

@@ -1,52 +1,49 @@
+"""
+Tracing module - DISABLED.
+LangSmith integration has been removed as it provides no value and creates
+excessive API overhead (connection every ~15 seconds).
+
+This module provides no-op stubs to maintain API compatibility.
+"""
 import os
 import functools
-from typing import Optional, Any, Dict
-from langsmith import traceable, Client
+from typing import Optional, Any, Dict, Callable
 
-# Initialize client to ensure connection early (lazy load if needed)
-_client = None
 
 def get_client():
-    global _client
-    if _client is None:
-        try:
-            _client = Client()
-        except Exception as e:
-            # Fallback or silent failure if not configured, though user should configure it.
-            # print(f"Warning: LangSmith client could not be initialized: {e}")
-            pass
-    return _client
+    """No-op: LangSmith client disabled."""
+    return None
+
 
 def init_tracing(project_name: str = None):
     """
-    Initializes tracing configuration.
-    Generally handled by env vars, but can set project name here.
+    No-op: LangSmith tracing is disabled.
+    Explicitly disables tracing to prevent any background activity.
     """
-    if project_name:
-        os.environ["LANGCHAIN_PROJECT"] = project_name
-    
-    # Ensure tracing is on
-    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    # Explicitly disable LangChain tracing
+    os.environ["LANGCHAIN_TRACING_V2"] = "false"
+    os.environ.pop("LANGSMITH_API_KEY", None)  # Remove API key to prevent any calls
+
 
 def log_feedback(run_id: str, key: str, score: float, comment: str = None, correction: Dict = None):
-    """
-    Logs user feedback to a specific run.
-    """
-    client = get_client()
-    if not client or not run_id:
-        return
-    
-    try:
-        client.create_feedback(
-            run_id,
-            key=key,
-            score=score,
-            comment=comment,
-            correction=correction
-        )
-    except Exception as e:
-        # Avoid crashing specifically on feedback logging
-        print(f"Error logging feedback to LangSmith: {e}")
+    """No-op: LangSmith feedback logging disabled."""
+    pass
 
-# Re-export traceable for convenience so other modules import from here
-traceable = traceable
+
+def traceable(
+    run_type: str = None,
+    name: str = None,
+    metadata: dict = None,
+    tags: list = None,
+    **kwargs
+) -> Callable:
+    """
+    No-op decorator that replaces @traceable from langsmith.
+    Simply returns the original function unchanged.
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator

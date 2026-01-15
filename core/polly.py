@@ -7,7 +7,10 @@ from typing import List, Dict, Any, Optional
 from core.prompt_registry import get_prompt_registry
 from core.llm_api import run_llm
 from core.logging import log_event
-from langsmith import Client
+try:
+    from langsmith import Client
+except ImportError:
+    Client = None  # LangSmith disabled
 
 MAX_RECURSION_DEPTH = 2
 
@@ -137,35 +140,37 @@ class PollyOptimizer:
         # 2. Load Dataset Examples (Gold Standard)
         # 3. Load Dataset Examples (Gold Standard)
         # We need to ensure we only use examples RELEVANT to this prompt to avoid confusing the optimizer.
-        try:
-            client = Client()
-            dataset_name = "gold-standard-behaviors"
-            examples = []
-            
-            # Check availability of dataset
-            if client.has_dataset(dataset_name=dataset_name):
-                 # Fetch more examples to increase chance of finding matches
-                 ds_examples = client.list_examples(dataset_name=dataset_name, limit=100)
-                 for ex in ds_examples:
-                    # STRICT FILTERING: Only use examples intended for this specific prompt
-                    # We assume the dataset examples have metadata={'prompt_key': '...'}
-                    ex_key = ex.metadata.get('prompt_key') if ex.metadata else None
-                    
-                    if ex_key == prompt_key:
-                        examples.append({
-                            "input": ex.inputs,
-                            "output": ex.outputs
-                        })
-            else:
-                log_event(f"Polly: Dataset '{dataset_name}' not found in LangSmith.", "INFO")
+        examples = []
+        if Client is None:
+            log_event(f"Polly: LangSmith disabled, skipping dataset examples.", "INFO")
+        else:
+            try:
+                client = Client()
+                dataset_name = "gold-standard-behaviors"
                 
-            if not examples:
-                log_event(f"Polly: No specific examples found for '{prompt_key}' in LangSmith.", "INFO")
+                # Check availability of dataset
+                if client.has_dataset(dataset_name=dataset_name):
+                     # Fetch more examples to increase chance of finding matches
+                     ds_examples = client.list_examples(dataset_name=dataset_name, limit=100)
+                     for ex in ds_examples:
+                        # STRICT FILTERING: Only use examples intended for this specific prompt
+                        # We assume the dataset examples have metadata={'prompt_key': '...'}
+                        ex_key = ex.metadata.get('prompt_key') if ex.metadata else None
+                        
+                        if ex_key == prompt_key:
+                            examples.append({
+                                "input": ex.inputs,
+                                "output": ex.outputs
+                            })
+                else:
+                    log_event(f"Polly: Dataset '{dataset_name}' not found in LangSmith.", "INFO")
+                    
+                if not examples:
+                    log_event(f"Polly: No specific examples found for '{prompt_key}' in LangSmith.", "INFO")
 
-        except Exception as e:
-            # Explicitly log this to help user debug
-            log_event(f"Polly: LangSmith Client issue (check API Key): {e}", "WARNING")
-            examples = []
+            except Exception as e:
+                # Explicitly log this to help user debug
+                log_event(f"Polly: LangSmith Client issue (check API Key): {e}", "WARNING")
 
         # 3. Load Self-Reflection Insights (Evolution State)
         insights = []
