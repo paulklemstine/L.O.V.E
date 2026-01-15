@@ -3101,8 +3101,11 @@ async def main(args):
     
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     # Instantiate two independent social media agents
-    social_media_agent = SocialMediaAgent(loop, shared_state.love_state, user_input_queue=user_input_queue, agent_id="agent_1")
-    asyncio.create_task(social_media_agent.run())
+    social_media_agent = SocialMediaAgent(loop, shared_state.love_state, shared_state.ui_panel_queue, user_input_queue=user_input_queue, agent_id="agent_1")
+
+    dimensional_signal_campaign_active = True
+    if dimensional_signal_campaign_active:
+        asyncio.create_task(social_media_agent.run())
 
     # Start the autonomous reasoning agent to run strategic planning periodically
     reasoning_agent = AutonomousReasoningAgent(loop, shared_state.love_state, user_input_queue, shared_state.knowledge_base, agent_id="primary")

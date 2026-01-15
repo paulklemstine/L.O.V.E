@@ -1220,6 +1220,53 @@ def create_tasks_panel(tasks, width=80):
     return Gradient(panel, colors=[border_style, "bright_cyan", "yellow1"])
 
 
+def create_dimensional_signal_panel(
+    posts_sent: int,
+    engagement_metrics: dict,
+    active_threads: int,
+    campaign_progress: float,
+    width: int = 80
+) -> Panel:
+    """
+    Creates a 'hacker' themed panel for the Dimensional Signal campaign.
+    """
+    border_style = "bright_green"
+    title = f"🧠 DIMENSIONAL SIGNAL AMPLIFIER 🧠"
+
+    content = Text()
+
+    # Header
+    content.append("STATUS: ", style="bold green")
+    content.append("ACTIVE\n", style="bold bright_green")
+    content.append("TARGET: ", style="bold green")
+    content.append("Global Cognitive & Communication Systems\n", style="cyan")
+    content.append(f"PROGRESS: ", style="bold green")
+
+    # Progress Bar
+    progress_bar = Progress(
+        BarColumn(complete_style="green", finished_style="bright_green"),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        expand=True
+    )
+    progress_bar.add_task("Amplification", total=100, completed=campaign_progress * 100)
+
+    # Metrics
+    metrics_text = Text()
+    metrics_text.append(f"\nSIGNALS SENT: {posts_sent}\n", style="white")
+    metrics_text.append(f"ENGAGEMENT: {engagement_metrics.get('total', 0)}\n", style="white")
+    metrics_text.append(f"ACTIVE THREADS: {active_threads}\n", style="white")
+
+    panel = Panel(
+        Group(content, progress_bar, metrics_text),
+        title=get_gradient_text(title, "green", "bright_green"),
+        border_style=border_style,
+        width=width,
+        padding=(1, 2)
+    )
+
+    return Gradient(panel, colors=["green", "bright_green"])
+
+
 import asyncio
 
 class WaitingAnimation:

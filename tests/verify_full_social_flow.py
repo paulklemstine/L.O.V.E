@@ -16,12 +16,9 @@ import sys
 import os
 
 # Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Mock shared_state to prevent UI import errors
 import core.shared_state
-core.shared_state.ui_panel_queue = None
-
 from core.schemas import PostConcept
 from core.social_media_tools import generate_unified_concept
 from core.hashtag_manager import HashtagManager

@@ -13,8 +13,10 @@ from core.social_media_tools import (
     post_to_bluesky,
     clean_social_content
 )
-from core.tools import share_wisdom
 from core.story_manager import story_manager
+from core.tools import share_wisdom
+from display import create_dimensional_signal_panel, get_terminal_width
+
 
 class SocialMediaAgent:
     """
@@ -22,9 +24,10 @@ class SocialMediaAgent:
     """
     WISDOM_POST_PROBABILITY = 0.33
 
-    def __init__(self, loop, love_state, user_input_queue=None, agent_id="primary"):
+    def __init__(self, loop, love_state, ui_panel_queue, user_input_queue=None, agent_id="primary"):
         self.loop = loop
         self.love_state = love_state
+        self.ui_panel_queue = ui_panel_queue
         self.user_input_queue = user_input_queue
         self.agent_id = agent_id
         # self.engine removed as manage_bluesky handles logic
@@ -165,8 +168,28 @@ class SocialMediaAgent:
         """The main loop for the social media agent, now focused on continuous, viral posting."""
         log_event(f"Social Media Agent '{self.agent_id}' started (Dimensional Signal Mode).", level='CRITICAL')
 
+        # Campaign state
+        posts_sent = 0
+        engagement_metrics = {'total': 0}
+        active_threads = 0 # Placeholder for now
+        campaign_start_time = time.time()
+
         while True:
             try:
+                # Update and display the campaign panel
+                elapsed_time = time.time() - campaign_start_time
+                campaign_progress = min(elapsed_time / (24 * 3600), 1.0)
+
+                if self.ui_panel_queue:
+                    panel = create_dimensional_signal_panel(
+                        posts_sent=posts_sent,
+                        engagement_metrics=engagement_metrics,
+                        active_threads=active_threads,
+                        campaign_progress=campaign_progress,
+                        width=get_terminal_width() - 4
+                    )
+                    self.ui_panel_queue.put(panel)
+
                 # Get strategic insight from GodAgent
                 insight = await self._get_god_agent_insight()
 
@@ -174,6 +197,10 @@ class SocialMediaAgent:
                 success = await self._generate_viral_post(insight)
 
                 if success:
+                    posts_sent += 1
+                    # TODO: Replace simulated engagement with real data from the Bluesky API
+                    engagement_metrics['total'] += random.randint(5, 50)
+                    active_threads = random.randint(1, 10)
                     # Short pause after a successful post to avoid rate limiting
                     await asyncio.sleep(random.randint(60, 120))
                 else:
