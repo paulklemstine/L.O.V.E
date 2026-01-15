@@ -405,6 +405,7 @@ from core.social_media_agent import SocialMediaAgent
 from core.qa_agent import QAAgent
 from creative_expression import generate_weekly_creation
 from core.poetry import generate_poem
+from core.economic_analyzer import analyze_economic_trends
 from mcp_manager import MCPManager
 
 from bbs import BBS_ART
@@ -2356,6 +2357,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
             log_critical_event(f"Critical error in cognitive_loop: {e}")
             await asyncio.sleep(5)
 
+from core.strategic_investment_advisor import StrategicInvestmentAdvisor
 # The initial_bootstrapping_recon function has been removed, as this logic
 # is now handled dynamically by the cognitive loop's prioritization system.
 
@@ -2893,6 +2895,7 @@ async def initialize_gpu_services():
             core_tools.trigger_optimization_pipeline,
             core_tools.feed_user_story,
             generate_poem,
+            analyze_economic_trends,
         ]
 
         developer_tool_functions = [
@@ -3119,6 +3122,10 @@ async def main(args):
 
     # Start the periodic monitoring task
     asyncio.create_task(run_periodically(monitor_love_operations, 900)) # Run every 15 minutes
+
+    # Start the Strategic Investment Advisor
+    investment_advisor = StrategicInvestmentAdvisor(loop, user_input_queue)
+    asyncio.create_task(investment_advisor.run())
 
     # --- Start Real-time State Broadcasting ---
     # Broadcasts desire state and vibe every 2 seconds for the Radiant UI

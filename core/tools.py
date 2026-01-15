@@ -41,6 +41,8 @@ from core.talent_utils import (
 )
 from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.dynamic_compress_prompt import dynamic_arg_caller
+from core.knowledge_synthesis import synthesize_knowledge
+from core import shared_state
 
 from langchain_core.tools import tool
 from core.tracing import traceable  # No-op decorator, LangSmith disabled
@@ -301,6 +303,15 @@ async def feed_user_story(story: str) -> str:
             return f"Successfully added user story to Jules. Task ID: {result}"
         else:
             return "Failed to feed user story. Check logs for API details."
+
+@tool("share_wisdom")
+async def share_wisdom() -> str:
+    """
+    Synthesizes a new insight from the knowledge base and returns it.
+    """
+    if not hasattr(shared_state, 'knowledge_base'):
+        return "Error: Knowledge base not initialized."
+    return await synthesize_knowledge(shared_state.knowledge_base)
             
     except Exception as e:
         core.logging.log_event(f"Error feeding user story: {e}", "ERROR")
