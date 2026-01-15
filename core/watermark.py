@@ -35,7 +35,7 @@ def get_logo_paths() -> List[str]:
     
     # Also check root directory for legacy logos
     root_logo = os.path.join(base_dir, "love_logo.png")
-    assets_logo = os.path.join(base_dir, "assets", "lovelogo.jpg")
+    assets_logo = os.path.join(base_dir, "assets")
     
     logo_paths = []
     
