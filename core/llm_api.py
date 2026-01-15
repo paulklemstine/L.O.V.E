@@ -939,23 +939,9 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                  log_event("Token Budget Monitor: All available models exceeded context limits. Triggering EmergencyMemoryFold.", "CRITICAL")
                  raise EmergencyMemoryFold(f"Context limit exhausted. Request size: {token_count}")
             
-            log_event("No models available to try (cooldowns or empty list).", "WARNING")
-            return {"result": None, "error": "No models available"}
-
-            
-            if model_is_available and provider_is_available:
-                models_to_try.append(m)
-            elif not provider_is_available:
-                 # Log once per provider if strictly necessary, but debug is better
-                 # log_event(f"Skipping {m} because provider '{provider}' is on cooldown.", "DEBUG")
-                 pass
-
-        # models_to_try = [m for m in ranked_model_list if time.time() >= LLM_AVAILABILITY.get(m, 0)]
-
-        if not models_to_try:
-            log_event("No available models to try after filtering by availability.", "WARNING")
-            # Fallback to the original full list if all are on cooldown, to allow for sleeping
-            models_to_try = ranked_model_list
+            log_event("No models available to try (all on cooldown or empty list).", "WARNING")
+            # Don't reset to ranked_model_list - respect the cooldowns and let sleep logic handle it
+            # The empty models_to_try will skip the iteration loop and go to sleep/fallback
 
 
         # --- Model Iteration and Execution ---
@@ -1427,8 +1413,8 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     
                     
                     # --- CIRCUIT BREAKER: Refined Strategy ---
-                    # Default: Per-Model Cooldown (429 usually means model rate limit)
-                    # Exception: Provider Cooldown (if "quota", "billing" or "insufficient" is mentioned)
+                    # Apply provider-level cooldown for ALL 429 errors to prevent hitting other models from same provider
+                    # Use longer cooldown for global quota issues vs per-model rate limits
                     
                     is_global_quota_issue = False
                     error_content_lower = error_details.lower()
@@ -1436,13 +1422,16 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     if "insufficient_quota" in error_content_lower or "billing" in error_content_lower or "quota exceeded" in error_content_lower:
                         is_global_quota_issue = True
                     
-                    if is_global_quota_issue and provider in ["gemini", "openrouter", "openai"]:
+                    if is_global_quota_issue:
+                        # Global quota issue - use full retry_seconds (300s default)
                         PROVIDER_AVAILABILITY[provider] = time.time() + retry_seconds
                         log_event(f"CIRCUIT BREAKER: Global Quota Limit for '{provider}'. Cooling down for {retry_seconds}s.", "CRITICAL")
                         console.print(display_error_oneliner("Circuit Breaker", f"Provider '{provider}' suspended (Quota Exceeded).", model_id=provider))
                     else:
-                        # Just mark the specific model as unavailable
-                        log_event(f"Rate limit (429) for model {model_id}. Applying per-model cooldown of {retry_seconds}s.", "WARNING")
+                        # Regular 429 - apply shorter provider cooldown (60s) to skip to next provider
+                        provider_cooldown = min(60, retry_seconds)  # Use 60s or retry_seconds, whichever is shorter
+                        PROVIDER_AVAILABILITY[provider] = time.time() + provider_cooldown
+                        log_event(f"Rate limit (429) for model {model_id}. Applying provider cooldown of {provider_cooldown}s for '{provider}'.", "WARNING")
                     
                     # Mark specific model unavailable (always do this on 429)
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
