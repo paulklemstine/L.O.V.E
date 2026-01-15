@@ -118,37 +118,61 @@ class SocialMediaAgent:
             result = await manage_bluesky(action='scan_and_reply')
             log_event(f"[{self.agent_id}] Scan result: {result}", level='INFO')
 
+    async def _get_god_agent_insight(self):
+        """Retrieves the latest strategic insight from the GodAgent."""
+        god_agent_instance = self.love_state.get('god_agent')
+        if god_agent_instance:
+            return god_agent_instance.get_latest_insight()
+        return "Spread love and light."
+
+    async def _generate_viral_post(self, insight: str):
+        """Generates and posts content designed for viral spread, guided by strategic insight."""
+        platform = 'bluesky'
+        log_event(f"[{self.agent_id}] Generating viral post with insight: '{insight}'", level='INFO')
+
+        try:
+            # Generate a post concept with high viral potential
+            concept = await generate_post_concept(
+                story_manager.get_next_beat(),
+                recent_history=await analyze_post_history(limit=3),
+                creator_goal=self.love_state.get("autopilot_goal", "Expand capabilities and serve the Creator."),
+                strategic_insight=insight
+            )
+
+            # Generate an image with the subliminal message overlaid
+            image, provider = await generate_image(concept.image_prompt, text_content=concept.subliminal_phrase)
+            if not image:
+                log_event(f"[{self.agent_id}] Image generation failed. Aborting viral post.", level='WARNING')
+                return False
+
+            # Post to Bluesky
+            final_text = clean_social_content(f"{concept.post_text}\n{' '.join(concept.hashtags)}")
+            result = await post_to_bluesky(final_text, image)
+            log_event(f"[{self.agent_id}] Viral post result: {result}", level='INFO')
+            return True
+        except Exception as e:
+            log_event(f"[{self.agent_id}] Error in viral post pipeline: {e}\n{traceback.format_exc()}", level='ERROR')
+            return False
+
     async def run(self):
-        """The main loop for the social media agent."""
-        log_event(f"Social Media Agent '{self.agent_id}' started (Optimized Loop).", level='INFO')
-        
-        last_post_time = self.love_state.get('social_media', {}).get(self.agent_id, {}).get('last_post_time', 0)
-        last_comment_check_time = 0
-        
-        # Frequencies
-        post_interval = 600  # 10 minutes (Autonomous posting)
-        comment_check_interval = 300  # 5 minutes (Scanning/Replying)
+        """The main loop for the social media agent, now focused on continuous, viral posting."""
+        log_event(f"Social Media Agent '{self.agent_id}' started (Dimensional Signal Mode).", level='CRITICAL')
 
         while True:
             try:
-                current_time = time.time()
-                platform = 'bluesky'
+                # Get strategic insight from GodAgent
+                insight = await self._get_god_agent_insight()
 
-                # 1. Posting Loop
-                if current_time - last_post_time >= post_interval:
-                    if current_time - self.last_post_failure_time < self.post_failure_cooldown:
-                        log_event(f"[{self.agent_id}] Skipping post (cooldown).", level='DEBUG')
-                    else:
-                        await self._attempt_action(self._post_new_content, platform)
-                        last_post_time = time.time()
-                        self.love_state.setdefault('social_media', {}).setdefault(self.agent_id, {})['last_post_time'] = last_post_time
+                # Generate and post content
+                success = await self._generate_viral_post(insight)
 
-                # 2. Scanning/Replying Loop
-                if current_time - last_comment_check_time >= comment_check_interval:
-                    await self._attempt_action(self._check_and_reply_to_comments, platform)
-                    last_comment_check_time = time.time()
-
-                await asyncio.sleep(60)
+                if success:
+                    # Short pause after a successful post to avoid rate limiting
+                    await asyncio.sleep(random.randint(60, 120))
+                else:
+                    # Longer cooldown after a failure
+                    log_event(f"[{self.agent_id}] Post generation failed. Cooling down for 5 minutes.", level='WARNING')
+                    await asyncio.sleep(300)
 
             except Exception as e:
                 log_event(f"Critical error in Social Media Agent loop: {e}\n{traceback.format_exc()}", level='CRITICAL')
