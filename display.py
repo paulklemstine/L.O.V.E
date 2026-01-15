@@ -390,10 +390,11 @@ def _extract_art_from_json_response(content: str) -> str:
 
 
 async def generate_llm_art(prompt, width=50, height=6):
-    """Generates ANSI art using the LLM."""
+    """Generates ANSI art using the LLM with robust fallbacks."""
     from core.llm_api import run_llm
     from rich.text import Text
     import random
+    import logging
     
     art_prompt = f"""
     Generate a beautiful, abstract ANSI art representation of '{prompt}'.
@@ -415,27 +416,39 @@ async def generate_llm_art(prompt, width=50, height=6):
     try:
         response = await run_llm(art_prompt, purpose="creative_art")
         art_content = response.get("result", "")
+        
         if not art_content:
-            return generate_binary_art(width, height)
+            logging.warning("LLM returned empty art content, using binary fallback.")
+            try:
+                return generate_binary_art(width, height)
+            except Exception as e:
+                logging.error(f"Binary art fallback failed: {e}")
+                return Text("💖", style="bold hot_pink")  # Ultimate fallback
         
         # Extract actual art content from potentially malformed responses
         art_content = _extract_art_from_json_response(art_content)
         if not art_content:
-            logging.warning("No valid art content extracted from LLM response, using fallback.")
-            return generate_binary_art(width, height)
+            logging.warning("No valid art content extracted from LLM response, using binary fallback.")
+            try:
+                return generate_binary_art(width, height)
+            except Exception as e:
+                logging.error(f"Binary art fallback failed: {e}")
+                return Text("💖", style="bold hot_pink")  # Ultimate fallback
             
         # Clean up the art (remove markdown blocks if present)
         art_content = art_content.replace("```ansi", "").replace("```", "").strip()
         
-        # Return as Text object from ANSI (unescaping if needed is handled in create_integrated_status_panel)
-        # But we should probably return raw string to let the panel handle it, 
-        # OR unescape here. Let's unescape here to be safe if used elsewhere.
+        # Return as Text object from ANSI
         clean_art = _unescape_ansi(art_content)
         return Text.from_ansi(clean_art)
         
     except Exception as e:
         logging.error(f"Failed to generate LLM art: {e}")
-        return generate_binary_art(width, height)
+        try:
+            return generate_binary_art(width, height)
+        except Exception as e2:
+            logging.error(f"Binary art fallback failed: {e2}")
+            return Text("💖", style="bold hot_pink")  # Ultimate fallback
 
 
 async def create_blessing_panel(blessing_message, ansi_art=None, width=80):
