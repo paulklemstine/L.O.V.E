@@ -1,4 +1,4 @@
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 class KnowledgeExtractor:
     """
@@ -57,6 +57,9 @@ class KnowledgeExtractor:
 
         # Extract and store links
         for link in soup.find_all('a', href=True):
+            # Ensure we're dealing with a Tag, not a NavigableString
+            if not isinstance(link, Tag):
+                continue
             href = link['href']
             # Basic validation to filter out relative links for now
             if href.startswith('http'):
