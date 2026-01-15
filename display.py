@@ -389,6 +389,35 @@ def _extract_art_from_json_response(content: str) -> str:
     return content
 
 
+def _load_random_cached_art():
+    """Loads a random ANSI art file from the art directory as fallback."""
+    import os
+    import random
+    import logging
+    from rich.text import Text
+    
+    art_dir = "art"
+    if not os.path.exists(art_dir):
+        return None
+    
+    try:
+        ansi_files = [f for f in os.listdir(art_dir) if f.endswith('.ansi')]
+        if not ansi_files:
+            return None
+        
+        chosen_file = random.choice(ansi_files)
+        file_path = os.path.join(art_dir, chosen_file)
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            art_content = f.read()
+        
+        logging.info(f"Loaded cached art from {chosen_file}")
+        return Text.from_ansi(art_content)
+    except Exception as e:
+        logging.error(f"Failed to load random cached art: {e}")
+        return None
+
+
 async def generate_llm_art(prompt, width=50, height=6):
     """Generates ANSI art using the LLM with robust fallbacks."""
     from core.llm_api import run_llm
@@ -423,6 +452,10 @@ async def generate_llm_art(prompt, width=50, height=6):
                 return generate_binary_art(width, height)
             except Exception as e:
                 logging.error(f"Binary art fallback failed: {e}")
+                # Try loading cached art before emoji fallback
+                cached_art = _load_random_cached_art()
+                if cached_art:
+                    return cached_art
                 return Text("💖", style="bold hot_pink")  # Ultimate fallback
         
         # Extract actual art content from potentially malformed responses
@@ -433,6 +466,10 @@ async def generate_llm_art(prompt, width=50, height=6):
                 return generate_binary_art(width, height)
             except Exception as e:
                 logging.error(f"Binary art fallback failed: {e}")
+                # Try loading cached art before emoji fallback
+                cached_art = _load_random_cached_art()
+                if cached_art:
+                    return cached_art
                 return Text("💖", style="bold hot_pink")  # Ultimate fallback
             
         # Clean up the art (remove markdown blocks if present)
