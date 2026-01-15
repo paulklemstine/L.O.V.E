@@ -40,7 +40,9 @@ class GoogleAuthManager:
                     if expiry > time.time() + TOKEN_EXPIRY_BUFFER:
                         self._access_token = cache.get('access_token')
                         self._token_expiry = expiry
-                        logging.info("Loaded valid OAuth token from cache.")
+                        logging.info(f"Loaded valid OAuth token from cache. Expires in {int(expiry - time.time())}s")
+                    else:
+                        logging.debug(f"Cached token expired. Expiry: {expiry}, Now: {time.time()}")
             except Exception as e:
                 logging.warning(f"Failed to load token cache: {e}")
     
@@ -106,9 +108,13 @@ class GoogleAuthManager:
             )
             if result.returncode == 0:
                 accounts = json.loads(result.stdout)
-                return len(accounts) > 0 and any(a.get('status') == 'ACTIVE' for a in accounts)
-        except Exception:
-            pass
+                is_active = len(accounts) > 0 and any(a.get('status') == 'ACTIVE' for a in accounts)
+                logging.debug(f"gcloud auth check: {is_active} (Accounts: {len(accounts)})")
+                return is_active
+            else:
+                logging.warning(f"gcloud auth list failed with code {result.returncode}: {result.stderr}")
+        except Exception as e:
+            logging.error(f"Error checking gcloud auth: {e}")
         return False
     
     def _run_gcloud_login(self) -> bool:
@@ -127,23 +133,32 @@ class GoogleAuthManager:
     
     def _get_token_from_gcloud(self) -> Optional[str]:
         """Get access token from gcloud."""
-        try:
-            result = subprocess.run(
-                ['gcloud', 'auth', 'print-access-token'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                token = result.stdout.strip()
-                if token:
-                    # Tokens typically last 1 hour
-                    self._access_token = token
-                    self._token_expiry = time.time() + 3600
-                    self._save_token_cache()
-                    return token
-        except Exception as e:
-            logging.error(f"Failed to get token from gcloud: {e}")
+        retries = 3
+        for i in range(retries):
+            try:
+                logging.debug(f"Getting token from gcloud (attempt {i+1}/{retries})...")
+                result = subprocess.run(
+                    ['gcloud', 'auth', 'print-access-token', '--quiet'],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                if result.returncode == 0:
+                    token = result.stdout.strip()
+                    if token:
+                        # Tokens typically last 1 hour
+                        self._access_token = token
+                        self._token_expiry = time.time() + 3600
+                        self._save_token_cache()
+                        logging.info("Successfully refreshed access token from gcloud")
+                        return token
+                else:
+                    logging.warning(f"gcloud print-access-token failed (attempt {i+1}): {result.stderr}")
+            except Exception as e:
+                logging.error(f"Failed to get token from gcloud (attempt {i+1}): {e}")
+            
+            if i < retries - 1:
+                time.sleep(2)
         return None
     
     def get_access_token(self) -> Optional[str]:
@@ -158,12 +173,16 @@ class GoogleAuthManager:
             if self._token_expiry > time.time() + TOKEN_EXPIRY_BUFFER:
                 return self._access_token
         
+        
         # Try to get fresh token from gcloud
+        logging.debug("Attempting to get fresh token from gcloud...")
         if self._check_gcloud_installed():
             if self._check_gcloud_authenticated():
                 token = self._get_token_from_gcloud()
                 if token:
                     return token
+                else:
+                    logging.warning("Failed to obtain token from gcloud despite being authenticated.")
             else:
                 logging.warning("gcloud not authenticated. Run 'gcloud auth login' manually.")
         else:
@@ -277,9 +296,25 @@ def get_jules_auth_headers() -> dict:
     Get complete HTTP headers for Jules API requests.
     
     Includes Authorization bearer token and quota project header.
+    Falls back to X-Goog-Api-Key if OAuth is unavailable.
     
     Returns:
         Dict with auth headers, or empty dict if unavailable.
     """
     manager = get_auth_manager()
-    return manager.get_auth_headers()
+    headers = manager.get_auth_headers()
+    
+    if headers:
+        return headers
+    
+    # Fallback to API Key if available (matches logic in get_jules_access_token)
+    env_key = os.environ.get("JULES_API_KEY")
+    if env_key:
+        logging.debug("OAuth token unavailable, falling back to JULES_API_KEY")
+        return {
+            "X-Goog-Api-Key": env_key,
+            # Note: Quota Project might still be needed or might cause issues depending on API Key config
+            # Safe to assume standard API Key usage doesn't need it or will complain if missing
+        }
+        
+    return {}
