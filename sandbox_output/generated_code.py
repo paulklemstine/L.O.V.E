@@ -1,96 +1,104 @@
-import logging
 import os
+import logging
 import sys
-import time
-import requests
-from typing import Any, Dict, Optional
-from contextlib import contextmanager
+import dotenv
+import shlex
+import subprocess
+from pathlib import Path
+from typing import Dict, Any
 
-# Configure logging
+# Configure secure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[logging.FileHandler("app.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
-# Security: Use environment variables for configuration
-API_KEY = os.getenv("API_KEY", "default_key")  # Replace with actual secret management
-API_URL = os.getenv("API_URL", "https://api.example.com")
+
+class CriticalError(Exception):
+    """Custom exception for critical errors requiring failsafe activation."""
+
+    pass
 
 
-@contextmanager
-def api_request_context():
-    """Context manager for API requests with automatic retries and error handling"""
-    try:
-        yield
-    except requests.exceptions.RequestException as e:
-        logger.error(f"API request failed: {e}")
-        # Implement retry logic here if needed
-        raise
+class DataProcessor:
+    """Class for secure data processing with failsafe mechanisms."""
 
+    def __init__(self, config_path: str = ".env"):
+        self.config_path = config_path
+        self.config = self._load_config()
+        self._validate_config()
 
-def process_data(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """
-    Process incoming data with robust error handling
+    def _load_config(self) -> Dict[str, Any]:
+        """Load configuration from .env file securely."""
+        try:
+            dotenv.load_dotenv(self.config_path)
+            return {
+                "api_key": os.getenv("API_KEY"),
+                "database_url": os.getenv("DATABASE_URL"),
+                "timeout": int(os.getenv("REQUEST_TIMEOUT", 30)),
+            }
+        except dotenv.DotenvException as e:
+            logger.critical(f"Configuration error: {e}")
+            raise CriticalError("Configuration loading failed") from e
 
-    Args:
-        data: Input data dictionary
+    def _validate_config(self) -> None:
+        """Validate configuration values."""
+        if not self.config["api_key"]:
+            logger.critical("API_KEY missing in configuration")
+            raise CriticalError("Missing required API key")
+        if not self.config["database_url"]:
+            logger.critical("DATABASE_URL missing in configuration")
+            raise CriticalError("Missing database connection URL")
 
-    Returns:
-        Processed data or None if processing fails
-    """
-    try:
-        # Critical processing section
-        with api_request_context():
-            response = requests.get(
-                f"{API_URL}/process",
-                headers={"Authorization": f"Bearer {API_KEY}"},
-                json=data,
+    def process_data(self, input_file: str, output_file: str) -> None:
+        """Process data from input file and save to output file."""
+        try:
+            # Validate input file
+            if not Path(input_file).is_file():
+                raise FileNotFoundError(f"Input file not found: {input_file}")
+
+            # Securely execute external commands
+            command = (
+                f"python generated_code.py --input {input_file} --output {output_file}"
             )
-            response.raise_for_status()
-            return response.json()
+            with shlex.split(command) as args:
+                result = subprocess.run(
+                    args,
+                    capture_output=True,
+                    text=True,
+                    check=True,  # Ensure non-zero exit codes raise exception
+                )
 
-    except requests.exceptions.HTTPError as e:
-        logger.error(f"HTTP error processing data: {e}")
-        # Handle specific HTTP errors
-        if response.status_code == 429:
-            logger.warning("Rate limit exceeded - retrying after 60s")
-            time.sleep(60)
-            return process_data(data)  # Retry once
-        else:
-            raise
-    except Exception as e:
-        logger.exception(f"Unexpected error processing data: {e}")
-        # Implement failsafe logic here
-        raise RuntimeError("Critical processing failure") from e
+            # Validate execution result
+            if result.returncode != 0:
+                logger.error(f"Command execution failed: {result.stderr}")
+                raise CriticalError("External command failed")
+
+            logger.info(f"Data processed successfully to {output_file}")
+
+        except (FileNotFoundError, PermissionError) as e:
+            logger.critical(f"File access error: {e}")
+            raise CriticalError("File access failure") from e
+        except subprocess.CalledProcessError as e:
+            logger.critical(f"Command execution error: {e}")
+            raise CriticalError("External command failed") from e
+        except Exception as e:
+            logger.exception(f"Unexpected processing error: {e}")
+            raise CriticalError("Unrecoverable processing error") from e
 
 
 def main():
-    """Main execution flow with failsafe handling"""
+    """Main execution function with failsafe handling."""
     try:
-        # Example data processing
-        test_data = {"input": "test_value"}
-        result = process_data(test_data)
-        if result:
-            logger.info(f"Processing successful: {result}")
-        else:
-            logger.warning("Processing completed without results")
-
-    except RuntimeError as e:
-        logger.critical(f"System failure: {e}")
-        # Implement system failsafe logic here
-        raise
-    except Exception as e:
-        logger.error(f"Unhandled exception: {e}")
-        # Fallback to safe mode
-        logger.warning("Entering safe mode due to unexpected error")
+        processor = DataProcessor()
+        processor.process_data("input_data.csv", "processed_data.json")
+    except CriticalError as e:
+        logger.critical(f"Failsafe triggered: {e}")
+        # Implement failsafe actions here (e.g., shutdown, rollback)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        logger.fatal(f"Critical exception unhandled: {e}")
-        # Final failsafe mechanism
-        sys.exit(1)
+    main()
