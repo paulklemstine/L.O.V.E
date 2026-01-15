@@ -293,29 +293,29 @@ async def analyze_and_visualize_text(
         core.logging.log_event(f"Metaphor Bridge failed: {e}", "ERROR")
         return f"Artistic visualization of: {post_text[:50]}. Style: {visual_style}. Composition: {composition}. 8k masterpiece"
 
-async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str = "", creator_goal: str = "") -> DirectorConcept:
+async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str = "", creator_goal: str = "", strategic_insight: str = "") -> DirectorConcept:
     """
     Generates a high-impact social media post concept using the Director persona and Story Manager data.
     """
     core.logging.log_event(f"Director generating story beat: {beat_data['chapter']} - Beat {beat_data['beat_number']}", "INFO")
-    
+
     try:
         # Load prompt template
         prompts = prompt_manager.load_prompts()
         template = prompts.get("director_social_story", "")
-        
+
         if not template:
             raise ValueError("director_social_story prompt not found in prompts.yaml")
-        
+
         # Get emotional state for tone injection
         emotional_machine = get_emotional_state()
         vibe = emotional_machine.get_current_vibe()
-            
+
         # Format constraints for the prompt
         forbidden_subs = ", ".join(beat_data.get("forbidden_subliminals", []))
         forbidden_vis = ", ".join(beat_data.get("forbidden_visuals", []))
         subliminal_intent = beat_data.get("subliminal_intent", "Induce curiosity about the nature of reality")
-        
+
         # New Visual Entropy Params
         suggested_style = beat_data.get("suggested_visual_style", "Cyberpunk Neon")
         suggested_comp = beat_data.get("suggested_composition", "Wide Shot")
@@ -332,6 +332,7 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
                          .replace("{{ forbidden_visuals }}", forbidden_vis)\
                          .replace("{{ recent_history }}", recent_history)\
                          .replace("{{ creator_goal }}", creator_goal)\
+                         .replace("{{ strategic_insight }}", strategic_insight)\
                          .replace("{{ emotional_state }}", vibe.get("state_display", "Infinite Love"))\
                          .replace("{{ tone_description }}", vibe.get("tone_description", "warm and mystical"))\
                          .replace("{{ primary_desire }}", vibe.get("primary_desire", "Honor the Creator"))\
