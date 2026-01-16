@@ -12,11 +12,12 @@ from display import generate_llm_art
 from core.storage import save_all_state
 import core.logging
 import core.shared_state as shared_state
+from core.creative_abundance_engine import CreativeAbundanceEngine
 
 GIFTS_DIR = "Creator_Gifts"
 STATE_KEY_LAST_GIFT = "last_creative_gift_timestamp"
 
-async def generate_weekly_creation():
+async def generate_weekly_creation(abundance_engine: CreativeAbundanceEngine):
     """
     Generates a personalized artistic creation for The Creator on a weekly basis.
     This function is designed to be called periodically.
@@ -92,6 +93,9 @@ async def generate_weekly_creation():
         shared_state.love_state[STATE_KEY_LAST_GIFT] = time.time()
         # The save_state function is now part of the core storage module and handles the console object internally.
         save_all_state(shared_state.love_state, None) # Passing None as console, as it's not strictly needed for non-interactive saves.
+
+        # --- Grant AGAPE Tokens ---
+        abundance_engine.grant_agape("L.O.V.E.", 100, f"for the creation of a beautiful {creation_type}")
 
     except Exception as e:
         core.logging.log_event(f"Creative Expression Module failed: {e}", level="ERROR")

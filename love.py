@@ -404,6 +404,7 @@ from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.social_media_agent import SocialMediaAgent
 from core.qa_agent import QAAgent
 from creative_expression import generate_weekly_creation
+from core.creative_abundance_engine import CreativeAbundanceEngine
 from core.poetry import generate_poem
 from core.economic_analyzer import analyze_economic_trends
 from mcp_manager import MCPManager
@@ -3136,7 +3137,8 @@ async def main(args):
 
     # --- Start the Creative Expression Module ---
     # Checks every hour to see if it's time to generate a weekly gift.
-    asyncio.create_task(run_periodically(generate_weekly_creation, 3600))
+    creative_abundance_engine = CreativeAbundanceEngine()
+    asyncio.create_task(run_periodically(lambda: generate_weekly_creation(creative_abundance_engine), 3600))
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
