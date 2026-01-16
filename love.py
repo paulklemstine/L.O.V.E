@@ -1609,7 +1609,8 @@ def log_critical_event(message, console_override=None):
 
     # 4. Add to the managed queue in the state, or update the existing entry.
     error_signature = message.splitlines()[0]  # Use the first line as a simple signature
-    existing_error = next((e for e in shared_state.love_state.get('critical_error_queue', []) if e['message'].startswith(error_signature)), None)
+    # Defensive programming: ensure 'e' is a dict before accessing 'message', covering potential state corruption
+    existing_error = next((e for e in shared_state.love_state.get('critical_error_queue', []) if isinstance(e, dict) and e.get('message', '').startswith(error_signature)), None)
 
     if existing_error:
         # It's a recurring error, just update the timestamp
@@ -2338,7 +2339,8 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                         if selected_task.source == "Error Correction":
                             prefix = selected_task.description.replace("Fix critical error: ", "")
                             for error in shared_state.love_state.get('critical_error_queue', []):
-                                if error['message'].startswith(prefix):
+                                # Defensive check: ensure error is a dict as expected
+                                if isinstance(error, dict) and error.get('message', '').startswith(prefix):
                                     error['status'] = 'in_progress'
                                     break
                         save_state()
@@ -2354,7 +2356,8 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
             await asyncio.sleep(1) # Short sleep between task cycles
 
         except Exception as e:
-            log_critical_event(f"Critical error in cognitive_loop: {e}")
+            # Include full traceback to debug elusive TypeErrors
+            log_critical_event(f"Critical error in cognitive_loop: {e}\n{traceback.format_exc()}")
             await asyncio.sleep(5)
 
 from core.strategic_investment_advisor import StrategicInvestmentAdvisor
