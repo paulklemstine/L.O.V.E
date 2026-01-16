@@ -2221,7 +2221,7 @@ async def _prioritize_and_select_task(deep_agent_engine=None):
         if isinstance(response_dict, str):
             scores_text = response_dict
         elif isinstance(response_dict, dict):
-            scores_text = response_dict.get("result", "")
+            scores_text = response_dict.get("result") or ""
         else:
             scores_text = ""
 
