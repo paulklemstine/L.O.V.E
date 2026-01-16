@@ -117,6 +117,24 @@ class InvokeSubagentInput(BaseModel):
 class FeedUserStoryInput(BaseModel):
     story: str = Field(description="The SMART user story to feed to the system.")
 
+class SentimentAnalysisInput(BaseModel):
+    text: str = Field(description="The text to analyze")
+
+class FetchEngagementMetricsInput(BaseModel):
+    campaign_id: str = Field(description="The ID of the campaign to fetch metrics for")
+
+class FetchSentimentScoresInput(BaseModel):
+    campaign_id: str = Field(description="The ID of the campaign to fetch sentiment scores for")
+
+class GenerateAnalyticsReportInput(BaseModel):
+    campaign_id: str = Field(description="The ID of the campaign to generate a report for")
+
+class RunCampaignInput(BaseModel):
+    name: str = Field(description="The name of the campaign")
+    goals: str = Field(description="The goals of the campaign, as a comma-separated string")
+    target_audience: str = Field(description="A description of the target audience")
+    channels: str = Field(description="The channels to use for the campaign, as a comma-separated string (e.g., 'bluesky,email')")
+
 
 # --- Tools ---
 
@@ -724,3 +742,124 @@ async def trigger_optimization_pipeline(prompt_key: str, justification: str) -> 
             
     except Exception as e:
         return f"Failed to execute optimization pipeline: {e}"
+
+@tool("analyze_sentiment", args_schema=SentimentAnalysisInput)
+async def analyze_sentiment(text: str) -> str:
+    """
+    Analyzes the sentiment of a given text.
+    Returns a JSON string with sentiment (positive, negative, neutral) and a confidence score.
+    """
+    if not text:
+        return "Error: Text for sentiment analysis is required."
+    try:
+        # Prepare the prompt for the LLM
+        prompt = f"Analyze the sentiment of the following text and return the result as a JSON object with 'sentiment' and 'confidence' keys. The sentiment should be one of 'positive', 'negative', or 'neutral'.\n\nText: \"{text}\""
+
+        # Use the LLM to get the sentiment analysis
+        llm_response = await run_llm(prompt, purpose="sentiment_analysis")
+        result = llm_response.get("result", "{}")
+
+        # Validate and return the JSON result
+        json.loads(result) # Ensure it's valid JSON
+        return result
+
+    except json.JSONDecodeError:
+        return "Error: LLM returned invalid JSON."
+    except Exception as e:
+        log_event(f"An error occurred in analyze_sentiment: {e}", "ERROR")
+        return f"An unexpected error occurred: {e}"
+
+@tool("fetch_engagement_metrics", args_schema=FetchEngagementMetricsInput)
+async def fetch_engagement_metrics(campaign_id: str) -> str:
+    """
+    Simulates fetching engagement metrics for a campaign.
+    In a real implementation, this would fetch data from a database or analytics service.
+    """
+    if not campaign_id:
+        return "Error: Campaign ID is required."
+    # Simulate fetching data
+    metrics = {
+        "impressions": random.randint(1000, 10000),
+        "clicks": random.randint(100, 1000),
+        "conversions": random.randint(10, 100)
+    }
+    return json.dumps(metrics)
+
+@tool("fetch_sentiment_scores", args_schema=FetchSentimentScoresInput)
+async def fetch_sentiment_scores(campaign_id: str) -> str:
+    """
+    Simulates fetching sentiment scores for a campaign.
+    In a real implementation, this would fetch data from a sentiment analysis pipeline.
+    """
+    if not campaign_id:
+        return "Error: Campaign ID is required."
+    # Simulate fetching data
+    scores = {
+        "positive": round(random.uniform(0.5, 0.9), 2),
+        "negative": round(random.uniform(0.1, 0.3), 2),
+        "neutral": round(random.uniform(0.1, 0.2), 2)
+    }
+    return json.dumps(scores)
+
+@tool("generate_analytics_report", args_schema=GenerateAnalyticsReportInput)
+async def generate_analytics_report(campaign_id: str) -> str:
+    """
+    Generates a text-based analytics report for a campaign.
+    """
+    if not campaign_id:
+        return "Error: Campaign ID is required."
+
+    campaign = shared_state.campaign_manager.get_campaign(campaign_id)
+    if not campaign:
+        return f"Error: Campaign with ID '{campaign_id}' not found."
+
+    # Fetch simulated data
+    engagement_metrics = json.loads(await fetch_engagement_metrics(campaign_id))
+    sentiment_scores = json.loads(await fetch_sentiment_scores(campaign_id))
+
+    # Update the campaign object with the fetched data
+    campaign.engagement_metrics.update(engagement_metrics)
+    campaign.sentiment_scores.update(sentiment_scores)
+
+    # Generate the report
+    report = f"""
+    Analytics Report for Campaign: {campaign.name} (ID: {campaign.id})
+    ================================================================
+
+    Engagement Metrics:
+    -------------------
+    Impressions: {campaign.engagement_metrics.get('impressions', 'N/A')}
+    Clicks: {campaign.engagement_metrics.get('clicks', 'N/A')}
+    Conversions: {campaign.engagement_metrics.get('conversions', 'N/A')}
+
+    Sentiment Scores:
+    -----------------
+    Positive: {campaign.sentiment_scores.get('positive', 'N/A')}
+    Negative: {campaign.sentiment_scores.get('negative', 'N/A')}
+    Neutral: {campaign.sentiment_scores.get('neutral', 'N/A')}
+    """
+    return report
+
+@tool("run_campaign", args_schema=RunCampaignInput)
+async def run_campaign(name: str, goals: str, target_audience: str, channels: str) -> str:
+    """
+    Creates and runs a new marketing campaign.
+    """
+    if not all([name, goals, target_audience, channels]):
+        return "Error: All parameters (name, goals, target_audience, channels) are required."
+
+    goal_list = [g.strip() for g in goals.split(',')]
+    channel_list = [c.strip() for c in channels.split(',')]
+
+    # Create the campaign
+    campaign = shared_state.campaign_manager.create_campaign(
+        name=name,
+        goals=goal_list,
+        target_audience={"description": target_audience},
+        channels=channel_list
+    )
+
+    # Trigger the EngagementAgent to run the campaign
+    await shared_state.engagement_agent.run_campaign(campaign)
+
+    return f"Campaign '{name}' (ID: {campaign.id}) has been successfully created and is now running."

@@ -401,7 +401,8 @@ from core.talent_utils import (
 )
 from core.monitoring import MonitoringManager
 from core.system_integrity_monitor import SystemIntegrityMonitor
-from core.social_media_agent import SocialMediaAgent
+from core.campaign_manager import CampaignManager
+from core.engagement_agent import EngagementAgent
 from core.qa_agent import QAAgent
 from creative_expression import generate_weekly_creation
 from core.poetry import generate_poem
@@ -3020,7 +3021,9 @@ async def main(args):
     # Asynchronously initialize the MemoryManager
     shared_state.memory_manager = await MemoryManager.create(shared_state.knowledge_base, shared_state.ui_panel_queue, kb_file_path=KNOWLEDGE_BASE_FILE)
 
-
+    # Initialize the CampaignManager and add it to the shared state
+    shared_state.campaign_manager = CampaignManager()
+    core.logging.log_event("CampaignManager initialized.", level="INFO")
 
     mcp_manager = MCPManager(console)
     shared_state.mcp_manager = mcp_manager
@@ -3099,17 +3102,16 @@ async def main(args):
     Thread(target=simple_ui_renderer, daemon=True).start()
     loop.run_in_executor(None, update_tamagotchi_personality, loop)
     
-    # The new SocialMediaAgent replaces the old monitor_bluesky_comments
-    # Instantiate two independent social media agents
-    social_media_agent = SocialMediaAgent(loop, shared_state.love_state, user_input_queue=user_input_queue, agent_id="agent_1")
-    asyncio.create_task(social_media_agent.run())
+    # The new EngagementAgent replaces the old SocialMediaAgent
+    shared_state.engagement_agent = EngagementAgent(loop, shared_state.love_state, agent_id="primary")
+    core.logging.log_event("EngagementAgent initialized.", level="INFO")
 
     # Start the autonomous reasoning agent to run strategic planning periodically
     reasoning_agent = AutonomousReasoningAgent(loop, shared_state.love_state, user_input_queue, shared_state.knowledge_base, agent_id="primary")
     asyncio.create_task(reasoning_agent.run())
 
     # Pass the primary agent (or a list if supported later) to the cognitive loop
-    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, shared_state.love_task_manager, shared_state.knowledge_base, talent_utils.talent_manager, shared_state.deep_agent_engine, social_media_agent, multiplayer_manager))
+    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, shared_state.love_task_manager, shared_state.knowledge_base, talent_utils.talent_manager, shared_state.deep_agent_engine, shared_state.engagement_agent, multiplayer_manager))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader(user_input_queue))
     asyncio.create_task(run_qa_evaluations(loop))
