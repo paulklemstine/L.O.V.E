@@ -1,29 +1,15 @@
 
 import pytest
-from unittest import mock
+from unittest.mock import MagicMock, patch, mock_open
 from core.guardian.verification import VerificationPipeline
-
-class MockSandbox:
-    def __init__(self):
-        self.last_command = None
-        # Default behavior: Success on everything
-        self.return_code = 0
-        self.stdout = ""
-        self.stderr = ""
-
-    def run_command(self, command):
-        self.last_command = command
-        # Simulate failure for specific commands if needed by test logic
-        if "fail_test" in command:
-             return 1, "Tests failed", "Error"
-        if "lint_fail" in command:
-             return 1, "Lint errors", ""
-             
-        return self.return_code, self.stdout, self.stderr
 
 @pytest.fixture
 def pipeline():
-    return VerificationPipeline(sandbox=MockSandbox())
+    # We patch the factory 'get_sandbox' to return a mock
+    with patch('core.guardian.verification.get_sandbox') as mock_get_sandbox:
+        mock_sandbox_instance = MagicMock()
+        mock_get_sandbox.return_value = mock_sandbox_instance
+        yield VerificationPipeline()
 
 def test_verify_syntax_valid(pipeline):
     code = "def foo(): pass"
@@ -34,27 +20,40 @@ def test_verify_syntax_invalid(pipeline):
     assert not pipeline.verify_syntax(code)
 
 def test_verify_semantics_success(pipeline):
-    # Default mock succeeds
-    assert pipeline.verify_semantics("tests/test_good.py")
-    assert "pytest tests/test_good.py" in pipeline.sandbox.last_command
+    pipeline.sandbox.run_command.return_value = (0, "Success", "")
+    assert pipeline.verify_semantics("tests/my_test.py") is True
+    pipeline.sandbox.run_command.assert_called_with("python3 -m pytest tests/my_test.py")
 
 def test_verify_semantics_failure(pipeline):
-    assert not pipeline.verify_semantics("tests/fail_test.py")
+    pipeline.sandbox.run_command.return_value = (1, "", "Test failed")
+    assert pipeline.verify_semantics("tests/my_test.py") is False
 
 def test_verify_style_success(pipeline):
-    assert pipeline.verify_style("core/good.py")
-    assert "ruff check core/good.py" in pipeline.sandbox.last_command
+    pipeline.sandbox.run_command.return_value = (0, "", "")
+    assert pipeline.verify_style("my_file.py") is True
+    pipeline.sandbox.run_command.assert_called_with("ruff check my_file.py")
 
 def test_verify_style_failure(pipeline):
-    assert not pipeline.verify_style("core/lint_fail.py")
+    pipeline.sandbox.run_command.return_value = (1, "Lint error", "")
+    assert pipeline.verify_style("my_file.py") is False
 
-def test_verify_all_flow(pipeline, tmp_path):
-    # We need a real file for syntax check part of verify_all
-    f = tmp_path / "valid.py"
-    f.write_text("print('hello')", encoding="utf-8")
-    
-    # Mock relative path usage by passing absolute path to verify_all since our mock sandbox accepts anything
-    # but the 'os.path.exists' check in verify_all needs to find it.
-    
-    assert pipeline.verify_all(str(f), "tests/fake_test.py")
+@patch('os.path.exists', return_value=True)
+@patch('builtins.open', new_callable=mock_open, read_data="def f(): pass")
+def test_verify_all_success(mock_file, mock_exists, pipeline):
+    pipeline.sandbox.run_command.return_value = (0, "Success", "")
+    assert pipeline.verify_all("target.py", "test.py") is True
+
+@patch('os.path.exists', return_value=True)
+@patch('builtins.open', new_callable=mock_open, read_data="def f(): pass")
+def test_verify_all_semantic_fail(mock_file, mock_exists, pipeline):
+    pipeline.sandbox.run_command.side_effect = [
+        (1, "", "Test failed"),
+        (0, "", "")
+    ]
+    assert pipeline.verify_all("target.py", "test.py") is False
+
+@patch('os.path.exists', return_value=True)
+@patch('builtins.open', new_callable=mock_open, read_data="def f() no")
+def test_verify_all_syntax_fail(mock_file, mock_exists, pipeline):
+    assert pipeline.verify_all("target.py", "test.py") is False
 

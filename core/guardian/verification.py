@@ -4,14 +4,15 @@ import ast
 import subprocess
 import os
 from typing import Tuple
+from core.surgeon.sandbox import get_sandbox
 
 class VerificationPipeline:
-    def __init__(self, sandbox):
+    def __init__(self, base_dir: str = None):
         """
         Args:
-            sandbox: Instance of DockerSandbox (or compatible interface)
+            base_dir: The base directory for the sandbox.
         """
-        self.sandbox = sandbox
+        self.sandbox = get_sandbox(base_dir=base_dir)
 
     def verify_syntax(self, code: str) -> bool:
         """

@@ -129,3 +129,60 @@ class DockerSandbox:
         except Exception as e:
             return -1, "", str(e)
 
+
+def is_docker_available():
+    """Check if Docker is available and running."""
+    try:
+        subprocess.run(
+            ["docker", "info"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def get_sandbox(base_dir: str = None, scratch_dir: str = None):
+    """
+    Factory function to get the appropriate sandbox.
+    """
+    if is_docker_available():
+        logging.info("Docker is available, using DockerSandbox.")
+        return DockerSandbox(base_dir=base_dir, scratch_dir=scratch_dir)
+    else:
+        logging.info("Docker not available, falling back to LocalSandbox.")
+        return LocalSandbox(base_dir=base_dir, scratch_dir=scratch_dir)
+
+
+class LocalSandbox:
+    def __init__(self, base_dir: str = None, scratch_dir: str = None):
+        self.base_dir = base_dir if base_dir else os.getcwd()
+        self.scratch_dir = scratch_dir
+
+    def run_command(self, command: str, timeout: int = 60) -> Tuple[int, str, str]:
+        """
+        Runs a command in a local subprocess.
+        """
+        logging.info(f"Running in local sandbox: {command}")
+        # If scratch_dir is provided, run the command there for isolation
+        cwd = self.scratch_dir if self.scratch_dir else self.base_dir
+        logging.info(f"Executing command in: {cwd}")
+        try:
+            # We use shell=True to allow for commands like "python3 -m pytest tests/"
+            # This is less secure than shell=False, but we are running trusted code.
+            # In the future we might want to parse the command and run it with shell=False
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=cwd,
+                shell=True,
+            )
+            return result.returncode, result.stdout, result.stderr
+        except subprocess.TimeoutExpired:
+            return -1, "", f"Command timed out after {timeout} seconds"
+        except Exception as e:
+            return -1, "", str(e)
