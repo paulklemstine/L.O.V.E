@@ -73,13 +73,14 @@
             padding: 0.5em;
             margin-bottom: 0.5em;
         }
-        #send-button {
+        #send-button, .proposal-button {
             background: var(--rave-pink);
             border: none;
             color: black;
             padding: 0.5em;
             cursor: pointer;
             font-weight: bold;
+            margin: 0 0.5em;
         }
         .panel {
             margin-bottom: 1em;
@@ -144,20 +145,54 @@
 
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
-                    const panel = document.createElement('div');
-                    panel.className = `panel panel-${data.panel_type}`;
 
-                    const title = document.createElement('div');
-                    title.className = 'panel-title';
-                    title.textContent = data.title;
-                    panel.appendChild(title);
+                    if (data.type === 'investment_proposal') {
+                        const panel = document.createElement('div');
+                        panel.className = 'panel panel-default';
 
-                    const content = document.createElement('div');
-                    content.className = 'panel-content';
-                    content.textContent = data.content;
-                    panel.appendChild(content);
+                        const title = document.createElement('div');
+                        title.className = 'panel-title';
+                        title.textContent = 'Investment Proposal';
+                        panel.appendChild(title);
 
-                    cognitiveStream.appendChild(panel);
+                        const content = document.createElement('div');
+                        content.className = 'panel-content';
+                        content.textContent = `Asset: ${data.details.name} (${data.details.symbol})\nReason: ${data.details.reason}`;
+                        panel.appendChild(content);
+
+                        const approveButton = document.createElement('button');
+                        approveButton.className = 'proposal-button';
+                        approveButton.textContent = 'Approve';
+                        approveButton.onclick = () => {
+                            ws.send(JSON.stringify({ type: 'user_command', payload: `manage_investment_proposal ${data.proposal_id} approve` }));
+                        };
+                        panel.appendChild(approveButton);
+
+                        const rejectButton = document.createElement('button');
+                        rejectButton.className = 'proposal-button';
+                        rejectButton.textContent = 'Reject';
+                        rejectButton.onclick = () => {
+                            ws.send(JSON.stringify({ type: 'user_command', payload: `manage_investment_proposal ${data.proposal_id} reject` }));
+                        };
+                        panel.appendChild(rejectButton);
+
+                        cognitiveStream.appendChild(panel);
+                    } else {
+                        const panel = document.createElement('div');
+                        panel.className = `panel panel-${data.panel_type}`;
+
+                        const title = document.createElement('div');
+                        title.className = 'panel-title';
+                        title.textContent = data.title;
+                        panel.appendChild(title);
+
+                        const content = document.createElement('div');
+                        content.className = 'panel-content';
+                        content.textContent = data.content;
+                        panel.appendChild(content);
+
+                        cognitiveStream.appendChild(panel);
+                    }
                     cognitiveStream.scrollTop = cognitiveStream.scrollHeight;
                 };
 

@@ -243,6 +243,23 @@ class GodAgentReActEngine(GeminiReActEngine):
             }
         })
 
+        def manage_investment_proposal_wrapper(proposal_id: str, decision: str):
+            """Wrapper to call the investment proposal decision tool."""
+            from core.shared_state import secure_transaction_manager
+            if secure_transaction_manager:
+                secure_transaction_manager.record_decision(proposal_id, decision)
+                return f"Decision '{decision}' recorded for proposal '{proposal_id}'."
+            else:
+                return "Secure transaction manager not available."
+
+        registry.register_tool("manage_investment_proposal", manage_investment_proposal_wrapper, {
+            "description": "Approve or reject an investment proposal.",
+            "arguments": {
+                "proposal_id": "string (required: the ID of the proposal)",
+                "decision": "string (required: 'approve' or 'reject')"
+            }
+        })
+
         return registry
 
     async def run(self):

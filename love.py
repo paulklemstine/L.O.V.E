@@ -2398,6 +2398,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
             await asyncio.sleep(5)
 
 from core.strategic_investment_advisor import StrategicInvestmentAdvisor
+from core.secure_transaction_manager import SecureTransactionManager
 # The initial_bootstrapping_recon function has been removed, as this logic
 # is now handled dynamically by the cognitive loop's prioritization system.
 
@@ -3164,7 +3165,9 @@ async def main(args):
     asyncio.create_task(run_periodically(monitor_love_operations, 900)) # Run every 15 minutes
 
     # Start the Strategic Investment Advisor
-    investment_advisor = StrategicInvestmentAdvisor(loop, user_input_queue)
+    secure_transaction_manager = SecureTransactionManager(websocket_manager)
+    shared_state.secure_transaction_manager = secure_transaction_manager
+    investment_advisor = StrategicInvestmentAdvisor(secure_transaction_manager)
     asyncio.create_task(investment_advisor.run())
 
     # --- Start Real-time State Broadcasting ---
