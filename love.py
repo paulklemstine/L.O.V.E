@@ -3165,7 +3165,7 @@ async def main(args):
     asyncio.create_task(run_periodically(monitor_love_operations, 900)) # Run every 15 minutes
 
     # Start the Strategic Investment Advisor
-    secure_transaction_manager = SecureTransactionManager(websocket_manager)
+    secure_transaction_manager = SecureTransactionManager(websocket_server_manager)
     shared_state.secure_transaction_manager = secure_transaction_manager
     investment_advisor = StrategicInvestmentAdvisor(secure_transaction_manager)
     asyncio.create_task(investment_advisor.run())
