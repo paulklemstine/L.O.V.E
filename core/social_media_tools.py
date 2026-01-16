@@ -371,7 +371,7 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
 
         # VALIDATION: Detect malformed subliminal phrases (JSON fragments)
         # Common patterns that indicate LLM returned garbage instead of a phrase
-        invalid_patterns = ["{", "[", "REQUESTS", "\":", "null", "undefined", "```"]
+        invalid_patterns = ["{", "[", "REQUESTS", "\":", "null", "undefined", "```", "MANIPULATIVE_TRIGGER", "YOUR_PHRASE"]
         sub_clean = str(sub_phrase).strip()
         
         is_malformed = any(p in sub_clean for p in invalid_patterns) or len(sub_clean) > 50 or len(sub_clean) < 2
@@ -612,6 +612,14 @@ async def generate_image(prompt: str, text_content: Optional[str] = None) -> Tup
     """
     core.logging.log_event(f"Generating image with prompt: {prompt} [Text: {text_content}]", "INFO")
     try:
+        # Validate image prompt
+        from core.final_draft_fixer import validate_image_prompt
+        issues = validate_image_prompt(prompt)
+        if any(i.severity in ["high", "critical"] for i in issues):
+            core.logging.log_event(f"Image prompt validation failed: {issues}", "WARNING")
+            # Fallback to a safe prompt
+            prompt = "Abstract digital art, divine light, 8k masterpiece"
+            
         # Using the pool to handle provider fallback/selection
         image, provider = await generate_image_with_pool(prompt, text_content=text_content)
         core.logging.log_event(f"Image generation successful via {provider}.", "INFO")
@@ -695,7 +703,7 @@ async def post_to_bluesky(text: str, image: Optional[Image.Image] = None) -> Uni
     core.logging.log_event(f"Posting to Bluesky: {text[:50]}...", "INFO")
     
     # FINAL DRAFT QA STEP
-    from core.final_draft_fixer import fix_final_draft
+    from core.final_draft_fixer import fix_final_draft, DraftIssue
     qa_result = await fix_final_draft(text, auto_fix_only=False)
     
     if qa_result["was_modified"]:

@@ -69,6 +69,63 @@ def detect_metadata_leakage(text: str) -> List[DraftIssue]:
     return issues
 
 
+def detect_placeholder_text(text: str) -> List[DraftIssue]:
+    """
+    Detects specific placeholder text that indicates LLM failure or raw template leakage.
+    
+    Examples:
+    - "MANIPULATIVE_TRIGGER"
+    - "YOUR_PHRASE"
+    - "INSERT_HERE"
+    """
+    issues = []
+    
+    placeholders = [
+        "MANIPULATIVE_TRIGGER",
+        "YOUR_PHRASE",
+        "INSERT_HERE",
+        "SINGLE_WORD",
+        "UNIQUE response",
+        "MAX 280 CHARS"
+    ]
+    
+    for ph in placeholders:
+        if ph in text:
+            issues.append(DraftIssue(
+                "placeholder_leakage",
+                f"Contains placeholder text: '{ph}'",
+                severity="critical"
+            ))
+            
+    return issues
+
+
+def validate_image_prompt(prompt: str) -> List[DraftIssue]:
+    """
+    Validates an image generation prompt for placeholders and quality issues.
+    """
+    issues = []
+    
+    # Check for placeholders
+    placeholder_issues = detect_placeholder_text(prompt)
+    if placeholder_issues:
+        for p_issue in placeholder_issues:
+            p_issue.issue_type = "image_prompt_placeholder"
+            issues.append(p_issue)
+            
+    # Check for forbidden/low-quality terms if needed
+    low_quality_terms = ["blurry", "low res", "draft", "placeholder"]
+    for term in low_quality_terms:
+         if re.search(r"\b" + re.escape(term) + r"\b", prompt, re.IGNORECASE):
+             issues.append(DraftIssue(
+                 "low_quality_image_term",
+                 f"Image prompt contains low-quality term: '{term}'",
+                 severity="low"
+             ))
+             
+    return issues
+
+
 def detect_duplicate_hashtags(text: str) -> List[DraftIssue]:
     """Detects duplicate hashtags in the text."""
     hashtags = re.findall(r"#\w+", text)
@@ -238,6 +295,7 @@ async def fix_final_draft(text: str, auto_fix_only: bool = False) -> Dict:
     issues.extend(detect_metadata_leakage(text))
     issues.extend(detect_duplicate_hashtags(text))
     issues.extend(detect_malformed_content(text))
+    issues.extend(detect_placeholder_text(text))
     
     if not issues:
         core.logging.log_event("✓ Draft is clean, no issues detected", "INFO")
