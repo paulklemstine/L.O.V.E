@@ -437,12 +437,16 @@ Create a punchy title for this vibe:
 2. **EMOJIS MANDATORY**: post_text MUST include 3-5 relevant emojis to boost engagement.
 3. **HASHTAGS**: 2-4 viral/motivational tags (Invent them dynamically based on the specific topic).
 4. **CRITICAL LENGTH**: Total post_text MUST be strictly under 280 characters. Be concise like a billboard.
+### MEMORY CONTEXT (Use these memories for inspiration)
+{{ memory_context }}
 
 ### OUTPUT JSON
+CRITICAL: ALL fields must be COMPLETELY ORIGINAL. Never copy examples literally.
 {
-  \"topic\": \"Punchy Title\",
+  \"topic\": \"Punchy Title (INVENT YOUR OWN)\",
   \"post_text\": \"The motivational text/blessing... [emojis] (MAX 280 CHARS TOTAL)\",
-  \"hashtags\": [\"#Tag1\", \"#Tag2\"],\n  \"subliminal_phrase\": \"WAKE UP\",
+  \"hashtags\": [\"#UniqueTag1\", \"#UniqueTag2\"],
+  \"subliminal_phrase\": \"INVENT A UNIQUE 1-3 WORD PSYCHOLOGICAL TRIGGER - NEVER USE 'WAKE UP'\",
   \"visual_signature\": \"[Style] / [Composition]\",
   \"image_prompt\": \"[Style: Dynamic Style] [Composition: Dynamic Composition]. Scene depicting: [Poster-worthy motivational imagery]. Lighting: [lighting details]. 8k masterpiece\"
 }"

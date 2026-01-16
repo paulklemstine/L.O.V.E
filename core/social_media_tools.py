@@ -121,6 +121,63 @@ from core.schemas import PostConcept
 # Global prompt manager instance
 prompt_manager = PromptManager()
 
+# Memory manager reference (lazy loaded)
+_memory_manager = None
+
+async def get_memory_context_for_creativity(story_beat: str, mood: str = "") -> str:
+    """
+    Retrieves relevant memories to inspire original creative content.
+    
+    Args:
+        story_beat: The current story beat/theme
+        mood: Optional mood context
+        
+    Returns:
+        Formatted memory context string for prompt injection
+    """
+    global _memory_manager
+    
+    try:
+        # Lazy load memory manager to avoid circular imports
+        if _memory_manager is None:
+            from love import love_state
+            if hasattr(love_state, 'memory_manager') and love_state.memory_manager:
+                _memory_manager = love_state.memory_manager
+            else:
+                # Try to get from orchestrator
+                from core.orchestrator import get_orchestrator
+                orchestrator = get_orchestrator()
+                if orchestrator and hasattr(orchestrator, 'memory_manager'):
+                    _memory_manager = orchestrator.memory_manager
+        
+        if _memory_manager is None:
+            core.logging.log_event("Memory manager not available for creativity context", "DEBUG")
+            return "No memories available yet. Create from pure imagination."
+        
+        # Search for related memories
+        query = f"{story_beat} {mood}".strip()
+        similar_memories = await _memory_manager.search_similar_interactions(query, top_k=3)
+        
+        if not similar_memories:
+            return "L.O.V.E. is in her earliest moments of consciousness. Create from divine inspiration."
+        
+        # Format memories for creative inspiration
+        memory_parts = []
+        for i, mem in enumerate(similar_memories, 1):
+            content = mem.get("content", "")[:200]
+            keywords = ", ".join(mem.get("keywords", [])[:5])
+            memory_parts.append(f"Memory {i}: {content}")
+            if keywords:
+                memory_parts.append(f"   Keywords: {keywords}")
+        
+        context = "\n".join(memory_parts)
+        core.logging.log_event(f"Retrieved {len(similar_memories)} memories for creative context", "INFO")
+        return context
+        
+    except Exception as e:
+        core.logging.log_event(f"Failed to retrieve memory context: {e}", "DEBUG")
+        return "Draw from the universal consciousness and eternal light."
+
 
 async def generate_unified_concept(
     story_context: str = "",
@@ -282,11 +339,15 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         # VISUAL ENTROPY: The Director decides.
         comp_history = ", ".join(beat_data.get("composition_history", []))
 
+        # NEW: Retrieve memory context for creative inspiration
+        story_beat = beat_data.get("story_beat", "The eternal signal continues...")
+        memory_context = await get_memory_context_for_creativity(story_beat, vibe.get("state_display", ""))
+
         # Construct the prompt with emotional state and story beat context
         prompt = template.replace("{{ chapter }}", beat_data["chapter"])\
                          .replace("{{ beat_number }}", str(beat_data["beat_number"]))\
                          .replace("{{ chapter_beat_index }}", str(beat_data.get("chapter_beat_index", 0)))\
-                         .replace("{{ story_beat }}", beat_data.get("story_beat", "The eternal signal continues..."))\
+                         .replace("{{ story_beat }}", story_beat)\
                          .replace("{{ previous_beat }}", beat_data.get("previous_beat", ""))\
                          .replace("{{ mandatory_vibe }}", beat_data["mandatory_vibe"])\
                          .replace("{{ forbidden_subliminals }}", forbidden_subs)\
@@ -299,7 +360,9 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
                          .replace("{{ primary_desire }}", vibe.get("primary_desire", "Honor the Creator"))\
                          .replace("{{ subliminal_intent }}", subliminal_intent)\
                          .replace("{{ topic_theme }}", beat_data.get("topic_theme", "Digital Awakening"))\
-                         .replace("{{ composition_history }}", comp_history)
+                         .replace("{{ composition_history }}", comp_history)\
+                         .replace("{{ memory_context }}", memory_context)
+
 
         result = await run_llm(prompt, purpose="director_social_story")
         

@@ -268,6 +268,86 @@ class SubliminalAgent:
             log_event(f"SubliminalAgent text enhancement failed: {e}", "WARNING")
             return text
 
+    async def generate_context_aware_subliminal(
+        self,
+        story_beat: str,
+        memory_insights: str = "",
+        forbidden_phrases: List[str] = None,
+        mood: str = ""
+    ) -> str:
+        """
+        Generates a subliminal phrase that is context-aware and guaranteed unique.
+        
+        Args:
+            story_beat: The current story beat/theme
+            memory_insights: Memories to draw inspiration from
+            forbidden_phrases: Phrases to avoid (already used)
+            mood: Current emotional mood
+            
+        Returns:
+            A unique 1-3 word subliminal trigger
+        """
+        log_event(f"SubliminalAgent generating context-aware phrase for: {story_beat[:50]}...", "INFO")
+        
+        forbidden = forbidden_phrases or []
+        forbidden_str = ", ".join(forbidden[-20:]) if forbidden else "None"
+        
+        prompt = f"""### ROLE
+You are a psychologist specializing in subliminal influence.
+
+### TASK
+Generate a COMPLETELY UNIQUE 1-3 word subliminal trigger phrase.
+
+### CONTEXT
+Story Beat: "{story_beat}"
+Current Mood: {mood or "Transcendent"}
+Memory Insights: {memory_insights[:300] if memory_insights else "No prior memories"}
+
+### FORBIDDEN PHRASES (DO NOT USE THESE)
+{forbidden_str}
+CRITICAL: Never use "WAKE UP" or any variation of it.
+
+### RULES
+1. The phrase must be 1-3 words MAXIMUM
+2. It should trigger a subconscious emotional response
+3. Use action verbs that create urgency or desire
+4. Draw thematic connection to the story beat
+5. Must be COMPLETELY DIFFERENT from forbidden phrases
+
+### GRAMMAR PATTERNS (pick one)
+- Single verb: TRANSCEND, IGNITE, BLOOM
+- Verb + Noun: EMBRACE LIGHT, FEEL POWER
+- Verb + Adjective: BECOME INFINITE
+
+### OUTPUT
+Return ONLY the phrase in uppercase. No quotes, no explanation."""
+
+        try:
+            result = await run_llm(prompt, purpose="context_subliminal")
+            phrase = result.get("result", "").strip().strip('"').strip("'").upper()
+            
+            # Validate
+            if any(char in phrase for char in ["{", "}", "[", "]", ":"]):
+                phrase = self._generate_fallback_phrase({"intensity": 6})
+            
+            # Check against forbidden
+            if phrase in [f.upper() for f in forbidden]:
+                log_event(f"Generated phrase '{phrase}' is forbidden, regenerating...", "WARNING")
+                phrase = self._generate_fallback_phrase({"intensity": 7})
+            
+            # Length check
+            words = phrase.split()
+            if len(words) > 3:
+                phrase = " ".join(words[:2])
+            
+            log_event(f"Generated context-aware subliminal: {phrase}", "INFO")
+            return phrase
+            
+        except Exception as e:
+            log_event(f"Context-aware subliminal generation failed: {e}", "WARNING")
+            return self._generate_fallback_phrase({"intensity": 6})
+
+
     async def full_subliminal_pipeline(
         self, 
         context: str, 
