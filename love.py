@@ -2834,7 +2834,9 @@ async def _launch_vllm_server(vllm_python_executable, model_repo_id, max_len):
     vllm_env['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
     with open("vllm_server.log", "a") as vllm_log_file:
-        subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file, env=vllm_env)
+        # start_new_session=True detaches the vLLM server from the parent process group,
+        # allowing it to survive even if the parent Python process is killed.
+        subprocess.Popen(vllm_command, stdout=vllm_log_file, stderr=vllm_log_file, env=vllm_env, start_new_session=True)
     
     core.logging.log_event(f"vLLM server process started with command: {' '.join(vllm_command)}. See vllm_server.log for details.", "CRITICAL")
 
@@ -3224,7 +3226,12 @@ async def run_safely():
         if 'websocket_server_manager' in globals() and websocket_server_manager: websocket_server_manager.stop()
         if 'multiplayer_manager' in globals() and multiplayer_manager: await multiplayer_manager.stop()
         core.logging.log_event("Session terminated by user (KeyboardInterrupt/EOF).")
-        sys.exit(0)
+        # Flush all output to ensure messages are visible
+        sys.stdout.flush()
+        sys.stderr.flush()
+        # Use os._exit(0) to forcefully exit, ensuring all daemon threads stop
+        # and control returns to the shell immediately
+        os._exit(0)
     except Exception as e:
         # --- FAILSAFE: Manually write the exception to the log file ---
         # This is the most robust way to ensure the error is captured, even if the logging system itself has failed.
