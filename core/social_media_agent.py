@@ -167,6 +167,9 @@ class SocialMediaAgent:
 
         while True:
             try:
+                # 1. Check for replies first (Interaction Priority)
+                await self._check_and_reply_to_comments('bluesky')
+
                 # Get strategic insight from GodAgent
                 insight = await self._get_god_agent_insight()
 
