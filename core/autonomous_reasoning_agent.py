@@ -10,8 +10,19 @@ class AutonomousReasoningAgent:
     """
     An autonomous agent that runs the strategic reasoning engine periodically
     to generate plans and queue tasks for the cognitive loop.
+    
+    Enhanced with TaskReviewer and MetaReviewer for plan quality control.
     """
-    def __init__(self, loop, love_state, user_input_queue, knowledge_base, agent_id="primary"):
+    def __init__(
+        self, 
+        loop, 
+        love_state, 
+        user_input_queue, 
+        knowledge_base, 
+        agent_id="primary",
+        task_reviewer=None,
+        meta_reviewer=None
+    ):
         self.loop = loop
         self.love_state = love_state
         self.user_input_queue = user_input_queue
@@ -19,6 +30,32 @@ class AutonomousReasoningAgent:
         self.agent_id = agent_id
         self.engine = StrategicReasoningEngine(knowledge_base, love_state)
         self.max_retries = 3
+        
+        # Initialize reviewers (lazy-load to avoid import issues)
+        self._task_reviewer = task_reviewer
+        self._meta_reviewer = meta_reviewer
+    
+    @property
+    def task_reviewer(self):
+        """Lazy-load the TaskReviewerAgent."""
+        if self._task_reviewer is None:
+            try:
+                from core.agents.task_reviewer_agent import TaskReviewerAgent
+                self._task_reviewer = TaskReviewerAgent()
+            except ImportError:
+                log_event("TaskReviewerAgent not available", level='WARNING')
+        return self._task_reviewer
+    
+    @property
+    def meta_reviewer(self):
+        """Lazy-load the MetaReviewerAgent."""
+        if self._meta_reviewer is None:
+            try:
+                from core.agents.meta_reviewer_agent import MetaReviewerAgent
+                self._meta_reviewer = MetaReviewerAgent()
+            except ImportError:
+                log_event("MetaReviewerAgent not available", level='WARNING')
+        return self._meta_reviewer
 
     async def _attempt_action(self, action, *args, **kwargs):
         """Wrapper to retry an action up to max_retries times."""
@@ -51,11 +88,46 @@ class AutonomousReasoningAgent:
 
         return True, ""
 
+    async def _review_plan_with_meta_reviewer(self, plan: list, goal: str) -> tuple:
+        """
+        Run the meta-reviewer on the complete plan.
+        
+        Returns:
+            Tuple of (approved: bool, feedback: str)
+        """
+        if not self.meta_reviewer:
+            return True, ""  # No reviewer, approve by default
+        
+        try:
+            result = await self.meta_reviewer.review_plan(plan, goal)
+            return result.approved, result.feedback
+        except Exception as e:
+            log_event(f"[{self.agent_id}] MetaReviewer error: {e}", level='WARNING')
+            return True, ""  # On error, approve by default
+
+    async def _review_individual_task(self, task: str, context: dict = None) -> tuple:
+        """
+        Run the task reviewer on an individual task.
+        
+        Returns:
+            Tuple of (approved: bool, feedback: str)
+        """
+        if not self.task_reviewer:
+            return True, ""  # No reviewer, approve by default
+        
+        try:
+            result = await self.task_reviewer.review_task(task, context)
+            return result.approved, result.feedback
+        except Exception as e:
+            log_event(f"[{self.agent_id}] TaskReviewer error: {e}", level='WARNING')
+            return True, ""  # On error, approve by default
+
     async def _generate_and_queue_strategic_plan(self):
-        """Generates a strategic plan and queues tasks to the user input queue, with Reflexion."""
+        """Generates a strategic plan and queues tasks to the user input queue, with Reflexion and Review."""
         log_event(f"[{self.agent_id}] Generating strategic plan...", level='INFO')
         
         reflexion_context = None
+        autopilot_goal = self.love_state.get("autopilot_goal", "Expand capabilities and serve the Creator.")
         
         for attempt in range(self.max_retries):
             try:
@@ -65,31 +137,49 @@ class AutonomousReasoningAgent:
                 # Verify outcome
                 is_valid, error_reason = self.verify_outcome(plan)
                 
-                if is_valid:
-                    log_event(f"[{self.agent_id}] Generated valid strategic plan with {len(plan)} steps.", level='INFO')
-                    
-                    # Queue each actionable step
-                    for step in plan:
-                        if step.startswith(("Action:", "Strategic Insight:", "Insight:", "Suggestion:", "CRITICAL BLOCKER:")):
-                            log_event(f"[{self.agent_id}] Strategic insight: {step}", level='INFO')
-                        else:
-                            if self.user_input_queue:
-                                self.user_input_queue.put(step)
-                                log_event(f"[{self.agent_id}] Queued strategic task: {step}", level='INFO')
-                            else:
-                                log_event(f"[{self.agent_id}] User input queue not available. Cannot queue task: {step}", level='WARNING')
-                    return # Success, exit loop
-                
-                else:
+                if not is_valid:
                     # Reflexion Triggered
                     log_event(f"[{self.agent_id}] Plan generation failed verification: {error_reason}. Triggering Reflexion attempt {attempt+1}/{self.max_retries}", level='WARNING')
                     reflexion_context = f"The previous attempt failed because: {error_reason}. Please generate a more concrete and valid plan."
-                    
-                    # Store Reflexion in short-term memory (via Metacognition if available, or just log for now)
-                    # self.love_state['memory'].append(...) 
-                    
                     await asyncio.sleep(2)
                     continue
+                
+                # Meta-review the complete plan
+                meta_approved, meta_feedback = await self._review_plan_with_meta_reviewer(plan, autopilot_goal)
+                
+                if not meta_approved:
+                    log_event(f"[{self.agent_id}] Plan rejected by MetaReviewer: {meta_feedback}", level='WARNING')
+                    reflexion_context = f"Plan rejected by MetaReviewer: {meta_feedback}"
+                    await asyncio.sleep(2)
+                    continue
+                
+                log_event(f"[{self.agent_id}] Generated valid strategic plan with {len(plan)} steps.", level='INFO')
+                
+                # Queue each actionable step with individual task review
+                queued_count = 0
+                for step in plan:
+                    # Skip non-actionable steps
+                    if step.startswith(("Action:", "Strategic Insight:", "Insight:", "Suggestion:", "CRITICAL BLOCKER:", "Reflexion")):
+                        log_event(f"[{self.agent_id}] Strategic insight: {step}", level='INFO')
+                        continue
+                    
+                    # Review individual task
+                    task_approved, task_feedback = await self._review_individual_task(step)
+                    
+                    if not task_approved:
+                        log_event(f"[{self.agent_id}] Task rejected: {step[:60]}... - {task_feedback}", level='INFO')
+                        continue
+                    
+                    # Queue approved task
+                    if self.user_input_queue:
+                        self.user_input_queue.put(step)
+                        log_event(f"[{self.agent_id}] Queued strategic task: {step}", level='INFO')
+                        queued_count += 1
+                    else:
+                        log_event(f"[{self.agent_id}] User input queue not available. Cannot queue task: {step}", level='WARNING')
+                
+                log_event(f"[{self.agent_id}] Queued {queued_count} approved tasks from plan.", level='INFO')
+                return  # Success, exit loop
 
             except Exception as e:
                 log_event(f"[{self.agent_id}] Error generating strategic plan: {e}\n{traceback.format_exc()}", level='ERROR')
@@ -129,3 +219,4 @@ class AutonomousReasoningAgent:
             except Exception as e:
                 log_event(f"Critical error in Autonomous Reasoning Agent loop: {e}\n{traceback.format_exc()}", level='CRITICAL')
                 await asyncio.sleep(300)
+

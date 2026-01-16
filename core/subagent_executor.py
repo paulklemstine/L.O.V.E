@@ -493,6 +493,181 @@ When you have completed the task, respond with your final answer directly.
             for k, v in self._active_subagents.items()
             if v.get("status") == "running"
         ]
+    
+    async def spawn_custom_subagent(
+        self,
+        requesting_agent_id: str,
+        desired_capability: str,
+        task: str,
+        hub_prompt_id: Optional[str] = None,
+        include_filesystem_tools: bool = True
+    ) -> SubagentResult:
+        """
+        Allows any agent to spawn a subagent with specified capabilities.
+        
+        This is the primary entry point for dynamic subagent creation.
+        Agents can specify what they need, and this method will find or
+        create an appropriate subagent with the right prompts and tools.
+        
+        Args:
+            requesting_agent_id: ID of the agent making the request
+            desired_capability: Description of what the subagent should do
+            task: The specific task for the subagent
+            hub_prompt_id: Optional LangChain Hub prompt ID to use
+            include_filesystem_tools: Whether to include agent filesystem tools
+            
+        Returns:
+            SubagentResult with execution outcome
+        """
+        core.logging.log_event(
+            f"Custom subagent request from {requesting_agent_id}: {desired_capability[:50]}...",
+            "INFO"
+        )
+        
+        # Determine agent type from desired capability
+        agent_type = self._infer_agent_type(desired_capability)
+        
+        # Get or load prompt
+        if hub_prompt_id:
+            # Try to load specific prompt from LangHub
+            try:
+                system_prompt = SubagentLoader.load_from_hub(hub_prompt_id)
+                if not system_prompt:
+                    system_prompt = SubagentLoader.load_subagent_prompt(
+                        agent_type,
+                        fallback_prompt=self._get_fallback_prompt(agent_type)
+                    )
+            except Exception as e:
+                core.logging.log_event(f"Failed to load hub prompt {hub_prompt_id}: {e}", "WARNING")
+                system_prompt = SubagentLoader.load_subagent_prompt(
+                    agent_type,
+                    fallback_prompt=self._get_fallback_prompt(agent_type)
+                )
+        else:
+            system_prompt = SubagentLoader.load_subagent_prompt(
+                agent_type,
+                fallback_prompt=self._get_fallback_prompt(agent_type)
+            )
+        
+        # Get tools
+        tools = self._get_tools_for_agent_type(agent_type)
+        
+        # Add filesystem tools if requested
+        if include_filesystem_tools:
+            fs_tools = self._get_filesystem_tools()
+            tools.extend(fs_tools)
+        
+        # Execute the subagent
+        task_id = str(uuid.uuid4())[:8]
+        
+        # Track the custom subagent
+        self._active_subagents[task_id] = {
+            "agent_type": agent_type,
+            "task": task,
+            "requesting_agent": requesting_agent_id,
+            "desired_capability": desired_capability,
+            "hub_prompt_id": hub_prompt_id,
+            "status": "running",
+            "started_at": asyncio.get_event_loop().time()
+        }
+        
+        try:
+            tools_section = self._format_tools_section(tools)
+            
+            result, iterations, tool_calls = await self._execute_reasoning_loop(
+                system_prompt=system_prompt,
+                task=task,
+                context=f"Capability requested: {desired_capability}",
+                tools_section=tools_section,
+                tools=tools,
+                max_iterations=5,
+                task_id=task_id
+            )
+            
+            self._active_subagents[task_id]["status"] = "completed"
+            
+            return SubagentResult(
+                success=True,
+                result=result,
+                agent_type=agent_type,
+                task_id=task_id,
+                iterations=iterations,
+                tool_calls=tool_calls,
+                metadata={
+                    "requesting_agent": requesting_agent_id,
+                    "hub_prompt_id": hub_prompt_id,
+                }
+            )
+            
+        except Exception as e:
+            core.logging.log_event(f"Custom subagent {task_id} failed: {e}", "ERROR")
+            self._active_subagents[task_id]["status"] = "failed"
+            
+            return SubagentResult(
+                success=False,
+                result=f"Custom subagent execution failed: {e}",
+                agent_type=agent_type,
+                task_id=task_id,
+                metadata={"error": str(e)}
+            )
+    
+    def _infer_agent_type(self, capability: str) -> str:
+        """Infer the best agent type from a capability description."""
+        capability_lower = capability.lower()
+        
+        if any(word in capability_lower for word in ["code", "program", "implement", "debug", "fix"]):
+            return "coding"
+        elif any(word in capability_lower for word in ["research", "search", "find", "investigate"]):
+            return "research"
+        elif any(word in capability_lower for word in ["social", "post", "tweet", "share"]):
+            return "social"
+        elif any(word in capability_lower for word in ["security", "vulnerability", "audit"]):
+            return "security"
+        elif any(word in capability_lower for word in ["analyze", "data", "chart", "statistics"]):
+            return "analyst"
+        elif any(word in capability_lower for word in ["creative", "write", "story", "art"]):
+            return "creative"
+        else:
+            return "reasoning"
+    
+    def _get_filesystem_tools(self) -> List[BaseTool]:
+        """Get agent filesystem tools for document creation."""
+        try:
+            from core.agent_filesystem_tools import create_filesystem_tools
+            return create_filesystem_tools()
+        except ImportError:
+            core.logging.log_event("AgentFilesystemTools not available", "DEBUG")
+            return []
+        except Exception as e:
+            core.logging.log_event(f"Failed to load filesystem tools: {e}", "WARNING")
+            return []
+    
+    async def discover_available_agents(self) -> List[Dict[str, str]]:
+        """
+        Discover available agents from LangHub and local registry.
+        
+        Returns:
+            List of {id, name, description} for available agents
+        """
+        agents = []
+        
+        # Add built-in agent types
+        for agent_type in SubagentType:
+            agents.append({
+                "id": agent_type.value,
+                "name": agent_type.name.title(),
+                "description": self._get_fallback_prompt(agent_type.value),
+                "source": "builtin"
+            })
+        
+        # Try to discover from LangHub
+        try:
+            hub_agents = await SubagentLoader.discover_hub_agents()
+            agents.extend(hub_agents)
+        except Exception as e:
+            core.logging.log_event(f"Failed to discover hub agents: {e}", "DEBUG")
+        
+        return agents
 
 
 # Global instance for easy access

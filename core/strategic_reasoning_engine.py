@@ -39,6 +39,8 @@ class StrategicReasoningEngine:
     async def generate_strategic_plan(self, reflexion_context: str = None):
         """
         Analyzes the knowledge graph and persona priorities to generate a strategic plan.
+        
+        Enhanced with task validation to gate impractical or dangerous tasks.
         """
         log_event("Strategic reasoning engine initiated analysis.", level='INFO')
 
@@ -125,8 +127,61 @@ class StrategicReasoningEngine:
             except Exception as e:
                 log_event(f"LLM fallback failed: {e}", level='ERROR')
 
-        log_event(f"Strategic plan generated with {len(plan)} steps.", level='INFO')
-        return plan
+        # 5. NEW: Validate and gate the plan before returning
+        validated_plan = await self._validate_and_gate_plan(plan)
+        
+        log_event(f"Strategic plan generated with {len(validated_plan)} validated steps (from {len(plan)} raw steps).", level='INFO')
+        return validated_plan
+
+    async def _validate_and_gate_plan(self, raw_plan: list) -> list:
+        """
+        Validates each plan step and gates impractical ones.
+        
+        Tasks are gated (not queued) if:
+        - They reference external services we haven't integrated
+        - They require funds/resources we don't have
+        - They are too vague or philosophical ("Embrace AGAPE")
+        - They fail feasibility checks
+        
+        Gated tasks are logged to rejected_goals.json for future reference.
+        """
+        try:
+            from core.task_validator import TaskValidator
+            validator = TaskValidator()
+        except ImportError:
+            log_event("TaskValidator not available, skipping validation", level='WARNING')
+            return raw_plan
+        
+        validated_plan = []
+        
+        # Build context from current state
+        context = {
+            "wallet_configured": bool(os.environ.get("ETH_WALLET_ADDRESS")),
+            "has_crypto_funds": False,  # Conservative default
+            "bluesky_configured": bool(os.environ.get("BLUESKY_HANDLE")),
+            "twitter_configured": bool(os.environ.get("TWITTER_API_KEY")),
+        }
+        
+        for step in raw_plan:
+            try:
+                result = await validator.validate(step, context)
+                
+                if result.valid:
+                    validated_plan.append(step)
+                    log_event(f"[Validator] APPROVED: {step[:60]}...", level='DEBUG')
+                else:
+                    log_event(
+                        f"[Validator] GATED: {step[:60]}... - Reason: {result.reason}", 
+                        level='INFO'
+                    )
+                    # Already logged to rejected_goals by the validator
+                    
+            except Exception as e:
+                log_event(f"[Validator] Error validating step: {e}", level='WARNING')
+                # On error, conservatively include the step
+                validated_plan.append(step)
+        
+        return validated_plan
 
     async def _handle_wealth_goal(self):
         """Generates strategies for wealth creation."""
