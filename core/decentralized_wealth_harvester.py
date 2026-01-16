@@ -41,6 +41,8 @@ async def fetch_defi_opportunities() -> List[Dict[str, Any]]:
         }
     ]
 
+from core.agape_token import get_agape_token_info
+
 async def fetch_new_token_opportunities() -> List[Dict[str, Any]]:
     """
     Identifies promising new tokens on decentralized exchanges.
@@ -50,13 +52,4 @@ async def fetch_new_token_opportunities() -> List[Dict[str, Any]]:
 
     For now, it returns a mock list of new token opportunities.
     """
-    return [
-        {
-            "opportunity_id": "NEW_TOKEN_001",
-            "token_symbol": "AGAPE",
-            "platform": "Uniswap",
-            "description": "The AGAPE token, a new governance token for a decentralized AI network.",
-            "reasoning": "Strong community backing and a clear mission-driven purpose.",
-            "action": "Acquire a small position in the AGAPE token"
-        }
-    ]
+    return [get_agape_token_info()]

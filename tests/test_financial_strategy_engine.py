@@ -85,8 +85,10 @@ class TestFinancialStrategyEngine(unittest.TestCase):
         ]
         mock_fetch_token.return_value = [
             {
-                "opportunity_id": "NEW_TOKEN_001", "token_symbol": "AGAPE", "platform": "Uniswap",
-                "description": "AGAPE token.", "reasoning": "Strong community.", "action": "Acquire AGAPE"
+                "opportunity_id": "NEW_TOKEN_001", "token_symbol": "AGAPE", "platform": "L.O.V.E. Ecosystem",
+                "description": "The AGAPE token is the heart of the L.O.V.E. network...",
+                "reasoning": "AGAPE transcends traditional financial incentives.",
+                "action": "Embrace and cultivate AGAPE through creative contribution."
             }
         ]
 
