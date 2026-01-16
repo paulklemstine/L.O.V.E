@@ -61,7 +61,7 @@ async def run_demo():
     dashboard = EvolutionDashboard()
     test_gen = TestGenerator()
     mutation = MutationEngine()
-    pipeline = VerificationPipeline(sandbox)
+    pipeline = VerificationPipeline()
 
     print("\n--- PHASE 1: PREPARATION ---")
     
