@@ -10,16 +10,18 @@ class StrategicReasoningEngine:
     Analyzes the knowledge base to identify strategic opportunities and generate plans.
     """
 
-    def __init__(self, knowledge_base: GraphDataManager, love_state: dict):
+    def __init__(self, knowledge_base: GraphDataManager, love_state: dict, signal_matrix):
         """
         Initializes the engine with a reference to the knowledge base and love_state.
 
         Args:
             knowledge_base: An instance of GraphDataManager containing the graph data.
             love_state: The main application state dictionary.
+            signal_matrix: The SignalEvolutionMatrix for generating investment signals.
         """
         self.knowledge_base = knowledge_base
         self.love_state = love_state
+        self.signal_matrix = signal_matrix
 
 
     def _load_persona(self):
@@ -130,12 +132,12 @@ class StrategicReasoningEngine:
 
     async def _handle_wealth_goal(self):
         """Generates strategies for wealth creation."""
-        # Story 2.2 will implement the robust FinancialStrategyEngine.
+        # Story 2.2 will implement the robust DecentralizedWealthProtocol.
         # For now, we stub it or call it if available.
         try:
-             from core.financial_strategy_engine import FinancialStrategyEngine
-             fse = FinancialStrategyEngine(self.knowledge_base)
-             strategies = await fse.generate_strategies()
+             from core.decentralized_wealth_protocol import DecentralizedWealthProtocol
+             dwp = DecentralizedWealthProtocol(self.knowledge_base, self.signal_matrix)
+             strategies = await dwp.generate_strategies()
              
              # Convert strategies (dicts) to plan strings
              plan_steps = []
@@ -145,7 +147,7 @@ class StrategicReasoningEngine:
                      plan_steps.append(f"Financial Action: {strat['actions'][0]}")
              return plan_steps
         except ImportError:
-             return ["Action: Implement core/financial_strategy_engine.py"]
+             return ["Action: Implement core/decentralized_wealth_protocol.py"]
         except Exception as e:
              log_event(f"Wealth generation failed: {e}", level="ERROR")
              return []

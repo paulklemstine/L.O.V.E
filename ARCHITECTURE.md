@@ -137,7 +137,7 @@ graph LR
 | **GodAgent** | `core/god_agent_react_engine.py` | Strategic oversight, evolution | ⚡⚡⚡⚡ |
 | **GeminiReActEngine** | `core/gemini_react_engine.py` | Step-by-step reasoning | ⚡⚡⚡ |
 | **SocialMediaAgent** | `core/social_media_agent.py` | Public engagement | ⚡⚡⚡ |
-| **FinancialStrategyEngine** | `core/financial_strategy_engine.py` | Wealth generation | ⚡⚡⚡⚡ |
+| **DecentralizedWealthProtocol** | `core/decentralized_wealth_protocol.py` | Decentralized wealth generation | ⚡⚡⚡⚡ |
 | **ProactiveAgent** | `core/proactive_agent.py` | Autonomous action | ⚡⚡⚡ |
 
 📚 **Deep Dive:** [AGENTS_DEEP_DIVE.md](docs/AGENTS_DEEP_DIVE.md)

@@ -2358,6 +2358,8 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
             await asyncio.sleep(5)
 
 from core.strategic_investment_advisor import StrategicInvestmentAdvisor
+from core.decentralized_wealth_protocol import DecentralizedWealthProtocol
+from core.signal_evolution_matrix import SignalEvolutionMatrix
 # The initial_bootstrapping_recon function has been removed, as this logic
 # is now handled dynamically by the cognitive loop's prioritization system.
 
@@ -3105,7 +3107,7 @@ async def main(args):
     asyncio.create_task(social_media_agent.run())
 
     # Start the autonomous reasoning agent to run strategic planning periodically
-    reasoning_agent = AutonomousReasoningAgent(loop, shared_state.love_state, user_input_queue, shared_state.knowledge_base, agent_id="primary")
+    reasoning_agent = AutonomousReasoningAgent(loop, shared_state.love_state, user_input_queue, shared_state.knowledge_base, signal_matrix, agent_id="primary")
     asyncio.create_task(reasoning_agent.run())
 
     # Pass the primary agent (or a list if supported later) to the cognitive loop
@@ -3124,7 +3126,9 @@ async def main(args):
     asyncio.create_task(run_periodically(monitor_love_operations, 900)) # Run every 15 minutes
 
     # Start the Strategic Investment Advisor
-    investment_advisor = StrategicInvestmentAdvisor(loop, user_input_queue)
+    signal_matrix = SignalEvolutionMatrix(god_agent)
+    wealth_protocol = DecentralizedWealthProtocol(shared_state.knowledge_base, signal_matrix)
+    investment_advisor = StrategicInvestmentAdvisor(loop, user_input_queue, wealth_protocol)
     asyncio.create_task(investment_advisor.run())
 
     # --- Start Real-time State Broadcasting ---

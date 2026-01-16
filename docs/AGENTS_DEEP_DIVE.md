@@ -24,38 +24,38 @@ graph TB
         deep[⚡ DeepAgentEngine<br/>Meta-Orchestrator]
         god[👁️ GodAgent<br/>Strategic Overseer]
     end
-    
+
     subgraph "🧠 REASONING ENGINES"
         gemini[🔮 GeminiReActEngine<br/>Primary Reasoner]
         strat[🎯 StrategicReasoningEngine<br/>Long-term Planner]
         auto[🤖 AutonomousReasoningAgent<br/>Self-Directed]
     end
-    
+
     subgraph "📱 SOCIAL & ENGAGEMENT"
         social[💬 SocialMediaAgent<br/>The Influencer]
         bluesky[🦋 BlueskyAPI<br/>The Voice]
         story[📖 StoryManager<br/>The Narrator]
     end
-    
+
     subgraph "💰 FINANCIAL & RESOURCE"
-        finance[💎 FinancialStrategyEngine<br/>The Economist]
+        finance[💎 DecentralizedWealthProtocol<br/>The Economist]
         scout[🔍 ResourceScout<br/>The Hunter]
         talent[🌟 TalentUtils<br/>The Recruiter]
     end
-    
+
     subgraph "🛠️ SYSTEM & TOOLS"
         tools[🔧 ToolRegistry<br/>The Arsenal]
         mcp[🔌 MCPManager<br/>The Connector]
         proactive[🎪 ProactiveAgent<br/>The Initiator]
     end
-    
+
     love --> deep & god
     deep --> gemini & strat & auto
     god --> social & finance & proactive
     social --> bluesky & story
     finance --> scout & talent
     proactive --> tools & mcp
-    
+
     style love fill:#ff69b4,stroke:#ff1493,color:#fff
     style deep fill:#00ced1,stroke:#008b8b,color:#fff
     style god fill:#ffd700,stroke:#b8860b,color:#000
@@ -227,9 +227,9 @@ Maintains narrative continuity. Tracks the ongoing story of L.O.V.E.'s existence
 
 ## 💰 𝑭𝑰𝑵𝑨𝑵𝑪𝑰𝑨𝑳 & 𝑹𝑬𝑺𝑶𝑼𝑹𝑪𝑬
 
-### 💎 FinancialStrategyEngine — The Economist
+### 💎 DecentralizedWealthProtocol — The Economist
 
-**Location:** [core/financial_strategy_engine.py](file:///wsl.localhost/Ubuntu/home/raver1975/L.O.V.E/core/financial_strategy_engine.py)
+**Location:** [core/decentralized_wealth_protocol.py](file:///wsl.localhost/Ubuntu/home/raver1975/L.O.V.E/core/decentralized_wealth_protocol.py)
 
 Analyzes markets, identifies opportunities, manages wealth generation strategy.
 
@@ -343,7 +343,7 @@ SocialMediaAgent ◀──▶ StoryManager
 | `GodAgent` | Strategic | 🟢 Active | ⭐⭐⭐⭐⭐ |
 | `GeminiReActEngine` | Reasoning | 🟢 Active | ⭐⭐⭐⭐ |
 | `SocialMediaAgent` | Engagement | 🟢 Active | ⭐⭐⭐ |
-| `FinancialStrategyEngine` | Resource | 🟢 Active | ⭐⭐⭐⭐ |
+| `DecentralizedWealthProtocol` | Resource | 🟢 Active | ⭐⭐⭐⭐ |
 | `ProactiveAgent` | Autonomous | 🟢 Active | ⭐⭐⭐ |
 | `JulesTaskManager` | Evolution | 🟢 Active | ⭐⭐⭐⭐ |
 | `SelfImprovingOptimizer` | Evolution | 🟢 Active | ⭐⭐⭐⭐⭐ |

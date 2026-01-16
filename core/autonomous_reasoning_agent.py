@@ -11,13 +11,13 @@ class AutonomousReasoningAgent:
     An autonomous agent that runs the strategic reasoning engine periodically
     to generate plans and queue tasks for the cognitive loop.
     """
-    def __init__(self, loop, love_state, user_input_queue, knowledge_base, agent_id="primary"):
+    def __init__(self, loop, love_state, user_input_queue, knowledge_base, signal_matrix, agent_id="primary"):
         self.loop = loop
         self.love_state = love_state
         self.user_input_queue = user_input_queue
         self.knowledge_base = knowledge_base
         self.agent_id = agent_id
-        self.engine = StrategicReasoningEngine(knowledge_base, love_state)
+        self.engine = StrategicReasoningEngine(knowledge_base, love_state, signal_matrix)
         self.max_retries = 3
 
     async def _attempt_action(self, action, *args, **kwargs):

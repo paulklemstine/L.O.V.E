@@ -4,7 +4,7 @@
 Economic Analyzer for L.O.V.E.
 
 This module provides tools for analyzing economic trends, fetching market data,
-and providing insights to guide the FinancialStrategyEngine.
+and providing insights to guide the DecentralizedWealthProtocol.
 """
 
 import httpx
