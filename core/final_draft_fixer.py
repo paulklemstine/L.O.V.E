@@ -50,6 +50,14 @@ def detect_metadata_leakage(text: str) -> List[DraftIssue]:
             severity="high"
         ))
     
+    # Pattern: (N chars)
+    if re.search(r"\(\d+\s*chars?\)", text, re.IGNORECASE):
+        issues.append(DraftIssue(
+            "metadata_leakage",
+            "Contains character count: '(N chars)'",
+            severity="high"
+        ))
+    
     # Pattern: Labels like "Caption:", "Post Text:"
     if re.search(r"^(Caption|Post Text|Status Update|Draft)[\s:]+", text, re.IGNORECASE):
         issues.append(DraftIssue(
@@ -196,6 +204,9 @@ def auto_fix_metadata_leakage(text: str) -> str:
     
     # Remove (Character count: N)
     text = re.sub(r"\s*\(Character count:?\s*\d+\)", "", text, flags=re.IGNORECASE)
+
+    # Remove (N chars)
+    text = re.sub(r"\s*\(\d+\s*chars?\)", "", text, flags=re.IGNORECASE)
     
     # Remove label prefixes
     text = re.sub(r"^(Caption|Post Text|Status Update|Draft)[\s:]+", "", text, flags=re.IGNORECASE)

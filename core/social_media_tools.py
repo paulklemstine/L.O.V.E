@@ -36,8 +36,8 @@ def clean_social_content(text: str) -> str:
         core.logging.log_event("Removing 'Breakdown' or post-analysis section.", level='WARNING')
         text = re.sub(breakdown_pattern, "", text, flags=re.IGNORECASE)
 
-    # 4. Remove character counts often added by LLMs e.g., "*(278 characters)*" or "*(Character count: 144)*"
-    char_count_pattern = r"[\(\*\[]+\s*(Character count|chars|characters)\s*[:]?\s*\d+\s*[\)\*\]]+"
+    # 4. Remove character counts often added by LLMs e.g., "*(278 characters)*" or "*(Character count: 144)*" or "(277 chars)"
+    char_count_pattern = r"[\(\*\[]+\s*(?:(?:Character count|chars|characters)\s*[:]?\s*\d+|\d+\s*(?:chars|characters))\s*[\)\*\]]+"
     if re.search(char_count_pattern, text, re.IGNORECASE):
         core.logging.log_event("Removing character count artifact from post.", level='WARNING')
         text = re.sub(char_count_pattern, "", text, flags=re.IGNORECASE)
