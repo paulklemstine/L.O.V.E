@@ -401,6 +401,7 @@ from core.talent_utils import (
 )
 from core.monitoring import MonitoringManager
 from core.system_integrity_monitor import SystemIntegrityMonitor
+from core.system_health_monitor import SystemHealthMonitor
 from core.social_media_agent import SocialMediaAgent
 from core.qa_agent import QAAgent
 from creative_expression import generate_weekly_creation
@@ -3005,7 +3006,7 @@ async def broadcast_love_state():
 
 async def main(args):
     """The main application entry point."""
-    global ipfs_manager, local_job_manager, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, system_integrity_monitor, multiplayer_manager
+    global ipfs_manager, local_job_manager, monitoring_manager, god_agent, mcp_manager, web_server_manager, websocket_server_manager, system_integrity_monitor, multiplayer_manager, social_media_agent, system_health_monitor
 
     loop = asyncio.get_running_loop()
     user_input_queue = queue.Queue()
@@ -3103,6 +3104,14 @@ async def main(args):
     # Instantiate two independent social media agents
     social_media_agent = SocialMediaAgent(loop, shared_state.love_state, user_input_queue=user_input_queue, agent_id="agent_1")
     asyncio.create_task(social_media_agent.run())
+
+    # --- Initialize and start the System Health Monitor ---
+    agents_to_monitor = {
+        "GodAgent": god_agent,
+        "SocialMediaAgent": social_media_agent,
+    }
+    system_health_monitor = SystemHealthMonitor(agents_to_monitor)
+    asyncio.create_task(system_health_monitor.run())
 
     # Start the autonomous reasoning agent to run strategic planning periodically
     reasoning_agent = AutonomousReasoningAgent(loop, shared_state.love_state, user_input_queue, shared_state.knowledge_base, agent_id="primary")

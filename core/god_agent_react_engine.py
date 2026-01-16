@@ -19,6 +19,10 @@ class GodAgentReActEngine(GeminiReActEngine):
         self.love_task_manager = love_task_manager
         self.loop = loop
 
+    def is_alive(self):
+        """A simple health check for the agent."""
+        return True
+
     def _get_tool_registry(self):
         # The God Agent uses a specific, limited set of tools for high-level analysis.
         # But we also include all shared tools (including MCP tools) for full access.

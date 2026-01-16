@@ -32,6 +32,11 @@ class SocialMediaAgent:
         # Track failed post generation attempts
         self.last_post_failure_time = 0
         self.post_failure_cooldown = 300  # 5 minutes cooldown after failure
+        self._is_running = False
+
+    def is_alive(self):
+        """A simple health check for the agent."""
+        return self._is_running
 
     async def _attempt_action(self, action, *args, **kwargs):
         """Wrapper to retry an action up to max_retries times."""
@@ -164,6 +169,7 @@ class SocialMediaAgent:
     async def run(self):
         """The main loop for the social media agent, now focused on continuous, viral posting."""
         log_event(f"Social Media Agent '{self.agent_id}' started (Dimensional Signal Mode).", level='CRITICAL')
+        self._is_running = True
 
         while True:
             try:
