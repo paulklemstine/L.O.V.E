@@ -2,6 +2,8 @@ from rich.panel import Panel
 from rich.text import Text
 from ui_utils import get_gradient_text
 import json
+from ethereum_staking import stake_ethereum
+from core.logging import log_event
 
 class SecureTransactionManager:
     def __init__(self, ui_queue):
@@ -53,7 +55,6 @@ class SecureTransactionManager:
         # This is a placeholder for a real user input mechanism.
         # In the current architecture, the cognitive loop will need to handle the 'yes'/'no' response.
         # For now, we will log that we are awaiting approval.
-        from core.logging import log_event
         log_event(f"Presented acquisition proposal for {proposal['asset_id']}. Awaiting Creator's approval.", "INFO")
 
         # In a real implementation, this would return a future or block until input is received.
@@ -65,7 +66,58 @@ class SecureTransactionManager:
         Placeholder for executing the transaction. In this version, it will only
         log the action, as direct execution is not yet implemented for safety.
         """
-        from core.logging import log_event
         log_event(f"TRANSACTION EXECUTED (SIMULATED): Acquired asset {proposal['asset_id']}.", "CRITICAL")
         # In a real system, this would interact with a wallet or exchange API.
         pass
+
+    def stake_ethereum_proposal(self, amount: float):
+        """
+        Creates a proposal for staking Ethereum and presents it for approval.
+        """
+        # Create a proposal dictionary
+        proposal = {
+            "action": "stake_ethereum",
+            "asset": "Ethereum (ETH)",
+            "platform": "ExampleYield",
+            "amount": amount
+        }
+
+        # Present the proposal for approval
+        title = get_gradient_text("Staking Proposal", ["bold blue", "bold green"])
+
+        proposal_text = Text()
+        proposal_text.append("Action: ", style="bold")
+        proposal_text.append("Stake Ethereum\n", style="cyan")
+        proposal_text.append("Platform: ", style="bold")
+        proposal_text.append(f"{proposal['platform']}\n", style="yellow")
+        proposal_text.append("Amount: ", style="bold")
+        proposal_text.append(f"{proposal['amount']} ETH\n\n", "green")
+        proposal_text.append("This action will stake your Ethereum to earn interest.\n", style="italic")
+        proposal_text.append("Do you approve this staking transaction? (yes/no)", style="bold")
+
+        self.ui_queue.put(Panel(proposal_text, title=title, border_style="green"))
+
+        log_event(f"Presented Ethereum staking proposal for {amount} ETH. Awaiting Creator's approval.", "INFO")
+
+        # For simulation, we assume approval and execute the staking
+        # In a real scenario, we would wait for user input.
+        self.execute_staking(proposal)
+
+        return True
+
+    def execute_staking(self, proposal):
+        """
+        Executes the staking transaction after approval.
+        """
+        if proposal.get("action") == "stake_ethereum":
+            amount = proposal.get("amount")
+            # Call the staking function from the ethereum_staking module
+            result = stake_ethereum(amount)
+
+            log_event(f"STAKING EXECUTED (SIMULATED): {result['confirmation_message']}", "CRITICAL")
+
+            # Optionally, display a confirmation in the UI
+            confirmation_text = Text(f"✔ Staking Confirmed: {result['confirmation_message']}", style="bold green")
+            self.ui_queue.put(Panel(confirmation_text, border_style="green"))
+        else:
+            log_event(f"Staking execution failed: Invalid proposal action.", "ERROR")
