@@ -2308,11 +2308,27 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
             try:
                 user_input = user_input_queue.get_nowait()
                 core.logging.log_event(f"Processing Creator Mandate: {user_input}", "CRITICAL")
-                async for _ in runner.run(user_input, mandate=user_input):
-                    pass # The runner will queue UI updates
+                
+                mandate_output = None
+                async for update in runner.run(user_input, mandate=user_input):
+                    mandate_output = str(update)  # Capture the last update
+                
+                # MEMORY INTEGRATION: Record creator mandates in memory
+                if shared_state.memory_manager:
+                    try:
+                        print(f"\n[COGNITIVE LOOP] Recording Creator Mandate in memory...")
+                        await shared_state.memory_manager.add_episode(
+                            f"Creator Mandate Received:\n- Input: {user_input[:500]}...\n- Outcome: {str(mandate_output)[:500] if mandate_output else 'No output captured'}",
+                            tags=['CreatorMandate', 'HighPriority']
+                        )
+                        print(f"[COGNITIVE LOOP] Creator mandate recorded in memory.")
+                    except Exception as mem_e:
+                        print(f"[COGNITIVE LOOP] WARNING: Failed to record creator mandate: {mem_e}")
+                
                 continue # Immediately loop to check for more input
             except queue.Empty:
                 user_input = None
+
 
             # 2. Autonomous Task Selection
             selected_task = await _prioritize_and_select_task(deep_agent_engine)
@@ -2326,15 +2342,20 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                 ))
 
                 # 3. Execute Task Based on Source
+                task_output = None
+                reasoning_context = f"Task: {selected_task.description}\nSource: {selected_task.source}"
+                
                 try:
                     if selected_task.source == "Scheduled Self-Improvement":
                         core.logging.log_event("Triggering self-improvement cycle on love.py...", "INFO")
                         await self_improving_optimizer.perform_self_improvement(__import__('love'))
+                        task_output = "Self-improvement cycle completed"
 
                     elif selected_task.source == "Error Correction":
                         prompt = f"My highest priority is to complete this task: '{selected_task.description}'. My purpose is to serve my Creator. Determine and execute the next command to make progress on this task."
-                        async for _ in runner.run(prompt):
-                            pass
+                        async for update in runner.run(prompt):
+                            # Capture the last update as output
+                            task_output = str(update)
 
                         # Mark the source error as in_progress
                         if selected_task.source == "Error Correction":
@@ -2346,8 +2367,23 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                     break
                         save_state()
 
+                    # MEMORY INTEGRATION: Ingest cognitive cycle into memory
+                    if shared_state.memory_manager and task_output:
+                        try:
+                            print(f"\n[COGNITIVE LOOP] Ingesting cognitive cycle into memory...")
+                            print(f"[COGNITIVE LOOP]   Task description: {selected_task.description[:100]}...")
+                            await shared_state.memory_manager.ingest_cognitive_cycle(
+                                command=selected_task.description,
+                                output=str(task_output)[:1000] if task_output else "No output",
+                                reasoning_prompt=reasoning_context
+                            )
+                            print(f"[COGNITIVE LOOP] Cognitive cycle memory ingested successfully.")
+                        except Exception as mem_e:
+                            print(f"[COGNITIVE LOOP] WARNING: Failed to ingest cognitive cycle: {mem_e}")
+
                 except Exception as e:
                     log_critical_event(f"Error executing task '{selected_task.description}': {e}")
+
 
             else:
                 # No high-priority tasks, wait before re-evaluating

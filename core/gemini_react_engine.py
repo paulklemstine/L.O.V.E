@@ -210,9 +210,12 @@ Recent Failures:
 {chr(10).join([f'- {f[:200]}...' for f in recent_failures[:3]])}
 """
                     try:
+                        print(f"\n[REACT ENGINE] Recording loop detection memory...")
                         await self.memory_manager.add_episode(failure_context, tags=['ReasoningFailure', 'Loop', self.caller])
+                        print(f"[REACT ENGINE] Loop detection memory recorded successfully.")
                     except Exception as e:
                         # Don't fail if memory storage fails
+                        print(f"[REACT ENGINE] WARNING: Failed to store loop memory: {e}")
                         pass
                 
                 # Provide clear guidance to try something different
@@ -321,7 +324,9 @@ Do NOT call '{tool_name}' again with the same arguments."""
                     # In love.py, memory_manager is initialized.
                     # Check if add_episode is async. Yes, it is (read_file confirmed).
                     if shared_state.memory_manager:
+                        print(f"\n[REACT ENGINE] Recording dynamic tool usage memory for: {tool_name}")
                         await shared_state.memory_manager.add_episode(tool_memory_content, tags=['ToolMemory'])
+                        print(f"[REACT ENGINE] Tool memory recorded successfully.")
 
             except Exception as e:
                 # Story 1.3: Emit error panel
@@ -361,8 +366,11 @@ Last {min(5, len(self.history))} actions:
 Reason: Maximum reasoning steps exceeded without reaching goal
 """
             try:
+                print(f"\n[REACT ENGINE] Recording max steps failure memory...")
                 await self.memory_manager.add_episode(failure_context, tags=['ReasoningFailure', 'MaxSteps', self.caller])
-            except Exception:
+                print(f"[REACT ENGINE] Max steps failure memory recorded successfully.")
+            except Exception as e:
+                print(f"[REACT ENGINE] WARNING: Failed to store max steps failure memory: {e}")
                 pass
         
         return {"success": False, "result": f"Goal failed. The reasoning engine exceeded the maximum number of steps ({max_steps})."}

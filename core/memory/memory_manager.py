@@ -346,11 +346,20 @@ class MemoryManager:
         This method triggers the full asynchronous agentic memory processing pipeline
         and adds the memory to the hierarchical memory system (Level 0).
         """
+        # MEMORY LOGGING: Track all add_episode calls
+        import traceback
+        caller_info = ''.join(traceback.format_stack()[-4:-1])
+        print(f"\n[MEMORY TRACE] add_episode called")
+        print(f"  Tags: {tags}")
+        print(f"  Content preview: {content[:100]}..." if len(content) > 100 else f"  Content: {content}")
+        print(f"  Call stack (last 3 frames):\n{caller_info}")
+        
         # Add to traditional agentic memory graph
         memory_note = await self.add_agentic_memory_note(content, external_tags=tags or [])
         
         # Add to hierarchical memory system (Level 0)
         if memory_note:
+            print(f"[MEMORY TRACE] Memory note created successfully: {memory_note.id}")
             from core.memory.memory_folding_agent import MemorySummary
             level_0_memory = MemorySummary(
                 content=content,
@@ -358,6 +367,7 @@ class MemoryManager:
                 source_ids=[memory_note.id]
             )
             self.level_0_memories.append(level_0_memory)
+            print(f"[MEMORY TRACE] Level 0 memories count: {len(self.level_0_memories)}")
             
             # Trigger automatic folding if thresholds are met
             updated_levels = await self.memory_folding_agent.trigger_folding(
@@ -370,6 +380,8 @@ class MemoryManager:
             self.level_0_memories = updated_levels['level_0']
             self.level_1_summaries = updated_levels['level_1']
             self.level_2_summaries = updated_levels['level_2']
+        else:
+            print(f"[MEMORY TRACE] WARNING: add_agentic_memory_note returned None!")
 
     async def add_agentic_memory_note(self, content: str, external_tags: List[str] = None) -> MemoryNote | None:
         """
@@ -380,16 +392,20 @@ class MemoryManager:
         Returns:
             The created MemoryNote object, or None if the process failed.
         """
-        print("Starting agentic processing for new memory...")
+        print(f"[MEMORY] Starting agentic processing for new memory...")
+        print(f"[MEMORY]   External tags: {external_tags}")
+        print(f"[MEMORY]   Content length: {len(content)} chars")
 
         # 1. Get LLM-derived attributes first
         attributes = await self._agentic_process_new_memory(content, external_tags=external_tags)
         if not attributes:
-            print("Agentic processing failed. Aborting memory addition.")
+            print("[MEMORY] ERROR: Agentic processing failed (LLM returned invalid attributes). Aborting memory addition.")
             return None
+        print(f"[MEMORY]   LLM attributes: contextual_description='{attributes.get('contextual_description', 'N/A')[:50]}...'")
 
         # 2. Generate embedding
         embedding = self.embedding_model.encode([content])[0]
+        print(f"[MEMORY]   Embedding generated: shape={embedding.shape}")
 
         # 3. Create the definitive MemoryNote object
         memory_note = MemoryNote(
@@ -414,8 +430,10 @@ class MemoryManager:
             terminal_width = get_terminal_width()
             panel = create_agentic_memory_panel(memory_note.content, width=terminal_width - 4)
             self.ui_panel_queue.put(panel)
-        else:
-            print(f"Successfully created agentic memory note {memory_note.id}.")
+        
+        print(f"[MEMORY] SUCCESS: Created agentic memory note {memory_note.id}")
+        print(f"[MEMORY]   FAISS index now has {self.faiss_index.ntotal if self.faiss_index else 0} entries")
+        print(f"[MEMORY]   ID map now has {len(self.faiss_id_map)} entries")
 
         # 6. Find and create links to related memories
         await self._find_and_link_related_memories(memory_note)

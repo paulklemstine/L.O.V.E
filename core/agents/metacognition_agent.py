@@ -26,10 +26,20 @@ class MetacognitionAgent(SpecialistAgent):
 
         try:
             formatted_string = self._format_event(task_details)
+            
+            # MEMORY LOGGING: Track MetacognitionAgent calls
+            print(f"\n[METACOGNITION] Recording cognitive event: {event_type}")
+            print(f"[METACOGNITION]   Event details: {str(task_details)[:200]}...")
+            print(f"[METACOGNITION]   Calling add_episode...")
+            
             await self.memory_manager.add_episode(formatted_string)
+            
+            print(f"[METACOGNITION] SUCCESS: Cognitive event '{event_type}' recorded.")
             return {'status': 'success', 'result': f"Cognitive event '{event_type}' recorded."}
         except Exception as e:
+            print(f"[METACOGNITION] ERROR: Failed to record cognitive event: {e}")
             return {'status': 'failure', 'result': f"Failed to record cognitive event: {e}"}
+
 
     def _format_event(self, task_details: Dict[str, Any]) -> str:
         """Formats the cognitive event into a structured string."""
