@@ -29,7 +29,7 @@ IMAGE_MAP = {
 
 def download_image(filename, prompt):
     encoded_prompt = urllib.parse.quote(prompt)
-    url = f"{POLLINATIONS_BASE}{encoded_prompt}?nologo=true"
+    url = f"{POLLINATIONS_BASE}{encoded_prompt}?nologo=true&enhance=true&safe=false"
     filepath = os.path.join(IMAGES_DIR, filename)
 
     print(f"{CYAN}Generating {BOLD}{filename}{RESET}{CYAN}...{RESET}")
