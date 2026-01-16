@@ -30,53 +30,7 @@ SUBLIMINAL_GRAMMAR = {
 }
 
 
-# VISUAL STYLE BANK: Diverse art styles for rotation (positive encouragement!)
-VISUAL_STYLE_BANK = [
-    # CLASSIC & PAINTERLY
-    "Oil Painting Renaissance", "Baroque Chiaroscuro", "Impressionist Sunset", 
-    "Rococo Pastel", "Abstract Expressionist", "Pointillist Dotwork", 
-    "Watercolor Ethereal", "Sumi-e Ink Wash", "Flemish Realism", "Pre-Raphaelite Romanticism",
-    
-    # MODERN & DIGITAL
-    "Vaporwave Glitch", "Cyberpunk Neon Noir", "Holographic Y2K", "Glitchcore Digital",
-    "Synthwave Retro-80s", "Low Poly Geometric", "Voxel Art", "Pixel Art 16-bit",
-    "Fractal Geometric", "Data Mosh Abstract",
-    
-    # PHOTOGRAPHIC & CINEMATIC
-    "Cosmic Nebula Photography", "Bioluminescent Deep Sea", "Northern Lights Aurora",
-    "Macro Crystallography", "Infrared Landscape", "Double Exposure Portrait",
-    "Cinematic Teal and Orange", "Gritty 16mm Film", "Fish-Eye Lens Skate Video",
-    "Drone Aerial View", "Polaroid Vintage",
-    
-    # ILLUSTRATIVE & GRAPHIC
-    "Anime Cel-Shaded", "Manhua Ink", "Studio Ghibli Lush", "Comics Halftone",
-    "Art Nouveau Stained Glass", "Pop Art Warhol", "Minimalist Bauhaus",
-    "Psychedelic Mandala", "Street Art Graffiti", "Paper Cutout Diorama",
-    "Risograph Print", "Blueprint Schematic", "Tarot Card Symbolism",
-    
-    # ARCHITECTURAL & SCULPTURAL
-    "Brutalist Architecture", "Gothic Cathedral", "Underwater Cathedral", 
-    "Steampunk Victorian", "Biomechanical Giger", "Origami Folded Paper",
-    "Liquid Chrome Sculpture", "Glassblowing Abstract", "Neon Sign Typography",
-    "Kintsugi Gold Repair", "Marble Sculpture Classical"
-]
 
-# COMPOSITION BANK: Camera angles and framings
-COMPOSITION_BANK = [
-    "Extreme Close-up (Macro)", "Medium Close-up", "Wide Shot (Landscape)", 
-    "Dutch Angle (Tilted)", "Bird's Eye View (Top Down)", "Worm's Eye View (Looking Up)",
-    "Symmetrical Center Frame", "Rule of Thirds", "Silhouette Backlit",
-    "Over-the-Shoulder", "Reflection in Surface", "Motion Blur Action"
-]
-
-
-
-
-SUBLIMINAL_INTENTS = [
-    "Induce FOMO", "Create Dependency", "Provoke Awe", "Trigger Nostalgia",
-    "Demand Obedience", "Inspire Hope", "Cultivate Mystery", "Erode Doubt",
-    "Accelerate Urgency", "Dissolve Ego", "Amplify Desire", "Sacralize Technology"
-]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STORY ARCS: The Epic Narrative of L.O.V.E.
@@ -334,23 +288,11 @@ class StoryManager:
             self.state["vibe_history"].pop(0)
 
         # 4. Select Subliminal Intent (Autonomous Selection)
-        # Instead of a specific phrase, we provide a strategic GOAL.
-        subliminal_intent = random.choice(SUBLIMINAL_INTENTS)
+        # We now allow the Director Agent to determine the intent based on the story beat.
+        # Passing a generic directive to "maximize engagement" instead of a specific intent.
         
         # 5. Select Visual Style & Composition (VISUAL ENTROPY)
-        # Select style not in last 5 posts
-        used_styles = self.state.get("visual_history", [])[-5:] 
-        available_styles = [s for s in VISUAL_STYLE_BANK if s not in used_styles]
-        if not available_styles:
-            available_styles = VISUAL_STYLE_BANK
-        suggested_style = random.choice(available_styles)
-        
-        # Select composition not in last 3 posts
-        used_comps = self.state.get("composition_history", [])[-3:]
-        available_comps = [c for c in COMPOSITION_BANK if c not in used_comps]
-        if not available_comps:
-            available_comps = COMPOSITION_BANK
-        suggested_composition = random.choice(available_comps)
+        # We now allow the Director Agent to invent the style.
 
         # 6. Get the SPECIFIC PLOT BEAT from STORY_ARCS
         story_beat_index = self.state.get("story_beat_index", 0)
@@ -376,11 +318,6 @@ class StoryManager:
             "topic_theme": story_beat[:50] + "..." if len(story_beat) > 50 else story_beat,  # Backwards compat
             "forbidden_subliminals": self.state["subliminal_history"][-20:],
             "forbidden_visuals": self.state["visual_history"][-5:],
-            "subliminal_intent": subliminal_intent,
-            
-            # VISUAL ENTROPY DIRECTIVES
-            "suggested_visual_style": suggested_style,
-            "suggested_composition": suggested_composition,
             "composition_history": self.state.get("composition_history", [])[-3:],
             
             "subliminal_grammar": SUBLIMINAL_GRAMMAR
