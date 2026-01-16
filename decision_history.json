@@ -1,0 +1,10 @@
+{
+    "78515330-d2d2-4d5a-9993-bcd751d9add7": {
+        "name": "Test Proposal",
+        "symbol": "TEST",
+        "trend_score": 1.0,
+        "price_change_24h": 0.0,
+        "reason": "Test Reason",
+        "status": "pending"
+    }
+}
