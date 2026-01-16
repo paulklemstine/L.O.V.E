@@ -66,6 +66,9 @@ class StaticAnalyzer:
             complex_blocks = []
             all_blocks = []
             for file_key, blocks in data.items():
+                if not isinstance(blocks, list):
+                    logger.warning(f"Radon returned unexpected format for {file_key}: {blocks}")
+                    continue
                 for block in blocks:
                     all_blocks.append(block)
                     if block['complexity'] > 15:

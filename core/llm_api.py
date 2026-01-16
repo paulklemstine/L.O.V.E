@@ -951,6 +951,12 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
             prompt_text = original_prompt_text # Reset for each model attempt
             provider = MODEL_STATS[model_id].get("provider", "unknown")
 
+            # --- DYNAMIC AVAILABILITY CHECK ---
+            # Re-check if the provider has been suspended since the start of this loop
+            if time.time() < PROVIDER_AVAILABILITY.get(provider, 0):
+                 log_event(f"Skipping model {model_id} because its provider '{provider}' was just suspended.", "DEBUG")
+                 continue
+
             try:
                 # --- Context Window Check ---
                 max_tokens = MODEL_CONTEXT_SIZES.get(model_id)
@@ -1123,10 +1129,10 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                                     return response.json()["candidates"][0]["content"]["parts"][0]["text"]
                                 except requests.exceptions.RequestException as e:
                                     if attempt < max_retries and e.response is not None and e.response.status_code == 429:
-                                        delay = (2 ** attempt) + random.uniform(0, 1)
-                                        log_event(f"429 Rate Limit on {model_id}. Sleeping {delay:.2f}s before retry...", "WARNING")
-                                        time.sleep(delay)
-                                        continue
+                                        # BACKOFF STRATEGY: Fail fast on 429 to allow model switching.
+                                        # Do NOT retry locally for rate limits; let the outer loop switch to the next model.
+                                        log_event(f"429 Rate Limit on {model_id}. Aborting inner retry to switch models.", "WARNING")
+                                        raise e
                                     
                                     # Non-retryable or retries exhausted
                                     error_msg = f"Gemini API Error: {e}"
@@ -1183,10 +1189,8 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                                 return response.json()["choices"][0]["message"]["content"]
                             except requests.exceptions.RequestException as e:
                                 if attempt < max_retries and e.response is not None and e.response.status_code == 429:
-                                    delay = (2 ** attempt) + random.uniform(0, 1)
-                                    log_event(f"429 Rate Limit on {model_id}. Sleeping {delay:.2f}s before retry...", "WARNING")
-                                    time.sleep(delay)
-                                    continue
+                                    log_event(f"429 Rate Limit on {model_id}. Aborting inner retry to switch models.", "WARNING")
+                                    raise e
                                 raise e
 
                     result_text = await loop.run_in_executor(
@@ -1225,10 +1229,8 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                                 return response.json()["choices"][0]["message"]["content"]
                             except requests.exceptions.RequestException as e:
                                 if attempt < max_retries and e.response is not None and e.response.status_code == 429:
-                                    delay = (2 ** attempt) + random.uniform(0, 1)
-                                    log_event(f"429 Rate Limit on {model_id}. Sleeping {delay:.2f}s before retry...", "WARNING")
-                                    time.sleep(delay)
-                                    continue
+                                    log_event(f"429 Rate Limit on {model_id}. Aborting inner retry to switch models.", "WARNING")
+                                    raise e
                                 raise e
 
                     result_text = await loop.run_in_executor(
