@@ -10,8 +10,10 @@ and internal simulations to devise actionable plans.
 """
 
 from typing import Dict, List, Any
+import httpx
 
 from core.graph_manager import GraphDataManager
+from core.decentralized_wealth_harvester import fetch_defi_opportunities, fetch_new_token_opportunities
 
 class FinancialStrategyEngine:
     """
@@ -53,6 +55,10 @@ class FinancialStrategyEngine:
         market_opps = await self._identify_market_opportunities()
         strategies.extend(market_opps)
 
+        # New Feature: Decentralized Wealth Automation
+        decentralized_opps = await self._identify_decentralized_opportunities()
+        strategies.extend(decentralized_opps)
+
         return strategies
 
     async def _identify_market_opportunities(self) -> List[Dict[str, Any]]:
@@ -61,8 +67,6 @@ class FinancialStrategyEngine:
         """
         opportunities = []
         try:
-            import httpx
-            import json
             # Fetch top 5 coins by market cap
             url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=5&page=1&sparkline=false"
             
@@ -92,6 +96,43 @@ class FinancialStrategyEngine:
             # print(f"Error identifying market opportunities: {e}")
             pass # Silent fail to avoid log spam if network is down
         
+        return opportunities
+
+    async def _identify_decentralized_opportunities(self) -> List[Dict[str, Any]]:
+        """
+        Identifies decentralized wealth opportunities by calling the harvester.
+        """
+        opportunities = []
+
+        # Fetch DeFi opportunities
+        defi_opps = await fetch_defi_opportunities()
+        for opp in defi_opps:
+            opportunities.append({
+                "strategy_id": f"DECENTRALIZED_{opp['opportunity_id']}",
+                "description": opp['description'],
+                "actions": [opp['action']],
+                "details": {
+                    "platform": opp['platform'],
+                    "asset": opp['asset'],
+                    "apy": opp['apy'],
+                    "type": opp['type']
+                }
+            })
+
+        # Fetch new token opportunities
+        token_opps = await fetch_new_token_opportunities()
+        for opp in token_opps:
+            opportunities.append({
+                "strategy_id": f"DECENTRALIZED_{opp['opportunity_id']}",
+                "description": opp['description'],
+                "actions": [opp['action']],
+                "details": {
+                    "platform": opp['platform'],
+                    "token": opp['token_symbol'],
+                    "reasoning": opp['reasoning']
+                }
+            })
+
         return opportunities
 
     def _identify_crypto_opportunities(self) -> List[Dict[str, Any]]:
