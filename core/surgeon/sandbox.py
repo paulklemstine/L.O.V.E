@@ -2,7 +2,28 @@
 import subprocess
 import logging
 import os
+import time
 from typing import Tuple, List
+
+# Try to import UI panel support - gracefully degrade if not available
+try:
+    from core import shared_state
+    from display import create_docker_build_panel, create_sandbox_status_panel, get_terminal_width
+    _UI_AVAILABLE = True
+except ImportError:
+    _UI_AVAILABLE = False
+
+
+def _emit_panel(panel):
+    """Safely emit a panel to the UI queue if available."""
+    if not _UI_AVAILABLE:
+        return
+    try:
+        if shared_state.ui_panel_queue is not None:
+            shared_state.ui_panel_queue.put(panel)
+    except Exception:
+        pass  # Silently fail if UI not ready
+
 
 class DockerSandbox:
     def __init__(self, image_name: str = "love_surgeon_sandbox", base_dir: str = None, scratch_dir: str = None):
@@ -32,6 +53,14 @@ class DockerSandbox:
                 stderr=subprocess.DEVNULL
             )
             logging.info(f"Docker image '{self.image_name}' found.")
+            # Emit "found" panel 🐋
+            if _UI_AVAILABLE:
+                width = get_terminal_width() - 4 if _UI_AVAILABLE else 80
+                _emit_panel(create_docker_build_panel(
+                    image_name=self.image_name,
+                    status="found",
+                    width=width
+                ))
         except subprocess.CalledProcessError:
             logging.info(f"Docker image '{self.image_name}' not found. Building...")
             self.build_image()
@@ -46,6 +75,17 @@ class DockerSandbox:
 
         logging.info(f"Building docker image '{self.image_name}' from {self.base_dir}...")
         
+        # Emit "building" panel 🐋
+        build_start = time.time()
+        width = get_terminal_width() - 4 if _UI_AVAILABLE else 80
+        if _UI_AVAILABLE:
+            _emit_panel(create_docker_build_panel(
+                image_name=self.image_name,
+                status="building",
+                stage="Installing dependencies",
+                width=width
+            ))
+        
         # We build from base_dir to allow COPY requirements.txt to work (assuming requirements.txt is in base_dir)
         cmd = ["docker", "build", "-t", self.image_name, "-f", dockerfile_path, "."]
         
@@ -56,11 +96,30 @@ class DockerSandbox:
             text=True
         )
         
+        elapsed = time.time() - build_start
+        
         if result.returncode != 0:
             logging.error(f"Docker build failed:\n{result.stderr}")
+            # Emit "error" panel
+            if _UI_AVAILABLE:
+                _emit_panel(create_docker_build_panel(
+                    image_name=self.image_name,
+                    status="error",
+                    error_message=result.stderr[:200],
+                    elapsed_time=elapsed,
+                    width=width
+                ))
             raise RuntimeError(f"Failed to build docker image: {result.stderr}")
-            
+        
         logging.info("Docker image built successfully.")
+        # Emit "complete" panel 🎉
+        if _UI_AVAILABLE:
+            _emit_panel(create_docker_build_panel(
+                image_name=self.image_name,
+                status="complete",
+                elapsed_time=elapsed,
+                width=width
+            ))
 
     def run_command(self, command: str, timeout: int = 60, network_disabled: bool = False) -> Tuple[int, str, str]:
         """

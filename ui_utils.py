@@ -218,6 +218,13 @@ PANEL_TYPE_COLORS = {
     "reasoning": "purple",
     "tasks": "hot_pink",
     "terminal": "bright_blue",  # Terminal widget for tool visibility
+    # Docker & Sandbox panels 🐋
+    "docker_building": "spring_green1",  # Fresh, in-progress
+    "docker_found": "bright_green",      # Success, existing
+    "docker_error": "bright_red",        # Build failure
+    "sandbox_running": "cyan1",          # Active execution
+    "sandbox_complete": "bright_green",  # Success
+    "sandbox_error": "bright_red",       # Failure
 }
 
 def display_llm_interaction(title, prompt, response, panel_type="llm", model_id=None, token_count=None, purpose=None, elapsed_time=None):

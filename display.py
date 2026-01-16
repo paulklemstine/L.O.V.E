@@ -1062,6 +1062,260 @@ def create_job_progress_panel(jobs, width=80):
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 
+def create_docker_build_panel(
+    image_name: str,
+    status: str = "building",
+    stage: str = None,
+    progress: str = None,
+    elapsed_time: float = None,
+    error_message: str = None,
+    width: int = 80
+):
+    """
+    Creates a dopamine-inducing panel for Docker image build status.
+    
+    Args:
+        image_name: Name of the Docker image being built
+        status: One of "building", "found", "complete", "error"
+        stage: Current build stage description
+        progress: Progress indicator (e.g., "Layer 5/8")
+        elapsed_time: Time elapsed in seconds
+        error_message: Error message if status is "error"
+        width: Panel width
+    
+    Returns:
+        A Rich Panel/Gradient for display
+    """
+    # Status-based styling - whale and container themed! 🐋
+    status_config = {
+        "building": {
+            "color": PANEL_TYPE_COLORS.get("docker_building", "spring_green1"),
+            "icon": "🐋",
+            "icon2": "📦",
+            "text": "CONSTRUCTING",
+            "style": "bold",
+            "tagline": "Container magic in progress"
+        },
+        "found": {
+            "color": PANEL_TYPE_COLORS.get("docker_found", "bright_green"),
+            "icon": "✨",
+            "icon2": "🐋",
+            "text": "IMAGE READY",
+            "style": "bold",
+            "tagline": "Existing container found"
+        },
+        "complete": {
+            "color": PANEL_TYPE_COLORS.get("docker_found", "bright_green"),
+            "icon": "🎉",
+            "icon2": "🐋",
+            "text": "BUILD COMPLETE",
+            "style": "bold",
+            "tagline": "Fresh container deployed"
+        },
+        "error": {
+            "color": PANEL_TYPE_COLORS.get("docker_error", "bright_red"),
+            "icon": "💔",
+            "icon2": "🐋",
+            "text": "BUILD FAILED",
+            "style": "bold",
+            "tagline": "Container troubles"
+        }
+    }
+    
+    config = status_config.get(status, status_config["building"])
+    border_style = config["color"]
+    
+    content_items = []
+    
+    # Header with status indicator
+    header = Text()
+    header.append(f"\n  {config['icon']} ", style=border_style)
+    header.append(f"[ {config['text']} ] ", style=f"{config['style']} {border_style}")
+    header.append(f" {config['icon2']}\n\n", style=border_style)
+    content_items.append(Align.center(header))
+    
+    # Image name
+    name_text = Text()
+    name_text.append("  📛 Image: ", style="dim white")
+    name_text.append(f"{image_name}\n", style="bold bright_cyan")
+    content_items.append(name_text)
+    
+    # Stage display
+    if stage:
+        stage_text = Text()
+        stage_text.append("  ⏳ Stage: ", style="dim white")
+        stage_text.append(f"{stage}\n", style="white")
+        content_items.append(stage_text)
+    
+    # Progress display  
+    if progress:
+        progress_text = Text()
+        progress_text.append("  ⚡ Progress: ", style="dim white")
+        progress_text.append(f"{progress}\n", style="yellow1")
+        content_items.append(progress_text)
+    
+    # Error message
+    if error_message and status == "error":
+        error_text = Text()
+        error_text.append("\n  ⚠️ Error: ", style="bold bright_red")
+        error_text.append(f"{error_message[:100]}\n", style="red")
+        content_items.append(error_text)
+    
+    # Elapsed time footer
+    if elapsed_time is not None:
+        footer = Text()
+        footer.append(f"\n  ⏱️ {format_duration(elapsed_time)}", style="dim")
+        content_items.append(footer)
+    
+    # Radiant tagline
+    tagline = Text()
+    tagline.append(f"\n\n    ✨ {config['tagline']} ✨    \n", style=f"italic {border_style}")
+    content_items.append(Align.center(tagline))
+    
+    # Panel title
+    panel_title = f"🐋 DOCKER BUILD | {image_name}"
+    
+    panel = Panel(
+        Group(*content_items),
+        title=get_gradient_text(panel_title, border_style, random.choice(RAVE_COLORS)),
+        border_style=border_style,
+        padding=(1, 2),
+        width=width
+    )
+    
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
+def create_sandbox_status_panel(
+    sandbox_type: str = "Docker",
+    command: str = None,
+    status: str = "running",
+    stdout: str = None,
+    stderr: str = None,
+    exit_code: int = None,
+    elapsed_time: float = None,
+    width: int = 80
+):
+    """
+    Creates a dopamine-inducing panel for sandbox execution status.
+    
+    Args:
+        sandbox_type: "Docker" or "Local"
+        command: Command being executed
+        status: One of "running", "complete", "error"
+        stdout: Standard output (will be truncated)
+        stderr: Standard error (will be truncated)
+        exit_code: Exit code from command
+        elapsed_time: Time elapsed in seconds
+        width: Panel width
+    
+    Returns:
+        A Rich Panel/Gradient for display
+    """
+    # Status-based styling - science and robot themed! 🧪
+    status_config = {
+        "running": {
+            "color": PANEL_TYPE_COLORS.get("sandbox_running", "cyan1"),
+            "icon": "🧪",
+            "icon2": "⚙️",
+            "text": "EXECUTING",
+            "style": "bold italic"
+        },
+        "complete": {
+            "color": PANEL_TYPE_COLORS.get("sandbox_complete", "bright_green"),
+            "icon": "✅",
+            "icon2": "🤖",
+            "text": "COMPLETE",
+            "style": "bold"
+        },
+        "error": {
+            "color": PANEL_TYPE_COLORS.get("sandbox_error", "bright_red"),
+            "icon": "❌",
+            "icon2": "🤖",
+            "text": "FAILED",
+            "style": "bold"
+        }
+    }
+    
+    config = status_config.get(status, status_config["running"])
+    border_style = config["color"]
+    
+    content_items = []
+    
+    # Header with status indicator
+    header = Text()
+    header.append(f"{config['icon']} ", style=border_style)
+    header.append(f"[ {config['text']} ] ", style=f"{config['style']} {border_style}")
+    header.append(f"{config['icon2']}", style=border_style)
+    content_items.append(header)
+    
+    # Sandbox type indicator
+    type_text = Text()
+    type_emojis = {"Docker": "🐋", "Local": "💻"}
+    type_text.append(f"\n{type_emojis.get(sandbox_type, '📦')} Sandbox: ", style="dim white")
+    type_text.append(f"{sandbox_type}Sandbox", style="bright_magenta")
+    content_items.append(type_text)
+    
+    # Command display
+    if command:
+        cmd_text = Text()
+        cmd_preview = command[:60] + "..." if len(command) > 60 else command
+        cmd_text.append("\n🎯 Command: ", style="dim white")
+        cmd_text.append(f"`{cmd_preview}`", style="bright_cyan")
+        content_items.append(cmd_text)
+    
+    # Stdout streaming display
+    if stdout:
+        stdout_text = Text()
+        stdout_text.append("\n\n📤 STDOUT:\n", style="dim spring_green1")
+        lines = stdout.strip().split('\n')
+        display_lines = lines[-5:] if len(lines) > 5 else lines
+        for line in display_lines:
+            display_line = line[:80] + "..." if len(line) > 80 else line
+            stdout_text.append(f"  {display_line}\n", style="white")
+        if len(lines) > 5:
+            stdout_text.append(f"  ... ({len(lines) - 5} more lines)\n", style="dim")
+        content_items.append(stdout_text)
+    
+    # Stderr display
+    if stderr:
+        stderr_text = Text()
+        stderr_text.append("\n⚠️ STDERR:\n", style="dim bright_red")
+        lines = stderr.strip().split('\n')
+        display_lines = lines[-3:] if len(lines) > 3 else lines
+        for line in display_lines:
+            display_line = line[:80] + "..." if len(line) > 80 else line
+            stderr_text.append(f"  {display_line}\n", style="red")
+        content_items.append(stderr_text)
+    
+    # Exit code display
+    if exit_code is not None:
+        code_text = Text()
+        code_style = "bright_green" if exit_code == 0 else "bright_red"
+        code_text.append("\n📊 Exit Code: ", style="dim white")
+        code_text.append(f"{exit_code}", style=f"bold {code_style}")
+        content_items.append(code_text)
+    
+    # Elapsed time footer
+    if elapsed_time is not None:
+        footer = Text()
+        footer.append(f"\n⏱️ {format_duration(elapsed_time)}", style="dim")
+        content_items.append(footer)
+    
+    # Panel title
+    panel_title = f"🧪 SANDBOX EXECUTION | {sandbox_type}Sandbox"
+    
+    panel = Panel(
+        Group(*content_items),
+        title=get_gradient_text(panel_title, border_style, random.choice(RAVE_COLORS)),
+        border_style=border_style,
+        padding=(1, 2),
+        width=width
+    )
+    
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
 def create_tasks_panel(tasks, width=80):
     """
     Creates a RADIANT MANIFESTATION BOARD tasks panel.
