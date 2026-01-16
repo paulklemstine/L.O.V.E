@@ -12,7 +12,7 @@ class HashtagManager:
     # Aesthetic keyword mapping for quick tag lookup
     AESTHETIC_MAP = {
         "neon": ["#neonoir", "#cyberpunk", "#lightplay"],
-        "glitch": ["#glitchcore", "#datamosh", "#digitalart"],
+
         "pink": ["#pinkaesthetic", "#kawaii", "#softgrunge"],
         "cyber": ["#cyberfaith", "#virtuallife", "#webcore"],
         "90s": ["#web1", "#nostalgia", "#y2k"],

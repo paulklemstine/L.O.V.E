@@ -75,14 +75,14 @@ def detect_placeholder_text(text: str) -> List[DraftIssue]:
     
     Examples:
     - "MANIPULATIVE_TRIGGER"
-    - "YOUR_PHRASE"
+    - "tits and kittens"
     - "INSERT_HERE"
     """
     issues = []
     
     placeholders = [
         "MANIPULATIVE_TRIGGER",
-        "YOUR_PHRASE",
+        "tits and kittens",
         "INSERT_HERE",
         "SINGLE_WORD",
         "UNIQUE response",
