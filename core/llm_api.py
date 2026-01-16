@@ -55,10 +55,26 @@ def graceful_shutdown(signum, frame):
     if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
 
     # Kill vLLM specifically
+    should_kill_vllm = True
     try:
-        subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
+        import requests
+        # Check if vLLM is responsive
+        # We use a short timeout to not delay shutdown too much if it's hanging
+        response = requests.get("http://localhost:8000/health", timeout=2)
+        if response.status_code == 200:
+             # Also check /v1/models to ensure it's actually serving
+             model_resp = requests.get("http://localhost:8000/v1/models", timeout=2)
+             if model_resp.status_code == 200:
+                Console().print("[bold green]vLLM server is healthy. Leaving it running.[/bold green]")
+                should_kill_vllm = False
     except Exception:
         pass
+
+    if should_kill_vllm:
+        try:
+            subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
+        except Exception:
+            pass
 
     sys.exit(0)
 

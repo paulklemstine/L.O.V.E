@@ -369,7 +369,22 @@ def _auto_configure_hardware():
         return
 
     # Clean up GPU first to ensure accurate VRAM detection
-    cleanup_gpu_processes()
+    # Check if vLLM is already running and healthy. If so, don't kill it.
+    vllm_healthy = False
+    try:
+        import requests
+        # Check /v1/models to verify it's serving
+        resp = requests.get("http://localhost:8000/v1/models", timeout=2)
+        if resp.status_code == 200:
+             vllm_healthy = True
+             print("Found healthy vLLM server running. Skipping GPU cleanup.")
+             _temp_log_event("Found healthy vLLM server running. Skipping GPU cleanup.", "INFO")
+    except (ImportError, Exception):
+        # requests might not be installed yet, or server not running
+        pass
+
+    if not vllm_healthy:
+        cleanup_gpu_processes()
 
     _temp_log_event("Performing hardware auto-configuration check...", "INFO")
     print("Performing hardware auto-configuration check...")
