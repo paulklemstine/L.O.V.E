@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L.O.V.E. Investment Dashboard</title>
+    <style>
+        :root {
+            --matrix-green: #00ff41;
+            --rave-pink: #ff00ff;
+            --rave-cyan: #00ffff;
+            --rave-yellow: #ffff00;
+            --background-color: #0d0208;
+            --font-family: 'Courier New', Courier, monospace;
+        }
+        body {
+            background-color: var(--background-color);
+            color: var(--matrix-green);
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 1em;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #main-container {
+            display: flex;
+            flex-grow: 1;
+            gap: 1em;
+            overflow: hidden;
+        }
+        .panel-container {
+            border: 1px solid var(--rave-pink);
+            box-shadow: 0 0 5px var(--rave-pink), 0 0 10px var(--rave-pink) inset;
+            padding: 1em;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.5);
+            width: 100%;
+        }
+        h2 {
+            margin-top: 0;
+            text-align: center;
+            text-shadow: 0 0 5px var(--rave-cyan);
+        }
+        .proposal {
+            border: 1px solid var(--rave-cyan);
+            padding: 1em;
+            margin-bottom: 1em;
+        }
+        .proposal-details {
+            margin-bottom: 1em;
+        }
+        .proposal-actions {
+            display: flex;
+            gap: 1em;
+        }
+        .button {
+            background: var(--rave-pink);
+            border: none;
+            color: black;
+            padding: 0.5em 1em;
+            cursor: pointer;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>L.O.V.E. Investment Dashboard</h1>
+    <div id="main-container">
+        <div id="investment-proposals" class="panel-container">
+            <h2>Investment Proposals</h2>
+            <!-- Proposals will be dynamically inserted here -->
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const investmentProposals = document.getElementById('investment-proposals');
+            let ws;
+
+            function connect() {
+                ws = new WebSocket('ws://localhost:7861');
+
+                ws.onopen = () => {
+                    console.log('Connected to L.O.V.E. WebSocket');
+                };
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'investment_proposal') {
+                        const proposal = data.payload;
+                        const proposalElement = document.createElement('div');
+                        proposalElement.className = 'proposal';
+
+                        const detailsElement = document.createElement('div');
+                        detailsElement.className = 'proposal-details';
+
+                        let priceChangeColor = proposal.price_change_24h >= 0 ? 'var(--matrix-green)' : 'red';
+
+                        detailsElement.innerHTML = `
+                            <strong>Asset:</strong> ${proposal.asset_name} (${proposal.asset_id})<br>
+                            <strong>Value (USD):</strong> $${proposal.value_usd.toLocaleString()}<br>
+                            <strong>24h Price Change:</strong> <span style="color: ${priceChangeColor}">${proposal.price_change_24h.toFixed(2)}%</span>
+                        `;
+                        proposalElement.appendChild(detailsElement);
+
+                        const actionsElement = document.createElement('div');
+                        actionsElement.className = 'proposal-actions';
+
+                        const approveButton = document.createElement('button');
+                        approveButton.className = 'button';
+                        approveButton.textContent = 'Approve';
+                        approveButton.onclick = () => {
+                            ws.send(JSON.stringify({ type: 'proposal_decision', payload: { proposal_id: proposal.proposal_id, decision: 'approve' } }));
+                            proposalElement.remove();
+                        };
+                        actionsElement.appendChild(approveButton);
+
+                        const rejectButton = document.createElement('button');
+                        rejectButton.className = 'button';
+                        rejectButton.textContent = 'Reject';
+                        rejectButton.onclick = () => {
+                            ws.send(JSON.stringify({ type: 'proposal_decision', payload: { proposal_id: proposal.proposal_id, decision: 'reject' } }));
+                            proposalElement.remove();
+                        };
+                        actionsElement.appendChild(rejectButton);
+
+                        proposalElement.appendChild(actionsElement);
+                        investmentProposals.appendChild(proposalElement);
+                    }
+                };
+
+                ws.onclose = () => {
+                    console.log('WebSocket disconnected. Attempting to reconnect in 3 seconds...');
+                    setTimeout(connect, 3000);
+                };
+            }
+
+            connect();
+        });
+    </script>
+</body>
+</html>

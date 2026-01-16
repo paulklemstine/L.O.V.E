@@ -685,13 +685,18 @@ async def broadcast_dashboard_data(websocket_manager, task_manager, kb, talent_m
 
 class WebServerManager:
     """Manages the lightweight HTTP server in a background thread."""
-    def __init__(self, port=7860):
+    def __init__(self, port=7860, directory='.'):
         self.port = port
         self.server = None
         self.thread = None
+        self.directory = directory
 
     def start(self):
-        Handler = http.server.SimpleHTTPRequestHandler
+        class CustomHandler(http.server.SimpleHTTPRequestHandler):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=self.directory, **kwargs)
+
+        Handler = CustomHandler
         socketserver.TCPServer.allow_reuse_address = True
         
         max_retries = 5
@@ -703,7 +708,7 @@ class WebServerManager:
                 self.port = current_port
                 self.thread = Thread(target=self.server.serve_forever, daemon=True)
                 self.thread.start()
-                core.logging.log_event(f"HTTP server started on port {self.port}.", level="INFO")
+                core.logging.log_event(f"HTTP server started on port {self.port} for directory {self.directory}.", level="INFO")
                 return
             except OSError as e:
                 # Handle "Address already in use"
@@ -774,6 +779,17 @@ class WebSocketServerManager:
                 data = json.loads(message)
                 if data.get("type") == "user_command":
                     self.user_input_queue.put(data.get("payload"))
+                elif data.get("type") == "proposal_decision":
+                    payload = data.get("payload")
+                    if payload:
+                        proposal_id = payload.get("proposal_id")
+                        decision = payload.get("decision")
+                        if proposal_id and decision:
+                            stm = SecureTransactionManager(shared_state.ui_panel_queue)
+                            proposal = stm.proposals.get(proposal_id)
+                            if proposal:
+                                stm._record_decision(proposal, decision)
+                                log_event(f"Recorded decision '{decision}' for proposal '{proposal_id}'", "INFO")
         finally:
             self.clients.remove(websocket)
 
@@ -2277,6 +2293,8 @@ async def _prioritize_and_select_task(deep_agent_engine=None):
     return selected_task
 
 
+from secure_transaction_manager import SecureTransactionManager
+
 async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, task_manager, kb, talent_manager, deep_agent_engine=None, social_media_agent=None, multiplayer_manager=None):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
@@ -2301,9 +2319,21 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     time.sleep(2)
 
     runner = DeepAgentRunner()
+    stm = SecureTransactionManager(shared_state.ui_panel_queue)
+    last_proposal_time = 0
 
     while True:
         try:
+            # Create a USDC investment proposal every 5 minutes
+            if time.time() - last_proposal_time > 300:
+                proposal = stm.create_usdc_investment_proposal(1000)
+                if websocket_manager:
+                    websocket_manager.broadcast(json.dumps({
+                        "type": "investment_proposal",
+                        "payload": proposal
+                    }))
+                last_proposal_time = time.time()
+
             # 1. Handle Creator's Mandates (Highest Priority)
             try:
                 user_input = user_input_queue.get_nowait()
@@ -3016,7 +3046,7 @@ async def main(args):
 
 
     # --- Initialize Managers and Services ---
-    web_server_manager = WebServerManager()
+    web_server_manager = WebServerManager(port=7860, directory='.')
     web_server_manager.start()
     websocket_server_manager = WebSocketServerManager(user_input_queue)
     websocket_server_manager.start()

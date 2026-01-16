@@ -4,10 +4,50 @@ from ui_utils import get_gradient_text
 import json
 from ethereum_staking import stake_ethereum
 from core.logging import log_event
+from market_data_harvester import get_crypto_market_data
+import datetime
+import uuid
 
 class SecureTransactionManager:
     def __init__(self, ui_queue):
         self.ui_queue = ui_queue
+        self.decision_history_file = 'decision_history.json'
+        self.proposals = {}
+
+    def _record_decision(self, proposal, decision):
+        """Records the decision for a proposal in the decision history file."""
+        try:
+            with open(self.decision_history_file, 'r+') as f:
+                history = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            history = []
+
+        record = {
+            'timestamp': datetime.datetime.now().isoformat(),
+            'proposal': proposal,
+            'decision': decision
+        }
+        history.append(record)
+
+        with open(self.decision_history_file, 'w') as f:
+            json.dump(history, f, indent=4)
+
+    def create_usdc_investment_proposal(self, amount):
+        """Creates an investment proposal for USDC."""
+        market_data = get_crypto_market_data(coin_ids=['usd-coin'])
+        price_change = market_data[0].get('price_change_percentage_24h_in_currency', 0) if market_data else 0
+        proposal_id = str(uuid.uuid4())
+
+        proposal = {
+            "proposal_id": proposal_id,
+            "asset_id": "usd-coin",
+            "asset_type": "cryptocurrency",
+            "asset_name": "USD Coin",
+            "value_usd": amount,
+            "price_change_24h": price_change
+        }
+        self.proposals[proposal_id] = proposal
+        return proposal
 
     def create_transaction_proposal(self, asset, score_details):
         """
@@ -40,9 +80,15 @@ class SecureTransactionManager:
         proposal_text.append("Name: ", style="bold")
         proposal_text.append(f"{proposal['asset_name']}\n", "white")
         proposal_text.append("Estimated Value (USD): ", style="bold")
-        proposal_text.append(f"${proposal['value_usd']:,}\n\n", "green")
+        proposal_text.append(f"${proposal['value_usd']:,}\n", "green")
 
-        proposal_text.append("Scoring Analysis:\n", style="bold underline")
+        if 'price_change_24h' in proposal:
+            price_change_24h = proposal['price_change_24h']
+            color = "green" if price_change_24h >= 0 else "red"
+            proposal_text.append("24h Price Change: ", style="bold")
+            proposal_text.append(f"{price_change_24h:.2f}%\n", style=color)
+
+        proposal_text.append("\nScoring Analysis:\n", style="bold underline")
         for score_name, score_value in proposal.get('score_details', {}).items():
             proposal_text.append(f"  - {score_name.replace('_', ' ').title()}: ", style="bold")
             proposal_text.append(f"{score_value:.2f} / 100\n", "magenta")
@@ -52,9 +98,6 @@ class SecureTransactionManager:
 
         self.ui_queue.put(Panel(proposal_text, title=title, border_style="cyan"))
 
-        # This is a placeholder for a real user input mechanism.
-        # In the current architecture, the cognitive loop will need to handle the 'yes'/'no' response.
-        # For now, we will log that we are awaiting approval.
         log_event(f"Presented acquisition proposal for {proposal['asset_id']}. Awaiting Creator's approval.", "INFO")
 
         # In a real implementation, this would return a future or block until input is received.

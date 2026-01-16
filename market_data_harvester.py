@@ -20,7 +20,8 @@ def get_crypto_market_data(coin_ids=['bitcoin', 'ethereum']):
         url = f"{COINGECKO_API_URL}/coins/markets"
         params = {
             'vs_currency': 'usd',
-            'ids': ','.join(coin_ids)
+            'ids': ','.join(coin_ids),
+            'price_change_percentage': '24h'
         }
         response = requests.get(url, params=params)
         response.raise_for_status()
