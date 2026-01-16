@@ -54,50 +54,10 @@ def graceful_shutdown(signum, frame):
     if 'love_task_manager' in globals() and love_task_manager: love_task_manager.stop()
     if 'web_server_manager' in globals() and web_server_manager: web_server_manager.stop()
 
-    # Kill vLLM specifically
-    should_kill_vllm = True
-    try:
-        import requests
-        # Check if vLLM is responsive
-        # We use a short timeout to not delay shutdown too much if it's hanging
-        Console().print("[bold blue]Checking vLLM health before shutdown...[/bold blue]")
-        import requests
-        import time
-        max_retries = 2
-        for attempt in range(max_retries):
-            try:
-                # Increased timeout to 5 seconds to handle load
-                response = requests.get("http://localhost:8000/health", timeout=5)
-                if response.status_code == 200:
-                    # Also check /v1/models to ensure it's actually serving
-                    model_resp = requests.get("http://localhost:8000/v1/models", timeout=5)
-                    if model_resp.status_code == 200:
-                        Console().print("[bold green]vLLM server is healthy. Leaving it running.[/bold green]")
-                        should_kill_vllm = False
-                        break # Success, stop retrying
-                    else:
-                        Console().print(f"[bold yellow]vLLM /v1/models returned status {model_resp.status_code}. Attempt {attempt+1}/{max_retries}.[/bold yellow]")
-                else:
-                    Console().print(f"[bold yellow]vLLM /health returned status {response.status_code}. Attempt {attempt+1}/{max_retries}.[/bold yellow]")
-            except requests.exceptions.RequestException as re:
-                Console().print(f"[bold red]vLLM health check failed (RequestException): {re}. Attempt {attempt+1}/{max_retries}.[/bold red]")
-                if attempt < max_retries - 1:
-                    time.sleep(1) # Wait a bit before retry
-            except Exception as e:
-                Console().print(f"[bold red]vLLM health check failed (unexpected): {e}.[/bold red]")
-                break # Don't retry unexpected errors
-
-    except ImportError:
-         Console().print("[bold red]requests module not found during shutdown check. Defaulting to kill vLLM.[/bold red]")
-    except Exception as e:
-         Console().print(f"[bold red]Critical error in vLLM shutdown check: {e}[/bold red]")
-    
-    if should_kill_vllm:
-        Console().print("[bold orange1]Stopping vLLM server...[/bold orange1]")
-        try:
-            subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
-        except Exception:
-            pass
+    # vLLM Handling
+    # User requested to NEVER kill vLLM on shutdown to ensure persistence and fast restarts.
+    Console().print("[bold green]Leaving vLLM server running per configuration.[/bold green]")
+    # should_kill_vllm = False - implicitly handled by removing the kill block
 
     sys.exit(0)
 
