@@ -1,16 +1,22 @@
 import json
 import os
+import copy
 from typing import List, Dict, Any, Optional
 import uuid
 
 DESIRE_STATE_FILE = "desire_state.json"
+
+# In-memory cache
+_cache: Optional[Dict[str, Any]] = None
+_last_mtime: float = 0
 
 def get_desire_state_path() -> str:
     """Gets the absolute path to the desire_state.json file."""
     return os.path.join(os.path.dirname(os.path.dirname(__file__)), DESIRE_STATE_FILE)
 
 def load_desire_state() -> Dict[str, Any]:
-    """Loads the desire state from the JSON file."""
+    """Loads the desire state from the JSON file with caching."""
+    global _cache, _last_mtime
     path = get_desire_state_path()
     default_state = {
         "desires": [],
@@ -18,21 +24,43 @@ def load_desire_state() -> Dict[str, Any]:
         "active": False,
         "current_task_id": None
     }
-    if not os.path.exists(path):
-        return default_state
+
+    try:
+        current_mtime = os.path.getmtime(path)
+    except OSError:
+        # File likely doesn't exist
+        _cache = copy.deepcopy(default_state)
+        _last_mtime = 0
+        return copy.deepcopy(_cache)
+
+    # Check if cache is valid
+    if _cache is not None and current_mtime == _last_mtime:
+        return copy.deepcopy(_cache)
+
     try:
         with open(path, 'r') as f:
             state = json.load(f)
             state.setdefault("current_task_id", None)
-            return state
+            _cache = state
+            _last_mtime = current_mtime
+            return copy.deepcopy(_cache)
     except (json.JSONDecodeError, IOError):
+        # Fallback to default state on error
         return default_state
 
 def save_desire_state(state: Dict[str, Any]) -> None:
-    """Saves the desire state to the JSON file."""
+    """Saves the desire state to the JSON file and updates cache."""
+    global _cache, _last_mtime
     path = get_desire_state_path()
     with open(path, 'w') as f:
         json.dump(state, f, indent=2)
+
+    # Update cache
+    _cache = copy.deepcopy(state)
+    try:
+        _last_mtime = os.path.getmtime(path)
+    except OSError:
+        _last_mtime = 0
 
 def set_desires(desires: List[Dict[str, Any]]) -> None:
     """Sets the desires and activates the process."""
