@@ -5,3 +5,7 @@
 ## 2024-05-24 - [Quantum Quiet Empty States]
 **Learning:** In TUI dashboards, removing a panel completely when it has no content (empty state) can be confusing. Users can't distinguish between "system broken/missing" and "system idle/nominal".
 **Action:** Implement "Quantum Quiet" states for empty lists. Use dim/subtle colors (e.g., `dim cyan`, `dim blue`) and reassuring text (e.g., "All Systems Nominal", "Quantum Field Quiet") to provide positive confirmation of system health without visual clutter.
+
+## 2024-05-25 - [Cyberpunk Focus Visibility]
+**Learning:** In high-contrast "cyberpunk" themes (neon on black), default browser focus rings (often blue or black) are often invisible or aesthetically jarring.
+**Action:** Explicitly style `:focus-visible` using the theme's primary accent color (e.g., `var(--rave-pink)`) and `outline-offset` to ensure keyboard navigation is both visible and on-brand.

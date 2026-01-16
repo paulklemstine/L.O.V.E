@@ -73,6 +73,10 @@
             padding: 0.5em;
             margin-bottom: 0.5em;
         }
+        #input-area:focus-visible {
+            outline: 2px solid var(--rave-pink);
+            outline-offset: 2px;
+        }
         #send-button {
             background: var(--rave-pink);
             border: none;
@@ -80,6 +84,10 @@
             padding: 0.5em;
             cursor: pointer;
             font-weight: bold;
+        }
+        #send-button:focus-visible {
+            outline: 2px solid var(--rave-cyan);
+            outline-offset: 2px;
         }
         .panel {
             margin-bottom: 1em;
@@ -117,8 +125,9 @@
             </div>
             <div id="creator-input" class="panel-container">
                 <h2>Creator Input</h2>
-                <textarea id="input-area"></textarea>
-                <button id="send-button">SEND</button>
+                <label for="input-area" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0;">Command Input</label>
+                <textarea id="input-area" placeholder="Enter command... (Ctrl+Enter to send)"></textarea>
+                <button id="send-button" aria-label="Send Command">SEND</button>
             </div>
         </div>
         <div id="right-column">
@@ -169,13 +178,22 @@
 
             connect();
 
-            sendButton.addEventListener('click', () => {
+            function sendMessage() {
                 const command = inputArea.value;
                 if (command && ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'user_command', payload: command }));
                     inputArea.value = '';
                 } else {
                     console.log('WebSocket is not connected. Message not sent.');
+                }
+            }
+
+            sendButton.addEventListener('click', sendMessage);
+
+            inputArea.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    sendMessage();
                 }
             });
         });
