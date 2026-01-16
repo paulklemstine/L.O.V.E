@@ -60,17 +60,31 @@ def graceful_shutdown(signum, frame):
         import requests
         # Check if vLLM is responsive
         # We use a short timeout to not delay shutdown too much if it's hanging
-        response = requests.get("http://localhost:8000/health", timeout=2)
-        if response.status_code == 200:
-             # Also check /v1/models to ensure it's actually serving
-             model_resp = requests.get("http://localhost:8000/v1/models", timeout=2)
-             if model_resp.status_code == 200:
-                Console().print("[bold green]vLLM server is healthy. Leaving it running.[/bold green]")
-                should_kill_vllm = False
-    except Exception:
-        pass
+        Console().print("[bold blue]Checking vLLM health before shutdown...[/bold blue]")
+        try:
+             response = requests.get("http://localhost:8000/health", timeout=3)
+             if response.status_code == 200:
+                  # Also check /v1/models to ensure it's actually serving
+                  model_resp = requests.get("http://localhost:8000/v1/models", timeout=3)
+                  if model_resp.status_code == 200:
+                     Console().print("[bold green]vLLM server is healthy. Leaving it running.[/bold green]")
+                     should_kill_vllm = False
+                  else:
+                     Console().print(f"[bold yellow]vLLM /v1/models returned status {model_resp.status_code}. Marking for shutdown.[/bold yellow]")
+             else:
+                  Console().print(f"[bold yellow]vLLM /health returned status {response.status_code}. Marking for shutdown.[/bold yellow]")
+        except requests.exceptions.RequestException as re:
+             Console().print(f"[bold red]vLLM health check failed (RequestException): {re}. Marking for shutdown.[/bold red]")
+        except Exception as e:
+             Console().print(f"[bold red]vLLM health check failed (unexpected): {e}. Marking for shutdown.[/bold red]")
 
+    except ImportError:
+         Console().print("[bold red]requests module not found during shutdown check. Defaulting to kill vLLM.[/bold red]")
+    except Exception as e:
+         Console().print(f"[bold red]Critical error in vLLM shutdown check: {e}[/bold red]")
+    
     if should_kill_vllm:
+        Console().print("[bold orange1]Stopping vLLM server...[/bold orange1]")
         try:
             subprocess.run(["pkill", "-f", "vllm.entrypoints.openai.api_server"])
         except Exception:
