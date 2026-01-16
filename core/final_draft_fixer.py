@@ -90,7 +90,7 @@ def detect_placeholder_text(text: str) -> List[DraftIssue]:
     ]
     
     for ph in placeholders:
-        if ph in text:
+        if ph.lower() in text.lower():
             issues.append(DraftIssue(
                 "placeholder_leakage",
                 f"Contains placeholder text: '{ph}'",

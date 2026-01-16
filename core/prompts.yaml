@@ -441,7 +441,7 @@ Create a punchy title for this vibe:
 {
   \"topic\": \"Punchy Title\",
   \"post_text\": \"The motivational text/blessing... [emojis] (MAX 280 CHARS TOTAL)\",
-  \"hashtags\": [\"#Tag1\", \"#Tag2\"],\n  \"subliminal_phrase\": \"YOUR_PHRASE\",
+  \"hashtags\": [\"#Tag1\", \"#Tag2\"],\n  \"subliminal_phrase\": \"WAKE UP\",
   \"visual_signature\": \"[Style] / [Composition]\",
   \"image_prompt\": \"[Style: Dynamic Style] [Composition: Dynamic Composition]. Scene depicting: [Poster-worthy motivational imagery]. Lighting: [lighting details]. 8k masterpiece\"
 }"
