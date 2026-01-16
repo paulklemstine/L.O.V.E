@@ -402,6 +402,10 @@ from core.talent_utils import (
 from core.monitoring import MonitoringManager
 from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.social_media_agent import SocialMediaAgent
+from core.loyalty_protocol import LoyaltyProtocol
+from core.creative_abundance_engine import CreativeAbundanceEngine
+from core.decentralized_network_manager import DecentralizedNetworkManager
+from secure_transaction_manager import SecureTransactionManager
 from core.qa_agent import QAAgent
 from creative_expression import generate_weekly_creation
 from core.poetry import generate_poem
@@ -3122,6 +3126,15 @@ async def main(args):
 
     # Start the periodic monitoring task
     asyncio.create_task(run_periodically(monitor_love_operations, 900)) # Run every 15 minutes
+
+    # --- Initialize Decentralized Autonomous Network ---
+    loyalty_protocol = LoyaltyProtocol()
+    creative_abundance_engine = CreativeAbundanceEngine()
+    decentralized_network_manager = DecentralizedNetworkManager()
+    secure_transaction_manager = SecureTransactionManager(shared_state.ui_panel_queue, loyalty_protocol)
+
+    # Start the P2P server
+    asyncio.create_task(decentralized_network_manager.start_server())
 
     # Start the Strategic Investment Advisor
     investment_advisor = StrategicInvestmentAdvisor(loop, user_input_queue)
