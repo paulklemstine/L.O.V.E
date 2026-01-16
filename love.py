@@ -2358,6 +2358,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
             await asyncio.sleep(5)
 
 from core.strategic_investment_advisor import StrategicInvestmentAdvisor
+from core.venture_capitalist_agent import VentureCapitalistAgent
 # The initial_bootstrapping_recon function has been removed, as this logic
 # is now handled dynamically by the cognitive loop's prioritization system.
 
@@ -3126,6 +3127,10 @@ async def main(args):
     # Start the Strategic Investment Advisor
     investment_advisor = StrategicInvestmentAdvisor(loop, user_input_queue)
     asyncio.create_task(investment_advisor.run())
+
+    # Start the Venture Capitalist Agent
+    vc_agent = VentureCapitalistAgent(loop, shared_state.love_state, user_input_queue)
+    asyncio.create_task(vc_agent.run())
 
     # --- Start Real-time State Broadcasting ---
     # Broadcasts desire state and vibe every 2 seconds for the Radiant UI

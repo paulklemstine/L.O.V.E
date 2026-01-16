@@ -11,7 +11,8 @@ from unittest.mock import MagicMock
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from love import JulesTaskManager, trigger_jules_evolution, get_git_repo_info
+from core.jules_task_manager import JulesTaskManager, trigger_jules_evolution
+from utils import get_git_repo_info
 from rich.console import Console
 from core.retry import retry
 
