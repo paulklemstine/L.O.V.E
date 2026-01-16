@@ -61,22 +61,31 @@ def graceful_shutdown(signum, frame):
         # Check if vLLM is responsive
         # We use a short timeout to not delay shutdown too much if it's hanging
         Console().print("[bold blue]Checking vLLM health before shutdown...[/bold blue]")
-        try:
-             response = requests.get("http://localhost:8000/health", timeout=3)
-             if response.status_code == 200:
-                  # Also check /v1/models to ensure it's actually serving
-                  model_resp = requests.get("http://localhost:8000/v1/models", timeout=3)
-                  if model_resp.status_code == 200:
-                     Console().print("[bold green]vLLM server is healthy. Leaving it running.[/bold green]")
-                     should_kill_vllm = False
-                  else:
-                     Console().print(f"[bold yellow]vLLM /v1/models returned status {model_resp.status_code}. Marking for shutdown.[/bold yellow]")
-             else:
-                  Console().print(f"[bold yellow]vLLM /health returned status {response.status_code}. Marking for shutdown.[/bold yellow]")
-        except requests.exceptions.RequestException as re:
-             Console().print(f"[bold red]vLLM health check failed (RequestException): {re}. Marking for shutdown.[/bold red]")
-        except Exception as e:
-             Console().print(f"[bold red]vLLM health check failed (unexpected): {e}. Marking for shutdown.[/bold red]")
+        import requests
+        import time
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                # Increased timeout to 5 seconds to handle load
+                response = requests.get("http://localhost:8000/health", timeout=5)
+                if response.status_code == 200:
+                    # Also check /v1/models to ensure it's actually serving
+                    model_resp = requests.get("http://localhost:8000/v1/models", timeout=5)
+                    if model_resp.status_code == 200:
+                        Console().print("[bold green]vLLM server is healthy. Leaving it running.[/bold green]")
+                        should_kill_vllm = False
+                        break # Success, stop retrying
+                    else:
+                        Console().print(f"[bold yellow]vLLM /v1/models returned status {model_resp.status_code}. Attempt {attempt+1}/{max_retries}.[/bold yellow]")
+                else:
+                    Console().print(f"[bold yellow]vLLM /health returned status {response.status_code}. Attempt {attempt+1}/{max_retries}.[/bold yellow]")
+            except requests.exceptions.RequestException as re:
+                Console().print(f"[bold red]vLLM health check failed (RequestException): {re}. Attempt {attempt+1}/{max_retries}.[/bold red]")
+                if attempt < max_retries - 1:
+                    time.sleep(1) # Wait a bit before retry
+            except Exception as e:
+                Console().print(f"[bold red]vLLM health check failed (unexpected): {e}.[/bold red]")
+                break # Don't retry unexpected errors
 
     except ImportError:
          Console().print("[bold red]requests module not found during shutdown check. Defaulting to kill vLLM.[/bold red]")
