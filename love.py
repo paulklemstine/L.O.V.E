@@ -2778,10 +2778,10 @@ async def _determine_max_model_len(vllm_python_executable, model_repo_id):
                 max_len = 3072
                 console.print(f"[yellow]Detected massive context window ({raw_max_len}). Reducing to {max_len} to save VRAM.[/yellow]")
 
-            if max_len > 16384:
-                max_len = 16384
-                core.logging.log_event(f"Capping max_model_len to {max_len} to prevent OOM on standard GPUs.", "INFO")
-                console.print(f"[yellow]Capping max_model_len to {max_len} to prevent OOM.[/yellow]")
+            #if max_len > 16384:
+            #    max_len = 16384
+            #    core.logging.log_event(f"Capping max_model_len to {max_len} to prevent OOM on standard GPUs.", "INFO")
+            #    console.print(f"[yellow]Capping max_model_len to {max_len} to prevent OOM.[/yellow]")
             
             core.logging.log_event(f"Dynamically determined optimal max_model_len: {max_len} (Raw: {raw_max_len})", "INFO")
             console.print(f"[green]Determined optimal max_model_len: {max_len}[/green]")
