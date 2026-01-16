@@ -1,5 +1,24 @@
 
+import json
+from datetime import datetime
 from core.logging import log_event
+
+STAKING_HISTORY_FILE = "staking_history.json"
+
+def get_staking_history():
+    """Retrieves the staking history from the JSON file."""
+    try:
+        with open(STAKING_HISTORY_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+def add_to_staking_history(transaction):
+    """Adds a new transaction to the staking history."""
+    history = get_staking_history()
+    history.append(transaction)
+    with open(STAKING_HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=4)
 
 def stake_ethereum(amount: float):
     """
@@ -29,11 +48,19 @@ def stake_ethereum(amount: float):
         "platform": "ExampleYield",
         "asset": "Ethereum (ETH)",
         "amount_staked": amount,
+        "timestamp": datetime.now().isoformat(),
         "confirmation_message": f"Successfully staked {amount} ETH. Your assets are now earning interest."
     }
 
+    add_to_staking_history(transaction_details)
+
     # In a real scenario, you might return a transaction hash or an ID.
     return transaction_details
+
+def get_total_staked():
+    """Calculates the total amount of ETH staked."""
+    history = get_staking_history()
+    return sum(item.get("amount_staked", 0) for item in history)
 
 if __name__ == '__main__':
     # Example of how to use the function

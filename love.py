@@ -408,6 +408,7 @@ from core.creative_abundance_engine import CreativeAbundanceEngine
 from core.poetry import generate_poem
 from core.economic_analyzer import analyze_economic_trends
 from mcp_manager import MCPManager
+from ethereum_staking import stake_ethereum
 
 from bbs import BBS_ART
 
@@ -774,6 +775,14 @@ class WebSocketServerManager:
                 data = json.loads(message)
                 if data.get("type") == "user_command":
                     self.user_input_queue.put(data.get("payload"))
+                elif data.get("type") == "stake_command":
+                    amount = data.get("payload", {}).get("amount")
+                    if amount:
+                        result = stake_ethereum(amount)
+                        self.broadcast(json.dumps({
+                            "type": "staking_result",
+                            "payload": result
+                        }))
         finally:
             self.clients.remove(websocket)
 

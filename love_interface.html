@@ -106,6 +106,28 @@
         .panel-api_error { border-color: #ffeb3b; } /* yellow */
         .panel-command_success { border-color: #00e676; } /* bright_green */
         .panel-command_failure { border-color: #ff1744; } /* bright_red */
+
+        .staking-controls {
+            display: flex;
+            gap: 0.5em;
+            margin-top: 1em;
+        }
+        #staking-amount {
+            flex-grow: 1;
+            background: transparent;
+            border: 1px solid var(--rave-cyan);
+            color: var(--rave-cyan);
+            font-family: var(--font-family);
+            padding: 0.5em;
+        }
+        #stake-button {
+            background: var(--rave-cyan);
+            border: none;
+            color: black;
+            padding: 0.5em 1em;
+            cursor: pointer;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -125,6 +147,13 @@
             <div id="status-dashboard" class="panel-container">
                 <h2>System Status Dashboard</h2>
             </div>
+            <div id="staking-panel" class="panel-container">
+                <h2>Ethereum Staking</h2>
+                <div class="staking-controls">
+                    <input type="number" id="staking-amount" placeholder="Amount of ETH to stake" step="0.01" min="0">
+                    <button id="stake-button">Stake</button>
+                </div>
+            </div>
         </div>
     </div>
     <script>
@@ -133,6 +162,8 @@
             const inputArea = document.getElementById('input-area');
             const sendButton = document.getElementById('send-button');
             const statusDashboard = document.getElementById('status-dashboard');
+            const stakeButton = document.getElementById('stake-button');
+            const stakingAmount = document.getElementById('staking-amount');
             let ws;
 
             function connect() {
@@ -144,21 +175,41 @@
 
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
-                    const panel = document.createElement('div');
-                    panel.className = `panel panel-${data.panel_type}`;
 
-                    const title = document.createElement('div');
-                    title.className = 'panel-title';
-                    title.textContent = data.title;
-                    panel.appendChild(title);
+                    if (data.type === 'staking_result') {
+                        const result = data.payload;
+                        const panel = document.createElement('div');
+                        panel.className = 'panel panel-command_success';
 
-                    const content = document.createElement('div');
-                    content.className = 'panel-content';
-                    content.textContent = data.content;
-                    panel.appendChild(content);
+                        const title = document.createElement('div');
+                        title.className = 'panel-title';
+                        title.textContent = 'Staking Result';
+                        panel.appendChild(title);
 
-                    cognitiveStream.appendChild(panel);
-                    cognitiveStream.scrollTop = cognitiveStream.scrollHeight;
+                        const content = document.createElement('div');
+                        content.className = 'panel-content';
+                        content.textContent = result.confirmation_message;
+                        panel.appendChild(content);
+
+                        cognitiveStream.appendChild(panel);
+                        cognitiveStream.scrollTop = cognitiveStream.scrollHeight;
+                    } else {
+                        const panel = document.createElement('div');
+                        panel.className = `panel panel-${data.panel_type}`;
+
+                        const title = document.createElement('div');
+                        title.className = 'panel-title';
+                        title.textContent = data.title;
+                        panel.appendChild(title);
+
+                        const content = document.createElement('div');
+                        content.className = 'panel-content';
+                        content.textContent = data.content;
+                        panel.appendChild(content);
+
+                        cognitiveStream.appendChild(panel);
+                        cognitiveStream.scrollTop = cognitiveStream.scrollHeight;
+                    }
                 };
 
                 ws.onclose = () => {
@@ -176,6 +227,16 @@
                     inputArea.value = '';
                 } else {
                     console.log('WebSocket is not connected. Message not sent.');
+                }
+            });
+
+            stakeButton.addEventListener('click', () => {
+                const amount = parseFloat(stakingAmount.value);
+                if (amount > 0 && ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'stake_command', payload: { amount: amount } }));
+                    stakingAmount.value = '';
+                } else {
+                    console.log('Invalid amount or WebSocket is not connected.');
                 }
             });
         });

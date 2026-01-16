@@ -1,0 +1,26 @@
+[
+    {
+        "status": "success",
+        "platform": "ExampleYield",
+        "asset": "Ethereum (ETH)",
+        "amount_staked": 1.5,
+        "timestamp": "2026-01-16T04:12:48.531033",
+        "confirmation_message": "Successfully staked 1.5 ETH. Your assets are now earning interest."
+    },
+    {
+        "status": "success",
+        "platform": "ExampleYield",
+        "asset": "Ethereum (ETH)",
+        "amount_staked": 10.0,
+        "timestamp": "2026-01-16T04:12:48.531356",
+        "confirmation_message": "Successfully staked 10.0 ETH. Your assets are now earning interest."
+    },
+    {
+        "status": "success",
+        "platform": "ExampleYield",
+        "asset": "Ethereum (ETH)",
+        "amount_staked": 1.5,
+        "timestamp": "2026-01-16T04:36:50.186077",
+        "confirmation_message": "Successfully staked 1.5 ETH. Your assets are now earning interest."
+    }
+]
