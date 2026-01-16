@@ -117,6 +117,10 @@ class InvokeSubagentInput(BaseModel):
 class FeedUserStoryInput(BaseModel):
     story: str = Field(description="The SMART user story to feed to the system.")
 
+class WaveMatrixInput(BaseModel):
+    initial_resources: int = Field(description="The number of initial resources to deploy")
+    deployment_target: str = Field(description="The target network for deployment")
+    num_waves: int = Field(description="The number of waves to execute")
 
 # --- Tools ---
 
@@ -316,6 +320,16 @@ async def share_wisdom() -> str:
     if not hasattr(shared_state, 'knowledge_base'):
         return "Error: Knowledge base not initialized."
     return await synthesize_knowledge(shared_state.knowledge_base)
+
+@tool("execute_wave_matrix_protocol", args_schema=WaveMatrixInput)
+def execute_wave_matrix_protocol(initial_resources: int, deployment_target: str, num_waves: int) -> str:
+    """
+    Executes the Wave Matrix Protocol for exponential resource deployment.
+    """
+    from core.wave_matrix_protocol import WaveMatrixProtocol
+    protocol = WaveMatrixProtocol(initial_resources, deployment_target)
+    protocol.run(num_waves)
+    return "Wave Matrix Protocol execution complete."
 
 @tool("post_to_bluesky", args_schema=PostToBlueskyInput)
 async def post_to_bluesky(text: str, image_prompt: str) -> str:
