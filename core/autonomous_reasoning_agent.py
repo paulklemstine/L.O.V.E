@@ -172,8 +172,14 @@ class AutonomousReasoningAgent:
                     
                     # Queue approved task
                     if self.user_input_queue:
-                        self.user_input_queue.put(step)
-                        log_event(f"[{self.agent_id}] Queued strategic task: {step}", level='INFO')
+                        # Optimization 3: Structured Input
+                        task_object = {
+                            "type": "internal_task",
+                            "content": step,
+                            "source": "StrategicReasoningEngine"
+                        }
+                        self.user_input_queue.put(task_object)
+                        log_event(f"[{self.agent_id}] Queued strategic task object: {step}", level='INFO')
                         queued_count += 1
                     else:
                         log_event(f"[{self.agent_id}] User input queue not available. Cannot queue task: {step}", level='WARNING')
