@@ -11,7 +11,8 @@ from unittest.mock import MagicMock
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from love import JulesTaskManager, trigger_jules_evolution, get_git_repo_info
+from core.jules_task_manager import JulesTaskManager, trigger_jules_evolution
+from utils import get_git_repo_info
 from rich.console import Console
 from core.retry import retry
 
@@ -90,10 +91,10 @@ def console():
 @pytest.fixture(scope="module")
 def task_manager(console):
     """
-    Provides a live LoveTaskManager instance. The background loop is allowed
+    Provides a live JulesTaskManager instance. The background loop is allowed
     to run as it would in production.
     """
-    manager = LoveTaskManager(console=console)
+    manager = JulesTaskManager(console=console)
     manager.start()
     yield manager
     manager.stop()
@@ -207,7 +208,7 @@ async def test_jules_increment_counter_lifecycle(task_manager, console):
 @pytest.mark.asyncio
 async def test_jules_merge_conflict_retry_logic(task_manager, console, mocker):
     """
-    Tests that the LoveTaskManager correctly retries a task up to 3 times
+    Tests that the JulesTaskManager correctly retries a task up to 3 times
     when faced with a persistent merge conflict, and then fails.
     """
     request = "Create a new file named 'test_retry.txt' with the content 'hello'."

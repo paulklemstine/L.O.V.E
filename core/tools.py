@@ -48,6 +48,9 @@ from langchain_core.tools import tool
 from core.tracing import traceable  # No-op decorator, LangSmith disabled
 from pydantic import BaseModel, Field
 
+# Reuse a single console instance
+CONSOLE = Console()
+
 love_state = {}
 
 # --- Input Schemas ---
@@ -166,7 +169,7 @@ def speak_to_creator(message: str):
     ALWAYS use this tool when answering a question or addressing the user.
     """
     try:
-        console = Console()
+        console = CONSOLE
         # Visual pop for the message
         console.print()
         console.print(Panel(f"[bold bright_cyan]{message}[/bold bright_cyan]", title="[bold green]L.O.V.E. SPEAKING[/bold green]", border_style="bright_cyan"))
@@ -275,7 +278,6 @@ async def feed_user_story(story: str) -> str:
     import core.logging
     import core.shared_state as shared_state
     from core.jules_task_manager import trigger_jules_evolution
-    from rich.console import Console
     
     if not story:
         return "Error: User story content is required."
@@ -287,7 +289,7 @@ async def feed_user_story(story: str) -> str:
     try:
         # We need a console for the function, usually passed in. 
         # We'll create a local one or use the shared one if available.
-        console = Console()
+        console = CONSOLE
         
         # trigger_jules_evolution is async
         result = await trigger_jules_evolution(
