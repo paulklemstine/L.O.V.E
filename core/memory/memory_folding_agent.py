@@ -8,7 +8,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, System
 # Import fractal schemas and salience scorer
 try:
     from core.memory.fractal_schemas import (
-        SalienceScore, GoldenMoment, ArcNode, EpisodicBuffer
+        SalienceScore, GoldenMoment, SceneNode, ArcNode, EpisodicBuffer
     )
     from core.memory.salience_scorer import SalienceScorer
     FRACTAL_MEMORY_AVAILABLE = True
@@ -142,28 +142,28 @@ class MemoryFoldingAgent:
         
         return foldable, crystals
 
-    async def fold_to_arc(
+    async def fold_to_scene(
         self,
         episodes: List[Dict[str, Any]],
-        arc_summary_hint: str = ""
-    ) -> Optional[ArcNode]:
+        scene_summary_hint: str = ""
+    ) -> Optional[SceneNode]:
         """
-        V2: Create an ArcNode from buffered episodes (Story M.2).
+        V2: Create a SceneNode from buffered episodes (Story M.2).
         
         When episodic_buffer > 50 items:
         1. Score each episode for salience
         2. Extract high-salience items as crystals
-        3. Summarize the rest into the arc
+        3. Summarize the rest into the scene
         
         Args:
             episodes: Raw episode dictionaries from EpisodicBuffer
-            arc_summary_hint: Optional hint for arc theme
+            scene_summary_hint: Optional hint for scene theme
             
         Returns:
-            ArcNode with summary and crystals
+            SceneNode with summary and crystals
         """
         if not FRACTAL_MEMORY_AVAILABLE:
-            print("Fractal memory not available, cannot create ArcNode")
+            print("Fractal memory not available, cannot create SceneNode")
             return None
         
         if not episodes:
@@ -200,20 +200,20 @@ class MemoryFoldingAgent:
         # Create summary from foldable content
         summary = ""
         if foldable_content:
-            summary = await self._create_arc_summary(foldable_content, arc_summary_hint)
+            summary = await self._create_scene_summary(foldable_content, scene_summary_hint)
         
-        # Create arc node
-        arc = ArcNode(
+        # Create scene node
+        scene = SceneNode(
             summary=summary,
             crystals=crystals,
             source_ids=source_ids,
             timestamp=time.time()
         )
         
-        print(f"Created ArcNode: {len(crystals)} crystals, {len(foldable_content)} items summarized")
-        return arc
+        print(f"Created SceneNode: {len(crystals)} crystals, {len(foldable_content)} items summarized")
+        return scene
 
-    async def _create_arc_summary(self, contents: List[str], hint: str = "") -> str:
+    async def _create_scene_summary(self, contents: List[str], hint: str = "") -> str:
         """Create a summary for arc content."""
         # Truncate each content for the LLM prompt
         truncated = [c[:300] + "..." if len(c) > 300 else c for c in contents[:20]]

@@ -34,8 +34,12 @@ class DeepAgentState(TypedDict):
     memory_manager: Optional[Any]
     # Subagent invocation tracking
     subagent_results: List[Dict[str, Any]]  # Results from spawned subagents
+    subagent_results: List[Dict[str, Any]]  # Results from spawned subagents
     parent_task_id: Optional[str]           # If this is a subagent, parent's ID
     task_id: Optional[str]                  # Unique identifier for this task
+    
+    # Story 2.3: Theory of Mind Context
+    user_model_context: Optional[str]       # Summary of user preferences/beliefs
     
     # =========================================================================
     # DeepAgent Protocol - Story 1.1: Recursive Reasoning Trace Fields
@@ -90,6 +94,7 @@ def create_initial_state(
         subagent_results=[],
         parent_task_id=None,
         task_id=None,
+        user_model_context=None,
         # DeepAgent Protocol fields
         input=user_input,
         chat_history=[],

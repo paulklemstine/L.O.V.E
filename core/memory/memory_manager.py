@@ -14,7 +14,7 @@ from typing import List, Dict, Optional
 # V2 Holographic Memory imports
 try:
     from core.memory.fractal_schemas import (
-        SalienceScore, GoldenMoment, ArcNode, EraNode, EpochNode,
+        SalienceScore, GoldenMoment, SceneNode, ArcNode, EpochNode,
         FractalTreeRoot, EpisodicBuffer, StateAnchor
     )
     from core.memory.salience_scorer import SalienceScorer
@@ -1723,14 +1723,14 @@ Return ONLY the JSON object.
         
         return False
     
-    async def flush_episodic_buffer_to_arc(self) -> Optional[ArcNode]:
+    async def flush_episodic_buffer_to_scene(self) -> Optional[SceneNode]:
         """
-        Flush the episodic buffer to create a new ArcNode.
+        Flush the episodic buffer to create a new SceneNode.
         
         Story M.2: When episodic_buffer > 50 items:
         1. Score each episode for salience
         2. Extract high-salience items as crystals (never compressed)
-        3. Summarize the rest into the arc
+        3. Summarize the rest into the scene
         """
         if not FRACTAL_MEMORY_AVAILABLE or self.episodic_buffer is None:
             return None
@@ -1742,21 +1742,21 @@ Return ONLY the JSON object.
         episodes = self.episodic_buffer.flush()
         self._save_episodic_buffer()
         
-        # Use memory folding agent to create arc with salience scoring
-        arc = await self.memory_folding_agent.fold_to_arc(episodes)
+        # Use memory folding agent to create scene with salience scoring
+        scene = await self.memory_folding_agent.fold_to_scene(episodes)
         
-        if arc:
-            # Store golden moments from arc crystals
-            for crystal in arc.crystals:
+        if scene:
+            # Store golden moments from scene crystals
+            for crystal in scene.crystals:
                 self.add_golden_moment(crystal)
             
-            # TODO: Add arc to fractal tree structure
+            # TODO: Add scene to arc in fractal tree structure
             # For now, we just preserve the crystals
             self._save_fractal_tree()
             
-            print(f"[FRACTAL MEMORY] Created Arc with {len(arc.crystals)} Golden Moments preserved")
+            print(f"[FRACTAL MEMORY] Created Scene with {len(scene.crystals)} Golden Moments preserved")
         
-        return arc
+        return scene
     
     def add_golden_moment(self, moment: GoldenMoment):
         """
@@ -1854,7 +1854,45 @@ Return ONLY the JSON object.
                 text = gm.raw_text[:200] + "..." if len(gm.raw_text) > 200 else gm.raw_text
                 context_parts.append(f"- {text}")
         
-        # 3. TODO: Fractal Tree drill-down would go here
+        # 3. Fractal Tree Drill-Down
+        if self.fractal_tree:
+             tree_context = self._traverse_fractal_tree(query, max_chars=max_chars // 2)
+             if tree_context:
+                 context_parts.append("\n## Fractal Archive Context")
+                 context_parts.append(tree_context)
         
         return "\n".join(context_parts)
+
+    def _traverse_fractal_tree(self, query: str, max_chars: int = 1000) -> str:
+        """
+        Traverse the fractal tree to find relevant context.
+        
+        Strategy:
+        1. Check Epoch summaries.
+        2. If an Epoch is relevant, check its Arcs.
+        3. If an Arc is relevant, check its Scenes (summary only).
+        """
+        if not FRACTAL_MEMORY_AVAILABLE or not self.fractal_tree:
+            return ""
+            
+        relevant_context = []
+        chars_used = 0
+        
+        # Simple keyword overlap for now (can be upgraded to vector search)
+        query_terms = set(query.lower().split())
+        
+        # Access all epochs (assuming loaded in memory or via graph - simplistic check for now)
+        # Note: In a real implementation, we'd fetch nodes by ID.
+        # For now, we assume we can't easily fetch ALL nodes without a graph traversal helper.
+        # But we do have graph_data_manager.
+        
+        # Since we haven't implemented full graph synchronization for the Tree yet,
+        # we will placeholder this with a comment.
+        # Story 2.1 is mainly about Schema. The Traversal requires the graph to be populated.
+        
+        # Fallback: Just return the root summary
+        if self.fractal_tree.summary:
+            relevant_context.append(f"Life Summary: {self.fractal_tree.summary}")
+            
+        return "\n".join(relevant_context)
 

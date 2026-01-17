@@ -45,3 +45,5 @@ openrouter_calls.json
 story_state.json
 watermark_state.json
 debug_queue.json
+state/
+

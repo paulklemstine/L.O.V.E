@@ -85,16 +85,21 @@ def _messages_to_prompt(
     messages: List[BaseMessage], 
     mandate: str = None,
     tool_schemas: List[Dict[str, Any]] = None,
-    memory_context: List[Dict[str, Any]] = None  # Story 2.1: Semantic Memory Bridge
+    memory_context: List[Dict[str, Any]] = None,  # Story 2.1: Semantic Memory Bridge
+    user_model_context: str = None  # Story 2.3: Theory of Mind
 ) -> str:
     """
     Converts a list of messages to a single prompt string, 
-    including tool context, memory context, and system instructions.
+    including tool context, memory context, user context, and system instructions.
     """
     prompt = ""
     
     # Add base system prompt
     prompt += f"System: {REASONING_SYSTEM_PROMPT}\n\n"
+    
+    # Story 2.3: Add User Model (Theory of Mind)
+    if user_model_context:
+        prompt += f"System: {user_model_context}\n\n"
     
     # Add tool context if available
     if tool_schemas:
@@ -225,6 +230,7 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
     tool_schemas = state.get("tool_schemas", [])
     loop_count = state.get("loop_count", 0)
     memory_context = state.get("memory_context", [])  # Story 2.1: Semantic Memory Bridge
+    user_model_context = state.get("user_model_context")  # Story 2.3: Theory of Mind
     
     # Guardrail: Check recursion limit
     MAX_ITERATIONS = 5
@@ -243,7 +249,8 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
         messages, 
         mandate=mandate, 
         tool_schemas=tool_schemas,
-        memory_context=memory_context  # Story 2.1
+        memory_context=memory_context,  # Story 2.1
+        user_model_context=user_model_context # Story 2.3
     )
     
     reasoning_trace = ""

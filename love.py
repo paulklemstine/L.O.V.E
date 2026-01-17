@@ -46,6 +46,10 @@ import io
 import asyncio
 import http.server
 import socketserver
+import yaml
+from pathlib import Path
+from core.agents.narrative_planner import NarrativePlanner
+from core.user_modeling import UserModelingAgent
 try:
     import aiohttp
 except ImportError:
@@ -2213,7 +2217,77 @@ async def analyze_creator_sentiment(text, deep_agent_instance=None):
         return {{"sentiment": "neutral", "emotions": []}}
     except Exception as e:
         log_critical_event(f"An unexpected error occurred during sentiment analysis: {e}")
-        return {{"sentiment": "neutral", "emotions": []}}
+        return {"sentiment": "neutral", "emotions": []}
+
+
+async def manage_narrative_arc(memory_manager):
+    """
+    Orchestrates the Narrative Arc for Story 2.2.
+    Checks if active arc is complete/null, plans new arc, updates state/narrative_arc.json.
+    """
+    try:
+        # Define paths
+        state_dir = Path("state")
+        state_dir.mkdir(exist_ok=True)
+        arc_state_path = state_dir / "narrative_arc.json"
+        persona_path = Path("persona.yaml")
+
+        current_arc = None
+        
+        # 1. Try to load from executable state
+        if arc_state_path.exists():
+            try:
+                with open(arc_state_path, "r", encoding="utf-8") as f:
+                    current_arc = json.load(f)
+            except Exception as e:
+                core.logging.log_event(f"Error loading narrative_arc.json: {e}", "WARNING")
+        
+        # 2. Fallback to persona seed if no state exists
+        if not current_arc and persona_path.exists():
+            try:
+                with open(persona_path, "r", encoding="utf-8") as f:
+                    persona_data = yaml.safe_load(f) or {}
+                    current_arc = persona_data.get("current_arc")
+            except Exception:
+                pass
+
+        planner = NarrativePlanner()
+        
+        # 3. Check Completion / Need for Plan
+        needs_planning = False
+        if not current_arc:
+            needs_planning = True
+        elif current_arc.get("status") == "completed":
+            needs_planning = True
+        
+        if needs_planning:
+            core.logging.log_event("Narrative Arc needs planning...", "INFO")
+            
+            # Get Context
+            fractal_context = await memory_manager.get_fractal_context_for_query("life story summary")
+            
+            # Get User Profile (reload persona to ensure freshness if needed)
+            if persona_path.exists():
+                with open(persona_path, "r", encoding="utf-8") as f:
+                    persona_data = yaml.safe_load(f) or {}
+                user_profile = str(persona_data.get("user_profile", "The Creator"))
+            else:
+                user_profile = "The Creator"
+            
+            # Plan
+            new_plan = await planner.plan_next_arc(user_profile, fractal_context, current_arc)
+            
+            # 4. Save to JSON state
+            new_arc_dict = new_plan.dict()
+            with open(arc_state_path, "w", encoding="utf-8") as f:
+                json.dump(new_arc_dict, f, indent=2)
+                
+            core.logging.log_event(f"Updated Narrative Arc to: {new_plan.title}", "SUCCESS")
+
+    except Exception as e:
+        core.logging.log_event(f"Failed to manage narrative arc: {e}", "ERROR")
+
+
 
 
 async def _prioritize_and_select_task(deep_agent_engine=None):
@@ -2339,6 +2413,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     shared_state.ui_panel_queue.put(create_news_feed_panel("COGNITIVE LOOP ENGAGED", "AUTONOMY ONLINE", "magenta", width=terminal_width - 4))
     time.sleep(2)
 
+    user_modeling_agent = UserModelingAgent()
     runner = DeepAgentRunner()
 
     # --- STRANGE LOOP: Context Injection ---
@@ -2349,10 +2424,18 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
 
     while True:
         try:
+            # --- Story 2.2: Narrative Arc Management ---
+            # Ensure we are on the right Chapter of the story
+            if shared_state.memory_manager:
+                await manage_narrative_arc(shared_state.memory_manager)
+
             # 1. Handle Creator's Mandates (Highest Priority)
             try:
                 user_input = user_input_queue.get_nowait()
                 core.logging.log_event(f"Processing Creator Mandate: {user_input}", "CRITICAL")
+                
+                # --- Story 2.3: Theory of Mind Context ---
+                runner.state["user_model_context"] = user_modeling_agent.get_prompt_context()
                 
                 mandate_output = None
                 async for update in runner.run(user_input, mandate=user_input):
@@ -2368,6 +2451,13 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                     )
                     if critique.needs_correction:
                         core.logging.log_event(f"Superego corrected output (drift: {critique.semantic_drift_detected})", "WARNING")
+                
+                # --- Story 2.3: Update User Model ---
+                if user_input and mandate_output:
+                    history = [{"role": "user", "content": user_input}, {"role": "assistant", "content": mandate_output}]
+                    # Updates theory of mind in background
+                    asyncio.create_task(user_modeling_agent.update_from_interaction(history))
+
 
                 
                 # MEMORY INTEGRATION: Record creator mandates in memory

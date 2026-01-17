@@ -95,14 +95,14 @@ class GoldenMoment(BaseModel):
         }
 
 
-class ArcNode(BaseModel):
+class SceneNode(BaseModel):
     """
-    An Arc represents ~50 episodes compressed into a summary + crystals.
+    A Scene represents ~50 episodes compressed into a summary + crystals.
     
-    Story M.2: When episodic_buffer > 50 items, create ArcNode.
+    Story M.2: When episodic_buffer > 50 items, create SceneNode.
     The summary captures the gist; crystals preserve verbatim high-salience items.
     
-    Think of an Arc as a "scene" in the life story of L.O.V.E.
+    Think of a Scene as a concrete "event cluster" in the life story of L.O.V.E.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     summary: str = Field(default="", description="LLM-generated summary of compressed episodes")
@@ -121,7 +121,7 @@ class ArcNode(BaseModel):
     )
     keywords: List[str] = Field(
         default_factory=list,
-        description="Key topics/themes in this arc"
+        description="Key topics/themes in this scene"
     )
     
     def get_crystal_text(self) -> str:
@@ -129,32 +129,40 @@ class ArcNode(BaseModel):
         return "\n".join([f"- {c.raw_text}" for c in self.crystals])
 
 
-class EraNode(BaseModel):
+class ArcNode(BaseModel):
     """
-    An Era is a collection of 5-10 Arcs sharing a theme.
+    An Arc is a collection of Scenes sharing a theme.
     
     Represents a larger narrative chunk - perhaps a "chapter" in L.O.V.E.'s story.
-    For example: "The Philosophy Era" covering discussions of Hofstadter, consciousness, etc.
+    For example: "The Philosophy Arc" covering discussions of Hofstadter, consciousness, etc.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    theme: str = Field(default="", description="Dominant theme of this era")
-    arc_ids: List[str] = Field(default_factory=list, description="IDs of contained Arcs")
-    summary: str = Field(default="", description="Meta-summary of all arcs")
+    theme: str = Field(default="", description="Dominant theme of this arc")
+    scene_ids: List[str] = Field(default_factory=list, description="IDs of contained Scenes")
+    summary: str = Field(default="", description="Meta-summary of all scenes")
     timestamp: float = Field(default_factory=time.time)
     embedding: Optional[List[float]] = None
+    crystals: List[GoldenMoment] = Field(
+        default_factory=list,
+        description="High-salience items preserved at the Arc level"
+    )
 
 
 class EpochNode(BaseModel):
     """
-    An Epoch is a collection of Eras - the highest level of the fractal tree.
+    An Epoch is a collection of Arcs - the highest level of the fractal tree.
     
     Represents major phases of L.O.V.E.'s existence.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = Field(default="", description="Title of this epoch")
-    era_ids: List[str] = Field(default_factory=list, description="IDs of contained Eras")
+    arc_ids: List[str] = Field(default_factory=list, description="IDs of contained Arcs")
     summary: str = Field(default="", description="High-level epoch summary")
     timestamp: float = Field(default_factory=time.time)
+    crystals: List[GoldenMoment] = Field(
+        default_factory=list,
+        description="High-salience items preserved at the Epoch level"
+    )
 
 
 class FractalTreeRoot(BaseModel):
