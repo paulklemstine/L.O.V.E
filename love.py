@@ -1206,6 +1206,36 @@ def update_tamagotchi_personality(loop):
                         tasks_panel = create_tasks_panel(tasks, width=terminal_width - 4)
                         shared_state.ui_panel_queue.put(tasks_panel)
                         core.logging.log_event("Queued kawaii tasks panel for display.", level="DEBUG")
+
+                # --- AGENT GRAPH PANEL ---
+                # Display the hierarchy of active agents and subagents
+                try:
+                    from core.subagent_executor import get_global_executor
+                    from display import create_agent_graph_panel
+                    
+                    # Get the executor instance (should be initialized by now)
+                    # We pass None for dependencies as we expect it to be initialized by tools using it,
+                    # or we can pass them if needed. Safer to try-except.
+                    sub_executor = get_global_executor(
+                        console=console, 
+                        love_state=shared_state.love_state,
+                        memory_manager=shared_state.memory_manager
+                    )
+                    
+                    if sub_executor:
+                        active_agents = sub_executor.get_active_subagents()
+                        # Always show the panel if there are agents, or occasionally if empty?
+                        # The plan said "show every cycle", and the panel handles empty state gracefully.
+                        # To avoid clutter, maybe only show if there are active agents OR 
+                        # if we want to show the "Systems Nominal" empty state.
+                        # Let's show it always for now as requested.
+                        graph_panel = create_agent_graph_panel(active_agents, width=terminal_width - 4)
+                        shared_state.ui_panel_queue.put(graph_panel)
+                        core.logging.log_event(f"Queued agent graph panel with {len(active_agents)} agents.", level="DEBUG")
+                except Exception as ag_e:
+                    # Don't let a panel failure crash the thread
+                    core.logging.log_event(f"Failed to create agent graph panel: {ag_e}", level="WARNING")
+
                         
             except Exception as e:
                 core.logging.log_event(f"Failed to create/queue status panel: {e}", level="ERROR")
