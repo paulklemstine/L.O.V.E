@@ -332,9 +332,25 @@ def _execute_in_docker(
     
     try:
         from core.surgeon.sandbox import DockerSandbox
+        from core.surgeon.sandbox_prewarmer import get_prewarmer
         
+        # Check if pre-warmer has finished building the image
+        prewarmer = get_prewarmer()
+        if not prewarmer.is_ready():
+            # Wait up to 5 seconds, then fall back to subprocess
+            log_event("Docker sandbox not ready yet, waiting up to 5s...", "INFO")
+            if not prewarmer.wait_for_ready(timeout=5.0):
+                log_event("Docker sandbox not ready after 5s, falling back to subprocess", "INFO")
+                return _execute_in_subprocess(code, timeout)
+        
+        # Check if prewarmer encountered an error
+        if prewarmer.has_error():
+            log_event(f"Docker pre-warm had error, using subprocess: {prewarmer.get_error()}", "WARNING")
+            return _execute_in_subprocess(code, timeout)
+        
+        # Sandbox is ready - use it (image already built by prewarmer)
         sandbox = DockerSandbox()
-        sandbox.ensure_image_exists()
+        # No need to call ensure_image_exists() - prewarmer already did it
         
         # Write code to temp file
         with tempfile.NamedTemporaryFile(
