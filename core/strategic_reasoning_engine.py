@@ -215,6 +215,9 @@ OUTPUT: A single executable command, nothing else."""
                 except Exception as e:
                     log_event(f"Error processing strategic plan: {e}", level='ERROR')
 
+            except Exception as e:
+                log_event(f"Critical error in generate_strategic_plan: {e}", level='ERROR')
+
         # 5. NEW: Validate and gate the plan before returning
         validated_plan = await self._validate_and_gate_plan(plan)
         
