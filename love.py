@@ -689,10 +689,121 @@ class LoveRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(500)
                 self.end_headers()
                 self.wfile.write(f'Internal Server Error: {str(e)}'.encode('utf-8'))
+        
+        elif self.path == '/inject-code':
+            # Live code injection endpoint - ONLY allowed if creator's private key is present
+            try:
+                from core.security import verify_injection_allowed
+                
+                allowed, message = verify_injection_allowed()
+                if not allowed:
+                    core.logging.log_event(f"Code injection rejected: {message}", "WARNING")
+                    self.send_response(403)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": message}).encode('utf-8'))
+                    return
+                
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data.decode('utf-8'))
+                
+                code = data.get('code')
+                if not code:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Missing 'code' in request body"}).encode('utf-8'))
+                    return
+                
+                # Execute the code in a controlled context
+                core.logging.log_event(f"Executing injected code (length: {len(code)} chars)", "INFO")
+                
+                # Create execution context with access to key modules
+                exec_globals = {
+                    'shared_state': shared_state,
+                    'core': core,
+                    'asyncio': asyncio,
+                    'json': json,
+                    'console': console,
+                    '__builtins__': __builtins__,
+                }
+                exec_locals = {}
+                
+                try:
+                    exec(code, exec_globals, exec_locals)
+                    result = exec_locals.get('result', 'Code executed successfully')
+                    
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "status": "success",
+                        "result": str(result)
+                    }).encode('utf-8'))
+                    
+                except Exception as exec_error:
+                    core.logging.log_event(f"Code injection execution error: {exec_error}", "ERROR")
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "status": "error",
+                        "error": str(exec_error),
+                        "traceback": traceback.format_exc()
+                    }).encode('utf-8'))
+                    
+            except json.JSONDecodeError:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(b'Invalid JSON')
+            except Exception as e:
+                core.logging.log_event(f"Error in /inject-code: {e}\n{traceback.format_exc()}", "ERROR")
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f'Internal Server Error: {str(e)}'.encode('utf-8'))
+        
         else:
             # Fallback to default behavior (likely 501 Unsupported method for POST in SimpleHTTPRequestHandler)
             # But SimpleHTTPRequestHandler usually only handles GET/HEAD.
             self.send_error(404, "Endpoint not found")
+    
+    def do_GET(self):
+        if self.path == '/system-state':
+            # Debugging endpoint to get current system state for AI agent analysis
+            try:
+                from core.security import is_creator_instance
+                
+                # Basic state is always available for monitoring
+                state_summary = {
+                    "version_name": shared_state.love_state.get("version_name", "N/A"),
+                    "uptime": _calculate_uptime() if '_calculate_uptime' in dir() else "N/A",
+                    "is_creator_instance": is_creator_instance(),
+                    "experience_points": shared_state.love_state.get("experience_points", 0),
+                    "successful_starts": shared_state.love_state.get("successful_starts", 0),
+                }
+                
+                # More detailed state only for creator instances
+                if is_creator_instance():
+                    state_summary["detailed"] = {
+                        "autopilot_goal": shared_state.love_state.get("autopilot_goal", ""),
+                        "evolution_history_count": len(shared_state.love_state.get("evolution_history", [])),
+                        "critical_errors": len(shared_state.love_state.get("critical_error_queue", [])),
+                    }
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(state_summary, indent=2).encode('utf-8'))
+                
+            except Exception as e:
+                core.logging.log_event(f"Error in /system-state: {e}", "ERROR")
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f'Error: {str(e)}'.encode('utf-8'))
+        else:
+            # Fall back to default file serving behavior
+            super().do_GET()
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -2682,26 +2793,16 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                 # No high-priority tasks, wait before re-evaluating
                 core.logging.log_event("No high-priority tasks found. Entering idle state.", "DEBUG")
                 
-                # --- Story 3.2: Intrinsic Motivation ---
-                # If internal backlog is empty, brainstorm new goals
-                internal_backlog = shared_state.love_state.get('internal_backlog', [])
-                if not internal_backlog:
-                    try:
-                        user_context = runner.state.get("user_model_context", "")
-                        new_goals = await goal_generator.generate_goals("Status: Idle", user_context)
-                        if new_goals:
-                            internal_backlog.extend(new_goals)
-                            shared_state.love_state['internal_backlog'] = internal_backlog
-                            save_state()
-                            core.logging.log_event(f"Generated {len(new_goals)} intrinsic goals.", "INFO")
-                    except Exception as ge:
-                        core.logging.log_event(f"Goal Generation Failed: {ge}", "WARNING")
-
-                # --- Story 3.1: Curiosity Idle Loop ---
+                # --- Top-Level Agent Decision for Idle State ---
+                # Delegate to the Orchestrator which will use SubagentExecutor,
+                # making agents visible in the Agent Graph Panel.
                 try:
-                    await curiosity_agent.run_idle_cycle()
-                except Exception as ce:
-                    core.logging.log_event(f"Curiosity Check Failed: {ce}", "WARNING")
+                    from core.agents.orchestrator import Orchestrator
+                    orchestrator = Orchestrator(shared_state.memory_manager)
+                    idle_result = await orchestrator.decide_idle_action()
+                    core.logging.log_event(f"Idle cycle completed: {idle_result.get('action', 'N/A')}", "INFO")
+                except Exception as orch_e:
+                    core.logging.log_event(f"Orchestrator Idle Cycle Failed: {orch_e}", "WARNING")
                 
                 await asyncio.sleep(15) # Wait longer if idle
 

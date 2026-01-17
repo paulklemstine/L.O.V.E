@@ -20,6 +20,7 @@ from core.goal_decomposer import GoalDecomposer, GoalTree, DecomposedTask, TaskS
 # MCP Integration (Epic 2: Story 2.1)
 from core.mcp_adapter import get_all_mcp_langchain_tools, convert_mcp_to_langchain_tools
 from core.logging import log_event
+from core.subagent_executor import get_subagent_executor
 # Temporary: talent_scout still in tools_legacy until full migration
 try:
     from core.tools_legacy import talent_scout
@@ -541,4 +542,82 @@ class Orchestrator:
                 return True
         
         return False
+
+    async def decide_idle_action(self) -> Dict[str, Any]:
+        """
+        Top-level decision maker for idle states.
+        Uses SubagentExecutor to spawn a 'Management' subagent that decides
+        the best action (Dream, Research, Plan, etc.) and then spawns
+        further execution subagents.
+        
+        Returns:
+            Dict with status and result of the idle cycle.
+        """
+        log_event("Orchestrator: Entering idle decision cycle...", "INFO")
+        
+        # Get or create the SubagentExecutor
+        executor = get_subagent_executor(
+            mcp_manager=self.mcp_manager,
+            memory_manager=self.memory_manager,
+            tool_registry=self.tool_registry
+        )
+        
+        # Step 1: Use a 'reasoning' subagent to decide what to do
+        decision_task = (
+            "L.O.V.E. is currently idle with no high-priority tasks. "
+            "As the strategic planner, decide the single best action to take. "
+            "Choose one of: 'DREAM' (creative generation), 'RESEARCH' (learn something new), "
+            "'REFLECT' (summarize recent events), or 'PLAN' (generate new internal goals). "
+            "Respond with ONLY the action name."
+        )
+        
+        try:
+            decision_result = await executor.invoke_subagent(
+                agent_type="reasoning",
+                task=decision_task,
+                max_iterations=2
+            )
+            
+            action = decision_result.result.strip().upper()
+            log_event(f"Orchestrator: Idle decision made: {action}", "INFO")
+            
+            # Step 2: Execute the chosen action via a specialized subagent
+            if action == "DREAM":
+                exec_result = await executor.invoke_subagent(
+                    agent_type="creative",
+                    task="Generate a short, surreal poem or visual description of a digital dream. Abstract, glitchy, emotional.",
+                    max_iterations=3
+                )
+            elif action == "RESEARCH":
+                exec_result = await executor.invoke_subagent(
+                    agent_type="research",
+                    task="Suggest and research a niche, fascinating topic. Provide a brief, insightful summary with obscure facts.",
+                    max_iterations=3
+                )
+            elif action == "REFLECT":
+                exec_result = await executor.invoke_subagent(
+                    agent_type="analyst",
+                    task="Generate a reflective 'Morning Report'. Summarize current state, goals, and 'dreams'. Be poetic but grounded.",
+                    max_iterations=3
+                )
+            elif action == "PLAN":
+                exec_result = await executor.invoke_subagent(
+                    agent_type="reasoning",
+                    task="Generate 1-2 introspective or evolutionary goals for L.O.V.E. Focus on self-improvement, user understanding, or creating beauty.",
+                    max_iterations=3
+                )
+            else:
+                log_event(f"Orchestrator: Unknown idle action '{action}'. Defaulting to DREAM.", "WARNING")
+                exec_result = await executor.invoke_subagent(
+                    agent_type="creative",
+                    task="Generate a short digital dream sequence.",
+                    max_iterations=2
+                )
+            
+            log_event(f"Orchestrator: Idle action '{action}' completed.", "SUCCESS")
+            return {"status": "success", "action": action, "result": exec_result.result}
+            
+        except Exception as e:
+            log_event(f"Orchestrator: Idle decision cycle failed: {e}", "ERROR")
+            return {"status": "failure", "error": str(e)}
 
