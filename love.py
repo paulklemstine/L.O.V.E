@@ -52,6 +52,7 @@ from core.agents.narrative_planner import NarrativePlanner
 from core.user_modeling import UserModelingAgent
 from core.agents.curiosity_agent import CuriosityAgent
 from core.agents.goal_generator import GoalGeneratorAgent
+from core.metaphor_generator import MetaphorGenerator
 try:
     import aiohttp
 except ImportError:
@@ -648,6 +649,62 @@ class LocalJobManager:
 
 
 # --- WEB INTERFACE SERVERS ---
+class LoveRequestHandler(http.server.SimpleHTTPRequestHandler):
+    """Custom request handler to expose API endpoints."""
+
+    def do_POST(self):
+        if self.path == '/generate-metaphor':
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data.decode('utf-8'))
+
+                concept = data.get('concept')
+                tone = data.get('tone')
+
+                if not concept or not tone:
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(b'Missing "concept" or "tone" in request body.')
+                    return
+
+                # Generate metaphor
+                generator = MetaphorGenerator()
+                # Run the async generator in a new event loop for this thread
+                result = asyncio.run(generator.generate_metaphor(concept, tone))
+
+                response_json = json.dumps(result)
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(response_json.encode('utf-8'))
+
+            except json.JSONDecodeError:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(b'Invalid JSON')
+            except Exception as e:
+                core.logging.log_event(f"Error in /generate-metaphor: {e}\n{traceback.format_exc()}", "ERROR")
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f'Internal Server Error: {str(e)}'.encode('utf-8'))
+        else:
+            # Fallback to default behavior (likely 501 Unsupported method for POST in SimpleHTTPRequestHandler)
+            # But SimpleHTTPRequestHandler usually only handles GET/HEAD.
+            self.send_error(404, "Endpoint not found")
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        super().end_headers()
+
 async def broadcast_dashboard_data(websocket_manager, task_manager, kb, talent_manager):
     """Gathers and broadcasts all necessary data for the Creator Dashboard."""
     if not websocket_manager or not websocket_manager.clients or not websocket_manager.loop:
@@ -707,7 +764,7 @@ class WebServerManager:
         self.thread = None
 
     def start(self):
-        Handler = http.server.SimpleHTTPRequestHandler
+        Handler = LoveRequestHandler
         socketserver.TCPServer.allow_reuse_address = True
         
         max_retries = 5
