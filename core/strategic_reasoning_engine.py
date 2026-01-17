@@ -184,26 +184,13 @@ class StrategicReasoningEngine:
         return validated_plan
 
     async def _handle_wealth_goal(self):
-        """Generates strategies for wealth creation."""
-        # Story 2.2 will implement the robust FinancialStrategyEngine.
-        # For now, we stub it or call it if available.
-        try:
-             from core.financial_strategy_engine import FinancialStrategyEngine
-             fse = FinancialStrategyEngine(self.knowledge_base)
-             strategies = await fse.generate_strategies()
-             
-             # Convert strategies (dicts) to plan strings
-             plan_steps = []
-             for strat in strategies:
-                 # Just take the first action for now to keep plan simple
-                 if strat.get('actions'):
-                     plan_steps.append(f"Financial Action: {strat['actions'][0]}")
-             return plan_steps
-        except ImportError:
-             return ["Action: Implement core/financial_strategy_engine.py"]
-        except Exception as e:
-             log_event(f"Wealth generation failed: {e}", level="ERROR")
-             return []
+        """Generates strategies for wealth creation.
+        
+        NOTE: Financial Strategy module has been removed.
+        This method now returns an empty list.
+        """
+        log_event("Wealth goal handling disabled - financial module removed.", level='INFO')
+        return []
 
     async def _handle_social_goal(self):
         """Generates strategies for social media dominance."""
