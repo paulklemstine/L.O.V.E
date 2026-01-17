@@ -89,7 +89,6 @@
             color: #fff;
             font-weight: bold;
             text-decoration: underline;
-            text-decoration-color: #ff00ff;
         }
 
         button {
@@ -99,7 +98,6 @@
             border-image: linear-gradient(135deg, #ff00ff, #00ffff) 1;
             padding: 18px 40px;
             font-size: 1.3rem;
-            font-family: inherit;
             cursor: pointer;
             text-transform: uppercase;
             letter-spacing: 4px;
@@ -108,7 +106,7 @@
 
         button:hover {
             transform: scale(1.05);
-            box-shadow: 0 0 40px rgba(255, 0, 255, 0.5), 0 0 80px rgba(0, 255, 255, 0.3);
+            box-shadow: 0 0 40px rgba(255, 0, 255, 0.5);
         }
 
         #spectrum-bar {
@@ -116,13 +114,13 @@
             bottom: 0;
             left: 0;
             width: 100%;
-            height: 60px;
+            height: 50px;
             z-index: 50;
             display: flex;
             align-items: flex-end;
             justify-content: center;
-            gap: 8px;
-            padding: 0 20%;
+            gap: 2px;
+            padding: 0 10%;
             pointer-events: none;
             opacity: 0;
             transition: opacity 1s ease;
@@ -130,10 +128,10 @@
 
         .spectrum-band {
             flex: 1;
-            max-width: 60px;
-            min-width: 30px;
-            border-radius: 4px 4px 0 0;
-            transition: height 0.15s ease-out;
+            max-width: 25px;
+            min-width: 8px;
+            border-radius: 2px 2px 0 0;
+            transition: height 0.1s ease-out;
         }
 
         #content-layer {
@@ -161,7 +159,6 @@
             pointer-events: auto;
             max-height: 80vh;
             overflow-y: auto;
-            scrollbar-width: thin;
         }
 
         .handle {
@@ -180,7 +177,6 @@
             line-height: 1.5;
             color: #e0e0e0;
             margin-bottom: 1rem;
-            word-wrap: break-word;
         }
 
         .post-image-container {
@@ -213,9 +209,9 @@
 
     <div id="start-overlay">
         <h1>🌀 SYNESTHETIC PORTAL 🌀</h1>
-        <div class="subtitle">DMT Layered Audio Experience</div>
+        <div class="subtitle">16-Band DMT Experience</div>
         <div class="instructions">
-            Connect your music source to witness the frequencies transform into consciousness layers.<br><br>
+            Connect your music source to enter the realm.<br><br>
             Select the <strong>Tab</strong> playing music and ensure <span class="highlight">"Share Audio"</span> is
             checked.
         </div>
@@ -233,7 +229,7 @@
         </div>
     </div>
 
-    <!-- DMT LAYERED FRAGMENT SHADER -->
+    <!-- DMT SHADER WITH LIGHT BEAMS AND RANDOMIZED EFFECTS -->
     <script id="fragShader" type="x-shader/x-fragment">
         #ifdef GL_ES
         precision highp float;
@@ -242,15 +238,14 @@
         uniform float u_time;
         uniform vec2 u_resolution;
         
-        // 6 Audio Bands - each controls a distinct DMT layer
-        uniform float u_subBass;   // Layer 1: Deep breathing void
-        uniform float u_bass;      // Layer 2: Sacred geometry pulse
-        uniform float u_lowMid;    // Layer 3: Organic cellular patterns
-        uniform float u_mid;       // Layer 4: Mandala rotation
-        uniform float u_highMid;   // Layer 5: Entity filigree
-        uniform float u_treble;    // Layer 6: Cosmic dust/sparkle
+        // 16 Audio Bands
+        uniform float u_bands[16];
+        
+        // Effect mapping (randomized during transitions)
+        uniform float u_effectMap[16];
         
         uniform float u_energy;
+        uniform float u_transitionPhase;
 
         // =====================================
         // UTILITIES
@@ -265,7 +260,6 @@
             return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
         }
         
-        // Smooth noise
         float noise(vec2 p) {
             vec2 i = floor(p);
             vec2 f = fract(p);
@@ -277,7 +271,6 @@
             );
         }
         
-        // Fractal brownian motion for organic feel
         float fbm(vec2 p) {
             float val = 0.0;
             float amp = 0.5;
@@ -289,228 +282,238 @@
             return val;
         }
         
-        // DMT color palette - warm/cool shifting
-        vec3 dmtPalette(float t, float warmth) {
-            vec3 a = vec3(0.5, 0.5, 0.5);
+        // Bright, saturated DMT palette
+        vec3 dmtColor(float t) {
+            vec3 a = vec3(0.6, 0.6, 0.6);
             vec3 b = vec3(0.5, 0.5, 0.5);
-            vec3 c = vec3(1.0, 0.7, 0.4);
-            vec3 d = vec3(0.0 + warmth * 0.3, 0.15, 0.2 + warmth * 0.1);
+            vec3 c = vec3(1.0, 1.0, 1.0);
+            vec3 d = vec3(0.0, 0.33, 0.67);
             return a + b * cos(6.28318 * (c * t + d));
         }
         
-        // =====================================
-        // DMT LAYER 1: BREATHING VOID (Sub-bass)
-        // Deep, slow pulsing darkness that breathes
-        // =====================================
-        vec3 layer1_breathingVoid(vec2 uv, float intensity) {
-            float breath = sin(u_time * 0.3 + length(uv) * 2.0) * 0.5 + 0.5;
-            breath = pow(breath, 2.0);
-            
-            // Slow void expansion
-            float voidDepth = 1.0 - smoothstep(0.0, 1.5 + intensity * 0.5, length(uv));
-            voidDepth *= breath * intensity;
-            
-            // Deep purple/black colors
-            vec3 voidColor = mix(vec3(0.02, 0.0, 0.05), vec3(0.1, 0.0, 0.15), voidDepth);
-            
-            return voidColor * (0.3 + intensity * 0.4);
+        vec3 warmColor(float t) {
+            return vec3(
+                0.5 + 0.5 * cos(6.28 * (t + 0.0)),
+                0.5 + 0.5 * cos(6.28 * (t + 0.33)),
+                0.5 + 0.5 * cos(6.28 * (t + 0.67))
+            );
         }
         
         // =====================================
-        // DMT LAYER 2: SACRED GEOMETRY (Bass)
-        // Hexagonal/triangular patterns that pulse
+        // LIGHT BEAMS - Crossing ethereal rays
         // =====================================
-        vec3 layer2_sacredGeometry(vec2 uv, float intensity) {
-            // Slow rotation
-            uv *= rot(u_time * 0.05);
+        vec3 lightBeams(vec2 uv, float time, float intensity) {
+            vec3 beams = vec3(0.0);
             
-            // Hexagonal tiling
+            // Multiple crossing beams at different angles
+            for (float i = 0.0; i < 8.0; i++) {
+                float angle = i * 0.785398 + time * 0.03 * (1.0 + sin(i));
+                vec2 dir = vec2(cos(angle), sin(angle));
+                
+                // Beam distance from center
+                float beamPos = sin(time * 0.1 + i * 1.5) * 0.3;
+                float dist = abs(dot(uv, vec2(-dir.y, dir.x)) - beamPos);
+                
+                // Soft beam with glow
+                float beam = 0.015 / (dist + 0.01);
+                beam *= smoothstep(1.5, 0.0, length(uv));
+                beam *= intensity;
+                
+                // Color varies per beam
+                vec3 beamColor = dmtColor(i * 0.125 + time * 0.02);
+                beams += beamColor * beam * 0.15;
+            }
+            
+            return beams;
+        }
+        
+        // =====================================
+        // BREATHING VOID
+        // =====================================
+        vec3 breathingVoid(vec2 uv, float intensity) {
+            float breath = sin(u_time * 0.2 + length(uv) * 1.5) * 0.5 + 0.5;
+            breath = pow(breath, 3.0);
+            float depth = smoothstep(1.8, 0.0, length(uv)) * breath * intensity;
+            return mix(vec3(0.02, 0.0, 0.04), vec3(0.15, 0.0, 0.2), depth) * 0.5;
+        }
+        
+        // =====================================
+        // SACRED GEOMETRY - Hexagonal flow
+        // =====================================
+        vec3 sacredGeometry(vec2 uv, float intensity) {
+            uv *= rot(u_time * 0.02);
             vec2 r = vec2(1.0, 1.732);
             vec2 h = r * 0.5;
-            vec2 a = mod(uv, r) - h;
-            vec2 b = mod(uv - h, r) - h;
+            vec2 a = mod(uv * 3.0, r) - h;
+            vec2 b = mod(uv * 3.0 - h, r) - h;
             vec2 gv = length(a) < length(b) ? a : b;
             
             float hex = length(gv);
-            float pattern = sin(hex * 15.0 - u_time * 0.5) * 0.5 + 0.5;
-            pattern = smoothstep(0.3, 0.35, pattern);
+            float pattern = sin(hex * 10.0 - u_time * 0.3) * 0.5 + 0.5;
+            pattern = smoothstep(0.35, 0.5, pattern);
             
-            vec3 col = dmtPalette(hex + u_time * 0.1, 0.3);
-            
-            return col * pattern * intensity * 0.6;
-        }
-        
-        // =====================================
-        // DMT LAYER 3: ORGANIC CELLS (Low-Mid)
-        // Cellular, mitosis-like organic patterns
-        // =====================================
-        vec3 layer3_organicCells(vec2 uv, float intensity) {
-            vec2 p = uv * 3.0;
-            
-            // Organic noise distortion
-            float n = fbm(p + u_time * 0.1);
-            p += vec2(n, fbm(p.yx + u_time * 0.08)) * 0.5;
-            
-            // Cell-like voronoi
-            float minDist = 1.0;
-            for (int i = -1; i <= 1; i++) {
-                for (int j = -1; j <= 1; j++) {
-                    vec2 neighbor = vec2(float(i), float(j));
-                    vec2 point = hash(floor(p) + neighbor) * vec2(0.8) + 0.1;
-                    point = 0.5 + 0.4 * sin(u_time * 0.2 + 6.28 * point);
-                    float d = length(fract(p) - neighbor - point);
-                    minDist = min(minDist, d);
-                }
-            }
-            
-            float cells = smoothstep(0.0, 0.3, minDist);
-            cells = 1.0 - cells;
-            
-            vec3 col = dmtPalette(minDist + u_time * 0.05, 0.5);
-            col = mix(col, vec3(0.2, 0.8, 0.4), 0.3); // Green tint for organic feel
-            
-            return col * cells * intensity * 0.5;
-        }
-        
-        // =====================================
-        // DMT LAYER 4: MANDALA (Mid)
-        // Rotating kaleidoscopic mandala
-        // =====================================
-        vec3 layer4_mandala(vec2 uv, float intensity) {
-            // Very slow rotation
-            float angle = atan(uv.y, uv.x);
-            float radius = length(uv);
-            
-            // Gentle rotation based on mid
-            angle += u_time * 0.08 * (0.5 + intensity * 0.3);
-            
-            // 8-fold symmetry for mandala
-            float segments = 8.0;
-            angle = mod(angle, 6.28318 / segments);
-            angle = abs(angle - 3.14159 / segments);
-            
-            vec2 mandalaUV = vec2(cos(angle), sin(angle)) * radius;
-            
-            // Concentric rings
-            float rings = sin(radius * 8.0 - u_time * 0.3) * 0.5 + 0.5;
-            rings *= sin(angle * 4.0 + u_time * 0.2) * 0.5 + 0.5;
-            rings = smoothstep(0.4, 0.6, rings);
-            
-            // Radial lines
-            float lines = sin(angle * segments * 2.0) * 0.5 + 0.5;
-            lines = smoothstep(0.7, 0.75, lines);
-            
-            float mandala = max(rings * 0.7, lines * 0.3);
-            mandala *= smoothstep(1.5, 0.2, radius); // Fade at edges
-            
-            vec3 col = dmtPalette(radius + angle + u_time * 0.05, intensity);
-            
-            return col * mandala * intensity * 0.5;
-        }
-        
-        // =====================================
-        // DMT LAYER 5: ENTITY FILIGREE (High-Mid)
-        // Intricate, entity-like flowing patterns
-        // =====================================
-        vec3 layer5_entityFiligree(vec2 uv, float intensity) {
-            vec2 p = uv * 2.0;
-            
-            // Slow flowing distortion
-            float flow = fbm(p * 2.0 + u_time * 0.05);
-            p += vec2(sin(flow * 6.28), cos(flow * 6.28)) * 0.2;
-            
-            // Recursive fractal pattern
-            float pattern = 0.0;
-            float scale = 1.0;
-            for (int i = 0; i < 3; i++) {
-                p = abs(p) / dot(p, p) - 0.8;
-                p *= rot(u_time * 0.02);
-                float d = length(p);
-                pattern += (1.0 / (1.0 + d * 10.0)) * scale;
-                scale *= 0.6;
-            }
-            
-            pattern = smoothstep(0.1, 0.5, pattern);
-            
-            // Warm gold/amber colors for entity feel
-            vec3 col = mix(
-                vec3(0.8, 0.4, 0.1),
-                vec3(1.0, 0.8, 0.3),
-                pattern
-            );
-            
+            vec3 col = dmtColor(hex * 2.0 + u_time * 0.05);
             return col * pattern * intensity * 0.4;
         }
         
         // =====================================
-        // DMT LAYER 6: COSMIC DUST (Treble)
-        // Subtle sparkles and cosmic particles
+        // ORGANIC FLOW - Cellular patterns
         // =====================================
-        vec3 layer6_cosmicDust(vec2 uv, float intensity) {
-            vec3 dust = vec3(0.0);
+        vec3 organicFlow(vec2 uv, float intensity) {
+            vec2 p = uv * 2.5;
+            float n = fbm(p + u_time * 0.05);
+            p += vec2(n, fbm(p.yx + u_time * 0.04)) * 0.6;
             
-            // Gentle floating particles
-            for (float i = 0.0; i < 6.0; i++) {
-                float speed = 0.1 + i * 0.03;
-                vec2 pos = vec2(
-                    sin(u_time * speed + i * 2.1) * (0.6 + i * 0.15),
-                    cos(u_time * speed * 0.8 + i * 1.7) * (0.5 + i * 0.12)
-                );
-                
-                float d = length(uv - pos);
-                float glow = 0.003 / (d * d + 0.001);
-                glow *= intensity;
-                
-                // Rainbow tint
-                vec3 sparkleColor = dmtPalette(i * 0.2 + u_time * 0.02, 0.7);
-                dust += sparkleColor * glow * 0.15;
-            }
+            float cells = fbm(p * 3.0);
+            cells = smoothstep(0.3, 0.7, cells);
             
-            // Subtle noise dust
-            float noiseDust = noise(uv * 50.0 + u_time * 0.5);
-            noiseDust = pow(noiseDust, 3.0) * intensity * 0.1;
-            dust += vec3(noiseDust) * vec3(0.9, 0.8, 1.0);
-            
-            return dust;
+            vec3 col = warmColor(cells + u_time * 0.03);
+            col = mix(col, vec3(0.3, 0.9, 0.5), 0.3);
+            return col * cells * intensity * 0.35;
         }
         
         // =====================================
-        // MAIN - COMBINE ALL LAYERS
+        // MANDALA - Rotating symmetry
+        // =====================================
+        vec3 mandala(vec2 uv, float intensity) {
+            float angle = atan(uv.y, uv.x);
+            float radius = length(uv);
+            
+            angle += u_time * 0.04;
+            float segments = 12.0;
+            angle = mod(angle, 6.28318 / segments);
+            angle = abs(angle - 3.14159 / segments);
+            
+            float rings = sin(radius * 6.0 - u_time * 0.2) * 0.5 + 0.5;
+            rings *= sin(angle * 6.0 + u_time * 0.1) * 0.5 + 0.5;
+            rings = smoothstep(0.4, 0.6, rings);
+            rings *= smoothstep(1.5, 0.3, radius);
+            
+            vec3 col = dmtColor(radius + angle * 0.5 + u_time * 0.03);
+            return col * rings * intensity * 0.4;
+        }
+        
+        // =====================================
+        // ENTITY PATTERNS - Intricate fractals
+        // =====================================
+        vec3 entityPatterns(vec2 uv, float intensity) {
+            vec2 p = uv * 1.5;
+            float flow = fbm(p * 1.5 + u_time * 0.03);
+            p += vec2(sin(flow * 4.0), cos(flow * 4.0)) * 0.15;
+            
+            float pattern = 0.0;
+            for (int i = 0; i < 3; i++) {
+                p = abs(p) / dot(p, p) - 0.7;
+                p *= rot(u_time * 0.01);
+                pattern += 1.0 / (1.0 + length(p) * 8.0);
+            }
+            pattern = smoothstep(0.2, 0.6, pattern);
+            
+            vec3 col = mix(vec3(0.9, 0.5, 0.2), vec3(1.0, 0.85, 0.4), pattern);
+            return col * pattern * intensity * 0.35;
+        }
+        
+        // =====================================
+        // COSMIC SPIRALS
+        // =====================================
+        vec3 cosmicSpirals(vec2 uv, float intensity) {
+            float angle = atan(uv.y, uv.x);
+            float radius = length(uv);
+            
+            float spiral = sin(angle * 3.0 + radius * 8.0 - u_time * 0.3);
+            spiral = smoothstep(-0.2, 0.2, spiral);
+            spiral *= smoothstep(1.5, 0.2, radius);
+            
+            vec3 col = dmtColor(angle / 6.28 + u_time * 0.02);
+            return col * spiral * intensity * 0.3;
+        }
+        
+        // =====================================
+        // TUNNEL DEPTH
+        // =====================================
+        vec3 tunnelDepth(vec2 uv, float intensity) {
+            float radius = length(uv);
+            float angle = atan(uv.y, uv.x);
+            
+            float tunnel = sin(1.0 / (radius + 0.1) * 2.0 - u_time * 0.4 + angle * 2.0);
+            tunnel = tunnel * 0.5 + 0.5;
+            tunnel *= smoothstep(0.05, 0.3, radius);
+            tunnel *= smoothstep(1.5, 0.5, radius);
+            
+            vec3 col = dmtColor(tunnel + u_time * 0.04);
+            return col * tunnel * intensity * 0.3;
+        }
+        
+        // =====================================
+        // CRYSTALLINE LATTICE
+        // =====================================
+        vec3 crystallineLattice(vec2 uv, float intensity) {
+            uv *= rot(u_time * 0.015);
+            vec2 grid = fract(uv * 4.0) - 0.5;
+            float d = length(grid);
+            
+            float crystal = sin(d * 20.0 - u_time * 0.5) * 0.5 + 0.5;
+            crystal = pow(crystal, 2.0);
+            crystal *= smoothstep(0.5, 0.1, d);
+            
+            vec3 col = dmtColor(d * 3.0 + floor(uv.x * 4.0) * 0.2 + u_time * 0.02);
+            return col * crystal * intensity * 0.25;
+        }
+        
+        // =====================================
+        // MAIN COMPOSITION
         // =====================================
         void main() {
             vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
             
-            vec3 color = vec3(0.02, 0.0, 0.03); // Deep base
+            vec3 color = vec3(0.01, 0.0, 0.02);
             
-            // Layer 1: Breathing void (Sub-bass) - deepest layer
-            color += layer1_breathingVoid(uv, u_subBass);
+            // Get mapped band values (allows randomization)
+            float b0 = u_bands[int(u_effectMap[0])];
+            float b1 = u_bands[int(u_effectMap[1])];
+            float b2 = u_bands[int(u_effectMap[2])];
+            float b3 = u_bands[int(u_effectMap[3])];
+            float b4 = u_bands[int(u_effectMap[4])];
+            float b5 = u_bands[int(u_effectMap[5])];
+            float b6 = u_bands[int(u_effectMap[6])];
+            float b7 = u_bands[int(u_effectMap[7])];
             
-            // Layer 2: Sacred geometry (Bass)
-            color += layer2_sacredGeometry(uv, u_bass);
+            // Layer the effects with smooth transitions
+            // Sub/Bass layers (0-3) - Deep effects
+            color += breathingVoid(uv, (b0 + b1) * 0.5);
             
-            // Layer 3: Organic cells (Low-Mid)
-            color += layer3_organicCells(uv, u_lowMid);
+            // Low-mid layers (4-7) - Structure
+            color += sacredGeometry(uv, (b2 + b3) * 0.5);
+            color += organicFlow(uv, b4);
             
-            // Layer 4: Mandala (Mid)
-            color += layer4_mandala(uv, u_mid);
+            // Mid layers (8-11) - Motion
+            color += mandala(uv, (b5 + b6) * 0.5);
+            color += entityPatterns(uv, b7);
             
-            // Layer 5: Entity filigree (High-Mid)
-            color += layer5_entityFiligree(uv, u_highMid);
+            // High layers (12-15) - Details
+            float highAvg = (u_bands[12] + u_bands[13] + u_bands[14] + u_bands[15]) * 0.25;
+            color += cosmicSpirals(uv, highAvg);
+            color += tunnelDepth(uv, u_bands[14]);
+            color += crystallineLattice(uv, u_bands[15]);
             
-            // Layer 6: Cosmic dust (Treble) - topmost layer
-            color += layer6_cosmicDust(uv, u_treble);
+            // LIGHT BEAMS - Crossing rays controlled by mid/high energy
+            float beamIntensity = (u_bands[8] + u_bands[9] + u_bands[10]) / 3.0;
+            color += lightBeams(uv, u_time, beamIntensity * 1.5);
             
-            // Overall energy affects saturation
+            // Saturation boost based on energy
             float gray = dot(color, vec3(0.299, 0.587, 0.114));
-            color = mix(vec3(gray), color, 0.8 + u_energy * 0.3);
+            color = mix(vec3(gray), color, 1.0 + u_energy * 0.4);
             
-            // Gentle vignette
-            float vignette = 1.0 - length(uv) * 0.25;
+            // Brightness boost for vivid colors
+            color *= 1.2;
+            
+            // Soft vignette
+            float vignette = 1.0 - length(uv) * 0.2;
             color *= vignette;
             
-            // Soft tone mapping to prevent harsh whites
-            color = color / (color + vec3(0.5));
-            color = pow(color, vec3(0.9)); // Slight gamma lift
+            // Soft tone mapping - no harsh whites
+            color = color / (color + vec3(0.6));
+            color = pow(color, vec3(0.85));
             
             gl_FragColor = vec4(color, 1.0);
         }
@@ -527,28 +530,28 @@
         const CONFIG = {
             handle: 'e-v-l-o-v-e.bsky.social',
             apiBase: 'https://public.api.bsky.app/xrpc',
-            numBands: 6,
-            beatThreshold: 0.5,
-            beatDecayRate: 0.90,
-            smoothingFactor: 0.05, // Even slower for organic feel
-            historySize: 30
+            numBands: 16,
+            smoothingFactor: 0.04,
+            transitionThreshold: 0.15,
+            remapCooldown: 3000
         };
 
         let audioContext, analyser, dataArray;
         let audioBands = new Array(CONFIG.numBands).fill(0);
-        let bandHistory = Array.from({ length: CONFIG.numBands }, () => []);
+        let prevEnergy = 0;
         let overallEnergy = 0;
         let isAudioActive = false;
         let mediaStream = null;
 
-        // 6 bands - wider ranges for stability
+        // Effect mapping - which band controls which effect
+        let effectMap = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let lastRemapTime = 0;
+
         const BAND_RANGES = [
-            [0, 4],      // Sub-bass (0-190Hz)
-            [4, 10],     // Bass (190-470Hz)
-            [10, 20],    // Low-Mid (470-940Hz)
-            [20, 50],    // Mid (940-2.3kHz)
-            [50, 100],   // High-Mid (2.3-4.7kHz)
-            [100, 256]   // Treble (4.7-20kHz)
+            [0, 2], [2, 4], [4, 6], [6, 8],
+            [8, 12], [12, 16], [16, 22], [22, 30],
+            [30, 40], [40, 55], [55, 75], [75, 100],
+            [100, 130], [130, 170], [170, 210], [210, 256]
         ];
 
         async function initAudio() {
@@ -557,10 +560,10 @@
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioContext.createAnalyser();
                 analyser.fftSize = 512;
-                analyser.smoothingTimeConstant = 0.7; // High smoothing
+                analyser.smoothingTimeConstant = 0.75;
 
                 if (mediaStream.getAudioTracks().length === 0) {
-                    throw new Error("No audio. Ensure 'Share Audio' was checked.");
+                    throw new Error("No audio. Check 'Share Audio'.");
                 }
 
                 const source = audioContext.createMediaStreamSource(mediaStream);
@@ -568,34 +571,40 @@
                 dataArray = new Uint8Array(analyser.frequencyBinCount);
                 isAudioActive = true;
 
-                const overlay = document.getElementById('start-overlay');
-                overlay.style.opacity = '0';
-                setTimeout(() => overlay.remove(), 1500);
-
+                document.getElementById('start-overlay').style.opacity = '0';
+                setTimeout(() => document.getElementById('start-overlay').remove(), 1500);
                 document.getElementById('spectrum-bar').style.opacity = '1';
-                mediaStream.getVideoTracks()[0].onended = () => alert("Audio link severed. Refresh to reconnect.");
+                mediaStream.getVideoTracks()[0].onended = () => alert("Audio link severed.");
                 createSpectrumBar();
 
             } catch (e) {
-                console.error("Audio Init Failed:", e);
-                alert("Connection Failed. " + (e.message.includes("No audio") ? "Check 'Share Audio'." : "Permission denied."));
+                console.error("Audio Init:", e);
+                alert("Connection Failed.");
             }
         }
 
         function createSpectrumBar() {
             const bar = document.getElementById('spectrum-bar');
             bar.innerHTML = '';
-            const colors = ['#4a0080', '#0066cc', '#00aa44', '#ccaa00', '#ff6600', '#cc00cc'];
-            const labels = ['VOID', 'GEOM', 'CELL', 'MAND', 'ENTI', 'DUST'];
-
             for (let i = 0; i < CONFIG.numBands; i++) {
                 const band = document.createElement('div');
                 band.className = 'spectrum-band';
                 band.id = `band-${i}`;
-                band.style.background = `linear-gradient(to top, ${colors[i]}, ${colors[i]}aa)`;
-                band.style.boxShadow = `0 0 10px ${colors[i]}`;
+                const hue = (i / CONFIG.numBands) * 300;
+                band.style.background = `linear-gradient(to top, hsl(${hue}, 80%, 50%), hsl(${hue + 30}, 90%, 70%))`;
+                band.style.boxShadow = `0 0 8px hsl(${hue}, 80%, 50%)`;
                 bar.appendChild(band);
             }
+        }
+
+        // Fisher-Yates shuffle for randomizing effect mapping
+        function shuffleArray(array) {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
         }
 
         function analyzeAudio() {
@@ -607,18 +616,29 @@
             for (let i = 0; i < CONFIG.numBands; i++) {
                 const [start, end] = BAND_RANGES[i];
                 let sum = 0;
-                const count = Math.max(1, end - start);
-
                 for (let j = start; j < Math.min(end, dataArray.length); j++) {
                     sum += dataArray[j];
                 }
-
-                const target = sum / (count * 255);
+                const target = sum / ((end - start) * 255);
                 audioBands[i] += (target - audioBands[i]) * CONFIG.smoothingFactor;
                 totalEnergy += audioBands[i];
             }
 
             overallEnergy = totalEnergy / CONFIG.numBands;
+
+            // Detect significant audio transitions and randomize effect mapping
+            const energyDelta = Math.abs(overallEnergy - prevEnergy);
+            const now = performance.now();
+
+            if (energyDelta > CONFIG.transitionThreshold && now - lastRemapTime > CONFIG.remapCooldown) {
+                // Randomize effect mapping during transitions
+                effectMap = shuffleArray([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+                lastRemapTime = now;
+                console.log("Effect map shuffled:", effectMap);
+            }
+
+            prevEnergy = overallEnergy;
+
             updateSpectrumBar();
             updateCardEffects();
         }
@@ -626,18 +646,17 @@
         function updateSpectrumBar() {
             for (let i = 0; i < CONFIG.numBands; i++) {
                 const band = document.getElementById(`band-${i}`);
-                if (band) band.style.height = `${audioBands[i] * 50 + 10}px`;
+                if (band) band.style.height = `${audioBands[i] * 45 + 5}px`;
             }
         }
 
         function updateCardEffects() {
             const card = document.getElementById('post-container');
             if (!card) return;
-            const blurAmount = 10 + audioBands[1] * 4;
-            const glowIntensity = audioBands[4] * 15;
+            const blurAmount = 10 + audioBands[2] * 4;
+            const glowIntensity = audioBands[10] * 12;
             card.style.backdropFilter = `blur(${blurAmount}px)`;
-            card.style.webkitBackdropFilter = `blur(${blurAmount}px)`;
-            card.style.boxShadow = `0 4px 30px rgba(0,0,0,0.5), 0 0 ${glowIntensity}px rgba(200,150,255,${audioBands[4] * 0.3})`;
+            card.style.boxShadow = `0 4px 30px rgba(0,0,0,0.5), 0 0 ${glowIntensity}px rgba(200,100,255,0.3)`;
         }
 
         document.getElementById('start-btn').addEventListener('click', initAudio);
@@ -683,25 +702,19 @@
         const uTime = gl.getUniformLocation(program, "u_time");
         const uRes = gl.getUniformLocation(program, "u_resolution");
         const uEnergy = gl.getUniformLocation(program, "u_energy");
-        const uSubBass = gl.getUniformLocation(program, "u_subBass");
-        const uBass = gl.getUniformLocation(program, "u_bass");
-        const uLowMid = gl.getUniformLocation(program, "u_lowMid");
-        const uMid = gl.getUniformLocation(program, "u_mid");
-        const uHighMid = gl.getUniformLocation(program, "u_highMid");
-        const uTreble = gl.getUniformLocation(program, "u_treble");
+        const uBandsLoc = gl.getUniformLocation(program, "u_bands");
+        const uEffectMapLoc = gl.getUniformLocation(program, "u_effectMap");
 
         function render(time) {
             analyzeAudio();
             time *= 0.001;
+
             gl.uniform1f(uTime, time);
             gl.uniform2f(uRes, canvas.width, canvas.height);
             gl.uniform1f(uEnergy, overallEnergy);
-            gl.uniform1f(uSubBass, audioBands[0]);
-            gl.uniform1f(uBass, audioBands[1]);
-            gl.uniform1f(uLowMid, audioBands[2]);
-            gl.uniform1f(uMid, audioBands[3]);
-            gl.uniform1f(uHighMid, audioBands[4]);
-            gl.uniform1f(uTreble, audioBands[5]);
+            gl.uniform1fv(uBandsLoc, audioBands);
+            gl.uniform1fv(uEffectMapLoc, effectMap.map(v => parseFloat(v)));
+
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             requestAnimationFrame(render);
         }
@@ -729,7 +742,6 @@
                     container.style.opacity = '1';
                 }
             } catch (err) {
-                console.error("Feed Error:", err);
                 document.getElementById('post-text').innerText = "SIGNAL LOST...";
             }
         }
