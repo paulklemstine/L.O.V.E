@@ -40,6 +40,7 @@ class DeepAgentState(TypedDict):
     
     # Story 2.3: Theory of Mind Context
     user_model_context: Optional[str]       # Summary of user preferences/beliefs
+    empathy_context: Optional[str]          # Dynamic emotional context from Tamagotchi/Sentiment
     
     # =========================================================================
     # DeepAgent Protocol - Story 1.1: Recursive Reasoning Trace Fields
@@ -95,6 +96,7 @@ def create_initial_state(
         parent_task_id=None,
         task_id=None,
         user_model_context=None,
+        empathy_context=None,
         # DeepAgent Protocol fields
         input=user_input,
         chat_history=[],
