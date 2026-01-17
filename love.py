@@ -412,6 +412,15 @@ from mcp_manager import MCPManager
 from bbs import BBS_ART
 
 from ipfs_manager import IPFSManager
+
+# --- STRANGE LOOP PROTOCOL (Phase 1) ---
+from core.reflection import (
+    introspect_self,
+    visualize_codebase,
+    get_context_injection
+)
+from core.agents.system_superego import safe_output
+
 from core.multiplayer import MultiplayerManager
 from threading import Thread, Lock, RLock
 
@@ -2332,6 +2341,12 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
 
     runner = DeepAgentRunner()
 
+    # --- STRANGE LOOP: Context Injection ---
+    # Inject self-symbol context into the runner's shared state if supported,
+    # or ensure it's available via the introspection tool.
+    # The runner's agents will naturally call introspect_self() when they need to know their capabilities.
+
+
     while True:
         try:
             # 1. Handle Creator's Mandates (Highest Priority)
@@ -2342,6 +2357,18 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                 mandate_output = None
                 async for update in runner.run(user_input, mandate=user_input):
                     mandate_output = str(update)  # Capture the last update
+                
+                # --- STRANGE LOOP: Superego Check ---
+                # Critique and correct the output before final action/memory
+                if mandate_output:
+                    original_len = len(mandate_output)
+                    mandate_output, critique = await safe_output(
+                        chain_of_thought="Executing Creator Mandate", # We don't have full CoT here yet
+                        final_output=mandate_output
+                    )
+                    if critique.needs_correction:
+                        core.logging.log_event(f"Superego corrected output (drift: {critique.semantic_drift_detected})", "WARNING")
+
                 
                 # MEMORY INTEGRATION: Record creator mandates in memory
                 if shared_state.memory_manager:
@@ -2386,6 +2413,13 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                         async for update in runner.run(prompt):
                             # Capture the last update as output
                             task_output = str(update)
+                        
+                        # --- STRANGE LOOP: Superego Check ---
+                        if task_output:
+                            task_output, critique = await safe_output(
+                                chain_of_thought=reasoning_context,
+                                final_output=task_output
+                            )
 
                         # Mark the source error as in_progress
                         if selected_task.source == "Error Correction":
@@ -2969,6 +3003,9 @@ async def initialize_gpu_services():
             core_tools.feed_user_story,
             generate_poem,
             analyze_economic_trends,
+            # --- STRANGE LOOP TOOLS ---
+            introspect_self,
+            visualize_codebase,
         ]
 
         developer_tool_functions = [
