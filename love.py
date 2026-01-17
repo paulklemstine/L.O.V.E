@@ -409,6 +409,7 @@ from core.monitoring import MonitoringManager
 from core.system_integrity_monitor import SystemIntegrityMonitor
 from core.social_media_agent import SocialMediaAgent
 from core.qa_agent import QAAgent
+from core.agents.response_optimizer import ResponseOptimizer
 from creative_expression import generate_weekly_creation
 from core.creative_abundance_engine import CreativeAbundanceEngine
 from core.poetry import generate_poem
@@ -3387,6 +3388,15 @@ async def main(args):
     # Checks every hour to see if it's time to generate a weekly gift.
     creative_abundance_engine = CreativeAbundanceEngine()
     asyncio.create_task(run_periodically(lambda: generate_weekly_creation(creative_abundance_engine), 3600))
+
+    # --- Response Optimizer ---
+    # Periodically reviews response generation efficiency.
+    response_optimizer = ResponseOptimizer(
+        tool_registry=shared_state.tool_registry,
+        monitoring_manager=monitoring_manager,
+        check_interval=1000 # Configurable
+    )
+    asyncio.create_task(run_periodically(response_optimizer.run_optimization_cycle, 3600)) # Run every hour
 
     # --- Main Thread becomes the Rendering Loop ---
     # The initial BBS art and message will be sent to the queue
