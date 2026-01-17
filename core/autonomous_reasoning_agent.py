@@ -31,6 +31,20 @@ class AutonomousReasoningAgent:
         self.engine = StrategicReasoningEngine(knowledge_base, love_state)
         self.max_retries = 3
         
+        # Circuit breaker state to prevent infinite retry loops
+        self._consecutive_failures = 0
+        self._circuit_breaker_until = 0  # Timestamp when circuit breaker resets
+        self._circuit_breaker_cooldown = 600  # 10 minute cooldown after repeated failures
+        
+        # Fallback tasks when all else fails - known-good concrete actions
+        self._fallback_tasks = [
+            "generate_bluesky_post",
+            "introspect_self",
+            "create_art",
+            "run_code_analysis",
+        ]
+        self._fallback_index = 0
+        
         # Initialize reviewers (lazy-load to avoid import issues)
         self._task_reviewer = task_reviewer
         self._meta_reviewer = meta_reviewer
@@ -124,6 +138,14 @@ class AutonomousReasoningAgent:
 
     async def _generate_and_queue_strategic_plan(self):
         """Generates a strategic plan and queues tasks to the user input queue, with Reflexion and Review."""
+        
+        # Circuit breaker check - if in cooldown, use fallback task instead
+        current_time = time.time()
+        if current_time < self._circuit_breaker_until:
+            remaining = int(self._circuit_breaker_until - current_time)
+            log_event(f"[{self.agent_id}] Circuit breaker active. Using fallback task. ({remaining}s remaining)", level='INFO')
+            return await self._queue_fallback_task()
+        
         log_event(f"[{self.agent_id}] Generating strategic plan...", level='INFO')
         
         reflexion_context = None
@@ -185,13 +207,40 @@ class AutonomousReasoningAgent:
                         log_event(f"[{self.agent_id}] User input queue not available. Cannot queue task: {step}", level='WARNING')
                 
                 log_event(f"[{self.agent_id}] Queued {queued_count} approved tasks from plan.", level='INFO')
+                
+                # Success - reset circuit breaker state
+                self._consecutive_failures = 0
                 return  # Success, exit loop
 
             except Exception as e:
                 log_event(f"[{self.agent_id}] Error generating strategic plan: {e}\n{traceback.format_exc()}", level='ERROR')
                 reflexion_context = f"Previous attempt raised an exception: {e}"
-                
-        log_event(f"[{self.agent_id}] Failed to generate valid plan after {self.max_retries} attempts.", level='ERROR')
+        
+        # All retries exhausted - use fallback instead of failing completely
+        log_event(f"[{self.agent_id}] Failed to generate valid plan after {self.max_retries} attempts. Using fallback task.", level='WARNING')
+        self._consecutive_failures += 1
+        
+        # If we've failed too many times consecutively, activate circuit breaker
+        if self._consecutive_failures >= 3:
+            self._circuit_breaker_until = time.time() + self._circuit_breaker_cooldown
+            log_event(f"[{self.agent_id}] Circuit breaker activated for {self._circuit_breaker_cooldown}s due to repeated failures.", level='WARNING')
+        
+        # Queue a fallback task to ensure the system always has work
+        await self._queue_fallback_task()
+
+    async def _queue_fallback_task(self):
+        """Queue a known-good fallback task when strategic planning fails."""
+        fallback_task = self._fallback_tasks[self._fallback_index % len(self._fallback_tasks)]
+        self._fallback_index += 1
+        
+        if self.user_input_queue:
+            task_object = {
+                "type": "internal_task",
+                "content": fallback_task,
+                "source": "FallbackStrategy"
+            }
+            self.user_input_queue.put(task_object)
+            log_event(f"[{self.agent_id}] Queued fallback task: {fallback_task}", level='INFO')
 
     async def run(self):
         """The main loop for the autonomous reasoning agent."""

@@ -311,6 +311,26 @@ class TaskValidator:
         Returns:
             ValidationResult with validation status
         """
+        # Safety check: Reject system metadata that shouldn't be tasks
+        # These prefixes indicate internal system messages, not actionable tasks
+        SYSTEM_PREFIXES = [
+            "Reflexion Adjustment:", 
+            "Strategic Insight:", 
+            "Meta Review:",
+            "Insight:",
+            "CRITICAL BLOCKER:",
+        ]
+        
+        for prefix in SYSTEM_PREFIXES:
+            if task_description.startswith(prefix):
+                return ValidationResult(
+                    valid=False,
+                    status=ValidationStatus.INVALID,
+                    reason=f"System metadata ('{prefix}'), not a task",
+                    category="system",
+                    should_log_as_rejected=False,  # Don't pollute rejected_goals log
+                )
+        
         # Get context
         if context is None:
             context = self.context_provider() if self.context_provider else {}

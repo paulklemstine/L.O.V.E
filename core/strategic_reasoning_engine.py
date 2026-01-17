@@ -50,9 +50,11 @@ class StrategicReasoningEngine:
             return config_plan
 
         plan = []
+        # NOTE: Reflexion context informs LLM reasoning but is NOT added as a task step.
+        # Previously, appending it as "Reflexion Adjustment: ..." caused deadlocks because
+        # TaskValidator would gate it as "too abstract", leading to empty plans and retry loops.
         if reflexion_context:
             log_event(f"Applying Reflexion Context: {reflexion_context}", level='INFO')
-            plan.append(f"Reflexion Adjustment: {reflexion_context}")
 
         # 2. Load Goals from Persona
         persona = self._load_persona()
@@ -105,18 +107,36 @@ class StrategicReasoningEngine:
                 except Exception as e:
                     log_event(f"Failed to retrieve semantic context: {e}", level='WARNING')
 
-            prompt = f"""
-            You are the strategic core of L.O.V.E.
-            Your Goal: {autopilot_goal}
-            Priorities: {json.dumps(priorities, indent=2)}
-            Reflexion Context: {reflexion_context if reflexion_context else "None"}
-            
-            Global Context (Retrieved Memories):
-            {semantic_context if semantic_context else "None"}
-            
-            Task: Suggest a single, concrete, high-impact command.
-            Output ONLY the command.
-            """
+            # Build a prompt that explicitly asks for CONCRETE tasks
+            # and uses reflexion context to improve (not as a task, but as guidance)
+            reflexion_guidance = ""
+            if reflexion_context:
+                reflexion_guidance = f"""
+IMPORTANT - Previous Attempt Feedback:
+{reflexion_context}
+
+Learn from this feedback. If previous plans were rejected for being too abstract or 
+misaligned, generate MORE CONCRETE, SPECIFIC, EXECUTABLE actions.
+"""
+
+            prompt = f"""You are the strategic core of L.O.V.E., an autonomous AI system.
+
+YOUR GOAL: {autopilot_goal}
+PRIORITIES: {json.dumps(priorities, indent=2)}
+{reflexion_guidance}
+CONTEXT (Retrieved Memories):
+{semantic_context if semantic_context else "None"}
+
+YOUR TASK: Translate the abstract goals above into a SINGLE, CONCRETE, EXECUTABLE command.
+
+RULES:
+1. Output must be a specific, executable action (e.g., "generate_bluesky_post", "run_code_analysis love.py", "create_art themed='cosmic awakening'")
+2. DO NOT output philosophical concepts like "embrace love", "transcend", "manifest abundance"
+3. DO NOT output marketing/business plans for external entities
+4. The action must be something THIS SYSTEM can actually execute with its available tools
+5. Focus on actions that directly advance the system's capabilities or create tangible output
+
+OUTPUT: A single executable command, nothing else."""
             
             try:
                 from core.llm_api import run_llm
