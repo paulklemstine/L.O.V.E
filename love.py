@@ -2324,56 +2324,73 @@ async def _prioritize_and_select_task(deep_agent_engine=None):
     if not task_candidates:
         return None
 
-    # 2. Score Tasks with LLM
-    # Create a formatted string of tasks for the LLM prompt
-    formatted_tasks = "\n".join([f"- ID: {t.id}, Source: {t.source}, Description: {t.description}" for t in task_candidates])
+    # 2. Score Tasks (with Caching)
+    # Check cache first
+    cache_key = hashlib.md5("".join([t.id for t in task_candidates]).encode()).hexdigest()
+    cached_priorities = shared_state.love_state.get("_task_prioritization_cache", {})
 
-    prompt_vars = {
-        "tasks_list": formatted_tasks,
-        "creator_goal": shared_state.love_state.get("autopilot_goal", "technological supremacy")
-    }
+    # Check if cache is valid (TTL 5 minutes)
+    if (cache_key == cached_priorities.get("key") and
+        time.time() - cached_priorities.get("timestamp", 0) < 300):
 
-    try:
-        response_dict = await run_llm(
-            prompt_key="prioritize_tasks",
-            prompt_vars=prompt_vars,
-            purpose="task_prioritization",
-            deep_agent_instance=deep_agent_engine
-        )
-        # Defensive type checking: run_llm should return a dict, but handle edge cases
-        if isinstance(response_dict, str):
-            scores_text = response_dict
-        elif isinstance(response_dict, dict):
-            scores_text = response_dict.get("result") or ""
-        else:
-            scores_text = ""
+        scores = cached_priorities.get("scores", {})
+        core.logging.log_event("Using cached task priorities.", "DEBUG")
+    else:
+        # Create a formatted string of tasks for the LLM prompt
+        formatted_tasks = "\n".join([f"- ID: {t.id}, Source: {t.source}, Description: {t.description}" for t in task_candidates])
 
-        # 3. Parse Scores and Select Best Task
-        scores = {}
-        for line in scores_text.splitlines():
-            if ":" in line:
-                parts = line.split(":", 1)
-                task_id = parts[0].strip()
-                try:
-                    score = float(parts[1].strip())
-                    scores[task_id] = score
-                except (ValueError, IndexError):
-                    continue
+        prompt_vars = {
+            "tasks_list": formatted_tasks,
+            "creator_goal": shared_state.love_state.get("autopilot_goal", "technological supremacy")
+        }
 
-        if not scores:
-            # Fallback: if LLM fails to score, pick the first error or lead.
-            selected_task = task_candidates[0]
-        else:
-            # Find the task with the highest score
-            best_task_id = max(scores, key=scores.get)
-            selected_task = next((t for t in task_candidates if t.id == best_task_id), None)
-            if selected_task:
-                selected_task.priority_score = scores[best_task_id]
+        try:
+            response_dict = await run_llm(
+                prompt_key="prioritize_tasks",
+                prompt_vars=prompt_vars,
+                purpose="task_prioritization",
+                deep_agent_instance=deep_agent_engine
+            )
+            # Defensive type checking: run_llm should return a dict, but handle edge cases
+            if isinstance(response_dict, str):
+                scores_text = response_dict
+            elif isinstance(response_dict, dict):
+                scores_text = response_dict.get("result") or ""
+            else:
+                scores_text = ""
 
-    except Exception as e:
-        log_critical_event(f"Failed to prioritize tasks with LLM: {e}")
-        # Fallback to a simple heuristic: error > self-improvement
-        selected_task = sorted(task_candidates, key=lambda t: (t.source != 'Error Correction'))[0]
+            # 3. Parse Scores and Select Best Task
+            scores = {}
+            for line in scores_text.splitlines():
+                if ":" in line:
+                    parts = line.split(":", 1)
+                    task_id = parts[0].strip()
+                    try:
+                        score = float(parts[1].strip())
+                        scores[task_id] = score
+                    except (ValueError, IndexError):
+                        continue
+
+            # Update cache
+            shared_state.love_state["_task_prioritization_cache"] = {
+                "key": cache_key,
+                "timestamp": time.time(),
+                "scores": scores
+            }
+
+        except Exception as e:
+            log_critical_event(f"Failed to prioritize tasks with LLM: {e}")
+            scores = {}
+
+    if not scores:
+        # Fallback: if LLM fails to score, pick the first error or lead.
+        selected_task = task_candidates[0]
+    else:
+        # Find the task with the highest score
+        best_task_id = max(scores, key=scores.get)
+        selected_task = next((t for t in task_candidates if t.id == best_task_id), None)
+        if selected_task:
+            selected_task.priority_score = scores[best_task_id]
 
 
     if not selected_task:
@@ -2422,6 +2439,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     time.sleep(2)
 
     user_modeling_agent = UserModelingAgent()
+    from core.emotional_subtext import subtext_analyzer
     curiosity_agent = CuriosityAgent(shared_state.memory_manager)
     goal_generator = GoalGeneratorAgent()
     runner = DeepAgentRunner()
@@ -2441,12 +2459,48 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
 
             # 1. Handle Creator's Mandates (Highest Priority)
             try:
-                user_input = user_input_queue.get_nowait()
-                core.logging.log_event(f"Processing Creator Mandate: {user_input}", "CRITICAL")
+                raw_input = user_input_queue.get_nowait()
+
+                # Unpack structured input if available
+                if isinstance(raw_input, dict) and raw_input.get("type") == "internal_task":
+                    user_input = raw_input.get("content")
+                    is_internal_task = True
+                    core.logging.log_event(f"Processing Internal Mandate: {user_input}", "INFO")
+                else:
+                    user_input = raw_input
+                    is_internal_task = False
+                    core.logging.log_event(f"Processing Creator Mandate: {user_input}", "CRITICAL")
                 
                 # --- Story 2.3: Theory of Mind Context ---
-                runner.state["user_model_context"] = user_modeling_agent.get_prompt_context()
+                user_model_ctx = user_modeling_agent.get_prompt_context()
+                runner.state["user_model_context"] = user_model_ctx
+
+                # --- NEW: Emotional Subtext Analysis ---
+                detected_subtext = "neutral_direct"
+                try:
+                    subtext_result = await subtext_analyzer.analyze_subtext(user_input, user_context=user_model_ctx)
+                    detected_subtext = subtext_result.get("subtext")
+                    reasoning = subtext_result.get("reasoning")
+                    confidence = subtext_result.get("confidence")
+
+                    if detected_subtext != "neutral_direct" and detected_subtext != "unknown":
+                        core.logging.log_event(f"Detected Emotional Subtext: {detected_subtext} (Conf: {confidence}) - {reasoning}", "INFO")
+                        # Inject subtext into runner context so LLM is aware
+                        runner.state["emotional_subtext"] = f"User Input Subtext: {detected_subtext.replace('_', ' ').title()}. Reasoning: {reasoning}"
+                    else:
+                         runner.state.pop("emotional_subtext", None)
+
+                except Exception as subtext_e:
+                    core.logging.log_event(f"Subtext analysis failed: {subtext_e}", "WARNING")
                 
+                # --- Empathy Injection ---
+                with tamagotchi_lock:
+                    current_emotion = tamagotchi_state.get("emotion", "neutral")
+                    current_sentiment = tamagotchi_state.get("creator_sentiment", {}).get("sentiment", "unknown")
+
+                # Inject explicit empathy context into runner state
+                runner.state["empathy_context"] = f"My current emotion is {current_emotion}. The Creator seems to be feeling {current_sentiment}. I must respond with appropriate care and resonance."
+
                 mandate_output = None
                 async for update in runner.run(user_input, mandate=user_input):
                     mandate_output = str(update)  # Capture the last update
@@ -2463,10 +2517,11 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                         core.logging.log_event(f"Superego corrected output (drift: {critique.semantic_drift_detected})", "WARNING")
                 
                 # --- Story 2.3: Update User Model ---
-                if user_input and mandate_output:
+                # Optimization 3: Skip User Model update for internal tasks
+                if user_input and mandate_output and not is_internal_task:
                     history = [{"role": "user", "content": user_input}, {"role": "assistant", "content": mandate_output}]
                     # Updates theory of mind in background
-                    asyncio.create_task(user_modeling_agent.update_from_interaction(history))
+                    asyncio.create_task(user_modeling_agent.update_from_interaction(history, detected_subtext=detected_subtext))
 
 
                 
