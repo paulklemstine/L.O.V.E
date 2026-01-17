@@ -158,6 +158,51 @@ class SentimentAnalyzer:
             dominant=dominant,
             intensity=intensity
         )
+
+    def analyze_batch(self, texts: list[str]) -> SentimentResult:
+        """
+        Analyzes a batch of texts and returns the aggregated sentiment.
+        Useful for timeline analysis.
+        """
+        if not texts:
+            return SentimentResult(0, 0, 1.0, "neutral", 0)
+            
+        total_pos = 0.0
+        total_neg = 0.0
+        total_intensity = 0.0
+        
+        count = 0
+        for text in texts:
+            if not text: continue
+            result = self.analyze(text)
+            total_pos += result.positive_score
+            total_neg += result.negative_score
+            total_intensity += result.intensity
+            count += 1
+            
+        if count == 0:
+             return SentimentResult(0, 0, 1.0, "neutral", 0)
+             
+        avg_pos = total_pos / count
+        avg_neg = total_neg / count
+        avg_intensity = total_intensity / count
+        
+        avg_neutral = max(0.0, 1.0 - max(avg_pos, avg_neg))
+        
+        if avg_pos > avg_neg + 0.1: # Lower threshold for batch
+            dominant = "positive"
+        elif avg_neg > avg_pos + 0.1:
+            dominant = "negative"
+        else:
+            dominant = "neutral"
+            
+        return SentimentResult(
+            positive_score=avg_pos,
+            negative_score=avg_neg,
+            neutral_score=avg_neutral,
+            dominant=dominant,
+            intensity=avg_intensity
+        )
     
     def get_tone_for_interaction(
         self,

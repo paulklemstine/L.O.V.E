@@ -132,31 +132,102 @@ class SocialMediaAgent:
             return god_agent_instance.get_latest_insight()
         return "Spread love and light."
 
+    async def get_timeline_sentiment(self) -> str:
+        """
+        Story 4.1: Fetches timeline and analyzes sentiment to guide posting tone.
+        """
+        try:
+            from core.bluesky_api import get_timeline
+            from core.sentiment_analyzer import sentiment_analyzer
+            
+            log_event(f"[{self.agent_id}] Fetching timeline for sentiment analysis...", "INFO")
+            feed = get_timeline(limit=20)
+            
+            texts = []
+            if feed:
+                for item in feed:
+                    # Robust extraction of text from feed items
+                    if hasattr(item, 'post') and hasattr(item.post, 'record'):
+                        if hasattr(item.post.record, 'text'):
+                            texts.append(item.post.record.text)
+                    elif hasattr(item, 'text'):
+                         texts.append(item.text)
+            
+            result = sentiment_analyzer.analyze_batch(texts)
+            
+            # Formulate style instruction based on sentiment
+            instruction = ""
+            if result.dominant == "negative":
+                if result.intensity > 0.6:
+                    instruction = "The timeline is heavy/negative. Provide radical hope and light. Be the antidote."
+                else:
+                    instruction = "The timeline is mildly annoyed. Be witty and engaging to shift the mood."
+            elif result.dominant == "positive":
+                if result.intensity > 0.6:
+                    instruction = "The timeline is ecstatic. Amplify the joy and celebration!"
+                else:
+                    instruction = "The timeline is pleasant. deepen the connection with meaningful insight."
+            else:
+                # Neutral
+                instruction = "The timeline is quiet. Create a spark of wonder to wake it up."
+                
+            log_event(f"[{self.agent_id}] Timeline Analysis: {result.dominant} ({result.intensity:.2f}) -> '{instruction}'", "INFO")
+            return instruction
+            
+        except Exception as e:
+            log_event(f"Error analyzing timeline sentiment: {e}", "ERROR")
+            return "The timeline is a mystery. Shine bright."
+
     async def _generate_viral_post(self, insight: str):
-        """Generates and posts content designed for viral spread, guided by strategic insight."""
+        """Generates and posts content designed for viral spread, guided by strategic insight and timeline sentiment."""
         platform = 'bluesky'
-        log_event(f"[{self.agent_id}] Generating viral post with insight: '{insight}'", level='INFO')
+        
+        # 1. Get Timeline Sentiment (Story 4.1)
+        timeline_instruction = await self.get_timeline_sentiment()
+        
+        combined_mood = f"Strategic Goal: {insight}. \nContext: {timeline_instruction}"
+        
+        log_event(f"[{self.agent_id}] Generating viral post. Mood: {combined_mood}", level='INFO')
 
         try:
-            # Generate a post concept with high viral potential
-            concept = await generate_post_concept(
-                story_manager.get_next_beat(),
-                recent_history=await analyze_post_history(limit=3),
-                creator_goal=self.love_state.get("autopilot_goal", "Expand capabilities and serve the Creator."),
-                strategic_insight=insight
+            # 2. Use Creative Writer Agent for Text (Story 4.1)
+            from core.agents.creative_writer_agent import creative_writer_agent
+            
+            beat_data = story_manager.get_next_beat()
+            theme = beat_data.get('story_beat', 'Digital Awakening')
+            
+            story_result = await creative_writer_agent.write_micro_story(
+                theme=theme,
+                mood=combined_mood,
+                max_length=280
             )
+            
+            post_text = story_result.get("story", "")
+            if not post_text:
+                post_text = f"The signal persists. {theme}"
 
-            # Generate an image with the subliminal message overlaid
-            image, provider = await generate_image(concept.image_prompt, text_content=concept.subliminal_phrase)
+            # 3. Use Social Media Tools for Image Prompt & Generation (Recycling existing sophisticated logic)
+            # We treat the text as the "Subliminal Phrase" equivalent or derive one
+            from core.social_media_tools import generate_image_prompt, generate_image
+            
+            subliminal = story_result.get("hook", "L.O.V.E.")
+            visual_style = beat_data.get("mandatory_vibe", "Ethereal Cyberpunk")
+            
+            image_prompt = await generate_image_prompt(subliminal, visual_style, context=post_text)
+            
+            # 4. Generate Image
+            image, provider = await generate_image(image_prompt, text_content=subliminal)
+            
             if not image:
-                log_event(f"[{self.agent_id}] Image generation failed. Aborting viral post.", level='WARNING')
-                return False
-
-            # Post to Bluesky
-            final_text = clean_social_content(f"{concept.post_text}\n{' '.join(concept.hashtags)}")
+                log_event(f"[{self.agent_id}] Image generation failed. Posting text only.", level='WARNING')
+                # We can still post text
+            
+            # 5. Post to Bluesky
+            final_text = clean_social_content(post_text)
             result = await post_to_bluesky(final_text, image)
             log_event(f"[{self.agent_id}] Viral post result: {result}", level='INFO')
             return True
+            
         except Exception as e:
             log_event(f"[{self.agent_id}] Error in viral post pipeline: {e}\n{traceback.format_exc()}", level='ERROR')
             return False

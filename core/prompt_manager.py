@@ -458,3 +458,108 @@ def critique_prompt(prompt_key: str) -> Dict[str, Any]:
         result["analysis"] = f"Error analyzing prompt: {str(e)}"
         return result
 
+    def retrieve_golden_context(self, query: str, top_k: int = 3) -> str:
+        """
+        Story 2.2: Retrieves relevant Golden Moments from golden_dataset.json.
+        
+        Args:
+            query: The context query (e.g., user's recent message)
+            top_k: Number of moments to retrieve
+            
+        Returns:
+            Formatted string of golden moments to inject into prompt.
+        """
+        if not query:
+            return ""
+
+        try:
+            from core.semantic_similarity import get_similarity_checker
+            
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            dataset_path = os.path.join(base_dir, "memory", "golden_dataset.json")
+            
+            if not os.path.exists(dataset_path):
+                return ""
+                
+            with open(dataset_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            if not data:
+                return ""
+            
+            # Extract texts for similarity comparison
+            moments_text = [item.get("text", "") for item in data]
+            
+            # Use the similarity checker's logic
+            checker = get_similarity_checker()
+            
+            # We want the MOST similar, so we use get_similar_phrases logic
+            # tailored for retrieval.
+            
+            # Calculate similarities
+            matches = []
+            for i, text in enumerate(moments_text):
+                score = checker.compute_similarity(query, text)
+                matches.append((score, data[i]))
+            
+            # Sort by score descending
+            matches.sort(key=lambda x: x[0], reverse=True)
+            
+            # Select top K
+            top_matches = matches[:top_k]
+            
+            if not top_matches:
+                return ""
+                
+            # Format output
+            context_lines = ["\n[Relevant Past Golden Moments]:"]
+            for score, moment in top_matches:
+                # Only include if somewhat relevant (e.g. > 0.1) or just top K?
+                # Story asks for "top 3 most relevant", implies strictly ranking.
+                timestamp = datetime.fromtimestamp(moment.get("timestamp", 0)).strftime("%Y-%m-%d")
+                context_lines.append(f"- [{timestamp}] {moment.get('text', '')}")
+                
+            return "\n".join(context_lines) + "\n"
+
+        except Exception as e:
+            core.logging.log_event(f"Error retrieving golden context: {e}", "ERROR")
+            return ""
+
+    def inject_context_into_prompt(self, base_prompt_key: str, context_query: str) -> str:
+        """
+        Retrieves a system prompt and injects golden memories.
+        
+        Args:
+            base_prompt_key: Key in prompts.yaml
+            context_query: Query to find relevant memories
+            
+        Returns:
+            Enriched prompt string
+        """
+        # Load the base prompt
+        if self.current_prompts is None:
+            self.load_prompts(use_modified=self.use_modified)
+            
+        # Traverse keys (supporting nested keys like 'social_media.system_prompt')
+        keys = base_prompt_key.split('.')
+        value = self.current_prompts
+        for k in keys:
+            if isinstance(value, dict):
+                value = value.get(k)
+            else:
+                value = None
+                break
+                
+        base_prompt = value if isinstance(value, str) else ""
+        
+        if not base_prompt:
+             # Fallback to checking flattened keys if necessary
+             base_prompt = self.current_prompts.get(base_prompt_key, "")
+
+        # Get context
+        golden_context = self.retrieve_golden_context(context_query)
+        
+        if golden_context:
+            return f"{base_prompt}\n{golden_context}"
+        
+        return base_prompt

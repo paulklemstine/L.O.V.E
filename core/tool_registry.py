@@ -647,6 +647,40 @@ class ToolRegistry:
         
         return loaded_tools
     
+    def load_core_tools(self) -> List[str]:
+        """
+        Loads core tools from core.tools_lib.
+        Story 3.1: Modularized tool loading.
+        """
+        loaded = []
+        try:
+            import core.tools_lib as tools_lib
+            
+            # Iterate over all exported attributes
+            for name in dir(tools_lib):
+                if name.startswith("_"): continue
+                
+                attr = getattr(tools_lib, name)
+                
+                # Check if it's a callable (function or tool)
+                if callable(attr):
+                    try:
+                        # Attempt to register
+                        self.register(attr)
+                        loaded.append(name)
+                        # print(f"🔧 Loaded core tool: {name}") # Optional logging
+                    except ToolDefinitionError:
+                        # Not a tool, skip
+                        pass
+                    except Exception:
+                        pass
+                        
+        except ImportError as e:
+            print(f"Warning: Failed to load core tools_lib: {e}")
+            
+        return loaded
+
+    
     def refresh(self) -> Dict[str, Any]:
         """
         Refreshes the tool registry by reloading custom tools.
@@ -742,6 +776,7 @@ def get_global_registry() -> ToolRegistry:
     global _global_registry
     if _global_registry is None:
         _global_registry = ToolRegistry()
+        _global_registry.load_core_tools() # Load modular tools
     return _global_registry
 
 

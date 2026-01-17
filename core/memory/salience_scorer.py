@@ -190,6 +190,10 @@ entities: [comma-separated list or "none"]
         if any(tag in score.entity_tags for tag in ["SECRET", "CONSTRAINT", "IDENTITY_SHIFT", "USER_GIFT"]):
             return True
         
+        # Story 2.1: Explicit check for emotional intensity
+        if score.emotional_weight >= threshold:
+            return True
+
         # High overall score triggers preservation
         return score.overall >= threshold
     
@@ -208,6 +212,41 @@ entities: [comma-separated list or "none"]
             source_id=source_id,
             timestamp=time.time()
         )
+
+    def _save_to_dataset(self, moment: GoldenMoment):
+        """
+        Story 2.1: Store Golden Moments in a dedicated JSON dataset for retrieval.
+        """
+        import json
+        import os
+        
+        dataset_path = os.path.join(os.path.dirname(__file__), "golden_dataset.json")
+        data = []
+        
+        try:
+            if os.path.exists(dataset_path):
+                with open(dataset_path, 'r') as f:
+                    data = json.load(f)
+        except Exception as e:
+            print(f"Error loading golden dataset: {e}")
+
+        # Convert moment to dict (assuming GoldenMoment is Pydantic or similar, otherwise manual dict)
+        # Using getattr or .dict() if available, else manual
+        moment_dict = {
+            "text": moment.raw_text,
+            "emotional_weight": moment.salience.emotional_weight,
+            "tags": moment.salience.entity_tags,
+            "timestamp": moment.timestamp
+        }
+        
+        data.append(moment_dict)
+        
+        try:
+            with open(dataset_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"Error saving to golden dataset: {e}")
+
     
     async def score_and_preserve(
         self, 
@@ -225,6 +264,8 @@ entities: [comma-separated list or "none"]
         
         if self.is_golden_moment(score, threshold):
             golden = self.create_golden_moment(content, score, source_id)
+            self._save_to_dataset(golden)
             return score, golden
         
         return score, None
+

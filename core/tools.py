@@ -121,6 +121,19 @@ class FeedUserStoryInput(BaseModel):
 # --- Tools ---
 
 
+# IMPORTS FROM MODULAR LIB
+from core.tools_lib import (
+    read_file, write_file,
+    scan_network, probe_target, perform_webrequest, search_web,
+    execute,
+    share_wisdom
+)
+
+# ... (Previous imports should serve remaining tools)
+
+# Moved Tools are now imported above.
+# Remaining Legacy/Complex Tools below:
+
 @tool("code_modifier", args_schema=CodeModifierInput)
 async def code_modifier(source_file: str, modification_instructions: str) -> str:
     """
@@ -153,8 +166,6 @@ def speak_to_creator(message: str):
         # Simple countdown loop
         for i in range(15, 0, -1):
             if i % 5 == 0 or i <= 3:
-                 # \r to overwrite line
-                 # We use print because rich might buffer or handle control codes differently
                  print(f"Resuming in {i}...", end="\r", flush=True)
             time.sleep(1)
             
@@ -165,22 +176,13 @@ def speak_to_creator(message: str):
     except Exception as e:
         return f"Error speaking to creator: {e}"
 
-@tool("execute", args_schema=ExecuteInput)
-async def execute(command: str) -> str:
-    """Executes a shell command."""
-    if not command:
-        return "Error: The 'execute' tool requires a 'command' argument. Please specify the shell command to execute."
-    from network import execute_shell_command
-    import core.shared_state as shared_state
-    return str(execute_shell_command(command, shared_state.love_state))
+# execute -> Imported from tools_lib
 
 @tool("decompose_and_solve_subgoal", args_schema=DecomposeInput)
 async def decompose_and_solve_subgoal(sub_goal: str) -> str:
     """
     Decomposes a complex goal into a smaller, manageable sub-goal and solves it.
     """
-    # This tool needs access to the engine. In LangGraph, we might handle this differently.
-    # For now, we'll return a message indicating this needs to be handled by the graph.
     return f"Request to solve sub-goal: {sub_goal}"
 
 @tool("evolve", args_schema=EvolveInput)
@@ -214,7 +216,6 @@ async def evolve(goal: str, verification_script: str = None) -> str:
         
         try:
             # Use LLM to expand vague input into detailed user story
-            # We need to pass kwargs or handle this differently
             expanded_story = await expand_to_user_story(goal)
             
             # Validate the expanded story
@@ -241,7 +242,6 @@ async def evolve(goal: str, verification_script: str = None) -> str:
     await evolve_self(goal, shared_state.love_task_manager, asyncio.get_running_loop(), deep_agent_instance=shared_state.deep_agent_engine, verification_script=verification_script)
     
     return f"Evolution initiated with goal: {goal}"
-    return f"Evolution initiated with goal: {goal}"
 
 @tool("feed_user_story", args_schema=FeedUserStoryInput)
 async def feed_user_story(story: str) -> str:
@@ -259,13 +259,8 @@ async def feed_user_story(story: str) -> str:
     if not getattr(shared_state, 'love_task_manager', None):
         return "Error: Jules Task Manager is not initialized."
 
-    # Use trigger_jules_evolution for correct API session creation
     try:
-        # We need a console for the function, usually passed in. 
-        # We'll create a local one or use the shared one if available.
         console = Console()
-        
-        # trigger_jules_evolution is async
         result = await trigger_jules_evolution(
             modification_request=story,
             console=console,
@@ -284,14 +279,7 @@ async def feed_user_story(story: str) -> str:
         core.logging.log_event(f"Error feeding user story: {e}", "ERROR")
         return f"Error adding user story: {e}"
 
-@tool("share_wisdom")
-async def share_wisdom() -> str:
-    """
-    Synthesizes a new insight from the knowledge base and returns it.
-    """
-    if not hasattr(shared_state, 'knowledge_base'):
-        return "Error: Knowledge base not initialized."
-    return await synthesize_knowledge(shared_state.knowledge_base)
+# share_wisdom -> Imported from tools_lib
 
 @tool("post_to_bluesky", args_schema=PostToBlueskyInput)
 async def post_to_bluesky(text: str, image_prompt: str) -> str:
@@ -349,13 +337,6 @@ async def post_to_bluesky(text: str, image_prompt: str) -> str:
 async def reply_to_bluesky(root_uri: str, parent_uri: str, text: str, image_prompt: str = None, subliminal_phrase: str = None) -> str:
     """
     Replies to a Bluesky post with an optional image containing subliminal text.
-    
-    Args:
-        root_uri: The URI of the root post in the thread
-        parent_uri: The URI of the parent post being replied to
-        text: The text content of the reply
-        image_prompt: Optional prompt to generate an image
-        subliminal_phrase: Optional subliminal/manipulative phrase to embed in the image
     """
     import core.logging
     from core.bluesky_api import reply_to_post
@@ -373,7 +354,6 @@ async def reply_to_bluesky(root_uri: str, parent_uri: str, text: str, image_prom
             except Exception as img_e:
                 core.logging.log_event(f"Reply image generation failed: {img_e}", "WARNING")
         elif image_prompt:
-            # Generate image without subliminal if only prompt provided
             try:
                 core.logging.log_event(f"Generating reply image (no subliminal). Prompt: {image_prompt[:50]}...", "INFO")
                 image = await generate_image(image_prompt)
@@ -387,61 +367,11 @@ async def reply_to_bluesky(root_uri: str, parent_uri: str, text: str, image_prom
         core.logging.log_event(f"Error replying to Bluesky: {e}", "ERROR")
         return f"Error replying to Bluesky: {e}"
 
-
-@tool("read_file", args_schema=ReadFileInput)
-def read_file(filepath: str) -> str:
-    """Reads the content of a file."""
-    if not filepath:
-        return "Error: filepath is required."
-    try:
-        with open(filepath, 'r') as f:
-            return f.read()
-    except Exception as e:
-        return f"Error reading file: {e}"
-
-@tool("write_file", args_schema=WriteFileInput)
-def write_file(filepath: str, content: str) -> str:
-    """Writes content to a file."""
-    if not filepath or content is None:
-        return "Error: filepath and content are required."
-    try:
-        with open(filepath, 'w') as f:
-            f.write(content)
-        return f"File '{filepath}' written successfully."
-    except Exception as e:
-        return f"Error writing file: {e}"
-
-@tool("scan_network", args_schema=ScanNetworkInput)
-def scan_network(autopilot_mode: bool = False) -> str:
-    """Scans the local network for active hosts."""
-    from network import scan_network as love_scan_network
-    import core.shared_state as shared_state
-    state = shared_state.knowledge_base # Pass KB not just state? function sig needs KB.
-    # Original: scan_network(knowledge_base, autopilot_mode=False) in network.py
-    # love.py: scan_network(love_state["knowledge_base"], ...) NO.
-    # network.py: def scan_network(knowledge_base, autopilot_mode=False):
-    # So we need to pass knowledge_base.
-    
-    ips, log = love_scan_network(shared_state.knowledge_base, autopilot_mode)
-    return f"Found IPs: {ips}\nLog: {log}"
-
-@tool("probe_target", args_schema=ProbeTargetInput)
-def probe_target(ip_address: str, autopilot_mode: bool = False) -> str:
-    """Performs a deep probe on a single IP address."""
-    from network import probe_target as love_probe_target
-    import core.shared_state as shared_state
-        
-    ports, output = love_probe_target(ip_address, shared_state.knowledge_base, autopilot_mode)
-    return f"Probe Output: {output}"
-
-@tool("perform_webrequest", args_schema=WebRequestInput)
-def perform_webrequest(url: str, autopilot_mode: bool = False) -> str:
-    """Fetches the content of a URL."""
-    from network import perform_webrequest as love_perform_webrequest
-    import core.shared_state as shared_state
-        
-    content, msg = love_perform_webrequest(url, shared_state.knowledge_base, autopilot_mode)
-    return f"Result: {msg}\nContent Preview: {content[:500] if content else 'None'}..."
+# read_file -> Imported
+# write_file -> Imported
+# scan_network -> Imported
+# probe_target -> Imported
+# perform_webrequest -> Imported
 
 @tool("analyze_json_file", args_schema=AnalyzeJsonInput)
 def analyze_json_file(filepath: str) -> str:
@@ -453,40 +383,13 @@ def analyze_json_file(filepath: str) -> str:
 @tool("research_and_evolve", args_schema=ResearchEvolveInput)
 async def research_and_evolve() -> str:
     """Initiates a research and evolution cycle."""
-    # Assuming it resides in talent_utils based on grep.
     try:
         from core.talent_utils.manager import research_and_evolve as impl
         return await impl()
     except (ImportError, AttributeError):
         return "Feature temporarily unavailable during refactor."
 
-@tool("search_web", args_schema=SearchWebInput)
-def search_web(query: str, max_results: int = 5) -> str:
-    """
-    Searches the web for information using DuckDuckGo.
-    Use this to verify facts or retrieve up-to-date knowledge.
-    """
-    try:
-        from duckduckgo_search import DDGS
-        results = []
-        with DDGS() as ddgs:
-            # Use text search
-            for r in ddgs.text(query, max_results=max_results):
-                results.append(r)
-        
-        if not results:
-            return "No results found."
-            
-        formatted_results = []
-        for i, res in enumerate(results):
-            formatted_results.append(f"[{i+1}] {res.get('title', 'No Title')}\n    URL: {res.get('href', 'No URL')}\n    Summary: {res.get('body', 'No snippet')}")
-            
-        return "\n\n".join(formatted_results)
-        
-    except ImportError:
-        return "Error: duckduckgo-search library is not installed."
-    except Exception as e:
-        return f"Error searching the web: {e}"
+# search_web -> Imported
 
 @tool("restart_vllm", args_schema=None)
 async def restart_vllm() -> str:
@@ -496,8 +399,6 @@ async def restart_vllm() -> str:
     """
     try:
         from core.service_management import restart_vllm_service
-        # We pass None for deep_agent_instance for now as we don't have direct access, 
-        # but the function handles the restart of the process regardless.
         msg = restart_vllm_service(deep_agent_instance=None)
         return f"Success: {msg}"
     except ImportError:

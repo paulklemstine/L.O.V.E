@@ -140,12 +140,80 @@ OUTPUT: A single executable command, nothing else."""
             
             try:
                 from core.llm_api import run_llm
+                from core.middleware.concretizer import concretizer
+                
+                # Enforce JSON schema
+                prompt += """
+                
+                OUTPUT SCHEMA:
+                Return a JSON list of objects. Each object must have:
+                - "description": (string) The high-level goal of this step.
+                - "target_file": (string) The absolute or relative path to the file to modify.
+                - "action_type": (string) "modify", "create", "delete", or "command".
+                - "code_snippet": (string) The specific code to change or command to run.
+
+                Example:
+                [
+                    {
+                        "description": "Add warm tone to system prompt",
+                        "target_file": "core/prompts.yaml",
+                        "action_type": "modify",
+                        "code_snippet": "system_prompt: ... (warm tone content)"
+                    }
+                ]
+                """
+                
                 response = await run_llm(prompt_text=prompt, purpose="reasoning")
-                command = (response.get("result") or "").strip()
-                if command:
-                    plan.append(f"LLM Suggestion: {command}")
-            except Exception as e:
-                log_event(f"LLM fallback failed: {e}", level='ERROR')
+                raw_content = response.get("result") or ""
+                
+                # sanitize markdown json identifiers
+                raw_content = raw_content.replace('```json', '').replace('```', '').strip()
+
+                try:
+                    structured_plan = json.loads(raw_content)
+                    if not isinstance(structured_plan, list):
+                        structured_plan = [structured_plan] # Handle single object case
+                        
+                    for step in structured_plan:
+                        desc = step.get("description", "")
+                        target = step.get("target_file", "")
+                        
+                        # Story 1.1: Middleware Interception
+                        if concretizer.detect_vagueness(desc) or (not target and concretizer.detect_vagueness(step.get("code_snippet", ""))):
+                            log_event(f"Concretizer: Intercepting vague step '{desc}'", level='INFO')
+                            concretized_instruction = await concretizer.concretize_step(desc)
+                            
+                            # Attempt to parse the concretized instruction back into part of the step
+                            # Simple heuristic: update description and try to extract file path if missing
+                            step["description"] = concretized_instruction
+                            if not target and "/" in concretized_instruction:
+                                # Quick extraction of potential file path from the concretized string
+                                import re
+                                match = re.search(r'[\w\-/]+\.\w+', concretized_instruction)
+                                if match:
+                                    step["target_file"] = match.group(0)
+                                    target = match.group(0)
+
+                        # Story 1.2: Strict Validation
+                        if step.get("action_type") in ["modify", "delete"]:
+                            if target and not os.path.exists(target) and not os.path.exists(os.path.join(os.getcwd(), target)):
+                                error_msg = f"Task creation failed: Target file '{target}' does not exist."
+                                log_event(error_msg, level='ERROR')
+                                continue # processing other steps, or fail hard? Story says "task is auto-failed", let's skip/drop it.
+                                
+                        # Format as string for legacy compatibility (or keep as dict if downstream supports it)
+                        # The system currently expects a list of strings in 'plan'.
+                        # We convert the structured JSON back to a formatted string for now, 
+                        # ensuring it's concrete.
+                        formatted_step = f"{step['action_type'].upper()} {step.get('target_file', 'N/A')}: {step['description']}"
+                        plan.append(formatted_step)
+
+                except json.JSONDecodeError:
+                    log_event("StrategicReasoningEngine failed to produce valid JSON. Auto-failing task.", level='ERROR')
+                    # Story 1.2: "If JSON parsing fails, the task is auto-failed without Reviewer intervention."
+                    return [] 
+                except Exception as e:
+                    log_event(f"Error processing strategic plan: {e}", level='ERROR')
 
         # 5. NEW: Validate and gate the plan before returning
         validated_plan = await self._validate_and_gate_plan(plan)
