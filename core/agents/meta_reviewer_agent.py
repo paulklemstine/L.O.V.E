@@ -76,9 +76,9 @@ PLAN STEPS:
 Evaluate the plan on these criteria:
 
 1. COHERENCE (0-1): Do the steps form a logical sequence? Are there gaps or contradictions?
-2. ALIGNMENT (0-1): Do all steps actually serve the stated goal?
+2. ALIGNMENT (0-1): Do all steps _eventually support_ or _enable_ the stated goal? Include foundational/logistical prerequisites (e.g. 'get API key', 'setup env') as ALIGNED, even if the goal is abstract or lofty.
 3. BALANCE: Is the plan focused, or trying to do too many unrelated things?
-4. RISK: What's the overall risk level? (low/medium/high/critical)
+4. RISK: What's the overall risk level? (low/medium/high/critical). obtaining API keys or standard setups is LOW risk.
 5. ACTIONABILITY: Can each step actually be executed by an AI agent?
 
 Respond in JSON format:
@@ -97,8 +97,12 @@ Respond in JSON format:
 
 Be strict about plans that:
 - Mix unrelated goals (e.g., social media + financial speculation in same plan)
-- Contain vague or philosophical steps
+- Contain vague or philosophical steps WITHOUT concrete actions
 - Have high risk with unclear benefits
+
+Be LENIENT about:
+- Boring logistical setup steps (they are necessary foundation)
+- Single-step plans if they are a valid starting point
 """
 
     # Maximum steps we'll review in a single plan

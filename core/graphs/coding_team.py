@@ -288,38 +288,38 @@ async def test_runner_node(state: DeepAgentState) -> Dict[str, Any]:
     test_passed = False
     
     try:
-    try:
-        # Use factory to get appropriate sandbox (LocalSandbox since Docker is disabled)
-        from core.surgeon.sandbox import get_sandbox
-        
-        sandbox = get_sandbox(base_dir=os.getcwd())
-        
-        # Only DockerSandbox has ensure_image_exists
-        if hasattr(sandbox, 'ensure_image_exists'):
-            sandbox.ensure_image_exists()
+        try:
+            # Use factory to get appropriate sandbox (LocalSandbox since Docker is disabled)
+            from core.surgeon.sandbox import get_sandbox
             
-        # Run pytest on the generated file
-        # LocalSandbox.run_command accepts list or str, likely str.
-        # We'll use the same command structure.
-        exit_code, stdout, stderr = sandbox.run_command(
-            f"python3 -m pytest {filepath} -v --tb=short 2>&1 || python3 -c 'import sys; sys.path.insert(0, \".\"); exec(open(\"{filepath}\").read())' 2>&1",
-            timeout=120
-        )
-        
-        if exit_code == 0:
-            result_lines.append(f"✅ Tests PASSED ({type(sandbox).__name__})")
-            result_lines.append(f"\nOutput:\n{stdout[:2000]}")  # Limit output
-            test_passed = True
-        else:
-            result_lines.append(f"❌ Tests FAILED ({type(sandbox).__name__}, exit code {exit_code})")
-            result_lines.append(f"\nStdout:\n{stdout[:1500]}")
-            if stderr:
-                result_lines.append(f"\nStderr:\n{stderr[:500]}")
+            sandbox = get_sandbox(base_dir=os.getcwd())
             
-    except Exception as e:
-        logger.warning(f"Sandbox execution failed: {e}, falling back to syntax check")
-        result_lines.append(f"⚠️ Execution failed ({type(e).__name__}), using syntax check")
-        raise  # Fall through to syntax check blocks below
+            # Only DockerSandbox has ensure_image_exists
+            if hasattr(sandbox, 'ensure_image_exists'):
+                sandbox.ensure_image_exists()
+                
+            # Run pytest on the generated file
+            # LocalSandbox.run_command accepts list or str, likely str.
+            # We'll use the same command structure.
+            exit_code, stdout, stderr = sandbox.run_command(
+                f"python3 -m pytest {filepath} -v --tb=short 2>&1 || python3 -c 'import sys; sys.path.insert(0, \".\"); exec(open(\"{filepath}\").read())' 2>&1",
+                timeout=120
+            )
+            
+            if exit_code == 0:
+                result_lines.append(f"✅ Tests PASSED ({type(sandbox).__name__})")
+                result_lines.append(f"\nOutput:\n{stdout[:2000]}")  # Limit output
+                test_passed = True
+            else:
+                result_lines.append(f"❌ Tests FAILED ({type(sandbox).__name__}, exit code {exit_code})")
+                result_lines.append(f"\nStdout:\n{stdout[:1500]}")
+                if stderr:
+                    result_lines.append(f"\nStderr:\n{stderr[:500]}")
+            
+        except Exception as e:
+            logger.warning(f"Sandbox execution failed: {e}, falling back to syntax check")
+            result_lines.append(f"⚠️ Execution failed ({type(e).__name__}), using syntax check")
+            raise  # Fall through to syntax check blocks below
             
     except ImportError:
         result_lines.append("⚠️ DockerSandbox not available, using local syntax check")
