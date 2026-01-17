@@ -5,3 +5,7 @@
 ## 2024-05-24 - [Quantum Quiet Empty States]
 **Learning:** In TUI dashboards, removing a panel completely when it has no content (empty state) can be confusing. Users can't distinguish between "system broken/missing" and "system idle/nominal".
 **Action:** Implement "Quantum Quiet" states for empty lists. Use dim/subtle colors (e.g., `dim cyan`, `dim blue`) and reassuring text (e.g., "All Systems Nominal", "Quantum Field Quiet") to provide positive confirmation of system health without visual clutter.
+
+## 2026-01-17 - [Accessible Streams & Forms]
+**Learning:** Dynamic content streams (like chat logs) are invisible to screen readers without `aria-live`. Adding `role="log"` and `aria-live="polite"` makes them accessible with zero visual impact.
+**Action:** Always wrap dynamic message containers with `aria-live="polite"`. Ensure all inputs have accessible names, using `aria-labelledby` to leverage existing headings if visual labels aren't desired.

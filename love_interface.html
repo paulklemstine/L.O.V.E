@@ -107,18 +107,25 @@
         .panel-api_error { border-color: #ffeb3b; } /* yellow */
         .panel-command_success { border-color: #00e676; } /* bright_green */
         .panel-command_failure { border-color: #ff1744; } /* bright_red */
+
+        /* Accessibility & Focus Styles */
+        button:focus-visible, textarea:focus-visible {
+            outline: 2px solid var(--matrix-green);
+            box-shadow: 0 0 10px var(--matrix-green);
+            transition: box-shadow 0.2s ease;
+        }
     </style>
 </head>
 <body>
     <h1>L.O.V.E. Command & Control</h1>
     <div id="main-container">
         <div id="left-column">
-            <div id="cognitive-stream" class="panel-container">
+            <div id="cognitive-stream" class="panel-container" role="log" aria-live="polite" aria-atomic="false">
                 <h2>Cognitive Stream</h2>
             </div>
             <div id="creator-input" class="panel-container">
-                <h2>Creator Input</h2>
-                <textarea id="input-area"></textarea>
+                <h2 id="creator-input-label">Creator Input</h2>
+                <textarea id="input-area" aria-labelledby="creator-input-label" placeholder="Enter system command..."></textarea>
                 <button id="send-button">SEND</button>
             </div>
         </div>
