@@ -191,16 +191,8 @@ class DockerSandbox:
 
 def is_docker_available():
     """Check if Docker is available and running."""
-    try:
-        subprocess.run(
-            ["docker", "info"],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
+    # PER USER REQUEST: Docker sandbox disabled in favor of Jules/Local execution
+    return False
 
 
 def get_sandbox(base_dir: str = None, scratch_dir: str = None):
