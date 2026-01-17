@@ -414,7 +414,6 @@ from core.agents.response_optimizer import ResponseOptimizer
 from creative_expression import generate_weekly_creation
 from core.creative_abundance_engine import CreativeAbundanceEngine
 from core.poetry import generate_poem
-from core.economic_analyzer import analyze_economic_trends
 from mcp_manager import MCPManager
 
 from bbs import BBS_ART
