@@ -183,10 +183,9 @@ async def get_memory_context_for_creativity(story_beat: str, mood: str = "") -> 
                 _memory_manager = shared_state.love_state.memory_manager
             else:
                 # Try to get from orchestrator
-                from core.orchestrator import get_orchestrator
-                orchestrator = get_orchestrator()
-                if orchestrator and hasattr(orchestrator, 'memory_manager'):
-                    _memory_manager = orchestrator.memory_manager
+                # Fallback to global memory manager in shared_state
+                if hasattr(shared_state, 'memory_manager') and shared_state.memory_manager:
+                    _memory_manager = shared_state.memory_manager
         
         if _memory_manager is None:
             core.logging.log_event("Memory manager not available for creativity context", "DEBUG")
