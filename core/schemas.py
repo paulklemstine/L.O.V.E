@@ -151,3 +151,136 @@ def from_director_concept(
         topic=topic,
         hashtags=hashtags
     )
+
+
+# =============================================================================
+# Structured LLM Output Schemas
+# Based on Nanonets Cookbook patterns for reliable structured outputs
+# =============================================================================
+
+from typing import Literal
+
+
+class TaskAction(BaseModel):
+    """Task/Tool action schema for agent execution."""
+    tool_name: str = Field(..., description="Name of the tool to execute")
+    arguments: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Arguments to pass to the tool"
+    )
+
+
+class ThoughtAction(BaseModel):
+    """ReAct agent thought-action schema."""
+    thought: str = Field(..., description="Agent's reasoning about what to do")
+    action: TaskAction = Field(..., description="The action to take")
+
+
+class ThoughtActionObservation(BaseModel):
+    """Extended ReAct schema with observation."""
+    thought: str = Field(..., description="Agent's reasoning")
+    action: Optional[TaskAction] = Field(
+        default=None, 
+        description="Action to take (null if final answer)"
+    )
+    observation: Optional[str] = Field(
+        default=None, 
+        description="Observation from action result"
+    )
+    final_answer: Optional[str] = Field(
+        default=None, 
+        description="Final answer if complete"
+    )
+
+
+class ReviewDecision(BaseModel):
+    """Task/content review decision schema."""
+    approved: bool = Field(..., description="Whether the item is approved")
+    feedback: str = Field(..., description="Detailed feedback on the decision")
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score (0.0 to 1.0)"
+    )
+    suggested_changes: Optional[List[str]] = Field(
+        default=None,
+        description="Suggested modifications if not approved"
+    )
+
+
+class TaskPrioritization(BaseModel):
+    """Task prioritization result schema."""
+    task_id: str = Field(..., description="Identifier of the task")
+    priority: int = Field(
+        ...,
+        ge=1,
+        le=10,
+        description="Priority score (1=low, 10=critical)"
+    )
+    urgency: Literal["immediate", "soon", "later", "backlog"] = Field(
+        ...,
+        description="Urgency classification"
+    )
+    reasoning: str = Field(..., description="Reason for prioritization")
+    dependencies: List[str] = Field(
+        default_factory=list,
+        description="IDs of tasks this depends on"
+    )
+
+
+class GoalDecomposition(BaseModel):
+    """Goal decomposition into subtasks schema."""
+    goal_summary: str = Field(..., description="Summary of the overall goal")
+    subtasks: List[TaskAction] = Field(
+        ...,
+        description="List of subtasks to accomplish goal"
+    )
+    estimated_complexity: Literal["trivial", "simple", "moderate", "complex", "epic"] = Field(
+        ...,
+        description="Overall complexity estimate"
+    )
+    success_criteria: List[str] = Field(
+        default_factory=list,
+        description="Criteria for goal completion"
+    )
+
+
+class SentimentAnalysis(BaseModel):
+    """Sentiment analysis result schema."""
+    sentiment: Literal["positive", "negative", "neutral", "mixed"] = Field(
+        ...,
+        description="Overall sentiment classification"
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in classification"
+    )
+    emotions: List[str] = Field(
+        default_factory=list,
+        description="Detected emotions (joy, anger, fear, etc.)"
+    )
+    key_phrases: List[str] = Field(
+        default_factory=list,
+        description="Key phrases influencing sentiment"
+    )
+
+
+class MemorySummary(BaseModel):
+    """Memory/context summarization schema."""
+    summary: str = Field(..., description="Condensed summary of content")
+    key_points: List[str] = Field(
+        default_factory=list,
+        description="Key points to remember"
+    )
+    entities_mentioned: List[str] = Field(
+        default_factory=list,
+        description="Important entities mentioned"
+    )
+    emotional_tone: Optional[str] = Field(
+        default=None,
+        description="Overall emotional tone"
+    )
+

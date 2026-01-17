@@ -777,7 +777,7 @@ def rank_models(purpose="general"):
     return [model["model_id"] for model in sorted_models]
 
 
-async def run_llm(prompt_text: str = None, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None, prompt_key: str = None, prompt_vars: dict = None, allow_fallback=True):
+async def run_llm(prompt_text: str = None, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None, prompt_key: str = None, prompt_vars: dict = None, allow_fallback=True, response_schema=None):
     """
     Main entry point for LLM interaction.
     Handles model selection, prompt compression, and error handling.
@@ -794,6 +794,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         force_model: Force a specific model ID
         prompt_key: Key in prompts.yaml to load prompt from
         prompt_vars: Variables to inject into the prompt template
+        response_schema: Optional Pydantic BaseModel for structured output validation
     """
     loop = asyncio.get_running_loop()
     global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT, _models_initialized
@@ -1114,7 +1115,18 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                                 }]
                             }]
                         }
-    
+                        
+                        # Add structured output schema if provided (Gemini constrained decoding)
+                        if response_schema:
+                            try:
+                                from core.structured_output import get_json_schema_for_provider
+                                schema_config = get_json_schema_for_provider(response_schema, "gemini")
+                                if schema_config and "generationConfig" in schema_config:
+                                    payload["generationConfig"] = schema_config["generationConfig"]
+                                    log_event(f"Using Gemini constrained decoding with schema: {response_schema.__name__}", "INFO")
+                            except Exception as schema_err:
+                                log_event(f"Failed to configure Gemini structured output: {schema_err}", "WARNING")
+
                         def _gemini_call():
                             # The Gemini API endpoint structure.
                             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
@@ -1219,6 +1231,17 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                             "max_tokens": 4096,
                             "temperature": 0.7
                         }
+                        
+                        # Add structured output schema if provided (vLLM guided decoding)
+                        if response_schema:
+                            try:
+                                from core.structured_output import get_json_schema_for_provider
+                                schema_config = get_json_schema_for_provider(response_schema, "vllm")
+                                if schema_config and "guided_json" in schema_config:
+                                    payload["extra_body"] = schema_config
+                                    log_event(f"Using vLLM guided decoding with schema: {response_schema.__name__}", "INFO")
+                            except Exception as schema_err:
+                                log_event(f"Failed to configure vLLM structured output: {schema_err}", "WARNING")
 
                         max_retries = 3
                         for attempt in range(max_retries + 1):
@@ -1289,6 +1312,17 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         "model": model_id,
                         "messages": [{"role": "user", "content": prompt_text}]
                     }
+                    
+                    # Add structured output schema if provided (OpenAI response_format)
+                    if response_schema:
+                        try:
+                            from core.structured_output import get_json_schema_for_provider
+                            schema_config = get_json_schema_for_provider(response_schema, "openai")
+                            if schema_config and "response_format" in schema_config:
+                                payload["response_format"] = schema_config["response_format"]
+                                log_event(f"Using OpenAI structured output with schema: {response_schema.__name__}", "INFO")
+                        except Exception as schema_err:
+                            log_event(f"Failed to configure OpenAI structured output: {schema_err}", "WARNING")
 
                     def _openai_call():
                         max_retries = 3
