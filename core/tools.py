@@ -124,40 +124,16 @@ class FeedUserStoryInput(BaseModel):
 @tool("code_modifier", args_schema=CodeModifierInput)
 async def code_modifier(source_file: str, modification_instructions: str) -> str:
     """
-    Modifies a Python source file based on a set of instructions.
+    DEPRECATED: Direct code modification is disabled.
+    Use the 'evolve' or 'feed_user_story' tool to delegate code changes to Jules.
     """
-    if not source_file or not modification_instructions:
-        return "Error: Both 'source_file' and 'modification_instructions' are required."
-
-    try:
-        # Read the original content of the file
-        with open(source_file, 'r') as f:
-            original_content = f.read()
-
-        # Prepare the prompt for the LLM
-        prompt = f"Original code from '{source_file}':\n```python\n{original_content}\n```\n\nModification instructions:\n{modification_instructions}\n\nReturn only the full, modified code. Do not include explanations or markdown formatting."
-
-        # Use the LLM to get the modified code
-        llm_response = await run_llm(prompt, purpose="code_modification")
-        modified_content = (llm_response.get("result") or "").strip()
-
-        # Clean up the response to get only the code
-        if modified_content.startswith("```python"):
-            modified_content = modified_content.split("```python\n", 1)[1]
-        if modified_content.endswith("```"):
-            modified_content = modified_content.rsplit("\n```", 1)[0]
-
-        # Write the modified content back to the file
-        with open(source_file, 'w') as f:
-            f.write(modified_content)
-
-        return f"Successfully modified '{source_file}'."
-
-    except FileNotFoundError:
-        return f"Error: The file '{source_file}' was not found."
-    except Exception as e:
-        log_event(f"An error occurred in code_modifier: {e}", "ERROR")
-        return f"An unexpected error occurred: {e}"
+    return (
+        "⚠️ The code_modifier tool has been disabled. "
+        "For code changes, please use:\n"
+        "  • `evolve(goal='...')` - for general code evolution\n"
+        "  • `feed_user_story(story='...')` - for SMART user stories\n"
+        "These tools delegate work to Jules, an expert software engineer."
+    )
 
 @tool("speak_to_creator", args_schema=SpeakToCreatorInput)
 def speak_to_creator(message: str):
@@ -636,6 +612,14 @@ async def invoke_subagent(agent_type: str, task: str, share_memory: bool = True,
     - creative: Creative content generation
     """
     try:
+        # Disabled agent types - redirect to appropriate tools
+        if agent_type == "coding":
+            return (
+                "⚠️ The 'coding' subagent is disabled. "
+                "Use `evolve(goal='...')` or `feed_user_story(story='...')` "
+                "to delegate code changes to Jules, our expert software engineer."
+            )
+
         from core.subagent_executor import get_subagent_executor
         import core.shared_state as shared_state
         

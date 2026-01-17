@@ -304,22 +304,10 @@ print("---------------------------------------")
 # Run dependency checks immediately, before any other imports that might fail.
 if not SKIP_CHECKS:
     setup_environment(shared_state, VRAM_MODEL_MAP)
-else:
-    print("[OPTIMIZATION] Skipping dependency checks as requested.")
-
-# Pre-warm Docker sandbox in background (non-blocking)
-# This builds the Docker image while the rest of startup continues
-try:
-    from core.surgeon.sandbox_prewarmer import get_prewarmer
-    _prewarmer = get_prewarmer()
-    if _prewarmer.start_prewarm():
-        print("[PREWARM] Docker sandbox build started in background")
-except Exception as _prewarm_err:
-    print(f"[PREWARM] Could not start sandbox pre-warmer: {_prewarm_err}")
-
 
 import core.tracing
 core.tracing.init_tracing()
+
 
 from core.jules_task_manager import (
     JulesTaskManager,
