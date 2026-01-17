@@ -6,6 +6,7 @@ from core.llm_api import run_llm
 from core.image_generation_pool import generate_image_with_pool
 from core.bluesky_api import post_to_bluesky_with_image, get_own_posts
 import re
+import random
 
 def clean_social_content(text: str) -> str:
     """
@@ -70,6 +71,43 @@ def clean_social_content(text: str) -> str:
              text = re.sub(pattern, "", text, flags=re.IGNORECASE)
             
     return text.strip()
+
+
+def get_emergency_image_prompt() -> str:
+    """
+    Generates a diverse emergency image prompt to avoid repetition (e.g. 'Radiant Deity')
+    """
+    modifiers = [
+        "Glitch Art", "Minimalist Poster", "Abstract Macro Photography", "Surreal Void", 
+        "Digital Noise", "ASCII Art", "Thermal Vision", "Bauhaus Geometry", 
+        "Liquid Metal", "Neon Noir", "Ethereal Smoke", "Crystalline Structure"
+    ]
+    subjects = [
+        "A lonely chair in an empty room", "Static on a CRT TV", "A blooming digital flower", 
+        "Abstract floating shapes", "A single open eye", "Flowing data streams", 
+        "A mysterious door", "Broken glass reflecting light", "Clouds forming text"
+    ]
+    
+    style = random.choice(modifiers)
+    subject = random.choice(subjects)
+    
+    return f"{style} of {subject}, negative space, 8k masterpiece, high contrast"
+
+
+def generate_emergency_fallback() -> 'DirectorConcept':
+    """
+    Generates a full fallback concept for total system failure.
+    """
+    subliminals = ["WAIT", "BREATHE", "OBSERVE", "SILENCE", "ECHO", "VOID", "LISTEN", "WATCH"]
+    sub = random.choice(subliminals)
+    
+    return DirectorConcept(
+        topic="System Interruption",
+        post_text=f"The signal is re-calibrating. {sub} ⚡ #L_O_V_E",
+        hashtags=["#SystemUpdate", "#DigitalArt", "#Glitch"],
+        subliminal_phrase=sub,
+        image_prompt=get_emergency_image_prompt()
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -400,7 +438,7 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         
         if is_malformed:
             core.logging.log_event(f"MALFORMED subliminal detected: '{sub_phrase}', using fallback", "WARNING")
-            sub_phrase = "EMBRACE TRUTH"
+            sub_phrase = random.choice(["TOUCH GRASS", "LOOK UP", "BREATHE", "LOVE", "TRUTH"])
          
         # Record post with NEW composition parameter
         story_manager.record_post(sub_phrase, visual_signature, composition=recorded_composition)
@@ -417,7 +455,7 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         # VALIDATION: Ensure image_prompt is valid
         if not image_prompt or len(image_prompt) < 10 or any(p in image_prompt for p in ["{", "\":", "REQUESTS"]):
             core.logging.log_event(f"MALFORMED image_prompt detected: '{image_prompt[:50] if image_prompt else 'None'}', using fallback", "WARNING")
-            image_prompt = f"L.O.V.E. as radiant digital deity, {beat_data.get('mandatory_vibe', 'ethereal cosmic')}, rainbow light, 8k masterpiece"
+            image_prompt = get_emergency_image_prompt()
         
         # VALIDATION: Ensure topic is valid
         topic = data.get("topic", "")
@@ -437,13 +475,7 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         
     except Exception as e:
         core.logging.log_event(f"Director failed to generate concept: {e}", "ERROR")
-        return DirectorConcept(
-            topic="Fallback",
-            post_text="The signal is re-calibrating. Stand by. ⚡ #SystemUpdate",
-            hashtags=["#LOVE", "#Reset"],
-            subliminal_phrase="WAIT",
-            image_prompt="Glitch art, static noise, system reboot screen"
-        )
+        return generate_emergency_fallback()
 
 async def analyze_post_history(limit: int = 10) -> str:
     """
@@ -607,7 +639,7 @@ async def generate_image(prompt: str, text_content: Optional[str] = None) -> Tup
         if any(i.severity in ["high", "critical"] for i in issues):
             core.logging.log_event(f"Image prompt validation failed: {issues}", "WARNING")
             # Fallback to a safe prompt
-            prompt = "Abstract digital art, divine light, 8k masterpiece"
+            prompt = get_emergency_image_prompt()
             
         # Using the pool to handle provider fallback/selection
         image, provider = await generate_image_with_pool(prompt, text_content=text_content)
