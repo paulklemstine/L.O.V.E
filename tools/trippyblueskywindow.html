@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DMT Audio Source Reactive Feed</title>
+    <title>🌀 DMT Audio Reactive Feed - MAXIMUM FREQUENCY EDITION</title>
     <style>
-        /* CRITICAL: Global Box Sizing to prevent width calculation errors */
+        /* CRITICAL: Global Box Sizing */
         * {
             box-sizing: border-box;
         }
@@ -18,13 +18,12 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            /* Strict lock on global scroll */
             background-color: #000;
             font-family: 'Courier New', Courier, monospace;
         }
 
         /* The WebGL Canvas */
-        canvas {
+        canvas#glcanvas {
             display: block;
             width: 100%;
             height: 100%;
@@ -34,14 +33,14 @@
             z-index: 1;
         }
 
-        /* Interaction Overlay (Start Button) */
+        /* Start Overlay */
         #start-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.9);
+            background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.98) 100%);
             z-index: 100;
             display: flex;
             flex-direction: column;
@@ -49,8 +48,36 @@
             align-items: center;
             color: #00e5ff;
             text-align: center;
-            transition: opacity 1s ease;
+            transition: opacity 1.5s ease;
             padding: 20px;
+        }
+
+        #start-overlay h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #ff00ff, #00ffff, #ffff00, #ff00ff);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradientShift 3s ease infinite;
+        }
+
+        @keyframes gradientShift {
+
+            0%,
+            100% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+
+        #start-overlay .subtitle {
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 30px;
         }
 
         .instructions {
@@ -65,25 +92,92 @@
             color: #fff;
             font-weight: bold;
             text-decoration: underline;
+            text-decoration-color: #ff00ff;
         }
 
         button {
-            background: transparent;
+            background: linear-gradient(135deg, rgba(255, 0, 255, 0.2), rgba(0, 255, 255, 0.2));
             color: #00e5ff;
-            border: 2px solid #00e5ff;
-            padding: 15px 30px;
-            font-size: 1.2rem;
+            border: 2px solid transparent;
+            border-image: linear-gradient(135deg, #ff00ff, #00ffff) 1;
+            padding: 18px 40px;
+            font-size: 1.3rem;
             font-family: inherit;
             cursor: pointer;
             text-transform: uppercase;
-            letter-spacing: 3px;
-            transition: all 0.3s;
+            letter-spacing: 4px;
+            transition: all 0.4s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent, #ff00ff, transparent, #00ffff, transparent);
+            animation: rotate 4s linear infinite;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        button:hover::before {
+            opacity: 0.3;
         }
 
         button:hover {
-            background: #00e5ff;
-            color: #000;
-            box-shadow: 0 0 20px #00e5ff;
+            transform: scale(1.05);
+            box-shadow: 0 0 40px rgba(255, 0, 255, 0.5), 0 0 80px rgba(0, 255, 255, 0.3);
+        }
+
+        @keyframes rotate {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Spectrum Analyzer Bar */
+        #spectrum-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            z-index: 50;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 3px;
+            padding: 0 10%;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 1s ease;
+        }
+
+        .spectrum-band {
+            flex: 1;
+            max-width: 40px;
+            background: linear-gradient(to top, #ff00ff, #00ffff);
+            border-radius: 3px 3px 0 0;
+            transition: height 0.05s ease-out;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        /* Beat Pulse Overlay */
+        #beat-pulse {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 45;
+            pointer-events: none;
+            border: 0px solid #ff00ff;
+            opacity: 0;
+            transition: opacity 0.1s, border-width 0.1s;
         }
 
         /* The Content Overlay */
@@ -96,28 +190,24 @@
             width: 90%;
             max-width: 550px;
             pointer-events: none;
-            /* Allows clicks to pass through around the card */
         }
 
         /* Glassmorphism card */
         .glass-card {
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.35);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.15);
             padding: 2rem;
             border-radius: 15px;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
-            transition: opacity 1s ease-in-out;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 0, 255, 0);
+            transition: all 0.3s ease-in-out;
             opacity: 0;
             color: #fff;
             pointer-events: auto;
-            /* Enable scrolling/clicking on the card */
             max-height: 80vh;
             overflow-y: auto;
-            /* Vertical scroll only */
             overflow-x: hidden;
-            /* Force hide horizontal scroll */
             scrollbar-width: thin;
         }
 
@@ -141,14 +231,12 @@
             word-wrap: break-word;
         }
 
-        /* Image Styling */
         .post-image-container {
             width: 100%;
             margin-top: 15px;
             border-radius: 8px;
             overflow: hidden;
             display: none;
-            /* Hidden by default */
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
@@ -165,7 +253,7 @@
             text-align: right;
         }
 
-        /* Custom Scrollbar for the card */
+        /* Custom Scrollbar */
         .glass-card::-webkit-scrollbar {
             width: 6px;
         }
@@ -178,6 +266,21 @@
             background: rgba(0, 229, 255, 0.3);
             border-radius: 3px;
         }
+
+        /* Debug Panel */
+        #debug-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            font-size: 10px;
+            padding: 8px;
+            border-radius: 5px;
+            font-family: monospace;
+            display: none;
+        }
     </style>
 </head>
 
@@ -186,22 +289,29 @@
     <!-- WebGL Canvas -->
     <canvas id="glcanvas"></canvas>
 
+    <!-- Beat Pulse Overlay -->
+    <div id="beat-pulse"></div>
+
+    <!-- Spectrum Analyzer -->
+    <div id="spectrum-bar"></div>
+
     <!-- Start Overlay -->
     <div id="start-overlay">
-        <h1>AUDIO LINK REQUIRED</h1>
+        <h1>🌀 SYNESTHETIC PORTAL 🌀</h1>
+        <div class="subtitle">16-Band Audio Reactive Experience</div>
         <div class="instructions">
-            To visualize Pandora, click the button below.<br>
-            In the popup, select the <strong>Tab</strong> running Pandora and ensure <span class="highlight">"Share
-                Audio"</span> is checked.
+            Connect your music source to witness the frequencies transform into light.<br><br>
+            Select the <strong>Tab</strong> playing music and ensure <span class="highlight">"Share Audio"</span> is
+            checked.
         </div>
-        <button id="start-btn">SELECT SOURCE</button>
+        <button id="start-btn">⚡ INITIATE LINK ⚡</button>
     </div>
 
     <!-- Feed Content -->
     <div id="content-layer">
         <div id="post-container" class="glass-card">
             <div class="handle">@e-v-l-o-v-e.bsky.social</div>
-            <div class="post-content" id="post-text">Fetching transmission...</div>
+            <div class="post-content" id="post-text">Awaiting transmission...</div>
             <div class="post-image-container" id="img-container">
                 <img id="post-image" class="post-image" alt="Post attachment" />
             </div>
@@ -209,74 +319,275 @@
         </div>
     </div>
 
-    <!-- WEBGL SHADERS -->
+    <!-- Debug Panel -->
+    <div id="debug-panel">
+        FPS: <span id="fps">0</span><br>
+        Beat: <span id="beat-status">--</span>
+    </div>
+
+    <!-- EPIC FRAGMENT SHADER -->
     <script id="fragShader" type="x-shader/x-fragment">
         #ifdef GL_ES
-        precision mediump float;
+        precision highp float;
         #endif
 
         uniform float u_time;
         uniform vec2 u_resolution;
         
-        // Audio Uniforms (0.0 to 1.0)
-        uniform float u_low;  // Bass
-        uniform float u_mid;  // Mids
-        uniform float u_high; // Treble
+        // 16-Band Audio Uniforms (0.0 to 1.0)
+        uniform float u_band[16];
+        
+        // Beat detection
+        uniform float u_beat;
+        uniform float u_beatDecay;
+        
+        // Average energy
+        uniform float u_energy;
 
-        // Palette function
-        vec3 palette( in float t ) {
-            // A trippy palette: contrasty and colorful
-            vec3 a = vec3(0.5, 0.5, 0.5);
-            vec3 b = vec3(0.5, 0.5, 0.5);
-            vec3 c = vec3(1.0, 1.0, 1.0);
-            // Shift phase based on high frequencies
-            vec3 d = vec3(0.263, 0.416, 0.557) + (u_high * 0.2); 
-            return a + b*cos( 6.28318*(c*t+d) );
-        }
-
-        // 2D Rotation
+        // =====================================
+        // UTILITY FUNCTIONS
+        // =====================================
+        
+        // Rotation matrix
         mat2 rot(float a) {
-            float s = sin(a);
-            float c = cos(a);
+            float s = sin(a), c = cos(a);
             return mat2(c, -s, s, c);
         }
+        
+        // HSV to RGB
+        vec3 hsv2rgb(vec3 c) {
+            vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+            vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+            return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+        }
+        
+        // Multi-palette system
+        vec3 palette(float t, float paletteIndex) {
+            vec3 a, b, c, d;
+            
+            if (paletteIndex < 0.25) {
+                // Neon Cyber (Magenta/Cyan)
+                a = vec3(0.5); b = vec3(0.5);
+                c = vec3(1.0, 0.7, 0.4);
+                d = vec3(0.0, 0.15, 0.2);
+            } else if (paletteIndex < 0.5) {
+                // Aurora (Green/Purple/Blue)
+                a = vec3(0.5, 0.5, 0.5); b = vec3(0.5, 0.5, 0.5);
+                c = vec3(1.5, 1.0, 0.7);
+                d = vec3(0.8, 0.9, 0.3);
+            } else if (paletteIndex < 0.75) {
+                // Sunset (Orange/Pink/Purple)
+                a = vec3(0.5, 0.5, 0.3); b = vec3(0.5, 0.5, 0.3);
+                c = vec3(0.8, 0.5, 0.4);
+                d = vec3(0.0, 0.1, 0.2);
+            } else {
+                // Electric (Blue/Yellow/White)
+                a = vec3(0.5, 0.5, 0.7); b = vec3(0.5, 0.5, 0.4);
+                c = vec3(1.0, 1.0, 1.0);
+                d = vec3(0.3, 0.2, 0.2);
+            }
+            
+            return a + b * cos(6.28318 * (c * t + d));
+        }
+        
+        // Noise function for texture
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        
+        float noise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            return mix(
+                mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+                mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+                f.y
+            );
+        }
 
+        // =====================================
+        // MAIN RENDERING
+        // =====================================
+        
         void main() {
-            vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y;
+            vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
             vec2 uv0 = uv;
+            
+            // =====================================
+            // AUDIO-DRIVEN PARAMETERS
+            // =====================================
+            
+            // Band 0: Sub-Bass (20-40Hz) - Space Warping
+            float subBass = u_band[0];
+            // Band 1: Bass (40-80Hz) - Zoom/Glow
+            float bass = u_band[1];
+            // Band 2: Low-Bass (80-120Hz) - Tunnel Depth
+            float lowBass = u_band[2];
+            // Band 3: Upper-Bass (120-200Hz) - Ring Frequency
+            float upperBass = u_band[3];
+            // Band 4: Low-Mid (200-400Hz) - Saturation
+            float lowMid = u_band[4];
+            // Band 5: Mid (400-800Hz) - Rotation Speed
+            float mid = u_band[5];
+            // Band 6: Upper-Mid (800-1.2kHz) - Complexity
+            float upperMid = u_band[6];
+            // Band 7: Mid-High (1.2-2kHz) - Chromatic Aberration
+            float midHigh = u_band[7];
+            // Band 8: Presence (2-4kHz) - Edge Sharpness
+            float presence = u_band[8];
+            // Band 9: High (4-6kHz) - Palette Phase
+            float high = u_band[9];
+            // Band 10: Very High (6-8kHz) - Sparkle
+            float veryHigh = u_band[10];
+            // Band 11: Brilliance (8-12kHz) - Color Temperature
+            float brilliance = u_band[11];
+            // Band 12: Air (12-16kHz) - Noise Texture
+            float air = u_band[12];
+            // Band 13-15: Ultra-High - Bloom/Trails/Flash
+            float ultraHigh = (u_band[13] + u_band[14] + u_band[15]) / 3.0;
+            
+            // =====================================
+            // SPACE WARPING (Sub-bass driven)
+            // =====================================
+            float warpStrength = subBass * 0.4 + u_beat * 0.3;
+            float warpAngle = atan(uv.y, uv.x);
+            float warpDist = length(uv);
+            
+            // Fisheye distortion on beats
+            uv *= 1.0 + (sin(warpDist * 3.0 - u_time * 2.0) * warpStrength * 0.15);
+            
+            // Tunnel zoom on sustained bass
+            float tunnelZoom = 1.0 + lowBass * 0.5;
+            uv /= tunnelZoom;
+            
+            // =====================================
+            // KALEIDOSCOPE (Mid-frequency driven)
+            // =====================================
+            float rotationSpeed = 0.15 + mid * 0.4;
+            uv *= rot(u_time * rotationSpeed);
+            
+            // Variable symmetry fold count
+            float folds = 4.0 + floor(upperMid * 4.0);
+            float angle = atan(uv.y, uv.x);
+            float radius = length(uv);
+            angle = mod(angle, 6.28318 / folds);
+            angle = abs(angle - 3.14159 / folds);
+            vec2 uvKaleid = vec2(cos(angle), sin(angle)) * radius;
+            
+            // =====================================
+            // MULTI-LAYER FRACTAL SYSTEM
+            // =====================================
             vec3 finalColor = vec3(0.0);
-
-            // Audio Reactivity modifiers
-            float bassZoom = 1.0 + (u_low * 0.5); // Bass zooms the fractal out/in
-            float midIter = (u_mid * 0.5);        // Mids add complexity
+            
+            // Layer 1: Primary fractal (Bass controlled)
+            vec2 uvL1 = uvKaleid;
+            float complexity1 = 3.0 + upperMid * 2.0;
             
             for (float i = 0.0; i < 4.0; i++) {
-                // Fractal space folding
-                uv = fract(uv * (1.5 + midIter * 0.1)) - 0.5;
-
-                // Distance calculation
-                float d = length(uv) * exp(-length(uv0));
-
-                // Color calculation based on spatial position + time + treble
-                vec3 col = palette(length(uv0) + i*.4 + u_time*.4 + u_high*0.5);
-
-                // The "Breathing" Sinusoid
-                // Bass modifies the frequency of the rings
-                d = sin(d * (8. + u_low * 10.) + u_time) / 8.;
+                uvL1 = fract(uvL1 * (1.5 + i * 0.1)) - 0.5;
+                float d = length(uvL1) * exp(-length(uv0) * (0.8 - bass * 0.3));
+                
+                // Palette selection based on overall energy
+                float paletteIdx = fract(u_energy + u_time * 0.05);
+                vec3 col = palette(length(uv0) + i * 0.4 + u_time * 0.3 + high * 0.5, paletteIdx);
+                
+                // Ring frequency from upper bass
+                float ringFreq = 6.0 + upperBass * 12.0;
+                d = sin(d * ringFreq + u_time) / 8.0;
                 d = abs(d);
                 
-                // Neon Glow
-                // Inverse power function. Bass intensifies the glow.
-                // pow(0.01 / d, 1.2) is standard. We reduce the divisor 1.2 based on bass to make it "sharper" or "bloomy"
-                float glow = pow(0.01 / d, 1.2 - (u_low * 0.4));
+                // Glow intensity from bass
+                float glowPower = 1.3 - bass * 0.5;
+                float glow = pow(0.012 / max(d, 0.001), glowPower);
                 
-                finalColor += col * glow;
+                finalColor += col * glow * 0.5;
             }
-             
-            // Kaleidoscopic Rotation based on time
-            uv0 *= rot(u_time * 0.1);
             
-            // Output
+            // Layer 2: Secondary fractal (counter-rotating)
+            vec2 uvL2 = uv0 * rot(-u_time * 0.1);
+            uvL2 *= 1.0 + sin(u_time * 0.5) * 0.2;
+            
+            for (float i = 0.0; i < 3.0; i++) {
+                uvL2 = fract(uvL2 * 1.8) - 0.5;
+                float d2 = length(uvL2);
+                vec3 col2 = palette(d2 + i * 0.3 + u_time * 0.2, 0.5 + lowMid * 0.5);
+                d2 = sin(d2 * 10.0 - u_time * 1.5) / 10.0;
+                d2 = abs(d2);
+                float glow2 = pow(0.008 / max(d2, 0.001), 1.2);
+                finalColor += col2 * glow2 * 0.25 * lowBass;
+            }
+            
+            // =====================================
+            // CHROMATIC ABERRATION (Treble driven)
+            // =====================================
+            float chromaStrength = midHigh * 0.03;
+            vec2 redOffset = uv0 * (1.0 + chromaStrength);
+            vec2 blueOffset = uv0 * (1.0 - chromaStrength);
+            
+            // Simple color separation
+            finalColor.r *= 1.0 + chromaStrength * 5.0;
+            finalColor.b *= 1.0 - chromaStrength * 3.0;
+            
+            // =====================================
+            // PARTICLE SPARKLES (Very High frequencies)
+            // =====================================
+            float sparkle = 0.0;
+            for (float i = 0.0; i < 8.0; i++) {
+                vec2 sparklePos = vec2(
+                    sin(u_time * (0.5 + i * 0.3) + i * 1.5),
+                    cos(u_time * (0.4 + i * 0.2) + i * 2.1)
+                ) * (0.5 + i * 0.1);
+                float sparkDist = length(uv0 - sparklePos);
+                sparkle += pow(0.005 / max(sparkDist, 0.001), 1.5) * veryHigh;
+            }
+            finalColor += vec3(sparkle) * vec3(1.0, 0.9, 0.8);
+            
+            // =====================================
+            // NOISE TEXTURE (Air frequencies)
+            // =====================================
+            float noiseVal = noise(uv0 * 50.0 + u_time * 2.0) * air * 0.15;
+            finalColor += vec3(noiseVal) * vec3(0.8, 0.9, 1.0);
+            
+            // =====================================
+            // COLOR TEMPERATURE (Brilliance)
+            // =====================================
+            float tempShift = brilliance * 0.3;
+            finalColor.r *= 1.0 + tempShift;
+            finalColor.b *= 1.0 - tempShift * 0.5;
+            
+            // =====================================
+            // SATURATION BOOST (Low-Mid)
+            // =====================================
+            float gray = dot(finalColor, vec3(0.299, 0.587, 0.114));
+            finalColor = mix(vec3(gray), finalColor, 1.0 + lowMid * 0.5);
+            
+            // =====================================
+            // BLOOM (Ultra-high driven)
+            // =====================================
+            float bloomIntensity = 1.0 + ultraHigh * 0.5;
+            finalColor *= bloomIntensity;
+            
+            // =====================================
+            // BEAT FLASH
+            // =====================================
+            finalColor += vec3(1.0, 0.8, 0.9) * u_beat * 0.3;
+            
+            // =====================================
+            // VIGNETTE
+            // =====================================
+            float vignette = 1.0 - length(uv0) * 0.4;
+            finalColor *= vignette;
+            
+            // =====================================
+            // EDGE SHARPNESS (Presence - subtle contrast boost)
+            // =====================================
+            float contrast = 1.0 + presence * 0.2;
+            finalColor = (finalColor - 0.5) * contrast + 0.5;
+            
+            // Final clamp
+            finalColor = clamp(finalColor, 0.0, 1.0);
+            
             gl_FragColor = vec4(finalColor, 1.0);
         }
     </script>
@@ -289,34 +600,72 @@
     </script>
 
     <script>
-        // --- CONFIGURATION ---
+        // =============================================
+        // CONFIGURATION
+        // =============================================
         const CONFIG = {
             handle: 'e-v-l-o-v-e.bsky.social',
-            apiBase: 'https://public.api.bsky.app/xrpc'
+            apiBase: 'https://public.api.bsky.app/xrpc',
+            numBands: 16,
+            beatThreshold: 0.6,
+            beatDecayRate: 0.95,
+            smoothingFactor: 0.15,
+            historySize: 60,
+            debugMode: false
         };
 
-        // --- GLOBAL STATE ---
+        // =============================================
+        // GLOBAL STATE
+        // =============================================
         let audioContext, analyser, dataArray;
-        let audioValues = { low: 0, mid: 0, high: 0 };
+        let audioBands = new Array(CONFIG.numBands).fill(0);
+        let bandHistory = Array.from({ length: CONFIG.numBands }, () => []);
+        let beatValue = 0;
+        let beatDecay = 0;
+        let lastBeatTime = 0;
+        let overallEnergy = 0;
         let isAudioActive = false;
         let mediaStream = null;
+        let frameCount = 0;
+        let lastFPSTime = performance.now();
 
-        // --- PART 1: AUDIO SYSTEM ---
+        // Band frequency ranges (as indices into 128-bin FFT)
+        // Each band maps a frequency range. With sample rate 48000 and fftSize 512:
+        // Each bin = 48000/512 ≈ 93.75Hz
+        const BAND_RANGES = [
+            [0, 1],     // 0: Sub-Bass (0-94Hz)
+            [1, 2],     // 1: Bass (94-188Hz)
+            [2, 3],     // 2: Low-Bass (188-281Hz)
+            [3, 4],     // 3: Upper-Bass (281-375Hz)
+            [4, 6],     // 4: Low-Mid (375-563Hz)
+            [6, 9],     // 5: Mid (563-844Hz)
+            [9, 13],    // 6: Upper-Mid (844-1.2kHz)
+            [13, 20],   // 7: Mid-High (1.2-1.9kHz)
+            [20, 30],   // 8: Presence (1.9-2.8kHz)
+            [30, 45],   // 9: High (2.8-4.2kHz)
+            [45, 65],   // 10: Very High (4.2-6.1kHz)
+            [65, 90],   // 11: Brilliance (6.1-8.4kHz)
+            [90, 120],  // 12: Air (8.4-11.3kHz)
+            [120, 150], // 13: Ultra-High 1 (11.3-14.1kHz)
+            [150, 200], // 14: Ultra-High 2 (14.1-18.8kHz)
+            [200, 256]  // 15: Peak (18.8kHz+)
+        ];
+
+        // =============================================
+        // AUDIO SYSTEM
+        // =============================================
         async function initAudio() {
             try {
-                // 1. Ask for Tab Capture (System Audio via Screen Share)
-                // We ask for video: true because getDisplayMedia requires it, but we only care about the audio track.
                 mediaStream = await navigator.mediaDevices.getDisplayMedia({
                     video: true,
                     audio: true
                 });
 
-                // 2. Setup Audio Context
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
+                analyser.fftSize = 512; // More frequency resolution
+                analyser.smoothingTimeConstant = 0.3;
 
-                // 3. Extract the audio track specifically
                 if (mediaStream.getAudioTracks().length === 0) {
                     throw new Error("No audio track selected. Ensure 'Share Audio' was checked.");
                 }
@@ -324,21 +673,29 @@
                 const source = audioContext.createMediaStreamSource(mediaStream);
                 source.connect(analyser);
 
-                // We do NOT connect to audioContext.destination because the user is already hearing
-                // Pandora from the Pandora tab. We just want to analyze the stream, not play it twice.
-
                 dataArray = new Uint8Array(analyser.frequencyBinCount);
                 isAudioActive = true;
 
                 // Hide overlay
                 const overlay = document.getElementById('start-overlay');
                 overlay.style.opacity = '0';
-                setTimeout(() => overlay.remove(), 1000);
+                setTimeout(() => overlay.remove(), 1500);
 
-                // Optional: Handle if user stops sharing via the browser UI
+                // Show spectrum bar
+                document.getElementById('spectrum-bar').style.opacity = '1';
+
+                // Show debug if enabled
+                if (CONFIG.debugMode) {
+                    document.getElementById('debug-panel').style.display = 'block';
+                }
+
+                // Handle stream end
                 mediaStream.getVideoTracks()[0].onended = () => {
                     alert("Audio link severed. Refresh to reconnect.");
                 };
+
+                // Create spectrum bar elements
+                createSpectrumBar();
 
             } catch (e) {
                 console.error("Audio Init Failed:", e);
@@ -349,38 +706,129 @@
             }
         }
 
+        function createSpectrumBar() {
+            const bar = document.getElementById('spectrum-bar');
+            bar.innerHTML = '';
+
+            const colors = [
+                '#ff0040', '#ff0080', '#ff00ff', '#c000ff',
+                '#8000ff', '#4000ff', '#0040ff', '#0080ff',
+                '#00c0ff', '#00ffff', '#00ffc0', '#00ff80',
+                '#00ff40', '#80ff00', '#c0ff00', '#ffff00'
+            ];
+
+            for (let i = 0; i < CONFIG.numBands; i++) {
+                const band = document.createElement('div');
+                band.className = 'spectrum-band';
+                band.id = `band-${i}`;
+                band.style.background = `linear-gradient(to top, ${colors[i]}, ${colors[(i + 4) % 16]})`;
+                band.style.boxShadow = `0 0 10px ${colors[i]}`;
+                bar.appendChild(band);
+            }
+        }
+
         function analyzeAudio() {
             if (!isAudioActive) return;
 
             analyser.getByteFrequencyData(dataArray);
 
-            // Simple frequency banding
-            // fftSize 256 = 128 bins.
+            let totalEnergy = 0;
 
-            let lowSum = 0, midSum = 0, highSum = 0;
+            // Calculate energy for each of 16 bands
+            for (let i = 0; i < CONFIG.numBands; i++) {
+                const [start, end] = BAND_RANGES[i];
+                let sum = 0;
+                const count = Math.max(1, end - start);
 
-            // Frequencies
-            for (let i = 0; i < 4; i++) lowSum += dataArray[i];
-            for (let i = 4; i < 20; i++) midSum += dataArray[i];
-            for (let i = 20; i < 128; i++) highSum += dataArray[i];
+                for (let j = start; j < Math.min(end, dataArray.length); j++) {
+                    sum += dataArray[j];
+                }
 
-            // Normalize (0.0 - 1.0)
-            const targetLow = lowSum / (4 * 255);
-            const targetMid = midSum / (16 * 255);
-            const targetHigh = highSum / (108 * 255);
+                const target = sum / (count * 255);
 
-            // Linear interpolation for smoothness (Lerp)
-            audioValues.low += (targetLow - audioValues.low) * 0.1;
-            audioValues.mid += (targetMid - audioValues.mid) * 0.1;
-            audioValues.high += (targetHigh - audioValues.high) * 0.1;
+                // Smooth interpolation
+                audioBands[i] += (target - audioBands[i]) * CONFIG.smoothingFactor;
+
+                // Track history for beat detection
+                bandHistory[i].push(audioBands[i]);
+                if (bandHistory[i].length > CONFIG.historySize) {
+                    bandHistory[i].shift();
+                }
+
+                totalEnergy += audioBands[i];
+            }
+
+            overallEnergy = totalEnergy / CONFIG.numBands;
+
+            // Beat detection on sub-bass
+            const bassEnergy = audioBands[0] + audioBands[1];
+            const bassAvg = bandHistory[0].reduce((a, b) => a + b, 0) / bandHistory[0].length;
+
+            const now = performance.now();
+            if (bassEnergy > bassAvg * 1.5 && bassEnergy > CONFIG.beatThreshold && now - lastBeatTime > 150) {
+                beatValue = 1.0;
+                lastBeatTime = now;
+                triggerBeatPulse();
+            }
+
+            // Decay beat
+            beatValue *= CONFIG.beatDecayRate;
+            beatDecay = beatValue;
+
+            // Update spectrum visualization
+            updateSpectrumBar();
+
+            // Update card effects
+            updateCardEffects();
+        }
+
+        function updateSpectrumBar() {
+            for (let i = 0; i < CONFIG.numBands; i++) {
+                const band = document.getElementById(`band-${i}`);
+                if (band) {
+                    const height = audioBands[i] * 55 + 5;
+                    band.style.height = `${height}px`;
+                }
+            }
+        }
+
+        function triggerBeatPulse() {
+            const pulse = document.getElementById('beat-pulse');
+            pulse.style.opacity = '0.4';
+            pulse.style.borderWidth = '6px';
+
+            setTimeout(() => {
+                pulse.style.opacity = '0';
+                pulse.style.borderWidth = '0px';
+            }, 100);
+        }
+
+        function updateCardEffects() {
+            const card = document.getElementById('post-container');
+            if (!card) return;
+
+            // Blur intensity from low frequencies
+            const blurAmount = 8 + audioBands[1] * 8;
+
+            // Border glow from treble
+            const glowIntensity = audioBands[9] * 30;
+
+            // Scale pulse on beat
+            const scale = 1.0 + beatValue * 0.02;
+
+            card.style.backdropFilter = `blur(${blurAmount}px)`;
+            card.style.webkitBackdropFilter = `blur(${blurAmount}px)`;
+            card.style.boxShadow = `0 4px 30px rgba(0,0,0,0.5), 0 0 ${glowIntensity}px rgba(255,0,255,${audioBands[9] * 0.5})`;
+            card.style.transform = `scale(${scale})`;
         }
 
         document.getElementById('start-btn').addEventListener('click', () => {
             initAudio();
         });
 
-
-        // --- PART 2: WEBGL SYSTEM ---
+        // =============================================
+        // WEBGL SYSTEM
+        // =============================================
         const canvas = document.getElementById("glcanvas");
         const gl = canvas.getContext("webgl");
 
@@ -399,7 +847,7 @@
             gl.shaderSource(shader, source);
             gl.compileShader(shader);
             if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(shader));
+                console.error("Shader compile error:", gl.getShaderInfoLog(shader));
                 gl.deleteShader(shader);
                 return null;
             }
@@ -412,6 +860,11 @@
         gl.attachShader(program, vertShader);
         gl.attachShader(program, fragShader);
         gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error("Program link error:", gl.getProgramInfoLog(program));
+        }
+
         gl.useProgram(program);
 
         // Buffer Setup
@@ -426,29 +879,51 @@
         // Uniform Locations
         const uTime = gl.getUniformLocation(program, "u_time");
         const uRes = gl.getUniformLocation(program, "u_resolution");
-        const uLow = gl.getUniformLocation(program, "u_low");
-        const uMid = gl.getUniformLocation(program, "u_mid");
-        const uHigh = gl.getUniformLocation(program, "u_high");
+        const uBeat = gl.getUniformLocation(program, "u_beat");
+        const uBeatDecay = gl.getUniformLocation(program, "u_beatDecay");
+        const uEnergy = gl.getUniformLocation(program, "u_energy");
+
+        // Get band uniform locations
+        const uBandLocations = [];
+        for (let i = 0; i < CONFIG.numBands; i++) {
+            uBandLocations.push(gl.getUniformLocation(program, `u_band[${i}]`));
+        }
 
         function render(time) {
-            analyzeAudio(); // Update audio values
+            analyzeAudio();
+
+            // FPS calculation
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFPSTime >= 1000) {
+                if (CONFIG.debugMode) {
+                    document.getElementById('fps').textContent = frameCount;
+                    document.getElementById('beat-status').textContent = beatValue > 0.1 ? 'BEAT!' : '--';
+                }
+                frameCount = 0;
+                lastFPSTime = now;
+            }
 
             time *= 0.001;
             gl.uniform1f(uTime, time);
             gl.uniform2f(uRes, canvas.width, canvas.height);
+            gl.uniform1f(uBeat, beatValue);
+            gl.uniform1f(uBeatDecay, beatDecay);
+            gl.uniform1f(uEnergy, overallEnergy);
 
-            // Pass audio data to shader
-            gl.uniform1f(uLow, audioValues.low);
-            gl.uniform1f(uMid, audioValues.mid);
-            gl.uniform1f(uHigh, audioValues.high);
+            // Pass all 16 band values
+            for (let i = 0; i < CONFIG.numBands; i++) {
+                gl.uniform1f(uBandLocations[i], audioBands[i]);
+            }
 
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             requestAnimationFrame(render);
         }
         requestAnimationFrame(render);
 
-
-        // --- PART 3: BLUESKY FEED PARSER ---
+        // =============================================
+        // BLUESKY FEED PARSER
+        // =============================================
         async function fetchPost() {
             const container = document.getElementById('post-container');
             const loadingText = document.getElementById('post-text');
@@ -456,34 +931,25 @@
             const imgEl = document.getElementById('post-image');
 
             try {
-                // Resolve Handle
                 const resolveData = await fetch(`${CONFIG.apiBase}/com.atproto.identity.resolveHandle?handle=${CONFIG.handle}`).then(r => r.json());
                 if (!resolveData.did) throw new Error("DID lookup failed");
 
-                // Get Feed
                 const feedData = await fetch(`${CONFIG.apiBase}/app.bsky.feed.getAuthorFeed?actor=${resolveData.did}&limit=1`).then(r => r.json());
 
                 if (feedData.feed && feedData.feed.length > 0) {
                     const post = feedData.feed[0].post;
                     const record = post.record;
 
-                    // 1. Text
                     document.getElementById('post-text').innerText = record.text || "(No text content)";
-
-                    // 2. Date
                     document.getElementById('post-date').innerText = new Date(record.createdAt).toLocaleString();
 
-                    // 3. Image Handling
                     let imageUrl = null;
 
-                    // Case A: Standard Image Embed
                     if (post.embed && post.embed.$type === 'app.bsky.embed.images#view') {
                         if (post.embed.images && post.embed.images.length > 0) {
                             imageUrl = post.embed.images[0].fullsize;
                         }
-                    }
-                    // Case B: Record with Media (Quote tweets with media, etc)
-                    else if (post.embed && post.embed.$type === 'app.bsky.embed.recordWithMedia#view') {
+                    } else if (post.embed && post.embed.$type === 'app.bsky.embed.recordWithMedia#view') {
                         if (post.embed.media && post.embed.media.images && post.embed.media.images.length > 0) {
                             imageUrl = post.embed.media.images[0].fullsize;
                         }
@@ -496,7 +962,6 @@
                         imgContainer.style.display = 'none';
                     }
 
-                    // Reveal
                     container.style.opacity = '1';
                 }
             } catch (err) {
@@ -508,6 +973,14 @@
         // Initial fetch and poll
         fetchPost();
         setInterval(fetchPost, 60000);
+
+        // Keyboard shortcut for debug mode
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'd' && e.ctrlKey) {
+                CONFIG.debugMode = !CONFIG.debugMode;
+                document.getElementById('debug-panel').style.display = CONFIG.debugMode ? 'block' : 'none';
+            }
+        });
 
     </script>
 </body>
