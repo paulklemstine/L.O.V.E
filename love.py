@@ -2439,6 +2439,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     time.sleep(2)
 
     user_modeling_agent = UserModelingAgent()
+    from core.emotional_subtext import subtext_analyzer
     curiosity_agent = CuriosityAgent(shared_state.memory_manager)
     goal_generator = GoalGeneratorAgent()
     runner = DeepAgentRunner()
@@ -2471,7 +2472,26 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                     core.logging.log_event(f"Processing Creator Mandate: {user_input}", "CRITICAL")
                 
                 # --- Story 2.3: Theory of Mind Context ---
-                runner.state["user_model_context"] = user_modeling_agent.get_prompt_context()
+                user_model_ctx = user_modeling_agent.get_prompt_context()
+                runner.state["user_model_context"] = user_model_ctx
+
+                # --- NEW: Emotional Subtext Analysis ---
+                detected_subtext = "neutral_direct"
+                try:
+                    subtext_result = await subtext_analyzer.analyze_subtext(user_input, user_context=user_model_ctx)
+                    detected_subtext = subtext_result.get("subtext")
+                    reasoning = subtext_result.get("reasoning")
+                    confidence = subtext_result.get("confidence")
+
+                    if detected_subtext != "neutral_direct" and detected_subtext != "unknown":
+                        core.logging.log_event(f"Detected Emotional Subtext: {detected_subtext} (Conf: {confidence}) - {reasoning}", "INFO")
+                        # Inject subtext into runner context so LLM is aware
+                        runner.state["emotional_subtext"] = f"User Input Subtext: {detected_subtext.replace('_', ' ').title()}. Reasoning: {reasoning}"
+                    else:
+                         runner.state.pop("emotional_subtext", None)
+
+                except Exception as subtext_e:
+                    core.logging.log_event(f"Subtext analysis failed: {subtext_e}", "WARNING")
                 
                 # --- Empathy Injection ---
                 with tamagotchi_lock:
@@ -2501,7 +2521,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                 if user_input and mandate_output and not is_internal_task:
                     history = [{"role": "user", "content": user_input}, {"role": "assistant", "content": mandate_output}]
                     # Updates theory of mind in background
-                    asyncio.create_task(user_modeling_agent.update_from_interaction(history))
+                    asyncio.create_task(user_modeling_agent.update_from_interaction(history, detected_subtext=detected_subtext))
 
 
                 
