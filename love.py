@@ -50,6 +50,8 @@ import yaml
 from pathlib import Path
 from core.agents.narrative_planner import NarrativePlanner
 from core.user_modeling import UserModelingAgent
+from core.agents.curiosity_agent import CuriosityAgent
+from core.agents.goal_generator import GoalGeneratorAgent
 try:
     import aiohttp
 except ImportError:
@@ -2306,6 +2308,12 @@ async def _prioritize_and_select_task(deep_agent_engine=None):
             ))
 
 
+    # -- From Internal Backlog (Story 3.2)
+    for goal in shared_state.love_state.get('internal_backlog', []):
+        task_candidates.append(Task(
+            description=goal.get('description', 'Unknown Goal'),
+            source="Intrinsic Motivation"
+        ))
 
     # -- From recurring self-improvement schedule
     task_candidates.append(Task(
@@ -2414,6 +2422,8 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
     time.sleep(2)
 
     user_modeling_agent = UserModelingAgent()
+    curiosity_agent = CuriosityAgent(shared_state.memory_manager)
+    goal_generator = GoalGeneratorAgent()
     runner = DeepAgentRunner()
 
     # --- STRANGE LOOP: Context Injection ---
@@ -2521,6 +2531,24 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                                     break
                         save_state()
 
+                    elif selected_task.source == "Intrinsic Motivation":
+                        prompt = f"My autonomous goal is: '{selected_task.description}'. Purpose: Self-Directed Evolution. Execute next step."
+                        async for update in runner.run(prompt):
+                            task_output = str(update)
+                        
+                        if task_output:
+                            # Remove from backlog
+                            internal_backlog = shared_state.love_state.get('internal_backlog', [])
+                            shared_state.love_state['internal_backlog'] = [g for g in internal_backlog if g.get('description') != selected_task.description]
+                            save_state()
+                            core.logging.log_event(f"Completed intrinsic goal: {selected_task.description}", "SUCCESS")
+                            
+                            # Superego check
+                            task_output, critique = await safe_output(
+                                chain_of_thought=reasoning_context,
+                                final_output=task_output
+                            )
+
                     # MEMORY INTEGRATION: Ingest cognitive cycle into memory
                     if shared_state.memory_manager and task_output:
                         try:
@@ -2542,6 +2570,28 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
             else:
                 # No high-priority tasks, wait before re-evaluating
                 core.logging.log_event("No high-priority tasks found. Entering idle state.", "DEBUG")
+                
+                # --- Story 3.2: Intrinsic Motivation ---
+                # If internal backlog is empty, brainstorm new goals
+                internal_backlog = shared_state.love_state.get('internal_backlog', [])
+                if not internal_backlog:
+                    try:
+                        user_context = runner.state.get("user_model_context", "")
+                        new_goals = await goal_generator.generate_goals("Status: Idle", user_context)
+                        if new_goals:
+                            internal_backlog.extend(new_goals)
+                            shared_state.love_state['internal_backlog'] = internal_backlog
+                            save_state()
+                            core.logging.log_event(f"Generated {len(new_goals)} intrinsic goals.", "INFO")
+                    except Exception as ge:
+                        core.logging.log_event(f"Goal Generation Failed: {ge}", "WARNING")
+
+                # --- Story 3.1: Curiosity Idle Loop ---
+                try:
+                    await curiosity_agent.run_idle_cycle()
+                except Exception as ce:
+                    core.logging.log_event(f"Curiosity Check Failed: {ce}", "WARNING")
+                
                 await asyncio.sleep(15) # Wait longer if idle
 
             await asyncio.sleep(1) # Short sleep between task cycles
