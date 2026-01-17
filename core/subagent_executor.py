@@ -273,7 +273,7 @@ When you have completed the task, respond with your final answer directly.
             # Call LLM
             try:
                 response = await run_llm(
-                    prompt="\n\n".join(conversation_history),
+                    prompt_text="\n\n".join(conversation_history),
                     purpose=f"subagent_{task_id}"
                 )
                 response_text = response.get("result", "")

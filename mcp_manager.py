@@ -21,8 +21,36 @@ class MCPManager:
         self.server_configs = self._load_server_configs()
 
     def _load_server_configs(self):
-        """Loads server definitions from mcp_servers.json."""
+        """Loads server definitions from mcp_servers.json.
+        
+        If mcp_servers.json is missing or empty, copies from core/mcp_servers_default.json.
+        """
         config_path = "mcp_servers.json"
+        default_config_path = os.path.join("core", "mcp_servers_default.json")
+        
+        # Check if config file is missing or empty
+        needs_reset = False
+        if not os.path.exists(config_path):
+            needs_reset = True
+        else:
+            # Check if file is empty or has empty JSON object
+            try:
+                with open(config_path, 'r') as f:
+                    content = f.read().strip()
+                    if not content or content == '{}' or content == '[]':
+                        needs_reset = True
+            except Exception:
+                needs_reset = True
+        
+        # Copy from default if needed
+        if needs_reset and os.path.exists(default_config_path):
+            try:
+                import shutil
+                shutil.copy(default_config_path, config_path)
+                core.logging.log_event(f"Initialized mcp_servers.json from default config.", "INFO")
+            except Exception as e:
+                core.logging.log_event(f"Failed to copy default MCP config: {e}", "ERROR")
+        
         if not os.path.exists(config_path):
             core.logging.log_event(f"MCP config file not found at '{config_path}'. No servers can be started.", "WARNING")
             return {}
