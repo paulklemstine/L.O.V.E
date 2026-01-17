@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌀 DMT Audio Reactive Feed</title>
+    <title>🌀 DMT Audio Reactive Feed - CRYSTAL VISION</title>
     <style>
         * {
             box-sizing: border-box;
@@ -37,7 +37,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.98) 100%);
+            background: rgba(0, 0, 0, 0.9);
             z-index: 100;
             display: flex;
             flex-direction: column;
@@ -45,96 +45,28 @@
             align-items: center;
             color: #00e5ff;
             text-align: center;
-            transition: opacity 1.5s ease;
             padding: 20px;
         }
 
-        #start-overlay h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #ff00ff, #00ffff, #ffff00, #ff00ff);
-            background-size: 300% 300%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: gradientShift 3s ease infinite;
-        }
-
-        @keyframes gradientShift {
-
-            0%,
-            100% {
-                background-position: 0% 50%;
-            }
-
-            50% {
-                background-position: 100% 50%;
-            }
-        }
-
-        #start-overlay .subtitle {
-            color: #888;
-            font-size: 0.9rem;
-            margin-bottom: 30px;
-        }
-
-        .instructions {
-            max-width: 600px;
-            line-height: 1.6;
-            margin-bottom: 30px;
-            color: #ccc;
-            font-size: 0.9rem;
-        }
-
-        .highlight {
-            color: #fff;
-            font-weight: bold;
-            text-decoration: underline;
-        }
-
         button {
-            background: linear-gradient(135deg, rgba(255, 0, 255, 0.2), rgba(0, 255, 255, 0.2));
+            background: transparent;
             color: #00e5ff;
-            border: 2px solid transparent;
-            border-image: linear-gradient(135deg, #ff00ff, #00ffff) 1;
-            padding: 18px 40px;
-            font-size: 1.3rem;
+            border: 2px solid #00e5ff;
+            padding: 15px 30px;
+            font-size: 1.5rem;
             cursor: pointer;
             text-transform: uppercase;
-            letter-spacing: 4px;
-            transition: all 0.4s;
+            letter-spacing: 3px;
+            transition: all 0.3s;
         }
 
         button:hover {
-            transform: scale(1.05);
-            box-shadow: 0 0 40px rgba(255, 0, 255, 0.5);
+            background: #00e5ff;
+            color: #000;
+            box-shadow: 0 0 20px #00e5ff;
         }
 
-        #spectrum-bar {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 50px;
-            z-index: 50;
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            gap: 2px;
-            padding: 0 10%;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 1s ease;
-        }
-
-        .spectrum-band {
-            flex: 1;
-            max-width: 25px;
-            min-width: 8px;
-            border-radius: 2px 2px 0 0;
-            transition: height 0.1s ease-out;
-        }
-
-        #content-layer {
+        #post-container {
             position: absolute;
             top: 50%;
             left: 50%;
@@ -142,94 +74,59 @@
             z-index: 10;
             width: 90%;
             max-width: 550px;
-            pointer-events: none;
-        }
-
-        .glass-card {
-            background: rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 2rem;
             border-radius: 15px;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
-            transition: all 0.5s ease-in-out;
-            opacity: 0;
             color: #fff;
-            pointer-events: auto;
-            max-height: 80vh;
-            overflow-y: auto;
+            opacity: 0;
+            transition: opacity 1s;
         }
 
         .handle {
-            font-size: 0.9rem;
             color: #00e5ff;
-            margin-bottom: 0.8rem;
-            text-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            margin-bottom: 10px;
             border-bottom: 1px solid rgba(0, 229, 255, 0.3);
-            padding-bottom: 10px;
-        }
-
-        .post-content {
-            font-size: 1.1rem;
-            line-height: 1.5;
-            color: #e0e0e0;
-            margin-bottom: 1rem;
-        }
-
-        .post-image-container {
-            width: 100%;
-            margin-top: 15px;
-            border-radius: 8px;
-            overflow: hidden;
-            display: none;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 5px;
         }
 
         .post-image {
             width: 100%;
-            height: auto;
-            display: block;
+            border-radius: 8px;
+            margin-top: 15px;
         }
 
-        .meta {
-            margin-top: 1.5rem;
-            font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.5);
-            text-align: right;
+        #debug-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: Lime;
+            z-index: 200;
+            font-family: monospace;
+            display: none;
         }
     </style>
 </head>
 
 <body>
     <canvas id="glcanvas"></canvas>
-    <div id="spectrum-bar"></div>
-
     <div id="start-overlay">
-        <h1>🌀 SYNESTHETIC PORTAL 🌀</h1>
-        <div class="subtitle">16-Band DMT Experience</div>
-        <div class="instructions">
-            Connect your music source to enter the realm.<br><br>
-            Select the <strong>Tab</strong> playing music and ensure <span class="highlight">"Share Audio"</span> is
-            checked.
-        </div>
-        <button id="start-btn">⚡ INITIATE LINK ⚡</button>
+        <h1>👁️ OPEN YOUR MIND 👁️</h1>
+        <p>16-Band Audio Reactive Engine</p>
+        <button id="start-btn">INITIATE</button>
     </div>
 
-    <div id="content-layer">
-        <div id="post-container" class="glass-card">
-            <div class="handle">@e-v-l-o-v-e.bsky.social</div>
-            <div class="post-content" id="post-text">Awaiting transmission...</div>
-            <div class="post-image-container" id="img-container">
-                <img id="post-image" class="post-image" alt="Post attachment" />
-            </div>
-            <div class="meta" id="post-date"></div>
-        </div>
+    <div id="post-container">
+        <div class="handle">@e-v-l-o-v-e.bsky.social</div>
+        <div id="post-text">Connecting...</div>
+        <img id="post-image" class="post-image" style="display:none" />
+        <div id="post-date" style="margin-top: 10px; font-size: 0.8em; color: #aaa;"></div>
     </div>
 
-    <!-- DMT SHADER WITH LIGHT BEAMS AND RANDOMIZED EFFECTS -->
+    <div id="debug-panel">DEBUG MODE</div>
+
     <script id="fragShader" type="x-shader/x-fragment">
         #ifdef GL_ES
         precision highp float;
@@ -237,498 +134,281 @@
 
         uniform float u_time;
         uniform vec2 u_resolution;
-        
-        // 16 PRE-MAPPED Audio Bands (Mapping handled in JS)
-        // Indices 0-3: Sub/Bass (Deep effects)
-        // Indices 4-7: Low-Mid (Structure)
-        // Indices 8-11: Mid (Motion)
-        // Indices 12-15: High (Details)
-        uniform float u_mappedBands[16];
-        
-        // Raw bands for light beams (energy based)
-        uniform float u_rawBands[16];
-        
+        uniform float u_mappedBands[16]; // Mapped effects
+        uniform float u_rawBands[16];    // Raw energy
         uniform float u_energy;
 
-        // =====================================
-        // UTILITIES
-        // =====================================
-        
+        // HIGH CONTRAST PALETTE
+        vec3 palette(float t) {
+            vec3 a = vec3(0.5, 0.5, 0.5);
+            vec3 b = vec3(0.5, 0.5, 0.5);
+            vec3 c = vec3(1.0, 1.0, 1.0);
+            vec3 d = vec3(0.263, 0.416, 0.557); // Classic psychedelic phase
+            return a + b * cos(6.28318 * (c * t + d + u_time * 0.1));
+        }
+
+        // 2D Rotation
         mat2 rot(float a) {
             float s = sin(a), c = cos(a);
             return mat2(c, -s, s, c);
         }
-        
-        float hash(vec2 p) {
-            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+
+        // Starburst / Light Beams
+        float starburst(vec2 uv, float distinctness) {
+            float angle = atan(uv.y, uv.x);
+            float beams = sin(angle * 12.0 + u_time) * cos(angle * 7.0 - u_time * 2.0);
+            beams = smoothstep(0.2, 1.0, beams); // Sharpen
+            float d = length(uv);
+            return beams * (0.05 / d) * distinctness;
         }
-        
-        float noise(vec2 p) {
-            vec2 i = floor(p);
-            vec2 f = fract(p);
-            f = f * f * (3.0 - 2.0 * f);
-            return mix(
-                mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-                mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
-                f.y
-            );
-        }
-        
-        float fbm(vec2 p) {
-            float val = 0.0;
-            float amp = 0.5;
-            for (int i = 0; i < 4; i++) {
-                val += amp * noise(p);
-                p *= 2.0;
-                amp *= 0.5;
-            }
-            return val;
-        }
-        
-        // Bright, saturated DMT palette
-        vec3 dmtColor(float t) {
-            vec3 a = vec3(0.6, 0.6, 0.6);
-            vec3 b = vec3(0.5, 0.5, 0.5);
-            vec3 c = vec3(1.0, 1.0, 1.0);
-            vec3 d = vec3(0.0, 0.33, 0.67);
-            return a + b * cos(6.28318 * (c * t + d));
-        }
-        
-        vec3 warmColor(float t) {
-            return vec3(
-                0.5 + 0.5 * cos(6.28 * (t + 0.0)),
-                0.5 + 0.5 * cos(6.28 * (t + 0.33)),
-                0.5 + 0.5 * cos(6.28 * (t + 0.67))
-            );
-        }
-        
-        // =====================================
-        // LIGHT BEAMS - Crossing ethereal rays
-        // =====================================
-        vec3 lightBeams(vec2 uv, float time, float intensity) {
-            vec3 beams = vec3(0.0);
-            for (float i = 0.0; i < 8.0; i++) {
-                float angle = i * 0.785398 + time * 0.03 * (1.0 + sin(i));
-                vec2 dir = vec2(cos(angle), sin(angle));
-                float beamPos = sin(time * 0.1 + i * 1.5) * 0.3;
-                float dist = abs(dot(uv, vec2(-dir.y, dir.x)) - beamPos);
-                float beam = 0.015 / (dist + 0.01);
-                beam *= smoothstep(1.5, 0.0, length(uv));
-                beam *= intensity;
-                vec3 beamColor = dmtColor(i * 0.125 + time * 0.02);
-                beams += beamColor * beam * 0.15;
-            }
-            return beams;
-        }
-        
-        // =====================================
-        // BREATHING VOID
-        // =====================================
-        vec3 breathingVoid(vec2 uv, float intensity) {
-            float breath = sin(u_time * 0.2 + length(uv) * 1.5) * 0.5 + 0.5;
-            breath = pow(breath, 3.0);
-            float depth = smoothstep(1.8, 0.0, length(uv)) * breath * intensity;
-            return mix(vec3(0.02, 0.0, 0.04), vec3(0.15, 0.0, 0.2), depth) * 0.5;
-        }
-        
-        // =====================================
-        // SACRED GEOMETRY - Hexagonal flow
-        // =====================================
-        vec3 sacredGeometry(vec2 uv, float intensity) {
-            uv *= rot(u_time * 0.02);
+
+        // Hexagonal / Crystal Grid
+        float hexGrid(vec2 uv, float scale) {
+            uv *= scale;
             vec2 r = vec2(1.0, 1.732);
             vec2 h = r * 0.5;
-            vec2 a = mod(uv * 3.0, r) - h;
-            vec2 b = mod(uv * 3.0 - h, r) - h;
+            vec2 a = mod(uv, r) - h;
+            vec2 b = mod(uv - h, r) - h;
             vec2 gv = length(a) < length(b) ? a : b;
-            
-            float hex = length(gv);
-            float pattern = sin(hex * 10.0 - u_time * 0.3) * 0.5 + 0.5;
-            pattern = smoothstep(0.35, 0.5, pattern);
-            
-            vec3 col = dmtColor(hex * 2.0 + u_time * 0.05);
-            return col * pattern * intensity * 0.4;
+            float d = length(gv);
+            return smoothstep(0.48, 0.5, d); // Sharp edges
         }
-        
-        // =====================================
-        // ORGANIC FLOW - Cellular patterns
-        // =====================================
-        vec3 organicFlow(vec2 uv, float intensity) {
-            vec2 p = uv * 2.5;
-            float n = fbm(p + u_time * 0.05);
-            p += vec2(n, fbm(p.yx + u_time * 0.04)) * 0.6;
-            float cells = fbm(p * 3.0);
-            cells = smoothstep(0.3, 0.7, cells);
-            vec3 col = warmColor(cells + u_time * 0.03);
-            col = mix(col, vec3(0.3, 0.9, 0.5), 0.3);
-            return col * cells * intensity * 0.35;
-        }
-        
-        // =====================================
-        // MANDALA - Rotating symmetry
-        // =====================================
-        vec3 mandala(vec2 uv, float intensity) {
-            float angle = atan(uv.y, uv.x);
-            float radius = length(uv);
-            angle += u_time * 0.04;
-            float segments = 12.0;
-            angle = mod(angle, 6.28318 / segments);
-            angle = abs(angle - 3.14159 / segments);
-            float rings = sin(radius * 6.0 - u_time * 0.2) * 0.5 + 0.5;
-            rings *= sin(angle * 6.0 + u_time * 0.1) * 0.5 + 0.5;
-            rings = smoothstep(0.4, 0.6, rings);
-            rings *= smoothstep(1.5, 0.3, radius);
-            vec3 col = dmtColor(radius + angle * 0.5 + u_time * 0.03);
-            return col * rings * intensity * 0.4;
-        }
-        
-        // =====================================
-        // ENTITY PATTERNS - Intricate fractals
-        // =====================================
-        vec3 entityPatterns(vec2 uv, float intensity) {
-            vec2 p = uv * 1.5;
-            float flow = fbm(p * 1.5 + u_time * 0.03);
-            p += vec2(sin(flow * 4.0), cos(flow * 4.0)) * 0.15;
-            float pattern = 0.0;
-            for (int i = 0; i < 3; i++) {
-                p = abs(p) / dot(p, p) - 0.7;
-                p *= rot(u_time * 0.01);
-                pattern += 1.0 / (1.0 + length(p) * 8.0);
-            }
-            pattern = smoothstep(0.2, 0.6, pattern);
-            vec3 col = mix(vec3(0.9, 0.5, 0.2), vec3(1.0, 0.85, 0.4), pattern);
-            return col * pattern * intensity * 0.35;
-        }
-        
-        // =====================================
-        // COSMIC SPIRALS
-        // =====================================
-        vec3 cosmicSpirals(vec2 uv, float intensity) {
-            float angle = atan(uv.y, uv.x);
-            float radius = length(uv);
-            float spiral = sin(angle * 3.0 + radius * 8.0 - u_time * 0.3);
-            spiral = smoothstep(-0.2, 0.2, spiral);
-            spiral *= smoothstep(1.5, 0.2, radius);
-            vec3 col = dmtColor(angle / 6.28 + u_time * 0.02);
-            return col * spiral * intensity * 0.3;
-        }
-        
-        // =====================================
-        // TUNNEL DEPTH
-        // =====================================
-        vec3 tunnelDepth(vec2 uv, float intensity) {
-            float radius = length(uv);
-            float angle = atan(uv.y, uv.x);
-            float tunnel = sin(1.0 / (radius + 0.1) * 2.0 - u_time * 0.4 + angle * 2.0);
-            tunnel = tunnel * 0.5 + 0.5;
-            tunnel *= smoothstep(0.05, 0.3, radius);
-            tunnel *= smoothstep(1.5, 0.5, radius);
-            vec3 col = dmtColor(tunnel + u_time * 0.04);
-            return col * tunnel * intensity * 0.3;
-        }
-        
-        // =====================================
-        // CRYSTALLINE LATTICE
-        // =====================================
-        vec3 crystallineLattice(vec2 uv, float intensity) {
-            uv *= rot(u_time * 0.015);
-            vec2 grid = fract(uv * 4.0) - 0.5;
-            float d = length(grid);
-            float crystal = sin(d * 20.0 - u_time * 0.5) * 0.5 + 0.5;
-            crystal = pow(crystal, 2.0);
-            crystal *= smoothstep(0.5, 0.1, d);
-            vec3 col = dmtColor(d * 3.0 + floor(uv.x * 4.0) * 0.2 + u_time * 0.02);
-            return col * crystal * intensity * 0.25;
-        }
-        
-        // =====================================
-        // MAIN COMPOSITION
-        // =====================================
+
         void main() {
-            vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+            vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y;
+            vec2 uv0 = uv;
+            vec3 finalColor = vec3(0.0);
+
+            // 1. BACKGROUND: DEEP PULSING TUNNEL
+            // Driven by Bass (Bands 0-3 mapped)
+            float tunnelDepth = 0.5 + u_mappedBands[0] * 0.5;
+            float r = length(uv);
+            float theta = atan(uv.y, uv.x);
+            float tunnelParam = 1.0 / (r + 0.1); // Inverse distance for tunnel
+            vec3 bgCol = palette(tunnelParam * 0.2 + theta * 0.1 + u_time * 0.1);
+            bgCol *= (tunnelParam * 0.3 * tunnelDepth); // Fade into distance
+            finalColor += bgCol;
+
+            // 2. MIDDLE: KALEIDOSCOPE MANDALA
+            // Driven by Mids (Bands 4-11 mapped)
+            vec2 kv = uv;
+            float rotSpeed = 0.2 + u_mappedBands[5] * 0.5;
+            kv *= rot(u_time * rotSpeed);
             
-            vec3 color = vec3(0.01, 0.0, 0.02);
+            // 6-fold Symmetry
+            float angle = atan(kv.y, kv.x);
+            float radius = length(kv);
+            angle = abs(mod(angle, 3.14159/3.0) - 3.14159/6.0);
+            kv = vec2(sin(angle), cos(angle)) * radius;
+
+            // Fractal Iterations
+            for(float i=0.0; i<3.0; i++) {
+                kv = abs(kv) - 0.4;
+                kv *= rot(u_time * 0.3 + u_mappedBands[6]);
+                kv = abs(kv) - 0.2;
+                float d = length(kv) * exp(-length(uv0));
+                
+                // Neon glow edges
+                d = sin(d * 8.0 + u_time) / 8.0;
+                d = abs(d);
+                d = pow(0.01 / d, 1.2); // Sharp glow line
+                
+                vec3 col = palette(length(uv0) + i * 0.4 + u_time * 0.4);
+                finalColor += col * d * (0.8 + u_mappedBands[8] * 0.5); // Boost on mids
+            }
+
+            // 3. FOREGROUND: LIGHT BEAMS & SPARKLES
+            // Driven by Highs (Bands 12-15 mapped)
             
-            // Use PRE-MAPPED band values (u_mappedBands)
+            // Light Beams (God Rays)
+            vec2 beamUV = uv0 * rot(u_time * 0.1);
+            float beams = starburst(beamUV, u_mappedBands[12] * 2.0); // Intensity from high-mid
+            finalColor += vec3(0.8, 0.9, 1.0) * beams;
+
+            // Diamond Sparkles
+            // Grid of sharp points
+            vec2 sparkUV = uv0 * 2.0;
+            vec2 sparkGrid = fract(sparkUV) - 0.5;
+            float sparkD = length(sparkGrid);
+            float sparkles = 0.005 / max(sparkD, 0.001);
+            sparkles *= smoothstep(0.8, 1.0, sin(u_time * 5.0 + floor(sparkUV.x)*10.0 + floor(sparkUV.y)*20.0));
+            sparkles *= u_mappedBands[15] * 3.0; // Treble controlled
+            finalColor += vec3(1.0) * sparkles;
+
+            // 4. POST PROCESSING
+            // High contrast, no murkiness
+            // Vignette
+            finalColor *= 1.2 - length(uv0) * 0.5;
             
-            // Sub/Bass layers (0-3) - Deep effects
-            color += breathingVoid(uv, (u_mappedBands[0] + u_mappedBands[1]) * 0.5);
-            
-            // Low-mid layers (4-7) - Structure
-            color += sacredGeometry(uv, (u_mappedBands[2] + u_mappedBands[3]) * 0.5);
-            color += organicFlow(uv, u_mappedBands[4]);
-            
-            // Mid layers (8-11) - Motion
-            color += mandala(uv, (u_mappedBands[5] + u_mappedBands[6]) * 0.5);
-            color += entityPatterns(uv, u_mappedBands[7]);
-            
-            // High layers (12-15) - Details
-            float highAvg = (u_mappedBands[12] + u_mappedBands[13] + u_mappedBands[14] + u_mappedBands[15]) * 0.25;
-            color += cosmicSpirals(uv, highAvg);
-            color += tunnelDepth(uv, u_mappedBands[14]);
-            color += crystallineLattice(uv, u_mappedBands[15]);
-            
-            // LIGHT BEAMS - Crossing rays controlled by RAW mid/high energy
-            float beamIntensity = (u_rawBands[8] + u_rawBands[9] + u_rawBands[10]) / 3.0;
-            color += lightBeams(uv, u_time, beamIntensity * 1.5);
-            
-            // Saturation boost based on energy
-            float gray = dot(color, vec3(0.299, 0.587, 0.114));
-            color = mix(vec3(gray), color, 1.0 + u_energy * 0.4);
-            
-            // Brightness boost for vivid colors
-            color *= 1.2;
-            
-            // Soft vignette
-            float vignette = 1.0 - length(uv) * 0.2;
-            color *= vignette;
-            
-            // Soft tone mapping - no harsh whites
-            color = color / (color + vec3(0.6));
-            color = pow(color, vec3(0.85));
-            
-            gl_FragColor = vec4(color, 1.0);
+            // Saturation boost
+            vec3 gray = vec3(dot(finalColor, vec3(0.299, 0.587, 0.114)));
+            finalColor = mix(gray, finalColor, 1.3); // +30% Saturation
+
+            gl_FragColor = vec4(finalColor, 1.0);
         }
     </script>
-
     <script id="vertShader" type="x-shader/x-vertex">
         attribute vec2 a_position;
-        void main() {
-            gl_Position = vec4(a_position, 0.0, 1.0);
-        }
+        void main() { gl_Position = vec4(a_position, 0.0, 1.0); }
     </script>
-
     <script>
+        // CONFIG
         const CONFIG = {
             handle: 'e-v-l-o-v-e.bsky.social',
             apiBase: 'https://public.api.bsky.app/xrpc',
             numBands: 16,
-            smoothingFactor: 0.04,
-            transitionThreshold: 0.15,
-            remapCooldown: 3000
+            smoothing: 0.1, // Faster
+            remapCooldown: 5000
         };
 
-        let audioContext, analyser, dataArray;
-        let audioBands = new Array(CONFIG.numBands).fill(0);
-        let prevEnergy = 0;
+        // AUDIO
+        let audioCtx, analyser, dataArray;
+        let audioBands = new Float32Array(16);
+        let effectMap = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]; // Identity map initially
+        let isRunning = false;
         let overallEnergy = 0;
-        let isAudioActive = false;
-        let mediaStream = null;
-
-        // Effect mapping - which band controls which effect
-        let effectMap = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-        let lastRemapTime = 0;
-
-        const BAND_RANGES = [
-            [0, 2], [2, 4], [4, 6], [6, 8],
-            [8, 12], [12, 16], [16, 22], [22, 30],
-            [30, 40], [40, 55], [55, 75], [75, 100],
-            [100, 130], [130, 170], [170, 210], [210, 256]
-        ];
 
         async function initAudio() {
             try {
-                mediaStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 512;
-                analyser.smoothingTimeConstant = 0.75;
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 1024; // Higher res
+                analyser.smoothingTimeConstant = 0.5;
 
-                if (mediaStream.getAudioTracks().length === 0) {
-                    throw new Error("No audio. Check 'Share Audio'.");
-                }
-
-                const source = audioContext.createMediaStreamSource(mediaStream);
-                source.connect(analyser);
+                const src = audioCtx.createMediaStreamSource(stream);
+                src.connect(analyser);
                 dataArray = new Uint8Array(analyser.frequencyBinCount);
-                isAudioActive = true;
 
-                document.getElementById('start-overlay').style.opacity = '0';
-                setTimeout(() => document.getElementById('start-overlay').remove(), 1500);
-                document.getElementById('spectrum-bar').style.opacity = '1';
-                mediaStream.getVideoTracks()[0].onended = () => alert("Audio link severed.");
-                createSpectrumBar();
+                document.getElementById('start-overlay').style.display = 'none';
+                document.getElementById('post-container').style.opacity = 1;
+                isRunning = true;
 
+                stream.getVideoTracks()[0].onended = () => alert("Stream ended");
             } catch (e) {
-                console.error("Audio Init:", e);
-                alert("Connection Failed.");
+                console.error(e);
+                alert("Audio Init Failed: " + e.message);
             }
         }
 
-        function createSpectrumBar() {
-            const bar = document.getElementById('spectrum-bar');
-            bar.innerHTML = '';
-            for (let i = 0; i < CONFIG.numBands; i++) {
-                const band = document.createElement('div');
-                band.className = 'spectrum-band';
-                band.id = `band-${i}`;
-                const hue = (i / CONFIG.numBands) * 300;
-                band.style.background = `linear-gradient(to top, hsl(${hue}, 80%, 50%), hsl(${hue + 30}, 90%, 70%))`;
-                band.style.boxShadow = `0 0 8px hsl(${hue}, 80%, 50%)`;
-                bar.appendChild(band);
-            }
-        }
-
-        // Fisher-Yates shuffle for randomizing effect mapping
-        function shuffleArray(array) {
-            const newArray = [...array];
-            for (let i = newArray.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-            }
-            return newArray;
-        }
-
-        function analyzeAudio() {
-            if (!isAudioActive) return;
-
-            analyser.getByteFrequencyData(dataArray);
-            let totalEnergy = 0;
-
-            for (let i = 0; i < CONFIG.numBands; i++) {
-                const [start, end] = BAND_RANGES[i];
-                let sum = 0;
-                for (let j = start; j < Math.min(end, dataArray.length); j++) {
-                    sum += dataArray[j];
-                }
-                const target = sum / ((end - start) * 255);
-                audioBands[i] += (target - audioBands[i]) * CONFIG.smoothingFactor;
-                totalEnergy += audioBands[i];
-            }
-
-            overallEnergy = totalEnergy / CONFIG.numBands;
-
-            // Detect significant audio transitions and randomize effect mapping
-            const energyDelta = Math.abs(overallEnergy - prevEnergy);
-            const now = performance.now();
-
-            if (energyDelta > CONFIG.transitionThreshold && now - lastRemapTime > CONFIG.remapCooldown) {
-                // Randomize effect mapping during transitions
-                effectMap = shuffleArray([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-                lastRemapTime = now;
-                console.log("Effect map shuffled:", effectMap);
-            }
-
-            prevEnergy = overallEnergy;
-
-            updateSpectrumBar();
-            updateCardEffects();
-        }
-
-        function updateSpectrumBar() {
-            for (let i = 0; i < CONFIG.numBands; i++) {
-                const band = document.getElementById(`band-${i}`);
-                if (band) band.style.height = `${audioBands[i] * 45 + 5}px`;
-            }
-        }
-
-        function updateCardEffects() {
-            const card = document.getElementById('post-container');
-            if (!card) return;
-            const blurAmount = 10 + audioBands[2] * 4;
-            const glowIntensity = audioBands[10] * 12;
-            card.style.backdropFilter = `blur(${blurAmount}px)`;
-            card.style.boxShadow = `0 4px 30px rgba(0,0,0,0.5), 0 0 ${glowIntensity}px rgba(200,100,255,0.3)`;
-        }
-
-        document.getElementById('start-btn').addEventListener('click', initAudio);
+        document.getElementById('start-btn').onclick = initAudio;
 
         // WEBGL
-        const canvas = document.getElementById("glcanvas");
-        const gl = canvas.getContext("webgl");
-        if (!gl) alert("WebGL not supported");
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl');
 
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             gl.viewport(0, 0, canvas.width, canvas.height);
         }
-        window.addEventListener("resize", resize);
+        window.onresize = resize;
         resize();
 
-        function createShader(gl, type, source) {
-            const shader = gl.createShader(type);
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error("Shader:", gl.getShaderInfoLog(shader));
-                return null;
+        function createShader(type, src) {
+            const s = gl.createShader(type);
+            gl.shaderSource(s, src);
+            gl.compileShader(s);
+            if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(s));
             }
-            return shader;
+            return s;
         }
 
-        const program = gl.createProgram();
-        gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, document.getElementById("vertShader").text));
-        gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, document.getElementById("fragShader").text));
-        gl.linkProgram(program);
-        gl.useProgram(program);
+        const prog = gl.createProgram();
+        gl.attachShader(prog, createShader(gl.VERTEX_SHADER, document.getElementById('vertShader').text));
+        gl.attachShader(prog, createShader(gl.FRAGMENT_SHADER, document.getElementById('fragShader').text));
+        gl.linkProgram(prog);
+        gl.useProgram(prog);
 
-        const positionBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        const buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+        const posLoc = gl.getAttribLocation(prog, "a_position");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
-        const positionLocation = gl.getAttribLocation(program, "a_position");
-        gl.enableVertexAttribArray(positionLocation);
-        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+        const uTime = gl.getUniformLocation(prog, "u_time");
+        const uRes = gl.getUniformLocation(prog, "u_resolution");
+        const uMapped = gl.getUniformLocation(prog, "u_mappedBands");
+        const uRaw = gl.getUniformLocation(prog, "u_rawBands");
+        const uEnergy = gl.getUniformLocation(prog, "u_energy");
 
-        const uTime = gl.getUniformLocation(program, "u_time");
-        const uRes = gl.getUniformLocation(program, "u_resolution");
-        const uEnergy = gl.getUniformLocation(program, "u_energy");
-        const uMappedBandsLoc = gl.getUniformLocation(program, "u_mappedBands");
-        const uRawBandsLoc = gl.getUniformLocation(program, "u_rawBands");
+        function analyze() {
+            if (!isRunning) return;
+            analyser.getByteFrequencyData(dataArray);
 
-        function render(time) {
-            analyzeAudio();
-            time *= 0.001;
-
-            // Manual mapping on CPU to avoid WebGL indexing error
-            const mappedBands = new Float32Array(16);
+            // Logarithmic binning for 16 bands
+            let start = 0;
+            let total = 0;
             for (let i = 0; i < 16; i++) {
-                mappedBands[i] = audioBands[effectMap[i]];
+                // Log scale: wider ranges for higher frequencies
+                let width = Math.floor(Math.pow(1.4, i) * 2);
+                let end = start + width;
+                let sum = 0;
+                let count = 0;
+                for (let j = start; j < end && j < dataArray.length; j++) {
+                    sum += dataArray[j];
+                    count++;
+                }
+                let val = (count > 0 ? sum / count : 0) / 255.0;
+                audioBands[i] += (val - audioBands[i]) * CONFIG.smoothing; // Smooth
+                total += audioBands[i];
+                start = end;
             }
+            overallEnergy = total / 16.0;
 
-            gl.uniform1f(uTime, time);
+            // Randomly shuffle map on big drops? (Optional, kept simple for now)
+            if (overallEnergy > 0.8 && Math.random() < 0.01) {
+                // Flash change
+                // shuffle(effectMap);
+            }
+        }
+
+        function loop(t) {
+            analyze();
+
+            // Map bands
+            let mapped = new Float32Array(16);
+            for (let i = 0; i < 16; i++) mapped[i] = audioBands[effectMap[i]];
+
+            gl.uniform1f(uTime, t * 0.001);
             gl.uniform2f(uRes, canvas.width, canvas.height);
             gl.uniform1f(uEnergy, overallEnergy);
-
-            // Send mapped bands for effects
-            gl.uniform1fv(uMappedBandsLoc, mappedBands);
-
-            // Send raw bands for light beams / spectrum
-            gl.uniform1fv(uRawBandsLoc, audioBands);
+            gl.uniform1fv(uMapped, mapped);
+            gl.uniform1fv(uRaw, audioBands);
 
             gl.drawArrays(gl.TRIANGLES, 0, 6);
-            requestAnimationFrame(render);
+            requestAnimationFrame(loop);
         }
-        requestAnimationFrame(render);
+        requestAnimationFrame(loop);
 
-        // BLUESKY
-        async function fetchPost() {
-            const container = document.getElementById('post-container');
+        // BLUESKY FEED (Simplified)
+        async function fetchFeed() {
             try {
-                const resolveData = await fetch(`${CONFIG.apiBase}/com.atproto.identity.resolveHandle?handle=${CONFIG.handle}`).then(r => r.json());
-                if (!resolveData.did) throw new Error("DID lookup failed");
-                const feedData = await fetch(`${CONFIG.apiBase}/app.bsky.feed.getAuthorFeed?actor=${resolveData.did}&limit=1`).then(r => r.json());
-                if (feedData.feed?.length > 0) {
+                const didRes = await fetch(`${CONFIG.apiBase}/com.atproto.identity.resolveHandle?handle=${CONFIG.handle}`);
+                const didData = await didRes.json();
+                const feedRes = await fetch(`${CONFIG.apiBase}/app.bsky.feed.getAuthorFeed?actor=${didData.did}&limit=1`);
+                const feedData = await feedRes.json();
+
+                if (feedData.feed && feedData.feed.length > 0) {
                     const post = feedData.feed[0].post;
-                    document.getElementById('post-text').innerText = post.record.text || "(No text)";
-                    document.getElementById('post-date').innerText = new Date(post.record.createdAt).toLocaleString();
-                    let imageUrl = post.embed?.images?.[0]?.fullsize || post.embed?.media?.images?.[0]?.fullsize;
-                    const imgContainer = document.getElementById('img-container');
-                    if (imageUrl) {
-                        document.getElementById('post-image').src = imageUrl;
-                        imgContainer.style.display = 'block';
-                    } else {
-                        imgContainer.style.display = 'none';
+                    document.getElementById('post-text').innerText = post.record.text;
+                    document.getElementById('post-date').innerText = new Date(post.record.createdAt).toLocaleTimeString();
+
+                    if (post.embed?.images?.[0]) {
+                        const img = document.getElementById('post-image');
+                        img.src = post.embed.images[0].fullsize;
+                        img.style.display = 'block';
                     }
-                    container.style.opacity = '1';
                 }
-            } catch (err) {
-                document.getElementById('post-text').innerText = "SIGNAL LOST...";
+            } catch (e) {
+                console.log("BlueSky Poll Error", e);
             }
         }
-        fetchPost();
-        setInterval(fetchPost, 60000);
+        fetchFeed();
+        setInterval(fetchFeed, 30000);
+
     </script>
 </body>
 
