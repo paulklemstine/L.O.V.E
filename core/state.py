@@ -40,6 +40,10 @@ class DeepAgentState(TypedDict):
     
     # Story 2.3: Theory of Mind Context
     user_model_context: Optional[str]       # Summary of user preferences/beliefs
+
+    # Story 5.5: Shadow Mode Validation (Will Framework)
+    shadow_mode: Optional[bool]
+    shadow_log: Optional[List[Dict[str, Any]]]
     
     # =========================================================================
     # DeepAgent Protocol - Story 1.1: Recursive Reasoning Trace Fields
@@ -95,6 +99,8 @@ def create_initial_state(
         parent_task_id=None,
         task_id=None,
         user_model_context=None,
+        shadow_mode=False,
+        shadow_log=[],
         # DeepAgent Protocol fields
         input=user_input,
         chat_history=[],

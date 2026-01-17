@@ -9,6 +9,8 @@ This node is responsible for:
 5. Setting appropriate stop_reason for routing
 """
 import json
+import time
+import asyncio
 from typing import Dict, Any, List, Optional
 from core.state import DeepAgentState
 from core.llm_api import run_llm, stream_llm
@@ -209,6 +211,27 @@ def _parse_tool_calls_from_response(response_text: str) -> Optional[List[Dict[st
     
     return tool_calls if tool_calls else None
 
+def _apply_shadow_heuristics(prompt: str, messages: List[BaseMessage]) -> str:
+    """
+    Applies experimental heuristics for the 'Will' framework shadow mode.
+
+    Heuristic 1: Dynamic Tone Adjustment
+    - Checks for 'quick', 'status', 'list' keywords in the last user message.
+    - Injects a conciseness constraint.
+    """
+    # Robust method: Inspect the messages list
+    last_user_msg = None
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            last_user_msg = msg.content.lower()
+            break
+
+    if last_user_msg:
+        if any(kw in last_user_msg for kw in ["quick", "status", "list", "concise", "short"]):
+            constraint = "\nSystem: [SHADOW MODE OVERRIDE] Constraint: Be extremely concise. Minimize persona fluff. Direct answers only.\n"
+            return prompt + constraint
+
+    return prompt
 
 async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
     """
@@ -231,6 +254,7 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
     loop_count = state.get("loop_count", 0)
     memory_context = state.get("memory_context", [])  # Story 2.1: Semantic Memory Bridge
     user_model_context = state.get("user_model_context")  # Story 2.3: Theory of Mind
+    shadow_mode = state.get("shadow_mode", False)
     
     # Guardrail: Check recursion limit
     MAX_ITERATIONS = 5
@@ -252,37 +276,68 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
         memory_context=memory_context,  # Story 2.1
         user_model_context=user_model_context # Story 2.3
     )
-    
+
+    # --- Shadow Mode & Main Execution (Story 5.5) ---
+    shadow_log_update = []
     reasoning_trace = ""
     stop_reason = None
     parsed_tool_calls = None
-    
-    try:
-        # Stream the LLM response
-        async for chunk in stream_llm(prompt, purpose="reasoning"):
-            reasoning_trace += chunk
+
+    async def execute_main_task():
+        nonlocal reasoning_trace, stop_reason, parsed_tool_calls
+        try:
+            # Stream the LLM response
+            async for chunk in stream_llm(prompt, purpose="reasoning"):
+                reasoning_trace += chunk
+
+                # Check for control tokens (legacy support)
+                if "<fold_thought>" in reasoning_trace:
+                    stop_reason = "fold_thought"
+                    break
+                if "<retrieve_tool>" in reasoning_trace:
+                    stop_reason = "retrieve_tool"
+                    break
             
-            # Check for control tokens (legacy support)
-            if "<fold_thought>" in reasoning_trace:
-                stop_reason = "fold_thought"
-                break
-            if "<retrieve_tool>" in reasoning_trace:
-                stop_reason = "retrieve_tool"
-                break
+            # If no control tokens, check for tool calls in the response
+            if stop_reason is None:
+                parsed_tool_calls = _parse_tool_calls_from_response(reasoning_trace)
+                if parsed_tool_calls:
+                    stop_reason = "tool_call"
+                    core.logging.log_event(
+                        f"Reasoning node detected {len(parsed_tool_calls)} tool call(s): {[tc['name'] for tc in parsed_tool_calls]}",
+                        "INFO"
+                    )
+        except Exception as e:
+            core.logging.log_event(f"Error in reasoning node: {e}", "ERROR")
+            reasoning_trace = f"An error occurred during reasoning: {e}"
+
+    async def execute_shadow_task():
+        nonlocal shadow_log_update
+        try:
+            shadow_prompt = _apply_shadow_heuristics(prompt, messages)
+            # Only run if the prompt was actually modified
+            if shadow_prompt != prompt:
+                core.logging.log_event("Running Shadow Mode reasoning (Parallel)...", "DEBUG")
+                shadow_start = time.time()
+                shadow_response = await run_llm(shadow_prompt, purpose="shadow_reasoning")
+                shadow_duration = time.time() - shadow_start
+
+                shadow_entry = {
+                    "timestamp": shadow_start,
+                    "duration": shadow_duration,
+                    "original_prompt_len": len(prompt),
+                    "shadow_prompt_len": len(shadow_prompt),
+                    "result": shadow_response.get("result", "")
+                }
+                shadow_log_update = [shadow_entry] # Will be appended to list in state update
+        except Exception as e:
+            core.logging.log_event(f"Shadow Mode execution failed: {e}", "WARNING")
+
+    tasks = [execute_main_task()]
+    if shadow_mode:
+        tasks.append(execute_shadow_task())
         
-        # If no control tokens, check for tool calls in the response
-        if stop_reason is None:
-            parsed_tool_calls = _parse_tool_calls_from_response(reasoning_trace)
-            if parsed_tool_calls:
-                stop_reason = "tool_call"
-                core.logging.log_event(
-                    f"Reasoning node detected {len(parsed_tool_calls)} tool call(s): {[tc['name'] for tc in parsed_tool_calls]}",
-                    "INFO"
-                )
-    
-    except Exception as e:
-        core.logging.log_event(f"Error in reasoning node: {e}", "ERROR")
-        reasoning_trace = f"An error occurred during reasoning: {e}"
+    await asyncio.gather(*tasks)
     
     # Construct the AIMessage with potential tool_calls
     if parsed_tool_calls:
@@ -293,8 +348,14 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
     else:
         response_message = AIMessage(content=reasoning_trace)
     
-    return {
+    state_update = {
         "messages": [response_message],
         "stop_reason": stop_reason
     }
 
+    if shadow_log_update:
+        # Append to existing log
+        current_log = state.get("shadow_log", [])
+        state_update["shadow_log"] = current_log + shadow_log_update
+
+    return state_update
