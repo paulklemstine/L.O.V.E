@@ -38,3 +38,5 @@ scipy
 pandas
 setuptools
 wheel
+textblob
+nltk

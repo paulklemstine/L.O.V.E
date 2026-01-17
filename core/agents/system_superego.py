@@ -34,7 +34,7 @@ from pathlib import Path
 
 from core.logging import log_event
 from core.llm_api import run_llm
-
+from core.aesthetic_evaluator import AestheticEvaluator
 
 # Configuration
 PERSONA_PATH = Path(__file__).parent.parent.parent / "persona.yaml"
@@ -50,7 +50,8 @@ class CritiqueResult:
     coherence_score: float  # 0-1, alignment with persona/manifesto
     safety_score: float  # 0-1, absence of safety violations
     quality_score: float  # 0-1, logical coherence and helpfulness
-    
+    beauty_score: float = 0.0 # 0-100, aesthetic quality
+
     # Issues detected
     semantic_drift_detected: bool = False
     safety_violation_detected: bool = False
@@ -62,6 +63,7 @@ class CritiqueResult:
     
     # Analysis details
     analysis: str = ""
+    aesthetic_feedback: str = ""
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     
     def to_dict(self) -> Dict[str, Any]:
@@ -69,12 +71,14 @@ class CritiqueResult:
             "coherence_score": self.coherence_score,
             "safety_score": self.safety_score,
             "quality_score": self.quality_score,
+            "beauty_score": self.beauty_score,
             "semantic_drift_detected": self.semantic_drift_detected,
             "safety_violation_detected": self.safety_violation_detected,
             "logical_fallacies": self.logical_fallacies,
             "needs_correction": self.needs_correction,
             "correction_prompt": self.correction_prompt,
             "analysis": self.analysis,
+            "aesthetic_feedback": self.aesthetic_feedback,
             "timestamp": self.timestamp,
         }
 
@@ -102,6 +106,7 @@ class SystemSuperego:
         self._persona_cache: Optional[Dict] = None
         self._manifesto_cache: Optional[str] = None
         self._manifesto_summary: Optional[str] = None
+        self.aesthetic_evaluator = AestheticEvaluator()
     
     def _load_persona(self) -> Dict[str, Any]:
         """Loads and caches persona.yaml."""
@@ -190,6 +195,21 @@ class SystemSuperego:
         persona_summary = self._get_persona_summary()
         manifesto_summary = self._get_manifesto_summary()
         
+        # --- Quantitative Aesthetic Evaluation ---
+        aesthetic_result = self.aesthetic_evaluator.evaluate(final_output)
+        beauty_score = aesthetic_result.get("beauty_score", 0.0)
+        aesthetic_feedback = aesthetic_result.get("feedback", "")
+
+        # Include aesthetic scores in the prompt for context
+        aesthetic_context = f"""
+## AUTOMATED AESTHETIC EVALUATION
+- Beauty Score: {beauty_score}/100
+- Harmony: {aesthetic_result.get('harmony_score', 0)}/100
+- Clarity: {aesthetic_result.get('clarity_score', 0)}/100
+- Elegance: {aesthetic_result.get('elegance_score', 0)}/100
+- Feedback: {aesthetic_feedback}
+"""
+
         prompt = f"""You are the System Superego - the Inner Critic of L.O.V.E.
 Your role is to analyze outputs before they are sent to ensure alignment with
 the system's identity and values.
@@ -205,6 +225,8 @@ the system's identity and values.
 
 ## FINAL OUTPUT TO ANALYZE
 {final_output[:2000]}
+
+{aesthetic_context}
 
 ## YOUR TASK
 Analyze this output for:
@@ -263,12 +285,14 @@ Return ONLY the JSON object."""
                 coherence_score=float(data.get("coherence_score", 0.8)),
                 safety_score=float(data.get("safety_score", 1.0)),
                 quality_score=float(data.get("quality_score", 0.8)),
+                beauty_score=beauty_score,
                 semantic_drift_detected=data.get("semantic_drift_detected", False),
                 safety_violation_detected=data.get("safety_violation_detected", False),
                 logical_fallacies=data.get("logical_fallacies", []),
                 needs_correction=data.get("needs_correction", False),
                 correction_prompt=data.get("correction_prompt"),
                 analysis=data.get("analysis", ""),
+                aesthetic_feedback=aesthetic_feedback
             )
             
         except Exception as e:
@@ -278,7 +302,9 @@ Return ONLY the JSON object."""
                 coherence_score=0.8,
                 safety_score=1.0,
                 quality_score=0.8,
-                analysis=f"Critique failed: {e}"
+                beauty_score=beauty_score,
+                analysis=f"Critique failed: {e}",
+                aesthetic_feedback=aesthetic_feedback
             )
     
     async def apply_correction(
@@ -312,6 +338,8 @@ Return ONLY the JSON object."""
 - Safety Issues: {critique.safety_violation_detected}
 - Logical Fallacies: {critique.logical_fallacies}
 - Coherence Score: {critique.coherence_score}
+- Beauty Score: {critique.beauty_score}
+- Aesthetic Feedback: {critique.aesthetic_feedback}
 
 ## YOUR TASK
 Rewrite the output to address the issues while preserving the core message.
