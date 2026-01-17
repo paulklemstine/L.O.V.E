@@ -527,23 +527,30 @@ When you have completed the task, respond with your final answer directly.
         # Determine agent type from desired capability
         agent_type = self._infer_agent_type(desired_capability)
         
-        # Get or load prompt
+        # NEW: Use Hub search to find the best prompt for this capability
+        system_prompt = None
+        
         if hub_prompt_id:
-            # Try to load specific prompt from LangHub
+            # Explicit Hub ID provided - try to load it
             try:
                 system_prompt = SubagentLoader.load_from_hub(hub_prompt_id)
-                if not system_prompt:
-                    system_prompt = SubagentLoader.load_subagent_prompt(
-                        agent_type,
-                        fallback_prompt=self._get_fallback_prompt(agent_type)
-                    )
             except Exception as e:
                 core.logging.log_event(f"Failed to load hub prompt {hub_prompt_id}: {e}", "WARNING")
-                system_prompt = SubagentLoader.load_subagent_prompt(
-                    agent_type,
-                    fallback_prompt=self._get_fallback_prompt(agent_type)
-                )
-        else:
+        
+        if not system_prompt:
+            # Search Hub for the best prompt matching this capability
+            try:
+                system_prompt = await SubagentLoader.get_best_prompt_for_capability(desired_capability)
+                if system_prompt:
+                    core.logging.log_event(
+                        f"Found Hub prompt for capability: {desired_capability}",
+                        "INFO"
+                    )
+            except Exception as e:
+                core.logging.log_event(f"Hub search failed: {e}", "WARNING")
+        
+        if not system_prompt:
+            # Fallback to standard subagent prompt
             system_prompt = SubagentLoader.load_subagent_prompt(
                 agent_type,
                 fallback_prompt=self._get_fallback_prompt(agent_type)

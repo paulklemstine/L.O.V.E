@@ -103,6 +103,11 @@ class ResponseOptimizer:
         """
         Uses an LLM to generate a refactoring plan based on identified inefficiencies.
         """
+        # Get available prompt keys from the registry
+        registry = get_prompt_registry()
+        available_keys = list(registry._prompts.keys()) if registry._prompts else []
+        keys_str = ", ".join(available_keys[:20]) if available_keys else "No prompts available"  # Limit to first 20 keys for brevity
+        
         prompt = f"""
         You are a system optimization expert. Analyze the following inefficiencies in our LLM response generation pipeline:
 
@@ -111,19 +116,25 @@ class ResponseOptimizer:
         Propose a specific, actionable plan to improve efficiency.
         Focus on prompt optimization (shortening, making more concise) or model selection changes.
 
+        AVAILABLE PROMPT KEYS (you MUST use one of these exactly):
+        {keys_str}
+
         Your output must be a JSON object with the following structure:
         {{
             "analysis": "Brief analysis of the problem",
             "proposed_changes": [
                 {{
                     "type": "prompt_update",
-                    "prompt_key": "key_from_prompts_yaml",
+                    "prompt_key": "MUST be one of the available prompt keys listed above",
                     "new_prompt_content": "The optimized prompt content..."
                 }}
             ]
         }}
 
-        Note: If you suggest a prompt update, you MUST provide the 'prompt_key' and the 'new_prompt_content'.
+        Note: If you suggest a prompt update, you MUST:
+        1. Use a 'prompt_key' that EXACTLY matches one from the AVAILABLE PROMPT KEYS list above.
+        2. Provide the 'new_prompt_content' as an optimized version of the existing prompt.
+        3. DO NOT invent new key names like 'main_prompt' or 'system_prompt' - these do not exist.
         """
 
         try:
