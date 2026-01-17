@@ -140,9 +140,9 @@ async def get_memory_context_for_creativity(story_beat: str, mood: str = "") -> 
     try:
         # Lazy load memory manager to avoid circular imports
         if _memory_manager is None:
-            from love import love_state
-            if hasattr(love_state, 'memory_manager') and love_state.memory_manager:
-                _memory_manager = love_state.memory_manager
+            from core import shared_state
+            if hasattr(shared_state, 'love_state') and hasattr(shared_state.love_state, 'memory_manager') and shared_state.love_state.memory_manager:
+                _memory_manager = shared_state.love_state.memory_manager
             else:
                 # Try to get from orchestrator
                 from core.orchestrator import get_orchestrator
