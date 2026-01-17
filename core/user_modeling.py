@@ -17,6 +17,7 @@ class UserModel(BaseModel):
     preferences: List[str] = Field(default_factory=list, description="Explicit and implicit preferences")
     beliefs: List[str] = Field(default_factory=list, description="Inferred beliefs or worldviews")
     emotional_profile: Dict[str, str] = Field(default_factory=dict, description="Typical emotional triggers/states")
+    subtext_history: Dict[str, int] = Field(default_factory=dict, description="Frequency of detected emotional subtexts")
     knowledge_gaps: List[str] = Field(default_factory=list, description="Topics the user wants to learn")
     last_updated: str = Field(..., description="Timestamp of last update")
 
@@ -93,15 +94,26 @@ class UserModelingAgent:
             lines.append(f"Inferred Beliefs: {', '.join(self.current_model.beliefs)}")
         if self.current_model.emotional_profile:
             lines.append(f"Emotional Profile: {json.dumps(self.current_model.emotional_profile)}")
+        if self.current_model.subtext_history:
+             # Sort subtexts by frequency
+            sorted_subtexts = sorted(self.current_model.subtext_history.items(), key=lambda item: item[1], reverse=True)
+            top_subtexts = [f"{k} ({v})" for k, v in sorted_subtexts[:3]]
+            lines.append(f"Frequent Emotional Subtexts: {', '.join(top_subtexts)}")
             
         return "\n".join(lines) if len(lines) > 1 else ""
 
-    async def update_from_interaction(self, recent_messages: List[Dict[str, str]]):
+    async def update_from_interaction(self, recent_messages: List[Dict[str, str]], detected_subtext: Optional[str] = None):
         """
         Updates the model based on recent interaction.
         """
         if not recent_messages:
             return
+
+        # Update subtext history if provided
+        if detected_subtext and detected_subtext != "neutral_direct" and detected_subtext != "unknown":
+            self.current_model.subtext_history[detected_subtext] = self.current_model.subtext_history.get(detected_subtext, 0) + 1
+            # We save immediately here, but continue to do the heavy LLM lifting
+            self.save_model(self.current_model)
 
         # Simple conversion of messages to text
         transcript = "\n".join([f"{m.get('role', 'unknown')}: {m.get('content', '')}" for m in recent_messages])
