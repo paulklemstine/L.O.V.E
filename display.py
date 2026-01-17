@@ -1062,6 +1062,184 @@ def create_job_progress_panel(jobs, width=80):
     return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
 
 
+def create_agent_graph_panel(agents, width=80):
+    """
+    Creates a visual hierarchical graph of running agents and subagents.
+    
+    This panel is designed to be rendered every cycle, so it's optimized for efficiency.
+    
+    Args:
+        agents: List of agent dicts with keys:
+            - task_id: Unique identifier
+            - agent_type: Type of agent (reasoning, coding, research, etc.)
+            - task: Description of current task
+            - status: running/completed/failed
+            - parent_task_id: Optional ID of parent agent for hierarchy
+            - started_at: Optional timestamp
+        width: Panel width
+    
+    Returns:
+        A Rich Panel/Gradient for display
+    """
+    # Agent type styling - emojis and colors for each type
+    AGENT_STYLES = {
+        "reasoning": {"emoji": "🔮", "color": "medium_purple1"},
+        "coding": {"emoji": "💻", "color": "bright_cyan"},
+        "research": {"emoji": "🌐", "color": "spring_green1"},
+        "social": {"emoji": "💬", "color": "hot_pink"},
+        "security": {"emoji": "🛡️", "color": "bright_red"},
+        "analyst": {"emoji": "📊", "color": "yellow1"},
+        "creative": {"emoji": "🎨", "color": "magenta1"},
+        "custom": {"emoji": "⚙️", "color": "bright_white"},
+        "orchestrator": {"emoji": "🧠", "color": "gold1"},
+        "default": {"emoji": "🤖", "color": "bright_blue"},
+    }
+    
+    # Status styling
+    STATUS_STYLES = {
+        "running": {"emoji": "🔄", "text": "ACTIVE", "color": "spring_green1"},
+        "completed": {"emoji": "✅", "text": "DONE", "color": "bright_green"},
+        "failed": {"emoji": "❌", "text": "FAIL", "color": "bright_red"},
+        "pending": {"emoji": "⏳", "text": "WAIT", "color": "yellow1"},
+    }
+    
+    border_style = PANEL_TYPE_COLORS.get("agent_graph", "medium_orchid")
+    
+    if not agents:
+        # Empty state - serene waiting
+        empty_art = Text()
+        empty_art.append("\n")
+        empty_art.append("    ( 🧘 ‿ 🧘 )    \n", style="dim cyan")
+        empty_art.append("  All Agents at Rest  \n", style="dim white")
+        empty_art.append("    ✨ ═══════ ✨    \n", style="dim medium_orchid")
+        
+        panel = Panel(
+            Align.center(empty_art),
+            title=Text("🧠 Agent Network", style="dim cyan"),
+            border_style="dim medium_orchid",
+            width=width,
+            padding=(0, 1)
+        )
+        return panel
+    
+    content_items = []
+    
+    # Build agent hierarchy
+    # First, create lookup and find root agents
+    agent_lookup = {a.get("task_id"): a for a in agents}
+    children_map = {}  # parent_id -> [child agents]
+    root_agents = []
+    
+    for agent in agents:
+        parent_id = agent.get("parent_task_id")
+        if parent_id and parent_id in agent_lookup:
+            if parent_id not in children_map:
+                children_map[parent_id] = []
+            children_map[parent_id].append(agent)
+        else:
+            root_agents.append(agent)
+    
+    def render_agent(agent, prefix="", is_last=True, depth=0):
+        """Recursively render an agent and its children as tree lines."""
+        lines = []
+        task_id = agent.get("task_id", "???")[:8]
+        agent_type = agent.get("agent_type", "default").lower()
+        task_desc = agent.get("task", "Unknown task")
+        status = agent.get("status", "running").lower()
+        
+        # Get styling
+        style_info = AGENT_STYLES.get(agent_type, AGENT_STYLES["default"])
+        status_info = STATUS_STYLES.get(status, STATUS_STYLES["running"])
+        
+        # Build the line
+        line = Text()
+        
+        # Tree connector
+        if depth > 0:
+            connector = "└─" if is_last else "├─"
+            line.append(prefix + connector, style="dim bright_black")
+        
+        # Agent emoji and type
+        line.append(f"{style_info['emoji']} ", style=style_info["color"])
+        line.append(f"{agent_type}", style=f"bold {style_info['color']}")
+        
+        # Task ID
+        line.append(f" [{task_id}]", style="dim bright_black")
+        
+        # Status
+        line.append(f" {status_info['emoji']} ", style=status_info["color"])
+        line.append(status_info["text"], style=f"bold {status_info['color']}")
+        
+        lines.append(line)
+        
+        # Task description (truncated)
+        if task_desc:
+            task_preview = task_desc[:50] + "..." if len(task_desc) > 50 else task_desc
+            task_line = Text()
+            child_prefix = prefix + ("   " if is_last else "│  ") if depth > 0 else ""
+            task_line.append(child_prefix + "   ", style="dim")
+            task_line.append(f"↳ {task_preview}", style="dim white italic")
+            lines.append(task_line)
+        
+        # Render children
+        children = children_map.get(task_id, [])
+        for i, child in enumerate(children):
+            is_child_last = (i == len(children) - 1)
+            child_prefix = prefix + ("   " if is_last else "│  ") if depth > 0 else ""
+            child_lines = render_agent(child, child_prefix, is_child_last, depth + 1)
+            lines.extend(child_lines)
+        
+        return lines
+    
+    # Radiant header
+    header = Text()
+    header.append("═" * ((width - 30) // 2), style="dim medium_orchid")
+    header.append(" 🧠 NEURAL NETWORK ", style="bold bright_white")
+    header.append("═" * ((width - 30) // 2), style="dim medium_orchid")
+    content_items.append(Align.center(header))
+    content_items.append(Text(""))
+    
+    # Render all root agents and their children
+    for i, root_agent in enumerate(root_agents):
+        is_last = (i == len(root_agents) - 1)
+        agent_lines = render_agent(root_agent, "", is_last, 0)
+        content_items.extend(agent_lines)
+        
+        # Add separator between root trees (if not last)
+        if not is_last:
+            sep = Text()
+            sep.append("  ~ ~ ~ ~ ~ ~ ~", style="dim hot_pink")
+            content_items.append(sep)
+    
+    # Stats footer
+    running_count = sum(1 for a in agents if a.get("status", "").lower() == "running")
+    completed_count = sum(1 for a in agents if a.get("status", "").lower() == "completed")
+    failed_count = sum(1 for a in agents if a.get("status", "").lower() == "failed")
+    
+    footer = Text()
+    footer.append("\n")
+    footer.append("─" * (width - 10), style="dim bright_black")
+    content_items.append(Align.center(footer))
+    
+    stats_line = Text()
+    stats_line.append(f"🔄 {running_count} active ", style="spring_green1")
+    stats_line.append(f"│ ✅ {completed_count} done ", style="bright_green")
+    stats_line.append(f"│ ❌ {failed_count} failed", style="bright_red" if failed_count > 0 else "dim")
+    content_items.append(Align.center(stats_line))
+    
+    panel_title = get_gradient_text("🧠 AGENT GRAPH", border_style, random.choice(RAVE_COLORS))
+    
+    panel = Panel(
+        Group(*content_items),
+        title=panel_title,
+        border_style=border_style,
+        width=width,
+        padding=(1, 2)
+    )
+    
+    return Gradient(panel, colors=[border_style, random.choice(RAVE_COLORS)])
+
+
 def create_docker_build_panel(
     image_name: str,
     status: str = "building",

@@ -225,6 +225,8 @@ PANEL_TYPE_COLORS = {
     "sandbox_running": "cyan1",          # Active execution
     "sandbox_complete": "bright_green",  # Success
     "sandbox_error": "bright_red",       # Failure
+    # Agent Graph panel 🧠
+    "agent_graph": "medium_orchid",       # Hierarchical agent network
 }
 
 def display_llm_interaction(title, prompt, response, panel_type="llm", model_id=None, token_count=None, purpose=None, elapsed_time=None):
