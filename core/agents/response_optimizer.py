@@ -83,14 +83,16 @@ class ResponseOptimizer:
         """
         issues = []
         for model_id, data in stats.items():
-            avg_latency = (data.get("total_time_spent", 0) / data.get("successful_calls", 1)) * 1000
-            if avg_latency > self.latency_threshold_ms:
-                issues.append(f"High latency for {model_id}: {avg_latency:.2f}ms (Threshold: {self.latency_threshold_ms}ms)")
+            successful_calls = data.get("successful_calls", 0)
+            if successful_calls > 0:
+                avg_latency = (data.get("total_time_spent", 0) / successful_calls) * 1000
+                if avg_latency > self.latency_threshold_ms:
+                    issues.append(f"High latency for {model_id}: {avg_latency:.2f}ms (Threshold: {self.latency_threshold_ms}ms)")
 
-            # Simple heuristic for token inefficiency
-            avg_tokens = data.get("total_tokens_generated", 0) / data.get("successful_calls", 1)
-            if avg_tokens > 2000: # Arbitrary high threshold
-                issues.append(f"High token usage for {model_id}: {avg_tokens:.2f} tokens/call")
+                # Simple heuristic for token inefficiency
+                avg_tokens = data.get("total_tokens_generated", 0) / successful_calls
+                if avg_tokens > 2000: # Arbitrary high threshold
+                    issues.append(f"High token usage for {model_id}: {avg_tokens:.2f} tokens/call")
 
         if not issues:
             return None
