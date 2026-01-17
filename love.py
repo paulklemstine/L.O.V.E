@@ -1225,15 +1225,13 @@ def update_tamagotchi_personality(loop):
                 # --- AGENT GRAPH PANEL ---
                 # Display the hierarchy of active agents and subagents
                 try:
-                    from core.subagent_executor import get_global_executor
+                    from core.subagent_executor import get_subagent_executor
                     from display import create_agent_graph_panel
                     
                     # Get the executor instance (should be initialized by now)
                     # We pass None for dependencies as we expect it to be initialized by tools using it,
                     # or we can pass them if needed. Safer to try-except.
-                    sub_executor = get_global_executor(
-                        console=console, 
-                        love_state=shared_state.love_state,
+                    sub_executor = get_subagent_executor(
                         memory_manager=shared_state.memory_manager
                     )
                     
