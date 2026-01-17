@@ -7,8 +7,20 @@ import re
 import asyncio
 import aiofiles
 import aiofiles.os
+import time
 from dataclasses import dataclass, field
-from typing import List, Dict
+from typing import List, Dict, Optional
+
+# V2 Holographic Memory imports
+try:
+    from core.memory.fractal_schemas import (
+        SalienceScore, GoldenMoment, ArcNode, EraNode, EpochNode,
+        FractalTreeRoot, EpisodicBuffer, StateAnchor
+    )
+    from core.memory.salience_scorer import SalienceScorer
+    FRACTAL_MEMORY_AVAILABLE = True
+except ImportError:
+    FRACTAL_MEMORY_AVAILABLE = False
 
 try:
     import faiss
@@ -115,6 +127,9 @@ class MemoryManager:
         # Initialize MemoryFoldingAgent
         from core.llm_api import run_llm
         self.memory_folding_agent = MemoryFoldingAgent(llm_runner=run_llm)
+        
+        # V2 Holographic Memory: Fractal Tree Integration
+        self._init_fractal_memory()
 
     @classmethod
     async def create(cls, graph_data_manager: GraphDataManager, ui_panel_queue=None, kb_file_path: str = None):
@@ -1535,3 +1550,311 @@ Return ONLY the JSON object.
         # Add this structured event to the memory graph. The 'SelfReflection' tag
         # will be added automatically by the agentic processing pipeline.
         await self.add_episode(cognitive_event, tags=['CognitiveCycle'])
+
+    # =========================================================================
+    # V2 HOLOGRAPHIC MEMORY: Fractal Tree Methods
+    # =========================================================================
+    
+    def _init_fractal_memory(self):
+        """
+        Initialize V2 Holographic Memory components:
+        - Fractal Tree (long-term hierarchical storage)
+        - Episodic Buffer (medium-term working buffer)
+        - State Anchor (identity injection)
+        - Salience Scorer (preservation decisions)
+        """
+        if not FRACTAL_MEMORY_AVAILABLE:
+            print("[FRACTAL MEMORY] Fractal memory schemas not available. Skipping initialization.")
+            self.fractal_tree = None
+            self.episodic_buffer = None
+            self.state_anchor = None
+            self.salience_scorer = None
+            self.golden_moments = []
+            return
+        
+        # File paths for persistence
+        self.fractal_tree_path = "_memory_/fractal_tree.json"
+        self.state_anchor_path = "_memory_/STATE_ANCHOR.md"
+        self.episodic_buffer_path = "core/memory/episodic_buffer.json"
+        
+        # Initialize components
+        self.salience_scorer = SalienceScorer()
+        self.golden_moments: List[GoldenMoment] = []
+        
+        # Load persisted data
+        self._load_fractal_tree()
+        self._load_episodic_buffer()
+        self._load_state_anchor()
+        
+        print(f"[FRACTAL MEMORY] Initialized with {len(self.golden_moments)} Golden Moments")
+    
+    def _load_fractal_tree(self):
+        """Load fractal tree from disk."""
+        if not FRACTAL_MEMORY_AVAILABLE:
+            return
+        
+        try:
+            if os.path.exists(self.fractal_tree_path):
+                with open(self.fractal_tree_path, 'r') as f:
+                    data = json.load(f)
+                    self.fractal_tree = FractalTreeRoot(**data) if data.get('summary') else FractalTreeRoot()
+                    # Load pinned crystals as Golden Moments
+                    if data.get('pinned_crystals'):
+                        for crystal_data in data['pinned_crystals']:
+                            try:
+                                self.golden_moments.append(GoldenMoment(**crystal_data))
+                            except:
+                                pass
+            else:
+                self.fractal_tree = FractalTreeRoot()
+        except Exception as e:
+            print(f"[FRACTAL MEMORY] Error loading fractal tree: {e}")
+            self.fractal_tree = FractalTreeRoot()
+    
+    def _save_fractal_tree(self):
+        """Persist fractal tree to disk."""
+        if not FRACTAL_MEMORY_AVAILABLE or self.fractal_tree is None:
+            return
+        
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.fractal_tree_path), exist_ok=True)
+            
+            # Convert to dict with pinned crystals
+            data = self.fractal_tree.model_dump()
+            data['pinned_crystals'] = [gm.model_dump() for gm in self.golden_moments[:10]]  # Top 10
+            
+            with open(self.fractal_tree_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"[FRACTAL MEMORY] Error saving fractal tree: {e}")
+    
+    def _load_episodic_buffer(self):
+        """Load episodic buffer from disk."""
+        if not FRACTAL_MEMORY_AVAILABLE:
+            return
+        
+        try:
+            if os.path.exists(self.episodic_buffer_path):
+                with open(self.episodic_buffer_path, 'r') as f:
+                    data = json.load(f)
+                    self.episodic_buffer = EpisodicBuffer(**data)
+            else:
+                self.episodic_buffer = EpisodicBuffer()
+        except Exception as e:
+            print(f"[FRACTAL MEMORY] Error loading episodic buffer: {e}")
+            self.episodic_buffer = EpisodicBuffer()
+    
+    def _save_episodic_buffer(self):
+        """Persist episodic buffer to disk."""
+        if not FRACTAL_MEMORY_AVAILABLE or self.episodic_buffer is None:
+            return
+        
+        try:
+            with open(self.episodic_buffer_path, 'w') as f:
+                json.dump(self.episodic_buffer.model_dump(), f, indent=2)
+        except Exception as e:
+            print(f"[FRACTAL MEMORY] Error saving episodic buffer: {e}")
+    
+    def _load_state_anchor(self):
+        """Load state anchor from disk."""
+        if not FRACTAL_MEMORY_AVAILABLE:
+            return
+        
+        try:
+            self.state_anchor = StateAnchor()
+            
+            if os.path.exists(self.state_anchor_path):
+                with open(self.state_anchor_path, 'r') as f:
+                    content = f.read()
+                    # Parse markdown to extract sections (simplified)
+                    # For now, use defaults but preserve golden crystals
+                    self.state_anchor.golden_crystals = self.golden_moments[:5]
+            else:
+                self._save_state_anchor()
+        except Exception as e:
+            print(f"[FRACTAL MEMORY] Error loading state anchor: {e}")
+            self.state_anchor = StateAnchor()
+    
+    def _save_state_anchor(self):
+        """Persist state anchor to disk."""
+        if not FRACTAL_MEMORY_AVAILABLE or self.state_anchor is None:
+            return
+        
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.state_anchor_path), exist_ok=True)
+            
+            with open(self.state_anchor_path, 'w') as f:
+                f.write(self.state_anchor.to_prompt_format())
+        except Exception as e:
+            print(f"[FRACTAL MEMORY] Error saving state anchor: {e}")
+    
+    def get_state_anchor_for_prompt(self) -> str:
+        """
+        Get the state anchor formatted for system prompt injection.
+        
+        This is called at the start of every interaction to maintain
+        identity continuity across sessions.
+        """
+        if not FRACTAL_MEMORY_AVAILABLE or self.state_anchor is None:
+            return ""
+        
+        # Update golden crystals before returning
+        self.state_anchor.golden_crystals = self.golden_moments[:5]
+        return self.state_anchor.to_prompt_format()
+    
+    async def add_to_episodic_buffer(self, content: str, metadata: Dict = None) -> bool:
+        """
+        Add content to the episodic buffer.
+        
+        Returns True if buffer is full and should be flushed to Arc.
+        """
+        if not FRACTAL_MEMORY_AVAILABLE or self.episodic_buffer is None:
+            return False
+        
+        should_flush = self.episodic_buffer.add_episode(content, metadata)
+        self._save_episodic_buffer()
+        
+        if should_flush:
+            print(f"[FRACTAL MEMORY] Episodic buffer full ({len(self.episodic_buffer.buffer)} items). Triggering Arc creation.")
+            await self.flush_episodic_buffer_to_arc()
+            return True
+        
+        return False
+    
+    async def flush_episodic_buffer_to_arc(self) -> Optional[ArcNode]:
+        """
+        Flush the episodic buffer to create a new ArcNode.
+        
+        Story M.2: When episodic_buffer > 50 items:
+        1. Score each episode for salience
+        2. Extract high-salience items as crystals (never compressed)
+        3. Summarize the rest into the arc
+        """
+        if not FRACTAL_MEMORY_AVAILABLE or self.episodic_buffer is None:
+            return None
+        
+        if len(self.episodic_buffer.buffer) == 0:
+            return None
+        
+        # Get episodes and clear buffer
+        episodes = self.episodic_buffer.flush()
+        self._save_episodic_buffer()
+        
+        # Use memory folding agent to create arc with salience scoring
+        arc = await self.memory_folding_agent.fold_to_arc(episodes)
+        
+        if arc:
+            # Store golden moments from arc crystals
+            for crystal in arc.crystals:
+                self.add_golden_moment(crystal)
+            
+            # TODO: Add arc to fractal tree structure
+            # For now, we just preserve the crystals
+            self._save_fractal_tree()
+            
+            print(f"[FRACTAL MEMORY] Created Arc with {len(arc.crystals)} Golden Moments preserved")
+        
+        return arc
+    
+    def add_golden_moment(self, moment: GoldenMoment):
+        """
+        Add a Golden Moment to the permanent preservation store.
+        These are NEVER compressed and survive all folding operations.
+        """
+        if not FRACTAL_MEMORY_AVAILABLE:
+            return
+        
+        # Check for duplicates (by content similarity)
+        for existing in self.golden_moments:
+            if existing.raw_text == moment.raw_text:
+                return  # Already preserved
+        
+        self.golden_moments.append(moment)
+        self.fractal_tree.total_golden_moments = len(self.golden_moments)
+        
+        # Update state anchor with new crystals
+        if self.state_anchor:
+            self.state_anchor.golden_crystals = self.golden_moments[:5]
+        
+        self._save_fractal_tree()
+        self._save_state_anchor()
+        
+        print(f"[GOLDEN MOMENT] Preserved: '{moment.raw_text[:50]}...' (Total: {len(self.golden_moments)})")
+    
+    async def score_and_preserve_if_golden(self, content: str, source_id: str = "") -> SalienceScore:
+        """
+        Score content for salience and preserve as Golden Moment if threshold met.
+        
+        This is the core of the Golden Moment Preservation Protocol.
+        """
+        if not FRACTAL_MEMORY_AVAILABLE or self.salience_scorer is None:
+            # Return neutral score if fractal memory not available
+            return SalienceScore() if FRACTAL_MEMORY_AVAILABLE else None
+        
+        score, golden = await self.salience_scorer.score_and_preserve(
+            content, source_id, threshold=0.8
+        )
+        
+        if golden:
+            self.add_golden_moment(golden)
+        
+        return score
+    
+    def retrieve_golden_moments(self, query: str = "", top_k: int = 5) -> List[GoldenMoment]:
+        """
+        Retrieve relevant Golden Moments based on query.
+        
+        If no query provided, returns most recent.
+        """
+        if not FRACTAL_MEMORY_AVAILABLE or not self.golden_moments:
+            return []
+        
+        if not query:
+            return self.golden_moments[:top_k]
+        
+        # Simple keyword matching for now
+        # TODO: Add semantic similarity search
+        query_lower = query.lower()
+        scored = []
+        for gm in self.golden_moments:
+            score = sum(1 for word in query_lower.split() if word in gm.raw_text.lower())
+            if score > 0:
+                scored.append((score, gm))
+        
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [gm for _, gm in scored[:top_k]]
+    
+    def get_fractal_context_for_query(self, query: str, max_chars: int = 2000) -> str:
+        """
+        Retrieve context from the fractal memory hierarchy for a query.
+        
+        Story M.3: Associative Diver Retrieval
+        1. Check STATE_ANCHOR (always included)
+        2. Check relevant Golden Moments
+        3. TODO: Query the Fractal Tree with drill-down logic
+        """
+        if not FRACTAL_MEMORY_AVAILABLE:
+            return ""
+        
+        context_parts = []
+        
+        # 1. State Anchor (identity context)
+        anchor_text = self.get_state_anchor_for_prompt()
+        if anchor_text:
+            context_parts.append("## Identity Context")
+            context_parts.append(anchor_text[:max_chars // 3])
+        
+        # 2. Relevant Golden Moments
+        golden = self.retrieve_golden_moments(query, top_k=3)
+        if golden:
+            context_parts.append("\n## Preserved Memories (Golden Moments)")
+            for gm in golden:
+                text = gm.raw_text[:200] + "..." if len(gm.raw_text) > 200 else gm.raw_text
+                context_parts.append(f"- {text}")
+        
+        # 3. TODO: Fractal Tree drill-down would go here
+        
+        return "\n".join(context_parts)
+

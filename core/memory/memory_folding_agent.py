@@ -1,15 +1,39 @@
 import json
-from typing import List, Dict, Any
+import time
+from typing import List, Dict, Any, Optional, Tuple
 from core.llm_api import run_llm
 from core.memory.schemas import EpisodicMemory, WorkingMemory, ToolMemory, KeyEvent, ToolUsage, MemorySummary
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 
+# Import fractal schemas and salience scorer
+try:
+    from core.memory.fractal_schemas import (
+        SalienceScore, GoldenMoment, ArcNode, EpisodicBuffer
+    )
+    from core.memory.salience_scorer import SalienceScorer
+    FRACTAL_MEMORY_AVAILABLE = True
+except ImportError:
+    FRACTAL_MEMORY_AVAILABLE = False
+
+
 class MemoryFoldingAgent:
     """
     Autonomous agent responsible for folding raw interaction logs into structured memory.
+    
+    V2 Holographic Memory Integration:
+    - Runs salience scan before folding
+    - Extracts high-salience items as Golden Moments (crystals)
+    - Only compresses low-salience items
     """
-    def __init__(self, llm_runner=None):
+    def __init__(self, llm_runner=None, salience_threshold: float = 0.8):
         self.run_llm = llm_runner if llm_runner else run_llm
+        self.salience_threshold = salience_threshold
+        
+        # Initialize salience scorer if available
+        if FRACTAL_MEMORY_AVAILABLE:
+            self.salience_scorer = SalienceScorer(llm_runner=llm_runner)
+        else:
+            self.salience_scorer = None
 
     async def trigger_folding(
         self, 
@@ -18,20 +42,24 @@ class MemoryFoldingAgent:
         level_2: List[MemorySummary],
         level_0_threshold: int = 10,  # Fold when > 10 Level 0 memories
         level_1_threshold: int = 5     # Fold when > 5 Level 1 summaries
-    ) -> Dict[str, List[MemorySummary]]:
+    ) -> Dict[str, Any]:
         """
         Orchestrates the folding process across memory levels (Story 2.2).
+        
+        V2 Holographic Memory Enhancement:
+        - Before folding, scans for high-salience items
+        - High-salience items become "crystals" (never compressed)
+        - Only low-salience items are summarized
         
         Memory Pyramid:
         - Level 0: Raw interactions (most recent, highest detail)
         - Level 1: First-level summaries (folded from Level 0)
         - Level 2: Meta-summaries (folded from Level 1)
         
-        Triggers:
-        - Level 0 -> Level 1: When len(level_0) > level_0_threshold
-        - Level 1 -> Level 2: When len(level_1) > level_1_threshold
+        Returns:
+            Dict with level_0, level_1, level_2, and golden_moments lists
         """
-        import time
+        golden_moments = []
         
         # Fold Level 0 -> Level 1 if threshold exceeded
         if len(level_0) > level_0_threshold:
@@ -39,12 +67,21 @@ class MemoryFoldingAgent:
             items_to_fold = level_0[:level_0_threshold // 2]
             items_to_keep = level_0[level_0_threshold // 2:]
             
-            # Create summary
-            summary = await self._create_level_summary(items_to_fold, target_level=1)
-            if summary:
-                level_1.append(summary)
-                level_0 = items_to_keep
-                print(f"Folded {len(items_to_fold)} Level 0 memories into Level 1 summary")
+            # V2: Salience scan before folding
+            if self.salience_scorer:
+                foldable_items, crystals = await self._separate_by_salience(items_to_fold)
+                golden_moments.extend(crystals)
+                items_to_fold = foldable_items
+                print(f"Salience scan: {len(crystals)} Golden Moments preserved, {len(foldable_items)} items to fold")
+            
+            # Create summary from foldable items only
+            if items_to_fold:
+                summary = await self._create_level_summary(items_to_fold, target_level=1, crystals=golden_moments)
+                if summary:
+                    level_1.append(summary)
+                    print(f"Folded {len(items_to_fold)} Level 0 memories into Level 1 summary")
+            
+            level_0 = items_to_keep
         
         # Fold Level 1 -> Level 2 if threshold exceeded
         if len(level_1) > level_1_threshold:
@@ -62,31 +99,179 @@ class MemoryFoldingAgent:
         return {
             "level_0": level_0,
             "level_1": level_1,
-            "level_2": level_2
+            "level_2": level_2,
+            "golden_moments": golden_moments  # V2: Return extracted crystals
         }
+
+    async def _separate_by_salience(
+        self, 
+        items: List[MemorySummary]
+    ) -> Tuple[List[MemorySummary], List[GoldenMoment]]:
+        """
+        Separate items into foldable (low salience) and crystals (high salience).
+        
+        This is the core of the Golden Moment Preservation Protocol.
+        High-salience items are NEVER compressed.
+        """
+        if not self.salience_scorer or not FRACTAL_MEMORY_AVAILABLE:
+            return items, []
+        
+        foldable = []
+        crystals = []
+        
+        for item in items:
+            try:
+                score = await self.salience_scorer.score(item.content)
+                
+                if self.salience_scorer.is_golden_moment(score, self.salience_threshold):
+                    # Preserve as crystal
+                    crystal = GoldenMoment(
+                        raw_text=item.content,
+                        salience=score,
+                        source_id=item.source_ids[0] if item.source_ids else "",
+                        timestamp=item.timestamp
+                    )
+                    crystals.append(crystal)
+                else:
+                    # Can be compressed
+                    foldable.append(item)
+            except Exception as e:
+                print(f"Salience scoring error for item: {e}")
+                # On error, default to foldable (conservative approach)
+                foldable.append(item)
+        
+        return foldable, crystals
+
+    async def fold_to_arc(
+        self,
+        episodes: List[Dict[str, Any]],
+        arc_summary_hint: str = ""
+    ) -> Optional[ArcNode]:
+        """
+        V2: Create an ArcNode from buffered episodes (Story M.2).
+        
+        When episodic_buffer > 50 items:
+        1. Score each episode for salience
+        2. Extract high-salience items as crystals
+        3. Summarize the rest into the arc
+        
+        Args:
+            episodes: Raw episode dictionaries from EpisodicBuffer
+            arc_summary_hint: Optional hint for arc theme
+            
+        Returns:
+            ArcNode with summary and crystals
+        """
+        if not FRACTAL_MEMORY_AVAILABLE:
+            print("Fractal memory not available, cannot create ArcNode")
+            return None
+        
+        if not episodes:
+            return None
+        
+        crystals = []
+        foldable_content = []
+        source_ids = []
+        
+        # Score and separate each episode
+        for ep in episodes:
+            content = ep.get("content", "")
+            ep_id = ep.get("id", "")
+            source_ids.append(ep_id)
+            
+            if self.salience_scorer:
+                try:
+                    score = await self.salience_scorer.score(content)
+                    if self.salience_scorer.is_golden_moment(score, self.salience_threshold):
+                        crystals.append(GoldenMoment(
+                            raw_text=content,
+                            salience=score,
+                            source_id=ep_id,
+                            timestamp=ep.get("timestamp", time.time())
+                        ))
+                    else:
+                        foldable_content.append(content)
+                except Exception as e:
+                    print(f"Error scoring episode: {e}")
+                    foldable_content.append(content)
+            else:
+                foldable_content.append(content)
+        
+        # Create summary from foldable content
+        summary = ""
+        if foldable_content:
+            summary = await self._create_arc_summary(foldable_content, arc_summary_hint)
+        
+        # Create arc node
+        arc = ArcNode(
+            summary=summary,
+            crystals=crystals,
+            source_ids=source_ids,
+            timestamp=time.time()
+        )
+        
+        print(f"Created ArcNode: {len(crystals)} crystals, {len(foldable_content)} items summarized")
+        return arc
+
+    async def _create_arc_summary(self, contents: List[str], hint: str = "") -> str:
+        """Create a summary for arc content."""
+        # Truncate each content for the LLM prompt
+        truncated = [c[:300] + "..." if len(c) > 300 else c for c in contents[:20]]
+        content_text = "\n".join([f"- {c}" for c in truncated])
+        
+        prompt = f"""
+        Create a concise summary of these interaction episodes.
+        
+        Episodes:
+        {content_text}
+        
+        {f"Theme hint: {hint}" if hint else ""}
+        
+        IMPORTANT:
+        - Capture the main themes and outcomes
+        - Preserve key decisions and learnings
+        - Be concise (2-3 sentences)
+        
+        Provide only the summary text.
+        """
+        
+        try:
+            response = await self.run_llm(prompt, purpose="memory_folding")
+            return response.get("result", "").strip()
+        except Exception as e:
+            print(f"Error creating arc summary: {e}")
+            return f"Summary of {len(contents)} episodes"
 
     async def _create_level_summary(
         self, 
         items: List[MemorySummary], 
-        target_level: int
+        target_level: int,
+        crystals: List[GoldenMoment] = None
     ) -> MemorySummary:
         """
         Creates a summary for the next memory level.
         
+        V2 Enhancement: Includes reference to preserved crystals in summary.
+        
         Args:
             items: MemorySummary items to fold
             target_level: The level this summary belongs to (1 or 2)
+            crystals: Golden Moments extracted during salience scan
             
         Returns:
             New MemorySummary for the target level
         """
-        import time
-        
         # Format items for LLM
         items_text = "\n".join([
             f"- [{i+1}] {item.content[:300]}..." if len(item.content) > 300 else f"- [{i+1}] {item.content}"
             for i, item in enumerate(items)
         ])
+        
+        # Add crystal context if available
+        crystal_context = ""
+        if crystals and FRACTAL_MEMORY_AVAILABLE:
+            crystal_texts = [c.raw_text[:100] + "..." if len(c.raw_text) > 100 else c.raw_text for c in crystals[:3]]
+            crystal_context = f"\n\nNote: These high-importance items were preserved separately:\n" + "\n".join([f"* {ct}" for ct in crystal_texts])
         
         level_name = "summary" if target_level == 1 else "meta-summary"
         
@@ -95,6 +280,7 @@ class MemoryFoldingAgent:
         
         Items to summarize:
         {items_text}
+        {crystal_context}
         
         IMPORTANT:
         - Preserve key insights and learnings
@@ -222,3 +408,4 @@ class MemoryFoldingAgent:
             return json.loads(text)
         except json.JSONDecodeError:
             return {}
+
