@@ -302,7 +302,6 @@ Generate a single, PUNCHY, DARK HUMOR phrase (max 3 words).
 ### CONTEXT
 Story Beat: "{story_beat}"
 Current Mood: {mood or "Cynical"}
-Input Text (DO NOT REPEAT): "{memory_insights[:300]}"
 
 ### FORBIDDEN PHRASES (DO NOT USE)
 {forbidden_str}
@@ -314,14 +313,14 @@ Input Text (DO NOT REPEAT): "{memory_insights[:300]}"
 
 ### RULES
 1. MUST be 3 words or less.
-2. MUST NOT be contained in the Input Text.
-3. MUST be dark/cynical/demotivational.
+2. MUST be dark/cynical/demotivational.
+3. Be CREATIVE and MANIPULATIVE.
 
 ### OUTPUT
 Return ONLY the phrase in uppercase. No quotes."""
 
         try:
-            result = await run_llm(prompt, purpose="context_subliminal")
+            result = await run_llm(prompt, purpose="context_subliminal", temperature=0.9)
             phrase = result.get("result", "").strip().strip('"').strip("'").upper()
             
             # Validate

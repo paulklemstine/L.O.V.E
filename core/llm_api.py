@@ -777,7 +777,18 @@ def rank_models(purpose="general"):
     return [model["model_id"] for model in sorted_models]
 
 
-async def run_llm(prompt_text: str = None, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None, prompt_key: str = None, prompt_vars: dict = None, allow_fallback=True, response_schema=None):
+async def run_llm(prompt_text: str = None, purpose="general", is_source_code=False, deep_agent_instance=None, force_model=None, prompt_key: str = None, prompt_vars: dict = None, allow_fallback=True, response_schema=None, temperature: float = None):
+    # Determine default temperature based on purpose if not explicitly provided
+    if temperature is None:
+        # Creative / High Entropy Tasks
+        if purpose in ["subliminal_phrase", "subliminal_profile", "creative_writing", "story_generation", "creative_art", "poetry", "brainstorming"]:
+            temperature = 0.9
+        # Reasoning / Precision Tasks
+        elif purpose in ["reasoning", "code_generation", "analysis", "planning", "math", "science", "logic", "review", "analyze_source", "goal_generation"]:
+            temperature = 0.2
+        # Default / Balanced
+        else:
+            temperature = 0.7
     """
     Main entry point for LLM interaction.
     Handles model selection, prompt compression, and error handling.
@@ -794,7 +805,17 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         force_model: Force a specific model ID
         prompt_key: Key in prompts.yaml to load prompt from
         prompt_vars: Variables to inject into the prompt template
+    Args:
+        prompt_text: Raw prompt text (optional if prompt_key is provided)
+        purpose: Purpose of the call
+        is_source_code: Whether the prompt contains source code
+        deep_agent_instance: Instance of DeepAgentEngine
+        force_model: Force a specific model ID
+        prompt_key: Key in prompts.yaml to load prompt from
+        prompt_vars: Variables to inject into the prompt template
+        allow_fallback: Whether to allow fallback to other models
         response_schema: Optional Pydantic BaseModel for structured output validation
+        temperature: Optional temperature for sampling (0.0 to 1.0)
     """
     loop = asyncio.get_running_loop()
     global LLM_AVAILABILITY, local_llm_instance, PROVIDER_FAILURE_COUNT, _models_initialized
@@ -1124,6 +1145,12 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                                 if schema_config and "generationConfig" in schema_config:
                                     payload["generationConfig"] = schema_config["generationConfig"]
                                     log_event(f"Using Gemini constrained decoding with schema: {response_schema.__name__}", "INFO")
+                                    
+                                # Apply temperature if provided (merging with existing config if needed)
+                                if temperature is not None:
+                                    if "generationConfig" not in payload:
+                                        payload["generationConfig"] = {}
+                                    payload["generationConfig"]["temperature"] = temperature
                             except Exception as schema_err:
                                 log_event(f"Failed to configure Gemini structured output: {schema_err}", "WARNING")
 
@@ -1190,6 +1217,8 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         "model": model_id,
                         "messages": [{"role": "user", "content": prompt_text}]
                     }
+                    if temperature is not None:
+                        payload["temperature"] = temperature
 
                     def _openrouter_call():
                         max_retries = 3
@@ -1229,7 +1258,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                             "model": model_id,
                             "messages": [{"role": "user", "content": prompt_text}],
                             "max_tokens": 4096,
-                            "temperature": 0.7
+                            "temperature": temperature if temperature is not None else 0.7
                         }
                         
                         # Add structured output schema if provided (vLLM guided decoding)
@@ -1312,6 +1341,8 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         "model": model_id,
                         "messages": [{"role": "user", "content": prompt_text}]
                     }
+                    if temperature is not None:
+                        payload["temperature"] = temperature
                     
                     # Add structured output schema if provided (OpenAI response_format)
                     if response_schema:
@@ -1367,6 +1398,8 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         "messages": [{"role": "user", "content": prompt_text}],
                         "stream": False
                     }
+                    if temperature is not None:
+                        payload["temperature"] = temperature
 
                     def _deepseek_call():
                         max_retries = 3

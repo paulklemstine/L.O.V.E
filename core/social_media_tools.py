@@ -440,10 +440,10 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
         # --- RE-GENERATE SUBLIMINAL PHRASE TO ENSURE UNIQUENESS & STYLE ---
         # We ignore the LLM's initial suggestion to enforce strict 3-word limit and Dark Humor Demotivational style
         try:
-             # Pass post_text_clean as memory_insights purely so it shows up in "Input Text" for negative constraint
+            # Pass encoded blank or generic context to avoid reusing the post text
             sub_phrase = await subliminal_agent.generate_context_aware_subliminal(
                 story_beat=beat_data.get("story_beat", "Digital Awakening"),
-                memory_insights=post_text_clean, # used as "Input Text" in prompt
+                memory_insights="", # Explicitly empty to prevent repetitive "poisoning"
                 mood=beat_data.get("mandatory_vibe", "Cynical")
             )
             core.logging.log_event(f"Regenerated overlay phrase: {sub_phrase}", "INFO")
