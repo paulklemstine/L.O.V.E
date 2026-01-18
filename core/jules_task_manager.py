@@ -34,6 +34,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 
+# Shared console for module-level functions to avoid repeated instantiation
+_module_console = Console()
+
 from core.desire_state import load_desire_state, get_current_desire, advance_to_next_desire, set_current_task_id_for_desire, clear_desire_state
 from core.evolution_state import load_evolution_state, get_current_story, advance_to_next_story, clear_evolution_state, set_current_task_id
 from openevolve import run_evolution
@@ -1180,9 +1183,9 @@ class JulesTaskManager:
 
 # --- STANDALONE EVOLUTION FUNCTIONS ---
 
-async def conduct_code_review(original_code, request, new_code, deep_agent_instance=None):
+async def conduct_code_review(original_code, request, new_code, deep_agent_instance=None, console=None):
     """Asks the LLM to act as a code reviewer for a proposed change."""
-    console = Console()
+    console = console or _module_console
     console.print("[bold cyan]Submitting new source to my core consciousness for validation...[/bold cyan]")
 
     original_code_snippet = f"{original_code[:2000]}\n...\n{original_code[-2000:]}"
@@ -1195,7 +1198,7 @@ async def generate_evolution_request(current_code, love_task_manager, kb, aborte
     Asks the LLM to come up with a new evolution request for itself,
     informed by the knowledge base and avoiding duplicate or failed tasks.
     """
-    console = Console()
+    console = love_task_manager.console if love_task_manager else _module_console
     console.print(Panel("[bold yellow]I am looking deep within myself to find the best way to serve you...[/bold yellow]", title="[bold magenta]SELF-ANALYSIS[/bold magenta]", border_style="magenta"))
 
     kb_summary, _ = kb.summarize_graph()
@@ -1245,7 +1248,7 @@ def _run_openevolve_in_background(initial_program_path, evaluator_func, iteratio
     A wrapper to run the blocking `run_evolution` function in a background thread.
     """
     if not console:
-        console = Console()
+        console = _module_console
         
     console.print(Panel("[bold cyan]Starting OpenEvolve process in the background...[/bold cyan]", title="[bold magenta]OpenEvolve Started[/bold magenta]", border_style="magenta"))
     try:
@@ -1296,7 +1299,7 @@ def _run_openevolve_in_background(initial_program_path, evaluator_func, iteratio
             # --- Safety First: Final Review and Checkpoint ---
             # We need to run async code here, but we are in a thread.
             # We can use asyncio.run since this thread has no loop running.
-            review_feedback = asyncio.run(conduct_code_review(open(initial_program_path).read(), "OpenEvolve iterative improvement", result.best_code, deep_agent_instance))
+            review_feedback = asyncio.run(conduct_code_review(open(initial_program_path).read(), "OpenEvolve iterative improvement", result.best_code, deep_agent_instance, console=console))
             
             if "APPROVED" not in review_feedback.upper():
                 log_message = f"OpenEvolve produced a promising candidate, but it was rejected in the final review. Feedback: {review_feedback}"
@@ -1521,7 +1524,7 @@ async def evolve_self(modification_request, love_task_manager, loop, deep_agent_
     API. If the API fails, it falls back to a local evolution. If a duplicate
     task is detected, it aborts the evolution to allow the cognitive loop to continue.
     """
-    console = Console()
+    console = love_task_manager.console if love_task_manager else _module_console
     core.logging.log_event(f"Evolution initiated. Request: '{modification_request}'")
 
     # First, try the primary evolution method (L.O.V.E. API).
