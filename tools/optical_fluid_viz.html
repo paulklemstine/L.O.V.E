@@ -450,8 +450,7 @@
             for(int j=-1; j<=1; j++)
             for(int i=-1; i<=1; i++) {
                 vec2 g = vec2(float(i),float(j));
-                vec2 o = hash(n+g) * 0.5 + 0.5; // bug here? hash returns float. Fix below.
-                o = vec2(hash(n+g), hash(n+g+vec2(12.3, 45.6))); // pseudo random vec2
+                vec2 o = vec2(hash(n+g), hash(n+g+vec2(12.3, 45.6))); // pseudo random vec2
                 o = 0.5 + 0.5*sin(t + 6.28*o);
                 vec2 r = g + o - f;
                 float d = length(r);
