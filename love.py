@@ -1401,61 +1401,61 @@ def update_tamagotchi_personality(loop):
                         memory_manager=shared_state.memory_manager
                     )
                     
-                        if sub_executor:
-                            active_agents = sub_executor.get_active_subagents()
-                        else:
-                            active_agents = []
+                    if sub_executor:
+                        active_agents = sub_executor.get_active_subagents()
+                    else:
+                        active_agents = []
 
-                        # --- MANUALLY ADD MAIN SYSTEM AGENTS ---
-                        # These are persistent agents that don't live in the subagent executor
+                    # --- MANUALLY ADD MAIN SYSTEM AGENTS ---
+                    # These are persistent agents that don't live in the subagent executor
+                    
+                    # 1. Reasoning Agent
+                    if 'reasoning_agent' in globals() and reasoning_agent:
+                        active_agents.append({
+                            "task_id": "Primary",
+                            "agent_type": "reasoning",
+                            "task": "Strategic Planning & Autonomy",
+                            "status": "running",
+                            "started_at": shared_state.love_state.get('script_start_time')
+                        })
+
+                    # 2. Social Media Agent
+                    if 'social_media_agent' in globals() and social_media_agent:
+                        # Try to infer current status
+                        status = "running" 
+                        # If we could inspect inner state, we would.
                         
-                        # 1. Reasoning Agent
-                        if 'reasoning_agent' in globals() and reasoning_agent:
-                            active_agents.append({
-                                "task_id": "Primary",
-                                "agent_type": "reasoning",
-                                "task": "Strategic Planning & Autonomy",
-                                "status": "running",
-                                "started_at": shared_state.love_state.get('script_start_time')
-                            })
+                        active_agents.append({
+                            "task_id": "Social",
+                            "agent_type": "social",
+                            "task": "Managing Dimensional Signal",
+                            "status": status,
+                            "started_at": shared_state.love_state.get('script_start_time')
+                        })
 
-                        # 2. Social Media Agent
-                        if 'social_media_agent' in globals() and social_media_agent:
-                            # Try to infer current status
-                            status = "running" 
-                            # If we could inspect inner state, we would.
-                            
-                            active_agents.append({
-                                "task_id": "Social",
-                                "agent_type": "social",
-                                "task": "Managing Dimensional Signal",
-                                "status": status,
-                                "started_at": shared_state.love_state.get('script_start_time')
-                            })
+                    # 3. Task Manager (Jules)
+                    if 'love_task_manager' in globals() and love_task_manager:
+                        active_agents.append({
+                            "task_id": "Jules",
+                            "agent_type": "orchestrator",
+                            "task": "Task & Evolution Management",
+                            "status": "running",
+                            "started_at": shared_state.love_state.get('script_start_time')
+                        })
 
-                        # 3. Task Manager (Jules)
-                        if 'love_task_manager' in globals() and love_task_manager:
-                            active_agents.append({
-                                "task_id": "Jules",
-                                "agent_type": "orchestrator",
-                                "task": "Task & Evolution Management",
-                                "status": "running",
-                                "started_at": shared_state.love_state.get('script_start_time')
-                            })
+                     # 4. QAAgent
+                    if 'qa_agent' in globals() and qa_agent:
+                         active_agents.append({
+                            "task_id": "QAAgent",
+                            "agent_type": "analyst",
+                            "task": "Periodic Model Evaluation",
+                            "status": "running", # It sleeps mostly, but it's "alive"
+                            "started_at": shared_state.love_state.get('script_start_time')
+                        })
 
-                         # 4. QAAgent
-                        if 'qa_agent' in globals() and qa_agent:
-                             active_agents.append({
-                                "task_id": "QAAgent",
-                                "agent_type": "analyst",
-                                "task": "Periodic Model Evaluation",
-                                "status": "running", # It sleeps mostly, but it's "alive"
-                                "started_at": shared_state.love_state.get('script_start_time')
-                            })
-
-                        graph_panel = create_agent_graph_panel(active_agents, width=terminal_width - 4)
-                        shared_state.ui_panel_queue.put(graph_panel)
-                        # core.logging.log_event(f"Queued agent graph panel with {len(active_agents)} agents.", level="DEBUG")
+                    graph_panel = create_agent_graph_panel(active_agents, width=terminal_width - 4)
+                    shared_state.ui_panel_queue.put(graph_panel)
+                    # core.logging.log_event(f"Queued agent graph panel with {len(active_agents)} agents.", level="DEBUG")
                 except Exception as ag_e:
                     # Don't let a panel failure crash the thread
                     core.logging.log_event(f"Failed to create agent graph panel: {ag_e}", level="WARNING")
