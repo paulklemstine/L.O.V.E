@@ -5,3 +5,7 @@
 ## 2024-05-24 - [Quantum Quiet Empty States]
 **Learning:** In TUI dashboards, removing a panel completely when it has no content (empty state) can be confusing. Users can't distinguish between "system broken/missing" and "system idle/nominal".
 **Action:** Implement "Quantum Quiet" states for empty lists. Use dim/subtle colors (e.g., `dim cyan`, `dim blue`) and reassuring text (e.g., "All Systems Nominal", "Quantum Field Quiet") to provide positive confirmation of system health without visual clutter.
+
+## 2026-01-18 - [Chat-like Input Pattern in Raw HTML]
+**Learning:** In single-file HTML interfaces mimicking chat or terminals, the lack of "Send on Enter" breaks user expectation and flow. Native `<textarea>` behavior requires manual intervention to match modern chat standards.
+**Action:** Implement a standard `keydown` listener that captures `Enter` (preventing default) to submit, while allowing `Shift+Enter` for newlines. Pair this with `aria-label` and `placeholder` to clarify the input method to assistive tech.

@@ -73,6 +73,10 @@
             padding: 0.5em;
             margin-bottom: 0.5em;
         }
+        #input-area:focus-visible {
+            outline: none;
+            box-shadow: 0 0 10px var(--rave-cyan);
+        }
         #send-button, .proposal-button {
             background: var(--rave-pink);
             border: none;
@@ -113,12 +117,12 @@
     <h1>L.O.V.E. Command & Control</h1>
     <div id="main-container">
         <div id="left-column">
-            <div id="cognitive-stream" class="panel-container">
+            <div id="cognitive-stream" class="panel-container" role="log" aria-live="polite">
                 <h2>Cognitive Stream</h2>
             </div>
             <div id="creator-input" class="panel-container">
                 <h2>Creator Input</h2>
-                <textarea id="input-area"></textarea>
+                <textarea id="input-area" aria-label="Command input" placeholder="Enter command (Shift+Enter for new line)..."></textarea>
                 <button id="send-button">SEND</button>
             </div>
         </div>
@@ -204,13 +208,22 @@
 
             connect();
 
-            sendButton.addEventListener('click', () => {
+            function sendMessage() {
                 const command = inputArea.value;
                 if (command && ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'user_command', payload: command }));
                     inputArea.value = '';
                 } else {
                     console.log('WebSocket is not connected. Message not sent.');
+                }
+            }
+
+            sendButton.addEventListener('click', sendMessage);
+
+            inputArea.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    sendMessage();
                 }
             });
         });
