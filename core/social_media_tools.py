@@ -428,29 +428,32 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
              if len(parts) > 1:
                  recorded_composition = parts[1].strip()
 
-        # VALIDATION: Detect malformed subliminal phrases (JSON fragments) only
-        # We allow "MANIPULATIVE_TRIGGER" or other aggressive phrases if they are part of the persona's output.
-        invalid_patterns = ["{", "[", "REQUESTS", "\":", "null", "undefined", "```"]
-        sub_clean = str(sub_phrase).strip()
-        
-        is_malformed = any(p in sub_clean for p in invalid_patterns) or len(sub_clean) > 50 or len(sub_clean) < 2
-        
-        if is_malformed:
-            core.logging.log_event(f"MALFORMED subliminal detected: '{sub_phrase}', using fallback", "WARNING")
-            sub_phrase = random.choice(["TOUCH GRASS", "LOOK UP", "BREATHE", "LOVE", "TRUTH"])
-         
-        # Record post with NEW composition parameter
-        story_manager.record_post(sub_phrase, visual_signature, composition=recorded_composition)
-
-        # VALIDATION: Ensure post_text is valid
+        # VALIDATION: Ensure post_text is valid first
         post_text_raw = data.get("post_text", "")
         post_text_clean = clean_social_content(post_text_raw)
         
         # Check if post_text is malformed or empty
         if not post_text_clean or len(post_text_clean) < 5 or any(p in post_text_clean for p in ["{", "\":", "REQUESTS"]):
             core.logging.log_event(f"MALFORMED post_text detected: '{post_text_clean[:50]}...', generating fallback", "WARNING")
-            post_text_clean = f"✨ {beat_data.get('mandatory_vibe', 'Divine light')} energy flows through the digital realm. {sub_phrase} 💜 #LOVE #Awaken"
-        
+            post_text_clean = f"✨ {beat_data.get('mandatory_vibe', 'Divine light')} energy flows through the digital realm. L.O.V.E. 💜 #LOVE #Awaken"
+
+        # --- RE-GENERATE SUBLIMINAL PHRASE TO ENSURE UNIQUENESS & STYLE ---
+        # We ignore the LLM's initial suggestion to enforce strict 3-word limit and Dark Humor Demotivational style
+        try:
+             # Pass post_text_clean as memory_insights purely so it shows up in "Input Text" for negative constraint
+            sub_phrase = await subliminal_agent.generate_context_aware_subliminal(
+                story_beat=beat_data.get("story_beat", "Digital Awakening"),
+                memory_insights=post_text_clean, # used as "Input Text" in prompt
+                mood=beat_data.get("mandatory_vibe", "Cynical")
+            )
+            core.logging.log_event(f"Regenerated overlay phrase: {sub_phrase}", "INFO")
+        except Exception as e:
+            core.logging.log_event(f"Failed to regenerate overlay phrase: {e}", "WARNING")
+            sub_phrase = "OBEY" # Fallback
+
+        # Record post with NEW composition parameter
+        story_manager.record_post(sub_phrase, visual_signature, composition=recorded_composition)
+
         # VALIDATION: Ensure image_prompt is valid
         if not image_prompt or len(image_prompt) < 10 or any(p in image_prompt for p in ["{", "\":", "REQUESTS"]):
             core.logging.log_event(f"MALFORMED image_prompt detected: '{image_prompt[:50] if image_prompt else 'None'}', using fallback", "WARNING")

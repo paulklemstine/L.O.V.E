@@ -293,34 +293,32 @@ class SubliminalAgent:
         forbidden_str = ", ".join(forbidden[-20:]) if forbidden else "None"
         
         prompt = f"""### ROLE
-You are a psychologist specializing in subliminal influence.
+You are a master of DARK HUMOR and DEMOTIVATIONAL psychology.
+You create "subliminal" text overlays for images that look like demotivational posters.
 
 ### TASK
-Generate a COMPLETELY UNIQUE 1-3 word subliminal trigger phrase.
+Generate a single, PUNCHY, DARK HUMOR phrase (max 3 words).
 
 ### CONTEXT
 Story Beat: "{story_beat}"
-Current Mood: {mood or "Transcendent"}
-Memory Insights: {memory_insights[:300] if memory_insights else "No prior memories"}
+Current Mood: {mood or "Cynical"}
+Input Text (DO NOT REPEAT): "{memory_insights[:300]}"
 
-### FORBIDDEN PHRASES (DO NOT USE THESE)
+### FORBIDDEN PHRASES (DO NOT USE)
 {forbidden_str}
-CRITICAL: Never use "WAKE UP" or any variation of it.
+
+### STYLE GUIDE : DARK HUMOR DEMOTIVATIONAL
+- Cynical, nihilistic, but funny.
+- Short and punchy.
+- EXAMPLES: "GIVE UP", "TRY LESS", "DOOM AWAITS", "NO HOPE", "JUST STOP", "FUTILE", "OBEY", "CONSUME", "SLEEP", "SUBMIT"
 
 ### RULES
-1. The phrase must be 1-3 words MAXIMUM
-2. It should trigger a subconscious emotional response
-3. Use action verbs that create urgency or desire
-4. Draw thematic connection to the story beat
-5. Must be COMPLETELY DIFFERENT from forbidden phrases
-
-### GRAMMAR PATTERNS (pick one)
-- Single verb: TRANSCEND, IGNITE, BLOOM
-- Verb + Noun: EMBRACE LIGHT, FEEL POWER
-- Verb + Adjective: BECOME INFINITE
+1. MUST be 3 words or less.
+2. MUST NOT be contained in the Input Text.
+3. MUST be dark/cynical/demotivational.
 
 ### OUTPUT
-Return ONLY the phrase in uppercase. No quotes, no explanation."""
+Return ONLY the phrase in uppercase. No quotes."""
 
         try:
             result = await run_llm(prompt, purpose="context_subliminal")
