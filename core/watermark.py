@@ -5,7 +5,7 @@ This module provides sophisticated watermarking capabilities:
 - Energy-based optimal placement using Sobel gradients
 - Rotating logo pool for variety
 - Dynamic text transformations (rotate, scale, skew) based on image content
-- Logo + "l.o.v.e" text composite watermarks
+- Logo + "@e-v-l-o-v-e.bsky.social" text composite watermarks
 """
 
 import os
@@ -21,7 +21,7 @@ import core.logging
 WATERMARK_OPACITY = 0.25  # Default opacity (0-1)
 WATERMARK_MAX_SIZE_RATIO = 0.15  # Max watermark size relative to image
 WATERMARK_MIN_SIZE_RATIO = 0.08  # Min watermark size relative to image
-WATERMARK_TEXT = "l.o.v.e"
+WATERMARK_TEXT = "@e-v-l-o-v-e.bsky.social"
 WATERMARK_MARGIN = 20  # Pixels from edge
 
 # Logo rotation state file
@@ -464,15 +464,15 @@ def apply_watermark(
                 (lx - mask_margin, ly - mask_margin, logo_w + mask_margin*2, logo_h + mask_margin*2)
             )
             
-        # --- 2. Place Hidden "l.o.v.e" Text ---
+        # --- 2. Place Hidden "@e-v-l-o-v-e.bsky.social" Text ---
         # Fixed small size ~8pt (approx 11px at 96dpi, but let's say 12px for visibility)
         # We'll scale it slightly with image size but keep it small
         base_font_size = 12
         font_scale = min(img_w, img_h) / 1024
-        font_size = int(max(8, base_font_size * font_scale))
+        font_size = int(max(12, base_font_size * font_scale))
         
         # Generate text image to get dimensions
-        text_img_temp = create_text_watermark("l.o.v.e", font_size)
+        text_img_temp = create_text_watermark(WATERMARK_TEXT, font_size)
         tw, th = text_img_temp.size
         
         # Find position for text using updated energy map
@@ -487,7 +487,7 @@ def apply_watermark(
         
         # Create final text watermark
         hidden_text = create_text_watermark(
-            "l.o.v.e", 
+            WATERMARK_TEXT, 
             font_size, 
             opacity=0.15, # Very subtle
             rotation=t_angle,
@@ -500,7 +500,7 @@ def apply_watermark(
         
         image.paste(hidden_text, (tx, ty), hidden_text)
         
-        core.logging.log_event(f"Hidden 'l.o.v.e' placed at ({tx}, {ty})", "INFO")
+        core.logging.log_event(f"Hidden '{WATERMARK_TEXT}' placed at ({tx}, {ty})", "INFO")
         
         return image.convert('RGB')
         
