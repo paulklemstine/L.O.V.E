@@ -390,7 +390,7 @@
         // 8. GLITCH
         vec3 viz_glitch(vec2 uv, float t, float p1, float p2, float p3, float p4) {
              // Displace
-             float shift = step(0.9, random(vec2(floor(uv.y * 100.0), t)));
+             float shift = step(0.9, hash(vec2(floor(uv.y * 100.0), t)));
              uv.x += shift * 0.1 * p1;
              
              // Bar code
