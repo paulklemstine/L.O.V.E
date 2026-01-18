@@ -34,7 +34,8 @@ class DeepAgentRunner:
         
         # Run the graph
         # astream returns a stream of outputs from nodes
-        async for output in self.graph.astream(self.state):
+        # Increase recursion limit to allow for complex ReAct + Reflexion loops
+        async for output in self.graph.astream(self.state, config={"recursion_limit": 150}):
             for node_name, node_update in output.items():
                 # Update our local state tracking (optional, as graph maintains it)
                 # But we might want to inspect it

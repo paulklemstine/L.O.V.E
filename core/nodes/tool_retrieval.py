@@ -89,5 +89,8 @@ async def retrieve_tools_node(state: DeepAgentState) -> Dict[str, Any]:
     # Convert ToolMatch objects to tool references
     tools = [match.name for match in tool_matches]
     
-    return {"retrieved_tools": tools}
+    # Increment loop count to prevent infinite retrieval loops
+    current_loop_count = state.get("loop_count", 0)
+    
+    return {"retrieved_tools": tools, "loop_count": current_loop_count + 1}
 

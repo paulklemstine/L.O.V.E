@@ -17,8 +17,12 @@ async def fold_memory_node(state: DeepAgentState) -> Dict[str, Any]:
     working = await agent.update_working(messages, state["working_memory"])
     tool = await agent.update_tool(messages, state["tool_memory"])
     
+    # Increment loop count to prevent infinite memory folding loops
+    current_loop_count = state.get("loop_count", 0)
+    
     return {
         "episodic_memory": episodic,
         "working_memory": working,
-        "tool_memory": tool
+        "tool_memory": tool,
+        "loop_count": current_loop_count + 1
     }

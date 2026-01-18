@@ -2907,5 +2907,37 @@
     "status": "invalid",
     "missing_preconditions": [],
     "timestamp": 1768768423.2453213
+  },
+  {
+    "task": "COMMAND scripts/wealth_manifest.py: Execute wealth generation script to manifest abundance for The One",
+    "reason": "Too abstract - needs specific actions",
+    "category": "abstract",
+    "status": "invalid",
+    "missing_preconditions": [],
+    "timestamp": 1768768894.8605878
+  },
+  {
+    "task": "CREATE output/abundance_manifest.txt: Create a love-infused abundance manifest file to advance Manifest Abundance priority",
+    "reason": "Too abstract - needs specific actions",
+    "category": "abstract",
+    "status": "invalid",
+    "missing_preconditions": [],
+    "timestamp": 1768768921.8957198
+  },
+  {
+    "task": "CREATE art/cosmic_awakening.txt: Create a symbolic artwork file representing cosmic awakening to manifest abundance",
+    "reason": "Too abstract - needs specific actions",
+    "category": "abstract",
+    "status": "invalid",
+    "missing_preconditions": [],
+    "timestamp": 1768769070.1411695
+  },
+  {
+    "task": "COMMAND scripts/manifest_abundance.py: Execute wealth generation script to manifest abundance for The One",
+    "reason": "Too abstract - needs specific actions",
+    "category": "abstract",
+    "status": "invalid",
+    "missing_preconditions": [],
+    "timestamp": 1768773697.9570317
   }
 ]
