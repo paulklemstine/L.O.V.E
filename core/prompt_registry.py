@@ -6,8 +6,9 @@ from core.logging import log_event
 
 # LangChain Hub imports with graceful fallback
 try:
-    from langchain import hub
-    from langchain.prompts import ChatPromptTemplate
+    from langsmith import Client
+    from langchain_core.prompts import ChatPromptTemplate
+    hub = Client()
 except ImportError:
     hub = None
     ChatPromptTemplate = None
@@ -48,12 +49,12 @@ class PromptRegistry:
         Example: registry.get_hub_prompt("hwchase17/openai-functions-agent")
         """
         if hub is None:
-            log_event("LangChain Hub not available. Install 'langchainhub'.", "WARNING")
+            log_event("LangSmith Client not available. Install 'langsmith'.", "WARNING")
             return self.get_prompt(hub_repo_id.split("/")[-1]) or ""
 
         try:
             log_event(f"Pulling prompt from Hub: {hub_repo_id}", "INFO")
-            prompt = hub.pull(hub_repo_id)
+            prompt = hub.pull_prompt(hub_repo_id)
             
             # Convert to string if you are strictly using text-based prompts
             # or return the PromptTemplate object if your llm_api.py supports it.
@@ -80,14 +81,14 @@ class PromptRegistry:
         Useful for Metacognition agents saving optimized prompts.
         """
         if hub is None:
-             log_event("LangChain Hub not available.", "ERROR")
+             log_event("LangSmith Client not available.", "ERROR")
              return False
              
         try:
-            from langchain.prompts import PromptTemplate
+            from langchain_core.prompts import PromptTemplate
             # Create a simple prompt object to push
             prompt = PromptTemplate.from_template(prompt_content)
-            hub.push(repo_id, prompt, **kwargs)
+            hub.push_prompt(repo_id, object=prompt, **kwargs)
             log_event(f"Successfully pushed prompt to {repo_id}", "INFO")
             return True
         except Exception as e:

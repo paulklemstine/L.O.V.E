@@ -34,11 +34,11 @@ class TestPromptHub(unittest.TestCase):
     def test_get_hub_prompt_specific(self):
         """Test specific get_hub_prompt method."""
         try:
-             from langchain import hub
+             from langsmith import Client
         except ImportError:
              return
 
-        with patch('langchain.hub.pull') as mock_pull:
+        with patch('langsmith.Client.pull_prompt') as mock_pull:
             # Mock the remote prompt object
             mock_prompt = MagicMock()
             mock_prompt.template = "REMOTE CONTENT SPECIFIC"
@@ -53,11 +53,11 @@ class TestPromptHub(unittest.TestCase):
     def test_push_to_hub(self):
         """Test pushing to hub."""
         try:
-             from langchain import hub
+             from langsmith import Client
         except ImportError:
              return
 
-        with patch('langchain.hub.push') as mock_push:
+        with patch('langsmith.Client.push_prompt') as mock_push:
             success = self.registry.push_to_hub("my/repo", "Test Prompt")
             self.assertTrue(success)
             mock_push.assert_called()
@@ -65,12 +65,12 @@ class TestPromptHub(unittest.TestCase):
     def test_remote_pull(self):
         """Test that it pulls from hub if enabled (only if module exists)."""
         try:
-             from langchain import hub
+             from langsmith import Client
         except ImportError:
-             print("Skipping remote pull test - langchain.hub not found")
+             print("Skipping remote pull test - langsmith not found")
              return
 
-        with patch('langchain.hub.pull') as mock_pull:
+        with patch('langsmith.Client.pull_prompt') as mock_pull:
             os.environ["USE_REMOTE_PROMPTS"] = "true"
             os.environ["LANGCHAIN_HUB_REPO"] = "love-agent"
             
@@ -107,14 +107,14 @@ class TestMetacognitionHubIntegration(unittest.TestCase):
     def test_push_evolution_prompt(self):
         """Test that MetacognitionAgent can push prompts to Hub."""
         try:
-            from langchain import hub
+            from langsmith import Client
         except ImportError:
-            print("Skipping - langchainhub not installed")
+            print("Skipping - langsmith not installed")
             return
             
         from core.agents.metacognition_agent import MetacognitionAgent
         
-        with patch('langchain.hub.push') as mock_push:
+        with patch('langsmith.Client.push_prompt') as mock_push:
             # Create mock memory manager
             mock_mm = MagicMock()
             mock_mm.add_episode = AsyncMock()
