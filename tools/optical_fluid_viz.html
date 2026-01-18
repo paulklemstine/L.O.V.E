@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ OPTICAL FLUID ENGINE - BLUE SKY</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;500;700&display=swap');
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Rajdhani', sans-serif;
+            color: #fff;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* UI OVERLAY */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            /* Let clicks pass to canvas if needed, but we have buttons */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #start-screen {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(20px);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            pointer-events: auto;
+            transition: opacity 0.8s ease;
+        }
+
+        h1 {
+            font-size: 4rem;
+            letter-spacing: 10px;
+            margin: 0 0 20px 0;
+            text-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+            background: linear-gradient(45deg, #fff, #00e5ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p {
+            font-size: 1.2rem;
+            color: #aaa;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        button {
+            margin-top: 40px;
+            padding: 15px 50px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.5rem;
+            letter-spacing: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button:hover {
+            background: rgba(0, 229, 255, 0.1);
+            border-color: #00e5ff;
+            box-shadow: 0 0 30px rgba(0, 229, 255, 0.3);
+            text-shadow: 0 0 10px cyan;
+        }
+
+        /* POST CONTAINER */
+        #post-card {
+            pointer-events: auto;
+            background: rgba(5, 5, 10, 0.4);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 4px;
+            width: 90%;
+            max-width: 600px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #post-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(to bottom, transparent, #00e5ff, transparent);
+        }
+
+        .handle {
+            color: #00e5ff;
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            display: block;
+        }
+
+        #post-text {
+            font-size: 1.3rem;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        #post-image {
+            width: 100%;
+            border-radius: 2px;
+            margin-top: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: none;
+        }
+
+        .meta {
+            margin-top: 15px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.4);
+            text-align: right;
+        }
+
+        /* DEBUG / STATUS */
+        #status-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        .param-indicator {
+            width: 4px;
+            height: 4px;
+            background: #00e5ff;
+            border-radius: 50%;
+            opacity: 0.2;
+            transition: opacity 0.2s;
+        }
+
+        .param-indicator.active {
+            opacity: 1;
+            box-shadow: 0 0 5px #00e5ff;
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="glcanvas"></canvas>
+
+    <!-- START SCREEN -->
+    <div id="start-screen">
+        <h1>OPTICAL//FLUID</h1>
+        <p>Probalistic Audio-Reactive Render Engine</p>
+        <button id="start-btn">INITIALIZE SYSTEM</button>
+    </div>
+
+    <!-- MAIN UI -->
+    <div id="ui-layer">
+        <div id="post-card">
+            <span class="handle">@e-v-l-o-v-e.bsky.social</span>
+            <div id="post-text">Establishing neural link...</div>
+            <img id="post-image" alt="Embedded Content" />
+            <div id="post-date" class="meta">WAITING FOR SIGNAL</div>
+        </div>
+    </div>
+
+    <div id="status-bar">
+        <div class="param-indicator"></div>
+        <div class="param-indicator"></div>
+        <div class="param-indicator"></div>
+        <div class="param-indicator"></div>
+        <div class="param-indicator"></div>
+        <div class="param-indicator"></div>
+        <div class="param-indicator"></div>
+        <div class="param-indicator"></div>
+        <span id="map-status">MAP: STANDARD</span>
+    </div>
+
+    <!-- SHADERS -->
+    <script id="vert" type="x-shader/x-vertex">
+        attribute vec2 a_position;
+        void main() {
+            gl_Position = vec4(a_position, 0.0, 1.0);
+        }
+    </script>
+
+    <script id="frag" type="x-shader/x-fragment">
+        #ifdef GL_ES
+        precision highp float;
+        #endif
+
+        uniform float u_time;
+        uniform vec2 u_resolution;
+        uniform float u_params[8]; // Controlled by 8 bands
+        
+        // u_params mapping guide (randomized in JS, but functionally):
+        // 0: Fluid Speed / Turbulence
+        // 1: Fluid Color Shift
+        // 2: Beam Intensity
+        // 3: Beam Rotation Speed
+        // 4: Warp Scale
+        // 5: Glow Intensity
+        // 6: Background Pulse
+        // 7: Chromatic Aberration strength
+
+        // --- CONSTANTS & UTILS ---
+        #define PI 3.14159265359
+
+        mat2 rot(float a) {
+            float s = sin(a), c = cos(a);
+            return mat2(c, -s, s, c);
+        }
+
+        // --- NOISE & FLUID ---
+        float random(in vec2 _st) {
+            return fract(sin(dot(_st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+        }
+
+        float noise(in vec2 _st) {
+            vec2 i = floor(_st);
+            vec2 f = fract(_st);
+            float a = random(i);
+            float b = random(i + vec2(1.0, 0.0));
+            float c = random(i + vec2(0.0, 1.0));
+            float d = random(i + vec2(1.0, 1.0));
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+        }
+
+        float fbm(in vec2 st) {
+            float v = 0.0;
+            float a = 0.5;
+            vec2 shift = vec2(100.0);
+            mat2 rot2 = rot(0.5);
+            for (int i = 0; i < 5; i++) {
+                v += a * noise(st);
+                st = rot2 * st * 2.0 + shift;
+                a *= 0.5;
+            }
+            return v;
+        }
+
+        // --- SPARKLES & GEOMETRY ---
+        float sparkles(vec2 uv, float t) {
+            float n = noise(uv * 20.0 + t);
+            return pow(n, 15.0) * 2.0; // High threshold for distinct points
+        }
+        
+        float hexGrid(vec2 uv) {
+            vec2 r = vec2(1.0, 1.732);
+            vec2 h = r * 0.5;
+            vec2 a = mod(uv, r) - h;
+            vec2 b = mod(uv - h, r) - h;
+            vec2 gv = length(a) < length(b) ? a : b;
+            return smoothstep(0.45, 0.5, length(gv));
+        }
+
+        // --- LIGHT BEAMS ---
+        // Generates crisscrossing beams using folded coordinates and distance fields
+        float lightBeams(vec2 uv, float time, float width, float intensity) {
+            vec2 p = uv;
+            
+            // Mirror Fold
+            p = abs(p);
+            p = abs(p - 0.5); // Double fold
+
+            // Rotate based on time and audio
+            p *= rot(time * 0.2);
+
+            // Create rays
+            float angle = atan(p.y, p.x);
+            float radius = length(p);
+            
+            // High frequency sine for thin rays
+            float rays = sin(angle * 20.0 + time) * sin(angle * 13.0 - time * 0.5);
+            
+            // Smooth and sharpen
+            rays = smoothstep(width, width + 0.1, rays);
+            
+            // Fade out at edges
+            rays *= 1.0 / (radius * 2.0 + 0.1);
+
+            return rays * intensity;
+        }
+
+        void main() {
+            vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y;
+            vec2 uv0 = uv;
+
+            float time = u_time * 0.5;
+
+            // --- FLUID SIMULATION (Domain Warping) ---
+            // p = pattern point
+            vec2 p = uv * (2.0 + u_params[4]); // Zoom/Warp Scale
+            vec2 q = vec2(0.);
+            vec2 r = vec2(0.);
+
+            // First warp
+            q.x = fbm(p + 0.00 * time);
+            q.y = fbm(p + vec2(1.0));
+
+            // Second warp (feedback)
+            r.x = fbm(p + 1.0 * q + vec2(1.7, 9.2) + 0.15 * time * (1.0 + u_params[0])); // Speed controlled by param 0
+            r.y = fbm(p + 1.0 * q + vec2(8.3, 2.8) + 0.126 * time);
+
+            float f = fbm(p + r);
+
+            // --- COLOR MAPPING (DMT / Hyper-Vibrant) ---
+            // Enhanced Palette: Deep Void -> Neon Cyan -> Electric Purple -> Golden Light
+            vec3 col1 = vec3(0.05, 0.0, 0.1); // Deep purple/black
+            vec3 col2 = vec3(0.0, 0.8, 0.9); // Neon Cyan
+            vec3 col3 = vec3(0.9, 0.0, 0.8); // Magenta/Electric Purple
+            vec3 col4 = vec3(1.0, 0.9, 0.2); // Intense Gold
+
+            // Mix based on 'f' and audio color shift (param 1)
+            // Color Shift rotates the hue heavily
+            float mixTerm = f * 3.0 + u_params[1] * 4.0 + time * 0.2; 
+            mixTerm = mod(mixTerm, 3.0); // Cycle through
+            
+            vec3 fluidColor = mix(col1, col2, clamp(mixTerm, 0.0, 1.0));
+            fluidColor = mix(fluidColor, col3, clamp(mixTerm - 1.0, 0.0, 1.0));
+            fluidColor = mix(fluidColor, col4, clamp(mixTerm - 2.0, 0.0, 1.0));
+            
+            // Boost Saturation
+            fluidColor *= 1.2;
+
+            // --- CRISS CROSSING BEAMS ---
+            // Overlaying optical physics
+            vec2 beamUV = uv;
+            beamUV *= rot(u_time * (0.05 + u_params[3] * 0.2)); 
+            
+            float beamVal = lightBeams(beamUV, u_time, 0.3 - u_params[2]*0.2, u_params[2] * 2.0); // Intensity param 2
+            
+            // --- SPARKLES ---
+            float spark = sparkles(uv, u_time * 2.0);
+            spark *= u_params[5] + 0.2; // Controlled by Glow Param
+
+            // --- GEOMETRIC OVERLAY (Subtle) ---
+            float hex = hexGrid(uv * (2.0 + u_params[4]*2.0)); // Scale with warp
+            vec3 geomColor = vec3(1.0) * (1.0 - hex) * 0.1 * u_params[6]; // Background Pulse controls grid visibility
+
+            // --- COMPOSITION ---
+            vec3 finalColor = fluidColor;
+            finalColor += vec3(0.7, 0.9, 1.0) * beamVal; // Add beams
+            finalColor += vec3(1.0, 1.0, 1.0) * spark;   // Add sparkles
+            finalColor += geomColor;                     // Add grid
+
+            // --- CHROMATIC ABERRATION (Audio Kick) ---
+            float abr = u_params[7] * 0.05 * length(uv);
+            finalColor.r += fbm(p + r + abr) * 0.2;
+            finalColor.b += fbm(p + r - abr) * 0.2;
+
+            // --- BACKGROUND PULSE & VIGNETTE ---
+            finalColor *= (0.8 + u_params[6] * 0.4);
+            finalColor *= 1.2 - length(uv0) * 0.8;
+
+            gl_FragColor = vec4(finalColor, 1.0);
+        }
+    </script>
+
+    <!-- LOGIC -->
+    <script>
+        // CONFIG
+        const CONFIG = {
+            handle: 'e-v-l-o-v-e.bsky.social',
+            apiBase: 'https://public.api.bsky.app/xrpc',
+            smoothing: 0.85, // Analyser smoothing
+            fullRes: 2048
+        };
+
+        // AUDIO ENGINE
+        let audioCtx, analyser, dataArray;
+        let bands = new Float32Array(8); // 8 Control Bands
+        let smoothedBands = new Float32Array(8);
+        let paramMap = [0, 1, 2, 3, 4, 5, 6, 7]; // Which band controls which param (0-7)
+        let isRunning = false;
+
+        // PARAMETER TARGETS (For smooth lerping of randomization)
+        // We don't lerp the map indices, we lerp the values fed to shader.
+        // Actually, simpler: we keep logic simple. Rerolls change the physical meaning of bands.
+
+        // Reroll Logic
+        let energyHistory = [];
+        const HISTORY_SIZE = 60; // 1 second @ 60fps
+        let lastRerollTime = 0;
+
+        function initAudio() {
+            navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then(stream => {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = CONFIG.fullRes;
+                analyser.smoothingTimeConstant = CONFIG.smoothing;
+
+                const src = audioCtx.createMediaStreamSource(stream);
+                src.connect(analyser);
+
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                // Start Visuals
+                document.getElementById('start-screen').style.opacity = 0;
+                setTimeout(() => document.getElementById('start-screen').style.display = 'none', 800);
+                document.getElementById('post-card').style.opacity = 1;
+                document.getElementById('post-card').style.transform = 'translateY(0)';
+
+                isRunning = true;
+                startTime = Date.now();
+                render();
+
+                stream.getVideoTracks()[0].onended = () => {
+                    alert("Stream source ended. Refresh to restart.");
+                }
+            }).catch(e => {
+                alert("Audio Init Failed: " + e);
+            });
+        }
+
+        document.getElementById('start-btn').onclick = initAudio;
+
+        // WEBGL ENGINE
+        const canvas = document.getElementById('glcanvas');
+        const gl = canvas.getContext('webgl');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertSrc = document.getElementById('vert').textContent;
+        const fragSrc = document.getElementById('frag').textContent;
+
+        const program = gl.createProgram();
+        gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, vertSrc));
+        gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, fragSrc));
+        gl.linkProgram(program);
+        gl.useProgram(program);
+
+        const buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+
+        const aPos = gl.getAttribLocation(program, "a_position");
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+        const uTime = gl.getUniformLocation(program, "u_time");
+        const uRes = gl.getUniformLocation(program, "u_resolution");
+        const uParams = gl.getUniformLocation(program, "u_params");
+
+        // REROLL FUNCTION
+        function rerollMapping() {
+            // Fisher-Yates shuffle
+            for (let i = paramMap.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [paramMap[i], paramMap[j]] = [paramMap[j], paramMap[i]];
+            }
+
+            // Visual Feedback
+            const status = document.getElementById('map-status');
+            status.innerText = "MAP: REROLLED [" + paramMap.slice(0, 3).join('') + ".." + "]";
+            status.style.color = '#fff';
+            status.style.textShadow = '0 0 10px #fff';
+            setTimeout(() => {
+                status.style.color = 'rgba(255,255,255,0.3)';
+                status.style.textShadow = 'none';
+            }, 500);
+        }
+
+        let startTime = Date.now();
+
+        function render() {
+            if (!isRunning) return requestAnimationFrame(render);
+
+            const now = (Date.now() - startTime) * 0.001;
+            analyser.getByteFrequencyData(dataArray);
+
+            // 1. Process Audio into 8 Bands (Logarithmic)
+            // Lows (0-1), Mids (2-5), Highs (6-7)
+            let rawBands = new Float32Array(8);
+            let binCount = 0;
+            let currentBin = 0;
+
+            // Simple linear partitioning for now, optimized for music
+            // 0: Subbass, 1: Bass, 2: Lo-Mid, 3: Mid, 4: Hi-Mid, 5: Presence, 6: Brilliance, 7: Air
+            // Manually selecting ranges to cover useful spectrum
+            const boundaries = [4, 12, 30, 60, 100, 200, 400, 800]; // Approximate bin indices (up to 1024)
+
+            let prevIdx = 0;
+            for (let b = 0; b < 8; b++) {
+                let sum = 0;
+                let count = 0;
+                let targetIdx = boundaries[b];
+
+                for (let i = prevIdx; i < targetIdx && i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                    count++;
+                }
+                rawBands[b] = (count > 0 ? sum / count : 0) / 255.0; // Normalize 0-1
+                prevIdx = targetIdx;
+            }
+
+            // 2. Transients / Drop Detection
+            // Monitor aggregated energy
+            let instantEnergy = rawBands.reduce((a, b) => a + b, 0) / 8.0;
+            energyHistory.push(instantEnergy);
+            if (energyHistory.length > HISTORY_SIZE) energyHistory.shift();
+
+            // Calculate average energy of last second
+            let avgEnergy = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
+
+            // Trigger Randomization?
+            // If sudden spike (drop) > threshold relative to average
+            // And cooldown passed
+            if (Date.now() - lastRerollTime > 5000) { // 5s min cooldown
+                if (instantEnergy > avgEnergy * 1.5 && instantEnergy > 0.3) {
+                    rerollMapping();
+                    lastRerollTime = Date.now();
+                }
+            }
+
+            // 3. Smooth & Map Params
+            let finalParams = new Float32Array(8);
+            for (let i = 0; i < 8; i++) {
+                // Smooth
+                smoothedBands[i] += (rawBands[i] - smoothedBands[i]) * 0.1;
+
+                // Map based on current permutation
+                // param[i] gets driven by band[paramMap[i]]
+                finalParams[i] = smoothedBands[paramMap[i]];
+            }
+
+            // 4. Update Uniforms
+            gl.uniform1f(uTime, now);
+            gl.uniform2f(uRes, canvas.width, canvas.height);
+            gl.uniform1fv(uParams, finalParams);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            // Update UI indicators
+            const indicators = document.querySelectorAll('.param-indicator');
+            indicators.forEach((ind, idx) => {
+                if (finalParams[idx] > 0.5) ind.classList.add('active');
+                else ind.classList.remove('active');
+            });
+
+            requestAnimationFrame(render);
+        }
+
+        // BLUESKY INTEGRATION
+        async function fetchFeed() {
+            try {
+                const didRes = await fetch(`${CONFIG.apiBase}/com.atproto.identity.resolveHandle?handle=${CONFIG.handle}`);
+                const didData = await didRes.json();
+                const feedRes = await fetch(`${CONFIG.apiBase}/app.bsky.feed.getAuthorFeed?actor=${didData.did}&limit=1`);
+                const feedData = await feedRes.json();
+
+                if (feedData.feed && feedData.feed.length > 0) {
+                    const post = feedData.feed[0].post;
+                    const textEl = document.getElementById('post-text');
+                    const imgEl = document.getElementById('post-image');
+                    const dateEl = document.getElementById('post-date');
+
+                    // text update check to avoid flicker
+                    if (textEl.innerText !== post.record.text) {
+                        textEl.innerText = post.record.text;
+                        dateEl.innerText = new Date(post.record.createdAt).toLocaleTimeString() + " // SYSTEM ACTIVE";
+
+                        // Fade in effect
+                        const card = document.getElementById('post-card');
+                        card.style.opacity = 0.5;
+                        setTimeout(() => card.style.opacity = 1, 100);
+                    }
+
+                    if (post.embed?.images?.[0]) {
+                        imgEl.src = post.embed.images[0].fullsize;
+                        imgEl.style.display = 'block';
+                    } else {
+                        imgEl.style.display = 'none';
+                    }
+                }
+            } catch (e) {
+                console.log("Comms Error", e);
+            }
+        }
+
+        // Initial Fetch & Poll
+        fetchFeed();
+        setInterval(fetchFeed, 30000);
+
+    </script>
+</body>
+
+</html>
