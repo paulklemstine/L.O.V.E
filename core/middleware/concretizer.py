@@ -68,11 +68,15 @@ class Concretizer:
         """
 
         try:
+            full_prompt = f"System Instruction: You are a transpiler from Poetry to Python instructions. Output raw text only.\n\n{prompt}"
+
             concrete_step = await run_llm(
-                prompt,
-                system_instruction="You are a transpiler from Poetry to Python instructions. Output raw text only.",
-                model="gemini-2.0-flash-exp"
+                prompt_text=full_prompt,
+                force_model="gemini-2.0-flash-exp",
+                purpose="code_generation"
             )
+            if isinstance(concrete_step, dict):
+                 return concrete_step.get("result", "").strip()
             return concrete_step.strip()
         except Exception as e:
             log_event("concretizer_failed", {"error": str(e)})
