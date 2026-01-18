@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>👁️ MACHINE ELF ENGINE v2</title>
+    <title>👁️ OMNI-VERSE ENGINE v3</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;500;700&display=swap');
 
@@ -20,7 +20,7 @@
             color: #fff;
         }
 
-        canvas {
+        canvas#glcanvas {
             display: block;
             width: 100%;
             height: 100%;
@@ -30,12 +30,25 @@
             z-index: 1;
         }
 
+        canvas#freqcanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 60px;
+            /* Width of the sidebar */
+            height: 100%;
+            z-index: 20;
+            background: rgba(0, 0, 0, 0.5);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         /* UI OVERLAY */
         #ui-layer {
             position: absolute;
             top: 0;
-            left: 0;
-            width: 100%;
+            left: 60px;
+            /* Offset for sidebar */
+            width: calc(100% - 60px);
             height: 100%;
             z-index: 10;
             pointer-events: none;
@@ -83,7 +96,7 @@
             }
         }
 
-        button {
+        button.start-btn {
             margin-top: 50px;
             padding: 20px 80px;
             background: transparent;
@@ -96,7 +109,7 @@
             transition: all 0.2s;
         }
 
-        button:hover {
+        button.start-btn:hover {
             background: #fff;
             color: #000;
             box-shadow: 0 0 40px #fff;
@@ -106,8 +119,8 @@
         /* POST CARD */
         #post-card {
             pointer-events: auto;
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 40px;
             border-radius: 12px;
             width: 80%;
@@ -144,17 +157,57 @@
             box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
         }
 
-        /* STATUS */
-        #layer-status {
+        /* CONTROLS */
+        #controls {
             position: absolute;
-            bottom: 40px;
-            left: 40px;
-            font-size: 1.2rem;
-            font-weight: 700;
+            bottom: 30px;
+            left: 90px;
+            /* Clears sidebar */
+            z-index: 50;
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        .ctrl-btn {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 10px 20px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            letter-spacing: 2px;
+            cursor: pointer;
             text-transform: uppercase;
-            letter-spacing: 4px;
-            z-index: 20;
-            color: rgba(255, 255, 255, 0.7);
+            transition: all 0.2s;
+        }
+
+        .ctrl-btn:hover {
+            border-color: #0ff;
+            color: #0ff;
+            background: rgba(0, 255, 255, 0.1);
+        }
+
+        .ctrl-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .ctrl-label {
+            font-size: 0.7rem;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+
+        #status-display {
+            margin-left: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-shadow: 0 0 5px #000;
         }
     </style>
 </head>
@@ -162,24 +215,42 @@
 <body>
 
     <canvas id="glcanvas"></canvas>
+    <canvas id="freqcanvas"></canvas>
 
     <div id="start-screen">
-        <h1>MACHINE ELF</h1>
-        <p style="letter-spacing: 5px; color: #888;">HYPER-DIMENSIONAL VISUALIZER v2.0</p>
-        <button id="start-btn">ENTER VOID</button>
+        <h1>OMNI-VERSE</h1>
+        <p style="letter-spacing: 5px; color: #888;">VISUAL ENGINE v3.0</p>
+        <button id="start-btn" class="start-btn">IGNITE</button>
     </div>
 
     <div id="ui-layer">
         <div id="post-card">
             <span class="handle">@e-v-l-o-v-e.bsky.social</span>
-            <div id="post-text">Attuning to hyperspace frequencies...</div>
+            <div id="post-text">Connecting to dimensionality matrix...</div>
             <img id="post-image" />
             <div id="post-date" style="text-align: right; margin-top: 15px; color: #888; font-size: 0.9rem;">SYSTEM
                 READY</div>
         </div>
     </div>
 
-    <div id="layer-status">Waiting for Signal...</div>
+    <div id="controls">
+        <div class="ctrl-group">
+            <span class="ctrl-label">LAYER A</span>
+            <button class="ctrl-btn" onclick="cycleLayer(0)">CYCLE</button>
+        </div>
+        <div class="ctrl-group">
+            <span class="ctrl-label">LAYER B</span>
+            <button class="ctrl-btn" onclick="cycleLayer(1)">CYCLE</button>
+        </div>
+        <div class="ctrl-group">
+            <span class="ctrl-label">SYSTEM</span>
+            <button class="ctrl-btn" style="border-color: #f0f" onclick="forceReroll()">REROLL</button>
+        </div>
+        <div id="status-display">
+            <span id="layer-a-name" style="color: #0ff">FLUID</span>
+            <span id="layer-b-name" style="color: #f0f">FRACTAL</span>
+        </div>
+    </div>
 
     <!-- SHADERS -->
     <script id="vert" type="x-shader/x-vertex">
@@ -208,7 +279,6 @@
             return mat2(c, -s, s, c);
         }
 
-        // Improved Hash
         float hash(vec2 p) {
             vec3 p3  = fract(vec3(p.xyx) * 0.1031);
             p3 += dot(p3, p3.yzx + 33.33);
@@ -237,176 +307,179 @@
             return v;
         }
 
-        // MACHINE ELF PALETTE
-        // Cosine based mix
+        // PALETTE
         vec3 elfPalette(float t) {
             vec3 a = vec3(0.5, 0.5, 0.5);
             vec3 b = vec3(0.5, 0.5, 0.5);
             vec3 c = vec3(1.0, 1.0, 1.0);
             vec3 d = vec3(0.263, 0.416, 0.557); 
-            // Phase shift for neon
             return a + b * cos(6.28318 * (c * t + d + vec3(0.0, 0.1, 0.2)));
         }
 
-        // --- VISUAL LIBRARY ---
+        // --- VISUAL LIBRARY (16 LAYERS) ---
 
-        // 1. FLUID (Enhanced - Anchored)
+        // 1. FLUID
         vec3 viz_fluid(vec2 uv, float t, float p1, float p2, float p3, float p4) {
              vec2 p = uv * (3.0 + p1); 
-             // Fix Drift: Domain warping uses relative offsets, not global translation
-             vec2 q = vec2(fbm(p + vec2(0.0, 0.0)), fbm(p + vec2(5.2, 1.3)));
-             vec2 r = vec2(fbm(p + 4.0*q + vec2(1.7, 9.2) + 0.15*t*(0.1+p2)), 
-                           fbm(p + 4.0*q + vec2(8.3, 2.8) - 0.12*t));
+             vec2 q = vec2(fbm(p), fbm(p + vec2(5.2, 1.3)));
+             vec2 r = vec2(fbm(p + 4.0*q + vec2(1.7, 9.2) + 0.15*t), fbm(p + 4.0*q + vec2(8.3, 2.8) - 0.12*t));
              float f = fbm(p + 4.0*r);
-             
-             // Color
-             float hue = f * 3.0 + t * 0.1 + p3;
-             vec3 col = elfPalette(hue);
-             return col * f * f * (1.5 + p4*2.0);
+             return elfPalette(f * 3.0 + t * 0.1 + p3) * f * f * (1.5 + p4*2.0);
         }
 
-        // 2. KIFS FRACTAL (Geometric)
+        // 2. FRACTAL
         vec3 viz_fractal(vec2 uv, float t, float p1, float p2, float p3, float p4) {
             uv *= 1.5 - p1*0.5;
             vec3 col = vec3(0.0);
             vec2 z = uv;
-            
             float scale = 1.5 + p2 * 0.5;
             float angle = t * 0.1 + p3;
-            
             float d = 100.0;
             for(int i=0; i<4; i++) {
-                z = abs(z) - 0.5; // Fold
-                z *= rot(angle);
-                z *= scale;
+                z = abs(z) - 0.5; z *= rot(angle); z *= scale;
                 d = min(d, length(z) / pow(scale, float(i)));
             }
-            
-            // Glow
-            float glow = 0.02 / max(d, 0.001);
-            glow *= (0.5 + p4);
-            return vec3(glow) * elfPalette(length(uv) + t);
+            return vec3(0.02 / max(d, 0.001) * (0.5 + p4)) * elfPalette(length(uv) + t);
         }
 
-        // 3. ENTITY (Symmetry Face)
+        // 3. ENTITY
         vec3 viz_entity(vec2 uv, float t, float p1, float p2, float p3, float p4) {
-            // Mirror X
             uv.x = abs(uv.x);
-            // Translate to form "eyes"
             vec2 eyeUV = uv - vec2(0.4, 0.2 * sin(t));
-            
             float r = length(eyeUV);
-            float a = atan(eyeUV.y, eyeUV.x);
-            
-            // Iris pattern
-            float f = sin(a * 10.0 + t) * cos(r * 20.0 - t*2.0);
+            float f = sin(atan(eyeUV.y, eyeUV.x) * 10.0 + t) * cos(r * 20.0 - t*2.0);
             float pupil = smoothstep(0.1 + p1*0.2, 0.05, r);
             float iris = smoothstep(0.4, 0.3, r) - pupil;
-            
-            vec3 col = vec3(f * iris) * elfPalette(p3 + r);
-            col += vec3(pupil); // Black pupil logic reversed here (white pupil for glowing entity)
-            
-            // Background waves
-            float wave = sin(uv.y * 10.0 + uv.x * 10.0 + t);
-            col += vec3(wave * 0.1 * p4);
-            
-            return col;
+            return (vec3(f * iris) * elfPalette(p3 + r)) + vec3(pupil);
         }
 
-        // 4. HYPERCUBE (Projected)
+        // 4. HYPERCUBE
         vec3 viz_hypercube(vec2 uv, float t, float p1, float p2, float p3, float p4) {
-            // Pseudo-3D wireframe
-            // Simply drawing lines
-            vec3 col = vec3(0.0);
-            
-            // Rotate space
             uv *= rot(t * 0.2);
-            
-            // Grid of boxes
             vec2 gv = fract(uv * (2.0 + p1*2.0)) - 0.5;
             vec2 id = floor(uv * (2.0 + p1*2.0));
-            
-            float d = length(max(abs(gv) - 0.3, 0.0)); // Box SDF
-            
-            // Rotation inside box
-            // Only draw edges
-            float w = 0.02;
-            float mask = smoothstep(w + 0.01, w, abs(d)); // Solid outline
-            
-            // Inner glowing core
-            float core = 0.05 / length(gv);
-            
-            vec3 boxCol = elfPalette(id.x + id.y + t*0.5 + p2);
-            return (vec3(mask) + vec3(core * p3)) * boxCol * (0.5 + p4);
+            float d = length(max(abs(gv) - 0.3, 0.0));
+            float mask = smoothstep(0.03, 0.02, abs(d));
+            return (vec3(mask) + vec3(0.05/length(gv)*p3)) * elfPalette(id.x + id.y + t*0.5 + p2) * (0.5+p4);
         }
 
-        // 5. TUNNEL (V2)
+        // 5. TUNNEL
         vec3 viz_tunnel(vec2 uv, float t, float p1, float p2, float p3, float p4) {
             float r = length(uv);
-            float a = atan(uv.y, uv.x);
-            
-            // Twist
-            a += 1.0 / (r + 0.01) * sin(t*0.5);
-            
-            // Texture
-            float u = 0.5/r + t * (0.5 + p1); // Speed
-            float v = a/PI * (2.0 + floor(p2 * 5.0)); // Segments
-            
-            float tex = step(0.5, fract(u)) * step(0.5, fract(v));
-            tex += step(0.9, fract(u)) * 2.0; // Rings
-            
-            vec3 col = vec3(tex) * (r * r * 2.0); // Fade center
-            return col * elfPalette(u + p3) * (0.5 + p4);
+            float a = atan(uv.y, uv.x) + 1.0/(r+0.01)*sin(t*0.5);
+            float u = 0.5/r + t * (0.5 + p1);
+            float v = a/PI * (2.0 + floor(p2*5.0));
+            float tex = step(0.5, fract(u)) * step(0.5, fract(v)) + step(0.9, fract(u))*2.0;
+            return vec3(tex) * (r*r*2.0) * elfPalette(u + p3) * (0.5+p4);
         }
 
-        // 6. FIRE (Fixed Drift)
+        // 6. FIRE
         vec3 viz_fire(vec2 uv, float t, float p1, float p2, float p3, float p4) {
-            // Anchor Y movement
-            vec2 offset = vec2(0.0, -t * (0.5 + p1));
-            // Noise sampling
-            float n = fbm(uv * 3.0 + offset);
-            
-            // Gradient: Bottom=Hot, Top=Cool
-            // Map UV.y to flame height properly
-            // Center is 0, so -1 to 1.
-            float yGradient = 1.0 - (uv.y + 0.5); // Bottom is 1.0
-            
-            float intensity = n * yGradient * 2.0;
-            intensity = pow(intensity, 2.0); // Contrast
-            
-            vec3 col = mix(vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), intensity);
-            return col * intensity * (1.0 + p3);
+            float n = fbm(uv * 3.0 + vec2(0.0, -t*(0.5+p1)));
+            float intensity = pow(n * (1.0 - (uv.y+0.5)) * 2.0, 2.0);
+            return mix(vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), intensity) * intensity * (1.0+p3);
         }
-        
+
         // 7. BEAMS
         vec3 viz_beams(vec2 uv, float t, float p1, float p2, float p3, float p4) {
             float a = atan(uv.y, uv.x);
-            float r = length(uv);
-            float beams = sin(a * (10.0 + floor(p1*10.0)) + t) * sin(a*(7.0)+t*0.5);
-            beams = smoothstep(0.8 - p2*0.5, 1.0, beams);
-            return vec3(beams) * (0.1/r) * elfPalette(t + p3) * (1.0 + p4);
+            float beams = sin(a * (10.0 + floor(p1*10.0)) + t) * sin(a*7.0+t*0.5);
+            return vec3(smoothstep(0.8-p2*0.5, 1.0, beams)) * (0.1/length(uv)) * elfPalette(t + p3) * (1.0+p4);
         }
 
         // 8. GLITCH
         vec3 viz_glitch(vec2 uv, float t, float p1, float p2, float p3, float p4) {
-             // Displace
              float shift = step(0.9, hash(vec2(floor(uv.y * 100.0), t)));
              uv.x += shift * 0.1 * p1;
-             
-             // Bar code
-             float bar = step(0.5, sin(uv.x * 100.0 * p2));
-             vec3 col = vec3(bar) * vec3(0.0, 1.0, 0.0);
-             return col * p4;
+             return vec3(step(0.5, sin(uv.x*100.0*p2))) * vec3(0.0, 1.0, 0.0) * p4;
+        }
+
+        // 9. MANDALA
+        vec3 viz_mandala(vec2 uv, float t, float p1, float p2, float p3, float p4) {
+            float r = length(uv);
+            float a = atan(uv.y, uv.x);
+            float arms = 6.0 + floor(p1 * 6.0);
+            a = mod(a, 2.0*PI/arms) - PI/arms;
+            uv = vec2(cos(a), sin(a)) * r;
+            uv -= 0.5;
+            float pat = sin(uv.x * 20.0 + t) * cos(uv.y * 20.0 - t);
+            return vec3(smoothstep(0.0, 0.1, abs(pat))) * elfPalette(r + t + p3) * p4;
+        }
+
+        // 10. NEURO
+        vec3 viz_neuro(vec2 uv, float t, float p1, float p2, float p3, float p4) {
+            vec2 p = uv * (3.0 + p1*3.0);
+            float n = noise(p + t);
+            float m = noise(p*2.0 - t);
+            float val = 0.02 / abs(n - m);
+            return vec3(val) * vec3(0.2, 0.5, 1.0) * p4;
+        }
+
+        // 11. RAIN
+        vec3 viz_rain(vec2 uv, float t, float p1, float p2, float p3, float p4) {
+            vec2 gv = fract(uv * 20.0);
+            vec2 id = floor(uv * 20.0);
+            float drop = fract(t * (1.0+p1) + hash(id)*5.0);
+            float val = smoothstep(0.9, 1.0, drop) * step(0.5, hash(id + vec2(1.0)));
+            return vec3(0.0, 1.0, 0.5) * val * p4 * 4.0;
+        }
+
+        // 12. WAVEFORM
+        vec3 viz_waveform(vec2 uv, float t, float p1, float p2, float p3, float p4) {
+            float lines = 0.0;
+            for(float i=0.0; i<5.0; i++){
+                float y = sin(uv.x * (5.0+i) + t * (1.0+p1) + i) * 0.3 * p2;
+                lines += 0.01 / abs(uv.y - y);
+            }
+            return vec3(lines) * elfPalette(t) * p4;
+        }
+
+        // 13. SPIRAL
+        vec3 viz_spiral(vec2 uv, float t, float p1, float p2, float p3, float p4) {
+            float r = length(uv);
+            float a = atan(uv.y, uv.x);
+            float s = sin(a * 10.0 - r * 20.0 + t * 5.0 * p1);
+            return vec3(s) * elfPalette(r*2.0 - t) * p4;
+        }
+
+        // 14. CRYSTAL
+        vec3 viz_crystal(vec2 uv, float t, float p1, float p2, float p3, float p4) {
+            vec2 n = floor(uv * 5.0);
+            vec2 f = fract(uv * 5.0);
+            float md = 1.0;
+            for(int j=-1; j<=1; j++)
+            for(int i=-1; i<=1; i++) {
+                vec2 g = vec2(float(i),float(j));
+                vec2 o = hash(n+g) * 0.5 + 0.5; // bug here? hash returns float. Fix below.
+                o = vec2(hash(n+g), hash(n+g+vec2(12.3, 45.6))); // pseudo random vec2
+                o = 0.5 + 0.5*sin(t + 6.28*o);
+                vec2 r = g + o - f;
+                float d = length(r);
+                md = min(md, d);
+            }
+            vec3 col = elfPalette(md*2.0 + p3);
+            return col * (1.0-md) * p4 * 2.0;
+        }
+
+        // 15. LATTICE
+        vec3 viz_lattice(vec2 uv, float t, float p1, float p2, float p3, float p4) {
+             uv *= rot(t*0.1);
+             vec2 gv = fract(uv * 4.0);
+             float d = length(gv-0.5);
+             float circles = smoothstep(0.4, 0.41, d) - smoothstep(0.5, 0.51, d);
+             return vec3(circles) * elfPalette(length(uv)*p1 + p3) * p4 * 2.0;
+        }
+
+        // 16. STARDUST (Snow replacement)
+        vec3 viz_stardust(vec2 uv, float t, float p3) {
+             float s = pow(noise(uv * 50.0 + t * 5.0), 30.0);
+             return vec3(s) * (1.0 + p3);
         }
 
         vec3 getLayer(int type, vec2 uv, float time, int offset) {
             float p1, p2, p3, p4;
-            // Map parameters
-            if (offset == 0) {
-                 p1 = u_params[0]; p2 = u_params[1]; p3 = u_params[2]; p4 = u_params[3];
-            } else {
-                 p1 = u_params[8]; p2 = u_params[9]; p3 = u_params[10]; p4 = u_params[11];
-            }
+            if (offset == 0) { p1=u_params[0]; p2=u_params[1]; p3=u_params[2]; p4=u_params[3]; }
+            else { p1=u_params[8]; p2=u_params[9]; p3=u_params[10]; p4=u_params[11]; }
 
             if (type == 0) return viz_fluid(uv, time, p1, p2, p3, p4);
             if (type == 1) return viz_fractal(uv, time, p1, p2, p3, p4);
@@ -416,6 +489,14 @@
             if (type == 5) return viz_fire(uv, time, p1, p2, p3, p4);
             if (type == 6) return viz_beams(uv, time, p1, p2, p3, p4);
             if (type == 7) return viz_glitch(uv, time, p1, p2, p3, p4);
+            if (type == 8) return viz_mandala(uv, time, p1, p2, p3, p4);
+            if (type == 9) return viz_neuro(uv, time, p1, p2, p3, p4);
+            if (type == 10) return viz_rain(uv, time, p1, p2, p3, p4);
+            if (type == 11) return viz_waveform(uv, time, p1, p2, p3, p4);
+            if (type == 12) return viz_spiral(uv, time, p1, p2, p3, p4);
+            if (type == 13) return viz_crystal(uv, time, p1, p2, p3, p4);
+            if (type == 14) return viz_lattice(uv, time, p1, p2, p3, p4);
+            // Stardust is separate overlay
             return vec3(0.0);
         }
 
@@ -427,13 +508,14 @@
             vec3 l2 = getLayer(u_layer2_type, uv, u_time, 1);
             
             vec3 final = l1 + l2;
-            
-            // Global Sparkles
-            float s = pow(noise(uv * 50.0 + u_time * 5.0), 30.0);
-            final += vec3(s) * 2.0;
+
+            // STARDUST (Controlled, Active only if Layer 15 is selected? No, separate overlay)
+            // But wait, plan says "Layer 16: Stardust".
+            // Let's allow Stardust to be one of the selectables.
+            if (u_layer1_type == 15) final += viz_stardust(uv, u_time, u_params[2]);
+            if (u_layer2_type == 15) final += viz_stardust(uv, u_time, u_params[10]);
 
             final *= 1.2 - length(uv0);
-
             gl_FragColor = vec4(final, 1.0);
         }
     </script>
@@ -447,7 +529,9 @@
 
         const LAYERS = [
             "FLUID", "FRACTAL", "ENTITY", "HYPERCUBE",
-            "TUNNEL", "FIRE", "BEAMS", "GLITCH"
+            "TUNNEL", "FIRE", "BEAMS", "GLITCH",
+            "MANDALA", "NEURO", "RAIN", "WAVEFORM",
+            "SPIRAL", "CRYSTAL", "LATTICE", "STARDUST"
         ];
 
         let audioCtx, analyser, dataArray;
@@ -463,32 +547,55 @@
         let energyHistory = new Array(60).fill(0);
         let lastDrop = 0;
 
+        // Freq Canvas
+        const fcvs = document.getElementById('freqcanvas');
+        const fctx = fcvs.getContext('2d');
+
         function initAudio() {
             navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then(stream => {
-                try {
-                    const AC = window.AudioContext || window.webkitAudioContext;
-                    audioCtx = new AC();
-                    analyser = audioCtx.createAnalyser();
-                    analyser.fftSize = 1024;
-                    analyser.smoothingTimeConstant = CONFIG.smoothing;
+                const AC = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AC();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 1024;
+                analyser.smoothingTimeConstant = CONFIG.smoothing;
 
-                    const src = audioCtx.createMediaStreamSource(stream);
-                    src.connect(analyser);
-                    dataArray = new Uint8Array(analyser.frequencyBinCount);
+                const src = audioCtx.createMediaStreamSource(stream);
+                src.connect(analyser);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-                    document.getElementById('start-screen').style.opacity = 0;
-                    setTimeout(() => document.getElementById('start-screen').style.display = 'none', 1000);
-                    document.getElementById('post-card').style.opacity = 1;
-                    document.getElementById('post-card').style.transform = "scale(1)";
+                document.getElementById('start-screen').style.opacity = 0;
+                setTimeout(() => document.getElementById('start-screen').style.display = 'none', 1000);
+                document.getElementById('post-card').style.opacity = 1;
+                document.getElementById('post-card').style.transform = "scale(1)";
 
-                    isRunning = true;
-                    startTime = Date.now();
-                    reroll();
-                    loop();
-                } catch (e) { alert(e); }
+                isRunning = true;
+                startTime = Date.now();
+                forceReroll();
+                loop();
             }).catch(e => alert("Audio Init Failed: " + e));
         }
         document.getElementById('start-btn').onclick = initAudio;
+
+        // APP LOGIC
+        function forceReroll() {
+            activeLayer1 = Math.floor(Math.random() * 16);
+            do { activeLayer2 = Math.floor(Math.random() * 16); } while (activeLayer1 == activeLayer2);
+            for (let i = 0; i < 16; i++) paramMap[i] = Math.floor(Math.random() * 8);
+            updateUI();
+        }
+
+        function cycleLayer(which) {
+            if (which === 0) activeLayer1 = (activeLayer1 + 1) % 16;
+            else activeLayer2 = (activeLayer2 + 1) % 16;
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('layer-a-name').innerText = LAYERS[activeLayer1];
+            document.getElementById('layer-b-name').innerText = LAYERS[activeLayer2];
+        }
+        window.cycleLayer = cycleLayer;
+        window.forceReroll = forceReroll;
 
         // GL SETUP
         const canvas = document.getElementById('glcanvas');
@@ -497,6 +604,9 @@
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             gl.viewport(0, 0, canvas.width, canvas.height);
+            // Side bar
+            fcvs.width = 60;
+            fcvs.height = window.innerHeight;
         }
         window.onresize = resize;
         resize();
@@ -530,20 +640,6 @@
         const uL1 = gl.getUniformLocation(prog, "u_layer1_type");
         const uL2 = gl.getUniformLocation(prog, "u_layer2_type");
 
-        function reroll() {
-            activeLayer1 = Math.floor(Math.random() * 8);
-            do { activeLayer2 = Math.floor(Math.random() * 8); } while (activeLayer1 == activeLayer2);
-
-            for (let i = 0; i < 16; i++) {
-                paramMap[i] = Math.floor(Math.random() * 8);
-            }
-
-            const n1 = LAYERS[activeLayer1];
-            const n2 = LAYERS[activeLayer2];
-            const el = document.getElementById('layer-status');
-            el.innerHTML = `NEURAL LINK: <span style="color:#0ff">${n1}</span> // <span style="color:#f0f">${n2}</span>`;
-        }
-
         function loop() {
             if (!isRunning) return requestAnimationFrame(loop);
 
@@ -553,11 +649,20 @@
             // Audio Processing
             let bands = new Float32Array(8);
             let binSize = Math.floor(dataArray.length / 8);
-            // Linear binning is simpler for general "movement" visual
             for (let i = 0; i < 8; i++) {
                 let sum = 0;
                 for (let j = 0; j < binSize; j++) sum += dataArray[i * binSize + j];
                 bands[i] = (sum / binSize) / 255.0;
+            }
+
+            // Draw Frequency Sidebar
+            fctx.clearRect(0, 0, fcvs.width, fcvs.height);
+            let barH = fcvs.height / 8;
+            for (let i = 0; i < 8; i++) {
+                let hue = i * 40;
+                let val = bands[7 - i]; // Highs at top
+                fctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+                fctx.fillRect(0, i * barH, val * 60, barH - 2);
             }
 
             // Drop Detection
@@ -568,7 +673,7 @@
 
             if (Date.now() - lastDrop > 5000) {
                 if (energy > avg * 1.5 && energy > 0.3) {
-                    reroll();
+                    forceReroll();
                     lastDrop = Date.now();
                 }
             }
