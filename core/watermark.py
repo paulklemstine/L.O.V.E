@@ -21,7 +21,7 @@ import core.logging
 WATERMARK_OPACITY = 0.25  # Default opacity (0-1)
 WATERMARK_MAX_SIZE_RATIO = 0.15  # Max watermark size relative to image
 WATERMARK_MIN_SIZE_RATIO = 0.08  # Min watermark size relative to image
-WATERMARK_TEXT = "l.o.v.e"
+WATERMARK_TEXT = "@e-v-l-o-v-e.bsky.social"
 WATERMARK_MARGIN = 20  # Pixels from edge
 
 # Logo rotation state file
@@ -469,10 +469,10 @@ def apply_watermark(
         # We'll scale it slightly with image size but keep it small
         base_font_size = 12
         font_scale = min(img_w, img_h) / 1024
-        font_size = int(max(8, base_font_size * font_scale))
+        font_size = int(max(12, base_font_size * font_scale))
         
         # Generate text image to get dimensions
-        text_img_temp = create_text_watermark("l.o.v.e", font_size)
+        text_img_temp = create_text_watermark(WATERMARK_TEXT, font_size)
         tw, th = text_img_temp.size
         
         # Find position for text using updated energy map
