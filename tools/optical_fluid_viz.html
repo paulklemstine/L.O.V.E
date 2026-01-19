@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>👁️ OMNI-VERSE ENGINE v3</title>
+    <title>👁️ HYPER-COLOR ENGINE v4</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;500;700&display=swap');
 
@@ -34,21 +34,18 @@
             position: absolute;
             top: 0;
             left: 0;
-            width: 60px;
-            /* Width of the sidebar */
+            width: 80px;
             height: 100%;
             z-index: 20;
             background: rgba(0, 0, 0, 0.5);
             border-right: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        /* UI OVERLAY */
         #ui-layer {
             position: absolute;
             top: 0;
-            left: 60px;
-            /* Offset for sidebar */
-            width: calc(100% - 60px);
+            left: 80px;
+            width: calc(100% - 80px);
             height: 100%;
             z-index: 10;
             pointer-events: none;
@@ -116,7 +113,70 @@
             transform: scale(1.1);
         }
 
-        /* POST CARD */
+        /* CHECKBOX BAR */
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 100px;
+            right: 20px;
+            z-index: 50;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            pointer-events: auto;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+        }
+
+        .layer-toggle {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9rem;
+            color: #888;
+            cursor: pointer;
+            user-select: none;
+            padding: 5px 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .layer-toggle.active {
+            color: #fff;
+            border-color: #0ff;
+            background: rgba(0, 255, 255, 0.1);
+            text-shadow: 0 0 5px #0ff;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        }
+
+        .layer-toggle:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .sys-btn {
+            padding: 5px 15px;
+            background: transparent;
+            border: 1px solid #f0f;
+            color: #f0f;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-left: 20px;
+            text-transform: uppercase;
+        }
+
+        .sys-btn:hover {
+            background: #f0f;
+            color: #000;
+            box-shadow: 0 0 15px #f0f;
+        }
+
+        /* FEED */
         #post-card {
             pointer-events: auto;
             background: rgba(0, 0, 0, 0.6);
@@ -137,77 +197,18 @@
             font-size: 1.5rem;
             font-weight: 700;
             letter-spacing: 2px;
-            display: block;
-            margin-bottom: 20px;
-            text-shadow: 0 0 10px #0ff;
         }
 
         #post-text {
             font-size: 1.8rem;
             line-height: 1.4;
             font-weight: 500;
-            text-shadow: 0 2px 5px #000;
         }
 
         #post-image {
             width: 100%;
             margin-top: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
             display: none;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-        }
-
-        /* CONTROLS */
-        #controls {
-            position: absolute;
-            bottom: 30px;
-            left: 90px;
-            /* Clears sidebar */
-            z-index: 50;
-            display: flex;
-            gap: 15px;
-            pointer-events: auto;
-        }
-
-        .ctrl-btn {
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: #fff;
-            padding: 10px 20px;
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 1rem;
-            letter-spacing: 2px;
-            cursor: pointer;
-            text-transform: uppercase;
-            transition: all 0.2s;
-        }
-
-        .ctrl-btn:hover {
-            border-color: #0ff;
-            color: #0ff;
-            background: rgba(0, 255, 255, 0.1);
-        }
-
-        .ctrl-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .ctrl-label {
-            font-size: 0.7rem;
-            color: #aaa;
-            margin-bottom: 5px;
-        }
-
-        #status-display {
-            margin-left: 20px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            font-size: 1.2rem;
-            font-weight: bold;
-            text-shadow: 0 0 5px #000;
         }
     </style>
 </head>
@@ -218,38 +219,22 @@
     <canvas id="freqcanvas"></canvas>
 
     <div id="start-screen">
-        <h1>OMNI-VERSE</h1>
-        <p style="letter-spacing: 5px; color: #888;">VISUAL ENGINE v3.0</p>
+        <h1>HYPER-COLOR</h1>
+        <p style="letter-spacing: 5px; color: #888;">VISUAL ENGINE v4.0</p>
         <button id="start-btn" class="start-btn">IGNITE</button>
     </div>
 
     <div id="ui-layer">
         <div id="post-card">
             <span class="handle">@e-v-l-o-v-e.bsky.social</span>
-            <div id="post-text">Connecting to dimensionality matrix...</div>
+            <div id="post-text">Initializing 48-Band Analysis...</div>
             <img id="post-image" />
-            <div id="post-date" style="text-align: right; margin-top: 15px; color: #888; font-size: 0.9rem;">SYSTEM
-                READY</div>
+            <div id="post-date" style="text-align: right; margin-top: 15px; color: #888;">SYSTEM READY</div>
         </div>
     </div>
 
     <div id="controls">
-        <div class="ctrl-group">
-            <span class="ctrl-label">LAYER A</span>
-            <button class="ctrl-btn" onclick="cycleLayer(0)">CYCLE</button>
-        </div>
-        <div class="ctrl-group">
-            <span class="ctrl-label">LAYER B</span>
-            <button class="ctrl-btn" onclick="cycleLayer(1)">CYCLE</button>
-        </div>
-        <div class="ctrl-group">
-            <span class="ctrl-label">SYSTEM</span>
-            <button class="ctrl-btn" style="border-color: #f0f" onclick="forceReroll()">REROLL</button>
-        </div>
-        <div id="status-display">
-            <span id="layer-a-name" style="color: #0ff">FLUID</span>
-            <span id="layer-b-name" style="color: #f0f">FRACTAL</span>
-        </div>
+        <!-- Generated by JS -->
     </div>
 
     <!-- SHADERS -->
@@ -268,8 +253,8 @@
         uniform float u_time;
         uniform vec2 u_resolution;
         uniform float u_params[16];
-        uniform int u_layer1_type;
-        uniform int u_layer2_type;
+        uniform float u_active[16]; // 0.0 or 1.0 for each layer
+        uniform float u_active_count; // Number of active layers for normalization
 
         #define PI 3.14159265359
 
@@ -307,16 +292,32 @@
             return v;
         }
 
-        // PALETTE
-        vec3 elfPalette(float t) {
-            vec3 a = vec3(0.5, 0.5, 0.5);
-            vec3 b = vec3(0.5, 0.5, 0.5);
-            vec3 c = vec3(1.0, 1.0, 1.0);
-            vec3 d = vec3(0.263, 0.416, 0.557); 
-            return a + b * cos(6.28318 * (c * t + d + vec3(0.0, 0.1, 0.2)));
+        // VIBRANT HSL PALETTE
+        vec3 hsl2rgb(vec3 c) {
+            vec3 rgb = clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0);
+            return c.z + c.y * (rgb-0.5)*(1.0-abs(2.0*c.z-1.0));
         }
 
-        // --- VISUAL LIBRARY (16 LAYERS) ---
+        vec3 hyperPalette(float t) {
+            // High saturation, shifting hue
+            return hsl2rgb(vec3(fract(t), 0.9, 0.6));
+        }
+
+        vec3 neonPalette(float t) {
+            return 0.5 + 0.5*cos(6.28318*(vec3(1.0,1.0,1.0)*t+vec3(0.0,0.33,0.67)));
+        }
+
+        // --- VISUAL LAYERS ---
+        // Need wrapper to inject params cleanly
+        // Using global p1...p4 for simplicity inside loop could work, 
+        // but passing them is cleaner.
+
+        // Shared params for simplicity in this loop structure
+        // Map: 
+        // Band 0 -> P1 (Structure/Scale)
+        // Band 1 -> P2 (Complexity/Detail)
+        // Band 2 -> P3 (Color Shift)
+        // Band 3 -> P4 (Intensity/Speed)
 
         // 1. FLUID
         vec3 viz_fluid(vec2 uv, float t, float p1, float p2, float p3, float p4) {
@@ -324,13 +325,12 @@
              vec2 q = vec2(fbm(p), fbm(p + vec2(5.2, 1.3)));
              vec2 r = vec2(fbm(p + 4.0*q + vec2(1.7, 9.2) + 0.15*t), fbm(p + 4.0*q + vec2(8.3, 2.8) - 0.12*t));
              float f = fbm(p + 4.0*r);
-             return elfPalette(f * 3.0 + t * 0.1 + p3) * f * f * (1.5 + p4*2.0);
+             return hyperPalette(f * 2.0 + t * 0.1 + p3) * f * f * (2.0 + p4*3.0);
         }
 
         // 2. FRACTAL
         vec3 viz_fractal(vec2 uv, float t, float p1, float p2, float p3, float p4) {
             uv *= 1.5 - p1*0.5;
-            vec3 col = vec3(0.0);
             vec2 z = uv;
             float scale = 1.5 + p2 * 0.5;
             float angle = t * 0.1 + p3;
@@ -339,7 +339,7 @@
                 z = abs(z) - 0.5; z *= rot(angle); z *= scale;
                 d = min(d, length(z) / pow(scale, float(i)));
             }
-            return vec3(0.02 / max(d, 0.001) * (0.5 + p4)) * elfPalette(length(uv) + t);
+            return vec3(0.03 / max(d, 0.001) * (0.8 + p4)) * neonPalette(length(uv) + t);
         }
 
         // 3. ENTITY
@@ -350,7 +350,7 @@
             float f = sin(atan(eyeUV.y, eyeUV.x) * 10.0 + t) * cos(r * 20.0 - t*2.0);
             float pupil = smoothstep(0.1 + p1*0.2, 0.05, r);
             float iris = smoothstep(0.4, 0.3, r) - pupil;
-            return (vec3(f * iris) * elfPalette(p3 + r)) + vec3(pupil);
+            return (vec3(f * iris) * hyperPalette(p3 + r)) + vec3(pupil);
         }
 
         // 4. HYPERCUBE
@@ -359,8 +359,8 @@
             vec2 gv = fract(uv * (2.0 + p1*2.0)) - 0.5;
             vec2 id = floor(uv * (2.0 + p1*2.0));
             float d = length(max(abs(gv) - 0.3, 0.0));
-            float mask = smoothstep(0.03, 0.02, abs(d));
-            return (vec3(mask) + vec3(0.05/length(gv)*p3)) * elfPalette(id.x + id.y + t*0.5 + p2) * (0.5+p4);
+            float mask = smoothstep(0.04, 0.01, abs(d));
+            return (vec3(mask) + vec3(0.1/length(gv)*p3)) * neonPalette(id.x + id.y + t*0.5 + p2) * (0.5+p4);
         }
 
         // 5. TUNNEL
@@ -370,28 +370,28 @@
             float u = 0.5/r + t * (0.5 + p1);
             float v = a/PI * (2.0 + floor(p2*5.0));
             float tex = step(0.5, fract(u)) * step(0.5, fract(v)) + step(0.9, fract(u))*2.0;
-            return vec3(tex) * (r*r*2.0) * elfPalette(u + p3) * (0.5+p4);
+            return vec3(tex) * (r*r*3.0) * hyperPalette(u + p3) * (0.5+p4);
         }
 
         // 6. FIRE
         vec3 viz_fire(vec2 uv, float t, float p1, float p2, float p3, float p4) {
-            float n = fbm(uv * 3.0 + vec2(0.0, -t*(0.5+p1)));
-            float intensity = pow(n * (1.0 - (uv.y+0.5)) * 2.0, 2.0);
-            return mix(vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), intensity) * intensity * (1.0+p3);
+            float n = fbm(uv * 3.0 + vec2(0.0, -t*(0.8+p1)));
+            float intensity = pow(n * (1.0 - (uv.y+0.5)) * 2.5, 2.0);
+            return mix(vec3(1.0, 0.1, 0.0), vec3(1.0, 1.0, 0.5), intensity) * intensity * (1.5+p3);
         }
 
         // 7. BEAMS
         vec3 viz_beams(vec2 uv, float t, float p1, float p2, float p3, float p4) {
             float a = atan(uv.y, uv.x);
-            float beams = sin(a * (10.0 + floor(p1*10.0)) + t) * sin(a*7.0+t*0.5);
-            return vec3(smoothstep(0.8-p2*0.5, 1.0, beams)) * (0.1/length(uv)) * elfPalette(t + p3) * (1.0+p4);
+            float beams = sin(a * (12.0 + floor(p1*10.0)) + t) * sin(a*8.0+t*0.5);
+            return vec3(smoothstep(0.8-p2*0.5, 1.0, beams)) * (0.15/length(uv)) * neonPalette(t + p3) * (1.0+p4);
         }
 
         // 8. GLITCH
         vec3 viz_glitch(vec2 uv, float t, float p1, float p2, float p3, float p4) {
              float shift = step(0.9, hash(vec2(floor(uv.y * 100.0), t)));
              uv.x += shift * 0.1 * p1;
-             return vec3(step(0.5, sin(uv.x*100.0*p2))) * vec3(0.0, 1.0, 0.0) * p4;
+             return vec3(step(0.5, sin(uv.x*100.0*p2))) * vec3(0.0, 1.0, 0.2) * p4;
         }
 
         // 9. MANDALA
@@ -403,7 +403,7 @@
             uv = vec2(cos(a), sin(a)) * r;
             uv -= 0.5;
             float pat = sin(uv.x * 20.0 + t) * cos(uv.y * 20.0 - t);
-            return vec3(smoothstep(0.0, 0.1, abs(pat))) * elfPalette(r + t + p3) * p4;
+            return vec3(smoothstep(0.0, 0.15, abs(pat))) * hyperPalette(r + t + p3) * p4;
         }
 
         // 10. NEURO
@@ -411,27 +411,27 @@
             vec2 p = uv * (3.0 + p1*3.0);
             float n = noise(p + t);
             float m = noise(p*2.0 - t);
-            float val = 0.02 / abs(n - m);
-            return vec3(val) * vec3(0.2, 0.5, 1.0) * p4;
+            float val = 0.03 / abs(n - m);
+            return vec3(val) * vec3(0.2, 0.6, 1.0) * p4 * 1.5;
         }
 
         // 11. RAIN
         vec3 viz_rain(vec2 uv, float t, float p1, float p2, float p3, float p4) {
-            vec2 gv = fract(uv * 20.0);
-            vec2 id = floor(uv * 20.0);
+            vec2 gv = fract(uv * 30.0);
+            vec2 id = floor(uv * 30.0);
             float drop = fract(t * (1.0+p1) + hash(id)*5.0);
             float val = smoothstep(0.9, 1.0, drop) * step(0.5, hash(id + vec2(1.0)));
-            return vec3(0.0, 1.0, 0.5) * val * p4 * 4.0;
+            return vec3(0.0, 1.0, 0.5) * val * p4 * 5.0;
         }
 
         // 12. WAVEFORM
         vec3 viz_waveform(vec2 uv, float t, float p1, float p2, float p3, float p4) {
             float lines = 0.0;
-            for(float i=0.0; i<5.0; i++){
-                float y = sin(uv.x * (5.0+i) + t * (1.0+p1) + i) * 0.3 * p2;
-                lines += 0.01 / abs(uv.y - y);
+            for(float i=0.0; i<6.0; i++){
+                float y = sin(uv.x * (4.0+i) + t * (1.5+p1) + i) * 0.35 * p2;
+                lines += 0.015 / abs(uv.y - y);
             }
-            return vec3(lines) * elfPalette(t) * p4;
+            return vec3(lines) * hyperPalette(t) * p4;
         }
 
         // 13. SPIRAL
@@ -439,7 +439,7 @@
             float r = length(uv);
             float a = atan(uv.y, uv.x);
             float s = sin(a * 10.0 - r * 20.0 + t * 5.0 * p1);
-            return vec3(s) * elfPalette(r*2.0 - t) * p4;
+            return vec3(smoothstep(0.0, 0.5, s)) * neonPalette(r*2.0 - t) * p4;
         }
 
         // 14. CRYSTAL
@@ -450,14 +450,13 @@
             for(int j=-1; j<=1; j++)
             for(int i=-1; i<=1; i++) {
                 vec2 g = vec2(float(i),float(j));
-                vec2 o = vec2(hash(n+g), hash(n+g+vec2(12.3, 45.6))); // pseudo random vec2
+                vec2 o = vec2(hash(n+g), hash(n+g+vec2(12.3, 45.6)));
                 o = 0.5 + 0.5*sin(t + 6.28*o);
-                vec2 r = g + o - f;
-                float d = length(r);
+                float d = length(g + o - f);
                 md = min(md, d);
             }
-            vec3 col = elfPalette(md*2.0 + p3);
-            return col * (1.0-md) * p4 * 2.0;
+            vec3 col = hyperPalette(md*3.0 + p3);
+            return col * pow(1.0-md, 2.0) * p4 * 3.0;
         }
 
         // 15. LATTICE
@@ -466,56 +465,72 @@
              vec2 gv = fract(uv * 4.0);
              float d = length(gv-0.5);
              float circles = smoothstep(0.4, 0.41, d) - smoothstep(0.5, 0.51, d);
-             return vec3(circles) * elfPalette(length(uv)*p1 + p3) * p4 * 2.0;
+             return vec3(circles) * neonPalette(length(uv)*p1 + p3) * p4 * 2.0;
         }
 
-        // 16. STARDUST (Snow replacement)
+         // 16. STARDUST
         vec3 viz_stardust(vec2 uv, float t, float p3) {
-             float s = pow(noise(uv * 50.0 + t * 5.0), 30.0);
-             return vec3(s) * (1.0 + p3);
+             float s = pow(noise(uv * 60.0 + t * 4.0), 40.0);
+             return vec3(s) * (2.0 + p3);
         }
 
-        vec3 getLayer(int type, vec2 uv, float time, int offset) {
-            float p1, p2, p3, p4;
-            if (offset == 0) { p1=u_params[0]; p2=u_params[1]; p3=u_params[2]; p4=u_params[3]; }
-            else { p1=u_params[8]; p2=u_params[9]; p3=u_params[10]; p4=u_params[11]; }
-
-            if (type == 0) return viz_fluid(uv, time, p1, p2, p3, p4);
-            if (type == 1) return viz_fractal(uv, time, p1, p2, p3, p4);
-            if (type == 2) return viz_entity(uv, time, p1, p2, p3, p4);
-            if (type == 3) return viz_hypercube(uv, time, p1, p2, p3, p4);
-            if (type == 4) return viz_tunnel(uv, time, p1, p2, p3, p4);
-            if (type == 5) return viz_fire(uv, time, p1, p2, p3, p4);
-            if (type == 6) return viz_beams(uv, time, p1, p2, p3, p4);
-            if (type == 7) return viz_glitch(uv, time, p1, p2, p3, p4);
-            if (type == 8) return viz_mandala(uv, time, p1, p2, p3, p4);
-            if (type == 9) return viz_neuro(uv, time, p1, p2, p3, p4);
-            if (type == 10) return viz_rain(uv, time, p1, p2, p3, p4);
-            if (type == 11) return viz_waveform(uv, time, p1, p2, p3, p4);
-            if (type == 12) return viz_spiral(uv, time, p1, p2, p3, p4);
-            if (type == 13) return viz_crystal(uv, time, p1, p2, p3, p4);
-            if (type == 14) return viz_lattice(uv, time, p1, p2, p3, p4);
-            // Stardust is separate overlay
-            return vec3(0.0);
+        // TONE MAPPING (ACES)
+        vec3 aces(vec3 x) {
+            float a = 2.51;
+            float b = 0.03;
+            float c = 2.43;
+            float d = 0.59;
+            float e = 0.14;
+            return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
         }
 
         void main() {
             vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y;
-            vec2 uv0 = uv;
-
-            vec3 l1 = getLayer(u_layer1_type, uv, u_time, 0);
-            vec3 l2 = getLayer(u_layer2_type, uv, u_time, 1);
             
-            vec3 final = l1 + l2;
+            // To improve performance, we only calculate what is active
+            // However, with WebGL 1/ES2, dynamic branching can be slow or compiled out.
+            // But we need to support any combination.
+            
+            vec3 accum = vec3(0.0);
+            
+            // Map Params consistently
+            float p1 = u_params[0]; // Structure
+            float p2 = u_params[1]; // Detail
+            float p3 = u_params[2]; // Color
+            float p4 = u_params[3]; // Intensity
 
-            // STARDUST (Controlled, Active only if Layer 15 is selected? No, separate overlay)
-            // But wait, plan says "Layer 16: Stardust".
-            // Let's allow Stardust to be one of the selectables.
-            if (u_layer1_type == 15) final += viz_stardust(uv, u_time, u_params[2]);
-            if (u_layer2_type == 15) final += viz_stardust(uv, u_time, u_params[10]);
+            if(u_active[0] > 0.5) accum += viz_fluid(uv, u_time, p1, p2, p3, p4);
+            if(u_active[1] > 0.5) accum += viz_fractal(uv, u_time, p1, p2, p3, p4);
+            if(u_active[2] > 0.5) accum += viz_entity(uv, u_time, p1, p2, p3, p4);
+            if(u_active[3] > 0.5) accum += viz_hypercube(uv, u_time, p1, p2, p3, p4);
+            if(u_active[4] > 0.5) accum += viz_tunnel(uv, u_time, p1, p2, p3, p4);
+            if(u_active[5] > 0.5) accum += viz_fire(uv, u_time, p1, p2, p3, p4);
+            if(u_active[6] > 0.5) accum += viz_beams(uv, u_time, p1, p2, p3, p4);
+            if(u_active[7] > 0.5) accum += viz_glitch(uv, u_time, p1, p2, p3, p4);
+            if(u_active[8] > 0.5) accum += viz_mandala(uv, u_time, p1, p2, p3, p4);
+            if(u_active[9] > 0.5) accum += viz_neuro(uv, u_time, p1, p2, p3, p4);
+            if(u_active[10] > 0.5) accum += viz_rain(uv, u_time, p1, p2, p3, p4);
+            if(u_active[11] > 0.5) accum += viz_waveform(uv, u_time, p1, p2, p3, p4);
+            if(u_active[12] > 0.5) accum += viz_spiral(uv, u_time, p1, p2, p3, p4);
+            if(u_active[13] > 0.5) accum += viz_crystal(uv, u_time, p1, p2, p3, p4);
+            if(u_active[14] > 0.5) accum += viz_lattice(uv, u_time, p1, p2, p3, p4);
+            if(u_active[15] > 0.5) accum += viz_stardust(uv, u_time, p3);
 
-            final *= 1.2 - length(uv0);
-            gl_FragColor = vec4(final, 1.0);
+            // Normalization & Post FX
+            // We want it bright, not washed out.
+            // Soft normalization based on active count
+            if (u_active_count > 1.0) {
+                 accum /= sqrt(u_active_count);
+            }
+
+            // Vignette
+            accum *= 1.2 - length(uv);
+
+            // Tone Map & Gamma
+            accum = aces(accum);
+            accum = pow(accum, vec3(1.0/2.2)); // Gamma correction
+
+            gl_FragColor = vec4(accum, 1.0);
         }
     </script>
 
@@ -523,7 +538,7 @@
         const CONFIG = {
             handle: 'e-v-l-o-v-e.bsky.social',
             apiBase: 'https://public.api.bsky.app/xrpc',
-            smoothing: 0.8
+            smoothing: 0.85
         };
 
         const LAYERS = [
@@ -533,29 +548,68 @@
             "SPIRAL", "CRYSTAL", "LATTICE", "STARDUST"
         ];
 
+        // State
+        let activeLayers = new Array(16).fill(false);
+        // Default Active
+        activeLayers[0] = true;
+        activeLayers[15] = true;
+
         let audioCtx, analyser, dataArray;
-        let smoothedBands = new Float32Array(8);
-        let paramMap = new Array(16).fill(0);
+        // 48 Bands
+        let smoothedBands = new Float32Array(48);
+        // We distill 48 bands down to 4 params for the shader
+        let shaderParams = new Float32Array(16);
+
         let isRunning = false;
         let startTime = Date.now();
-
-        let activeLayer1 = 0;
-        let activeLayer2 = 1;
-
-        // ENERGY TRACKING
-        let energyHistory = new Array(60).fill(0);
-        let lastDrop = 0;
 
         // Freq Canvas
         const fcvs = document.getElementById('freqcanvas');
         const fctx = fcvs.getContext('2d');
+
+        // UI Builder
+        const controls = document.getElementById('controls');
+        LAYERS.forEach((name, i) => {
+            const btn = document.createElement('div');
+            btn.className = 'layer-toggle' + (activeLayers[i] ? ' active' : '');
+            btn.innerText = name;
+            btn.onclick = () => toggleLayer(i, btn);
+            controls.appendChild(btn);
+        });
+
+        const randBtn = document.createElement('button');
+        randBtn.className = 'sys-btn';
+        randBtn.innerText = 'REROLL SYSTEM';
+        randBtn.onclick = forceReroll;
+        controls.appendChild(randBtn);
+
+
+        function toggleLayer(idx, btn) {
+            activeLayers[idx] = !activeLayers[idx];
+            btn.className = 'layer-toggle' + (activeLayers[idx] ? ' active' : '');
+        }
+
+        function forceReroll() {
+            // Pick 2-4 random layers
+            activeLayers.fill(false);
+            let count = 2 + Math.floor(Math.random() * 3);
+            for (let k = 0; k < count; k++) {
+                activeLayers[Math.floor(Math.random() * 16)] = true;
+            }
+            // Update UI
+            const btns = document.querySelectorAll('.layer-toggle');
+            btns.forEach((b, i) => {
+                b.className = 'layer-toggle' + (activeLayers[i] ? ' active' : '');
+            });
+        }
+
 
         function initAudio() {
             navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then(stream => {
                 const AC = window.AudioContext || window.webkitAudioContext;
                 audioCtx = new AC();
                 analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 1024;
+                analyser.fftSize = 2048; // High res for 48 bands
                 analyser.smoothingTimeConstant = CONFIG.smoothing;
 
                 const src = audioCtx.createMediaStreamSource(stream);
@@ -569,32 +623,10 @@
 
                 isRunning = true;
                 startTime = Date.now();
-                forceReroll();
                 loop();
             }).catch(e => alert("Audio Init Failed: " + e));
         }
         document.getElementById('start-btn').onclick = initAudio;
-
-        // APP LOGIC
-        function forceReroll() {
-            activeLayer1 = Math.floor(Math.random() * 16);
-            do { activeLayer2 = Math.floor(Math.random() * 16); } while (activeLayer1 == activeLayer2);
-            for (let i = 0; i < 16; i++) paramMap[i] = Math.floor(Math.random() * 8);
-            updateUI();
-        }
-
-        function cycleLayer(which) {
-            if (which === 0) activeLayer1 = (activeLayer1 + 1) % 16;
-            else activeLayer2 = (activeLayer2 + 1) % 16;
-            updateUI();
-        }
-
-        function updateUI() {
-            document.getElementById('layer-a-name').innerText = LAYERS[activeLayer1];
-            document.getElementById('layer-b-name').innerText = LAYERS[activeLayer2];
-        }
-        window.cycleLayer = cycleLayer;
-        window.forceReroll = forceReroll;
 
         // GL SETUP
         const canvas = document.getElementById('glcanvas');
@@ -603,8 +635,7 @@
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             gl.viewport(0, 0, canvas.width, canvas.height);
-            // Side bar
-            fcvs.width = 60;
+            fcvs.width = 80;
             fcvs.height = window.innerHeight;
         }
         window.onresize = resize;
@@ -636,8 +667,8 @@
         const uTime = gl.getUniformLocation(prog, "u_time");
         const uRes = gl.getUniformLocation(prog, "u_resolution");
         const uParams = gl.getUniformLocation(prog, "u_params");
-        const uL1 = gl.getUniformLocation(prog, "u_layer1_type");
-        const uL2 = gl.getUniformLocation(prog, "u_layer2_type");
+        const uActive = gl.getUniformLocation(prog, "u_active");
+        const uCount = gl.getUniformLocation(prog, "u_active_count");
 
         function loop() {
             if (!isRunning) return requestAnimationFrame(loop);
@@ -645,51 +676,67 @@
             const t = (Date.now() - startTime) * 0.001;
             analyser.getByteFrequencyData(dataArray);
 
-            // Audio Processing
-            let bands = new Float32Array(8);
-            let binSize = Math.floor(dataArray.length / 8);
-            for (let i = 0; i < 8; i++) {
+            // 48 Band Analysis
+            // Freq range ~20Hz - 20kHz
+            // We'll log-bin them or linear-bin depending on preference.
+            // Linear looks better for "spectrum".
+            let binSize = Math.floor(dataArray.length / 60); // Skip very highs
+
+            for (let i = 0; i < 48; i++) {
                 let sum = 0;
-                for (let j = 0; j < binSize; j++) sum += dataArray[i * binSize + j];
-                bands[i] = (sum / binSize) / 255.0;
+                // Accumulate range
+                let start = i * binSize;
+                for (let j = 0; j < binSize; j++) sum += dataArray[start + j];
+                let val = (sum / binSize) / 255.0;
+
+                // Attack/Decay
+                if (val > smoothedBands[i]) smoothedBands[i] = val;
+                else smoothedBands[i] += (val - smoothedBands[i]) * 0.1;
             }
 
-            // Draw Frequency Sidebar
+            // Draw Frequency Sidebar (48 bars)
             fctx.clearRect(0, 0, fcvs.width, fcvs.height);
-            let barH = fcvs.height / 8;
-            for (let i = 0; i < 8; i++) {
-                let hue = i * 40;
-                let val = bands[7 - i]; // Highs at top
+            let barH = fcvs.height / 48;
+            for (let i = 0; i < 48; i++) {
+                let hue = i * 6; // Rainbow over 48
+                let val = smoothedBands[47 - i]; // Highs at top
                 fctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-                fctx.fillRect(0, i * barH, val * 60, barH - 2);
+                let w = val * 80;
+                fctx.fillRect(0, i * barH, w, barH - 1);
             }
 
-            // Drop Detection
-            let energy = bands.reduce((a, b) => a + b) / 8;
-            energyHistory.shift();
-            energyHistory.push(energy);
-            let avg = energyHistory.reduce((a, b) => a + b) / 60;
+            // Map 48 bands to 4 Shader Params (Bass, LoMid, HiMid, High)
+            // Average sections
+            let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+            for (let i = 0; i < 12; i++) p1 += smoothedBands[i]; // Bass
+            for (let i = 12; i < 24; i++) p2 += smoothedBands[i]; // LoMid
+            for (let i = 24; i < 36; i++) p3 += smoothedBands[i]; // HiMid
+            for (let i = 36; i < 48; i++) p4 += smoothedBands[i]; // High
 
-            if (Date.now() - lastDrop > 5000) {
-                if (energy > avg * 1.5 && energy > 0.3) {
-                    forceReroll();
-                    lastDrop = Date.now();
+            p1 /= 12; p2 /= 12; p3 /= 12; p4 /= 12;
+
+            // Fill params array (Uniform layout: 0-3 params)
+            let finalParams = new Float32Array(16);
+            finalParams[0] = p1; finalParams[1] = p2;
+            finalParams[2] = p3; finalParams[3] = p4;
+
+            // Prepare active array
+            let activeFloats = new Float32Array(16);
+            let activeCount = 0;
+            for (let i = 0; i < 16; i++) {
+                if (activeLayers[i]) {
+                    activeFloats[i] = 1.0;
+                    activeCount++;
+                } else {
+                    activeFloats[i] = 0.0;
                 }
             }
-
-            // Smooth
-            let finalParams = new Float32Array(16);
-            for (let i = 0; i < 8; i++)
-                smoothedBands[i] += (bands[i] - smoothedBands[i]) * 0.1;
-
-            for (let i = 0; i < 16; i++)
-                finalParams[i] = smoothedBands[paramMap[i]];
 
             gl.uniform1f(uTime, t);
             gl.uniform2f(uRes, canvas.width, canvas.height);
             gl.uniform1fv(uParams, finalParams);
-            gl.uniform1i(uL1, activeLayer1);
-            gl.uniform1i(uL2, activeLayer2);
+            gl.uniform1fv(uActive, activeFloats);
+            gl.uniform1f(uCount, activeCount);
 
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             requestAnimationFrame(loop);
