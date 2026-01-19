@@ -225,8 +225,10 @@ def _try_smart_parse_fallback(response_text: str) -> Optional[List[Dict[str, Any
         parsed = smart_parse_llm_response(response_text)
         
         if parsed and not parsed.get("_parse_error"):
-            # Check for "action" key (Key-Value format)
+            # Check for "action" key
             action = parsed.get("action")
+            
+            # Case 1: Action is a dictionary containing tool details
             if isinstance(action, dict):
                 tool_name = action.get("tool_name") or action.get("name") or action.get("function")
                 args = action.get("arguments") or action.get("args") or action.get("parameters", {})
@@ -238,17 +240,28 @@ def _try_smart_parse_fallback(response_text: str) -> Optional[List[Dict[str, Any
                         "args": args if isinstance(args, dict) else {}
                     }]
             
-            # Check for direct tool dictionary if the whole response was just the tool call
-            # e.g. {"tool": "..."}
-            if "tool" in parsed or "tool_name" in parsed:
-                tool_name = parsed.get("tool") or parsed.get("tool_name")
-                args = parsed.get("arguments") or parsed.get("args") or parsed.get("parameters", {})
-                if tool_name:
-                    return [{
+            # Case 2: Action is a string (the tool name), arguments are sibling
+            elif isinstance(action, str) and action.strip():
+                 tool_name = action.strip()
+                 # Grab arguments from top-level since action is just the name
+                 args = parsed.get("arguments") or parsed.get("args") or parsed.get("parameters", {})
+                 return [{
                         "id": f"call_smart_{tool_name}",
                         "name": tool_name,
                         "args": args if isinstance(args, dict) else {}
-                    }]
+                 }]
+            
+            # Check for direct tool dictionary if the whole response is flat
+            # e.g. {"tool": "...", "arguments": ...}
+            # or {"function": "...", "arguments": ...}
+            tool_name = parsed.get("tool") or parsed.get("tool_name") or parsed.get("function")
+            if tool_name and isinstance(tool_name, str):
+                args = parsed.get("arguments") or parsed.get("args") or parsed.get("parameters", {})
+                return [{
+                    "id": f"call_smart_{tool_name}",
+                    "name": tool_name,
+                    "args": args if isinstance(args, dict) else {}
+                }]
 
     except ImportError:
         pass
