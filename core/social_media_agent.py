@@ -210,7 +210,7 @@ class SocialMediaAgent:
             # We treat the text as the "Subliminal Phrase" equivalent or derive one
             from core.social_media_tools import generate_image_prompt, generate_image
             
-            subliminal = story_result.get("hook", "L.O.V.E.")
+            subliminal = story_result.get("subliminal", "L.O.V.E.")
             visual_style = beat_data.get("mandatory_vibe", "Ethereal Cyberpunk")
             
             image_prompt = await generate_image_prompt(subliminal, visual_style, context=post_text)

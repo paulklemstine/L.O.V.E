@@ -781,7 +781,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
     # Determine default temperature based on purpose if not explicitly provided
     if temperature is None:
         # Creative / High Entropy Tasks
-        if purpose in ["subliminal_phrase", "subliminal_profile", "creative_writing", "story_generation", "creative_art", "poetry", "brainstorming", "persona_chat", "visual_art_direction", "musical_composition", "dream_weaving"]:
+        if purpose in ["subliminal_phrase", "subliminal_profile", "creative_writing", "story_generation", "creative_art", "poetry", "brainstorming", "persona_chat", "visual_art_direction", "musical_composition", "dream_weaving", "creative_micro_story", "viral_content"]:
             temperature = 1.1
         # Reasoning / Precision Tasks
         elif purpose in ["reasoning", "code_generation", "analysis", "planning", "math", "science", "logic", "review", "analyze_source", "goal_generation", "security_audit", "bug_fixing", "refactoring", "data_extraction"]:
