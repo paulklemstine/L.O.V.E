@@ -18,6 +18,7 @@ except ImportError:
     CVESearch = None
 
 from core.retry import retry
+from core.exceptions import TemporaryEnvironmentError
 from ipfs import pin_to_ipfs_sync
 from core.image_api import generate_image
 from core.bluesky_api import post_to_bluesky_with_image, reply_to_post
@@ -496,6 +497,10 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
             
             return f"✅ Posted to Bluesky: {resp}"
         except Exception as e:
+            error_str = str(e).lower()
+            if "timeout" in error_str or "503" in error_str or "connection" in error_str or "circuit breaker" in error_str:
+                core.logging.log_event(f"Temporary BlueSky failure: {e}. Raising signal for system pause.", "WARNING")
+                raise TemporaryEnvironmentError(f"BlueSky API Temporary Failure: {e}")
             return f"Error posting: {e}"
 
     # ═══════════════════════════════════════════════════════════════════
@@ -738,6 +743,10 @@ Rules:
             return f"Scanned notifications. Replied to {replied_count} items."
 
         except Exception as e:
+            error_str = str(e).lower()
+            if "timeout" in error_str or "503" in error_str or "connection" in error_str or "circuit breaker" in error_str:
+                core.logging.log_event(f"Temporary BlueSky failure during scan: {e}. Raising signal for system pause.", "WARNING")
+                raise TemporaryEnvironmentError(f"BlueSky API Temporary Failure: {e}")
             return f"Error scanning: {e}"
 
     else:

@@ -7,6 +7,7 @@ import traceback
 
 import core.logging
 from core.god_agent_react_engine import GodAgentReActEngine
+from core.exceptions import TemporaryEnvironmentError
 
 class GodAgent:
     def __init__(self, love_state, knowledge_base, love_task_manager, ui_panel_queue, loop, deep_agent_engine=None, memory_manager=None):
@@ -92,6 +93,10 @@ class GodAgent:
                  # Catch SystemExit to prevent the thread from killing the whole process if possible
                  core.logging.log_event("GodAgent: Caught SystemExit. Restarting loop...", level="CRITICAL")
                  time.sleep(5)
+            except TemporaryEnvironmentError as e:
+                 core.logging.log_event(f"GodAgent: {e}. Entering Sleep Mode for 5 minutes to allow environment recovery.", level="WARNING")
+                 print(f"GodAgent: {e}. Sleeping for 300s...", file=sys.stderr)
+                 time.sleep(300)
             except Exception as e:
                 # Log full traceback for debugging
                 tb = traceback.format_exc()

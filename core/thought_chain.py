@@ -137,7 +137,34 @@ class ThoughtChain:
         self.current_node_id = node_id
         log_event(f"Thought step added: [{status}] {content[:50]}...", "DEBUG")
         
+        # Story 4: Persistence
+        self._save_to_disk()
+        
         return node_id
+    
+    def _save_to_disk(self):
+        """Story 4.1: Serialize current thought chain to disk."""
+        try:
+            import json
+            import os
+            
+            # Ensure directory exists
+            os.makedirs(".memory", exist_ok=True)
+            
+            data = {
+                "name": self.name,
+                "created_at": self.created_at.isoformat(),
+                "current_node_id": self.current_node_id,
+                "root_ids": self.root_ids,
+                "nodes": {nid: n.to_dict() for nid, n in self.nodes.items()}
+            }
+            
+            with open(".memory/current_thought.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+                
+        except Exception as e:
+            log_event(f"Failed to save thought chain: {e}", "ERROR")
+
     
     def update_status(self, node_id: str, status: str) -> None:
         """Updates the status of a node."""
@@ -259,8 +286,45 @@ class ThoughtChain:
         }
 
 
+    @classmethod
+    def load_from_file(cls) -> Optional['ThoughtChain']:
+        """Story 4.1: Load thought chain from disk."""
+        try:
+            import json
+            import os
+            
+            if not os.path.exists(".memory/current_thought.json"):
+                return None
+                
+            with open(".memory/current_thought.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+                
+            chain = cls(name=data.get("name", "Restored Chain"))
+            chain.current_node_id = data.get("current_node_id")
+            chain.root_ids = data.get("root_ids", [])
+            
+            for nid, n_data in data.get("nodes", {}).items():
+                node = ThoughtNode(
+                    id=n_data["id"],
+                    content=n_data["content"],
+                    status=NodeStatus(n_data["status"]),
+                    created_at=datetime.fromisoformat(n_data["created_at"]),
+                    parent_id=n_data["parent_id"],
+                    children=n_data["children"],
+                    metadata=n_data.get("metadata", {})
+                )
+                chain.nodes[nid] = node
+                
+            log_event(f"Restored ThoughtChain from disk ({len(chain.nodes)} nodes).", "SUCCESS")
+            return chain
+            
+        except Exception as e:
+            log_event(f"Failed to restore thought chain: {e}", "ERROR")
+            return None
+
 # Global thought chain for current session
 _current_chain: Optional[ThoughtChain] = None
+
 
 
 def start_chain(name: str = "Reasoning Chain") -> ThoughtChain:

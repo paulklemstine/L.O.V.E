@@ -256,6 +256,73 @@ class SystemIntegrityMonitor:
         return evolution_report
 
 
+    # --- Story 3: Stagnation Watchdog ---
+    def update_state_hash(self, current_state: Dict[str, Any]) -> None:
+        """
+        Updates the state hash to detect stagnation.
+        """
+        import hashlib
+        import json
+        
+        try:
+            # Create a deterministic hash of the state
+            state_str = json.dumps(current_state, sort_keys=True, default=str)
+            new_hash = hashlib.md5(state_str.encode()).hexdigest()
+            
+            if not hasattr(self, 'last_state_hash'):
+                self.last_state_hash = None
+                self.last_state_change_time = datetime.now()
+            
+            if new_hash != self.last_state_hash:
+                self.last_state_hash = new_hash
+                self.last_state_change_time = datetime.now()
+                # log_event(f"System State Changed. Hash: {new_hash[:8]}", "DEBUG")
+                
+        except Exception as e:
+            log_event(f"Failed to update state hash: {e}", "ERROR")
+
+    async def check_stagnation(self) -> bool:
+        """
+        Checks if the system has been stagnant for >15 minutes.
+        If so, triggers the Circuit Breaker.
+        """
+        if not hasattr(self, 'last_state_change_time'):
+            return False
+            
+        time_diff = (datetime.now() - self.last_state_change_time).total_seconds()
+        
+        # 15 minutes = 900 seconds
+        if time_diff > 900:
+            log_event(f"STAGNATION DETECTED! No state change for {time_diff:.0f}s.", "CRITICAL")
+            await self._trigger_stagnation_protocol()
+            return True
+            
+        return False
+
+    async def _trigger_stagnation_protocol(self):
+        """
+        Story 3.3: Circuit Breaker - Invoke Curiosity Agent.
+        """
+        log_event("Triggering STAGNATION PROTOCOL...", "WARNING")
+        
+        try:
+            # Dynamic import to avoid circular dependencies
+            from core.agents.curiosity_agent import CuriosityAgent
+            
+            # Escape the stagnation by forcing a random curiosity action
+            agent = CuriosityAgent()
+            log_event("Stagnation Watchdog: Bypassing Orchestrator -> Invoking Curiosity Agent.", "INFO")
+            
+            # Force run
+            await agent.run_idle_cycle()
+            
+            # Reset timer manually to give it space
+            self.last_state_change_time = datetime.now()
+            
+        except Exception as e:
+            log_event(f"Stagnation Protocol Failed: {e}", "ERROR")
+
 # Global instance for easy access
 system_monitor = SystemIntegrityMonitor()
+
 

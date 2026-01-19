@@ -3647,6 +3647,25 @@ async def main(args):
 
     mcp_manager = MCPManager(console)
     shared_state.mcp_manager = mcp_manager
+
+    # Story 4: Load persisted thought chain if valid
+    from core.thought_chain import ThoughtChain, _current_chain
+    thought_chain_path = ".memory/current_thought.json"
+    if os.path.exists(thought_chain_path):
+        try:
+            file_mtime = os.path.getmtime(thought_chain_path)
+            file_age = time.time() - file_mtime
+            
+            if file_age < 3600: # 1 hour
+                loaded_chain = ThoughtChain.load_from_file()
+                if loaded_chain:
+                    from core import thought_chain
+                    thought_chain._current_chain = loaded_chain
+                    core.logging.log_event("Restored active thought chain from disk.", "SUCCESS")
+            else:
+                core.logging.log_event(f"Found thought chain but it is stale ({int(file_age/60)} mins old). Starting fresh.", "INFO")
+        except Exception as e:
+            core.logging.log_event(f"Failed to load thought chain: {e}", "WARNING")
     
     # Register atexit handler for graceful MCP server shutdown
     import atexit
@@ -3733,7 +3752,29 @@ async def main(args):
 
     # Pass the primary agent (or a list if supported later) to the cognitive loop
     # asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, shared_state.love_task_manager, shared_state.knowledge_base, talent_utils.talent_manager, shared_state.deep_agent_engine, social_media_agent, multiplayer_manager))
-    asyncio.create_task(alternating_agent_loop(user_input_queue, loop, god_agent, shared_state.love_task_manager, social_media_agent, shared_state.deep_agent_engine))
+    # Story 5: Wrap cognitive loop in error handler to prevent silent crashes
+    async def safe_agent_loop_wrapper():
+        from core.exceptions import TemporaryEnvironmentError
+        core.logging.log_event("Starting Resilient Agent Loop...", "INFO")
+        while True:
+            try:
+                # Run the actual loop
+                await alternating_agent_loop(user_input_queue, loop, god_agent, shared_state.love_task_manager, social_media_agent, shared_state.deep_agent_engine)
+            except TemporaryEnvironmentError as e:
+                # Story 5: Handle specific environment failures gracefully
+                core.logging.log_event(f"Environment Unreachable: {e}. Entering Sleep Mode for 5 minutes.", "WARNING")
+                await asyncio.sleep(300)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                core.logging.log_event(f"Cognitive Loop Crashed: {e}", "ERROR")
+                await asyncio.sleep(10) # Prevent tight crash loop
+
+    asyncio.create_task(safe_agent_loop_wrapper())
+    
+    # Start the periodic heartbeat task
+    asyncio.create_task(system_heartbeat())
+
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader(user_input_queue))
     asyncio.create_task(run_qa_evaluations(loop))
@@ -3778,6 +3819,32 @@ async def main(args):
 
 ipfs_available = False
 
+def check_connectivity():
+    """Story 5: Startup Connectivity Test"""
+    try:
+        import socket
+        socket.create_connection(("8.8.8.8", 53), timeout=3)
+        return True
+    except OSError:
+        return False
+
+async def system_heartbeat():
+    """Story 1.3: Periodic Heartbeat Logging & Story 3: Stagnation Check"""
+    from core.system_integrity_monitor import system_monitor
+    
+    while True:
+        await asyncio.sleep(60) # Logic runs every minute, logs every 5
+        
+        # Story 3: Stagnation Check 
+        # (Assuming system_monitor is globally available or we use the global instance)
+        if 'system_integrity_monitor' in globals() and system_integrity_monitor:
+            await system_integrity_monitor.check_stagnation()
+        
+        # Log heartbeat every 5 minutes
+        if int(time.time()) % 300 == 0:
+            import threading
+            from core.logging import log_event
+            log_event(f"HEARTBEAT: System Active. Threads: {threading.active_count()}", "INFO")
 
 # --- SCRIPT ENTRYPOINT WITH FAILSAFE WRAPPER ---
 async def run_safely():
@@ -3786,6 +3853,15 @@ async def run_safely():
         apply_stability_patches()
         core.logging.setup_global_logging(shared_state.love_state.get('version_name', 'unknown'))
         load_all_state(ipfs_cid=args.from_ipfs)
+
+        load_all_state(ipfs_cid=args.from_ipfs)
+
+        # Story 5: Startup Connectivity Test
+        if not check_connectivity():
+             core.logging.log_event("Startup Connectivity Test FAILED. Proceeding with limited functionality...", "CRITICAL")
+             # We don't exit, but we log critically.
+        else:
+             core.logging.log_event("Startup Connectivity Test PASSED", "SUCCESS")
 
         if "autopilot_mode" in shared_state.love_state:
             del shared_state.love_state["autopilot_mode"]

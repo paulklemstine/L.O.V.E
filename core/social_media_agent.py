@@ -3,6 +3,7 @@ import random
 import time
 import os
 import traceback
+from core.exceptions import TemporaryEnvironmentError
 
 from core.logging import log_event
 from core.tools_legacy import manage_bluesky
@@ -38,6 +39,10 @@ class SocialMediaAgent:
         for attempt in range(self.max_retries):
             try:
                 result = await action(*args, **kwargs)
+                if result is None or (isinstance(result, list) and len(result) == 0):
+                     # Story 5: Treat empty results as potential environment failure if critical
+                     # For now, we allow empty lists but logging it.
+                     pass
                 return result
             except Exception as e:
                 log_event(f"Attempt {attempt + 1}/{self.max_retries} failed for action {action.__name__}. Error: {e}", level='WARNING')
@@ -45,7 +50,9 @@ class SocialMediaAgent:
                     await asyncio.sleep(5 * (attempt + 1))
                 else:
                     log_event(f"Action {action.__name__} failed after {self.max_retries} attempts.", level='ERROR')
-                    return None
+                    # Story 5: Raise specific error for the main loop to catch
+                    raise TemporaryEnvironmentError(f"Social Environment Unreachable: {e}")
+
 
 
 

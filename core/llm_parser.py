@@ -71,6 +71,9 @@ def extract_clean_text_content(response: str) -> str:
     return response.strip()
 
 
+
+
+
 def smart_parse_llm_response(response: str, expected_keys: Optional[list] = None) -> Dict[str, Any]:
     """
     Intelligently parses LLM responses with multiple fallback strategies.
@@ -101,8 +104,7 @@ def smart_parse_llm_response(response: str, expected_keys: Optional[list] = None
     
     # Strategy 0: Extract from <json> tags (New Priority)
     result = _extract_from_xml(response)
-    if result and not result.get('_parse_error'):
-        return result
+    if result and not result.get('_parse_error'):return result
 
     # Strategy 1: Parse as JSON (Priority for valid JSON)
     try:

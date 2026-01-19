@@ -212,7 +212,50 @@ def _parse_tool_calls_from_response(response_text: str) -> Optional[List[Dict[st
         except Exception:
             continue
     
-    return tool_calls if tool_calls else None
+    return tool_calls if tool_calls else _try_smart_parse_fallback(response_text)
+
+
+def _try_smart_parse_fallback(response_text: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    Fallback: Uses the robust smart_parse_llm_response from core.llm_parser
+    to handle Action: {...} and other formats.
+    """
+    try:
+        from core.llm_parser import smart_parse_llm_response
+        parsed = smart_parse_llm_response(response_text)
+        
+        if parsed and not parsed.get("_parse_error"):
+            # Check for "action" key (Key-Value format)
+            action = parsed.get("action")
+            if isinstance(action, dict):
+                tool_name = action.get("tool_name") or action.get("name") or action.get("function")
+                args = action.get("arguments") or action.get("args") or action.get("parameters", {})
+                
+                if tool_name:
+                    return [{
+                        "id": f"call_smart_{tool_name}",
+                        "name": tool_name,
+                        "args": args if isinstance(args, dict) else {}
+                    }]
+            
+            # Check for direct tool dictionary if the whole response was just the tool call
+            # e.g. {"tool": "..."}
+            if "tool" in parsed or "tool_name" in parsed:
+                tool_name = parsed.get("tool") or parsed.get("tool_name")
+                args = parsed.get("arguments") or parsed.get("args") or parsed.get("parameters", {})
+                if tool_name:
+                    return [{
+                        "id": f"call_smart_{tool_name}",
+                        "name": tool_name,
+                        "args": args if isinstance(args, dict) else {}
+                    }]
+
+    except ImportError:
+        pass
+    except Exception as e:
+        core.logging.log_event(f"Smart parse fallback failed: {e}", "WARNING")
+        
+    return None
 
 
 async def reason_node(state: DeepAgentState) -> Dict[str, Any]:

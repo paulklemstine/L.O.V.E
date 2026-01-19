@@ -60,6 +60,28 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
 
     message = " ".join(map(str, args))
 
+    # Story 6: Separate Artifact Logging
+    # Detect large ASCII blocks or artifacts and redirect them to artifacts.log
+    # Heuristic: Message is long (> 500 chars) and contains multiple newlines, or explicitly marked
+    if len(message) > 500 and message.count('\n') > 10:
+        try:
+            artifact_file = "artifacts.log"
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Calculate a unique ID for the artifact
+            import hashlib
+            artifact_id = hashlib.md5(message.encode()).hexdigest()[:8]
+            
+            with open(artifact_file, "a", encoding="utf-8") as f:
+                f.write(f"\n--- ARTIFACT {artifact_id} [{timestamp}] ---\n")
+                f.write(message)
+                f.write(f"\n--- END ARTIFACT {artifact_id} ---\n")
+            
+            # Replace message with pointer
+            message = f"[ARTIFACT STRIPPED] Large output logged to {artifact_file} (ID: {artifact_id})"
+        except Exception as e:
+            # Fallback to normal logging if artifact write fails
+            pass
+
     # Also write to the Python logger with the specified level
     if level_upper == "INFO":
         logging.info(message)
@@ -73,6 +95,16 @@ def log_event(*args, level="INFO", from_ui=False, **kwargs):
         logging.debug(message)
     else:
         logging.info(message)  # Default to INFO
+
+    # Bolt Optimization: Filter out noisy libraries unless verbose is explicit
+    # This prevents the UI/Logs from being flooded with HTTP/WebSocket debugging
+    noisy_sources = ["urllib3", "http", "websockets", "asyncio", "httpx"]
+    is_noisy = any(src in message.lower() for src in noisy_sources)
+    
+    # If it's a noisy log and we are NOT in verbose mode (checking DEBUG level), skip UI/File
+    # We allow ERROR/CRITICAL from these sources to pass through
+    if is_noisy and level_int < logging.WARNING and not logger.isEnabledFor(logging.DEBUG):
+        return
 
     # If the UI queue is configured and this log didn't come from the UI,
     # create a structured log object and send it to the display.
@@ -198,6 +230,19 @@ def setup_global_logging(version_name='unknown', verbose=False):
 
     # We no longer print the startup message to stdout, as it's not a UI panel.
     # The console object will handle all direct user-facing output.
+
+    # Story 1: Suppress noisy libraries
+    # These libraries are very verbose at INFO level
+    full_suppression_list = [
+        "urllib3", "urllib3.connectionpool", "http.client", 
+        "websockets", "asyncio", "httpx", "langsmith.client",
+        "watchdog.observers.inotify_buffer"
+    ]
+    
+    for lib_name in full_suppression_list:
+        lib_logger = logging.getLogger(lib_name)
+        lib_logger.setLevel(logging.WARNING)
+        lib_logger.propagate = True # Ensure warnings still bubble up if needed
 
 
 class ScopedDiagnosticLogger:

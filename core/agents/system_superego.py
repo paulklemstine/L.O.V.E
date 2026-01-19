@@ -295,6 +295,12 @@ Return ONLY the JSON object."""
                 aesthetic_feedback=aesthetic_feedback
             )
             
+            # Story 1.2: Log Rejections Explicitly
+            if result.needs_correction:
+                log_event(f"Superego REJECTED action. Reason: {result.analysis}", "WARNING")
+            
+            return result
+            
         except Exception as e:
             log_event(f"Superego critique failed: {e}", "ERROR")
             # Return safe defaults on error
