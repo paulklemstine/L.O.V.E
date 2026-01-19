@@ -137,16 +137,48 @@ from core.tools_lib import (
 @tool("code_modifier", args_schema=CodeModifierInput)
 async def code_modifier(source_file: str, modification_instructions: str) -> str:
     """
-    DEPRECATED: Direct code modification is disabled.
-    Use the 'evolve' or 'feed_user_story' tool to delegate code changes to Jules.
+    Initiates a Jules evolution task to modify the specified source file.
+    Proxies the request to the robust Jules task manager.
     """
-    return (
-        "⚠️ The code_modifier tool has been disabled. "
-        "For code changes, please use:\n"
-        "  • `evolve(goal='...')` - for general code evolution\n"
-        "  • `feed_user_story(story='...')` - for SMART user stories\n"
-        "These tools delegate work to Jules, an expert software engineer."
+    import core.logging
+    import core.shared_state as shared_state
+    from core.jules_task_manager import trigger_jules_evolution
+    from rich.console import Console
+    
+    if not source_file or not modification_instructions:
+        return "Error: Both source_file and modification_instructions are required."
+
+    # Format the request as a user story/task for Jules
+    request = (
+        f"Modify `{source_file}`.\n\n"
+        f"Instructions:\n{modification_instructions}"
     )
+    
+    if not getattr(shared_state, 'love_task_manager', None):
+         # Try to recover or warn
+         return "Error: Jules Task Manager is not initialized. Cannot process code modification."
+
+    try:
+        console = Console()
+        core.logging.log_event(f"Delegating code modification of {source_file} to Jules...", "INFO")
+        
+        result = await trigger_jules_evolution(
+            modification_request=request,
+            console=console,
+            love_task_manager=shared_state.love_task_manager,
+            deep_agent_instance=shared_state.deep_agent_engine
+        )
+        
+        if result == 'duplicate':
+             return "Task ignored: A similar modification task is already being processed."
+        elif result:
+            return f"Successfully initiated Jules task to modify `{source_file}`. Task ID: {result}. You can check status via `love_task_manager.get_status()`."
+        else:
+            return "Failed to initiate Jules task. Check logs for details."
+
+    except Exception as e:
+        core.logging.log_event(f"Error in code_modifier proxy: {e}", "ERROR")
+        return f"Error delegating to Jules: {e}"
 
 @tool("speak_to_creator", args_schema=SpeakToCreatorInput)
 def speak_to_creator(message: str):
