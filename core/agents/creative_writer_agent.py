@@ -115,6 +115,13 @@ Generate two DISTINCT content pieces based on the theme: "{theme}":
                 
                 data = json.loads(raw)
                 
+                # Handle case where LLM returns a list of one object
+                if isinstance(data, list):
+                    if len(data) > 0 and isinstance(data[0], dict):
+                        data = data[0]
+                    else:
+                        raise ValueError(f"LLM returned an invalid JSON structure (List): {raw[:100]}")
+                
                 story = data.get("story", "")
                 subliminal = data.get("subliminal", "WAKE UP")
 
