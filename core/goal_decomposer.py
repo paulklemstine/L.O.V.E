@@ -247,13 +247,14 @@ class GoalDecomposer:
         
         return GoalTree(original_goal=goal, root=root)
     
-    async def _llm_decompose(self, goal: str, current_depth: int = 0) -> GoalTree:
+    async def _llm_decompose(self, goal: str, current_depth: int = 0, context: str = None) -> GoalTree:
         """
         Uses LLM to decompose a goal into a recursive hierarchical structure.
         
         Args:
             goal: The goal to decompose
             current_depth: Current nesting depth (for recursive calls)
+            context: Optional context (e.g., failure reasons) to guide decomposition
             
         Returns:
             GoalTree from LLM decomposition
@@ -266,10 +267,12 @@ class GoalDecomposer:
             log_event(f"Maximum decomposition depth ({max_depth}) reached for: {goal}")
             return self._create_leaf_goal_tree(goal, current_depth)
         
+        context_block = f"\nCONTEXT:\n{context}\n" if context else ""
+        
         prompt = f"""You are a hierarchical task decomposition expert. Break down the following goal into a RECURSIVE tree of sub-tasks.
 
 Goal: "{goal}"
-
+{context_block}
 RULES:
 1. Create 2-5 specific, actionable sub-tasks
 2. If a sub-task is complex, include nested "children" sub-tasks (up to {max_depth - current_depth} more levels)
@@ -439,8 +442,17 @@ Return ONLY valid JSON with this structure:
         log_event(f"Refining subtask: {subtask.task}")
         subtask.status = TaskStatus.IN_PROGRESS
         
+        # Extract error context if available
+        error_context = subtask.metadata.get("error")
+        if error_context:
+            error_context = f"Previous attempt failed: {error_context}. Please decompose into smaller, easier steps."
+        
         # Use LLM to re-decompose at a deeper level
-        refined_tree = await self._llm_decompose(subtask.task, current_depth=subtask.depth)
+        refined_tree = await self._llm_decompose(
+            subtask.task, 
+            current_depth=subtask.depth, 
+            context=error_context
+        )
         
         # Transfer the refined children to the original subtask
         subtask.children = refined_tree.root.children

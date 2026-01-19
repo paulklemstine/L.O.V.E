@@ -1009,20 +1009,32 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         log_event(f"Prompt ({original_token_count} tokens) is too long for the context length of {model_id} ({max_prompt_tokens} tokens). Truncating...", "WARNING")
 
                         # Truncate text progressively until it fits within the token limit.
+                        # Truncate text intelligently: PRESERVE SYSTEM PROMPT (START) AND RECENT CONTEXT (END)
                         while token_count > max_prompt_tokens:
-                            # Calculate the estimated number of characters to chop off.
-                            # We add a buffer of 100 tokens to be safe.
-                            tokens_to_remove = token_count - max_prompt_tokens + 100
+                            # Calculate chars to remove with a safety buffer
+                            tokens_to_remove = token_count - max_prompt_tokens + 200
                             avg_chars_per_token = len(prompt_text) / token_count if token_count > 0 else 4
                             chars_to_remove = int(tokens_to_remove * avg_chars_per_token)
-
-                            # Ensure we don't chop off everything
-                            if chars_to_remove >= len(prompt_text):
-                                prompt_text = ""
+                            
+                            target_length = len(prompt_text) - chars_to_remove
+                            
+                            if target_length <= 100:
+                                log_event("Prompt too massive to truncate intelligently, forcing severe cut.", "WARNING")
+                                prompt_text = prompt_text[-max_prompt_tokens*2:] # Last resort: just keep tail
                             else:
-                                prompt_text = prompt_text[:-chars_to_remove]
+                                # Keep start (System Prompt) and End (Recent Context)
+                                # Allocating 25% to start (capped at 2000 chars)
+                                keep_start = min(int(target_length * 0.25), 2000)
+                                keep_end = max(0, target_length - keep_start)
+                                
+                                new_text = prompt_text[:keep_start] + "\n... [TRUNCATED] ...\n" + prompt_text[-keep_end:]
+                                
+                                # Safety against infinite loops
+                                if len(new_text) >= len(prompt_text):
+                                    prompt_text = prompt_text[:int(len(prompt_text)*0.9)] 
+                                else:
+                                    prompt_text = new_text
 
-                            # Recalculate token count
                             token_count = get_token_count(prompt_text)
 
                         log_event(f"Prompt truncated from {original_token_count} to {token_count} tokens.", "INFO")

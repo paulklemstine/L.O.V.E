@@ -390,13 +390,13 @@ When you have completed the task, respond with your final answer directly.
         context_parts = []
         
         if "messages" in state:
-            recent_msgs = state["messages"][-3:]  # Last 3 messages
+            recent_msgs = state["messages"][-15:]  # Increased from 3 to 15 for better context
             for msg in recent_msgs:
                 content = getattr(msg, "content", str(msg))
-                context_parts.append(f"- {content[:200]}")
+                context_parts.append(f"- {content[:500]}")  # Increased truncation limit for individual messages
         
         if "memory_context" in state and state["memory_context"]:
-            context_parts.append(f"Memory: {state['memory_context'][:500]}")
+            context_parts.append(f"Memory: {state['memory_context'][:2000]}")  # Increased memory context limit
         
         if context_parts:
             return "\n\nParent Context:\n" + "\n".join(context_parts)

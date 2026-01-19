@@ -403,7 +403,7 @@
             uv = vec2(cos(a), sin(a)) * r;
             uv -= 0.5;
             float pat = sin(uv.x * 20.0 + t) * cos(uv.y * 20.0 - t);
-            return vec3(smoothstep(0.0, 0.15, abs(pat))) * hyperPalette(r + t + p3) * p4;
+            return vec3(smoothstep(0.0, 0.15, abs(pat))) * hyperPalette(r + t + p3) * (0.3 + p4 * 2.0);
         }
 
         // 10. NEURO
@@ -412,7 +412,7 @@
             float n = noise(p + t);
             float m = noise(p*2.0 - t);
             float val = 0.03 / abs(n - m);
-            return vec3(val) * vec3(0.2, 0.6, 1.0) * p4 * 1.5;
+            return vec3(val) * vec3(0.2, 0.6, 1.0) * (0.5 + p4 * 2.5);
         }
 
         // 11. RAIN
@@ -421,7 +421,7 @@
             vec2 id = floor(uv * 30.0);
             float drop = fract(t * (1.0+p1) + hash(id)*5.0);
             float val = smoothstep(0.9, 1.0, drop) * step(0.5, hash(id + vec2(1.0)));
-            return vec3(0.0, 1.0, 0.5) * val * p4 * 5.0;
+            return vec3(0.0, 1.0, 0.5) * val * (1.0 + p4 * 4.0);
         }
 
         // 12. WAVEFORM
@@ -431,7 +431,7 @@
                 float y = sin(uv.x * (4.0+i) + t * (1.5+p1) + i) * 0.35 * p2;
                 lines += 0.015 / abs(uv.y - y);
             }
-            return vec3(lines) * hyperPalette(t) * p4;
+            return vec3(lines) * hyperPalette(t) * (0.5 + p4 * 2.0);
         }
 
         // 13. SPIRAL
@@ -439,7 +439,7 @@
             float r = length(uv);
             float a = atan(uv.y, uv.x);
             float s = sin(a * 10.0 - r * 20.0 + t * 5.0 * p1);
-            return vec3(smoothstep(0.0, 0.5, s)) * neonPalette(r*2.0 - t) * p4;
+            return vec3(smoothstep(0.0, 0.5, s)) * neonPalette(r*2.0 - t) * (0.5 + p4 * 2.0);
         }
 
         // 14. CRYSTAL
@@ -456,7 +456,7 @@
                 md = min(md, d);
             }
             vec3 col = hyperPalette(md*3.0 + p3);
-            return col * pow(1.0-md, 2.0) * p4 * 3.0;
+            return col * pow(1.0-md, 2.0) * (0.3 + p4 * 3.0);
         }
 
         // 15. LATTICE
@@ -465,7 +465,7 @@
              vec2 gv = fract(uv * 4.0);
              float d = length(gv-0.5);
              float circles = smoothstep(0.4, 0.41, d) - smoothstep(0.5, 0.51, d);
-             return vec3(circles) * neonPalette(length(uv)*p1 + p3) * p4 * 2.0;
+             return vec3(circles) * neonPalette(length(uv)*p1 + p3) * (0.5 + p4 * 2.0);
         }
 
          // 16. STARDUST
