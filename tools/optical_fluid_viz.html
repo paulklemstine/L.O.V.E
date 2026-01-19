@@ -554,11 +554,23 @@
         activeLayers[0] = true;
         activeLayers[15] = true;
 
+        // Audio Mapping State
+        // 4 params x [startBand, count]
+        // Default: 0-12, 12-12, 24-12, 36-12
+        let paramMap = [
+            { s: 0, c: 12 },   // P1
+            { s: 12, c: 12 },  // P2
+            { s: 24, c: 12 },  // P3
+            { s: 36, c: 12 }   // P4
+        ];
+
+        let autoReroll = false;
+        let lastAutoTime = 0;
+        let avgEnergy = 0;
+
         let audioCtx, analyser, dataArray;
         // 48 Bands
         let smoothedBands = new Float32Array(48);
-        // We distill 48 bands down to 4 params for the shader
-        let shaderParams = new Float32Array(16);
 
         let isRunning = false;
         let startTime = Date.now();
@@ -577,11 +589,31 @@
             controls.appendChild(btn);
         });
 
+        // ROW 2: System Controls
+        const sysRow = document.createElement('div');
+        sysRow.style.width = "100%";
+        sysRow.style.display = "flex";
+        sysRow.style.justifyContent = "center";
+        sysRow.style.marginTop = "10px";
+        sysRow.style.gap = "15px";
+        controls.appendChild(sysRow);
+
         const randBtn = document.createElement('button');
         randBtn.className = 'sys-btn';
-        randBtn.innerText = 'REROLL SYSTEM';
-        randBtn.onclick = forceReroll;
-        controls.appendChild(randBtn);
+        randBtn.innerText = 'REROLL CHAOS';
+        randBtn.onclick = () => forceReroll(true);
+        sysRow.appendChild(randBtn);
+
+        const autoBtn = document.createElement('button');
+        autoBtn.className = 'sys-btn';
+        autoBtn.innerText = 'AUTO: OFF';
+        autoBtn.onclick = () => {
+            autoReroll = !autoReroll;
+            autoBtn.innerText = autoReroll ? 'AUTO: ON' : 'AUTO: OFF';
+            autoBtn.style.background = autoReroll ? '#f0f' : 'transparent';
+            autoBtn.style.color = autoReroll ? '#000' : '#f0f';
+        };
+        sysRow.appendChild(autoBtn);
 
 
         function toggleLayer(idx, btn) {
@@ -589,18 +621,27 @@
             btn.className = 'layer-toggle' + (activeLayers[idx] ? ' active' : '');
         }
 
-        function forceReroll() {
-            // Pick 2-4 random layers
-            activeLayers.fill(false);
-            let count = 2 + Math.floor(Math.random() * 3);
-            for (let k = 0; k < count; k++) {
-                activeLayers[Math.floor(Math.random() * 16)] = true;
+        function forceReroll(randomizeLayers) {
+            // 1. Randomize Active Layers (if requested or auto)
+            if (randomizeLayers) {
+                activeLayers.fill(false);
+                let count = 2 + Math.floor(Math.random() * 4); // 2 to 5 layers
+                for (let k = 0; k < count; k++) {
+                    activeLayers[Math.floor(Math.random() * 16)] = true;
+                }
+                // Update UI
+                const btns = document.querySelectorAll('.layer-toggle');
+                btns.forEach((b, i) => {
+                    b.className = 'layer-toggle' + (activeLayers[i] ? ' active' : '');
+                });
             }
-            // Update UI
-            const btns = document.querySelectorAll('.layer-toggle');
-            btns.forEach((b, i) => {
-                b.className = 'layer-toggle' + (activeLayers[i] ? ' active' : '');
-            });
+
+            // 2. Randomize Audio Mappings (ALWAYS)
+            // Pick a random chunk of spectrum for each param
+            for (let i = 0; i < 4; i++) {
+                paramMap[i].s = Math.floor(Math.random() * 36); // Start anywhere 0-36
+                paramMap[i].c = 3 + Math.floor(Math.random() * 12); // Width 3-15 bands
+            }
         }
 
 
@@ -610,6 +651,7 @@
                 audioCtx = new AC();
                 analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 2048; // High res for 48 bands
+                // Increased smoothing for smoother visuals but keep responsiveness for drops
                 analyser.smoothingTimeConstant = CONFIG.smoothing;
 
                 const src = audioCtx.createMediaStreamSource(stream);
@@ -619,7 +661,6 @@
                 document.getElementById('start-screen').style.opacity = 0;
                 setTimeout(() => document.getElementById('start-screen').style.display = 'none', 1000);
                 document.getElementById('post-card').style.opacity = 1;
-                document.getElementById('post-card').style.transform = "scale(1)";
 
                 isRunning = true;
                 startTime = Date.now();
@@ -673,18 +714,16 @@
         function loop() {
             if (!isRunning) return requestAnimationFrame(loop);
 
-            const t = (Date.now() - startTime) * 0.001;
+            const now = Date.now();
+            const t = (now - startTime) * 0.001;
             analyser.getByteFrequencyData(dataArray);
 
             // 48 Band Analysis
-            // Freq range ~20Hz - 20kHz
-            // We'll log-bin them or linear-bin depending on preference.
-            // Linear looks better for "spectrum".
-            let binSize = Math.floor(dataArray.length / 60); // Skip very highs
+            let binSize = Math.floor(dataArray.length / 60);
+            let currentTotalEnergy = 0;
 
             for (let i = 0; i < 48; i++) {
                 let sum = 0;
-                // Accumulate range
                 let start = i * binSize;
                 for (let j = 0; j < binSize; j++) sum += dataArray[start + j];
                 let val = (sum / binSize) / 255.0;
@@ -692,33 +731,50 @@
                 // Attack/Decay
                 if (val > smoothedBands[i]) smoothedBands[i] = val;
                 else smoothedBands[i] += (val - smoothedBands[i]) * 0.1;
+
+                currentTotalEnergy += val;
+            }
+            currentTotalEnergy /= 48.0;
+
+            // AUTO-REROLL LOGIC
+            // Simple beat detection: average over time vs immediate
+            avgEnergy = avgEnergy * 0.99 + currentTotalEnergy * 0.01;
+
+            // Threshold for drop: 1.5x average energy, min cooldown 4s
+            if (autoReroll && (now - lastAutoTime > 4000) && (currentTotalEnergy > avgEnergy * 1.5) && (currentTotalEnergy > 0.1)) {
+                forceReroll(true);
+                lastAutoTime = now;
+                // Visual flash on sidebar
+                fctx.fillStyle = "white";
+                fctx.fillRect(0, 0, 80, window.innerHeight);
             }
 
             // Draw Frequency Sidebar (48 bars)
             fctx.clearRect(0, 0, fcvs.width, fcvs.height);
             let barH = fcvs.height / 48;
             for (let i = 0; i < 48; i++) {
-                let hue = i * 6; // Rainbow over 48
-                let val = smoothedBands[47 - i]; // Highs at top
+                let hue = i * 6;
+                let val = smoothedBands[47 - i];
                 fctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
                 let w = val * 80;
                 fctx.fillRect(0, i * barH, w, barH - 1);
             }
 
-            // Map 48 bands to 4 Shader Params (Bass, LoMid, HiMid, High)
-            // Average sections
-            let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
-            for (let i = 0; i < 12; i++) p1 += smoothedBands[i]; // Bass
-            for (let i = 12; i < 24; i++) p2 += smoothedBands[i]; // LoMid
-            for (let i = 24; i < 36; i++) p3 += smoothedBands[i]; // HiMid
-            for (let i = 36; i < 48; i++) p4 += smoothedBands[i]; // High
-
-            p1 /= 12; p2 /= 12; p3 /= 12; p4 /= 12;
-
-            // Fill params array (Uniform layout: 0-3 params)
-            let finalParams = new Float32Array(16);
-            finalParams[0] = p1; finalParams[1] = p2;
-            finalParams[2] = p3; finalParams[3] = p4;
+            // Map 48 bands to 4 Shader Params DYNAMICALLY
+            let params = new Float32Array(4);
+            for (let p = 0; p < 4; p++) {
+                let map = paramMap[p];
+                let sum = 0;
+                let count = 0;
+                for (let k = 0; k < map.c; k++) {
+                    let idx = map.s + k;
+                    if (idx < 48) {
+                        sum += smoothedBands[idx];
+                        count++;
+                    }
+                }
+                params[p] = count > 0 ? (sum / count) : 0;
+            }
 
             // Prepare active array
             let activeFloats = new Float32Array(16);
@@ -734,7 +790,7 @@
 
             gl.uniform1f(uTime, t);
             gl.uniform2f(uRes, canvas.width, canvas.height);
-            gl.uniform1fv(uParams, finalParams);
+            gl.uniform1fv(uParams, params);
             gl.uniform1fv(uActive, activeFloats);
             gl.uniform1f(uCount, activeCount);
 
