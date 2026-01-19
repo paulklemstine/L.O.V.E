@@ -649,36 +649,68 @@ class ToolRegistry:
     
     def load_core_tools(self) -> List[str]:
         """
-        Loads core tools from core.tools_lib.
+        Loads core tools from core.tools_lib and core.tools.
         Story 3.1: Modularized tool loading.
         """
         loaded = []
+        
+        # 1. Load core.tools_lib (standard import)
         try:
             import core.tools_lib as tools_lib
-            
-            # Iterate over all exported attributes
-            for name in dir(tools_lib):
-                if name.startswith("_"): continue
-                
-                attr = getattr(tools_lib, name)
-                
-                # Check if it's a callable (function or tool)
-                if callable(attr):
-                    try:
-                        # Attempt to register
-                        self.register(attr)
-                        loaded.append(name)
-                        # print(f"🔧 Loaded core tool: {name}") # Optional logging
-                    except ToolDefinitionError:
-                        # Not a tool, skip
-                        pass
-                    except Exception:
-                        pass
-                        
+            self._register_module_tools(tools_lib, loaded)
         except ImportError as e:
             print(f"Warning: Failed to load core tools_lib: {e}")
+
+        # 2. Load core.tools (Explicit path import to avoid collision with core/tools/ directory)
+        try:
+            import os
+            import importlib.util
+            import sys
+            
+            # Find path to core/tools.py
+            current_file = os.path.abspath(__file__)
+            core_dir = os.path.dirname(current_file) # core/
+            tools_py_path = os.path.join(core_dir, "tools.py")
+            
+            if os.path.exists(tools_py_path):
+                spec = importlib.util.spec_from_file_location("core.tools_module", tools_py_path)
+                if spec and spec.loader:
+                    tools_module = importlib.util.module_from_spec(spec)
+                    sys.modules["core.tools_module"] = tools_module
+                    spec.loader.exec_module(tools_module)
+                    self._register_module_tools(tools_module, loaded)
+            else:
+                print(f"Warning: core/tools.py not found at {tools_py_path}")
+                
+        except Exception as e:
+            print(f"Error loading core/tools.py: {e}")
             
         return loaded
+
+    def _register_module_tools(self, module, loaded_list):
+        """Helper to iterate and register tools from a module."""
+        # print(f"DEBUG: robust register from {module}")
+        for name in dir(module):
+            if name.startswith("_"): continue
+            
+            attr = getattr(module, name)
+            
+            # Check if it looks like a tool (either callable or has tool attributes)
+            # LangChain tools are callable OR they are instances of BaseTool which might not be callable in this context
+            is_potential_tool = callable(attr) or (hasattr(attr, "args_schema") and hasattr(attr, "name"))
+            
+            if is_potential_tool:
+                if isinstance(attr, type):
+                    if not hasattr(attr, "args_schema") and not hasattr(attr, "__tool_schema__"):
+                         continue
+
+                try:
+                    self.register(attr, name=name)
+                    loaded_list.append(name)
+                except ToolDefinitionError:
+                    pass
+                except Exception:
+                    pass
 
     
     def refresh(self) -> Dict[str, Any]:
