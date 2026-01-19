@@ -30,6 +30,9 @@ from collections import defaultdict
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
+
+# Reusable module-level console to avoid instantiation overhead (~0.18ms)
+_console = Console()
 from rich.text import Text
 from bbs import run_hypnotic_progress
 from display import create_api_error_panel
@@ -44,10 +47,10 @@ import signal
 def graceful_shutdown(signum, frame):
     # Safety check: Don't shut down if running in a pytest environment
     if "PYTEST_CURRENT_TEST" in os.environ:
-        Console().print(f"[bold yellow]Signal {signum} received, but ignoring due to active test environment.[/bold yellow]")
+        _console.print(f"[bold yellow]Signal {signum} received, but ignoring due to active test environment.[/bold yellow]")
         return
 
-    Console().print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
+    _console.print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
 
     # Trigger the existing cleanup logic
     if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
@@ -56,7 +59,7 @@ def graceful_shutdown(signum, frame):
 
     # vLLM Handling
     # User requested to NEVER kill vLLM on shutdown to ensure persistence and fast restarts.
-    Console().print("[bold green]Leaving vLLM server running per configuration.[/bold green]")
+    _console.print("[bold green]Leaving vLLM server running per configuration.[/bold green]")
     # should_kill_vllm = False - implicitly handled by removing the kill block
 
     sys.exit(0)
@@ -115,8 +118,7 @@ async def execute_reasoning_task(prompt: str, deep_agent_instance=None) -> dict:
     Exclusively uses the run_llm function for a reasoning task.
     This is the new primary pathway for the GeminiReActEngine.
     """
-    console = Console()
-    prompt_cid = await _pin_to_ipfs_async(prompt.encode('utf-8'), console)
+    prompt_cid = await _pin_to_ipfs_async(prompt.encode('utf-8'), _console)
     response_cid = None
     try:
         log_event("Initiating reasoning task via run_llm.", "INFO")
@@ -134,11 +136,11 @@ async def execute_reasoning_task(prompt: str, deep_agent_instance=None) -> dict:
 
     except TypeError as e:
         log_event(f"Caught TypeError in reasoning task: {e}\n{traceback.format_exc()}", "CRITICAL")
-        console.print(create_api_error_panel("reasoning_core", f"Caught TypeError: {e}", "reasoning"))
+        _console.print(create_api_error_panel("reasoning_core", f"Caught TypeError: {e}", "reasoning"))
         return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
     except Exception as e:
         log_event(f"An error occurred during reasoning task: {e}", "CRITICAL")
-        console.print(create_api_error_panel("reasoning_core", str(e), "reasoning"))
+        _console.print(create_api_error_panel("reasoning_core", str(e), "reasoning"))
         return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
 
@@ -839,7 +841,6 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         return {"result": None, "error": "No prompt text provided"}
 
 
-    console = Console()
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
     start_time = time.time()
@@ -859,7 +860,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
     final_result = None
     try:
         # --- Token Count & Prompt Management ---
-        prompt_cid = await _pin_to_ipfs_async(prompt_text.encode('utf-8'), console)
+        prompt_cid = await _pin_to_ipfs_async(prompt_text.encode('utf-8'), _console)
         original_prompt_text = prompt_text
 
         try:
@@ -1056,7 +1057,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                             None,
                             functools.partial(
                                 run_hypnotic_progress,
-                                console,
+                                _console,
                                 f"Processing with local cognitive matrix [bold yellow]{active_model_filename}[/bold yellow] (Purpose: {purpose})",
                                 _local_llm_call,
                                 silent=True
@@ -1102,7 +1103,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                                 None,
                                 functools.partial(
                                     run_hypnotic_progress,
-                                    console,
+                                    _console,
                                     f"Accessing cognitive matrix via [bold yellow]Gemini Internal ({model_id})[/bold yellow] (Purpose: {purpose})",
                                     _colab_internal_call,
                                     silent=True
@@ -1185,7 +1186,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                             None,
                             functools.partial(
                                 run_hypnotic_progress,
-                                console,
+                                _console,
                                 f"Accessing cognitive matrix via [bold yellow]Gemini ({model_id})[/bold yellow] (Purpose: {purpose})",
                                 _gemini_call,
                                 silent=True
@@ -1237,7 +1238,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         None,
                         functools.partial(
                             run_hypnotic_progress,
-                            console,
+                            _console,
                             f"Accessing cognitive matrix via [bold yellow]OpenRouter ({model_id})[/bold yellow] (Purpose: {purpose})",
                             _openrouter_call,
                             silent=True
@@ -1288,7 +1289,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         None,
                         functools.partial(
                             run_hypnotic_progress,
-                            console,
+                            _console,
                             f"Accessing local cognitive matrix via [bold green]vLLM ({model_id})[/bold green] (Purpose: {purpose})",
                             _vllm_call,
                             silent=True
@@ -1321,7 +1322,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         None,
                         functools.partial(
                             run_hypnotic_progress,
-                            console,
+                            _console,
                             f"Accessing distributed cognitive matrix via [bold yellow]AI Horde ({model_id})[/bold yellow]",
                             _run_horde_wrapper,
                             silent=True
@@ -1374,7 +1375,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         None,
                         functools.partial(
                             run_hypnotic_progress,
-                            console,
+                            _console,
                             f"Accessing cognitive matrix via [bold yellow]OpenAI ({model_id})[/bold yellow] (Purpose: {purpose})",
                             _openai_call,
                             silent=True
@@ -1420,7 +1421,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         None,
                         functools.partial(
                             run_hypnotic_progress,
-                            console,
+                            _console,
                             f"Accessing cognitive matrix via [bold cyan]DeepSeek ({model_id})[/bold cyan] (Purpose: {purpose})",
                             _deepseek_call,
                             silent=True
@@ -1431,7 +1432,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 # --- Success Case ---
                 if result_text is not None:
                     # --- User Feedback: Response Logging ---
-                    console.print(display_llm_interaction(f"Interaction with {model_id}", truncate_for_log(prompt_text, length=200), truncate_for_log(result_text, length=500), panel_type="llm", model_id=model_id, token_count=get_token_count(result_text), purpose=purpose, elapsed_time=time.time() - start_time))
+                    _console.print(display_llm_interaction(f"Interaction with {model_id}", truncate_for_log(prompt_text, length=200), truncate_for_log(result_text, length=500), panel_type="llm", model_id=model_id, token_count=get_token_count(result_text), purpose=purpose, elapsed_time=time.time() - start_time))
 
                     PROVIDER_FAILURE_COUNT[provider] = 0 # Reset on success
                     LLM_AVAILABILITY[model_id] = time.time()
@@ -1441,7 +1442,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         quality_controller = get_quality_controller()
                         quality_controller.record_success(model_id, provider)
                     
-                    response_cid = await _pin_to_ipfs_async(result_text.encode('utf-8'), console)
+                    response_cid = await _pin_to_ipfs_async(result_text.encode('utf-8'), _console)
                     final_result = {"result": result_text, "prompt_cid": prompt_cid, "response_cid": response_cid, "model": model_id}
                     break
             except requests.exceptions.RequestException as e:
@@ -1494,7 +1495,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                         # Global quota issue - use full retry_seconds (300s default)
                         PROVIDER_AVAILABILITY[provider] = time.time() + retry_seconds
                         log_event(f"CIRCUIT BREAKER: Global Quota Limit for '{provider}'. Cooling down for {retry_seconds}s.", "CRITICAL")
-                        console.print(display_error_oneliner("Circuit Breaker", f"Provider '{provider}' suspended (Quota Exceeded).", model_id=provider))
+                        _console.print(display_error_oneliner("Circuit Breaker", f"Provider '{provider}' suspended (Quota Exceeded).", model_id=provider))
                     else:
                         # Regular 429 - apply shorter provider cooldown (60s) to skip to next provider
                         provider_cooldown = min(60, retry_seconds)  # Use 60s or retry_seconds, whichever is shorter
@@ -1505,7 +1506,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
                     
                     if provider == "horde":
-                        console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
+                        _console.print(create_api_error_panel(model_id, f"Rate limit exceeded. Cooldown for {retry_seconds}s.", purpose, more_info=error_details))
                     
                     # Avoid tight loop if this was the last model
                     time.sleep(1)
@@ -1539,7 +1540,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                 
                 log_event(f"Model {model_id} failed. Error: {e}", level="WARNING")
                 if isinstance(e, FileNotFoundError):
-                    console.print(display_error_oneliner("CONNECTION FAILED", "Error: 'llm' command not found."))
+                    _console.print(display_error_oneliner("CONNECTION FAILED", "Error: 'llm' command not found."))
                     return {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
                 elif isinstance(e, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
@@ -1551,17 +1552,17 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
                     LLM_AVAILABILITY[model_id] = time.time() + retry_seconds
 
                     if provider == "horde":
-                        console.print(create_api_error_panel(model_id, error_message, purpose))
+                        _console.print(create_api_error_panel(model_id, error_message, purpose))
                     else:
                         reason = "Quota Exceeded" if "quota" in error_message.lower() else "API Error"
-                        console.print(display_error_oneliner("API Error", f"Reason: {reason} - Retrying in {retry_seconds:.2f}s.", model_id=model_id))
+                        _console.print(display_error_oneliner("API Error", f"Reason: {reason} - Retrying in {retry_seconds:.2f}s.", model_id=model_id))
                 else:
                     LLM_AVAILABILITY[model_id] = time.time() + 60
                     # For any other generic exception, show the full panel for Horde, one-liner for others.
                     if provider == "horde":
-                        console.print(create_api_error_panel(model_id, str(e), purpose))
+                        _console.print(create_api_error_panel(model_id, str(e), purpose))
                     else:
-                        console.print(display_error_oneliner("API Error", "Check love.log for details.", model_id=model_id))
+                        _console.print(display_error_oneliner("API Error", "Check love.log for details.", model_id=model_id))
 
             if final_result:
                 break
@@ -1579,7 +1580,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
             sleep_duration = max(0, min(all_available_times) - time.time())
             if sleep_duration > 0:
                 log_event(f"All providers on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
-                console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
+                _console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
                 time.sleep(sleep_duration)
 
 
@@ -1587,7 +1588,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         # --- EMERGENCY FALLBACK ---
         if not final_result and allow_fallback:
             log_event("All ranked cognitive interfaces failed. Initiating EMERGENCY FALLBACK.", "CRITICAL")
-            console.print(Panel("[bold red]Primary systems offline. Engaging emergency backup protocols...[/bold red]", title="SYSTEM CRITICAL", border_style="red"))
+            _console.print(Panel("[bold red]Primary systems offline. Engaging emergency backup protocols...[/bold red]", title="SYSTEM CRITICAL", border_style="red"))
             
             # Explicitly try a reliable horde model as absolute last resort
             emergency_models = ["Mythalion-13B", "Toppy-M-7B"]
@@ -1621,7 +1622,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         if last_exception:
             error_msg_text += f"\nLast known error:\n{last_exception}"
 
-        console.print(Panel(error_msg_text, title="[bold red]CATASTROPHIC SYSTEM FAULT[/bold red]", border_style="red"))
+        _console.print(Panel(error_msg_text, title="[bold red]CATASTROPHIC SYSTEM FAULT[/bold red]", border_style="red"))
         final_result = {"result": None, "prompt_cid": prompt_cid, "response_cid": None}
 
     finally:
