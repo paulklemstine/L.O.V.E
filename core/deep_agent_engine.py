@@ -734,7 +734,7 @@ class DeepAgentEngine:
             # Collect force tokens: tool names and critical keywords
             force_tokens = ["tool_name", "arguments", "thought", "action", "Finish", "JSON"]
             if self.tool_registry:
-                force_tokens.extend(list(self.tool_registry.list_tools().keys()))
+                force_tokens.extend(self.tool_registry.list_tools())
             
             compression_result = compress_prompt(
                 system_prompt,
