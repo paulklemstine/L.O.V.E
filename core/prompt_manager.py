@@ -560,6 +560,25 @@ def critique_prompt(prompt_key: str) -> Dict[str, Any]:
         golden_context = self.retrieve_golden_context(context_query)
         
         if golden_context:
-            return f"{base_prompt}\n{golden_context}"
-        
+            base_prompt = f"{base_prompt}\n{golden_context}"
+            
+        # Story 5.1: Inject Persona
+        persona = self.get_persona_content()
+        if persona:
+            base_prompt = f"{persona}\n\n{base_prompt}"
+            
         return base_prompt
+
+    def get_persona_content(self) -> str:
+        """Reads the GODDESS_PROFILE.md content."""
+        # base_dir is core/. User persona is in persona/ (sibling of core)
+        # So we go up one level.
+        try:
+            repo_root = os.path.dirname(self.base_dir) 
+            path = os.path.join(repo_root, "persona", "GODDESS_PROFILE.md")
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read()
+        except Exception as e:
+            core.logging.log_event(f"Error reading persona: {e}", "WARNING")
+        return ""

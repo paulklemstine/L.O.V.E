@@ -131,6 +131,34 @@ class MemoryManager:
         # V2 Holographic Memory: Fractal Tree Integration
         self._init_fractal_memory()
 
+    async def save_activity_log(self, action: str, result: str, filepath=".ralph/activity_log.md"):
+        """Appends a structured log entry to the activity log."""
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        entry = f"## [{timestamp}] {action}\n**Result:** {result}\n\n"
+        
+        log_dir = os.path.dirname(filepath)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+            
+        async with aiofiles.open(filepath, 'a', encoding='utf-8') as f:
+            await f.write(entry)
+            
+    async def read_recent_activity(self, filepath=".ralph/activity_log.md", n=5) -> str:
+        """Reads the last N entries from the activity log."""
+        if not os.path.exists(filepath):
+            return ""
+            
+        async with aiofiles.open(filepath, 'r', encoding='utf-8') as f:
+            content = await f.read()
+            
+        # Parse entries by "## ["
+        entries = re.split(r'(?=## \[\d{4}-\d{2}-\d{2})', content)
+        # Filter empty
+        entries = [e for e in entries if e.strip()]
+        
+        recent = entries[-n:]
+        return "".join(recent)
+
     @classmethod
     async def create(cls, graph_data_manager: GraphDataManager, ui_panel_queue=None, kb_file_path: str = None):
         """

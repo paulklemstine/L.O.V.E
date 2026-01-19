@@ -586,6 +586,39 @@ async def manage_bluesky(action: str = "post", text: str = None, image_path: str
                 except Exception as e:
                     core.logging.log_event(f"Failed to retrieve memory context for reply: {e}", "WARNING")
 
+                # --- STORY 5.2: SOCIAL GRAPH ---
+                try:
+                    SOCIAL_GRAPH_FILE = "data/social_graph.json"
+                    social_graph = {"nodes": [], "edges": []}
+                    if os.path.exists(SOCIAL_GRAPH_FILE):
+                         with open(SOCIAL_GRAPH_FILE, 'r') as f:
+                             social_graph = json.load(f)
+                    
+                    # Check/Add User
+                    user_node = next((n for n in social_graph["nodes"] if n["id"] == p_author_handle), None)
+                    if not user_node:
+                         core.logging.log_event(f"New connection! Adding {p_author_handle} to Social Graph.", "INFO")
+                         user_node = {
+                             "id": p_author_handle, 
+                             "first_seen": datetime.now().isoformat(), 
+                             "interactions": 0,
+                             "status": "Dreamer"
+                         }
+                         social_graph["nodes"].append(user_node)
+                    
+                    user_node["interactions"] += 1
+                    user_node["last_seen"] = datetime.now().isoformat()
+                    
+                    # Save Graph
+                    with open(SOCIAL_GRAPH_FILE, 'w') as f:
+                        json.dump(social_graph, f, indent=2)
+                        
+                    # Inject Social Graph Data into Context
+                    reply_context += f"\n[Social Graph Data]: User {p_author_handle} has {user_node['interactions']} interactions. Status: {user_node.get('status')}."
+                    
+                except Exception as sg_e:
+                    core.logging.log_event(f"Social Graph Error: {sg_e}", "WARNING")
+
                 # CREATOR OVERRIDE
                 CREATOR_HANDLE = "evildrgemini.bsky.social"
                 is_creator = (p_author_handle == CREATOR_HANDLE)

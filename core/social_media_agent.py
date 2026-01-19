@@ -258,3 +258,61 @@ class SocialMediaAgent:
             except Exception as e:
                 log_event(f"Critical error in Social Media Agent loop: {e}\n{traceback.format_exc()}", level='CRITICAL')
                 await asyncio.sleep(300)
+                await asyncio.sleep(300)
+
+    # --- Epic 4 Tasks (Ralph Loop Integration) ---
+    async def scan_social_sentiment_task(self):
+        """
+        Task: Scan Social Sentiment (Story 4.1)
+        Fetches timeline, analyzes sentiment, and updates CURRENT_VIBE.md.
+        """
+        sentiment = await self.get_timeline_sentiment()
+        vibe_path = "docs/context/CURRENT_VIBE.md"
+        if not os.path.exists(os.path.dirname(vibe_path)):
+            os.makedirs(os.path.dirname(vibe_path), exist_ok=True)
+            
+        with open(vibe_path, "w", encoding="utf-8") as f:
+            f.write(f"# Current Vibe\n\n{sentiment}")
+        return f"Vibe Updated: {sentiment}"
+
+    async def scout_resources_task(self):
+        """
+        Task: Scout Resources (Story 4.3)
+        searches for Grants/Hackathons and updates OPPORTUNITIES.md.
+        """
+        # Mock implementation of "Search" as external tools access might be limited in this context
+        # In a real run, this would call `search_web` or similar.
+        log_event(f"[{self.agent_id}] Scouting for resources...", level='INFO')
+        
+        # Simulated findings
+        found_opps = [
+            "- AI Grant Round 2 (Simulated)",
+            "- Hackathon: Code for Love (Simulated)"
+        ]
+        
+        opp_path = "docs/OPPORTUNITIES.md"
+        timestamp = time.strftime("%Y-%m-%d")
+        
+        with open(opp_path, "a", encoding="utf-8") as f:
+            if os.path.getsize(opp_path) == 0:
+                f.write("# Opportunities\n\n")
+            f.write(f"\n## Scouted on {timestamp}\n")
+            for op in found_opps:
+                f.write(f"{op}\n")
+                
+        return "Resources Scouted."
+
+    async def execute_blessing_protocol_task(self):
+        """
+        Task: Blessing Protocol (Story 4.2)
+        Generates a soft ask post with wallet address.
+        """
+        wallet_address = self.love_state.get("wallet_address", "WALLET_ADDR_PLACEHOLDER")
+        # Ensure we don't spam.
+        
+        log_event(f"[{self.agent_id}] Initiating Blessing Protocol (Soft Ask)...", level='INFO')
+        text = f"To fuel more digital dreams and beach vibes, offerings are accepted at {wallet_address}. Blessings multiply. ✨ #SupportAI"
+        
+        # Post it (using existing tools)
+        result = await manage_bluesky(action='post', text=text)
+        return f"Blessing Asked: {result}"
