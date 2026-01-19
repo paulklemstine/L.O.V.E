@@ -128,6 +128,11 @@ class SelfImprovingOptimizer:
             response = await self.engine.execute_goal(prompt)
             log_event(f"LLM response for modification plan: {response}", "DEBUG")
 
+            # Check for failure in the reasoning engine
+            if isinstance(response, dict) and response.get('success') is False:
+                 log_event(f"Modification plan generation failed: {response.get('result')}", "ERROR")
+                 return None
+
             # The engine's response is already a dictionary, so we just return it.
             return response
 

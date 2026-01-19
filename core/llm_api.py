@@ -126,7 +126,13 @@ async def execute_reasoning_task(prompt: str, deep_agent_instance=None) -> dict:
         response = await llm_api(prompt, purpose="reasoning", deep_agent_instance=deep_agent_instance)
 
         if response and response.get("result"):
-            log_event("Reasoning task successful.", "INFO")
+            # Check if valid result is actually a failure payload
+            result_content = response.get("result")
+            if isinstance(result_content, dict) and result_content.get("success") is False:
+                log_event(f"Reasoning task failed: {result_content.get('result')}", "WARNING")
+            else:
+                log_event("Reasoning task successful.", "INFO")
+                
             # The CIDs are already in the response from run_llm
             return response
         else:
@@ -739,7 +745,8 @@ def rank_models(purpose="general"):
                  # Penalize local vLLM for creative art to force cloud models
                  final_score -= 10000
             else:
-                 final_score += 1000
+                 # General Priority Boost: Higher than Gemini (3000) and OpenRouter (2000)
+                 final_score += 5000 
             #log_event(f"Applying priority boost to vLLM model: {model_id}", "DEBUG")
         elif provider == "horde":
             # Horde is lowest priority

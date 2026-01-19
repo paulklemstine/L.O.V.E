@@ -67,7 +67,7 @@ class GeminiReActEngine:
         
         return is_loop, similar_count, recent_failures
 
-    async def execute_goal(self, goal: str, max_steps: int = 10) -> dict:
+    async def execute_goal(self, goal: str, max_steps: int = 20) -> dict:
         """
         Main entry point for the ReAct engine.
         Continues the loop until the Action is a "Finish" action or max_steps is reached.
