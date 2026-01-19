@@ -2624,6 +2624,127 @@ async def _prioritize_and_select_task(deep_agent_engine=None):
     return selected_task
 
 
+async def alternating_agent_loop(user_input_queue, loop, god_agent, task_manager, social_media_agent, deep_agent_engine):
+    """
+    Alternating loop for Evolve and Social Media tasks, checking user input with high priority.
+    Orchestratorless design: explicitly alternates between evolution and social engagement.
+    """
+    # --- Local Setup ---
+    optimizer_tool_registry = ToolRegistry()
+    optimizer_tool_registry.register_tool(
+        name="code_modifier", tool=code_modifier,
+        metadata={"description": "Modifies a Python source file."}
+    )
+    self_improving_optimizer = SelfImprovingOptimizer(tool_registry=optimizer_tool_registry)
+    
+    # Instantiate Metacognition Agent
+    from core.agents.metacognition_agent import MetacognitionAgent
+    metacognition_agent = MetacognitionAgent(shared_state.memory_manager)
+
+    user_modeling_agent = UserModelingAgent()
+    from core.emotional_subtext import subtext_analyzer
+    
+    runner = DeepAgentRunner()
+    
+    console.print("[magenta]Alternating Agent Loop Initiated: Evolve <-> Social[/magenta]")
+    
+    mode = "evolve" # Start with evolve
+
+    while True:
+        try:
+             # --- Story 2.2: Narrative Arc Management ---
+            if shared_state.memory_manager:
+                await manage_narrative_arc(shared_state.memory_manager)
+
+            # 1. Handle Creator's Mandates (Highest Priority)
+            try:
+                raw_input = user_input_queue.get_nowait()
+                
+                # Unpack structured input
+                if isinstance(raw_input, dict) and raw_input.get("type") == "internal_task":
+                    user_input = raw_input.get("content")
+                    is_internal_task = True
+                    core.logging.log_event(f"Processing Internal Mandate: {user_input}", "INFO")
+                else:
+                    user_input = raw_input
+                    is_internal_task = False
+                    core.logging.log_event(f"Processing Creator Mandate: {user_input}", "CRITICAL")
+                
+                user_model_ctx = user_modeling_agent.get_prompt_context()
+                runner.state["user_model_context"] = user_model_ctx
+                
+                # Emotional Subtext
+                detected_subtext = "neutral_direct"
+                try:
+                    subtext_result = await subtext_analyzer.analyze_subtext(user_input, user_context=user_model_ctx)
+                    detected_subtext = subtext_result.get("subtext")
+                    reasoning = subtext_result.get("reasoning")
+                    if detected_subtext != "neutral_direct" and detected_subtext != "unknown":
+                         runner.state["emotional_subtext"] = f"User Input Subtext: {detected_subtext.replace('_', ' ').title()}. Reasoning: {reasoning}"
+                    else:
+                         runner.state.pop("emotional_subtext", None)
+                except Exception:
+                    pass
+                
+                # Run the mandate
+                mandate_output = None
+                async for update in runner.run(user_input, mandate=user_input):
+                    mandate_output = str(update)
+                
+                # Record in memory
+                if shared_state.memory_manager:
+                    await shared_state.memory_manager.add_episode(
+                        f"Creator Mandate Received:\\n- Input: {user_input[:500]}...\\n- Outcome: {str(mandate_output)[:500] if mandate_output else 'No output captured'}",
+                        tags=['CreatorMandate', 'HighPriority']
+                    )
+                
+                # Skip alternating step this cycle to be responsive
+                continue 
+
+            except queue.Empty:
+                pass
+
+
+            # 2. Alternating Tasks
+            if mode == "evolve":
+                 console.print("[cyan]Running Evolve Cycle Step...[/cyan]")
+                 try:
+                     # Check if we should evolve 'love' mechanism or something else
+                     # For now, default to self-improvement of the main script
+                     await self_improving_optimizer.perform_self_improvement(__import__('love'))
+                 except Exception as e:
+                     core.logging.log_event(f"Error in Evolve Step: {e}", "ERROR")
+
+                 mode = "social" 
+
+            elif mode == "social":
+                 console.print("[blue]Running Social Cycle Step...[/blue]")
+                 try:
+                     await social_media_agent._check_and_reply_to_comments('bluesky')
+                     insight = await social_media_agent._get_god_agent_insight()
+                     # _generate_viral_post returns success boolean
+                     success = await social_media_agent._generate_viral_post(insight)
+                 except Exception as e:
+                     core.logging.log_event(f"Error in Social Step: {e}", "ERROR")
+
+                 mode = "metacog"
+
+            elif mode == "metacog":
+                 console.print("[magenta]Running Metacognition Cycle Step...[/magenta]")
+                 try:
+                     await metacognition_agent.perform_metacognition_cycle(deep_agent_engine=deep_agent_engine)
+                 except Exception as e:
+                     core.logging.log_event(f"Error in Metacognition Step: {e}", "ERROR")
+                
+                 mode = "evolve"
+            
+            # Wait a reasonable time between cycles
+            await asyncio.sleep(10)
+
+        except Exception as e:
+            console.print(f"[bold red]Error in alternating loop: {e}[/bold red]")
+            await asyncio.sleep(10)
+
 async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, task_manager, kb, talent_manager, deep_agent_engine=None, social_media_agent=None, multiplayer_manager=None):
     """
     The main, persistent cognitive loop. L.O.V.E. will autonomously
@@ -3604,14 +3725,15 @@ async def main(args):
     # The new SocialMediaAgent replaces the old monitor_bluesky_comments
     # Instantiate two independent social media agents
     social_media_agent = SocialMediaAgent(loop, shared_state.love_state, user_input_queue=user_input_queue, agent_id="agent_1")
-    asyncio.create_task(social_media_agent.run())
+    # asyncio.create_task(social_media_agent.run())
 
     # Start the autonomous reasoning agent to run strategic planning periodically
     reasoning_agent = AutonomousReasoningAgent(loop, shared_state.love_state, user_input_queue, shared_state.knowledge_base, agent_id="primary")
-    asyncio.create_task(reasoning_agent.run())
+    # asyncio.create_task(reasoning_agent.run())
 
     # Pass the primary agent (or a list if supported later) to the cognitive loop
-    asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, shared_state.love_task_manager, shared_state.knowledge_base, talent_utils.talent_manager, shared_state.deep_agent_engine, social_media_agent, multiplayer_manager))
+    # asyncio.create_task(cognitive_loop(user_input_queue, loop, god_agent, websocket_server_manager, shared_state.love_task_manager, shared_state.knowledge_base, talent_utils.talent_manager, shared_state.deep_agent_engine, social_media_agent, multiplayer_manager))
+    asyncio.create_task(alternating_agent_loop(user_input_queue, loop, god_agent, shared_state.love_task_manager, social_media_agent, shared_state.deep_agent_engine))
     Thread(target=_automatic_update_checker, args=(console,), daemon=True).start()
     asyncio.create_task(_mrl_stdin_reader(user_input_queue))
     asyncio.create_task(run_qa_evaluations(loop))
