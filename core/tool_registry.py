@@ -409,12 +409,59 @@ class ToolRegistry:
                 )
         
         if tool_name in self._tools:
+            existing_tool = self._tools[tool_name].get("func")
+            # If the tool is the exact same object, don't warn
+            if existing_tool is func:
+                return
+            
+            # If it's a different function with the same name, warn and overwrite
+            try:
+                # Handle bound methods or different import paths for same underlying code
+                if getattr(existing_tool, "__code__", None) == getattr(func, "__code__", None):
+                    return
+            except Exception:
+                pass
+                
             print(f"Warning: Tool '{tool_name}' is already registered. Overwriting.")
         
         self._tools[tool_name] = {
             "func": func,
             "schema": schema
         }
+
+    def log_registered_tools(self, console=None) -> None:
+        """
+        Logs all registered tools to the console in a table format.
+        
+        Story 3.1: Provides visibility into available tools at startup.
+        """
+        from rich.console import Console
+        from rich.table import Table
+        from rich.panel import Panel
+        from rich import box
+        
+        if not console:
+            console = Console()
+            
+        table = Table(title="Registered Tools", box=box.ROUNDED, show_lines=True)
+        table.add_column("Name", style="cyan", no_wrap=True)
+        table.add_column("Type", style="magenta")
+        table.add_column("Description", style="white")
+        
+        # Sort tools by name
+        sorted_tools = sorted(self._tools.items())
+        
+        for name, data in sorted_tools:
+            schema = data.get("schema", {})
+            desc = schema.get("description", "").split("\n")[0] # First line only
+            
+            tool_type = "Native"
+            if desc.startswith("[MCP:"):
+                tool_type = "MCP"
+                
+            table.add_row(name, tool_type, desc)
+            
+        console.print(table)
     
     def get_tool(self, name: str) -> Callable:
         """

@@ -3530,6 +3530,10 @@ async def initialize_gpu_services():
 
         tool_registry.register_langchain_tools(core_tool_functions)
         tool_registry.register_langchain_tools(developer_tool_functions)
+        
+        # Log all available tools to the console (Story 3.1)
+        tool_registry.log_registered_tools(console)
+        
         core.logging.log_event(f"Registered {len(core_tool_functions)} core and {len(developer_tool_functions)} developer tools with the registry.", "INFO")
     except Exception as e:
         core.logging.log_event(f"Error registering core tools: {e}", "WARNING")
