@@ -9,7 +9,7 @@ This node is responsible for:
 5. Setting appropriate stop_reason for routing
 """
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from core.state import DeepAgentState
 from core.llm_api import run_llm, stream_llm
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage, ToolCall
