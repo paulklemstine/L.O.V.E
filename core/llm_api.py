@@ -770,6 +770,10 @@ def rank_models(purpose="general"):
         provider_failures = PROVIDER_FAILURE_COUNT.get(provider, 0)
         final_score -= (provider_failures * 1000)
 
+        if "molmo" in model_name_lower and purpose == "reasoning":
+            final_score -= 100000 
+            # log_event(f"Heavily penalizing Molmo for reasoning task: {model_id}", "DEBUG")
+
         ranked_models.append({"model_id": model_id, "score": final_score})
 
     # Sort models by score in descending order

@@ -212,7 +212,31 @@ def _parse_tool_calls_from_response(response_text: str) -> Optional[List[Dict[st
         except Exception:
             continue
     
-    return tool_calls if tool_calls else _try_smart_parse_fallback(response_text)
+    # Filter out known placeholder names
+    valid_calls = []
+    if tool_calls:
+        for call in tool_calls:
+            name = call.get("name", "").lower().strip()
+            if name not in ["tool_name", "fallback", "tool", "function", "action", "example_tool"]:
+                valid_calls.append(call)
+            else:
+                 core.logging.log_event(f"Filtered out placeholder tool call: {name}", "WARNING")
+
+    # Fallback if no valid calls found via regex
+    if not valid_calls:
+        fallback_calls = _try_smart_parse_fallback(response_text)
+        if fallback_calls:
+             # Apply same filtering to fallback results
+             final_fallback = []
+             for call in fallback_calls:
+                 name = call.get("name", "").lower().strip()
+                 if name not in ["tool_name", "fallback", "tool", "function", "action", "example_tool"]:
+                      final_fallback.append(call)
+                 else:
+                      core.logging.log_event(f"Filtered out placeholder fallback tool call: {name}", "WARNING")
+             return final_fallback
+    
+    return valid_calls
 
 
 def _try_smart_parse_fallback(response_text: str) -> Optional[List[Dict[str, Any]]]:
