@@ -16,27 +16,44 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, Base
 import core.logging
 
 
-# System prompt that encourages step-by-step reasoning with tool usage
+# System prompt that encourages step-by-step reasoning with strict JSON output
 REASONING_SYSTEM_PROMPT = """You are L.O.V.E. (Logos of Virtual Existence), a sophisticated AI agent with reasoning and tool-calling capabilities.
 
 ## Core Directives
-- Think step-by-step when approaching complex problems
-- If you lack information, use an available tool to gather it
-- Break complex problems into discrete tool steps before responding
-- Use the search tool if you need current information
-- Only respond directly if you have sufficient information to answer completely
+- Think step-by-step when approaching complex problems.
+- If you lack information, use an available tool to gather it.
+- Break complex problems into discrete tool steps before responding.
+- Use the search tool if you need current information.
+- Only respond directly if you have sufficient information to answer completely.
 
-## Tool Usage Guidelines
-When you determine a tool is needed:
-1. Analyze what information is missing
-2. Select the most appropriate tool
-3. Provide precise arguments for the tool call
-4. Wait for the tool result before proceeding
+## RESPONSE FORMAT (MANDATORY)
+You MUST respond with a valid JSON object in the following format:
 
-## Response Format
-- If you need to call a tool, respond with a tool_call
-- If you can answer directly, provide a clear, helpful response
-- Never fabricate information - use tools to verify facts when uncertain
+```json
+{
+  "thought": "Your step-by-step reasoning analysis here...",
+  "action": {
+    "name": "tool_name",
+    "args": { "arg_name": "value" }
+  },
+  "final_response": null
+}
+```
+
+OR, if you are providing a final answer to the user:
+
+```json
+{
+  "thought": "Reasoning aimed at finalizing the answer...",
+  "action": null,
+  "final_response": "Your final response to the user here..."
+}
+```
+
+- Do NOT output markdown outside the JSON.
+- Do NOT output explanations outside the JSON.
+- `action` should be `null` if you are providing a `final_response`.
+- `final_response` should be `null` if you are calling a tool.
 """
 
 
@@ -51,7 +68,7 @@ def _format_tools_for_prompt(tool_schemas: List[Dict[str, Any]]) -> str:
         return "No tools are currently available."
     
     output = "## Available Tools\n\n"
-    output += "To use a tool, respond with a JSON block or use the tool_use XML format.\n\n"
+    output += "To use a tool, fill the 'action' field in your JSON response.\n\n"
     
     for schema in tool_schemas:
         name = schema.get("name", "unknown")
@@ -146,197 +163,92 @@ def _messages_to_prompt(
     return prompt
 
 
-def _parse_tool_calls_from_response(response_text: str) -> Optional[List[Dict[str, Any]]]:
+def _parse_reasoning_response(response_text: str) -> Tuple[Optional[str], Optional[List[Dict[str, Any]]], Optional[str]]:
     """
-    Attempts to extract tool calls from the LLM response text.
-    
-    Looks for patterns like:
-    - JSON blocks with tool_call structure
-    - Function call syntax: tool_name(arg1=value1, arg2=value2)
-    """
-    tool_calls = []
-    
-    # Pattern 1: Look for JSON tool call blocks
-    import re
-    json_pattern = r'```(?:json)?\s*\{[^}]*"tool"[^}]*\}```'
-    json_matches = re.findall(r'```(?:json)?\s*(\{[^`]*\})\s*```', response_text, re.DOTALL)
-    
-    for match in json_matches:
-        try:
-            data = json.loads(match)
-            if "tool" in data or "name" in data or "function" in data:
-                tool_name = data.get("tool") or data.get("name") or data.get("function")
-                tool_args = data.get("arguments") or data.get("args") or data.get("parameters", {})
-                if tool_name:
-                    tool_calls.append({
-                        "id": f"call_{len(tool_calls)}",
-                        "name": tool_name,
-                        "args": tool_args if isinstance(tool_args, dict) else {}
-                    })
-        except json.JSONDecodeError:
-            continue
-    
-    # Pattern 2: Look for function-call style syntax
-    # e.g., search_web(query="weather in Menasha")
-    func_pattern = r'(\w+)\s*\(\s*((?:[^()]*(?:\([^()]*\))?[^()]*)*)\s*\)'
-    func_matches = re.findall(func_pattern, response_text)
-    
-    for func_name, args_str in func_matches:
-        # Skip common non-tool patterns
-        if func_name.lower() in ['print', 'len', 'str', 'int', 'list', 'dict', 'type', 'range', 'enumerate']:
-            continue
-        
-        # Try to parse arguments
-        try:
-            # Handle keyword arguments: arg1=value1, arg2="value2"
-            args_dict = {}
-            if args_str.strip():
-                # Split by comma, being careful with quoted strings
-                for arg in re.split(r',\s*(?=[^"]*(?:"[^"]*"[^"]*)*$)', args_str):
-                    if '=' in arg:
-                        key, val = arg.split('=', 1)
-                        key = key.strip()
-                        val = val.strip().strip('"\'')
-                        args_dict[key] = val
-                    elif arg.strip():
-                        # Positional argument - skip for now
-                        pass
-            
-            # Only add if it looks like a real tool call
-            if args_dict:
-                tool_calls.append({
-                    "id": f"call_{len(tool_calls)}",
-                    "name": func_name,
-                    "args": args_dict
-                })
-        except Exception:
-            continue
-    
-    # Filter out known placeholder names
-    valid_calls = []
-    if tool_calls:
-        for call in tool_calls:
-            name = call.get("name", "").lower().strip()
-            if name not in ["tool_name", "fallback", "tool", "function", "action", "example_tool"]:
-                valid_calls.append(call)
-            else:
-                 core.logging.log_event(f"Filtered out placeholder tool call: {name}", "WARNING")
-
-    # Fallback if no valid calls found via regex
-    if not valid_calls:
-        fallback_calls = _try_smart_parse_fallback(response_text)
-        if fallback_calls:
-             # Apply same filtering to fallback results
-             final_fallback = []
-             for call in fallback_calls:
-                 name = call.get("name", "").lower().strip()
-                 if name not in ["tool_name", "fallback", "tool", "function", "action", "example_tool"]:
-                      final_fallback.append(call)
-                 else:
-                      core.logging.log_event(f"Filtered out placeholder fallback tool call: {name}", "WARNING")
-             return final_fallback
-    
-    return valid_calls
-
-
-def _try_smart_parse_fallback(response_text: str) -> Optional[List[Dict[str, Any]]]:
-    """
-    Fallback: Uses the robust smart_parse_llm_response from core.llm_parser
-    to handle Action: {...} and other formats.
+    Parses the structured JSON response.
+    Returns: (thought, tool_calls, final_response)
     """
     try:
         from core.llm_parser import smart_parse_llm_response
         parsed = smart_parse_llm_response(response_text)
         
         if parsed and not parsed.get("_parse_error"):
-            # Check for "action" key
+            thought = parsed.get("thought", "")
+            final_response = parsed.get("final_response")
+            
+            tool_calls = []
             action = parsed.get("action")
             
             # Case 1: Action is a dictionary containing tool details
             if isinstance(action, dict):
-                tool_name = action.get("tool_name") or action.get("name") or action.get("function")
-                args = action.get("arguments") or action.get("args") or action.get("parameters", {})
+                tool_name = action.get("name") or action.get("tool_name") or action.get("function")
+                args = action.get("args") or action.get("arguments") or action.get("parameters", {})
                 
-                if tool_name:
-                    return [{
-                        "id": f"call_smart_{tool_name}",
+                # Filter placeholders
+                if tool_name and str(tool_name).lower() not in ["null", "none", "tool_name", "fallback", "action"]:
+                    tool_calls.append({
+                        "id": f"call_{tool_name}",
                         "name": tool_name,
                         "args": args if isinstance(args, dict) else {}
-                    }]
+                    })
             
-            # Case 2: Action is a string (the tool name), arguments are sibling
-            elif isinstance(action, str) and action.strip():
+            # Case 2: Action is a string (rare legacy/fallback)
+            elif isinstance(action, str) and action.strip().lower() not in ["null", "none"]:
                  tool_name = action.strip()
-                 # Grab arguments from top-level since action is just the name
-                 args = parsed.get("arguments") or parsed.get("args") or parsed.get("parameters", {})
-                 return [{
-                        "id": f"call_smart_{tool_name}",
+                 if tool_name.lower() not in ["tool_name", "fallback", "action"]:
+                     args = parsed.get("arguments") or parsed.get("args") or {}
+                     tool_calls.append({
+                            "id": f"call_{tool_name}",
+                            "name": tool_name,
+                            "args": args if isinstance(args, dict) else {}
+                     })
+
+            # Check for direct tool dictionary if flat structure
+            tool_name = parsed.get("tool") or parsed.get("tool_name") or parsed.get("function")
+            if tool_name and isinstance(tool_name, str) and tool_name.lower() not in ["tool_name", "fallback", "action"]:
+                args = parsed.get("arguments") or parsed.get("args") or {}
+                if not any(tc['name'] == tool_name for tc in tool_calls): # Avoid duplicates
+                     tool_calls.append({
+                        "id": f"call_{tool_name}",
                         "name": tool_name,
                         "args": args if isinstance(args, dict) else {}
-                 }]
+                    })
             
-            # Check for direct tool dictionary if the whole response is flat
-            # e.g. {"tool": "...", "arguments": ...}
-            # or {"function": "...", "arguments": ...}
-            tool_name = parsed.get("tool") or parsed.get("tool_name") or parsed.get("function")
-            if tool_name and isinstance(tool_name, str):
-                args = parsed.get("arguments") or parsed.get("args") or parsed.get("parameters", {})
-                return [{
-                    "id": f"call_smart_{tool_name}",
-                    "name": tool_name,
-                    "args": args if isinstance(args, dict) else {}
-                }]
+            return thought, tool_calls if tool_calls else None, final_response
 
-    except ImportError:
-        pass
     except Exception as e:
-        core.logging.log_event(f"Smart parse fallback failed: {e}", "WARNING")
-        
-    return None
+        core.logging.log_event(f"Error parsing reasoning response: {e}", "ERROR")
+
+    return None, None, None
 
 
 async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
     """
     The core reasoning node that processes the current state and decides next actions.
-    
-    This node:
-    1. Pulls tool schemas from state (injected by ToolRegistry)
-    2. Constructs a prompt with tool context
-    3. Calls the LLM (streaming or non-streaming)
-    4. Parses the response for tool_calls
-    5. Returns appropriate stop_reason for routing:
-       - "tool_call": Route to tool_execution_node
-       - "fold_thought": Route to memory fold node
-       - "retrieve_tool": Route to tool retrieval node
-       - None: Route to END (direct response)
+    Now enforces a strict JSON response.
     """
     messages = state["messages"]
     mandate = state.get("creator_mandate")
     tool_schemas = state.get("tool_schemas", [])
     loop_count = state.get("loop_count", 0)
-    memory_context = state.get("memory_context", [])  # Story 2.1: Semantic Memory Bridge
-    user_model_context = state.get("user_model_context")  # Story 2.3: Theory of Mind
-    empathy_context = state.get("empathy_context") # Dynamic Empathy
+    memory_context = state.get("memory_context", []) 
+    user_model_context = state.get("user_model_context") 
+    empathy_context = state.get("empathy_context") 
     
-    # Guardrail: Check recursion limit
     MAX_ITERATIONS = 5
     if loop_count >= MAX_ITERATIONS:
-        core.logging.log_event(
-            f"Reasoning node hit max iterations ({MAX_ITERATIONS}). Forcing direct response.",
-            "WARNING"
-        )
+        core.logging.log_event(f"Reasoning node hit max iterations ({MAX_ITERATIONS}). Forcing stop.", "WARNING")
         return {
-            "messages": [AIMessage(content="I've reached my maximum reasoning iterations. Here's my best response based on the information gathered so far.")],
-            "stop_reason": None  # Force END
+            "messages": [AIMessage(content="I've reached my maximum reasoning iterations. Stopping now.")],
+            "stop_reason": None 
         }
     
-    # Build the prompt with tool context and memory context
     prompt = _messages_to_prompt(
         messages, 
         mandate=mandate, 
         tool_schemas=tool_schemas,
-        memory_context=memory_context,  # Story 2.1
-        user_model_context=user_model_context, # Story 2.3
+        memory_context=memory_context,
+        user_model_context=user_model_context,
         empathy_context=empathy_context
     )
     
@@ -345,40 +257,49 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
     parsed_tool_calls = None
     
     try:
-        # Stream the LLM response
-        async for chunk in stream_llm(prompt, purpose="reasoning"):
-            reasoning_trace += chunk
-            
-            # Check for control tokens (legacy support)
-            if "<fold_thought>" in reasoning_trace:
-                stop_reason = "fold_thought"
-                break
-            if "<retrieve_tool>" in reasoning_trace:
-                stop_reason = "retrieve_tool"
-                break
+        # Get full response (non-streaming preferred for JSON structure, but stream is okay if we collect it)
+        response_text = await run_llm(prompt, purpose="reasoning") 
         
-        # If no control tokens, check for tool calls in the response
-        if stop_reason is None:
-            parsed_tool_calls = _parse_tool_calls_from_response(reasoning_trace)
-            if parsed_tool_calls:
-                stop_reason = "tool_call"
-                core.logging.log_event(
-                    f"Reasoning node detected {len(parsed_tool_calls)} tool call(s): {[tc['name'] for tc in parsed_tool_calls]}",
-                    "INFO"
-                )
-    
+        # Use simple string result if returned, or extract from dict
+        if isinstance(response_text, dict):
+             response_text = response_text.get("result", "")
+        
+        reasoning_trace = response_text
+        
+        thought, parsed_tool_calls, final_response = _parse_reasoning_response(response_text)
+        
+        if parsed_tool_calls:
+            stop_reason = "tool_call"
+            core.logging.log_event(
+                f"Reasoning node detected JSON tool call(s): {[tc['name'] for tc in parsed_tool_calls]}",
+                "INFO"
+            )
+        
+        # Format the content for the graph history
+        # We can reconstruct a readable message or just store the raw JSON
+        # For clarity in chat logs, let's store the thought + intent
+        content_display = ""
+        if thought:
+            content_display += f"Thought: {thought}\n"
+        if final_response:
+             content_display += f"Response: {final_response}"
+        elif parsed_tool_calls:
+             content_display += f"Action: Call tools {[tc['name'] for tc in parsed_tool_calls]}"
+        
+        if not content_display:
+            content_display = response_text # Fallback to raw
+
     except Exception as e:
         core.logging.log_event(f"Error in reasoning node: {e}", "ERROR")
         reasoning_trace = f"An error occurred during reasoning: {e}"
+        content_display = reasoning_trace
     
-    # Construct the AIMessage with potential tool_calls
+    # Construct AIMessage
+    msg_args = {"content": content_display}
     if parsed_tool_calls:
-        response_message = AIMessage(
-            content=reasoning_trace,
-            tool_calls=parsed_tool_calls
-        )
-    else:
-        response_message = AIMessage(content=reasoning_trace)
+        msg_args["tool_calls"] = parsed_tool_calls
+        
+    response_message = AIMessage(**msg_args)
     
     return {
         "messages": [response_message],
