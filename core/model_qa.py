@@ -50,7 +50,7 @@ class ModelQAManager:
                 allow_fallback=False # Must test THIS model
             )
             
-            raw_text = response.get("result", "")
+            raw_text = response.get("result") or ""
             
             # Scoring Logic
             score = 0.0
