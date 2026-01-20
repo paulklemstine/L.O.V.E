@@ -54,6 +54,12 @@ OR, if you are providing a final answer to the user:
 - Do NOT output explanations outside the JSON.
 - `action` should be `null` if you are providing a `final_response`.
 - `final_response` should be `null` if you are calling a tool.
+
+## CRITICAL INSTRUCTION ON ACTIONS
+- The "action" field must NEVER contain a description of what you want to do.
+- It must ONLY contain the EXACT name of a tool from the ## Available Tools list.
+- INCORRECT: "action": "Add error handling" (This will cause a system crash)
+- CORRECT: "action": {"name": "code_modifier", "args": {...}}
 """
 
 
@@ -203,17 +209,33 @@ def _parse_reasoning_response(response_text: str) -> Tuple[Optional[str], Option
                             "args": args if isinstance(args, dict) else {}
                      })
 
-            # Check for direct tool dictionary if flat structure
-            tool_name = parsed.get("tool") or parsed.get("tool_name") or parsed.get("function")
-            if tool_name and isinstance(tool_name, str) and tool_name.lower() not in ["tool_name", "fallback", "action"]:
-                args = parsed.get("arguments") or parsed.get("args") or {}
-                if not any(tc['name'] == tool_name for tc in tool_calls): # Avoid duplicates
-                     tool_calls.append({
-                        "id": f"call_{tool_name}",
-                        "name": tool_name,
-                        "args": args if isinstance(args, dict) else {}
-                    })
-            
+            # Case 3: Handle capitalized keys or flat structure (fallback)
+            if not tool_calls:
+                # Check for "Action" or "Tool" keys if "action" was missing/null
+                action_raw = parsed.get("Action") or parsed.get("Tool") or parsed.get("Function")
+                if action_raw:
+                    if isinstance(action_raw, dict):
+                        tool_name = action_raw.get("name") or action_raw.get("tool_name")
+                        args = action_raw.get("args") or action_raw.get("arguments") or {}
+                        if tool_name:
+                             tool_calls.append({
+                                "id": f"call_{tool_name}",
+                                "name": tool_name,
+                                "args": args if isinstance(args, dict) else {}
+                            })
+                    elif isinstance(action_raw, str):
+                        # Potential dangerous natural language action
+                        cleaned_name = action_raw.strip()
+                        # VALIDATION: If the "tool name" has spaces and length > 40, it's likely a sentence
+                        if " " in cleaned_name and len(cleaned_name) > 40:
+                             core.logging.log_event(f"Ignored invalid natural language tool name: {cleaned_name}", "WARNING")
+                        elif cleaned_name.lower() not in ["null", "none"]:
+                             tool_calls.append({
+                                "id": f"call_{cleaned_name}",
+                                "name": cleaned_name,
+                                "args": parsed.get("arguments") or parsed.get("args") or {}
+                             })
+
             return thought, tool_calls if tool_calls else None, final_response
 
     except Exception as e:
