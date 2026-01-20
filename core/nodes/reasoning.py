@@ -60,6 +60,7 @@ OR, if you are providing a final answer to the user:
 - It must ONLY contain the EXACT name of a tool from the ## Available Tools list.
 - INCORRECT: "action": "Add error handling" (This will cause a system crash)
 - CORRECT: "action": {"name": "code_modifier", "args": {...}}
+- The `action` field must be at the TOP LEVEL of the JSON object, or inside a simple wrapper if unavoidable, but NOT nested deep inside other objects like `next_step` or `plan`.
 """
 
 
@@ -213,10 +214,24 @@ def _parse_reasoning_response(response_text: str) -> Tuple[Optional[str], Option
             if not tool_calls:
                 # Check for "Action" or "Tool" keys if "action" was missing/null
                 action_raw = parsed.get("Action") or parsed.get("Tool") or parsed.get("Function")
+                
+                # Check for nested keys like "next_step" or "plan"
+                if not action_raw:
+                    nested_container = parsed.get("next_step") or parsed.get("plan") or parsed.get("step")
+                    if isinstance(nested_container, dict):
+                         action_raw = nested_container.get("action") or nested_container.get("Action")
+                         # Initialize args if not present from previous attempts
+                         args = parsed.get("arguments") or parsed.get("args")
+                         if not args: 
+                             args = nested_container.get("arguments") or nested_container.get("args") or nested_container.get("parameters")
+
                 if action_raw:
                     if isinstance(action_raw, dict):
                         tool_name = action_raw.get("name") or action_raw.get("tool_name")
-                        args = action_raw.get("args") or action_raw.get("arguments") or {}
+                        nested_args = action_raw.get("args") or action_raw.get("arguments")
+                        if nested_args:
+                            args = nested_args # prioritize args inside the action object
+                        
                         if tool_name:
                              tool_calls.append({
                                 "id": f"call_{tool_name}",
@@ -233,7 +248,7 @@ def _parse_reasoning_response(response_text: str) -> Tuple[Optional[str], Option
                              tool_calls.append({
                                 "id": f"call_{cleaned_name}",
                                 "name": cleaned_name,
-                                "args": parsed.get("arguments") or parsed.get("args") or {}
+                                "args": args if isinstance(args, dict) else {}
                              })
 
             return thought, tool_calls if tool_calls else None, final_response
