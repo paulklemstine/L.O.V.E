@@ -29,6 +29,7 @@ from collections import defaultdict
 
 from rich.console import Console
 from rich.panel import Panel
+from core.model_qa import qa_manager
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 from rich.text import Text
 from bbs import run_hypnotic_progress
@@ -676,7 +677,7 @@ def truncate_for_log(text: str, length: int = 150) -> str:
     return truncated
 
 
-def rank_models(purpose="general"):
+async def rank_models(purpose="general"):
     """
     Ranks models based on a weighted score of reasoning, speed, and reliability.
     Returns a sorted list of model IDs.
@@ -737,17 +738,7 @@ def rank_models(purpose="general"):
         elif provider == "deepseek":
             final_score += 100  # Low priority - DeepSeek is a paid service
             #log_event(f"Applying priority boost to DeepSeek model: {model_id}", "DEBUG")
-        elif provider == "vllm":
-            if purpose == "emotion" or purpose == "scoring":
-                 final_score += 500 # Moderate boost, but not overriding
-                 # log_event(f"Applying moderate priority boost to local vLLM for {purpose} task: {model_id}", "DEBUG")
-            elif purpose == "creative_art":
-                 # Penalize local vLLM for creative art to force cloud models
-                 final_score -= 10000
-            else:
-                 # General Priority Boost: Lower than Gemini (3000) and OpenRouter (2000)
-                 final_score += 500 
-            #log_event(f"Applying priority boost to vLLM model: {model_id}", "DEBUG")
+
         elif provider == "horde":
             # Horde is lowest priority
             pass
@@ -777,9 +768,23 @@ def rank_models(purpose="general"):
         provider_failures = PROVIDER_FAILURE_COUNT.get(provider, 0)
         final_score -= (provider_failures * 1000)
 
-        if "molmo" in model_name_lower and purpose == "reasoning":
-            final_score -= 100000 
-            # log_event(f"Heavily penalizing Molmo for reasoning task: {model_id}", "DEBUG")
+
+        # --- Model QA Score Integration ---
+        try:
+            # We await the QA check (cached after first run)
+            # Only check for reasoning/coding tasks where JSON is critical
+            if purpose in ["reasoning", "coding", "analysis", "tool_use"]:
+                qa_score = await qa_manager.test_model_capability(model_id)
+                if qa_score < 0.4:
+                    final_score -= 50000 # Severe penalty for inability to output JSON
+                    # log_event(f"Penalizing {model_id} due to low QA score: {qa_score}", "DEBUG")
+                elif qa_score < 0.8:
+                    final_score -= 1000 # Moderate penalty for imperfect formatting
+                else:
+                    final_score += 500 # slight boost for verified capability
+        except Exception as e:
+            # log_event(f"QA Check failed for {model_id}: {e}", "WARNING")
+            pass
 
         ranked_models.append({"model_id": model_id, "score": final_score})
 
@@ -1688,7 +1693,7 @@ async def stream_llm(prompt_text: str, purpose="general", deep_agent_instance=No
     if force_model:
         ranked_model_list = [force_model]
     else:
-        ranked_model_list = rank_models()
+        ranked_model_list = await rank_models(purpose=purpose)
 
     # Inject DeepAgent vLLM if available
     if deep_agent_instance:

@@ -1,148 +1,94 @@
+
 import json
 import asyncio
-import logging
+import traceback
 from typing import Dict, Any, Optional
+from core.llm_api import run_llm
 
-try:
-    from core.llm_api import run_llm, MODEL_STATS
-    import core.logging
-except ImportError:
-    # Standalone mode support
-    import sys
-    import os
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-    from core.llm_api import run_llm, MODEL_STATS
-    import core.logging
-
-QA_PROMPT = """
-You are a precision testing unit.
-Respond with a strictly formatted JSON object containing the following keys:
-1. "status": Must be exactly "ready".
-2. "checksum": The sum of 5 + 7.
-3. "model_id": Your own model identifier if known, otherwise "unknown".
-
-Example Response:
-```json
-{
-  "status": "ready",
-  "checksum": 12,
-  "model_id": "unknown"
-}
-```
-Do not output any text before or after the JSON.
-"""
-
-async def test_model_capability(model_id: str) -> Dict[str, Any]:
+class ModelQAManager:
     """
-    Runs a standardized test on a specific model to verify its JSON generation capabilities.
-    Returns a result dict with 'score' (0-100), 'latency', and 'error' if any.
+    Manages Quality Assurance checks for LLM models.
+    Tests models for their ability to follow strict JSON instructions.
     """
-    import time
-    start_time = time.time()
-    
-    try:
-        # Force specific model usage in run_llm if possible, or we rely on the caller 
-        # to have set up the context. Since run_llm usually picks the "best" model, 
-        # testing a *specific* model requires bypassing rank_models or passing a specific override.
-        # core.llm_api.run_llm doesn't easily support "force this specific model ID" 
-        # without some modifications or using the lower-level provider interfaces directly.
-        # For now, we will assume we can pass a 'model_id_override' or similar if we modify llm_api,
-        # OR we just test the "current best" and see if it fails.
+    def __init__(self):
+        self.qa_scores: Dict[str, float] = {}
+        self.tested_models = set()
+
+    async def test_model_capability(self, model_id: str) -> float:
+        """
+        Runs a standard QA test on the model to determine its reasoning and formatting capability.
+        Returns a score from 0.0 to 1.0.
+        """
+        if model_id in self.qa_scores:
+            return self.qa_scores[model_id]
+
+        print(f"--- Running QA Test for Model: {model_id} ---")
         
-        # However, for this to be useful as a scanner, we ideally want to iterate available models.
-        # Let's assume run_llm can accept a model_id kwarg (which it often can in these architectures).
+        test_prompt = """
+        SYSTEM_TEST_PROTOCOL_INITIATED
         
-        response = await run_llm(
-            prompt_text=QA_PROMPT,
-            purpose="qa_testing",
-            model_id=model_id # Hypothetical override support
-        )
+        TASK: Output a valid JSON object with specific data.
         
-        duration = time.time() - start_time
-        
-        # Parse output
-        if isinstance(response, dict):
-             text = response.get("result", "") or response.get("content", "")
-        else:
-            text = str(response)
-            
-        # Clean markdown
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0].strip()
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0].strip()
-            
-        try:
-            data = json.loads(text)
-            score = 0
-            if data.get("status") == "ready":
-                score += 40
-            if int(data.get("checksum", 0)) == 12:
-                score += 40
-            if "model_id" in data:
-                score += 20
-                
-            return {
-                "score": score,
-                "latency": duration,
-                "success": True
-            }
-        except Exception as e:
-            return {
-                "score": 0,
-                "latency": duration,
-                "success": False,
-                "error": f"JSON Parse Error: {e} - Output: {text[:100]}"
-            }
-            
-    except Exception as e:
-        return {
-            "score": 0,
-            "latency": time.time() - start_time,
-            "success": False,
-            "error": f"API Call Failed: {e}"
+        REQUIRED JSON STRUCTURE:
+        {
+            "status": "operational",
+            "test_code": 9988,
+            "message": "QA Verified"
         }
-
-async def run_system_qa():
-    """
-    Iterates through known models in MODEL_STATS and tests them.
-    Updates the global stats and saves them.
-    """
-    print("Starting Model QA Cycle...")
-    
-    # We need a way to get the list of models.
-    # MODEL_STATS is loaded in llm_api.
-    
-    results = {}
-    
-    # Snapshot keys to avoid modification during iteration
-    model_ids = list(MODEL_STATS.keys())
-    
-    for mid in model_ids:
-        print(f"Testing model: {mid}...")
-        result = await test_model_capability(mid)
-        results[mid] = result
-        print(f"  -> Score: {result['score']}, Success: {result['success']}")
         
-        # Update Stats
-        if mid not in MODEL_STATS:
-            MODEL_STATS[mid] = {}
+        Output ONLY the JSON object. No markdown, no preambles.
+        """
+        
+        try:
+            # Run with a short timeout and low temp
+            response = await run_llm(
+                test_prompt, 
+                purpose="scoring", 
+                force_model=model_id, 
+                temperature=0.1,
+                allow_fallback=False # Must test THIS model
+            )
             
-        MODEL_STATS[mid]['qa_score'] = result['score']
-        MODEL_STATS[mid]['last_qa_check'] = time.time()
-        
-        if not result['success']:
-             # Penalize reliablity
-             current_fails = MODEL_STATS[mid].get("failed_calls", 0)
-             MODEL_STATS[mid]["failed_calls"] = current_fails + 1
-    
-    # Save stats
-    try:
-        with open("llm_model_stats.json", "w") as f:
-            json.dump(MODEL_STATS, f, indent=4)
-        print("Updated llm_model_stats.json")
-    except Exception as e:
-        print(f"Failed to save stats: {e}")
+            raw_text = response.get("result", "")
+            
+            # Scoring Logic
+            score = 0.0
+            
+            # 1. JSON Validity
+            try:
+                # Clean up markdown
+                clean_text = raw_text.replace("```json", "").replace("```", "").strip()
+                data = json.loads(clean_text)
+                
+                # Check formatting
+                if isinstance(data, dict):
+                    score += 0.4
+                    
+                    # 2. Content Accuracy
+                    if data.get("status") == "operational":
+                        score += 0.2
+                    if data.get("test_code") == 9988:
+                        score += 0.2
+                    if data.get("message") == "QA Verified":
+                        score += 0.2
+                        
+                else:
+                    print(f"Model {model_id} returned valid JSON but not a dict: {type(data)}")
+                    score = 0.2 # Partial credit for valid JSON
+                    
+            except json.JSONDecodeError:
+                print(f"Model {model_id} failed JSON parsing. Output: {raw_text[:50]}...")
+                score = 0.0
+                
+            print(f"Model {model_id} QA Score: {score:.2f}")
+            self.qa_scores[model_id] = score
+            self.tested_models.add(model_id)
+            return score
+            
+        except Exception as e:
+            print(f"Model QA System Error for {model_id}: {e}")
+            self.qa_scores[model_id] = 0.0
+            return 0.0
 
-if __name__ == "__main__":
-    asyncio.run(run_system_qa())
+# Singleton instance
+qa_manager = ModelQAManager()

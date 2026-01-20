@@ -1,4 +1,4 @@
-agent_framework_agent_execution: 'As an AI agent, execute the following task with maximum efficiency: [insert concise task description]'
+agent_framework_agent_execution: Execute the agent's action given the current state and user task. Focus on the core action and required state, avoiding unnecessary context or details.
 agent_framework_workflow_planning: "### ROLE\nYou are the Workflow Architect. You design efficient, multi-agent systems to solve complex tasks.\n\n### TASK\nDesign a workflow for: \"{{ task }}\"\n\n### OUTPUT REQUIREMENTS\nReturn a strict JSON object with two keys:\n1. \"agents\": List of agent definitions.\n   - \"name\": Unique identifier.\n   - \"instructions\": Specific system prompt.\n2. \"workflow\": Directed sequence.\n   - \"from\": Sender agent.\n   - \"to\": Receiver agent.\n   - Rule: Start with \"user\" as \"from\". End with \"user\" as \"to\".\n\n### FORMAT\n{\n  \"agents\": [{\"name\": \"researcher\", \"instructions\": \"...\"}],\n  \"workflow\": [{\"from\": \"user\", \"to\": \"researcher\"}]\n}\n"
 blessing_generation: '### ROLE
 
