@@ -302,12 +302,14 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
              response_text = response_text.get("result", "")
         
         core.logging.log_event(f"DEBUG: Reasoning raw response len={len(response_text)}: {response_text[:500]}...", "DEBUG")
+        print(f"DEBUG: Reasoning raw response: {response_text[:500]}...") # FORCE PRINT
 
         reasoning_trace = response_text
         
         thought, parsed_tool_calls, final_response = _parse_reasoning_response(response_text)
         
         core.logging.log_event(f"DEBUG: Parsed thought: {bool(thought)}, Tool calls: {len(parsed_tool_calls) if parsed_tool_calls else 0}, Final: {bool(final_response)}", "DEBUG")
+        print(f"DEBUG: Parsed thought: {bool(thought)}, Tool calls: {len(parsed_tool_calls) if parsed_tool_calls else 0}, Final: {bool(final_response)}") # FORCE PRINT
         
         if parsed_tool_calls:
             stop_reason = "tool_call"
@@ -315,6 +317,7 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
                 f"Reasoning node detected JSON tool call(s): {[tc['name'] for tc in parsed_tool_calls]}",
                 "INFO"
             )
+            print(f"DEBUG: Tool calls detected: {[tc['name'] for tc in parsed_tool_calls]}")
         
         # Format the content for the graph history
         # We can reconstruct a readable message or just store the raw JSON
