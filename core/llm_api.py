@@ -738,6 +738,9 @@ async def rank_models(purpose="general"):
         elif provider == "deepseek":
             final_score += 100  # Low priority - DeepSeek is a paid service
             #log_event(f"Applying priority boost to DeepSeek model: {model_id}", "DEBUG")
+        elif provider == "vllm":
+            final_score += 50000
+            #log_event(f"Applying maximum priority boost to local vLLM model: {model_id}", "DEBUG")
 
         elif provider == "horde":
             # Horde is lowest priority

@@ -2648,7 +2648,7 @@ async def alternating_agent_loop(user_input_queue, loop, god_agent, task_manager
     
     console.print("[magenta]Alternating Agent Loop Initiated: Evolve <-> Social[/magenta]")
     
-    mode = "evolve" # Start with evolve
+    mode = "social" # Start with social
 
     while True:
         try:
@@ -2715,7 +2715,7 @@ async def alternating_agent_loop(user_input_queue, loop, god_agent, task_manager
                  except Exception as e:
                      core.logging.log_event(f"Error in Evolve Step: {e}", "ERROR")
 
-                 mode = "social" 
+                 mode = "metacog" 
 
             elif mode == "social":
                  console.print("[blue]Running Social Cycle Step...[/blue]")
@@ -2727,7 +2727,7 @@ async def alternating_agent_loop(user_input_queue, loop, god_agent, task_manager
                  except Exception as e:
                      core.logging.log_event(f"Error in Social Step: {e}", "ERROR")
 
-                 mode = "metacog"
+                 mode = "evolve"
 
             elif mode == "metacog":
                  console.print("[magenta]Running Metacognition Cycle Step...[/magenta]")
@@ -2736,7 +2736,7 @@ async def alternating_agent_loop(user_input_queue, loop, god_agent, task_manager
                  except Exception as e:
                      core.logging.log_event(f"Error in Metacognition Step: {e}", "ERROR")
                 
-                 mode = "evolve"
+                 mode = "social"
             
             # Wait a reasonable time between cycles
             await asyncio.sleep(10)
