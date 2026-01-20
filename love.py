@@ -2949,7 +2949,7 @@ async def cognitive_loop(user_input_queue, loop, god_agent, websocket_manager, t
                             print(f"[COGNITIVE LOOP] WARNING: Failed to ingest cognitive cycle: {mem_e}")
 
                 except Exception as e:
-                    log_critical_event(f"Error executing task '{selected_task.description}': {e}")
+                    log_critical_event(f"Error executing task '{selected_task.description}': {e}\n{traceback.format_exc()}")
 
 
             else:

@@ -739,14 +739,14 @@ def rank_models(purpose="general"):
             #log_event(f"Applying priority boost to DeepSeek model: {model_id}", "DEBUG")
         elif provider == "vllm":
             if purpose == "emotion" or purpose == "scoring":
-                 final_score += 100000 # Massive boost for routine/aesthetic tasks
-                 # log_event(f"Applying massive priority boost to local vLLM for {purpose} task: {model_id}", "DEBUG")
+                 final_score += 500 # Moderate boost, but not overriding
+                 # log_event(f"Applying moderate priority boost to local vLLM for {purpose} task: {model_id}", "DEBUG")
             elif purpose == "creative_art":
                  # Penalize local vLLM for creative art to force cloud models
                  final_score -= 10000
             else:
-                 # General Priority Boost: Higher than Gemini (3000) and OpenRouter (2000)
-                 final_score += 5000 
+                 # General Priority Boost: Lower than Gemini (3000) and OpenRouter (2000)
+                 final_score += 500 
             #log_event(f"Applying priority boost to vLLM model: {model_id}", "DEBUG")
         elif provider == "horde":
             # Horde is lowest priority
