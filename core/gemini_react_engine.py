@@ -96,6 +96,7 @@ class GeminiReActEngine:
                 return {"success": False, "result": "The reasoning engine failed to produce a response."}
 
             raw_response = response_dict.get("result", "")
+            print(f"DEBUG: ReAct raw response: {raw_response[:500]}...") # FORCE PRINT
 
             # Log the raw response
             panel = create_reasoning_panel(
@@ -110,6 +111,7 @@ class GeminiReActEngine:
             from core.llm_parser import smart_parse_llm_response
             
             parsed_response = smart_parse_llm_response(raw_response, expected_keys=["thought", "action"])
+            print(f"DEBUG: ReAct parsed response: {parsed_response.keys()}") # FORCE PRINT
             
             # Check if parsing failed
             if parsed_response.get('_parse_error'):
@@ -181,7 +183,13 @@ class GeminiReActEngine:
 
             # VALIDATION: Check if tool_name is None or empty
             if not tool_name or tool_name == "None":
-                observation = f"Error: Model produced invalid tool_name ('{tool_name}'). This usually indicates the model is confused or stuck. Thought was: {thought[:200]}"
+                # Zombie Detection: Thought exists but no tool
+                if thought:
+                    print(f"DEBUG: Zombie response detected (Thought w/o Action). detected_tool_name={tool_name}") # FORCE PRINT
+                    observation = f"SYSTEM ERROR: You provided a 'thought' but failed to provide a valid 'action'. You MUST provide an 'action' block with a 'tool_name' (e.g., 'code_modifier', 'search_web'). Do not stop at analysis. Thought was: {thought[:200]}"
+                else:
+                    observation = f"Error: Model produced invalid tool_name ('{tool_name}'). This usually indicates the model is confused or stuck. Thought was: {thought[:200]}"
+                
                 self.history.append((thought, action, observation))
                 # Log the error
                 panel = create_reasoning_panel(
