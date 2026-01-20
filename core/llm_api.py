@@ -29,7 +29,6 @@ from collections import defaultdict
 
 from rich.console import Console
 from rich.panel import Panel
-from core.model_qa import qa_manager
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 from rich.text import Text
 from bbs import run_hypnotic_progress
@@ -67,6 +66,9 @@ def graceful_shutdown(signum, frame):
 if "PYTEST_CURRENT_TEST" not in os.environ:
     signal.signal(signal.SIGTERM, graceful_shutdown)
     signal.signal(signal.SIGINT, graceful_shutdown) # Handle Ctrl+C same way
+
+# Shared console instance to avoid instantiation overhead
+_console = Console()
 
 _global_ui_queue = None
 def set_ui_queue(queue_instance):
@@ -116,7 +118,7 @@ async def execute_reasoning_task(prompt: str, deep_agent_instance=None) -> dict:
     Exclusively uses the run_llm function for a reasoning task.
     This is the new primary pathway for the GeminiReActEngine.
     """
-    console = Console()
+    console = _console
     prompt_cid = await _pin_to_ipfs_async(prompt.encode('utf-8'), console)
     response_cid = None
     try:
@@ -774,6 +776,8 @@ async def rank_models(purpose="general"):
             # We await the QA check (cached after first run)
             # Only check for reasoning/coding tasks where JSON is critical
             if purpose in ["reasoning", "coding", "analysis", "tool_use"]:
+                # Import here to avoid circular dependency
+                from core.model_qa import qa_manager
                 qa_score = await qa_manager.test_model_capability(model_id)
                 if qa_score < 0.4:
                     final_score -= 50000 # Severe penalty for inability to output JSON
@@ -855,7 +859,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         return {"result": None, "error": "No prompt text provided"}
 
 
-    console = Console()
+    console = _console
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
     start_time = time.time()
@@ -919,7 +923,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         else:
             # Generate a fresh, performance-based ranking of all models for every call.
             # PASS THE PURPOSE DOWN
-            ranked_model_list = rank_models(purpose=purpose)
+            ranked_model_list = await rank_models(purpose=purpose)
             log_event(f"Dynamically ranked models. Top 5: {ranked_model_list[:5]}", "INFO")
 
 
