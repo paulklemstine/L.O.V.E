@@ -266,7 +266,7 @@
         uniform float u_time;
         uniform vec2 u_resolution;
         uniform float u_params[16];
-        uniform float u_active[16]; // 0.0 or 1.0 for each layer
+        uniform float u_active[20]; // Increased to 20 for new layers
         uniform float u_active_count; // Number of active layers for normalization
 
         #define PI 3.14159265359
@@ -487,6 +487,28 @@
              return vec3(s) * (2.0 + p3);
         }
 
+        // 17. WATERFALL
+        vec3 viz_waterfall(vec2 uv, float t, float p1, float p2, float p3, float p4) {
+            float flow = uv.y * (2.0 + p1) + t * (1.0 + p2);
+            float col = sin(uv.x * (10.0 + p1*10.0) + flow) * sin(flow * 0.5);
+            return vec3(smoothstep(0.0, 0.1, abs(col))) * hyperPalette(flow + p3) * (0.5 + p4*2.0);
+        }
+
+        // 18. KALEIDOWAVE
+        vec3 viz_kaleidowave(vec2 uv, float t, float p1, float p2, float p3, float p4) {
+            float r = length(uv);
+            float a = atan(uv.y, uv.x);
+            float segments = 8.0;
+            a = mod(a, 2.0*PI/segments) - PI/segments;
+            
+            // Spiral Waveform
+            float wave = sin(a * (10.0 + p1*10.0) - r * (10.0 + p2*10.0) + t * (2.0 + p3));
+            float ring = abs(r - (0.5 + wave*0.2));
+            float glow = 0.02 / ring;
+            
+            return vec3(glow) * neonPalette(r + t + p3) * (0.5 + p4*3.0);
+        }
+
         // TONE MAPPING (ACES)
         vec3 aces(vec3 x) {
             float a = 2.51;
@@ -528,6 +550,8 @@
             if(u_active[13] > 0.5) accum += viz_crystal(uv, u_time, p1, p2, p3, p4);
             if(u_active[14] > 0.5) accum += viz_lattice(uv, u_time, p1, p2, p3, p4);
             if(u_active[15] > 0.5) accum += viz_stardust(uv, u_time, p3);
+            if(u_active[16] > 0.5) accum += viz_waterfall(uv, u_time, p1, p2, p3, p4);
+            if(u_active[17] > 0.5) accum += viz_kaleidowave(uv, u_time, p1, p2, p3, p4);
 
             // Normalization & Post FX
             // We want it bright, not washed out.
@@ -558,11 +582,12 @@
             "FLUID", "FRACTAL", "ENTITY", "HYPERCUBE",
             "TUNNEL", "FIRE", "BEAMS", "GLITCH",
             "MANDALA", "NEURO", "RAIN", "WAVEFORM",
-            "SPIRAL", "CRYSTAL", "LATTICE", "STARDUST"
+            "SPIRAL", "CRYSTAL", "LATTICE", "STARDUST",
+            "WATERFALL", "KALEIDOWAVE"
         ];
 
         // State
-        let activeLayers = new Array(16).fill(false);
+        let activeLayers = new Array(20).fill(false);
         // Default Active
         activeLayers[0] = true;
         activeLayers[15] = true;
@@ -645,7 +670,7 @@
                 activeLayers.fill(false);
                 let count = 2 + Math.floor(Math.random() * 4); // 2 to 5 layers
                 for (let k = 0; k < count; k++) {
-                    activeLayers[Math.floor(Math.random() * 16)] = true;
+                    activeLayers[Math.floor(Math.random() * LAYERS.length)] = true;
                 }
                 // Update UI
                 const btns = document.querySelectorAll('.layer-toggle');
@@ -864,9 +889,9 @@
             }
 
             // Prepare active array
-            let activeFloats = new Float32Array(16);
+            let activeFloats = new Float32Array(20);
             let activeCount = 0;
-            for (let i = 0; i < 16; i++) {
+            for (let i = 0; i < 20; i++) {
                 if (activeLayers[i]) {
                     activeFloats[i] = 1.0;
                     activeCount++;
