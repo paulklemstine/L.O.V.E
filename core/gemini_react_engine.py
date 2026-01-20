@@ -309,6 +309,8 @@ Do NOT call '{tool_name}' again with the same arguments."""
                 else:
                     observation = tool(**arguments)
 
+                print(f"DEBUG: Tool '{tool_name}' returned: {str(observation)[:500]}...") # FORCE PRINT
+
                 # Emit "complete" status panel
                 elapsed_time = time.time() - start_time
                 complete_panel = create_terminal_widget_panel(
