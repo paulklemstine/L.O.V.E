@@ -90,6 +90,7 @@
             background: linear-gradient(90deg, #f0f, #0ff, #fff, #ff0, #f0f);
             background-size: 300%;
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
             animation: rainbow 3s linear infinite;
         }
@@ -749,7 +750,7 @@
             analyser.getByteFrequencyData(dataArray);
 
             // 48 Band Analysis - LOGARITHMIC MAPPING
-            const minFreq = 40;
+            const minFreq = 65;
             const maxFreq = 22000;
             const logScale = Math.log(maxFreq / minFreq);
             let nyquist = audioCtx.sampleRate / 2;
@@ -777,7 +778,6 @@
                 let val = count > 0 ? (sum / count) / 255.0 : 0;
 
                 // TREBLE BOOST (Pink scaling)
-                // Boost highs to make them visible
                 val *= 1.0 + (i / 48) * 2.0;
 
                 // Attack/Decay
@@ -823,10 +823,10 @@
                 let bin = noteBins[i];
                 let rawVal = (bin < dataArray.length) ? dataArray[bin] : 0;
 
-                // Logarithmic Flashing (Perceptual Brightness)
-                // Maps 0.0 -> 0.0, 0.1 -> ~0.5, 1.0 -> 1.0
+                // Pitch Focus: Power Curve + Log Flashing
                 let norm = rawVal / 255.0;
-                let nVal = Math.log10(1 + 9 * norm);
+                norm = Math.pow(norm, 3.0); // Suppress noise
+                let nVal = Math.log10(1 + 9 * norm); // Log brightness
 
                 let hue = i * (300 / 48); // Red to Violet
 
