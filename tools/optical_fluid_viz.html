@@ -41,11 +41,22 @@
             border-right: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        canvas#notecanvas {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 100px;
+            height: 100%;
+            z-index: 20;
+            background: rgba(0, 0, 0, 0.5);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         #ui-layer {
             position: absolute;
             top: 0;
             left: 80px;
-            width: calc(100% - 80px);
+            width: calc(100% - 180px);
             height: 100%;
             z-index: 10;
             pointer-events: none;
@@ -217,6 +228,7 @@
 
     <canvas id="glcanvas"></canvas>
     <canvas id="freqcanvas"></canvas>
+    <canvas id="notecanvas"></canvas>
 
     <div id="start-screen">
         <h1>HYPER-COLOR</h1>
@@ -579,6 +591,11 @@
         const fcvs = document.getElementById('freqcanvas');
         const fctx = fcvs.getContext('2d');
 
+        // Note Canvas
+        const ncvs = document.getElementById('notecanvas');
+        const nctx = ncvs.getContext('2d');
+        let noteBins = new Uint16Array(48);
+
         // UI Builder
         const controls = document.getElementById('controls');
         LAYERS.forEach((name, i) => {
@@ -658,6 +675,17 @@
                 src.connect(analyser);
                 dataArray = new Uint8Array(analyser.frequencyBinCount);
 
+                // Calculate Note Bins (C3=Midi 48 to B6=Midi 95)
+                for (let i = 0; i < 48; i++) {
+                    let midi = 48 + i;
+                    // f = 440 * 2^((d-69)/12)
+                    let freq = 440 * Math.pow(2, (midi - 69) / 12);
+                    let bin = Math.round(freq * analyser.fftSize / audioCtx.sampleRate);
+                    // Clamp to max bin
+                    if (bin >= analyser.frequencyBinCount) bin = analyser.frequencyBinCount - 1;
+                    noteBins[i] = bin;
+                }
+
                 document.getElementById('start-screen').style.opacity = 0;
                 setTimeout(() => document.getElementById('start-screen').style.display = 'none', 1000);
                 document.getElementById('post-card').style.opacity = 1;
@@ -678,6 +706,8 @@
             gl.viewport(0, 0, canvas.width, canvas.height);
             fcvs.width = 80;
             fcvs.height = window.innerHeight;
+            ncvs.width = 100;
+            ncvs.height = window.innerHeight;
         }
         window.onresize = resize;
         resize();
@@ -758,6 +788,37 @@
                 fctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
                 let w = val * 80;
                 fctx.fillRect(0, i * barH, w, barH - 1);
+            }
+
+            // Draw Note Xylophone (Right)
+            nctx.clearRect(0, 0, ncvs.width, ncvs.height);
+            let noteH = ncvs.height / 48;
+            let maxNoteW = 90;
+            let minNoteW = 40;
+            
+            for (let i = 0; i < 48; i++) {
+                // Get energy from calculated bin using direct lookup
+                let bin = noteBins[i];
+                let rawVal = (bin < dataArray.length) ? dataArray[bin] : 0;
+                let nVal = rawVal / 255.0;
+
+                let hue = i * (300 / 48); // Red to Violet
+                
+                // Taper width: Low notes (i=0) wide, High notes (i=47) narrow
+                let barW = maxNoteW - (i / 48) * (maxNoteW - minNoteW);
+                let xOff = (ncvs.width - barW) / 2;
+                
+                // Base bar
+                nctx.fillStyle = `hsla(${hue}, 100%, 60%, ${0.2 + nVal * 0.8})`;
+                // Draw from bottom up (Low notes at bottom)
+                let yPos = ncvs.height - (i + 1) * noteH;
+                nctx.fillRect(xOff, yPos, barW, noteH - 2);
+
+                // Flash overlay
+                if (nVal > 0.4) {
+                    nctx.fillStyle = `rgba(255, 255, 255, ${ (nVal - 0.4) })`;
+                    nctx.fillRect(xOff, yPos, barW, noteH - 2);
+                }
             }
 
             // Map 48 bands to 4 Shader Params DYNAMICALLY
