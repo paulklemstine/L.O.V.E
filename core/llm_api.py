@@ -919,7 +919,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         else:
             # Generate a fresh, performance-based ranking of all models for every call.
             # PASS THE PURPOSE DOWN
-            ranked_model_list = rank_models(purpose=purpose)
+            ranked_model_list = await rank_models(purpose=purpose)
             log_event(f"Dynamically ranked models. Top 5: {ranked_model_list[:5]}", "INFO")
 
 
