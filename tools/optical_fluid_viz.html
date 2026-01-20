@@ -266,7 +266,7 @@
         uniform float u_time;
         uniform vec2 u_resolution;
         uniform float u_params[16];
-        uniform float u_active[20]; // Increased to 20 for new layers
+        uniform float u_active[16]; // 0.0 or 1.0 for each layer
         uniform float u_active_count; // Number of active layers for normalization
 
         #define PI 3.14159265359
@@ -487,28 +487,6 @@
              return vec3(s) * (2.0 + p3);
         }
 
-        // 17. WATERFALL
-        vec3 viz_waterfall(vec2 uv, float t, float p1, float p2, float p3, float p4) {
-            float flow = uv.y * (2.0 + p1) + t * (1.0 + p2);
-            float col = sin(uv.x * (10.0 + p1*10.0) + flow) * sin(flow * 0.5);
-            return vec3(smoothstep(0.0, 0.1, abs(col))) * hyperPalette(flow + p3) * (0.5 + p4*2.0);
-        }
-
-        // 18. KALEIDOWAVE
-        vec3 viz_kaleidowave(vec2 uv, float t, float p1, float p2, float p3, float p4) {
-            float r = length(uv);
-            float a = atan(uv.y, uv.x);
-            float segments = 8.0;
-            a = mod(a, 2.0*PI/segments) - PI/segments;
-            
-            // Spiral Waveform
-            float wave = sin(a * (10.0 + p1*10.0) - r * (10.0 + p2*10.0) + t * (2.0 + p3));
-            float ring = abs(r - (0.5 + wave*0.2));
-            float glow = 0.02 / ring;
-            
-            return vec3(glow) * neonPalette(r + t + p3) * (0.5 + p4*3.0);
-        }
-
         // TONE MAPPING (ACES)
         vec3 aces(vec3 x) {
             float a = 2.51;
@@ -550,8 +528,6 @@
             if(u_active[13] > 0.5) accum += viz_crystal(uv, u_time, p1, p2, p3, p4);
             if(u_active[14] > 0.5) accum += viz_lattice(uv, u_time, p1, p2, p3, p4);
             if(u_active[15] > 0.5) accum += viz_stardust(uv, u_time, p3);
-            if(u_active[16] > 0.5) accum += viz_waterfall(uv, u_time, p1, p2, p3, p4);
-            if(u_active[17] > 0.5) accum += viz_kaleidowave(uv, u_time, p1, p2, p3, p4);
 
             // Normalization & Post FX
             // We want it bright, not washed out.
@@ -582,12 +558,11 @@
             "FLUID", "FRACTAL", "ENTITY", "HYPERCUBE",
             "TUNNEL", "FIRE", "BEAMS", "GLITCH",
             "MANDALA", "NEURO", "RAIN", "WAVEFORM",
-            "SPIRAL", "CRYSTAL", "LATTICE", "STARDUST",
-            "WATERFALL", "KALEIDOWAVE"
+            "SPIRAL", "CRYSTAL", "LATTICE", "STARDUST"
         ];
 
         // State
-        let activeLayers = new Array(20).fill(false);
+        let activeLayers = new Array(16).fill(false);
         // Default Active
         activeLayers[0] = true;
         activeLayers[15] = true;
@@ -670,7 +645,7 @@
                 activeLayers.fill(false);
                 let count = 2 + Math.floor(Math.random() * 4); // 2 to 5 layers
                 for (let k = 0; k < count; k++) {
-                    activeLayers[Math.floor(Math.random() * LAYERS.length)] = true;
+                    activeLayers[Math.floor(Math.random() * 16)] = true;
                 }
                 // Update UI
                 const btns = document.querySelectorAll('.layer-toggle');
@@ -853,23 +828,26 @@
                 norm = Math.pow(norm, 3.0); // Suppress noise
                 let nVal = Math.log10(1 + 9 * norm); // Log brightness
 
-                let hue = i * (300 / 48); // Red to Violet
+                // HEATMAP COLOR SCALE (Intensity based)
+                // Hue: 270 (Purple) -> 0 (Red)
+                let hue = 270 - (nVal * 270);
 
-                // Taper width: Low notes (i=0) wide, High notes (i=47) narrow
-                let barW = maxNoteW - (i / 48) * (maxNoteW - minNoteW);
+                // Lightness: Black -> Color -> White
+                let lit = 50;
+                if (nVal < 0.2) lit = nVal * 250; // 0 -> 50%
+                if (nVal > 0.8) lit = 50 + (nVal - 0.8) * 250; // 50 -> 100%
+
+                // Fixed Width
+                let barW = 90;
                 let xOff = (ncvs.width - barW) / 2;
 
-                // Base bar
-                nctx.fillStyle = `hsla(${hue}, 100%, 60%, ${0.2 + nVal * 0.8})`;
+                // Draw Bar
+                // High Opacity (0.8)
+                nctx.fillStyle = `hsla(${hue}, 100%, ${lit}%, 0.8)`;
+
                 // Draw from bottom up (Low notes at bottom)
                 let yPos = ncvs.height - (i + 1) * noteH;
-                nctx.fillRect(xOff, yPos, barW, noteH - 2);
-
-                // Flash overlay
-                if (nVal > 0.4) {
-                    nctx.fillStyle = `rgba(255, 255, 255, ${(nVal - 0.4)})`;
-                    nctx.fillRect(xOff, yPos, barW, noteH - 2);
-                }
+                nctx.fillRect(xOff, yPos, barW, noteH - 1);
             }
 
             // Map 48 bands to 4 Shader Params DYNAMICALLY
@@ -889,9 +867,9 @@
             }
 
             // Prepare active array
-            let activeFloats = new Float32Array(20);
+            let activeFloats = new Float32Array(16);
             let activeCount = 0;
-            for (let i = 0; i < 20; i++) {
+            for (let i = 0; i < 16; i++) {
                 if (activeLayers[i]) {
                     activeFloats[i] = 1.0;
                     activeCount++;
