@@ -3,7 +3,7 @@ import json
 import asyncio
 import traceback
 from typing import Dict, Any, Optional
-from core.llm_api import run_llm
+
 
 class ModelQAManager:
     """
@@ -41,6 +41,7 @@ class ModelQAManager:
         
         try:
             # Run with a short timeout and low temp
+            from core.llm_api import run_llm
             response = await run_llm(
                 test_prompt, 
                 purpose="scoring", 
