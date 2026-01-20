@@ -96,7 +96,8 @@ class GeminiReActEngine:
                 return {"success": False, "result": "The reasoning engine failed to produce a response."}
 
             raw_response = response_dict.get("result", "")
-            print(f"DEBUG: ReAct raw response: {raw_response[:500]}...") # FORCE PRINT
+            print(f"DEBUG: ReAct raw response START: {raw_response[:500]}...")
+            print(f"DEBUG: ReAct raw response END: ...{raw_response[-500:]}")
 
             # Log the raw response
             panel = create_reasoning_panel(
@@ -111,7 +112,8 @@ class GeminiReActEngine:
             from core.llm_parser import smart_parse_llm_response
             
             parsed_response = smart_parse_llm_response(raw_response, expected_keys=["thought", "action"])
-            print(f"DEBUG: ReAct parsed response: {parsed_response.keys()}") # FORCE PRINT
+            print(f"DEBUG: ReAct parsed response keys: {parsed_response.keys()}")
+            print(f"DEBUG: ReAct extract action: {parsed_response.get('action')}")
             
             # Check if parsing failed
             if parsed_response.get('_parse_error'):
