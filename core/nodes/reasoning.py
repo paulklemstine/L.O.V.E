@@ -301,9 +301,13 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
         if isinstance(response_text, dict):
              response_text = response_text.get("result", "")
         
+        core.logging.log_event(f"DEBUG: Reasoning raw response len={len(response_text)}: {response_text[:500]}...", "DEBUG")
+
         reasoning_trace = response_text
         
         thought, parsed_tool_calls, final_response = _parse_reasoning_response(response_text)
+        
+        core.logging.log_event(f"DEBUG: Parsed thought: {bool(thought)}, Tool calls: {len(parsed_tool_calls) if parsed_tool_calls else 0}, Final: {bool(final_response)}", "DEBUG")
         
         if parsed_tool_calls:
             stop_reason = "tool_call"
@@ -338,8 +342,17 @@ async def reason_node(state: DeepAgentState) -> Dict[str, Any]:
         
     response_message = AIMessage(**msg_args)
     
+    # Story 4: Correction for "Zombie" responses (thought but no action/final)
+    messages_to_return = [response_message]
+    
+    if not parsed_tool_calls and not final_response and thought:
+         core.logging.log_event("Reasoning node detected valid JSON but missing 'action'/'final_response'. Triggering retry.", "WARNING")
+         stop_reason = "retry_format_error"
+         correction_msg = HumanMessage(content="SYSTEM: You provided a 'thought' but NO 'action' or 'final_response'. You must provide a valid JSON object with either an 'action' to execute a tool, or a 'final_response' to answer the user. Do not stop at analysis.")
+         messages_to_return.append(correction_msg)
+
     return {
-        "messages": [response_message],
+        "messages": messages_to_return,
         "stop_reason": stop_reason
     }
 

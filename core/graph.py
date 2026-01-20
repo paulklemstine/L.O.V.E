@@ -127,6 +127,8 @@ def create_deep_agent_graph():
             return "fold_memory_node"
         elif stop_reason == "retrieve_tool":
             return "retrieve_tools_node"
+        elif stop_reason == "retry_format_error":
+             return "reasoning_node"
         elif stop_reason == "tool_call":
             # Story 2: Route to tool execution when tool_calls detected
             return "tool_execution_node"
@@ -156,6 +158,7 @@ def create_deep_agent_graph():
             "retrieve_tools_node": "retrieve_tools_node",
             "tool_execution_node": "tool_execution_node",
             "critic_node": "critic_node",
+            "reasoning_node": "reasoning_node", # Allow direct loopback for retries
             END: END
         }
     )
