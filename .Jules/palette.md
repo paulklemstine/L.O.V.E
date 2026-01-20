@@ -5,3 +5,7 @@
 ## 2024-05-24 - [Quantum Quiet Empty States]
 **Learning:** In TUI dashboards, removing a panel completely when it has no content (empty state) can be confusing. Users can't distinguish between "system broken/missing" and "system idle/nominal".
 **Action:** Implement "Quantum Quiet" states for empty lists. Use dim/subtle colors (e.g., `dim cyan`, `dim blue`) and reassuring text (e.g., "All Systems Nominal", "Quantum Field Quiet") to provide positive confirmation of system health without visual clutter.
+
+## 2026-01-20 - [Conversational Flow in Chat Interfaces]
+**Learning:** In chat-based command interfaces, the "Send" button is a fallback, not the primary interaction. Users expect "Enter" to send immediately, mirroring messaging apps. Forcing a click breaks the cognitive flow of "thought -> type -> action".
+**Action:** Always implement "Send on Enter" (with Shift+Enter for newlines) for chat inputs. Ensure textareas have accessible labels (`aria-labelledby`) and clear placeholders to guide this behavior.
