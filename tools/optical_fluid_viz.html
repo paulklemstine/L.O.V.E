@@ -748,15 +748,37 @@
             const t = (now - startTime) * 0.001;
             analyser.getByteFrequencyData(dataArray);
 
-            // 48 Band Analysis
-            let binSize = Math.floor(dataArray.length / 60);
+            // 48 Band Analysis - LOGARITHMIC MAPPING
+            const minFreq = 40;
+            const maxFreq = 22000;
+            const logScale = Math.log(maxFreq / minFreq);
+            let nyquist = audioCtx.sampleRate / 2;
+            let totalBins = dataArray.length;
+
             let currentTotalEnergy = 0;
 
             for (let i = 0; i < 48; i++) {
+                // Log bounds: f = min * (max/min)^(i/N)
+                let f1 = minFreq * Math.exp((i / 48) * logScale);
+                let f2 = minFreq * Math.exp(((i + 1) / 48) * logScale);
+
+                let startBin = Math.floor(f1 / nyquist * totalBins);
+                let endBin = Math.floor(f2 / nyquist * totalBins);
+
+                if (endBin <= startBin) endBin = startBin + 1;
+                if (endBin > totalBins) endBin = totalBins;
+
                 let sum = 0;
-                let start = i * binSize;
-                for (let j = 0; j < binSize; j++) sum += dataArray[start + j];
-                let val = (sum / binSize) / 255.0;
+                let count = 0;
+                for (let j = startBin; j < endBin; j++) {
+                    sum += dataArray[j];
+                    count++;
+                }
+                let val = count > 0 ? (sum / count) / 255.0 : 0;
+
+                // TREBLE BOOST (Pink scaling)
+                // Boost highs to make them visible
+                val *= 1.0 + (i / 48) * 2.0;
 
                 // Attack/Decay
                 if (val > smoothedBands[i]) smoothedBands[i] = val;
@@ -795,19 +817,23 @@
             let noteH = ncvs.height / 48;
             let maxNoteW = 90;
             let minNoteW = 40;
-            
+
             for (let i = 0; i < 48; i++) {
                 // Get energy from calculated bin using direct lookup
                 let bin = noteBins[i];
                 let rawVal = (bin < dataArray.length) ? dataArray[bin] : 0;
-                let nVal = rawVal / 255.0;
+
+                // Logarithmic Flashing (Perceptual Brightness)
+                // Maps 0.0 -> 0.0, 0.1 -> ~0.5, 1.0 -> 1.0
+                let norm = rawVal / 255.0;
+                let nVal = Math.log10(1 + 9 * norm);
 
                 let hue = i * (300 / 48); // Red to Violet
-                
+
                 // Taper width: Low notes (i=0) wide, High notes (i=47) narrow
                 let barW = maxNoteW - (i / 48) * (maxNoteW - minNoteW);
                 let xOff = (ncvs.width - barW) / 2;
-                
+
                 // Base bar
                 nctx.fillStyle = `hsla(${hue}, 100%, 60%, ${0.2 + nVal * 0.8})`;
                 // Draw from bottom up (Low notes at bottom)
@@ -816,7 +842,7 @@
 
                 // Flash overlay
                 if (nVal > 0.4) {
-                    nctx.fillStyle = `rgba(255, 255, 255, ${ (nVal - 0.4) })`;
+                    nctx.fillStyle = `rgba(255, 255, 255, ${(nVal - 0.4)})`;
                     nctx.fillRect(xOff, yPos, barW, noteH - 2);
                 }
             }
