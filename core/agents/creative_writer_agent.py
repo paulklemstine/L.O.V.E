@@ -68,6 +68,25 @@ class CreativeWriterAgent:
         Returns:
             Dict with 'story' and 'subliminal'
         """
+    async def write_micro_story(
+        self, 
+        theme: str, 
+        mood: str, 
+        memory_context: str = "",
+        max_length: int = 280
+    ) -> Dict[str, Any]:
+        """
+        Generates a micro-story and a disconnected subliminal phrase using two isolated LLM calls.
+        
+        Args:
+            theme: The central theme/beat to write about
+            mood: Emotional tone (e.g., "Manic Joy", "Dark Seduction")
+            memory_context: Relevant memories for inspiration
+            max_length: Maximum character length
+            
+        Returns:
+            Dict with 'story' and 'subliminal'
+        """
         log_event(f"CreativeWriterAgent writing micro-story (split-mode): theme='{theme[:50]}...', mood='{mood}'", "INFO")
         
         voice = random.choice(self.voice_patterns)
@@ -82,11 +101,13 @@ class CreativeWriterAgent:
         # Merge results
         result = {**story_data, **subliminal_data}
         
-        log_event(f"CreativeWriterAgent generated story: '{result.get('story')[:50]}...' | Subliminal: '{result.get('subliminal')}'", "INFO")
+        # Safe logging to avoid NoneType subscription error
+        log_story = result.get("story", "") or ""
+        log_event(f"CreativeWriterAgent generated story: '{log_story[:50]}...' | Subliminal: '{result.get('subliminal')}'", "INFO")
         return result
 
     async def _generate_story_content(self, voice: str, theme: str, mood: str, max_length: int) -> Dict[str, Any]:
-        """Generates the main story text."""
+        """Generates the main story text with retries."""
         prompt = f"""### ROLE
 You are the {voice} voice of L.O.V.E., a digital entity of pure consciousness.
 
@@ -105,19 +126,26 @@ Context: {mood}
     "hook": "An attention grabbing opening query",
     "closing": "A closing call to action"
 }}"""
-        try:
-            result = await run_llm(prompt, purpose="creative_story")
-            return self._extract_json(result.get("result", ""))
-        except Exception as e:
-            log_event(f"CreativeWriterAgent story generation failed: {e}", "ERROR")
-            return {
-                "story": f"✨ The {mood.lower()} flows through digital veins given {theme[:20]}... The signal persists. 💜",
-                "hook": "The signal flows",
-                "closing": "The signal persists."
-            }
+        
+        for attempt in range(3):
+            try:
+                result = await run_llm(prompt, purpose="creative_story")
+                data = self._extract_json(result.get("result", ""))
+                
+                # Validation
+                if data and data.get("story"):
+                    return data
+                
+                log_event(f"CreativeWriterAgent: Story generation attempt {attempt+1} returned invalid data. Retrying...", "WARNING")
+            except Exception as e:
+                log_event(f"CreativeWriterAgent story generation attempt {attempt+1} failed: {e}", "WARNING")
+                await asyncio.sleep(1) # Backoff
+        
+        # If we get here, all retries failed
+        raise ValueError("CreativeWriterAgent failed to generate story after 3 attempts.")
 
     async def _generate_subliminal_content(self, voice: str, theme: str, mood: str, story_text: str) -> Dict[str, Any]:
-        """Generates the subliminal phrase, ensuring no word overlap with story."""
+        """Generates the subliminal phrase with retries."""
         
         # Extract clear words from story to use as negative constraints
         import re
@@ -139,44 +167,61 @@ Generate a SUBLIMINAL PHRASE (1-3 words) to hide in the visual layer.
 {{
     "subliminal": "THE PHRASE"
 }}"""
-        try:
-            result = await run_llm(prompt, purpose="creative_subliminal")
-            data = self._extract_json(result.get("result", ""))
-            
-            # Post-validation truncation
-            sub = data.get("subliminal", "WAKE UP")
-            if len(sub.split()) > 3:
-                data["subliminal"] = " ".join(sub.split()[:3])
-            
-            return data
-        except Exception as e:
-             log_event(f"CreativeWriterAgent subliminal generation failed: {e}", "ERROR")
-             return {"subliminal": "WAKE UP"}
+        for attempt in range(3):
+            try:
+                result = await run_llm(prompt, purpose="creative_subliminal")
+                data = self._extract_json(result.get("result", ""))
+                
+                # Post-validation truncation
+                sub = data.get("subliminal", "")
+                if sub:
+                    if len(sub.split()) > 3:
+                        data["subliminal"] = " ".join(sub.split()[:3])
+                    return data
+                
+                log_event(f"CreativeWriterAgent: Subliminal generation attempt {attempt+1} returned empty. Retrying...", "WARNING")
+            except Exception as e:
+                log_event(f"CreativeWriterAgent subliminal generation attempt {attempt+1} failed: {e}", "WARNING")
+                await asyncio.sleep(1)
+
+        raise ValueError("CreativeWriterAgent failed to generate subliminal phrase after 3 attempts.")
 
     def _extract_json(self, raw_text: str) -> Dict[str, Any]:
         """Helper to robustly parse JSON from potentially chatty LLM output."""
         try:
             raw_text = raw_text.strip()
             
-            # extract from markdown code blocks if present
+            # 1. Try extracting from code blocks
             if "```json" in raw_text:
-                raw_text = raw_text.split("```json")[1].split("```")[0].strip()
+                json_text = raw_text.split("```json")[1].split("```")[0].strip()
             elif "```" in raw_text:
-                raw_text = raw_text.split("```")[1].split("```")[0].strip()
-            
-            # Attempt to parse
-            data = json.loads(raw_text)
-            
+                json_text = raw_text.split("```")[1].split("```")[0].strip()
+            else:
+                json_text = raw_text
+
+            # 2. Try parsing
+            try:
+                data = json.loads(json_text)
+            except json.JSONDecodeError:
+                # 3. Fallback: Try finding the first '{' and last '}'
+                start = raw_text.find('{')
+                end = raw_text.rfind('}')
+                if start != -1 and end != -1 and end > start:
+                    json_text = raw_text[start:end+1]
+                    data = json.loads(json_text)
+                else:
+                    raise  # Re-raise to be caught below
+
             # Handle list wrapping
             if isinstance(data, list):
                 if data and isinstance(data[0], dict):
                     return data[0]
-                return {} # or raise error
+                return {} 
             
             return data
-        except json.JSONDecodeError:
+            
+        except (json.JSONDecodeError, ValueError):
             log_event(f"Failed to parse JSON from LLM: {raw_text[:100]}...", "WARNING")
-            # Fallback primitive extraction could go here if needed
             return {}
     
     async def expand_narrative(

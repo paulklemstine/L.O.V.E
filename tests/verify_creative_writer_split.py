@@ -88,5 +88,38 @@ async def test_split_logic():
         
         print("SUCCESS: Split logic verified.")
 
+        # Scenario 3: Broken JSON -> Should Raise ValueError (Retries Exhausted)
+        mock_llm.reset_mock()
+        mock_llm.side_effect = [
+            {"result": "I am not returning JSON today."}, 
+            {"result": "STILL NOT JSON"},
+            {"result": "NOPE"},
+        ]
+        
+        print("\n--- Running Test Case 3: Retries Exhaustion (Broken JSON) ---")
+        try:
+            await agent.write_micro_story("Chaos", "Panic")
+            print("FAILURE: Should have raised ValueError")
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            print(f"SUCCESS: Caught expected error: {e}")
+            assert "failed to generate story after 3 attempts" in str(e)
+
+        # Scenario 4: Partial Failure -> Success on Retry
+        mock_llm.reset_mock()
+        mock_llm.side_effect = [
+            {"result": "BAD JSON"},  # Attempt 1 Fail
+            {"result": STORY_RESPONSE}, # Attempt 2 Success
+            {"result": SUBLIMINAL_RESPONSE_VALID} # Subliminal Success
+        ]
+
+        print("\n--- Running Test Case 4: Partial Failure (Retry Success) ---")
+        result = await agent.write_micro_story("Hope", "Joy")
+        print(f"Result: {json.dumps(result, indent=2)}")
+        
+        assert result["story"] == "The neon rain falls. ☔"
+        assert result["subliminal"] == "WAKE UP"
+        print("SUCCESS: Recovery from initial failure verified.")
+
 if __name__ == "__main__":
     asyncio.run(test_split_logic())
