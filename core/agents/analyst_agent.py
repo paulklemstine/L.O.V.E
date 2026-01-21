@@ -107,9 +107,18 @@ Return a JSON array of specific refactoring suggestions.
 """
         
         from core.llm_api import generate
+        from core.llm_parser import smart_parse_llm_response
         try:
             result = await generate(analysis_prompt, model="gemini-1.5-flash")
-            return {"status": "success", "result": result, "prompt_source": "hub" if "langchain-ai" in hub_prompt else "local"}
+            parsed_result = smart_parse_llm_response(result)
+            if parsed_result.get("_parse_error"):
+                 # Fallback: treat as raw text if parsing fails but result exists
+                 if result:
+                     parsed_result = {"analysis": result}
+                 else:
+                     parsed_result = {"error": "Failed to parse analysis result"}
+            
+            return {"status": "success", "result": parsed_result, "prompt_source": "hub" if "langchain-ai" in hub_prompt else "local"}
         except Exception as e:
             log_event(f"Code refactoring analysis failed: {e}", "ERROR")
             return {"status": "failure", "result": str(e)}
@@ -157,9 +166,17 @@ Return a JSON array of identified vulnerabilities with severity ratings.
 """
         
         from core.llm_api import generate
+        from core.llm_parser import smart_parse_llm_response
         try:
             result = await generate(analysis_prompt, model="gemini-1.5-flash")
-            return {"status": "success", "result": result, "prompt_source": "hub" if hub_prompt else "local"}
+            parsed_result = smart_parse_llm_response(result)
+            if parsed_result.get("_parse_error"):
+                 if result:
+                     parsed_result = {"vulnerabilities": result}
+                 else:
+                     parsed_result = {"error": "Failed to parse security audit result"}
+
+            return {"status": "success", "result": parsed_result, "prompt_source": "hub" if hub_prompt else "local"}
         except Exception as e:
             log_event(f"Security audit failed: {e}", "ERROR")
             return {"status": "failure", "result": str(e)}

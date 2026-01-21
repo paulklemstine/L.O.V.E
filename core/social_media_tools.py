@@ -254,14 +254,14 @@ async def generate_unified_concept(
         
         result = await run_llm(prompt, purpose="social_concept_generation")
         
-        import json
-        raw_json = result.get("result", "").strip()
-        if "```json" in raw_json:
-            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
-        elif "```" in raw_json:
-            raw_json = raw_json.split("```")[1].split("```")[0].strip()
-        
-        data = json.loads(raw_json)
+        from core.llm_parser import smart_parse_llm_response
+        data = smart_parse_llm_response(result.get("result", ""))
+        if data.get("_parse_error"):
+            # If parse failed, try to treat the raw result as a core idea if it's just text
+            if len(str(result.get("result", ""))) < 200:
+                data = {"core_idea": str(result.get("result", ""))}
+            else:
+                raise ValueError("Failed to parse unified concept JSON")
         
         # Create and validate PostConcept
         concept = PostConcept(
@@ -324,14 +324,10 @@ async def analyze_and_visualize_text(
                          
         result = await run_llm(prompt, purpose="visualize_text_metaphor")
         
-        import json
-        raw_json = result.get("result", "").strip()
-        if "```json" in raw_json:
-            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
-        elif "```" in raw_json:
-            raw_json = raw_json.split("```")[1].split("```")[0].strip()
-            
-        data = json.loads(raw_json)
+        from core.llm_parser import smart_parse_llm_response
+        data = smart_parse_llm_response(result.get("result", ""))
+        if data.get("_parse_error"):
+             data = {}
         
         visual_metaphor = data.get("visual_metaphor", "Abstract interpretation")
         image_prompt = data.get("image_prompt", "")
@@ -403,14 +399,11 @@ async def generate_post_concept(beat_data: Dict[str, Any], recent_history: str =
 
         result = await run_llm(prompt, purpose="director_social_story")
         
-        import json
-        raw_json = result.get("result", "").strip()
-        if "```json" in raw_json:
-            raw_json = raw_json.split("```json")[1].split("```")[0].strip()
-        elif "```" in raw_json:
-            raw_json = raw_json.split("```")[1].split("```")[0].strip()
-            
-        data = json.loads(raw_json)
+        from core.llm_parser import smart_parse_llm_response
+        data = smart_parse_llm_response(result.get("result", ""))
+        if data.get("_parse_error"):
+             # Fallback logic is handled by defaults below
+             data = {}
         
         # Handle list wrapping
         if isinstance(data, list):

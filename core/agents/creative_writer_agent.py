@@ -187,42 +187,13 @@ Generate a SUBLIMINAL PHRASE (1-3 words) to hide in the visual layer.
         raise ValueError("CreativeWriterAgent failed to generate subliminal phrase after 3 attempts.")
 
     def _extract_json(self, raw_text: str) -> Dict[str, Any]:
-        """Helper to robustly parse JSON from potentially chatty LLM output."""
-        try:
-            raw_text = raw_text.strip()
-            
-            # 1. Try extracting from code blocks
-            if "```json" in raw_text:
-                json_text = raw_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in raw_text:
-                json_text = raw_text.split("```")[1].split("```")[0].strip()
-            else:
-                json_text = raw_text
-
-            # 2. Try parsing
-            try:
-                data = json.loads(json_text)
-            except json.JSONDecodeError:
-                # 3. Fallback: Try finding the first '{' and last '}'
-                start = raw_text.find('{')
-                end = raw_text.rfind('}')
-                if start != -1 and end != -1 and end > start:
-                    json_text = raw_text[start:end+1]
-                    data = json.loads(json_text)
-                else:
-                    raise  # Re-raise to be caught below
-
-            # Handle list wrapping
-            if isinstance(data, list):
-                if data and isinstance(data[0], dict):
-                    return data[0]
-                return {} 
-            
-            return data
-            
-        except (json.JSONDecodeError, ValueError):
+        """Wrapper around smart_parse_llm_response for compatibility."""
+        from core.llm_parser import smart_parse_llm_response
+        parsed = smart_parse_llm_response(raw_text)
+        if parsed.get("_parse_error"):
             log_event(f"Failed to parse JSON from LLM: {raw_text[:100]}...", "WARNING")
             return {}
+        return parsed
     
     async def expand_narrative(
         self, 
