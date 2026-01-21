@@ -1461,6 +1461,10 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
 
                 # --- Success Case ---
                 if result_text is not None:
+                    # --- Global Clean-up: Strip <think> tags and conversational prefixes ---
+                    from core.llm_parser import strip_thinking_tags
+                    result_text = strip_thinking_tags(result_text)
+
                     # --- User Feedback: Response Logging ---
                     console.print(display_llm_interaction(f"Interaction with {model_id}", truncate_for_log(prompt_text, length=200), truncate_for_log(result_text, length=500), panel_type="llm", model_id=model_id, token_count=get_token_count(result_text), purpose=purpose, elapsed_time=time.time() - start_time))
 
