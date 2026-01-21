@@ -10,6 +10,7 @@ import time
 import hashlib
 from typing import Dict, List, Optional, Any
 from functools import lru_cache
+from collections import OrderedDict
 import logging
 from .dynamic_compress_prompt import dynamic_compress_prompt
 
@@ -60,7 +61,8 @@ class PromptCompressor:
             
         self.compressor = None
         self.config = _get_config()
-        self.cache = {}
+        # Use OrderedDict for LRU (Least Recently Used) cache eviction policy
+        self.cache = OrderedDict()
         self.metrics = {
             "total_compressions": 0,
             "total_original_tokens": 0,
@@ -169,6 +171,8 @@ class PromptCompressor:
         cache_key = self._get_cache_key(prompt, rate, force_tokens)
         if cache_key in self.cache:
             self.metrics["cache_hits"] += 1
+            # Move to end to mark as recently used (LRU policy)
+            self.cache.move_to_end(cache_key)
             result = self.cache[cache_key].copy()
             result["cached"] = True
             self.log_event(
@@ -243,9 +247,8 @@ class PromptCompressor:
             
             # Cache result (with LRU eviction)
             if len(self.cache) >= self.config["cache_size"]:
-                # Remove oldest entry
-                oldest_key = next(iter(self.cache))
-                del self.cache[oldest_key]
+                # Remove oldest entry (Least Recently Used item is at the beginning)
+                self.cache.popitem(last=False)
             self.cache[cache_key] = result.copy()
             
             self.log_event(
