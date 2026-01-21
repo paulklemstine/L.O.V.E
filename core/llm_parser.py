@@ -68,7 +68,41 @@ def extract_clean_text_content(response: str) -> str:
     for pattern in explanation_patterns:
         response = re.sub(pattern, "", response, flags=re.DOTALL | re.IGNORECASE)
     
+    # Also strip thinking tags from text content
+    response = _strip_thinking_tags(response)
+    
     return response.strip()
+
+
+def _strip_thinking_tags(response: str) -> str:
+    """
+    Removes <think>...</think> blocks and common conversational prefixes.
+    """
+    if not response:
+        return ""
+        
+    # 1. Remove <think> blocks
+    response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL | re.IGNORECASE)
+    
+    # 2. Remove "Thinking Process:" style blocks (common in some fine-tunes)
+    response = re.sub(r'Thinking Process:.*?\n\n', '', response, flags=re.DOTALL | re.IGNORECASE)
+    
+    # 3. Clean up leading conversational filler *if* it precedes a JSON block or just generally
+    # This matches "Okay, here is..." at the start of the string
+    # We be careful not to strip legitimate content if it's a text-only response, 
+    # but strictly speaking, "Okay, here is" is usually noise.
+    conversational_prefixes = [
+        r"^Okay, (?:let's|here|I).+?:\s*",
+        r"^Sure, (?:here|I).+?:\s*",
+        r"^Here is the (?:JSON|code|output).+?:\s*",
+        r"^I have generated.+?:\s*",
+    ]
+    
+    clean_response = response.strip()
+    for pattern in conversational_prefixes:
+        clean_response = re.sub(pattern, "", clean_response, flags=re.DOTALL | re.IGNORECASE) # DOTALL important for multi-line prefixes
+        
+    return clean_response.strip()
 
 
 
@@ -102,6 +136,9 @@ def smart_parse_llm_response(response: str, expected_keys: Optional[list] = None
     
     response = response.strip()
     
+    # Pre-processing: Strip <think> tags and conversational prefixes
+    response = _strip_thinking_tags(response)
+
     # Strategy 0: Extract from <json> tags (New Priority)
     result = _extract_from_xml(response)
     if result and not result.get('_parse_error'):return result
