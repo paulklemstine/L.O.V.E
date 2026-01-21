@@ -687,7 +687,7 @@ async def rank_models(purpose="general"):
         return []
 
     ranked_models = []
-    for model_id, stats in MODEL_STATS.items():
+    for model_id, stats in list(MODEL_STATS.items()):
         # --- Calculate Speed Score (TPS) ---
         if stats["total_time_spent"] > 0:
             tps = stats["total_tokens_generated"] / stats["total_time_spent"]
