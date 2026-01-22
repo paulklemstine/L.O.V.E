@@ -341,21 +341,178 @@ def apply_patch_with_rollback(
 
 # --- Git Operations ---
 
+import re
+from datetime import datetime
+
+
 class GitManager:
-    def __init__(self, repo_path="."):
+    """
+    Manages Git operations for L.O.V.E. evolution workflows.
+    
+    Story 3.1: Provides evolution-aware branch naming and automated PR generation.
+    """
+    
+    def __init__(self, repo_path=".", activity_log_path: str = None):
         self.repo_path = repo_path
         self.token = os.environ.get("GITHUB_TOKEN")
+        self.activity_log_path = activity_log_path or os.path.join(repo_path, "activity_log.md")
 
-    def _run_cmd(self, cmd_list):
+    def _run_cmd(self, cmd_list, check: bool = True) -> Optional[str]:
         try:
             result = subprocess.run(
-                cmd_list, cwd=self.repo_path, check=True, 
+                cmd_list, cwd=self.repo_path, check=check, 
                 capture_output=True, text=True
             )
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
             core.logging.log_event(f"Git Command Failed: {e.stderr}", "ERROR")
             return None
+
+    def _slugify(self, text: str) -> str:
+        """Convert text to URL-safe slug."""
+        text = text.lower().strip()
+        text = re.sub(r'[^\w\s-]', '', text)
+        text = re.sub(r'[\s_-]+', '-', text)
+        return text[:50]  # Limit length
+
+    def _log_activity(self, action: str, details: str) -> None:
+        """Append to activity log for traceability."""
+        try:
+            timestamp = datetime.now().isoformat()
+            log_entry = f"| {timestamp} | {action} | {details} |\n"
+            
+            # Ensure file exists with header
+            if not os.path.exists(self.activity_log_path):
+                with open(self.activity_log_path, 'w') as f:
+                    f.write("# Activity Log\n\n| Timestamp | Action | Details |\n|---|---|---|\n")
+            
+            with open(self.activity_log_path, 'a') as f:
+                f.write(log_entry)
+        except Exception as e:
+            core.logging.log_event(f"Failed to log activity: {e}", "WARNING")
+
+    # --- Story 3.1: Evolution-Aware Branch Management ---
+    
+    def create_evolution_branch(self, intent_slug: str) -> Optional[str]:
+        """
+        Creates a branch with evolution naming convention.
+        
+        Story 3.1: Branch name format: feature/evolution-{timestamp}-{intent_slug}
+        
+        Args:
+            intent_slug: Human-readable description of the evolution intent
+            
+        Returns:
+            Branch name if created, None on failure
+        """
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+        slug = self._slugify(intent_slug)
+        branch_name = f"feature/evolution-{timestamp}-{slug}"
+        
+        # Ensure we're on main first
+        self._run_cmd(["git", "checkout", "main"], check=False)
+        self._run_cmd(["git", "pull", "origin", "main"], check=False)
+        
+        result = self._run_cmd(["git", "checkout", "-b", branch_name])
+        if result is not None:
+            self._log_activity("BRANCH_CREATED", branch_name)
+            core.logging.log_event(f"Created evolution branch: {branch_name}", "INFO")
+            return branch_name
+        return None
+
+    def get_current_branch(self) -> Optional[str]:
+        """Returns the current branch name."""
+        return self._run_cmd(["git", "branch", "--show-current"])
+
+    def commit_evolution(self, files: List[str], message: str, intent: str = None) -> bool:
+        """
+        Stages and commits multiple files with semantic message.
+        
+        Story 3.1: Commits all evolution-related changes atomically.
+        
+        Args:
+            files: List of file paths to stage
+            message: Commit message
+            intent: Optional intent description for activity log
+            
+        Returns:
+            True if commit succeeded
+        """
+        # Stage all files
+        for file_path in files:
+            result = self._run_cmd(["git", "add", file_path])
+            if result is None:
+                core.logging.log_event(f"Failed to stage: {file_path}", "WARNING")
+        
+        # Commit
+        result = self._run_cmd(["git", "commit", "-m", message])
+        if result is not None:
+            self._log_activity("COMMIT", f"{message[:80]}... ({len(files)} files)")
+            return True
+        return False
+
+    def create_evolution_pr(
+        self, 
+        branch_name: str, 
+        title: str,
+        description: str,
+        base_branch: str = "main"
+    ) -> Optional[str]:
+        """
+        Creates a Pull Request for an evolution branch.
+        
+        Story 3.1: Generates PR with semantic description and logs the URL.
+        
+        Args:
+            branch_name: Head branch name
+            title: PR title
+            description: PR body (markdown)
+            base_branch: Target branch (default: main)
+            
+        Returns:
+            PR URL if created, None on failure
+        """
+        # Push branch first
+        push_result = self._run_cmd(["git", "push", "-u", "origin", branch_name])
+        if push_result is None:
+            core.logging.log_event(f"Failed to push branch: {branch_name}", "ERROR")
+            return None
+        
+        if not self.token:
+            core.logging.log_event("No GITHUB_TOKEN found. Cannot create PR.", "WARNING")
+            # Still log the branch for manual PR creation
+            self._log_activity("PR_READY", f"Branch pushed: {branch_name} (manual PR required)")
+            return None
+
+        env = os.environ.copy()
+        env["GITHUB_TOKEN"] = self.token
+        
+        try:
+            cmd = [
+                "gh", "pr", "create", 
+                "--title", title, 
+                "--body", description, 
+                "--head", branch_name, 
+                "--base", base_branch
+            ]
+            result = subprocess.run(cmd, cwd=self.repo_path, capture_output=True, text=True, env=env)
+            
+            if result.returncode == 0:
+                pr_url = result.stdout.strip()
+                self._log_activity("PR_CREATED", pr_url)
+                core.logging.log_event(f"Created PR: {pr_url}", "INFO")
+                return pr_url
+            else:
+                core.logging.log_event(f"GH CLI failed: {result.stderr}", "ERROR")
+                self._log_activity("PR_FAILED", result.stderr[:100])
+                return None
+                
+        except FileNotFoundError:
+            core.logging.log_event("GitHub CLI 'gh' not installed.", "ERROR")
+            self._log_activity("PR_READY", f"Branch {branch_name} ready (gh CLI not available)")
+            return None
+
+    # --- Legacy Methods (preserved for compatibility) ---
 
     def create_branch(self, branch_name: str):
         """Creates and switches to a new branch."""
@@ -371,33 +528,8 @@ class GitManager:
 
     def push_changes(self, branch_name: str):
         """Pushes branch to remote."""
-        # Use token in URL for auth if needed, or rely on system auth
         return self._run_cmd(["git", "push", "-u", "origin", branch_name])
 
     def create_pull_request(self, title: str, body: str, head_branch: str, base_branch="main"):
         """Uses GitHub CLI (gh) or API to create PR."""
-        if not self.token:
-            core.logging.log_event("No GITHUB_TOKEN found. Cannot create PR.", "WARNING")
-            return False
-
-        # Try using 'gh' CLI if installed
-        env = os.environ.copy()
-        env["GITHUB_TOKEN"] = self.token
-        
-        try:
-            cmd = [
-                "gh", "pr", "create", 
-                "--title", title, 
-                "--body", body, 
-                "--head", head_branch, 
-                "--base", base_branch
-            ]
-            result = subprocess.run(cmd, cwd=self.repo_path, capture_output=True, text=True, env=env)
-            if result.returncode == 0:
-                return result.stdout.strip()
-            else:
-                core.logging.log_event(f"GH CLI failed: {result.stderr}", "ERROR")
-                return None
-        except FileNotFoundError:
-            core.logging.log_event("GitHub CLI 'gh' not installed.", "ERROR")
-            return None
+        return self.create_evolution_pr(head_branch, title, body, base_branch)

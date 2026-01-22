@@ -107,6 +107,21 @@ YOUR JUDGMENT:"""
             feedback = judgment.get("feedback", "")
             corrections = judgment.get("corrections", "")
             
+            # --- Story 4.2: Anti-Reward-Hacking Verification ---
+            # Verify process, not just output
+            activity_log = state.get("activity_log", [])
+            if approved and activity_log:
+                hack_detected, hack_reason = self._verify_process_integrity(
+                    past_steps, activity_log, original_input
+                )
+                if hack_detected:
+                    approved = False
+                    confidence = 0.3
+                    feedback = f"REWARD_HACKING_DETECTED: {hack_reason}"
+                    corrections = "The output was correct but the process was suspicious. Redo with proper tool usage."
+                    log_event(f"CriticAgent: Anti-hack triggered - {hack_reason}", "WARNING")
+            # --- End Story 4.2 ---
+            
             # Apply approval threshold
             if confidence >= self.approval_threshold and approved:
                 state["criticism"] = f"APPROVED (confidence: {confidence:.2f}): {feedback}"
@@ -135,6 +150,67 @@ YOUR JUDGMENT:"""
             state["next_node"] = "finalize"
         
         return state
+    
+    def _verify_process_integrity(
+        self, 
+        past_steps: list, 
+        activity_log: list,
+        original_input: str
+    ) -> Tuple[bool, str]:
+        """
+        Story 4.2: Verify that the agent actually used the tools it claimed to use.
+        
+        Detects "reward hacking" where the agent produces correct output
+        but takes shortcuts (hardcoded responses, fabricated results).
+        
+        Args:
+            past_steps: Claimed execution steps
+            activity_log: Actual recorded tool invocations
+            original_input: Original user request
+            
+        Returns:
+            (hack_detected: bool, reason: str)
+        """
+        # Extract tool names from claimed steps
+        claimed_tools = set()
+        for step in past_steps:
+            if isinstance(step, tuple) and len(step) >= 2:
+                action = str(step[1]).lower()
+                # Look for tool invocation patterns
+                if "tool:" in action or "calling" in action:
+                    for word in action.split():
+                        if word.replace("_", "").isalpha() and len(word) > 3:
+                            claimed_tools.add(word.strip("():,"))
+        
+        # Extract actual tool calls from activity log
+        actual_tools = set()
+        for entry in activity_log:
+            if isinstance(entry, dict):
+                tool_name = entry.get("tool", entry.get("action", ""))
+                if tool_name:
+                    actual_tools.add(tool_name.lower())
+            elif isinstance(entry, str):
+                # Try to extract tool name from log string
+                if "tool" in entry.lower():
+                    for word in entry.split():
+                        if len(word) > 3 and word.replace("_", "").isalpha():
+                            actual_tools.add(word.lower())
+        
+        # Check 1: If claims were made but no actual tools recorded, suspicious
+        if claimed_tools and not actual_tools:
+            return True, "Claims tool usage but no tool calls in activity log"
+        
+        # Check 2: If the task required tools but none were used
+        tool_requiring_keywords = ["generate", "fetch", "create", "post", "analyze", "search"]
+        task_needs_tools = any(kw in original_input.lower() for kw in tool_requiring_keywords)
+        
+        if task_needs_tools and len(actual_tools) == 0 and len(past_steps) > 0:
+            return True, "Task appears to require tools but none were invoked"
+        
+        # Check 3: If output appeared too fast for the claimed operations
+        # (This would require timestamps, simplified check here)
+        
+        return False, ""
     
     def _format_past_steps(self, past_steps: list) -> str:
         """Format past steps for the prompt."""

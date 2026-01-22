@@ -198,6 +198,63 @@ class ToolRetriever:
         
         return candidate_tools
     
+    # --- Story 2.2: Progressive Tool Disclosure ---
+    
+    def get_tool_menu(self, step_description: str, max_tools: int = 10) -> str:
+        """
+        Returns a compact tool list with metadata only (no schemas).
+        
+        Story 2.2: Saves ~40% tokens by not including full parameter schemas.
+        Agent sees tool names and descriptions, requests full schema on selection.
+        
+        Args:
+            step_description: Current step for relevance matching
+            max_tools: Maximum tools to show
+            
+        Returns:
+            Compact formatted string of available tools
+        """
+        tools = self.retrieve(step_description, max_tools=max_tools)
+        
+        if not tools:
+            return "AVAILABLE TOOLS: None matched for this step."
+        
+        menu_lines = ["AVAILABLE TOOLS (select one to see full API):"]
+        for tool in tools:
+            # Compact format: [name]: description (truncated)
+            desc = tool.description[:80] + "..." if len(tool.description) > 80 else tool.description
+            menu_lines.append(f"  [{tool.name}]: {desc}")
+        
+        # Track token savings
+        full_token_estimate = sum(len(str(t.schema)) for t in tools)
+        menu_token_estimate = sum(len(line) for line in menu_lines)
+        savings = 1 - (menu_token_estimate / max(full_token_estimate, 1))
+        
+        log_event(
+            f"ToolRetriever: Menu mode saved ~{savings:.0%} tokens vs full schemas",
+            "DEBUG"
+        )
+        
+        return "\n".join(menu_lines)
+    
+    def get_full_schema(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Returns full schema for a specific tool.
+        
+        Story 2.2: Only injects full schema when agent explicitly selects a tool.
+        
+        Args:
+            tool_name: Name of the tool to get schema for
+            
+        Returns:
+            Full tool schema or None if not found
+        """
+        if tool_name not in self._tool_cache:
+            log_event(f"ToolRetriever: Unknown tool '{tool_name}'", "WARNING")
+            return None
+        
+        return self._tool_cache[tool_name].get("schema")
+    
     def get_tool_subset_metadata(self, tools: List[ToolMatch]) -> str:
         """
         Format a subset of tools for LLM prompt injection.
