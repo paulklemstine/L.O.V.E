@@ -260,16 +260,20 @@ def search_bluesky(
         }
 
 
-def generate_post_content(topic: str = None) -> Dict[str, Any]:
+def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
     """
     Generate post content aligned with persona using LLM.
     
     Args:
         topic: Optional topic to focus on.
+        **kwargs: Ignored additional arguments (e.g. 'text' if LLM gets confused).
     
     Returns:
         Dict with: success, text, hashtags, error
     """
+    # Fallback: if 'text' provided but no topic, use text as topic
+    if not topic and 'text' in kwargs:
+        topic = kwargs['text']
     try:
         from .llm_client import get_llm_client
         from .persona_goal_extractor import get_persona_extractor
