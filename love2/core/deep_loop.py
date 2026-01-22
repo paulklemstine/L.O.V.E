@@ -139,16 +139,33 @@ What is the next action to take towards this goal?"""
             print(f"[DeepLoop] Failed to load tools: {e}")
     
     def _format_tools_for_prompt(self) -> str:
-        """Format available tools for the system prompt."""
+        """Format available tools for the system prompt with parameter info."""
         if not self.tools:
-            return "No tools available."
+            return "No tools available. Use action='skip' if you cannot proceed."
         
-        lines = []
+        import inspect
+        lines = ["ONLY use tools from this list. Do NOT invent new tools.\n"]
+        
         for name, func in self.tools.items():
             doc = func.__doc__ or "No description"
-            # Get first line of docstring
             first_line = doc.strip().split('\n')[0]
-            lines.append(f"- **{name}**: {first_line}")
+            
+            # Get parameter info
+            try:
+                sig = inspect.signature(func)
+                params = []
+                for pname, param in sig.parameters.items():
+                    if pname == 'self':
+                        continue
+                    if param.default == inspect.Parameter.empty:
+                        params.append(f"{pname} (required)")
+                    else:
+                        params.append(f"{pname}={param.default!r}")
+                param_str = ", ".join(params) if params else "no parameters"
+            except Exception:
+                param_str = "unknown"
+            
+            lines.append(f"- **{name}**({param_str}): {first_line}")
         
         return "\n".join(lines)
     

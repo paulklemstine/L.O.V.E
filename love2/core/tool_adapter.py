@@ -54,12 +54,14 @@ def _get_love2_tools() -> Dict[str, Callable]:
             post_to_bluesky,
             get_bluesky_timeline,
             reply_to_post,
-            search_bluesky
+            search_bluesky,
+            generate_post_content
         )
         tools["bluesky_post"] = post_to_bluesky
         tools["bluesky_timeline"] = get_bluesky_timeline
         tools["bluesky_reply"] = reply_to_post
         tools["bluesky_search"] = search_bluesky
+        tools["generate_content"] = generate_post_content  # LLM-powered content generation
     except ImportError:
         print("[ToolAdapter] bluesky_agent not found")
     except Exception as e:
