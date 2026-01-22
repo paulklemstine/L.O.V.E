@@ -14,13 +14,27 @@ import os
 import sys
 from pathlib import Path
 
-# Ensure love2 is in path
-sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, str(Path(__file__).parent.parent))  # L.O.V.E. root
+# Get the love2 directory and L.O.V.E. root
+LOVE2_DIR = Path(__file__).parent.absolute()
+LOVE_ROOT = LOVE2_DIR.parent
+
+# CRITICAL: Remove any existing 'core' from sys.modules to avoid conflict
+# with L.O.V.E. v1's core module
+for key in list(sys.modules.keys()):
+    if key.startswith('core'):
+        del sys.modules[key]
+
+# Add love2 directory FIRST so its 'core' takes precedence
+sys.path.insert(0, str(LOVE2_DIR))
+# Add L.O.V.E. root AFTER for v1 fallback imports (used by tool_adapter)
+sys.path.insert(1, str(LOVE_ROOT))
+
+# Change working directory to love2
+os.chdir(LOVE2_DIR)
 
 # Load environment
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent / ".env")
+load_dotenv(LOVE2_DIR / ".env")
 
 
 def main():
@@ -86,7 +100,7 @@ Examples:
 ╚══════════════════════════════════════════════════════════════╝
     """)
     
-    # Import and run
+    # Import and run - love2/core is now first in sys.path
     from core.deep_loop import DeepLoop
     
     loop = DeepLoop(
