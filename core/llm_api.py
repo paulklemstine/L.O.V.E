@@ -30,6 +30,9 @@ from collections import defaultdict
 from rich.console import Console
 from rich.panel import Panel
 from core.model_qa import qa_manager
+
+# Reuse a module-level console to avoid re-instantiation overhead (~0.18ms)
+_module_console = Console()
 from rich.progress import Progress, BarColumn, TextColumn, DownloadColumn, TransferSpeedColumn
 from rich.text import Text
 from bbs import run_hypnotic_progress
@@ -45,10 +48,10 @@ import signal
 def graceful_shutdown(signum, frame):
     # Safety check: Don't shut down if running in a pytest environment
     if "PYTEST_CURRENT_TEST" in os.environ:
-        Console().print(f"[bold yellow]Signal {signum} received, but ignoring due to active test environment.[/bold yellow]")
+        _module_console.print(f"[bold yellow]Signal {signum} received, but ignoring due to active test environment.[/bold yellow]")
         return
 
-    Console().print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
+    _module_console.print(f"\n[bold red]Received signal {signum}. Shutting down gracefully...[/bold red]")
 
     # Trigger the existing cleanup logic
     if 'ipfs_manager' in globals() and ipfs_manager: ipfs_manager.stop_daemon()
@@ -57,7 +60,7 @@ def graceful_shutdown(signum, frame):
 
     # vLLM Handling
     # User requested to NEVER kill vLLM on shutdown to ensure persistence and fast restarts.
-    Console().print("[bold green]Leaving vLLM server running per configuration.[/bold green]")
+    _module_console.print("[bold green]Leaving vLLM server running per configuration.[/bold green]")
     # should_kill_vllm = False - implicitly handled by removing the kill block
 
     sys.exit(0)
@@ -116,7 +119,7 @@ async def execute_reasoning_task(prompt: str, deep_agent_instance=None) -> dict:
     Exclusively uses the run_llm function for a reasoning task.
     This is the new primary pathway for the GeminiReActEngine.
     """
-    console = Console()
+    console = _module_console
     prompt_cid = await _pin_to_ipfs_async(prompt.encode('utf-8'), console)
     response_cid = None
     try:
@@ -858,7 +861,7 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
         return {"result": None, "error": "No prompt text provided"}
 
 
-    console = Console()
+    console = _module_console
     last_exception = None
     MAX_TOTAL_ATTEMPTS = 15 # Max attempts for a single logical call
     start_time = time.time()

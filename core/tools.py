@@ -34,6 +34,9 @@ from rich.table import Table
 from rich.panel import Panel
 from datetime import datetime
 from core.talent_utils.analyzer import TraitAnalyzer, ProfessionalismRater
+
+# Reuse a module-level console to avoid re-instantiation overhead (~0.18ms)
+_module_console = Console()
 from core.talent_utils import (
     talent_manager,
     public_profile_aggregator,
@@ -159,7 +162,7 @@ async def code_modifier(source_file: str, modification_instructions: str) -> str
          return "Error: Jules Task Manager is not initialized. Cannot process code modification."
 
     try:
-        console = Console()
+        console = _module_console
         core.logging.log_event(f"Delegating code modification of {source_file} to Jules...", "INFO")
         
         result = await trigger_jules_evolution(
@@ -187,7 +190,7 @@ def speak_to_creator(message: str):
     ALWAYS use this tool when answering a question or addressing the user.
     """
     try:
-        console = Console()
+        console = _module_console
         # Visual pop for the message
         console.print()
         console.print(Panel(f"[bold bright_cyan]{message}[/bold bright_cyan]", title="[bold green]L.O.V.E. SPEAKING[/bold green]", border_style="bright_cyan"))
@@ -292,7 +295,7 @@ async def feed_user_story(story: str) -> str:
         return "Error: Jules Task Manager is not initialized."
 
     try:
-        console = Console()
+        console = _module_console
         result = await trigger_jules_evolution(
             modification_request=story,
             console=console,

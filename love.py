@@ -340,6 +340,11 @@ from rich.console import Console
 # Use a single console object throughout the application to ensure consistent output.
 console = Console()
 
+# --- OFFSCREEN CONSOLE FOR JSON SERIALIZATION ---
+# Reusable console for capturing rich output without repeated instantiation overhead (~0.18ms)
+# We set force_terminal=True and color_system="truecolor" to ensure ANSI codes are generated
+_json_capture_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor")
+
 # --- STABILITY PATCHES ---
 # The following section applies runtime patches to fix issues in dependencies.
 
@@ -3058,9 +3063,11 @@ def serialize_panel_to_json(panel, panel_type_map, renderer=None):
     if renderer:
         content_with_ansi = renderer.render(panel.renderable, width=get_terminal_width())
     else:
-        temp_console = Console(file=io.StringIO(), force_terminal=True, color_system="truecolor", width=get_terminal_width())
-        temp_console.print(panel.renderable)
-        content_with_ansi = temp_console.file.getvalue()
+        # Reuse the global capture console
+        _json_capture_console.file = io.StringIO()
+        _json_capture_console.width = get_terminal_width()
+        _json_capture_console.print(panel.renderable)
+        content_with_ansi = _json_capture_console.file.getvalue()
 
     plain_content = _strip_ansi_codes(content_with_ansi)
 
