@@ -69,8 +69,8 @@ Examples:
     parser.add_argument(
         "--sleep", "-s",
         type=float,
-        default=30.0,
-        help="Seconds between iterations (default: 30)"
+        default=0,
+        help="Seconds between iterations (default: 0)"
     )
     
     parser.add_argument(

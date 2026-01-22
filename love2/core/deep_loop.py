@@ -351,8 +351,8 @@ What is the next action to take towards this goal?"""
                 # Persist state
                 self.memory.save()
                 
-                # Backpressure sleep
-                if self.running:
+                # Backpressure sleep (skip if 0)
+                if self.running and self.sleep_seconds > 0:
                     print(f"[DeepLoop] Sleeping {self.sleep_seconds}s...")
                     time.sleep(self.sleep_seconds)
         
