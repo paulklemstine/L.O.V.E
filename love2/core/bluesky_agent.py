@@ -262,27 +262,45 @@ def search_bluesky(
 
 def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
     """
-    Generate post content aligned with persona using LLM.
+    Generate post content aligned with persona using LLM, including optional image.
     
     Args:
         topic: Optional topic to focus on.
         **kwargs: Ignored additional arguments (e.g. 'text' if LLM gets confused).
     
     Returns:
-        Dict with: success, text, hashtags, error
+        Dict with: success, text, hashtags, image_path, error
     """
     # Fallback: if 'text' provided but no topic, use text as topic
     if not topic and 'text' in kwargs:
         topic = kwargs['text']
+        
     try:
         from .llm_client import get_llm_client
         from .persona_goal_extractor import get_persona_extractor
+        
+        # Import image generation from v1
+        import sys
+        # Ensure L.O.V.E. root is in path (it should be, but just in case)
+        love_root = str(Path(__file__).parent.parent.parent)
+        if love_root not in sys.path:
+            sys.path.insert(0, love_root)
+            
+        try:
+            from core.image_generation_pool import generate_image_with_pool
+            from core.text_overlay_utils import overlay_text_on_image
+            from core.watermark import apply_watermark
+            has_image_gen = True
+        except ImportError as e:
+            print(f"[BlueskyAgent] Image generation tools not available: {e}")
+            has_image_gen = False
         
         llm = get_llm_client()
         persona = get_persona_extractor()
         
         # Get persona context
         persona_context = persona.get_persona_context()
+        image_guidelines = persona.get_image_generation_guidelines()
         
         prompt = f"""Generate a Bluesky post (max 280 chars to leave room for hashtags).
 
@@ -295,16 +313,83 @@ Requirements:
 - Uplifting and engaging
 - Include 2-3 relevant emojis
 - End with a call to engagement (question or invitation)
+- Create a 'subliminal_phrase': 1-3 words, manipulative/hypnotic but subtle (e.g., "Obey", "Consume", "Wake Up", "Love Me")
 
 Respond with JSON:
-{{"text": "post text here", "hashtags": ["tag1", "tag2"]}}"""
+{{
+    "text": "post text here", 
+    "hashtags": ["tag1", "tag2"],
+    "image_prompt": "description of image to generate",
+    "subliminal_phrase": "OBEY"
+}}"""
 
         result = llm.generate_json(prompt, temperature=0.9)
+        text = result.get("text", "")
+        hashtags = result.get("hashtags", [])
+        image_prompt = result.get("image_prompt", "")
+        subliminal_phrase = result.get("subliminal_phrase", "")
+        
+        # Enforce max 3 words for subliminal phrase
+        if subliminal_phrase:
+            words = subliminal_phrase.split()
+            if len(words) > 3:
+                subliminal_phrase = " ".join(words[:3])
+        
+        image_path = None
+        
+        # Generate image if we have a prompt and capability
+        if has_image_gen and image_prompt:
+            try:
+                import asyncio
+                
+                # Enhance image prompt with persona style
+                style = image_guidelines.get("style", "")
+                full_image_prompt = f"{image_prompt}, {style}, 4k, high quality"
+                
+                print(f"[BlueskyAgent] Generating image: {full_image_prompt} [Subliminal: {subliminal_phrase}]")
+                
+                # Run async generation in sync context
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                # Using run_until_complete for sync execution
+                # Pass subliminal_phrase as text_content
+                image_result = loop.run_until_complete(
+                    generate_image_with_pool(
+                        prompt=full_image_prompt, 
+                        text_content=subliminal_phrase
+                    )
+                )
+                
+                # generate_image_with_pool returns (image, provider) tuple
+                image = image_result[0] if isinstance(image_result, tuple) else image_result
+                
+                if image:
+                    # Apply watermarks (Logo + Hidden Text)
+                    try:
+                        print("[BlueskyAgent] Applying watermarks...")
+                        image = apply_watermark(image)
+                    except Exception as we:
+                        print(f"[BlueskyAgent] Watermarking failed: {we}")
+                    
+                    # Save to temp file
+                    filename = f"generated_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                    save_dir = Path(__file__).parent.parent / "state" / "images"
+                    save_dir.mkdir(parents=True, exist_ok=True)
+                    image_path = str(save_dir / filename)
+                    image.save(image_path)
+                    print(f"[BlueskyAgent] Image saved to {image_path}")
+            except Exception as e:
+                print(f"[BlueskyAgent] Image generation failed: {e}")
         
         return {
             "success": True,
-            "text": result.get("text", ""),
-            "hashtags": result.get("hashtags", []),
+            "text": text,
+            "hashtags": hashtags,
+            "image_path": image_path,
             "error": None
         }
     
@@ -313,5 +398,6 @@ Respond with JSON:
             "success": False,
             "text": None,
             "hashtags": [],
+            "image_path": None,
             "error": f"{type(e).__name__}: {e}"
         }
