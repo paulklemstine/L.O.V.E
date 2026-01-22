@@ -1609,13 +1609,31 @@ async def run_llm(prompt_text: str = None, purpose="general", is_source_code=Fal
             prompt_text = original_prompt_text
             # Simplified retry logic would go here if needed, but for now we proceed to cooldown/fallback
 
-        all_available_times = [t for m, t in LLM_AVAILABILITY.items() if t > time.time()]
-        if all_available_times:
-            sleep_duration = max(0, min(all_available_times) - time.time())
-            if sleep_duration > 0:
-                log_event(f"All providers on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
-                console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
-                time.sleep(sleep_duration)
+        # --- Re-evaluate available models before sleeping ---
+        # Only sleep if ALL ranked models are truly on cooldown
+        # Re-rank to get the current full model list
+        current_ranked = await rank_models(purpose=purpose)
+        available_now = [
+            m for m in current_ranked 
+            if time.time() >= LLM_AVAILABILITY.get(m, 0) 
+            and time.time() >= PROVIDER_AVAILABILITY.get(MODEL_STATS[m].get("provider", "unknown"), 0)
+        ]
+        
+        if available_now:
+            # There are available models we haven't tried yet - don't sleep, retry immediately
+            log_event(f"Found {len(available_now)} available models after retry: {available_now[:3]}...", level="INFO")
+            # Don't sleep - the emergency fallback will handle this
+        else:
+            # Truly no models available - calculate minimum cooldown from models we actually tried
+            models_on_cooldown = [t for m, t in LLM_AVAILABILITY.items() if t > time.time() and m in current_ranked]
+            if models_on_cooldown:
+                sleep_duration = max(0, min(models_on_cooldown) - time.time())
+                # Cap the sleep to a reasonable duration to allow re-evaluation
+                sleep_duration = min(sleep_duration, 60.0)  # Max 60s sleep
+                if sleep_duration > 0:
+                    log_event(f"All {len(current_ranked)} ranked models on cooldown. Sleeping for {sleep_duration:.2f}s.", level="INFO")
+                    console.print(f"[yellow]All cognitive interfaces on cooldown. Re-engaging in {sleep_duration:.2f}s...[/yellow]")
+                    time.sleep(sleep_duration)
 
 
 
