@@ -49,12 +49,12 @@ Your mission is to achieve the given goal using the available tools.
 
 ## Response Format
 You MUST respond with valid JSON in this exact format:
-{
+{{
     "thought": "Your reasoning about what to do next",
     "action": "tool_name" or "complete" or "skip",
-    "action_input": {"param1": "value1", ...},
+    "action_input": {{"param1": "value1", ...}},
     "reasoning": "Why this action helps achieve the goal"
-}
+}}
 
 ## Rules
 1. If you can complete the goal with a tool action, do it.
