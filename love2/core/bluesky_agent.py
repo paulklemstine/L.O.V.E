@@ -281,18 +281,33 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
         
         # Import image generation from v1
         import sys
-        # Ensure L.O.V.E. root is in path (it should be, but just in case)
+        
         love_root = str(Path(__file__).parent.parent.parent)
-        if love_root not in sys.path:
+        
+        # Ensure root is first in path
+        if sys.path[0] != love_root:
             sys.path.insert(0, love_root)
             
         try:
+            # Check if 'core' module is currently pointing to love2/core
+            # We need it to point to root/core for v1 tools to work
+            import core
+            reload_core = False
+            if hasattr(core, '__file__') and 'love2' in str(core.__file__):
+                reload_core = True
+                # Remove package entry so it can be re-imported from root
+                del sys.modules['core']
+                
             from core.image_generation_pool import generate_image_with_pool
             from core.text_overlay_utils import overlay_text_on_image
             from core.watermark import apply_watermark
+            
             has_image_gen = True
         except ImportError as e:
             print(f"[BlueskyAgent] Image generation tools not available: {e}")
+            has_image_gen = False
+        except Exception as e:
+            print(f"[BlueskyAgent] Failed to load v1 modules: {e}")
             has_image_gen = False
         
         llm = get_llm_client()
