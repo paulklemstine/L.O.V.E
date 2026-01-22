@@ -11,7 +11,7 @@ import os
 import sys
 from typing import Optional, Dict, Any, List
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Add L.O.V.E. v1 to path
@@ -39,7 +39,132 @@ def _check_cooldown() -> Optional[str]:
     return None
 
 
-# ... existing _get_bluesky_client ...
+def _get_bluesky_client():
+    """Get the Bluesky API client from L.O.V.E. v1."""
+    try:
+        from core.bluesky_api import get_bluesky_client
+        return get_bluesky_client()
+    except ImportError:
+        # Fallback to direct AT Protocol
+        from atproto import Client
+        
+        handle = os.getenv("BLUESKY_USER")
+        password = os.getenv("BLUESKY_PASSWORD")
+        
+        if not handle or not password:
+            raise ValueError("BLUESKY_USER and BLUESKY_PASSWORD must be set in .env")
+        
+        client = Client()
+        client.login(handle, password)
+        return client
+
+
+def post_to_bluesky(
+    text: str,
+    image_path: Optional[str] = None,
+    alt_text: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Post to Bluesky with optional image.
+    
+    Args:
+        text: Text content of the post (max 300 chars).
+        image_path: Optional path to image file to attach.
+        alt_text: Alt text for the image.
+    
+    Returns:
+        Dict with: success, post_uri, error
+    """
+    global _last_post_time
+    
+    # Check cooldown
+    cooldown_msg = _check_cooldown()
+    if cooldown_msg:
+        return {"success": False, "post_uri": None, "error": cooldown_msg}
+    
+    # Validate text length
+    if len(text) > 300:
+        return {"success": False, "post_uri": None, "error": "Text exceeds 300 character limit"}
+    
+    try:
+        client = _get_bluesky_client()
+        
+        # Try to use L.O.V.E. v1's posting method
+        try:
+            from core.bluesky_api import post_with_image
+            
+            if image_path:
+                result = post_with_image(text, image_path, alt_text)
+            else:
+                result = client.send_post(text)
+            
+            _last_post_time = datetime.now()
+            
+            return {
+                "success": True,
+                "post_uri": getattr(result, 'uri', str(result)),
+                "error": None
+            }
+        except ImportError:
+            # Direct posting
+            result = client.send_post(text)
+            _last_post_time = datetime.now()
+            
+            return {
+                "success": True,
+                "post_uri": result.uri,
+                "error": None
+            }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "post_uri": None,
+            "error": f"{type(e).__name__}: {e}"
+        }
+
+
+def get_bluesky_timeline(limit: int = 20) -> Dict[str, Any]:
+    """
+    Get recent posts from the home timeline.
+    
+    Args:
+        limit: Maximum number of posts to fetch (1-50).
+    
+    Returns:
+        Dict with: success, posts (list), error
+    """
+    limit = max(1, min(50, limit))
+    
+    try:
+        client = _get_bluesky_client()
+        
+        response = client.get_timeline(limit=limit)
+        
+        posts = []
+        for item in response.feed:
+            post = item.post
+            posts.append({
+                "uri": post.uri,
+                "author": post.author.handle,
+                "text": post.record.text if hasattr(post.record, 'text') else "",
+                "created_at": str(post.record.created_at) if hasattr(post.record, 'created_at') else "",
+                "likes": post.like_count if hasattr(post, 'like_count') else 0,
+                "reposts": post.repost_count if hasattr(post, 'repost_count') else 0
+            })
+        
+        return {
+            "success": True,
+            "posts": posts,
+            "error": None
+        }
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "posts": [],
+            "error": f"{type(e).__name__}: {e}"
+        }
 
 
 def reply_to_post(
