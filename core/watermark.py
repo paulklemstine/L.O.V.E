@@ -46,8 +46,8 @@ def get_logo_paths() -> List[str]:
                 logo_paths.append(os.path.join(logos_dir, f))
     
     # Add legacy logos if they exist and aren't duplicates
-    for legacy in [assets_logo]:
-        if os.path.exists(legacy):
+    for legacy in [root_logo]:  # Removed assets_logo dict
+        if os.path.exists(legacy) and os.path.isfile(legacy):
             # Check if already in list by filename
             legacy_name = os.path.basename(legacy)
             if not any(os.path.basename(p) == legacy_name for p in logo_paths):
