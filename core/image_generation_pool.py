@@ -434,7 +434,8 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
         
         # Use gen.pollinations.ai with API key authentication
         # Models: flux (default), turbo, gptimage, kontext, seedream
-        model = "nanobanana"  # High quality model
+        # 'nanobanana' (Gemini) is strict on brand names like OBEY. Using 'flux' for better creative freedom.
+        model = "flux"  # High quality, less restrictive
         url = f"https://gen.pollinations.ai/image/{encoded_prompt}?model={model}&width={width}&height={height}&seed={seed}&safe=false&enhance=true"
         
         headers = {
