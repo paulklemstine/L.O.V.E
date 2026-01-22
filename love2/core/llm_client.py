@@ -202,32 +202,71 @@ class LLMClient:
         """
         json_system = (system_prompt or "") + "\n\nYou MUST respond with valid JSON only. No markdown, no explanation."
         
+        # Build messages
+        messages = []
+        if json_system:
+            messages.append({"role": "system", "content": json_system})
+        messages.append({"role": "user", "content": prompt})
+        
+        # Try vLLM with JSON mode first
+        if self._check_vllm_health():
+            try:
+                # Try using response_format (OpenAI compatible)
+                response = self._client.post(
+                    f"{self.vllm_url}/chat/completions",
+                    json={
+                        "model": self.model_name or "default",
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": 4096,  # Increased for JSON
+                        "response_format": {"type": "json_object"}
+                    }
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    text = data["choices"][0]["message"]["content"]
+                    return self._parse_json(text)
+            except Exception as e:
+                print(f"[LLMClient] vLLM JSON mode error: {e}")
+        
+        # Fallback to standard generation
         response = self.generate(
             prompt=prompt,
             system_prompt=json_system,
-            temperature=temperature
+            temperature=temperature,
+            max_tokens=4096
         )
+        return self._parse_json(response)
+    
+    def _parse_json(self, text: str) -> Dict[str, Any]:
+        """Parse JSON from text with fallback strategies."""
+        text = text.strip()
         
-        # Try to extract JSON from response
-        text = response.strip()
-        
-        # Handle markdown code blocks
-        if text.startswith("```"):
-            lines = text.split("\n")
-            # Remove first and last lines (```json and ```)
-            text = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+        # Remove markdown code blocks
+        if "```" in text:
+            import re
+            # Extract content between ```json and ``` or just ``` and ```
+            match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+            if match:
+                text = match.group(1)
         
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            # Try to find JSON in the response
+            # Try to find the first valid JSON object
             import re
-            json_match = re.search(r'\{[\s\S]*\}', text)
-            if json_match:
-                try:
-                    return json.loads(json_match.group())
-                except json.JSONDecodeError:
-                    pass
+            try:
+                # Look for outermost matching braces
+                # This is a simple heuristic, standard regex can't handle nested braces perfectly
+                # but often works for LLM output
+                json_match = re.search(r'(\{[\s\S]*\})', text)
+                if json_match:
+                    return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                pass
+            
+            # Last ditch: try to fix truncated JSON
+            # This is complex, for now just raise with context
             raise ValueError(f"Failed to parse JSON from LLM response: {text[:200]}...")
     
     def close(self):
