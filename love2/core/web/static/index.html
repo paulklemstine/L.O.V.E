@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,28 +40,60 @@
             padding-bottom: 10px;
         }
 
-        h1 { margin: 0; color: var(--accent-color); text-shadow: 0 0 10px var(--accent-color); }
-        h2 { margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 5px; }
+        h1 {
+            margin: 0;
+            color: var(--accent-color);
+            text-shadow: 0 0 10px var(--accent-color);
+        }
+
+        h2 {
+            margin-top: 0;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
 
         .panel {
             background-color: var(--panel-bg);
             border-radius: 8px;
             padding: 15px;
             border: 1px solid #333;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
             overflow: hidden;
             display: flex;
             flex-direction: column;
         }
 
-        #status-panel { grid-row: 2; grid-column: 1; }
-        #logs-panel { grid-row: 2; grid-column: 2; }
+        #status-panel {
+            grid-row: 2;
+            grid-column: 1;
+        }
 
-        .stat-item { margin-bottom: 10px; }
-        .stat-label { color: #888; font-size: 0.9em; }
-        .stat-value { font-size: 1.2em; font-weight: bold; }
-        .stat-value.running { color: var(--success); }
-        .stat-value.stopped { color: var(--error); }
+        #logs-panel {
+            grid-row: 2;
+            grid-column: 2;
+        }
+
+        .stat-item {
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .stat-value.running {
+            color: var(--success);
+        }
+
+        .stat-value.stopped {
+            color: var(--error);
+        }
 
         #goal-display {
             background: #222;
@@ -88,20 +121,54 @@
             font-size: 0.9em;
         }
 
-        .log-time { color: #555; margin-right: 10px; }
-        .log-level { display: inline-block; width: 60px; font-weight: bold; }
-        .log-level.INFO { color: #888; }
-        .log-level.WARNING { color: var(--warning); }
-        .log-level.ERROR { color: var(--error); }
-        .log-source { color: var(--accent-color); margin-right: 10px; }
+        .log-time {
+            color: #555;
+            margin-right: 10px;
+        }
+
+        .log-level {
+            display: inline-block;
+            width: 60px;
+            font-weight: bold;
+        }
+
+        .log-level.INFO {
+            color: #888;
+        }
+
+        .log-level.WARNING {
+            color: var(--warning);
+        }
+
+        .log-level.ERROR {
+            color: var(--error);
+        }
+
+        .log-source {
+            color: var(--accent-color);
+            margin-right: 10px;
+        }
 
         /* Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #111; }
-        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #666; }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #111;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #666;
+        }
     </style>
 </head>
+
 <body>
     <header>
         <h1>L.O.V.E. v2 Control Panel</h1>
@@ -122,7 +189,7 @@
             <div class="stat-label">Last Update</div>
             <div id="last-update" class="stat-value">-</div>
         </div>
-        
+
         <div class="stat-label">Current Goal</div>
         <div id="goal-display">Waiting for goal...</div>
 
@@ -138,26 +205,26 @@
     </div>
 
     <script>
-        const API_URL = "http://localhost:8000/api";
+        const API_URL = "/api";
         const UPDATE_INTERVAL = 1000;
-        
+
         async function fetchStatus() {
             try {
                 const response = await fetch(`${API_URL}/status`);
                 const data = await response.json();
-                
+
                 document.getElementById('connection-status').textContent = 'Connected';
                 document.getElementById('connection-status').style.color = '#00ff00';
-                
+
                 document.getElementById('agent-state').textContent = data.is_running ? "RUNNING" : "STOPPED";
                 document.getElementById('agent-state').className = `stat-value ${data.is_running ? 'running' : 'stopped'}`;
-                
+
                 document.getElementById('iteration-count').textContent = data.iteration;
                 document.getElementById('last-update').textContent = new Date(data.last_update).toLocaleTimeString();
-                
+
                 const goal = data.current_goal || "No active goal";
                 document.getElementById('goal-display').textContent = goal;
-                
+
                 // Memory stats
                 const memStats = data.memory_stats;
                 let memHtml = '';
@@ -179,10 +246,10 @@
             try {
                 const response = await fetch(`${API_URL}/logs?limit=100`);
                 const logs = await response.json();
-                
+
                 const container = document.getElementById('log-container');
                 const wasScrolledToBottom = container.scrollHeight - container.scrollTop === container.clientHeight;
-                
+
                 container.innerHTML = logs.map(log => {
                     const time = new Date(log.timestamp).toLocaleTimeString();
                     return `
@@ -223,4 +290,5 @@
         }, UPDATE_INTERVAL);
     </script>
 </body>
+
 </html>
