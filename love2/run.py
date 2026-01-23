@@ -102,6 +102,15 @@ Examples:
     
     # Import and run - love2/core is now first in sys.path
     from core.deep_loop import DeepLoop
+    from core.logger import setup_logging
+    from core.web_server import start_background_server
+    
+    # Setup logging
+    setup_logging(verbose=args.verbose)
+    
+    # Start Web Control Panel
+    start_background_server()
+    print("\n[Control Panel] 🌐 Web UI running at http://localhost:8000")
     
     loop = DeepLoop(
         max_iterations=max_iterations,

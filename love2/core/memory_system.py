@@ -350,3 +350,12 @@ class MemorySystem:
         self.episodic.add_event("goal_completed", f"Completed: {goal}")
         self.working.current_goal = None
         self.save()
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get memory statistics."""
+        return {
+            "episodic_events": len(self.episodic.events),
+            "working_goals": len(self.working.sub_goals),
+            "tool_patterns_learned": len(self.tool.learned_patterns),
+            "tools_tracked": len(self.tool.tool_usage)
+        }

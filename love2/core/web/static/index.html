@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L.O.V.E. v2 - DeepAgent Control Panel</title>
+    <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --text-color: #e0e0e0;
+            --accent-color: #00ffff;
+            --secondary-color: #ff00ff;
+            --panel-bg: #1a1a1a;
+            --success: #00ff00;
+            --error: #ff0000;
+            --warning: #ffff00;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 10px;
+        }
+
+        h1 { margin: 0; color: var(--accent-color); text-shadow: 0 0 10px var(--accent-color); }
+        h2 { margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 5px; }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #333;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #status-panel { grid-row: 2; grid-column: 1; }
+        #logs-panel { grid-row: 2; grid-column: 2; }
+
+        .stat-item { margin-bottom: 10px; }
+        .stat-label { color: #888; font-size: 0.9em; }
+        .stat-value { font-size: 1.2em; font-weight: bold; }
+        .stat-value.running { color: var(--success); }
+        .stat-value.stopped { color: var(--error); }
+
+        #goal-display {
+            background: #222;
+            padding: 10px;
+            border-left: 3px solid var(--secondary-color);
+            margin-top: 10px;
+            font-style: italic;
+        }
+
+        #log-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #333;
+        }
+
+        .log-entry {
+            margin-bottom: 2px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.4;
+            font-size: 0.9em;
+        }
+
+        .log-time { color: #555; margin-right: 10px; }
+        .log-level { display: inline-block; width: 60px; font-weight: bold; }
+        .log-level.INFO { color: #888; }
+        .log-level.WARNING { color: var(--warning); }
+        .log-level.ERROR { color: var(--error); }
+        .log-source { color: var(--accent-color); margin-right: 10px; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #666; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>L.O.V.E. v2 Control Panel</h1>
+        <div id="connection-status" style="color: var(--error)">Disconnected</div>
+    </header>
+
+    <div id="status-panel" class="panel">
+        <h2>Status</h2>
+        <div class="stat-item">
+            <div class="stat-label">Agent State</div>
+            <div id="agent-state" class="stat-value stopped">STOPPED</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-label">Iteration</div>
+            <div id="iteration-count" class="stat-value">0</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-label">Last Update</div>
+            <div id="last-update" class="stat-value">-</div>
+        </div>
+        
+        <div class="stat-label">Current Goal</div>
+        <div id="goal-display">Waiting for goal...</div>
+
+        <div style="margin-top: 20px;">
+            <h3>Memories</h3>
+            <div id="memory-stats">Loading...</div>
+        </div>
+    </div>
+
+    <div id="logs-panel" class="panel">
+        <h2>Live Logs</h2>
+        <div id="log-container"></div>
+    </div>
+
+    <script>
+        const API_URL = "http://localhost:8000/api";
+        const UPDATE_INTERVAL = 1000;
+        
+        async function fetchStatus() {
+            try {
+                const response = await fetch(`${API_URL}/status`);
+                const data = await response.json();
+                
+                document.getElementById('connection-status').textContent = 'Connected';
+                document.getElementById('connection-status').style.color = '#00ff00';
+                
+                document.getElementById('agent-state').textContent = data.is_running ? "RUNNING" : "STOPPED";
+                document.getElementById('agent-state').className = `stat-value ${data.is_running ? 'running' : 'stopped'}`;
+                
+                document.getElementById('iteration-count').textContent = data.iteration;
+                document.getElementById('last-update').textContent = new Date(data.last_update).toLocaleTimeString();
+                
+                const goal = data.current_goal || "No active goal";
+                document.getElementById('goal-display').textContent = goal;
+                
+                // Memory stats
+                const memStats = data.memory_stats;
+                let memHtml = '';
+                if (memStats) {
+                    for (const [key, val] of Object.entries(memStats)) {
+                        memHtml += `<div>${key}: ${val}</div>`;
+                    }
+                }
+                document.getElementById('memory-stats').innerHTML = memHtml || "No memory stats";
+
+            } catch (error) {
+                console.error("Status fetch failed:", error);
+                document.getElementById('connection-status').textContent = 'Disconnected';
+                document.getElementById('connection-status').style.color = '#ff0000';
+            }
+        }
+
+        async function fetchLogs() {
+            try {
+                const response = await fetch(`${API_URL}/logs?limit=100`);
+                const logs = await response.json();
+                
+                const container = document.getElementById('log-container');
+                const wasScrolledToBottom = container.scrollHeight - container.scrollTop === container.clientHeight;
+                
+                container.innerHTML = logs.map(log => {
+                    const time = new Date(log.timestamp).toLocaleTimeString();
+                    return `
+                        <div class="log-entry">
+                            <span class="log-time">${time}</span>
+                            <span class="log-level ${log.level}">${log.level}</span>
+                            <span class="log-source">[${log.source}]</span>
+                            ${escapeHtml(log.message)}
+                        </div>
+                    `;
+                }).join('');
+
+                if (wasScrolledToBottom) {
+                    container.scrollTop = container.scrollHeight;
+                }
+            } catch (error) {
+                console.error("Log fetch failed:", error);
+            }
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Initial load
+        fetchStatus();
+        fetchLogs();
+
+        // Loop
+        setInterval(() => {
+            fetchStatus();
+            fetchLogs();
+        }, UPDATE_INTERVAL);
+    </script>
+</body>
+</html>

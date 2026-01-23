@@ -13,6 +13,7 @@ import time
 import signal
 import json
 import traceback
+import logging
 from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +25,9 @@ from .llm_client import get_llm_client, LLMClient
 from .memory_system import MemorySystem
 from .persona_goal_extractor import get_persona_extractor, PersonaGoalExtractor, Goal
 from .autonomous_memory_folding import get_memory_folder, AutonomousMemoryFolder
+from .state_manager import get_state_manager
 
+logger = logging.getLogger("DeepLoop")
 
 class DeepLoop:
     """
@@ -122,7 +125,7 @@ What is the next action to take towards this goal?"""
     def _setup_signals(self):
         """Setup signal handlers for graceful shutdown."""
         def handle_signal(signum, frame):
-            print(f"\n[DeepLoop] Received signal {signum}, stopping gracefully...")
+            logger.info(f"Received signal {signum}, stopping gracefully...")
             self.running = False
         
         signal.signal(signal.SIGINT, handle_signal)
@@ -134,9 +137,9 @@ What is the next action to take towards this goal?"""
             from .tool_adapter import get_adapted_tools
             self.tools.update(get_adapted_tools())
         except ImportError:
-            print("[DeepLoop] tool_adapter not found, starting with empty tools")
+            logger.warning("tool_adapter not found, starting with empty tools")
         except Exception as e:
-            print(f"[DeepLoop] Failed to load tools: {e}")
+            logger.error(f"Failed to load tools: {e}")
     
     def _format_tools_for_prompt(self) -> str:
         """Format available tools for the system prompt with parameter info."""
@@ -176,7 +179,7 @@ What is the next action to take towards this goal?"""
         # Check if we need to fold
         full_context = memory_context
         if self.folder.should_fold(full_context):
-            print("[DeepLoop] Context too large, folding memory...")
+            logger.info("Context too large, folding memory...")
             full_context = self.folder.fold(full_context)
         
         return full_context
@@ -209,7 +212,7 @@ What is the next action to take towards this goal?"""
             )
             return response
         except Exception as e:
-            print(f"[DeepLoop] Reasoning failed: {e}")
+            logger.error(f"Reasoning failed: {e}")
             return {
                 "thought": f"Reasoning failed: {e}",
                 "action": "skip",
@@ -286,48 +289,48 @@ What is the next action to take towards this goal?"""
         
         Returns True if work was done, False if skipped/completed.
         """
-        self.iteration += 1
-        print(f"\n{'='*50}")
-        print(f"[DeepLoop] Iteration {self.iteration} - {datetime.now().isoformat()}")
-        print(f"{'='*50}")
+        # Iteration logging and state update happened in run()
+
         
         # Select goal
         goal = self._select_goal()
         if not goal:
-            print("[DeepLoop] No goals available")
+            logger.warning("No goals available")
             return False
         
         self.current_goal = goal
+        get_state_manager().update_state(current_goal=goal.text)
+        
         self.memory.record_goal_start(goal.text)
-        print(f"[DeepLoop] Goal: {goal}")
+        logger.info(f"Goal: {goal}")
         
         # Reason about goal
-        print("[DeepLoop] Reasoning...")
+        logger.info("Reasoning...")
         decision = self._reason(goal)
-        print(f"[DeepLoop] Thought: {decision.get('thought', 'N/A')}")
-        print(f"[DeepLoop] Action: {decision.get('action', 'N/A')}")
+        logger.info(f"Thought: {decision.get('thought', 'N/A')}")
+        logger.info(f"Action: {decision.get('action', 'N/A')}")
         
         action = decision.get("action", "skip")
         
         if action == "complete":
-            print("[DeepLoop] Goal marked as complete")
+            logger.info("Goal marked as complete")
             self.memory.record_goal_complete(goal.text)
             return True
         
         if action == "skip":
-            print(f"[DeepLoop] Skipping: {decision.get('reasoning', 'No reason')}")
+            logger.info(f"Skipping: {decision.get('reasoning', 'No reason')}")
             return False
         
         # Execute action
         action_input = decision.get("action_input", {})
-        print(f"[DeepLoop] Executing {action}...")
+        logger.info(f"Executing {action}...")
         
         result = self._execute_action(action, action_input)
         
         if result["success"]:
-            print(f"[DeepLoop] Success: {str(result['result'])[:100]}...")
+            logger.info(f"Success: {str(result['result'])[:100]}...")
         else:
-            print(f"[DeepLoop] Failed: {result['error']}")
+            logger.error(f"Failed: {result['error']}")
         
         return result["success"]
     
@@ -341,24 +344,36 @@ What is the next action to take towards this goal?"""
         - Unrecoverable error
         """
         self.running = True
-        print("\n" + "="*60)
-        print("🌊 L.O.V.E. DeepLoop Starting 🌊")
-        print(f"   Sleep interval: {self.sleep_seconds}s")
-        print(f"   Max iterations: {self.max_iterations or 'Infinite'}")
-        print(f"   Tools loaded: {len(self.tools)}")
-        print("="*60 + "\n")
+        get_state_manager().update_state(is_running=True)
+        
+        logger.info("="*60)
+        logger.info("🌊 L.O.V.E. DeepLoop Starting 🌊")
+        logger.info(f"   Sleep interval: {self.sleep_seconds}s")
+        logger.info(f"   Max iterations: {self.max_iterations or 'Infinite'}")
+        logger.info(f"   Tools loaded: {len(self.tools)}")
+        logger.info("="*60)
         
         try:
             while self.running:
                 # Check iteration limit
                 if self.max_iterations and self.iteration >= self.max_iterations:
-                    print(f"\n[DeepLoop] Reached max iterations ({self.max_iterations})")
+                    logger.info(f"Reached max iterations ({self.max_iterations})")
                     break
                 
                 try:
+                    self.iteration += 1
+                    logger.info(f"\n{'='*50}")
+                    logger.info(f"Iteration {self.iteration} - {datetime.now().isoformat()}")
+                    logger.info(f"{'='*50}")
+                    
+                    get_state_manager().update_state(
+                        iteration=self.iteration,
+                        memory_stats=self.memory.get_stats()
+                    )
+                    
                     self.run_iteration()
                 except Exception as e:
-                    print(f"[DeepLoop] Iteration error: {e}")
+                    logger.error(f"Iteration error: {e}")
                     traceback.print_exc()
                     self.memory.episodic.add_event(
                         "error",
@@ -370,17 +385,17 @@ What is the next action to take towards this goal?"""
                 
                 # Backpressure sleep (skip if 0)
                 if self.running and self.sleep_seconds > 0:
-                    print(f"[DeepLoop] Sleeping {self.sleep_seconds}s...")
+                    logger.info(f"Sleeping {self.sleep_seconds}s...")
                     time.sleep(self.sleep_seconds)
         
         except Exception as e:
-            print(f"[DeepLoop] Fatal error: {e}")
-            traceback.print_exc()
+            logger.exception(f"Fatal error: {e}")
         
         finally:
             self.running = False
+            get_state_manager().update_state(is_running=False)
             self.memory.save()
-            print("\n[DeepLoop] Stopped. State saved.")
+            logger.info("Stopped. State saved.")
     
     def stop(self):
         """Stop the loop gracefully."""
