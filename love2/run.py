@@ -110,7 +110,6 @@ Examples:
     
     # Start Web Control Panel
     start_background_server()
-    print("\n[Control Panel] 🌐 Web UI running at http://localhost:8000")
     
     loop = DeepLoop(
         max_iterations=max_iterations,

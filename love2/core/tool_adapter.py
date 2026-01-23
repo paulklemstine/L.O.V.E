@@ -24,19 +24,7 @@ def get_adapted_tools() -> Dict[str, Callable]:
     """
     tools: Dict[str, Callable] = {}
     
-    # Try to import from L.O.V.E. v1
-    try:
-        from core.tool_registry import get_registry
-        registry = get_registry()
-        
-        # Get all registered tools
-        for name, tool_info in registry.tools.items():
-            if callable(tool_info.get("func")):
-                tools[name] = tool_info["func"]
-    except ImportError:
-        print("[ToolAdapter] L.O.V.E. v1 tool_registry not found")
-    except Exception as e:
-        print(f"[ToolAdapter] Failed to load v1 tools: {e}")
+    tools: Dict[str, Callable] = {}
     
     # Add love2 specific tools
     tools.update(_get_love2_tools())
