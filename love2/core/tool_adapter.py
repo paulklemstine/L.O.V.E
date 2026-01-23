@@ -12,8 +12,8 @@ import sys
 from typing import Dict, Callable, Any, List, Optional
 from pathlib import Path
 
-# Add L.O.V.E. v1 to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Add L.O.V.E. v1 to path - REMOVED for v2 migration
+# sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 def get_adapted_tools() -> Dict[str, Callable]:
