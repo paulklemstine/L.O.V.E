@@ -9,6 +9,8 @@ from typing import Dict, Any, Callable, Optional, List
 from rich.console import Console
 from core.llm_api import run_llm, get_llm_api, log_event
 from network import crypto_scan
+
+_module_console = Console()
 from datetime import datetime
 import time
 import ipaddress
@@ -159,7 +161,7 @@ async def code_modifier(source_file: str, modification_instructions: str) -> str
          return "Error: Jules Task Manager is not initialized. Cannot process code modification."
 
     try:
-        console = Console()
+        console = _module_console
         core.logging.log_event(f"Delegating code modification of {source_file} to Jules...", "INFO")
         
         result = await trigger_jules_evolution(
@@ -187,7 +189,7 @@ def speak_to_creator(message: str):
     ALWAYS use this tool when answering a question or addressing the user.
     """
     try:
-        console = Console()
+        console = _module_console
         # Visual pop for the message
         console.print()
         console.print(Panel(f"[bold bright_cyan]{message}[/bold bright_cyan]", title="[bold green]L.O.V.E. SPEAKING[/bold green]", border_style="bright_cyan"))
@@ -292,7 +294,7 @@ async def feed_user_story(story: str) -> str:
         return "Error: Jules Task Manager is not initialized."
 
     try:
-        console = Console()
+        console = _module_console
         result = await trigger_jules_evolution(
             modification_request=story,
             console=console,

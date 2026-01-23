@@ -7,6 +7,8 @@ from typing import List
 from core.tools_legacy import ToolRegistry
 from core.llm_api import run_llm
 
+_module_console = Console()
+
 class ReasoningEngine:
     """
     An advanced reasoning engine that leverages the unified knowledge graph and a
@@ -24,7 +26,7 @@ class ReasoningEngine:
         """
         self.knowledge_base = knowledge_base
         self.tool_registry = tool_registry
-        self.console = console if console else Console()
+        self.console = console if console else _module_console
 
     async def analyze_and_prioritize(self):
         """
