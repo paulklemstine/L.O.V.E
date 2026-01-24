@@ -10,3 +10,6 @@
 ## 2024-05-23 - [Optimizing Synchronous Network Calls]
 **Learning:** Removing redundant "check-then-act" logic for local network services (like IPFS daemons) reduces latency significantly (50% in this case). Relying on exception handling is faster and cleaner.
 **Action:** When interacting with local microservices, assume they are up and handle exceptions, rather than pinging status endpoints before every request.
+## 2024-05-23 - [PromptCompressor Cache Eviction]
+**Learning:** `PromptCompressor` used a Python dict for caching but failed to update entry order on access, resulting in FIFO eviction instead of the intended LRU. This reduced cache hit rates for frequent prompts when the cache was full.
+**Action:** When implementing LRU with Python dicts, explicitly `pop()` and re-insert the key on access to move it to the end (MRU position).

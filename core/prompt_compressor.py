@@ -9,7 +9,6 @@ import os
 import time
 import hashlib
 from typing import Dict, List, Optional, Any
-from functools import lru_cache
 import logging
 from .dynamic_compress_prompt import dynamic_compress_prompt
 
@@ -169,13 +168,17 @@ class PromptCompressor:
         cache_key = self._get_cache_key(prompt, rate, force_tokens)
         if cache_key in self.cache:
             self.metrics["cache_hits"] += 1
-            result = self.cache[cache_key].copy()
-            result["cached"] = True
+            # Move to end to mark as recently used
+            result = self.cache.pop(cache_key)
+            self.cache[cache_key] = result
+
+            result_copy = result.copy()
+            result_copy["cached"] = True
             self.log_event(
                 f"[PromptCompressor] Cache hit for {purpose} (saved {result['time_ms']:.0f}ms)",
                 "DEBUG"
             )
-            return result
+            return result_copy
         
         # Load compressor if needed
         if self.compressor is None:
