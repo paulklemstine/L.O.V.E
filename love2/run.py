@@ -63,9 +63,16 @@ def bootstrap_dependencies():
             print("✅ Dependencies installed successfully!")
             print("----------------------------------------")
         except subprocess.CalledProcessError as e:
-            print(f"❌ Failed to install dependencies: {e}")
-            print("Please run 'pip install -r requirements.txt' manually.")
-            sys.exit(1)
+            print(f"⚠️ Standard install failed. Attempting workaround for externally managed environment...")
+            try:
+                # Retry with --break-system-packages for WSL/Debian environments
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "--break-system-packages"])
+                print("✅ Dependencies installed successfully (with --break-system-packages)!")
+                print("----------------------------------------")
+            except subprocess.CalledProcessError as e2:
+                print(f"❌ Failed to install dependencies: {e2}")
+                print("Please try running: pip install -r requirements.txt --break-system-packages")
+                sys.exit(1)
         except Exception as e:
             print(f"❌ Unexpected error during installation: {e}")
             sys.exit(1)
