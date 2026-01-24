@@ -15,6 +15,7 @@
             --success: #00ff00;
             --error: #ff0000;
             --warning: #ffff00;
+            --dim-text: #888;
         }
 
         body {
@@ -24,8 +25,8 @@
             margin: 0;
             padding: 20px;
             display: grid;
-            grid-template-columns: 300px 1fr;
-            grid-template-rows: auto 1fr;
+            grid-template-columns: 320px 1fr 320px;
+            grid-template-rows: auto 1fr auto;
             gap: 20px;
             height: 100vh;
             box-sizing: border-box;
@@ -50,6 +51,14 @@
             margin-top: 0;
             border-bottom: 1px solid #444;
             padding-bottom: 5px;
+            font-size: 1.2em;
+            color: var(--secondary-color);
+        }
+
+        h3 {
+            font-size: 1em;
+            margin-bottom: 5px;
+            color: var(--accent-color);
         }
 
         .panel {
@@ -63,14 +72,34 @@
             flex-direction: column;
         }
 
-        #status-panel {
-            grid-row: 2;
+        #left-sidebar {
             grid-column: 1;
+            grid-row: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
         }
 
-        #logs-panel {
-            grid-row: 2;
+        #main-content {
             grid-column: 2;
+            grid-row: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #right-sidebar {
+            grid-column: 3;
+            grid-row: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #status-panel,
+        #memory-panel {
+            background: var(--panel-bg);
         }
 
         .stat-item {
@@ -78,20 +107,22 @@
         }
 
         .stat-label {
-            color: #888;
-            font-size: 0.9em;
+            color: var(--dim-text);
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .stat-value {
-            font-size: 1.2em;
+            font-size: 1.1em;
             font-weight: bold;
         }
 
-        .stat-value.running {
+        .running {
             color: var(--success);
         }
 
-        .stat-value.stopped {
+        .stopped {
             color: var(--error);
         }
 
@@ -99,59 +130,163 @@
             background: #222;
             padding: 10px;
             border-left: 3px solid var(--secondary-color);
-            margin-top: 10px;
+            margin-top: 5px;
             font-style: italic;
+            font-size: 0.9em;
+        }
+
+        /* Agent Monitor */
+        .agent-card {
+            background: #252525;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            border: 1px solid #444;
+        }
+
+        .agent-name {
+            font-weight: bold;
+            color: var(--accent-color);
+            margin-bottom: 5px;
+        }
+
+        .agent-status {
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .agent-thought {
+            font-size: 0.85em;
+            color: #aaa;
+            font-style: italic;
+            border-top: 1px solid #444;
+            padding-top: 5px;
+            margin-top: 5px;
+        }
+
+        /* Art Panel */
+        #art-display {
+            width: 100%;
+            aspect-ratio: 1;
+            background: #000;
+            border: 1px solid #444;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #555;
+            overflow: hidden;
+        }
+
+        #art-display img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* Logs */
+        #logs-panel {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
         }
 
         #log-container {
             flex-grow: 1;
             overflow-y: auto;
             font-family: 'Consolas', 'Monaco', monospace;
-            background: #000;
+            background: #0d0d0d;
             padding: 10px;
             border-radius: 4px;
             border: 1px solid #333;
-        }
-
-        .log-entry {
-            margin-bottom: 2px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            line-height: 1.4;
             font-size: 0.9em;
         }
 
-        .log-time {
-            color: #555;
-            margin-right: 10px;
+        .log-entry {
+            margin-bottom: 4px;
+            display: flex;
+            gap: 10px;
+            border-bottom: 1px solid #1a1a1a;
+            padding-bottom: 2px;
+        }
+
+        .log-meta {
+            flex-shrink: 0;
+            width: 140px;
+            font-size: 0.8em;
+            color: #666;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-content {
+            flex-grow: 1;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            word-break: break-word;
+            /* Fixes long string overflow */
         }
 
         .log-level {
-            display: inline-block;
-            width: 60px;
             font-weight: bold;
         }
 
-        .log-level.INFO {
+        .INFO {
             color: #888;
         }
 
-        .log-level.WARNING {
+        .WARNING {
             color: var(--warning);
         }
 
-        .log-level.ERROR {
+        .ERROR {
             color: var(--error);
         }
 
-        .log-source {
+        .source {
             color: var(--accent-color);
-            margin-right: 10px;
+        }
+
+        /* LLM Console */
+        #llm-console {
+            grid-column: 1 / -1;
+            grid-row: 3;
+            background: #151515;
+            padding: 10px;
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #llm-input {
+            flex-grow: 1;
+            background: #222;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        button {
+            background: var(--accent-color);
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            opacity: 0.9;
         }
 
         /* Scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
+            height: 8px;
         }
 
         ::-webkit-scrollbar-track {
@@ -175,62 +310,101 @@
         <div id="connection-status" style="color: var(--error)">Disconnected</div>
     </header>
 
-    <div id="status-panel" class="panel">
-        <h2>Status</h2>
-        <div class="stat-item">
-            <div class="stat-label">Agent State</div>
-            <div id="agent-state" class="stat-value stopped">STOPPED</div>
-        </div>
-        <div class="stat-item">
-            <div class="stat-label">Iteration</div>
-            <div id="iteration-count" class="stat-value">0</div>
-        </div>
-        <div class="stat-item">
-            <div class="stat-label">Last Update</div>
-            <div id="last-update" class="stat-value">-</div>
+    <div id="left-sidebar">
+        <!-- System Status -->
+        <div id="status-panel" class="panel">
+            <h2>System Status</h2>
+            <div class="stat-item">
+                <div class="stat-label">Core State</div>
+                <div id="agent-state" class="stat-value stopped">STOPPED</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Iteration</div>
+                <div id="iteration-count" class="stat-value">0</div>
+            </div>
+            <div class="stat-label">Current Goal</div>
+            <div id="goal-display">Waiting for goal...</div>
         </div>
 
-        <div class="stat-label">Current Goal</div>
-        <div id="goal-display">Waiting for goal...</div>
+        <!-- Active Agents -->
+        <div id="agents-panel" class="panel">
+            <h2>Active Agents</h2>
+            <div id="agent-list">
+                <div style="color: #666; font-style: italic;">No agents active yet...</div>
+            </div>
+        </div>
+    </div>
 
-        <div style="margin-top: 20px;">
-            <h3>Memories</h3>
+    <div id="main-content">
+        <!-- Live Logs -->
+        <div id="logs-panel" class="panel">
+            <h2>Live Logs</h2>
+            <div id="log-container"></div>
+        </div>
+    </div>
+
+    <div id="right-sidebar">
+        <!-- Art/Visuals -->
+        <div id="art-panel" class="panel">
+            <h2>Visual Interface</h2>
+            <div id="art-display">
+                <span>No Signal</span>
+            </div>
+        </div>
+
+        <!-- Memory Stats -->
+        <div id="memory-panel" class="panel">
+            <h2>Memory Stats</h2>
             <div id="memory-stats">Loading...</div>
         </div>
     </div>
 
-    <div id="logs-panel" class="panel">
-        <h2>Live Logs</h2>
-        <div id="log-container"></div>
+    <!-- LLM Bridge -->
+    <div id="llm-console">
+        <div style="font-weight: bold; color: var(--secondary-color);">LLM Bridge:</div>
+        <input type="text" id="llm-input" placeholder="Enter prompt for direct LLM generation..."
+            onkeypress="handleEnter(event)">
+        <button onclick="submitLLM()">Generate</button>
     </div>
 
     <script>
         const API_URL = "/api";
         const UPDATE_INTERVAL = 1000;
+        let lastImageHash = "";
 
         async function fetchStatus() {
             try {
                 const response = await fetch(`${API_URL}/status`);
                 const data = await response.json();
 
+                // Connection status
                 document.getElementById('connection-status').textContent = 'Connected';
                 document.getElementById('connection-status').style.color = '#00ff00';
 
+                // Core Stats
                 document.getElementById('agent-state').textContent = data.is_running ? "RUNNING" : "STOPPED";
                 document.getElementById('agent-state').className = `stat-value ${data.is_running ? 'running' : 'stopped'}`;
-
                 document.getElementById('iteration-count').textContent = data.iteration;
-                document.getElementById('last-update').textContent = new Date(data.last_update).toLocaleTimeString();
 
                 const goal = data.current_goal || "No active goal";
                 document.getElementById('goal-display').textContent = goal;
 
-                // Memory stats
+                // Agent List
+                updateAgentList(data.agent_states);
+
+                // Art/Image
+                if (data.last_image && data.last_image !== lastImageHash) {
+                    const artDisplay = document.getElementById('art-display');
+                    artDisplay.innerHTML = `<img src="data:image/png;base64,${data.last_image}" alt="Generated Art" />`;
+                    lastImageHash = data.last_image;
+                }
+
+                // Memory Stats
                 const memStats = data.memory_stats;
                 let memHtml = '';
                 if (memStats) {
                     for (const [key, val] of Object.entries(memStats)) {
-                        memHtml += `<div>${key}: ${val}</div>`;
+                        memHtml += `<div class="stat-item"><div class="stat-label">${key}</div><div class="stat-value" style="font-size: 1em">${val}</div></div>`;
                     }
                 }
                 document.getElementById('memory-stats').innerHTML = memHtml || "No memory stats";
@@ -242,22 +416,44 @@
             }
         }
 
+        function updateAgentList(agentStates) {
+            const container = document.getElementById('agent-list');
+            if (!agentStates || Object.keys(agentStates).length === 0) {
+                return; // Keep existing or show empty if appropriate
+            }
+
+            let html = '';
+            for (const [name, state] of Object.entries(agentStates)) {
+                html += `
+                    <div class="agent-card">
+                        <div class="agent-name">${name}</div>
+                        <div class="agent-status">${state.status}</div>
+                        ${state.action ? `<div style="color: var(--success); font-size: 0.9em;">▶ ${state.action}</div>` : ''}
+                        ${state.thought ? `<div class="agent-thought">"${state.thought}"</div>` : ''}
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
         async function fetchLogs() {
             try {
                 const response = await fetch(`${API_URL}/logs?limit=100`);
                 const logs = await response.json();
 
                 const container = document.getElementById('log-container');
-                const wasScrolledToBottom = container.scrollHeight - container.scrollTop === container.clientHeight;
+                const wasScrolledToBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
 
                 container.innerHTML = logs.map(log => {
                     const time = new Date(log.timestamp).toLocaleTimeString();
                     return `
                         <div class="log-entry">
-                            <span class="log-time">${time}</span>
-                            <span class="log-level ${log.level}">${log.level}</span>
-                            <span class="log-source">[${log.source}]</span>
-                            ${escapeHtml(log.message)}
+                            <div class="log-meta">
+                                <div>${time}</div>
+                                <div class="log-level ${log.level}">${log.level}</div>
+                                <div class="source">${log.source}</div>
+                            </div>
+                            <div class="log-content">${escapeHtml(log.message)}</div>
                         </div>
                     `;
                 }).join('');
@@ -271,6 +467,7 @@
         }
 
         function escapeHtml(text) {
+            if (!text) return "";
             return text
                 .replace(/&/g, "&amp;")
                 .replace(/</g, "&lt;")
@@ -278,6 +475,51 @@
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
         }
+
+        // LLM Bridge
+        async function submitLLM() {
+            const input = document.getElementById('llm-input');
+            const prompt = input.value.trim();
+            if (!prompt) return;
+
+            console.log("Generating response for:", prompt);
+            input.value = "Generating...";
+            input.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    alert("Error: " + data.error);
+                } else {
+                    console.log("LLM Response:", data.response);
+                    // Also show in logs for visibility
+                    // You could add a modal here if you wanted
+                    alert(data.response);
+                }
+            } catch (e) {
+                alert("Request failed: " + e);
+            } finally {
+                input.value = "";
+                input.disabled = false;
+                input.focus();
+            }
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') submitLLM();
+        }
+
+        // Expose for debugging
+        window.askLLM = async (prompt) => {
+            document.getElementById('llm-input').value = prompt;
+            await submitLLM();
+        };
 
         // Initial load
         fetchStatus();

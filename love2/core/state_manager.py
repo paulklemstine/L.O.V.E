@@ -24,6 +24,8 @@ class StateManager:
         self.iteration: int = 0
         self.memory_stats: Dict[str, Any] = {}
         self.is_running: bool = False
+        self.agent_states: Dict[str, Dict[str, str]] = {}  # {agent_name: {status, action, thought}}
+        self.last_image: Optional[str] = None  # Base64 string
         self.last_update = datetime.now()
         self._initialized = True
 
@@ -36,6 +38,24 @@ class StateManager:
             "source": source
         }
         self.logs.append(entry)
+        self.last_update = datetime.now()
+
+    def update_agent_status(self, agent_name: str, status: str, action: str = None, thought: str = None):
+        """Update the status of a specific agent."""
+        if agent_name not in self.agent_states:
+            self.agent_states[agent_name] = {}
+        
+        self.agent_states[agent_name]["status"] = status
+        if action:
+            self.agent_states[agent_name]["action"] = action
+        if thought:
+            self.agent_states[agent_name]["thought"] = thought
+            
+        self.last_update = datetime.now()
+
+    def update_image(self, image_b64: str):
+        """Update the latest generated image."""
+        self.last_image = image_b64
         self.last_update = datetime.now()
 
     def update_state(self, **kwargs):
@@ -52,6 +72,8 @@ class StateManager:
             "current_goal": self.current_goal,
             "is_running": self.is_running,
             "memory_stats": self.memory_stats,
+            "agent_states": self.agent_states,
+            "last_image": self.last_image,
             "last_update": self.last_update.isoformat(),
             "log_count": len(self.logs)
         }

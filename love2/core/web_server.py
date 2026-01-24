@@ -6,9 +6,15 @@ import uvicorn
 import asyncio
 import threading
 from pathlib import Path
+from pydantic import BaseModel
 from .state_manager import get_state_manager
+from .llm_client import get_llm_client
 
 app = FastAPI(title="L.O.V.E. v2 Control Panel")
+
+class GenerateRequest(BaseModel):
+    prompt: str
+    system_prompt: str = None
 
 # CORS
 app.add_middleware(
@@ -37,6 +43,22 @@ async def get_status():
 async def get_logs(limit: int = 50):
     """Get recent logs."""
     return get_state_manager().get_recent_logs(limit)
+
+@app.post("/api/generate")
+async def generate_text(request: GenerateRequest):
+    """Generate text using the agent's LLM."""
+    try:
+        if not request.system_prompt:
+            request.system_prompt = "You are a helpful AI assistant."
+            
+        print(f"[Control Panel] Generating text for prompt: {request.prompt[:50]}...")
+        response = get_llm_client().generate(
+            prompt=request.prompt,
+            system_prompt=request.system_prompt
+        )
+        return {"response": response}
+    except Exception as e:
+        return {"error": str(e)}
 
 def find_available_port(start_port=8000, max_tries=10):
     """Find an available port starting from start_port."""

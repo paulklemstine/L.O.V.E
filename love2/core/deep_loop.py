@@ -304,11 +304,19 @@ What is the next action to take towards this goal?"""
         self.memory.record_goal_start(goal.text)
         logger.info(f"Goal: {goal}")
         
-        # Reason about goal
         logger.info("Reasoning...")
+        get_state_manager().update_agent_status("DeepLoop", "Reasoning")
         decision = self._reason(goal)
+        
         logger.info(f"Thought: {decision.get('thought', 'N/A')}")
         logger.info(f"Action: {decision.get('action', 'N/A')}")
+
+        get_state_manager().update_agent_status(
+            "DeepLoop", 
+            "Decided", 
+            action=decision.get('action'),
+            thought=decision.get('thought')
+        )
         
         action = decision.get("action", "skip")
         
@@ -324,6 +332,7 @@ What is the next action to take towards this goal?"""
         # Execute action
         action_input = decision.get("action_input", {})
         logger.info(f"Executing {action}...")
+        get_state_manager().update_agent_status("DeepLoop", "Executing", action=action)
         
         result = self._execute_action(action, action_input)
         

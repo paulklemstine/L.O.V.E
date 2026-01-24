@@ -15,6 +15,7 @@ from typing import Tuple
 
 # _overlay_text removed in favor of core.text_overlay_utils.overlay_text_on_image
 from .text_overlay_utils import overlay_text_on_image
+from .state_manager import get_state_manager
 
 # --- Provider Configurations ---
 GEMINI_IMAGE_MODELS = ["imagen-3.0"]  # Imagen 3
@@ -603,6 +604,16 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
                 # -------------------------------------
                 
                 logging.info(f"Image generation successful with provider: {provider_name}")
+                
+                # Update state manager with the new image
+                try:
+                    buffered = io.BytesIO()
+                    image.save(buffered, format="PNG")
+                    img_str = base64.b64encode(buffered.getvalue()).decode()
+                    get_state_manager().update_image(img_str)
+                except Exception as e:
+                    logging.error(f"Failed to update state with image: {e}")
+
                 return image, provider_name
             
         except PollinationsCreditExhaustedException as e:

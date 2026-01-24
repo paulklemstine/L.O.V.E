@@ -27,7 +27,7 @@ for key in list(sys.modules.keys()):
 # Add love2 directory FIRST so its 'core' takes precedence
 sys.path.insert(0, str(LOVE2_DIR))
 # Add L.O.V.E. root AFTER for v1 fallback imports (used by tool_adapter)
-sys.path.insert(1, str(LOVE_ROOT))
+# sys.path.insert(1, str(LOVE_ROOT))  # DISABLED for love2 standalone mode
 
 # Change working directory to love2
 os.chdir(LOVE2_DIR)
