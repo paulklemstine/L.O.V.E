@@ -37,8 +37,45 @@ from dotenv import load_dotenv
 load_dotenv(LOVE2_DIR / ".env")
 
 
+
+def bootstrap_dependencies():
+    """Check and install missing dependencies."""
+    required = {
+        "atproto": "atproto",
+        "emoji": "emoji",
+        "dotenv": "python-dotenv"
+    }
+    
+    missing = []
+    for module, package in required.items():
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(package)
+    
+    if missing:
+        print(f"📦 Missing dependencies detected: {', '.join(missing)}")
+        print("🚀 Auto-installing dependencies...")
+        
+        import subprocess
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+            print("✅ Dependencies installed successfully!")
+            print("----------------------------------------")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to install dependencies: {e}")
+            print("Please run 'pip install -r requirements.txt' manually.")
+            sys.exit(1)
+        except Exception as e:
+            print(f"❌ Unexpected error during installation: {e}")
+            sys.exit(1)
+
+
 def main():
     """Main entry point."""
+    # Auto-install dependencies before doing anything else
+    bootstrap_dependencies()
+
     import argparse
     
     parser = argparse.ArgumentParser(

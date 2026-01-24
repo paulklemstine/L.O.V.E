@@ -24,7 +24,8 @@ def get_adapted_tools() -> Dict[str, Callable]:
     """
     tools: Dict[str, Callable] = {}
     
-    tools: Dict[str, Callable] = {}
+    # Remove duplicate declaration
+    # tools: Dict[str, Callable] = {}
     
     # Add love2 specific tools
     tools.update(_get_love2_tools())
@@ -35,6 +36,25 @@ def get_adapted_tools() -> Dict[str, Callable]:
 def _get_love2_tools() -> Dict[str, Callable]:
     """Get love2 specific tools."""
     tools = {}
+    
+    # Check for critical dependencies first
+    missing_deps = []
+    try:
+        import atproto
+    except ImportError:
+        missing_deps.append("atproto")
+    try:
+        import emoji
+    except ImportError:
+        missing_deps.append("emoji")
+    try:
+        import dotenv
+    except ImportError:
+        missing_deps.append("python-dotenv")
+        
+    if missing_deps:
+        print(f"[ToolAdapter] CRITICAL: Missing dependencies for bluesky_agent: {', '.join(missing_deps)}")
+        print(f"[ToolAdapter] Please run: pip install {' '.join(missing_deps)}")
     
     # Bluesky tools
     try:
@@ -51,9 +71,13 @@ def _get_love2_tools() -> Dict[str, Callable]:
         tools["bluesky_search"] = search_bluesky
         tools["generate_content"] = generate_post_content  # LLM-powered content generation
     except ImportError as e:
-        print(f"[ToolAdapter] bluesky_agent not found: {e}")
+        import traceback
+        print(f"[ToolAdapter] bluesky_agent import failed: {e}")
+        traceback.print_exc()
     except Exception as e:
+        import traceback
         print(f"[ToolAdapter] Failed to load bluesky tools: {e}")
+        traceback.print_exc()
     
     # Basic utility tools
     tools["log_message"] = _log_message
