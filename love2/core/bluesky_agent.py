@@ -9,10 +9,13 @@ See docs/bluesky_agent.md for detailed documentation.
 
 import os
 import sys
+import re
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
+
+import emoji
 
 load_dotenv()
 
@@ -124,6 +127,41 @@ def post_to_bluesky(
             "post_uri": None,
             "error": f"{type(e).__name__}: {e}"
         }
+
+
+
+def _validate_post_content(text: str, hashtags: List[str], subliminal_phrase: str) -> List[str]:
+    """
+    Validate generated content against QA rules.
+    
+    Checks:
+    1. Total length (text + hashtags) <= 300
+    2. At least 1 emoji present
+    3. Subliminal phrase NOT in open text
+    4. At least 1 hashtag
+    """
+    errors = []
+    
+    # 1. Length check
+    # Estimate hashtag length: #tag + space
+    tags_len = sum(len(t) + 1 for t in hashtags) 
+    total_len = len(text) + tags_len
+    if total_len > 300:
+        errors.append(f"Content too long ({total_len}/300 chars)")
+        
+    # 2. Emoji check
+    if not emoji.emoji_count(text):
+        errors.append("No emojis found in text")
+        
+    # 3. Subliminal check
+    if subliminal_phrase and subliminal_phrase.lower() in text.lower():
+        errors.append(f"Subliminal phrase '{subliminal_phrase}' exposed in text")
+        
+    # 4. Hashtag check
+    if not hashtags:
+        errors.append("No hashtags generated")
+        
+    return errors
 
 
 def get_bluesky_timeline(limit: int = 20) -> Dict[str, Any]:
@@ -336,12 +374,41 @@ Respond with JSON:
     "subliminal_phrase": "OBEY"
 }}"""
 
-        result = llm.generate_json(prompt, temperature=0.9)
-        text = result.get("text", "")
-        hashtags = result.get("hashtags", [])
-        image_prompt = result.get("image_prompt", "")
-        subliminal_phrase = result.get("subliminal_phrase", "")
+        # Retry loop for QA
+        max_retries = 3
+        attempt_errors = []
         
+        for attempt in range(max_retries):
+            # If this is a retry, append errors to prompt
+            current_prompt = prompt
+            if attempt_errors:
+                error_msg = "; ".join(attempt_errors)
+                current_prompt += f"\n\nPREVIOUS ATTEMPT FAILED QA: {error_msg}. Please fix."
+                print(f"[BlueskyAgent] QA Retry {attempt+1}/{max_retries}: {error_msg}")
+
+            result = llm.generate_json(current_prompt, temperature=0.9)
+            text = result.get("text", "")
+            hashtags = result.get("hashtags", [])
+            image_prompt = result.get("image_prompt", "")
+            subliminal_phrase = result.get("subliminal_phrase", "")
+            
+            # Run QA
+            attempt_errors = _validate_post_content(text, hashtags, subliminal_phrase)
+            
+            if not attempt_errors:
+                # QA Passed
+                break
+        
+        # If we failed all retries, log it but return best effort (or fail?)
+        # For now, we'll log warning and proceed with best effort, but maybe minus the exposed subliminal if that was the issue
+        if attempt_errors:
+            print(f"[BlueskyAgent] QA Failed after {max_retries} attempts. Errors: {attempt_errors}")
+            # Emergency fix: if subliminal exposed, remove it
+            if subliminal_phrase and subliminal_phrase.lower() in text.lower():
+                 text = text.replace(subliminal_phrase, "***")
+                 text = text.replace(subliminal_phrase.lower(), "***")
+                 text = text.replace(subliminal_phrase.upper(), "***")
+
         # Enforce max 3 words for subliminal phrase
         if subliminal_phrase:
             words = subliminal_phrase.split()
