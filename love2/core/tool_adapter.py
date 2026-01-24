@@ -50,8 +50,8 @@ def _get_love2_tools() -> Dict[str, Callable]:
         tools["bluesky_reply"] = reply_to_post
         tools["bluesky_search"] = search_bluesky
         tools["generate_content"] = generate_post_content  # LLM-powered content generation
-    except ImportError:
-        print("[ToolAdapter] bluesky_agent not found")
+    except ImportError as e:
+        print(f"[ToolAdapter] bluesky_agent not found: {e}")
     except Exception as e:
         print(f"[ToolAdapter] Failed to load bluesky tools: {e}")
     
