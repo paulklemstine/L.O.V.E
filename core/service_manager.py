@@ -49,8 +49,9 @@ class ServiceManager:
         if model_name:
             cmd.extend(["--model", model_name])
         
-        # Add common optimization
+        # Add common optimization and safety limits
         cmd.extend(["--gpu-memory-utilization", str(gpu_memory_utilization)])
+        cmd.extend(["--max-model-len", "8192"])  # Cap context to prevent OOM on consumer cards
 
         # Start process
         try:
