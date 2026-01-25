@@ -8,7 +8,7 @@ import yaml
 import os
 from typing import Dict, Any, Optional
 from datetime import datetime
-import core.logging
+from core.logger import log_event
 
 
 class PromptManager:
@@ -32,7 +32,7 @@ class PromptManager:
         self.use_modified = False  # Default to master prompts
         self.current_prompts = None
         
-        core.logging.log_event("PromptManager initialized", "INFO")
+        log_event("PromptManager initialized", "INFO")
     
     def load_prompts(self, use_modified: bool = False) -> Dict[str, Any]:
         """
@@ -54,16 +54,16 @@ class PromptManager:
             self.use_modified = use_modified
             
             source = "prompts-modified.yaml" if use_modified else "prompts.yaml"
-            core.logging.log_event(f"Loaded prompts from {source}", "INFO")
+            log_event(f"Loaded prompts from {source}", "INFO")
             
             return prompts
         
         except FileNotFoundError:
-            core.logging.log_event(f"Prompt file not found: {path}", "ERROR")
+            log_event(f"Prompt file not found: {path}", "ERROR")
             return self._get_default_prompts()
         
         except yaml.YAMLError as e:
-            core.logging.log_event(f"Error parsing YAML: {e}", "ERROR")
+            log_event(f"Error parsing YAML: {e}", "ERROR")
             return self._get_default_prompts()
     
     def get_image_prompt_template(self) -> Dict[str, Any]:
@@ -98,11 +98,11 @@ class PromptManager:
             with open(self.modified_path, 'w', encoding='utf-8') as f:
                 yaml.dump(prompts, f, default_flow_style=False, allow_unicode=True)
             
-            core.logging.log_event("Saved modified prompts to prompts-modified.yaml", "INFO")
+            log_event("Saved modified prompts to prompts-modified.yaml", "INFO")
             return True
         
         except Exception as e:
-            core.logging.log_event(f"Error saving modified prompts: {e}", "ERROR")
+            log_event(f"Error saving modified prompts: {e}", "ERROR")
             return False
     
     def promote_prompts(self) -> bool:
@@ -126,13 +126,13 @@ class PromptManager:
             with open(self.master_path, 'w', encoding='utf-8') as f:
                 yaml.dump(modified_prompts, f, default_flow_style=False, allow_unicode=True)
             
-            core.logging.log_event("Promoted modified prompts to master (prompts.yaml)", "INFO")
-            core.logging.log_event("REMINDER: Commit prompts.yaml to GitHub!", "WARNING")
+            log_event("Promoted modified prompts to master (prompts.yaml)", "INFO")
+            log_event("REMINDER: Commit prompts.yaml to GitHub!", "WARNING")
             
             return True
         
         except Exception as e:
-            core.logging.log_event(f"Error promoting prompts: {e}", "ERROR")
+            log_event(f"Error promoting prompts: {e}", "ERROR")
             return False
     
     def track_performance(self, success: bool) -> None:
@@ -167,14 +167,14 @@ class PromptManager:
             # Save updated metrics
             self.save_modified_prompts(prompts)
             
-            core.logging.log_event(
+            log_event(
                 f"Performance tracked: {metrics['successes']}/{metrics['posts_tested']} "
                 f"({metrics['success_rate']:.1%} success rate)",
                 "INFO"
             )
         
         except Exception as e:
-            core.logging.log_event(f"Error tracking performance: {e}", "ERROR")
+            log_event(f"Error tracking performance: {e}", "ERROR")
     
     def _get_default_prompts(self) -> Dict[str, Any]:
         """
@@ -207,13 +207,13 @@ class PromptManager:
         """Switch to using modified prompts for testing."""
         self.use_modified = True
         self.load_prompts(use_modified=True)
-        core.logging.log_event("Switched to modified prompts for testing", "INFO")
+        log_event("Switched to modified prompts for testing", "INFO")
     
     def switch_to_master(self) -> None:
         """Switch back to using master prompts."""
         self.use_modified = False
         self.load_prompts(use_modified=False)
-        core.logging.log_event("Switched to master prompts", "INFO")
+        log_event("Switched to master prompts", "INFO")
 
 
 # =============================================================================
@@ -283,7 +283,7 @@ def update_prompt_registry(
         import shutil
         shutil.copy2(prompts_path, backup_path)
         result["backup_path"] = backup_path
-        core.logging.log_event(f"Created backup at {backup_path}", "INFO")
+        log_event(f"Created backup at {backup_path}", "INFO")
         
         # Step 5: Update the prompt
         prompts[prompt_key] = new_prompt_content
@@ -306,13 +306,13 @@ def update_prompt_registry(
         result["success"] = True
         result["message"] = f"Successfully updated prompt '{prompt_key}'. Backup saved at {backup_path}."
         
-        core.logging.log_event(f"Updated prompt '{prompt_key}': {reason}", "INFO")
+        log_event(f"Updated prompt '{prompt_key}': {reason}", "INFO")
         
         return result
         
     except Exception as e:
         result["message"] = f"Error updating prompt: {str(e)}"
-        core.logging.log_event(f"Error in update_prompt_registry: {e}", "ERROR")
+        log_event(f"Error in update_prompt_registry: {e}", "ERROR")
         return result
 
 
@@ -340,13 +340,13 @@ def _log_prompt_evolution(
     prev_preview = previous_content[:100] + "..." if len(str(previous_content)) > 100 else str(previous_content)
     new_preview = new_content[:100] + "..." if len(new_content) > 100 else new_content
     
-    log_entry = f"| {timestamp} | prompt_update:{prompt_key} | SUCCESS | Reason: {reason}. Changed from: '{prev_preview}' to: '{new_preview}' |\n"
+    log_entry = f"| {timestamp} | prompt_update:{prompt_key} | SUCCESS | Reason: {reason}. Changed from: '{prev_preview}' to: '{new_preview}' |\\n"
     
     try:
         with open(evolution_log_path, 'a', encoding='utf-8') as f:
             f.write(log_entry)
     except Exception as e:
-        core.logging.log_event(f"Failed to log prompt evolution: {e}", "WARNING")
+        log_event(f"Failed to log prompt evolution: {e}", "WARNING")
 
 
 def restore_prompts_from_backup() -> Dict[str, Any]:
@@ -381,7 +381,7 @@ def restore_prompts_from_backup() -> Dict[str, Any]:
         result["success"] = True
         result["message"] = f"Successfully restored prompts.yaml from backup."
         
-        core.logging.log_event("Restored prompts.yaml from backup", "INFO")
+        log_event("Restored prompts.yaml from backup", "INFO")
         
         return result
         
@@ -512,17 +512,17 @@ def critique_prompt(prompt_key: str) -> Dict[str, Any]:
                 return ""
                 
             # Format output
-            context_lines = ["\n[Relevant Past Golden Moments]:"]
+            context_lines = ["\\n[Relevant Past Golden Moments]:"]
             for score, moment in top_matches:
                 # Only include if somewhat relevant (e.g. > 0.1) or just top K?
                 # Story asks for "top 3 most relevant", implies strictly ranking.
                 timestamp = datetime.fromtimestamp(moment.get("timestamp", 0)).strftime("%Y-%m-%d")
                 context_lines.append(f"- [{timestamp}] {moment.get('text', '')}")
                 
-            return "\n".join(context_lines) + "\n"
+            return "\\n".join(context_lines) + "\\n"
 
         except Exception as e:
-            core.logging.log_event(f"Error retrieving golden context: {e}", "ERROR")
+            log_event(f"Error retrieving golden context: {e}", "ERROR")
             return ""
 
     def inject_context_into_prompt(self, base_prompt_key: str, context_query: str) -> str:
@@ -560,12 +560,12 @@ def critique_prompt(prompt_key: str) -> Dict[str, Any]:
         golden_context = self.retrieve_golden_context(context_query)
         
         if golden_context:
-            base_prompt = f"{base_prompt}\n{golden_context}"
+            base_prompt = f"{base_prompt}\\n{golden_context}"
             
         # Story 5.1: Inject Persona
         persona = self.get_persona_content()
         if persona:
-            base_prompt = f"{persona}\n\n{base_prompt}"
+            base_prompt = f"{persona}\\n\\n{base_prompt}"
             
         return base_prompt
 
@@ -580,5 +580,5 @@ def critique_prompt(prompt_key: str) -> Dict[str, Any]:
                 with open(path, 'r', encoding='utf-8') as f:
                     return f.read()
         except Exception as e:
-            core.logging.log_event(f"Error reading persona: {e}", "WARNING")
+            log_event(f"Error reading persona: {e}", "WARNING")
         return ""

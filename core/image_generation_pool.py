@@ -8,9 +8,14 @@ from collections import defaultdict
 from PIL import Image
 import io
 from PIL import Image, ImageDraw, ImageFont, ImageStat
-import core.logging
+import logging
 import urllib.parse
 import random
+from typing import Tuple
+
+# _overlay_text removed in favor of core.text_overlay_utils.overlay_text_on_image
+from .text_overlay_utils import overlay_text_on_image
+from .state_manager import get_state_manager
 
 # --- Provider Configurations ---
 GEMINI_IMAGE_MODELS = ["imagen-3.0"]  # Imagen 3
@@ -99,9 +104,6 @@ def rank_image_models():
     return [model["model_id"] for model in sorted_models]
 
 
-# _overlay_text removed in favor of core.text_overlay_utils.overlay_text_on_image
-from core.text_overlay_utils import overlay_text_on_image
-
 def _is_image_black(image: Image.Image, threshold: int = 5) -> bool:
     """
     Checks if an image is substantially black or empty.
@@ -117,7 +119,7 @@ def _is_image_black(image: Image.Image, threshold: int = 5) -> bool:
         # Check 1: Pure black extrema
         extrema = gray.getextrema()
         if extrema == (0, 0):
-             core.logging.log_event("Image validation failed: Image is pure black (0,0).", "WARNING")
+             logging.warning("Image validation failed: Image is pure black (0,0).")
              return True
         
         # Check 2: Average brightness
@@ -125,17 +127,16 @@ def _is_image_black(image: Image.Image, threshold: int = 5) -> bool:
         avg_brightness = stat.mean[0]
         
         if avg_brightness < threshold:
-             core.logging.log_event(f"Image validation failed: Image is too dark. Avg brightness: {avg_brightness:.2f} < {threshold}", "WARNING")
+             logging.warning(f"Image validation failed: Image is too dark. Avg brightness: {avg_brightness:.2f} < {threshold}")
              return True
              
         return False
     except Exception as e:
-        core.logging.log_event(f"Image validation error: {e}", "WARNING")
+        logging.warning(f"Image validation error: {e}")
         return False
 
 
-
-async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
+async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: int = 1024, **kwargs) -> Image.Image:
     """Generate image using Gemini Imagen3 via Gemini API"""
     model_id = "imagen-3.0-generate-001"
     start_time = time.time()
@@ -145,7 +146,7 @@ async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: i
         if not api_key:
             raise ValueError("GEMINI_API_KEY not set")
         
-        core.logging.log_event(f"Attempting image generation with Gemini Imagen3: {prompt[:100]}...", "INFO")
+        logging.info(f"Attempting image generation with Gemini Imagen3: {prompt[:100]}...")
         
         # Using the predict endpoint for Imagen 3 on Generative Language API
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:predict"
@@ -193,7 +194,7 @@ async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: i
                         image_bytes = base64.b64decode(prediction["bytesBase64Encoded"])
                     else:
                         # Fallback for potential variation
-                        core.logging.log_event(f"Unexpected prediction format: {prediction.keys()}", "WARNING")
+                        logging.warning(f"Unexpected prediction format: {prediction.keys()}")
                         if "image" in prediction: # older format?
                              image_bytes = base64.b64decode(prediction["image"])
                         else:
@@ -208,7 +209,7 @@ async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: i
                     IMAGE_MODEL_STATS[model_id]["total_time_spent"] += elapsed
                     IMAGE_MODEL_FAILURE_COUNT[model_id] = 0
                     
-                    core.logging.log_event(f"Gemini Imagen3 generation successful in {elapsed:.2f}s", "INFO")
+                    logging.info(f"Gemini Imagen3 generation successful in {elapsed:.2f}s")
                     return image
                 else:
                     raise Exception(f"No predictions in response: {data.keys()}")
@@ -225,11 +226,11 @@ async def _generate_with_gemini_imagen(prompt: str, width: int = 1024, height: i
         cooldown = 60 * (2 ** (failure_count - 1))
         IMAGE_MODEL_AVAILABILITY[model_id] = time.time() + cooldown
         
-        core.logging.log_event(f"Gemini Imagen3 failed: {e}. Cooldown: {cooldown}s", "WARNING")
+        logging.warning(f"Gemini Imagen3 failed: {e}. Cooldown: {cooldown}s")
         raise
 
 
-async def _generate_with_stability(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
+async def _generate_with_stability(prompt: str, width: int = 1024, height: int = 1024, **kwargs) -> Image.Image:
     """Generate image using Stability AI API"""
     model_id = "stable-diffusion-xl-1024-v1-0"
     start_time = time.time()
@@ -239,7 +240,7 @@ async def _generate_with_stability(prompt: str, width: int = 1024, height: int =
         if not api_key:
             raise ValueError("STABILITY_API_KEY not set")
         
-        core.logging.log_event(f"Attempting image generation with Stability AI: {prompt[:100]}...", "INFO")
+        logging.info(f"Attempting image generation with Stability AI: {prompt[:100]}...")
         
         url = f"https://api.stability.ai/v1/generation/{model_id}/text-to-image"
         
@@ -278,7 +279,7 @@ async def _generate_with_stability(prompt: str, width: int = 1024, height: int =
                     IMAGE_MODEL_STATS[model_id]["total_time_spent"] += elapsed
                     IMAGE_MODEL_FAILURE_COUNT[model_id] = 0
                     
-                    core.logging.log_event(f"Stability AI generation successful in {elapsed:.2f}s", "INFO")
+                    logging.info(f"Stability AI generation successful in {elapsed:.2f}s")
                     return image
                 else:
                     raise Exception("No artifacts in response")
@@ -294,19 +295,44 @@ async def _generate_with_stability(prompt: str, width: int = 1024, height: int =
         cooldown = 60 * (2 ** (failure_count - 1))
         IMAGE_MODEL_AVAILABILITY[model_id] = time.time() + cooldown
         
-        core.logging.log_event(f"Stability AI failed: {e}. Cooldown: {cooldown}s", "WARNING")
+        logging.warning(f"Stability AI failed: {e}. Cooldown: {cooldown}s")
         raise
 
 
-async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 1024) -> Image.Image:
-    """Generate image using AI Horde (existing logic from image_api.py)"""
-    from core.image_api import get_top_image_models
-    
+def get_top_image_models(count=1):
+    """Fetches the list of active image models from the AI Horde and returns the top `count` models by performance."""
+    try:
+        response = requests.get("https://stablehorde.net/api/v2/status/models?type=image", timeout=10)
+        response.raise_for_status()
+        models = response.json()
+        sorted_models = sorted([m for m in models if m.get('performance')], key=lambda x: x['performance'], reverse=True)
+        
+        # Prioritize known high-quality models if they are in the top 20
+        preferred_keywords = ["Juggernaut", "AlbedoBase", "RealVis", "SDXL"]
+        
+        candidates = []
+        # Check top 20 performance models for preferred keywords
+        for model in sorted_models[:20]:
+            for keyword in preferred_keywords:
+                if keyword.lower() in model['name'].lower():
+                    candidates.append(model['name'])
+                    if len(candidates) >= count:
+                        return candidates
+                        
+        # Fallback to pure performance sorting
+        return [model['name'] for model in sorted_models[:count]]
+    except Exception as e:
+        logging.warning(f"Failed to fetch Horde models: {e}")
+        return ["stable_diffusion_2.1"]
+
+
+async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 1024, **kwargs) -> Image.Image:
+    """Generate image using AI Horde"""
     model_id = "ai_horde"
     start_time = time.time()
     
     try:
-        core.logging.log_event(f"Attempting image generation with AI Horde: {prompt[:100]}...", "INFO")
+        logging.info(f"Attempting image generation with AI Horde: {prompt[:100]}...")
         
         api_key = os.environ.get("STABLE_HORDE", "0000000000")
         headers = {"apikey": api_key, "Content-Type": "application/json"}
@@ -315,7 +341,7 @@ async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 102
         if not top_models:
             raise Exception("Could not fetch any image models from AI Horde")
         
-        core.logging.log_event(f"AI Horde selected models: {top_models}", "INFO")
+        logging.info(f"AI Horde selected models: {top_models}")
 
         payload = {
             "prompt": prompt,
@@ -343,7 +369,7 @@ async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 102
                 response.raise_for_status()
                 job = await response.json()
                 job_id = job["id"]
-                core.logging.log_event(f"AI Horde job submitted: {job_id}", "INFO")
+                logging.info(f"AI Horde job submitted: {job_id}")
             
             # Poll for result
             check_url = f"https://stablehorde.net/api/v2/generate/status/{job_id}"
@@ -354,7 +380,7 @@ async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 102
                     status = await check_response.json()
                     
                     if attempt % 6 == 0:
-                        core.logging.log_event(f"AI Horde in progress... (attempt {attempt+1}/60)", "INFO")
+                        logging.info(f"AI Horde in progress... (attempt {attempt+1}/60)")
                     
                     if status["done"]:
                         img_url = status["generations"][0]["img"]
@@ -370,7 +396,7 @@ async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 102
                             IMAGE_MODEL_STATS[model_id]["total_time_spent"] += elapsed
                             IMAGE_MODEL_FAILURE_COUNT[model_id] = 0
                             
-                            core.logging.log_event(f"AI Horde generation successful in {elapsed:.2f}s", "INFO")
+                            logging.info(f"AI Horde generation successful in {elapsed:.2f}s")
                             return image
             
             raise Exception("AI Horde job timed out after 10 minutes")
@@ -386,11 +412,11 @@ async def _generate_with_horde(prompt: str, width: int = 1024, height: int = 102
         cooldown = 60 * (2 ** (failure_count - 1))
         IMAGE_MODEL_AVAILABILITY[model_id] = time.time() + cooldown
         
-        core.logging.log_event(f"AI Horde failed: {e}. Cooldown: {cooldown}s", "WARNING")
+        logging.warning(f"AI Horde failed: {e}. Cooldown: {cooldown}s")
         raise
 
 
-async def _generate_with_pollinations(prompt: str, width: int = 1024, height: int = 1024, subliminal_text: str = None) -> Image.Image:
+async def _generate_with_pollinations(prompt: str, width: int = 1024, height: int = 1024, subliminal_text: str = None, **kwargs) -> Image.Image:
     """
     Generate image using Pollinations.ai with authenticated API.
     
@@ -410,7 +436,7 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
         if not api_key:
             raise ValueError("POLLINATIONS_API_KEY not set")
         
-        core.logging.log_event(f"Attempting image generation with Pollinations: {prompt[:100]}...", "INFO")
+        logging.info(f"Attempting image generation with Pollinations: {prompt[:100]}...")
         
         # Embed subliminal text directly into the prompt for in-scene rendering
         enhanced_prompt = prompt
@@ -424,7 +450,7 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
                 f"Place it where it feels right within the composition. Emphasized but not overpowering."
             )
             enhanced_prompt = prompt + subliminal_instruction
-            core.logging.log_event(f"Pollinations prompt enhanced with subliminal text: '{subliminal_text}'", "INFO")
+            logging.info(f"Pollinations prompt enhanced with subliminal text: '{subliminal_text}'")
         
         # URL Encode the enhanced prompt
         encoded_prompt = urllib.parse.quote(enhanced_prompt)
@@ -463,7 +489,7 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
                 IMAGE_MODEL_STATS[model_id]["total_time_spent"] += elapsed
                 IMAGE_MODEL_FAILURE_COUNT[model_id] = 0
                 
-                core.logging.log_event(f"Pollinations generation successful in {elapsed:.2f}s", "INFO")
+                logging.info(f"Pollinations generation successful in {elapsed:.2f}s")
                 return image
                 
     except PollinationsCreditExhaustedException:
@@ -480,13 +506,9 @@ async def _generate_with_pollinations(prompt: str, width: int = 1024, height: in
         cooldown = 60 * (2 ** (failure_count - 1))
         IMAGE_MODEL_AVAILABILITY[model_id] = time.time() + cooldown
         
-        core.logging.log_event(f"Pollinations failed: {e}. Cooldown: {cooldown}s", "WARNING")
+        logging.warning(f"Pollinations failed: {e}. Cooldown: {cooldown}s")
         raise
 
-
-# _generate_with_craiyon DISABLED - Craiyon removed as image provider
-
-from typing import Tuple
 
 async def generate_image_with_pool(prompt: str, width: int = 1024, height: int = 1024, force_provider=None, text_content: str = None, overlay_position: str = None) -> Tuple[Image.Image, str]:
     """
@@ -501,28 +523,25 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
         text_content: Optional text to embed/overlay
     
     Returns:
-        PIL Image object
+        PIL Image object, Provider Name
     """
-    core.logging.log_event(f"Starting image generation with pool: {prompt[:100]}... ({width}x{height}) [Text: {text_content}]", "INFO")
+    logging.info(f"Starting image generation with pool: {prompt[:100]}... ({width}x{height}) [Text: {text_content}]")
     
     # Define provider functions
     providers = {
         "gemini": _generate_with_gemini_imagen,
         "stability": _generate_with_stability,
         "horde": _generate_with_horde,
-        "pollinations": _generate_with_pollinations,  # DISABLED in provider_order
-        # "craiyon": _generate_with_craiyon  # DISABLED
+        "pollinations": _generate_with_pollinations,
     }
     
     if force_provider:
         if force_provider not in providers:
             raise ValueError(f"Unknown provider: {force_provider}")
         provider_order = [force_provider]
-        core.logging.log_event(f"Forcing image generation with provider: {force_provider}", "INFO")
+        logging.info(f"Forcing image generation with provider: {force_provider}")
     else:
         # Try providers in order: Pollinations (with in-scene text) -> Horde (with overlay)
-        # Pollinations embeds subliminal text IN the generation prompt for in-scene rendering
-        # Horde falls back to manual text overlay post-generation
         provider_order = ["pollinations", "horde"]
     
     last_exception = None
@@ -532,7 +551,7 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
         provider_key = f"{provider_name}_provider"
         if time.time() < IMAGE_MODEL_AVAILABILITY.get(provider_key, 0):
             cooldown_remaining = IMAGE_MODEL_AVAILABILITY[provider_key] - time.time()
-            core.logging.log_event(f"Provider {provider_name} is on cooldown for {cooldown_remaining:.0f}s", "INFO")
+            logging.info(f"Provider {provider_name} is on cooldown for {cooldown_remaining:.0f}s")
             continue
             
         # --- Pre-flight Checks ---
@@ -544,7 +563,7 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
             continue
         
         try:
-            core.logging.log_event(f"Trying image generation with provider: {provider_name}", "INFO")
+            logging.info(f"Trying image generation with provider: {provider_name}")
             
             # --- PRE-GENERATION PROVIDER LOGIC ---
             current_prompt = prompt
@@ -565,10 +584,7 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
                 # --- VALIDATION ---
                 # Check for black/blank images
                 if _is_image_black(image):
-                    core.logging.log_event(f"Provider {provider_name} returned a black/blank image. Skipping.", "WARNING")
-                    # Treat as failure -> Cooldown?
-                    # For now just skip to next provider to avoid punishing transient errors too hard, 
-                    # but we should probably record it.
+                    logging.warning(f"Provider {provider_name} returned a black/blank image. Skipping.")
                     last_exception = Exception("Generated image was black/blank")
                     continue
                 # ------------------
@@ -580,30 +596,38 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
                     position_choices = ["top", "center", "bottom"]
                     selected_position = overlay_position or random.choice(position_choices)
                     
-                    core.logging.log_event(f"Applying manual text overlay: '{manual_overlay_text}' at position: {selected_position}", "INFO")
+                    logging.info(f"Applying manual text overlay: '{manual_overlay_text}' at position: {selected_position}")
                     try:
                         image = overlay_text_on_image(image, manual_overlay_text, position=selected_position, style="subliminal")
                     except Exception as e:
-                         core.logging.log_event(f"Failed to overlay text: {e}", "ERROR")
+                         logging.error(f"Failed to overlay text: {e}")
                 # -------------------------------------
                 
-                core.logging.log_event(f"Image generation successful with provider: {provider_name}", "INFO")
-                core.logging.log_event(f"Image generation successful with provider: {provider_name}", "INFO")
+                logging.info(f"Image generation successful with provider: {provider_name}")
+                
+                # Update state manager with the new image
+                try:
+                    buffered = io.BytesIO()
+                    image.save(buffered, format="PNG")
+                    img_str = base64.b64encode(buffered.getvalue()).decode()
+                    get_state_manager().update_image(img_str)
+                except Exception as e:
+                    logging.error(f"Failed to update state with image: {e}")
+
                 return image, provider_name
             
         except PollinationsCreditExhaustedException as e:
             # Credit exhaustion - immediately fall back to next provider, set long cooldown
-            core.logging.log_event(f"Pollinations credits exhausted, falling back to next provider: {e}", "WARNING")
-            # Set a 24-hour cooldown on Pollinations when credits are exhausted
+            logging.warning(f"Pollinations credits exhausted, falling back to next provider: {e}")
             IMAGE_MODEL_AVAILABILITY["pollinations_provider"] = time.time() + (24 * 60 * 60)
             last_exception = e
             continue
         except Exception as e:
             last_exception = e
-            core.logging.log_event(f"Provider {provider_name} failed: {e}", "WARNING")
+            logging.warning(f"Provider {provider_name} failed: {e}")
             continue
     
     # All providers failed
     error_msg = f"All image generation providers failed. Last error: {last_exception}"
-    core.logging.log_event(error_msg, "ERROR")
+    logging.error(error_msg)
     raise Exception(error_msg)

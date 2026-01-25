@@ -11,8 +11,7 @@ import re
 import math
 from typing import List, Tuple, Optional, Dict, Set
 from collections import Counter
-from core.logging import log_event
-
+from core.logger import log_event
 
 class SemanticSimilarityChecker:
     """
@@ -42,7 +41,7 @@ class SemanticSimilarityChecker:
         """Tokenize and normalize text."""
         # Lowercase and extract words
         text = text.lower()
-        words = re.findall(r'\b[a-z]+\b', text)
+        words = re.findall(r'\\b[a-z]+\\b', text)
         # Remove stopwords and short words
         return [w for w in words if w not in self._stopwords and len(w) > 2]
     

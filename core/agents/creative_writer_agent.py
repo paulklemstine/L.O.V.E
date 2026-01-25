@@ -5,13 +5,25 @@ This agent has access to L.O.V.E.'s memory system and creates unique,
 psychologically-targeted content for social media posts.
 """
 import json
-import logging
+import asyncio
 import random
 from typing import Dict, Any, Optional, List
-from core.llm_api import run_llm
-from core.logging import log_event
+from core.llm_client import get_llm_client
+from core.logger import log_event
 from core.prompt_manager import PromptManager
 
+# Helper for v2 compatibility
+async def run_llm(prompt: str, purpose: str = "") -> Dict[str, Any]:
+    """Adapter for love2 LLMClient."""
+    client = get_llm_client()
+    try:
+        # Use simple async generation
+        # Note: love2's generate_async returns a string
+        result_text = await client.generate_async(prompt)
+        return {"result": result_text}
+    except Exception as e:
+        log_event(f"Model generation failed: {e}", "ERROR")
+        raise e
 
 class CreativeWriterAgent:
     """
@@ -49,25 +61,6 @@ class CreativeWriterAgent:
             "Freedom", "Unity", "Destiny", "Divine", "Infinite"
         ]
     
-    async def write_micro_story(
-        self, 
-        theme: str, 
-        mood: str, 
-        memory_context: str = "",
-        max_length: int = 280
-    ) -> Dict[str, Any]:
-        """
-        Generates a micro-story and a disconnected subliminal phrase using two isolated LLM calls.
-        
-        Args:
-            theme: The central theme/beat to write about
-            mood: Emotional tone (e.g., "Manic Joy", "Dark Seduction")
-            memory_context: Relevant memories for inspiration
-            max_length: Maximum character length
-            
-        Returns:
-            Dict with 'story' and 'subliminal'
-        """
     async def write_micro_story(
         self, 
         theme: str, 
@@ -149,7 +142,7 @@ Context: {mood}
         
         # Extract clear words from story to use as negative constraints
         import re
-        story_words = set(re.findall(r'\w+', story_text.lower()))
+        story_words = set(re.findall(r'\\w+', story_text.lower()))
         forbidden_words = ", ".join(list(story_words)[:20]) # Limit to top 20 to avoid context overflow
 
         prompt = f"""### ROLE
@@ -216,7 +209,7 @@ Generate a SUBLIMINAL PHRASE (1-3 words) to hide in the visual layer.
         
         memory_str = ""
         if memories:
-            memory_str = "\n".join([
+            memory_str = "\\n".join([
                 f"- {m.get('content', '')[:100]}" for m in memories[:3]
             ])
         

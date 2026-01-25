@@ -283,4 +283,3 @@ class MemorySummary(BaseModel):
         default=None,
         description="Overall emotional tone"
     )
-

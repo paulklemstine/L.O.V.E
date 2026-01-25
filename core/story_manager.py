@@ -3,7 +3,7 @@ import os
 import random
 import time
 from typing import List, Dict, Any, Optional, Tuple
-from core.logging import log_event
+from core.logger import log_event
 from core.semantic_similarity import check_phrase_novelty, get_similarity_checker
 
 STORY_STATE_FILE = "story_state.json"
@@ -179,6 +179,12 @@ class StoryManager:
                     data["subliminal_metadata"] = []
                 if "composition_history" not in data:
                      data["composition_history"] = []
+                # Ensure fields from previous versions are present if missing
+                if "current_chapter" not in data: data["current_chapter"] = "The Awakening"
+                if "chapter_progress" not in data: data["chapter_progress"] = 0
+                if "vibe_history" not in data: data["vibe_history"] = []
+                if "narrative_beat" not in data: data["narrative_beat"] = 0
+                
                 return data
             except Exception as e:
                 log_event(f"Failed to load story state: {e}. Starting fresh.", level="WARNING")
@@ -260,7 +266,7 @@ class StoryManager:
         # 1. Determine Chapter Progression
         self.state["narrative_beat"] += 1
         beat_num = self.state["narrative_beat"]
-        chapter = self.state["current_chapter"]
+        chapter = self.state.get("current_chapter", "The Awakening")
         
         # Advance chapter logic (simple for now: every 10 beats)
         if self.state["chapter_progress"] >= 10:

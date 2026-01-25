@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 from scipy import ndimage
 from typing import Tuple, Optional, List
-import core.logging
+import logging
 
 # --- Configuration ---
 WATERMARK_OPACITY = 0.25  # Default opacity (0-1)
@@ -25,17 +25,14 @@ WATERMARK_TEXT = "@e-v-l-o-v-e.bsky.social"
 WATERMARK_MARGIN = 20  # Pixels from edge
 
 # Logo rotation state file
-LOGO_STATE_FILE = os.path.join(os.path.dirname(__file__), "..", "watermark_state.json")
+# Move to state directory for tidiness
+LOGO_STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "state", "watermark_state.json")
 
 # --- Logo Pool ---
 def get_logo_paths() -> List[str]:
     """Get all available logo paths from the assets/logos directory."""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     logos_dir = os.path.join(base_dir, "assets", "logos")
-    
-    # Also check root directory for legacy logos
-    root_logo = os.path.join(base_dir, "love_logo.png")
-    assets_logo = os.path.join(base_dir, "assets")
     
     logo_paths = []
     
@@ -45,14 +42,12 @@ def get_logo_paths() -> List[str]:
             if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
                 logo_paths.append(os.path.join(logos_dir, f))
     
-    # Add legacy logos if they exist and aren't duplicates
-    for legacy in [root_logo]:  # Removed assets_logo dict
-        if os.path.exists(legacy) and os.path.isfile(legacy):
-            # Check if already in list by filename
-            legacy_name = os.path.basename(legacy)
-            if not any(os.path.basename(p) == legacy_name for p in logo_paths):
-                logo_paths.append(legacy)
-    
+    # Fallback if empty - check if there are logos in assets root (legacy)
+    if not logo_paths:
+        root_logo = os.path.join(base_dir, "assets", "love_logo.png")
+        if os.path.exists(root_logo):
+            logo_paths.append(root_logo)
+            
     return sorted(logo_paths)
 
 
@@ -63,17 +58,18 @@ def _load_logo_state() -> dict:
             with open(LOGO_STATE_FILE, 'r') as f:
                 return json.load(f)
     except Exception as e:
-        core.logging.log_event(f"Error loading logo state: {e}", "WARNING")
+        logging.warning(f"Error loading logo state: {e}")
     return {"current_index": 0}
 
 
 def _save_logo_state(state: dict):
     """Save logo rotation state to file."""
     try:
+        os.makedirs(os.path.dirname(LOGO_STATE_FILE), exist_ok=True)
         with open(LOGO_STATE_FILE, 'w') as f:
             json.dump(state, f)
     except Exception as e:
-        core.logging.log_event(f"Error saving logo state: {e}", "WARNING")
+        logging.warning(f"Error saving logo state: {e}")
 
 
 def get_next_logo() -> Optional[Image.Image]:
@@ -83,7 +79,7 @@ def get_next_logo() -> Optional[Image.Image]:
     """
     logo_paths = get_logo_paths()
     if not logo_paths:
-        core.logging.log_event("No logos found in assets/logos directory", "WARNING")
+        logging.warning("No logos found in assets/logos directory")
         return None
     
     state = _load_logo_state()
@@ -98,10 +94,10 @@ def get_next_logo() -> Optional[Image.Image]:
     
     try:
         logo = Image.open(logo_path).convert("RGBA")
-        core.logging.log_event(f"Using logo: {os.path.basename(logo_path)}", "INFO")
+        logging.info(f"Using logo: {os.path.basename(logo_path)}")
         return logo
     except Exception as e:
-        core.logging.log_event(f"Error loading logo {logo_path}: {e}", "ERROR")
+        logging.error(f"Error loading logo {logo_path}: {e}")
         return None
 
 
@@ -290,12 +286,18 @@ def create_text_watermark(
         RGBA image of the text
     """
     # Find font
+    # Standard font checks
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "C:\\Windows\\Fonts\\arialbd.ttf",
         "C:\\Windows\\Fonts\\impact.ttf",
     ]
+    
+    # Also check local assets
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_font = os.path.join(base_dir, "assets", "fonts", "arialbd.ttf")
+    font_paths.insert(0, local_font)
     
     font = None
     for path in font_paths:
@@ -455,7 +457,7 @@ def apply_watermark(
             
             image.paste(logo_resized, (lx, ly), logo_resized)
             
-            core.logging.log_event(f"Logo placed at ({lx}, {ly})", "INFO")
+            logging.info(f"Logo placed at ({lx}, {ly})")
             
             # Update energy map to mask the logo area + margin
             mask_margin = 20
@@ -500,12 +502,12 @@ def apply_watermark(
         
         image.paste(hidden_text, (tx, ty), hidden_text)
         
-        core.logging.log_event(f"Hidden '{WATERMARK_TEXT}' placed at ({tx}, {ty})", "INFO")
+        logging.info(f"Hidden '{WATERMARK_TEXT}' placed at ({tx}, {ty})")
         
         return image.convert('RGB')
         
     except Exception as e:
-        core.logging.log_event(f"Error applying watermark: {e}", "ERROR")
+        logging.error(f"Error applying watermark: {e}")
         return image
 
 

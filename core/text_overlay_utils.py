@@ -5,7 +5,7 @@ import random
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.schemas import PostConcept
+    from .schemas import PostConcept
 
 
 # US-006: Style to font mapping for concept-driven overlays
@@ -212,8 +212,12 @@ def overlay_text_from_concept(
             break
     
     # Font path mapping
+    # Robust asset path resolution relative to this file
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    assets_fonts = os.path.join(base_dir, "assets", "fonts")
+    
     font_paths = [
-        os.path.join(os.getcwd(), "assets", "fonts", "arialbd.ttf"),
+        os.path.join(assets_fonts, "arialbd.ttf"),
         "assets/fonts/arialbd.ttf",
         # Windows
         "C:\\Windows\\Fonts\\arialbd.ttf",
@@ -321,7 +325,11 @@ def overlay_text_on_image(image: Image.Image, text: str, position: str = "bottom
     # Smart scaling: width / 15 as per Story 2.3
     font_size = int(width / 15)
     
-    local_font_path = os.path.join(os.getcwd(), "assets", "fonts", "arialbd.ttf")
+    # Robust asset path resolution relative to this file
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    assets_fonts = os.path.join(base_dir, "assets", "fonts")
+    local_font_path = os.path.join(assets_fonts, "arialbd.ttf")
+    
     # Extended list of likely system fonts
     font_paths = [
         local_font_path,

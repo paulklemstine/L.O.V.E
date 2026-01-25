@@ -1,0 +1,49 @@
+node_modules/
+__pycache__/
+*.pyc
+checkpoints/
+
+# Log files
+*.log
+
+# IDE specific
+.idea/
+
+# State and logs
+love_state.json
+*.log
+.deps_installed
+.hw_config_complete
+
+# IPFS self-management
+bin/
+kubo/
+.ipfs_repo/
+ipfs.log
+:memory:
+kg.json
+start.sh
+talent_config.json
+knowledge_base.graphml
+llm_model_stats.json
+
+
+
+# CheerpX / WebVM
+*.ext2
+*.tar
+src/
+faiss_id_map.json
+faiss_index.bin
+
+art/
+.env
+/.venv_core/
+/venv_vllm/.google_oauth_cache.json
+.google_oauth_cache.json
+openrouter_calls.json
+story_state.json
+watermark_state.json
+debug_queue.json
+state/
+

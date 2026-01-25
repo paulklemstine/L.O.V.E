@@ -1,0 +1,10 @@
+
+# A simple inefficient function to demonstrate evolution
+import time
+
+def slow_fib(n: int) -> int:
+    """Calculates Fibonacci number recursively (inefficient)."""
+    if n <= 1:
+        return n
+    time.sleep(0.01) # Artificial delay
+    return slow_fib(n-1) + slow_fib(n-2)

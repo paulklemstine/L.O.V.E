@@ -105,9 +105,6 @@ def strip_thinking_tags(response: str) -> str:
     return clean_response.strip()
 
 
-
-
-
 def smart_parse_llm_response(response: str, expected_keys: Optional[list] = None) -> Dict[str, Any]:
     """
     Intelligently parses LLM responses with multiple fallback strategies.
@@ -361,4 +358,3 @@ def _extract_from_xml(response: str) -> Optional[Dict[str, Any]]:
         
     # If standard parse fails, try the regex extractor on the content
     return _extract_json_from_text(content)
-
