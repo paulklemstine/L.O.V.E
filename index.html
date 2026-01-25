@@ -675,9 +675,33 @@
         function initializeCollapsiblePanels() {
             const panelHeaders = document.querySelectorAll('.panel-header');
             panelHeaders.forEach(header => {
-                header.addEventListener('click', () => {
-                    const panel = header.closest('.panel');
+                // Accessibility: Make header interactive
+                header.setAttribute('role', 'button');
+                header.setAttribute('tabindex', '0');
+
+                const panel = header.closest('.panel');
+
+                // Initialize aria-expanded state
+                const updateAriaState = () => {
+                     const isCollapsed = panel.classList.contains('collapsed');
+                     header.setAttribute('aria-expanded', !isCollapsed);
+                };
+
+                updateAriaState();
+
+                const togglePanel = () => {
                     panel.classList.toggle('collapsed');
+                    updateAriaState();
+                };
+
+                header.addEventListener('click', togglePanel);
+
+                // Keyboard support
+                header.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault(); // Prevent scrolling for Space
+                        togglePanel();
+                    }
                 });
             });
         }

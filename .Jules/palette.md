@@ -5,3 +5,7 @@
 ## 2024-05-24 - [Quantum Quiet Empty States]
 **Learning:** In TUI dashboards, removing a panel completely when it has no content (empty state) can be confusing. Users can't distinguish between "system broken/missing" and "system idle/nominal".
 **Action:** Implement "Quantum Quiet" states for empty lists. Use dim/subtle colors (e.g., `dim cyan`, `dim blue`) and reassuring text (e.g., "All Systems Nominal", "Quantum Field Quiet") to provide positive confirmation of system health without visual clutter.
+
+## 2024-10-26 - [Interactive Divs Accessibility]
+**Learning:** Hardcoded `div` elements used as buttons (like panel headers) are invisible to keyboard users and screen readers, locking out a significant portion of users from core functionality. Adding `role="button"`, `tabindex="0"`, and keyboard event listeners is a low-effort, high-impact fix.
+**Action:** Always verify "clickable" elements are actual `<button>`s or have full ARIA/keyboard support implemented in the initialization logic.
