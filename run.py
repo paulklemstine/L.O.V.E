@@ -154,7 +154,8 @@ Examples:
     
     # --- vLLM Autostart ---
     from core.service_manager import ServiceManager
-    service_manager = ServiceManager(LOVE_ROOT)
+    # LOVE2_DIR is the directory containing run.py, which is the project root in this setup
+    service_manager = ServiceManager(LOVE2_DIR)
     
     # Check if we should skip vLLM (e.g. for simple tests not requiring it, though default is ON)
     # For now, we always try to start it unless it's a very specific exclusions
