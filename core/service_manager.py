@@ -33,7 +33,7 @@ class ServiceManager:
                 return False
         return True
 
-    def start_vllm(self, model_name=None, gpu_memory_utilization=0.9):
+    def start_vllm(self, model_name=None, gpu_memory_utilization=0.6):
         """Starts the vLLM server in a background subprocess."""
         if self.is_vllm_healthy():
             print("✅ vLLM is already running and healthy.")
