@@ -70,7 +70,22 @@ def bootstrap_dependencies():
                 print("✅ Dependencies installed successfully (with --break-system-packages)!")
                 print("----------------------------------------")
             except subprocess.CalledProcessError as e2:
-                print(f"❌ Failed to install dependencies: {e2}")
+                print(f"⚠️ Dependency installation failed: {e2}")
+                
+                # Check for WSL/Linux and try the fix script
+                fix_script = LOVE2_DIR / "scripts" / "fix_wsl_deps.sh"
+                if sys.platform.startswith("linux") and fix_script.exists():
+                    print("\n🔧 Attempting to auto-fix missing system dependencies (requires sudo)...")
+                    print("You may be asked for your system password.")
+                    try:
+                        subprocess.check_call(["bash", str(fix_script)])
+                        print("✅ System dependencies fixed and requirements installed!")
+                        print("----------------------------------------")
+                        return # Success
+                    except subprocess.CalledProcessError as e3:
+                         print(f"❌ Auto-fix script failed: {e3}")
+                
+                print("❌ Critical: Failed to install dependencies.")
                 print("Please try running: pip install -r requirements.txt --break-system-packages")
                 sys.exit(1)
         except Exception as e:
