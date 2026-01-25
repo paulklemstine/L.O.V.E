@@ -10,8 +10,8 @@ from atproto_client.exceptions import ModelError
 from PIL import Image
 import io
 from atproto_client.models.app.bsky.feed import get_post_thread
-from core.llm_api import run_llm
-from core.circuit_breaker import CircuitBreaker, CircuitBreakerOpenException
+# from core.llm_api import run_llm # Unused in v1 code apparently, or replaced by agent layer
+from .circuit_breaker import CircuitBreaker, CircuitBreakerOpenException
 
 # Initialize Circuit Breaker for Bluesky
 # 3 failures, 60s base recovery timeout
@@ -35,12 +35,8 @@ def _process_and_upload_image(client, image: Image.Image):
     if not image:
         return None
 
-    # Apply intelligent watermark before processing
-    try:
-        from core.watermark import apply_watermark
-        image = apply_watermark(image, opacity=0.25)
-    except Exception as e:
-        print(f"Warning: Could not apply watermark: {e}")
+    # Watermark is applied by the agent before reaching this API layer.
+    # Redundant application removed to prevent double watermarking.
 
     import io
     from atproto import models
@@ -104,13 +100,6 @@ def post_to_bluesky_with_image(text: str, image: Image.Image = None):
     # Prepare the post content using TextBuilder for proper facet (hashtag/link) detection
     from atproto import client_utils
     text_builder = client_utils.TextBuilder()
-    
-    # Manually parse hashtags and add them as tags
-    # We split by space to preserve order and structure, but a regex finditer is better for positions
-    # However, TextBuilder handles the positioning if we build it segment by segment.
-    # A simpler approach is to use a regex to find all hashtags, and then construct the builder.
-    # But TextBuilder.text() appends text. 
-    # So we can iterate through the text and append either normal text or a tag.
     
     import re
     # Regex to find hashtags: # followed by alphanumeric characters
@@ -205,9 +194,6 @@ def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None, im
     client = get_bluesky_client()
 
     # If CIDs are not provided, we MUST fetch them or extract them. 
-    # Extracting from URI is unreliable as URIs often don't contain the CID in the expected format for AT Proto refs.
-    # The caller SHOULD provide them. if not, we try to fetch.
-    
     from atproto import models, client_utils
 
     if not root_cid:
@@ -256,9 +242,6 @@ def reply_to_post(root_uri, parent_uri, text, root_cid=None, parent_cid=None, im
     embed = _process_and_upload_image(client, image)
 
     try:
-        # We need to construct the record manually 
-        # But we can also use send_post with reply_to
-        # Note: client.send_post(text=..., reply_to=..., embed=...)
         # Construct ReplyRef object
         reply_ref = models.AppBskyFeedPost.ReplyRef(root=root_ref, parent=parent_ref)
         
@@ -294,4 +277,3 @@ def get_profile():
     except Exception as e:
         print(f"Error fetching profile: {e}")
         return None
-
