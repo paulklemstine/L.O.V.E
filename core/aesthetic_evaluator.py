@@ -8,6 +8,7 @@ based on three dimensions: Harmony, Clarity, and Creative Elegance.
 import math
 import statistics
 import nltk
+import functools
 from textblob import TextBlob
 from nltk.tokenize import sent_tokenize, word_tokenize
 from typing import Dict, Any, List
@@ -50,10 +51,16 @@ class AestheticEvaluator:
         if not text or not text.strip():
             return self._empty_result()
 
-        # Pre-processing (Tokenize once)
+        # Pre-processing
+        # Optimization: Use TextBlob to tokenize once and cache tokens
         blob = TextBlob(text)
+
+        # Accessing blob.words triggers tokenization once and caches it in the blob object.
+        # blob.tags will reuse these tokens later.
+        raw_tokens = blob.words
+
+        # Use simple string sentences to avoid TextBlob Sentence object creation overhead
         sentences = sent_tokenize(text)
-        raw_tokens = word_tokenize(text)
 
         # Filter for actual words (alphanumeric) to fix punctuation skew
         words = [w for w in raw_tokens if w.isalnum()]
@@ -197,7 +204,9 @@ class AestheticEvaluator:
 
         return max(0.0, min(100.0, final_score))
 
-    def _count_syllables(self, word: str) -> int:
+    @staticmethod
+    @functools.lru_cache(maxsize=1024)
+    def _count_syllables(word: str) -> int:
         """Simple syllable counter."""
         if not word.isalnum():
             return 0
