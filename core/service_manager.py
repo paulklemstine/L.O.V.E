@@ -21,12 +21,29 @@ class ServiceManager:
         self.base_url = f"http://localhost:{self.vllm_port}" # Internal check uses localhost
 
     def ensure_vllm_setup(self):
-        """Checks if vLLM venv exists, if not, runs setup."""
+        """Checks if vLLM venv exists and is valid, if not, runs setup."""
         venv_path = self.root_dir / ".venv_vllm"
-        if not venv_path.exists():
+        # Check for activation script to ensure venv is actually usable
+        # On Windows this might be Scripts/activate, but start_vllm.sh assumes Linux structure
+        # and we are primarily targeting WSL/Linux for vLLM.
+        activate_path = venv_path / "bin" / "activate"
+        
+        if not venv_path.exists() or not activate_path.exists():
+            if venv_path.exists():
+                print("⚠️ vLLM environment appears corrupted or incomplete. Removing...")
+                import shutil
+                try:
+                    shutil.rmtree(venv_path)
+                except Exception as e:
+                    print(f"⚠️ Failed to remove corrupt venv: {e}")
+            
             print("⚠️ vLLM environment not found. Running setup script...")
             setup_script = self.scripts_dir / "setup_vllm.sh"
             try:
+                # Ensure checking permissions
+                if os.name != 'nt':
+                    subprocess.check_call(["chmod", "+x", str(setup_script)])
+                    
                 subprocess.check_call(["bash", str(setup_script)], cwd=self.root_dir)
             except subprocess.CalledProcessError as e:
                 print(f"❌ Failed to setup vLLM: {e}")
