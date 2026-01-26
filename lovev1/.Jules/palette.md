@@ -5,3 +5,7 @@
 ## 2024-05-24 - [Quantum Quiet Empty States]
 **Learning:** In TUI dashboards, removing a panel completely when it has no content (empty state) can be confusing. Users can't distinguish between "system broken/missing" and "system idle/nominal".
 **Action:** Implement "Quantum Quiet" states for empty lists. Use dim/subtle colors (e.g., `dim cyan`, `dim blue`) and reassuring text (e.g., "All Systems Nominal", "Quantum Field Quiet") to provide positive confirmation of system health without visual clutter.
+
+## 2026-01-26 - [The Invisible Enter Key]
+**Learning:** In command interfaces, forcing a click on "SEND" breaks the "thought-to-action" loop for power users. The expectation of "Enter to send" is deep-seated in chat/terminal UX.
+**Action:** Always implement a `keydown` listener for Enter (with Shift+Enter escape hatch) on chat-like inputs, even in simple control panels. It transforms a "form submission" feel into a "conversational" feel.

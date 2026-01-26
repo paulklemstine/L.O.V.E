@@ -118,7 +118,7 @@
             </div>
             <div id="creator-input" class="panel-container">
                 <h2>Creator Input</h2>
-                <textarea id="input-area"></textarea>
+                <textarea id="input-area" aria-label="Command input" placeholder="Enter command... (Shift+Enter for newline)"></textarea>
                 <button id="send-button">SEND</button>
             </div>
         </div>
@@ -211,6 +211,13 @@
                     inputArea.value = '';
                 } else {
                     console.log('WebSocket is not connected. Message not sent.');
+                }
+            });
+
+            inputArea.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendButton.click();
                 }
             });
         });
