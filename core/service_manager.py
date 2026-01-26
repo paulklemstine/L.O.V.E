@@ -86,6 +86,8 @@ class ServiceManager:
         venv_path = str(self.root_dir / ".venv_vllm")
         cmd = ["bash", str(start_script), "--venv", venv_path]
         
+        print(f"DEBUG SERVICE_MANAGER: Launching command: {cmd}")
+        
         if model_name:
             cmd.extend(["--model", model_name])
         

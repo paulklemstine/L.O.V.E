@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# DEBUG: Print args
+echo "DEBUG START_VLLM: Received args: $@"
+
 # Default settings
 HOST="0.0.0.0"
 PORT="8000"
