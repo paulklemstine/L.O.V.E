@@ -50,6 +50,22 @@ class ServiceManager:
                 return False
         return True
 
+    def get_total_vram_mb(self):
+        """Attempts to get total VRAM in MB using nvidia-smi."""
+        try:
+            # Query nvidia-smi for memory.total
+            # Format: 12345 (just the number because of nounits)
+            output = subprocess.check_output(
+                ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                encoding="utf-8"
+            )
+            # Take the first line (first GPU)
+            vram_mb = int(output.strip().split('\n')[0])
+            return vram_mb
+        except Exception:
+            # Fallback if nvidia-smi missing or fails (e.g. CPU mode or Mac)
+            return None
+
     def start_vllm(self, model_name=None, gpu_memory_utilization=None):
         """Starts the vLLM server in a background subprocess."""
         if gpu_memory_utilization is None:
@@ -72,7 +88,22 @@ class ServiceManager:
         
         # Add common optimization and safety limits
         cmd.extend(["--gpu-memory-utilization", str(gpu_memory_utilization)])
-        cmd.extend(["--max-model-len", "8192"])  # Cap context to prevent OOM on consumer cards
+        
+        # Dynamic Context Window Config
+        # If we have < 7GB VRAM (e.g. 6GB Laptop GPU), limit context to prevent OOM.
+        # If we have > 7GB (e.g. Colab T4/A100), assume we can handle full context or vLLM defaults.
+        vram_mb = self.get_total_vram_mb()
+        
+        if vram_mb is not None:
+            print(f"   Detected VRAM: {vram_mb} MB")
+            if vram_mb < 7000:
+                 print("   ⚠️ Small GPU detected (< 7GB). Limiting context window to 8192.")
+                 cmd.extend(["--max-model-len", "8192"])  # Cap context for small GPUs
+            else:
+                 print("   ✨ High VRAM detected. Unleashing full context window.")
+        else:
+             print("   ⚠️ Unknown VRAM (nvidia-smi failed). Assuming server capability (no limit).")
+             # Default: No limit if we can't detect (user likely on server or knows what they are doing)
 
         # Start process
         try:
