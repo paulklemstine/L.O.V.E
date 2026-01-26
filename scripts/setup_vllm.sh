@@ -30,11 +30,24 @@ fi
 # Create venv if needed
 if [ ! -d "$VENV_NAME" ]; then
     echo -e "${YELLOW}Creating virtual environment '$VENV_NAME'...${NC}"
-    $PYTHON_EXEC -m venv "$VENV_NAME"
+    
+    # Try standard creation first
+    if ! $PYTHON_EXEC -m venv "$VENV_NAME"; then
+        echo -e "${YELLOW}Standard venv creation failed (likely ensurepip). Retrying without pip...${NC}"
+        # Fallback: Create without pip, then bootstrap it
+        if $PYTHON_EXEC -m venv --without-pip "$VENV_NAME"; then
+            echo -e "${YELLOW}Bootstrapping pip manually...${NC}"
+            curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+            "$VENV_NAME/bin/python3" get-pip.py
+            rm get-pip.py
+        else
+            echo -e "${RED}CRITICAL: Failed to create virtual environment.${NC}"
+            exit 1
+        fi
+    fi
     
     if [ ! -f "$VENV_NAME/bin/activate" ]; then
         echo -e "${RED}CRITICAL: Failed to create virtual environment. 'bin/activate' is missing.${NC}"
-        echo -e "${RED}You might need to install: sudo apt-get install python3-venv${NC}"
         exit 1
     fi
 else
