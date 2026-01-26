@@ -11,12 +11,15 @@ MODEL_BLACKLIST = [
 def get_top_image_models(count=1):
     """Fetches the list of active image models from the AI Horde and returns the top `count` models by performance."""
     try:
+    try:
         response = requests.get("https://stablehorde.net/api/v2/status/models?type=image")
         response.raise_for_status()
         models = response.json()
         
-        # Filter out blacklisted models
-        models = [m for m in models if m['name'] not in MODEL_BLACKLIST]
+        # Filter out blacklisted models (robust case-insensitive check)
+        # We perform this check early to prevent them from being sorted/selected
+        cleaned_blacklist = {b.lower().strip() for b in MODEL_BLACKLIST}
+        models = [m for m in models if m['name'].strip().lower() not in cleaned_blacklist]
         
         sorted_models = sorted([m for m in models if m.get('performance')], key=lambda x: x['performance'], reverse=True)
         
