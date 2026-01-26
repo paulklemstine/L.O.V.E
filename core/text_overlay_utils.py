@@ -1,5 +1,5 @@
 import logging
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageStat
 import os
 import random
 from typing import Optional, TYPE_CHECKING
@@ -122,9 +122,9 @@ def analyze_image_region_brightness(image: Image.Image, region: str = "center") 
     # Convert to grayscale for brightness analysis
     gray = region_img.convert('L')
     
-    # Calculate average brightness
-    pixels = list(gray.getdata())
-    avg_brightness = sum(pixels) / len(pixels) if pixels else 128
+    # Calculate average brightness using ImageStat (O(1) vs O(N) pixel iteration)
+    stat = ImageStat.Stat(gray)
+    avg_brightness = stat.mean[0] if stat.mean else 128
     
     return avg_brightness
 
