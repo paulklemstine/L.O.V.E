@@ -380,7 +380,7 @@ What is the next action to take towards this goal?"""
                         memory_stats=self.memory.get_stats()
                     )
                     
-                    self.run_iteration()
+                    success_or_work_done = self.run_iteration()
                 except Exception as e:
                     logger.error(f"Iteration error: {e}")
                     traceback.print_exc()
@@ -388,11 +388,19 @@ What is the next action to take towards this goal?"""
                         "error",
                         f"Iteration {self.iteration} failed: {e}"
                     )
+                    success_or_work_done = False
                 
                 # Persist state
                 self.memory.save()
                 
-                # Backpressure sleep (skip if 0)
+                # Dynamic backoff logic
+                # If the iteration did no work (skipped/failed) and sleep is 0, 
+                # we force a small sleep to prevent busy-looping (which spams logs).
+                if not success_or_work_done:
+                     if self.sleep_seconds < 1.0:
+                         time.sleep(2.0)
+                
+                # Main user-configured sleep
                 if self.running and self.sleep_seconds > 0:
                     logger.info(f"Sleeping {self.sleep_seconds}s...")
                     time.sleep(self.sleep_seconds)

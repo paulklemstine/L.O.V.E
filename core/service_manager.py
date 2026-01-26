@@ -33,8 +33,12 @@ class ServiceManager:
                 return False
         return True
 
-    def start_vllm(self, model_name=None, gpu_memory_utilization=0.6):
+    def start_vllm(self, model_name=None, gpu_memory_utilization=None):
         """Starts the vLLM server in a background subprocess."""
+        if gpu_memory_utilization is None:
+            # Check env var, default to 0.6
+            gpu_memory_utilization = float(os.environ.get("GPU_MEMORY_UTILIZATION", "0.6"))
+
         if self.is_vllm_healthy():
             print("✅ vLLM is already running and healthy.")
             return True

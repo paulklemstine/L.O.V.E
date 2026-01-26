@@ -54,9 +54,10 @@ def setup_logging(verbose: bool = False):
     web_handler.setFormatter(formatter)
     root_logger.addHandler(web_handler)
     
-    # Redirect stdout/stderr to capture print statements
+    # Redirect stdout to capture print statements
+    # WARNING: Do NOT redirect stderr, as it causes infinite recursion if the logger itself fails
     sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO)
-    sys.stderr = StreamToLogger(logging.getLogger('STDERR'), logging.ERROR)
+    # sys.stderr = StreamToLogger(logging.getLogger('STDERR'), logging.ERROR)
     
     logging.info("Logging initialized. Writing to %s", LOG_FILE)
 
