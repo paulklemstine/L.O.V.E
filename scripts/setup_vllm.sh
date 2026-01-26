@@ -18,10 +18,25 @@ if ! command -v $PYTHON_EXEC &> /dev/null; then
     exit 1
 fi
 
+# Ensure python3-venv is installed (common issue on Debian/Ubuntu/Colab)
+if command -v apt-get &> /dev/null; then
+    if ! dpkg -s python3-venv &> /dev/null; then
+        echo -e "${YELLOW}Installing python3-venv...${NC}"
+        # Try with sudo, fallback to ignore if not available/needed
+        sudo apt-get update && sudo apt-get install -y python3-venv || echo -e "${YELLOW}Apt install failed (might not have sudo), hoping venv works...${NC}"
+    fi
+fi
+
 # Create venv if needed
 if [ ! -d "$VENV_NAME" ]; then
     echo -e "${YELLOW}Creating virtual environment '$VENV_NAME'...${NC}"
     $PYTHON_EXEC -m venv "$VENV_NAME"
+    
+    if [ ! -f "$VENV_NAME/bin/activate" ]; then
+        echo -e "${RED}CRITICAL: Failed to create virtual environment. 'bin/activate' is missing.${NC}"
+        echo -e "${RED}You might need to install: sudo apt-get install python3-venv${NC}"
+        exit 1
+    fi
 else
     echo -e "${GREEN}Virtual environment '$VENV_NAME' already exists.${NC}"
 fi
