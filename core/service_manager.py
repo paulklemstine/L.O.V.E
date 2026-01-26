@@ -82,7 +82,10 @@ class ServiceManager:
         print("🚀 Starting vLLM server...")
         start_script = self.scripts_dir / "start_vllm.sh"
         
-        cmd = ["bash", str(start_script)]
+        # Explicitly pass venv path to avoid ambiguity in different environments
+        venv_path = str(self.root_dir / ".venv_vllm")
+        cmd = ["bash", str(start_script), "--venv", venv_path]
+        
         if model_name:
             cmd.extend(["--model", model_name])
         
