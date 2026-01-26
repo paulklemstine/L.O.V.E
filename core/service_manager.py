@@ -109,9 +109,15 @@ class ServiceManager:
         try:
             # We redirect stdout/stderr to a log file
             log_file = open(self.root_dir / "logs" / "vllm.log", "w")
+            
+            # Pass absolute venv path to script to avoid relative path issues
+            env = os.environ.copy()
+            env["VLLM_VENV_PATH"] = str(self.root_dir / ".venv_vllm")
+            
             self.vllm_process = subprocess.Popen(
                 cmd,
                 cwd=self.root_dir,
+                env=env,
                 stdout=log_file,
                 stderr=subprocess.STDOUT
             )

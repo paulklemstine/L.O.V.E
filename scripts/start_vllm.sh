@@ -5,7 +5,12 @@ set -e
 HOST="0.0.0.0"
 PORT="8000"
 MODEL="" # If empty, vLLM will default or we pass it via args
-VENV_PATH="$(dirname "$0")/../.venv_vllm"
+# Use env var if provided (robust), else fallback to relative path
+if [ -z "$VLLM_VENV_PATH" ]; then
+    VENV_PATH="$(dirname "$0")/../.venv_vllm"
+else
+    VENV_PATH="$VLLM_VENV_PATH"
+fi
 
 # Activate venv
 if [ -f "$VENV_PATH/bin/activate" ]; then
