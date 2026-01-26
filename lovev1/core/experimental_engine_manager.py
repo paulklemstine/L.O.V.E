@@ -18,9 +18,9 @@ def _select_model(vram):
         return "Qwen/QwQ-32B-AWQ"
     elif vram >= 22 * 1024:
         return "Qwen/Qwen3-30B-A3B-Thinking-2507"
-    elif vram >= 6 * 1024:
+    elif vram >= 7 * 1024:
         return "Qwen/Qwen3-8B-AWQ"
-    elif vram >= 3 * 1024:
+    elif vram >= 6 * 1024:
         return "cpatonn/Qwen3-4B-Thinking-2507-AWQ-4bit"
     elif vram >= 2 * 1024:
         return "Qwen/Qwen2.5-1.5B-Instruct-AWQ"

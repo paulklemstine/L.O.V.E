@@ -4,12 +4,20 @@ import time
 from PIL import Image
 import io
 
+MODEL_BLACKLIST = [
+    "WAI-NSFW-illustrious-SDXL"
+]
+
 def get_top_image_models(count=1):
     """Fetches the list of active image models from the AI Horde and returns the top `count` models by performance."""
     try:
         response = requests.get("https://stablehorde.net/api/v2/status/models?type=image")
         response.raise_for_status()
         models = response.json()
+        
+        # Filter out blacklisted models
+        models = [m for m in models if m['name'] not in MODEL_BLACKLIST]
+        
         sorted_models = sorted([m for m in models if m.get('performance')], key=lambda x: x['performance'], reverse=True)
         
         # Prioritize known high-quality models if they are in the top 20
