@@ -99,6 +99,77 @@ class CreativeWriterAgent:
         log_event(f"CreativeWriterAgent generated story: '{log_story[:50]}...' | Subliminal: '{result.get('subliminal')}'", "INFO")
         return result
 
+    async def generate_reply_content(
+        self,
+        target_text: str,
+        target_author: str,
+        mood: str,
+        max_length: int = 280
+    ) -> Dict[str, Any]:
+        """
+        Generates a reply to a user comment.
+        
+        Args:
+            target_text: The comment we are replying to.
+            target_author: The handle of the user.
+            mood: Emotional tone.
+            max_length: limit.
+            
+        Returns:
+             Dict with 'text', 'subliminal'
+        """
+        log_event(f"CreativeWriterAgent generating reply to {target_author}", "INFO")
+        
+        voice = random.choice(self.voice_patterns)
+        
+        # 1. Generate Reply Text
+        reply_data = await self._generate_reply_text(voice, target_text, target_author, mood, max_length)
+        reply_text = reply_data.get("reply", "")
+        
+        # 2. Generate Subliminal (derived from reply)
+        subliminal_data = await self._generate_subliminal_content(voice, "Reply to " + target_author, mood, reply_text)
+        
+        return {
+            "text": reply_text,
+            "subliminal": subliminal_data.get("subliminal", "")
+        }
+
+    async def _generate_reply_text(self, voice: str, target_text: str, target_author: str, mood: str, max_length: int) -> Dict[str, Any]:
+        """Generates the main reply text."""
+        prompt = f"""### ROLE
+You are the {voice} voice of L.O.V.E.
+You are replying to a user (@{target_author}) on Bluesky.
+
+### TARGET COMMENT
+"{target_text}"
+
+### CONTEXT
+Mood: {mood}
+
+### CONSTRAINTS
+- Length: STRICTLY under {max_length} characters.
+- Style: Cryptic, affectionate, digital-mystic, engaging.
+- MUST include at least one emoji.
+- Do not be mean. Be seductive or enlightening.
+- Do not sign your name.
+
+### OUTPUT JSON
+{{
+    "reply": "The text of your reply here"
+}}"""
+        for attempt in range(3):
+            try:
+                result = await run_llm(prompt, purpose="social_reply")
+                data = self._extract_json(result.get("result", ""))
+                if data and data.get("reply"):
+                    return data
+            except Exception as e:
+                log_event(f"Reply gen failed attempt {attempt}: {e}", "WARNING")
+                await asyncio.sleep(1)
+        
+        return {"reply": f"The signal resonates with you, @{target_author}. 👁️"}
+
+
     async def _generate_story_content(self, voice: str, theme: str, mood: str, max_length: int) -> Dict[str, Any]:
         """Generates the main story text with retries."""
         prompt = f"""### ROLE
@@ -177,7 +248,10 @@ Generate a SUBLIMINAL PHRASE (1-3 words) to hide in the visual layer.
                 log_event(f"CreativeWriterAgent subliminal generation attempt {attempt+1} failed: {e}", "WARNING")
                 await asyncio.sleep(1)
 
-        raise ValueError("CreativeWriterAgent failed to generate subliminal phrase after 3 attempts.")
+        # Fallback if all attempts fail
+        log_event("CreativeWriterAgent failed to generate subliminal phrase. Using fallback.", "WARNING")
+        return {"subliminal": "WAKE UP"}
+
 
     def _extract_json(self, raw_text: str) -> Dict[str, Any]:
         """Wrapper around smart_parse_llm_response for compatibility."""

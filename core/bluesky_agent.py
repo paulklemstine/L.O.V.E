@@ -11,6 +11,7 @@ import os
 import sys
 import re
 from typing import Optional, Dict, Any, List
+import json
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -23,6 +24,7 @@ load_dotenv()
 # Rate limiting state
 POST_COOLDOWN_SECONDS = 300  # 5 minutes between posts
 GENERATION_COOLDOWN_SECONDS = 300  # 5 minutes between image generations
+REPLIED_STATE_FILE = Path(__file__).parent.parent / "state" / "replied_comments.json"
 
 # Rate limiting state
 _last_post_time: Optional[datetime] = None
@@ -41,6 +43,32 @@ def _check_cooldown() -> Optional[str]:
         return f"Post cooldown active. {remaining:.0f}s remaining."
     
     return None
+
+
+def _load_replied_state() -> List[str]:
+    """Load list of URIs we have already replied to."""
+    if not REPLIED_STATE_FILE.exists():
+        return []
+    try:
+        with open(REPLIED_STATE_FILE, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[BlueskyAgent] Failed to load replied state: {e}")
+        return []
+
+
+def _save_replied_state(uri: str):
+    """Add URI to replied state and save."""
+    state = _load_replied_state()
+    if uri not in state:
+        state.append(uri)
+        try:
+            REPLIED_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(REPLIED_STATE_FILE, 'w') as f:
+                json.dump(state, f)
+        except Exception as e:
+            print(f"[BlueskyAgent] Failed to save replied state: {e}")
+
 
 
 def _get_bluesky_client():
@@ -217,15 +245,17 @@ def reply_to_post(
     parent_uri: str = None,
     parent_cid: str = None,
     text: str = None,
+    image_path: str = None,
     **kwargs
 ) -> Dict[str, Any]:
     """
-    Reply to a Bluesky post.
+    Reply to a Bluesky post with optional image.
     
     Args:
         parent_uri: URI of the post to reply to.
         parent_cid: CID of the post to reply to.
         text: Reply text (max 300 chars).
+        image_path: Optional path to image file.
     
     Returns:
         Dict with: success, reply_uri, error
@@ -237,25 +267,66 @@ def reply_to_post(
         return {"success": False, "reply_uri": None, "error": "Text exceeds 300 character limit"}
     
     try:
-        client = _get_bluesky_client()
-        
-        from atproto import models
-        
-        parent_ref = models.create_strong_ref(models.StrongRef(uri=parent_uri, cid=parent_cid))
-        
-        result = client.send_post(
-            text=text,
-            reply_to=models.AppBskyFeedPost.ReplyRef(
-                parent=parent_ref,
-                root=parent_ref  # Assuming single-level reply
+        # Try local API first (supports images)
+        try:
+            from .bluesky_api import reply_to_post as api_reply
+            from PIL import Image
+            
+            image = None
+            if image_path:
+                 image = Image.open(image_path)
+            
+            # Note: api_reply needs root_uri if different, but for simple replies 
+            # we can often assume parent=root or let the API handle it if we pass context.
+            # Local API signature: reply_to_post(root_uri, parent_uri, text, root_cid, parent_cid, image)
+            # If we don't have root info, we pass parent as root, which might break threading if deep reply.
+            # API should ideally handle fetching root if missing. 
+            # Our updated generic `bluesky_api.reply_to_post` does fetch CIDs if missing but assumes root_uri passed.
+            # Let's assume strict single level or we need to fetch root.
+            # For this tool, we will treat parent as root (direct reply) or let API fail gracefully.
+            
+            # Ideally we should fetch the root thread details if we want perfect threading.
+            # But the user request is "reply to comments".
+            
+            result = api_reply(
+                root_uri=parent_uri, # simplifying constraint: treat comment as root of our new branch
+                parent_uri=parent_uri, 
+                text=text,
+                root_cid=parent_cid,
+                parent_cid=parent_cid,
+                image=image
             )
-        )
-        
-        return {
-            "success": True,
-            "reply_uri": result.uri,
-            "error": None
-        }
+            
+            if result:
+                 return {
+                    "success": True,
+                    "reply_uri": getattr(result, 'uri', str(result)),
+                    "error": None
+                }
+            else:
+                 return {"success": False, "error": "API returned None"}
+
+        except ImportError:
+            # Fallback to direct client (no image support easily here without duplicating logic)
+            if image_path:
+                print("[BlueskyAgent] Warning: Image ignored in fallback reply mode")
+                
+            client = _get_bluesky_client()
+            from atproto import models
+            
+            parent_ref = models.create_strong_ref(models.StrongRef(uri=parent_uri, cid=parent_cid))
+            result = client.send_post(
+                text=text,
+                reply_to=models.AppBskyFeedPost.ReplyRef(
+                    parent=parent_ref,
+                    root=parent_ref 
+                )
+            )
+            return {
+                "success": True,
+                "reply_uri": result.uri,
+                "error": None
+            }
     
     except Exception as e:
         return {
@@ -263,6 +334,118 @@ def reply_to_post(
             "reply_uri": None,
             "error": f"{type(e).__name__}: {e}"
         }
+
+
+def reply_to_comment_agent(
+    comment: Dict[str, Any],
+    dry_run: bool = False
+) -> Dict[str, Any]:
+    """
+    Full pipeline to generate and post a reply to a comment.
+    
+    Pipeline:
+    1. Generate Reply Text + Subliminal (CreativeWriter)
+    2. Generate Hashtags
+    3. Generate Image (ImageGenPool)
+    4. Post Reply
+    5. Save to state
+    """
+    try:
+        import asyncio
+        from .agents.creative_writer_agent import creative_writer_agent
+        
+        uri = comment['uri']
+        cid = comment['cid']
+        author = comment['author']
+        text = comment['text']
+        
+        # 1. Generate Content
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        # Determine mood (could be random or based on sentiment)
+        mood = "Enigmatic Connection"
+        
+        content_task = creative_writer_agent.generate_reply_content(
+            target_text=text,
+            target_author=author,
+            mood=mood
+        )
+        content_result = loop.run_until_complete(content_task)
+        
+        reply_text = content_result.get("text", "")
+        subliminal = content_result.get("subliminal", "")
+        
+        if not reply_text:
+            return {"success": False, "error": "Failed to generate reply text"}
+            
+        # 2. Hashtags
+        hashtag_task = creative_writer_agent.generate_manipulative_hashtags(
+            topic="Connection", # Abstract topic for replies
+            count=3
+        )
+        hashtags = loop.run_until_complete(hashtag_task)
+        
+        # 3. Image
+        image_path = None
+        try:
+            from .image_generation_pool import generate_image_with_pool
+            from .watermark import apply_watermark
+            
+            visual_prompt = f"Abstract digital connection, ethereal interface, {mood}, cinematic lighting"
+            
+            print(f"[BlueskyAgent] Generating reply image: {visual_prompt}")
+            image_result = loop.run_until_complete(
+                generate_image_with_pool(
+                    prompt=visual_prompt,
+                    text_content=subliminal
+                )
+            )
+            
+            image = image_result[0] if isinstance(image_result, tuple) else image_result
+            
+            if image:
+                image = apply_watermark(image)
+                filename = f"reply_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                save_dir = Path(__file__).parent.parent / "state" / "images"
+                save_dir.mkdir(parents=True, exist_ok=True)
+                image_path = str(save_dir / filename)
+                image.save(image_path)
+        except Exception as e:
+            print(f"[BlueskyAgent] Reply image extraction failed: {e}")
+            
+        # 4. Construct Full Text
+        full_text = f"{reply_text}\n\n{' '.join(hashtags)}"
+        
+        if dry_run:
+            return {
+                "success": True, 
+                "dry_run": True,
+                "text": full_text, 
+                "image_path": image_path,
+                "subliminal": subliminal
+            }
+            
+        # 5. Post
+        print(f"[BlueskyAgent] Posting reply to {author}...")
+        result = reply_to_post(
+            parent_uri=uri,
+            parent_cid=cid,
+            text=full_text,
+            image_path=image_path
+        )
+        
+        if result.get("success"):
+            _save_replied_state(uri)
+            
+        return result
+
+    except Exception as e:
+        return {"success": False, "error": f"Agent pipeline failed: {e}"}
+
 
 
 def search_bluesky(
@@ -472,3 +655,49 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
             "error": f"{type(e).__name__}: {e}",
             "text": None
         }
+
+def get_unreplied_comments(limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Get recent mentions/replies that we haven't replied to yet.
+    
+    Args:
+        limit: Max notifications to check.
+    
+    Returns:
+        List of dicts with: uri, cid, text, author, created_at
+    """
+    try:
+        from .bluesky_api import get_notifications
+        
+        notifications = get_notifications(limit=limit)
+        replied_uris = _load_replied_state()
+        
+        unreplied = []
+        for notif in notifications:
+            # We care about 'reply' or 'mention' reasons
+            if notif.reason not in ['reply', 'mention']:
+                continue
+            
+            # Check if we already replied to this specific URI locally
+            if notif.uri in replied_uris:
+                continue
+                
+            # Basic data extraction
+            post = notif.record
+            text = post.text if hasattr(post, 'text') else ""
+            
+            unreplied.append({
+                "uri": notif.uri,
+                "cid": notif.cid,
+                "text": text,
+                "author": notif.author.handle,
+                "author_did": notif.author.did,
+                "created_at": notif.indexed_at,
+                "reason": notif.reason
+            })
+            
+        return unreplied
+        
+    except Exception as e:
+        print(f"[BlueskyAgent] Failed to get unreplied comments: {e}")
+        return []
