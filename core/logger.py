@@ -45,37 +45,18 @@ def setup_logging(verbose: bool = False):
     root_logger.addHandler(file_handler)
     
     # 2. Console Handler
-    # Check if sys.stdout is already our wrapper (from a previous run)
-    raw_stdout = sys.stdout
-    if isinstance(raw_stdout, StreamToLogger):
-         # If already wrapped, we won't wrap it again, but we need the underlying stream for the handler
-         # Since we don't store it in StreamToLogger (my bad), we'll try sys.__stdout__ as fallback
-         # But safer: avoid re-wrapping at the end of function
-         # Ideally we should store the original stream
-         pass
-    
-    # Use the raw stream for the handler to prevent loops
-    # If sys.stdout is already wrapped, this might be risky unless we unwrap it.
-    # Let's perform a check.
-    
-    if hasattr(sys.stdout, 'is_pseudo'): 
-        # Detect simple wrapper if we tag it, but for now:
-        pass
-
-    # Better Strategy:
-    # 1. Capture current stdout
+    # Detect if sys.stdout is already a wrapper (duck typing for safety across reloads)
     current_stdout = sys.stdout
+    original_stream = sys.stdout
     
-    # 2. If it's ALREADY a StreamToLogger, DO NOT re-wrap, and use its logger for output? 
-    # No, we want to reset the handlers.
-    
-    # If it is our wrapper, let's try to unwrap or fallback to __stdout__
-    target_stream = current_stdout
-    if isinstance(target_stream, StreamToLogger):
-        # Fallback to __stdout__ if available, otherwise we are stuck
-        target_stream = getattr(sys, '__stdout__', target_stream)
+    if hasattr(current_stdout, 'original_stream'):
+        # It's our wrapper (or similar). Unwrap it!
+        original_stream = current_stdout.original_stream
+        # RESTORE sys.stdout to prevent nesting wrappers
+        sys.stdout = original_stream
+        print("Restored sys.stdout from existing wrapper.")
         
-    console_handler = logging.StreamHandler(target_stream)
+    console_handler = logging.StreamHandler(original_stream)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
@@ -85,34 +66,23 @@ def setup_logging(verbose: bool = False):
     root_logger.addHandler(web_handler)
     
     # Redirect stdout to capture print statements
-    # ONLY wrap if not already wrapped
-    if not isinstance(sys.stdout, StreamToLogger):
-        sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO)
+    # Pass the original stream so the wrapper knows what to write to if needed (though it logs to logger)
+    # Actually, StreamToLogger usually eats the output and logs it. 
+    # BUT, if we want print() to show up, the Logger 'STDOUT' must eventually output to ConsoleHandler.
+    # ConsoleHandler writes to 'original_stream'.
+    # So StreamToLogger doesn't need to write to stream directly.
+    sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO, original_stream)
     
     logging.info("Logging initialized. Writing to %s", LOG_FILE)
 
-def log_event(message: str, level: str = "INFO"):
-    """
-    Helper function for v1 compatibility.
-    Logs an event with the specified level.
-    """
-    lvl = getattr(logging, level.upper(), logging.INFO)
-    logging.log(lvl, message)
-
-
-def get_logger(name: str):
-    """
-    Get a logger instance by name.
-    
-    Standard Python logging interface for introspection module.
-    """
-    return logging.getLogger(name)
+# ... (rest of file)
 
 class StreamToLogger:
     """Fake file-like stream object that redirects writes to a logger instance."""
-    def __init__(self, logger, level):
+    def __init__(self, logger, level, original_stream=None):
         self.logger = logger
         self.level = level
+        self.original_stream = original_stream
         self.linebuf = ''
 
     def write(self, buf):
@@ -120,7 +90,12 @@ class StreamToLogger:
             self.logger.log(self.level, line.rstrip())
 
     def flush(self):
-        pass
+        if self.original_stream and hasattr(self.original_stream, 'flush'):
+             try:
+                 self.original_stream.flush()
+             except:
+                 pass
 
     def isatty(self):
         return False
+
