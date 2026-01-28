@@ -1,8 +1,13 @@
 """
-llm_client.py - Local vLLM Interface
+llm_client.py - Multi-Provider LLM Interface
 
-This module provides a client for interfacing with the local vLLM server.
-It prioritizes the local vLLM model over other providers for speed and cost.
+This module provides a client for LLM generation with multi-provider support.
+It automatically detects the best available provider.
+
+Priority:
+1. Google Colab AI (free, when running in Colab)
+2. Local vLLM server (fastest, no cost)
+3. Fallback providers
 
 See docs/llm_client.md for detailed documentation.
 """
@@ -11,8 +16,14 @@ import os
 import sys
 import httpx
 import json
+import logging
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
+
+# Import Colab detection
+from core.colab_llm import is_running_in_colab, ColabLLM, DEFAULT_COLAB_MODEL
+
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path to import from L.O.V.E. v1
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -22,11 +33,12 @@ load_dotenv()
 
 class LLMClient:
     """
-    Client for local vLLM server with fallback to L.O.V.E. v1 llm_api.
+    Multi-provider LLM client with automatic provider selection.
     
-    Prioritizes:
-    1. Local vLLM server (fastest, no cost)
-    2. L.O.V.E. v1 llm_api multi-provider pool (fallback)
+    Priority chain:
+    1. Google Colab AI (free, when running in Colab)
+    2. Local vLLM server (fastest, no cost)
+    3. Fallback providers (if configured)
     """
     
     DEFAULT_VLLM_URL = "http://localhost:8000/v1"
@@ -36,7 +48,8 @@ class LLMClient:
         self, 
         vllm_url: Optional[str] = None,
         timeout: float = DEFAULT_TIMEOUT,
-        use_fallback: bool = True
+        use_fallback: bool = True,
+        colab_model: Optional[str] = None
     ):
         """
         Initialize the LLM client.
@@ -44,7 +57,8 @@ class LLMClient:
         Args:
             vllm_url: URL of the vLLM server. Defaults to localhost:8000.
             timeout: Request timeout in seconds.
-            use_fallback: If True, fall back to L.O.V.E. v1 llm_api on vLLM failure.
+            use_fallback: If True, fall back to other providers on failure.
+            colab_model: Model to use when in Colab. Defaults to gemini-3-pro-preview.
         """
         self.vllm_url = vllm_url or os.getenv("VLLM_URL", self.DEFAULT_VLLM_URL)
         self.timeout = timeout
@@ -52,6 +66,20 @@ class LLMClient:
         self.model_name: Optional[str] = None
         self._client = httpx.Client(timeout=self.timeout)
         self._async_client: Optional[httpx.AsyncClient] = None
+        
+        # Colab AI configuration
+        self.in_colab = is_running_in_colab()
+        self.colab_model = colab_model or DEFAULT_COLAB_MODEL
+        self._colab_client: Optional[ColabLLM] = None
+        
+        if self.in_colab:
+            try:
+                self._colab_client = ColabLLM(model_name=self.colab_model)
+                logger.info(f"🌐 Running in Google Colab - using free Gemini API ({self.colab_model})")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Colab LLM: {e}")
+                self._colab_client = None
+        
         
     async def _get_async_client(self) -> httpx.AsyncClient:
         """Get or create async HTTP client."""
@@ -93,13 +121,25 @@ class LLMClient:
         Returns:
             Generated text response.
         """
-        # Build messages
+        # Priority 1: Try Colab AI first (free, no API key needed)
+        if self._colab_client is not None:
+            try:
+                logger.debug(f"Using Colab AI ({self.colab_model}) for generation")
+                response = self._colab_client.generate(
+                    prompt=prompt,
+                    system_prompt=system_prompt
+                )
+                return response
+            except Exception as e:
+                logger.warning(f"Colab AI generation failed: {e}, falling back to vLLM")
+        
+        # Build messages for vLLM
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         
-        # Try vLLM first
+        # Priority 2: Try vLLM
         if self._check_vllm_health():
             try:
                 response = self._client.post(
@@ -116,13 +156,12 @@ class LLMClient:
                     data = response.json()
                     return data["choices"][0]["message"]["content"]
             except Exception as e:
-                print(f"[LLMClient] vLLM error: {e}")
+                logger.error(f"vLLM error: {e}")
         
-        # Fallback to L.O.V.E. v1 llm_api
-        if self.use_fallback:
-             raise RuntimeError(f"vLLM unavailable at {self.vllm_url} and fallback is disabled.")
-        
-        raise RuntimeError("vLLM unavailable and fallback disabled")
+        # No providers available
+        if self.in_colab:
+            raise RuntimeError(f"Colab AI failed and vLLM unavailable at {self.vllm_url}")
+        raise RuntimeError(f"vLLM unavailable at {self.vllm_url}")
     
     async def generate_async(
         self,
@@ -133,11 +172,26 @@ class LLMClient:
         stop: Optional[List[str]] = None
     ) -> str:
         """Async version of generate()."""
+        # Priority 1: Try Colab AI first (note: Colab AI is sync, but we use it anyway)
+        if self._colab_client is not None:
+            try:
+                logger.debug(f"Using Colab AI ({self.colab_model}) for async generation")
+                # Colab AI is synchronous, but we can still use it in async context
+                response = self._colab_client.generate(
+                    prompt=prompt,
+                    system_prompt=system_prompt
+                )
+                return response
+            except Exception as e:
+                logger.warning(f"Colab AI async generation failed: {e}, falling back to vLLM")
+        
+        # Build messages for vLLM
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         
+        # Priority 2: Try vLLM
         client = await self._get_async_client()
         
         try:
@@ -155,14 +209,12 @@ class LLMClient:
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
         except Exception as e:
-            print(f"[LLMClient] Async vLLM error: {e}")
+            logger.error(f"Async vLLM error: {e}")
         
-        # Fallback removed to avoid namespace conflicts
-        if self.use_fallback:
-             # Just raise error for now as we want to enforce vLLM usage or implement a proper love2 fallback
-             raise RuntimeError(f"vLLM unavailable at {self.vllm_url} and fallback is disabled.")
-        
-        raise RuntimeError("vLLM unavailable")
+        # No providers available
+        if self.in_colab:
+            raise RuntimeError(f"Colab AI failed and vLLM unavailable at {self.vllm_url}")
+        raise RuntimeError(f"vLLM unavailable at {self.vllm_url}")
     
     def generate_json(
         self,
