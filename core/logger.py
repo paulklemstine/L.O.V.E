@@ -45,9 +45,7 @@ def setup_logging(verbose: bool = False):
     root_logger.addHandler(file_handler)
     
     # 2. Console Handler
-    # Use __stdout__ to ensure we write to the real stream, not our own redirector
-    stream = getattr(sys, '__stdout__', sys.stdout)
-    console_handler = logging.StreamHandler(stream)
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
