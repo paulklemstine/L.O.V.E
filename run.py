@@ -95,8 +95,12 @@ def bootstrap_dependencies():
 
 def main():
     """Main entry point."""
-    # Auto-install dependencies before doing anything else
-    bootstrap_dependencies()
+    # Check for Colab environment and skip dependency bootstrap if detected
+    if 'google.colab' in sys.modules:
+        print("✨ Running in Google Colab. Skipping dependency bootstrap.")
+    else:
+        # Auto-install dependencies before doing anything else
+        bootstrap_dependencies()
 
     import argparse
     

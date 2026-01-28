@@ -83,8 +83,21 @@ class ServiceManager:
             # Fallback if nvidia-smi missing or fails (e.g. CPU mode or Mac)
             return None
 
+    def is_colab(self):
+        """Checks if running in Google Colab."""
+        try:
+            import sys
+            return 'google.colab' in sys.modules
+        except ImportError:
+            return False
+
     def start_vllm(self, model_name=None, gpu_memory_utilization=None):
         """Starts the vLLM server in a background subprocess."""
+        if self.is_colab():
+            print("✨ Running in Google Colab. Skipping local vLLM startup.")
+            print("   Assume Colab environment handles model serving or API access.")
+            return True
+
         if gpu_memory_utilization is None:
             # Check env var, default to 0.6
             gpu_memory_utilization = float(os.environ.get("GPU_MEMORY_UTILIZATION", "0.6"))
