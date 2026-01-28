@@ -369,12 +369,11 @@ Target Emotion to Trigger: {target_emotion}
             result = await run_llm(prompt, purpose="hashtag_generation")
             raw = result.get("result", "").strip()
             
-            if "```json" in raw:
-                raw = raw.split("```json")[1].split("```")[0].strip()
-            elif "```" in raw:
-                raw = raw.split("```")[1].split("```")[0].strip()
+            # Use safe JSON parsing (handles empty/malformed responses)
+            data = self._extract_json(raw)
+            if not data or not data.get("hashtags"):
+                raise ValueError("No hashtags in response")
             
-            data = json.loads(raw)
             hashtags = data.get("hashtags", [])
             
             # Ensure all start with #
