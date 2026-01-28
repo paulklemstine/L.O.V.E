@@ -28,8 +28,9 @@ def _get_embedding_model():
             from sentence_transformers import SentenceTransformer
             _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         except ImportError:
-            from core.logger import log_event
-            log_event("sentence-transformers not installed. Embeddings will be unavailable.", "WARNING")
+            import logging
+            logger = logging.getLogger("CodeChunker")
+            logger.warning("sentence-transformers not installed. Embeddings will be unavailable.")
             return None
     return _embedding_model
 
@@ -102,8 +103,9 @@ class CodeChunk:
             self.embedding = model.encode(text, convert_to_numpy=True)
             return True
         except Exception as e:
-            from core.logger import log_event
-            log_event(f"Failed to compute embedding for {self.qualified_name}: {e}", "DEBUG")
+            import logging
+            logger = logging.getLogger("CodeChunker")
+            logger.debug(f"Failed to compute embedding for {self.qualified_name}: {e}")
             return False
     
     def to_dict(self) -> Dict[str, Any]:
@@ -201,8 +203,9 @@ class SemanticCodeChunker:
             
             # Skip large files
             if len(source) > self.MAX_FILE_SIZE:
-                from core.logger import log_event
-                log_event(f"Skipping large file: {file_path}", "DEBUG")
+                import logging
+                logger = logging.getLogger("CodeChunker")
+                logger.debug(f"Skipping large file: {file_path}")
                 return []
             
             tree = ast.parse(source, filename=file_path)
@@ -242,12 +245,14 @@ class SemanticCodeChunker:
             return chunks
             
         except SyntaxError as e:
-            from core.logger import log_event
-            log_event(f"Syntax error in {file_path}: {e}", "DEBUG")
+            import logging
+            logger = logging.getLogger("CodeChunker")
+            logger.debug(f"Syntax error in {file_path}: {e}")
             return []
         except Exception as e:
-            from core.logger import log_event
-            log_event(f"Error processing {file_path}: {e}", "DEBUG")
+            import logging
+            logger = logging.getLogger("CodeChunker")
+            logger.debug(f"Error processing {file_path}: {e}")
             return []
     
     def chunk_directory(
@@ -284,8 +289,9 @@ class SemanticCodeChunker:
             file_chunks = self.chunk_file(str(file_path))
             chunks.extend(file_chunks)
         
-        from core.logger import log_event
-        log_event(f"Chunked {len(chunks)} code units from {directory}", "INFO")
+        import logging
+        logger = logging.getLogger("CodeChunker")
+        logger.info(f"Chunked {len(chunks)} code units from {directory}")
         
         return chunks
     
@@ -383,8 +389,9 @@ class SemanticCodeChunker:
             )
             
         except Exception as e:
-            from core.logger import log_event
-            log_event(f"Error processing function {node.name}: {e}", "DEBUG")
+            import logging
+            logger = logging.getLogger("CodeChunker")
+            logger.debug(f"Error processing function {node.name}: {e}")
             return None
     
     def _process_class(
@@ -449,8 +456,9 @@ class SemanticCodeChunker:
                         chunks.append(method_chunk)
             
         except Exception as e:
-            from core.logger import log_event
-            log_event(f"Error processing class {node.name}: {e}", "DEBUG")
+            import logging
+            logger = logging.getLogger("CodeChunker")
+            logger.debug(f"Error processing class {node.name}: {e}")
         
         return chunks
     

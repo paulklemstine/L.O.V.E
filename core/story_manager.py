@@ -1,9 +1,16 @@
+import logging
 import json
 import os
 import random
 import time
 from typing import List, Dict, Any, Optional, Tuple
-from core.logger import log_event
+
+logger = logging.getLogger("StoryManager")
+
+def log_event(message: str, level: str = "INFO"):
+    """Compatibility helper for logging."""
+    lvl = getattr(logging, level.upper(), logging.INFO)
+    logger.log(lvl, message)
 from core.semantic_similarity import check_phrase_novelty, get_similarity_checker
 
 STORY_STATE_FILE = "story_state.json"

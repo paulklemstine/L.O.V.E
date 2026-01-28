@@ -4,11 +4,18 @@ Prompt Manager for L.O.V.E Social Media System
 Manages YAML-based prompt templates with testing and promotion workflow.
 """
 
+import logging
 import yaml
 import os
 from typing import Dict, Any, Optional
 from datetime import datetime
-from core.logger import log_event
+
+logger = logging.getLogger("PromptManager")
+
+def log_event(message: str, level: str = "INFO"):
+    """Compatibility helper for logging."""
+    lvl = getattr(logging, level.upper(), logging.INFO)
+    logger.log(lvl, message)
 
 
 class PromptManager:

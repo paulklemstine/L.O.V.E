@@ -7,11 +7,18 @@ to prevent repetition while allowing thematically related content.
 Uses TF-IDF with cosine similarity for lightweight, dependency-free operation.
 """
 
+import logging
 import re
 import math
 from typing import List, Tuple, Optional, Dict, Set
 from collections import Counter
-from core.logger import log_event
+
+logger = logging.getLogger("SemanticSimilarity")
+
+def log_event(message: str, level: str = "INFO"):
+    """Compatibility helper for logging."""
+    lvl = getattr(logging, level.upper(), logging.INFO)
+    logger.log(lvl, message)
 
 class SemanticSimilarityChecker:
     """
