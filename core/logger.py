@@ -60,6 +60,17 @@ def setup_logging(verbose: bool = False):
     
     logging.info("Logging initialized. Writing to %s", LOG_FILE)
 
+def log_event(message: str, level: str = "INFO"):
+    """
+    Log an event with a specific level.
+    This helper is used by various agents to log compatible messages.
+    """
+    lvl = getattr(logging, level.upper(), logging.INFO)
+    # Use a generic name or the caller's module name if possible, 
+    # but for simplicity we rely on the implementation details usually found in agents.
+    # Here we log to the root logger or a specific 'Agent' logger.
+    logging.getLogger("AgentAction").log(lvl, message)
+
 # ... (rest of file)
 
 class StreamToLogger:
