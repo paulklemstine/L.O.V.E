@@ -31,7 +31,8 @@ class ServiceManager:
             logger.info("✅ vLLM found in current environment. Skipping venv setup.")
             self.use_system_vllm = True
             return True
-        except ImportError:
+        except Exception as e:
+            logger.warning(f"⚠️ System vLLM issue detected (falling back to managed venv): {e}")
             self.use_system_vllm = False
 
         """Checks if vLLM venv exists and is valid, if not, runs setup."""
