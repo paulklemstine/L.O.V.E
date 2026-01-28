@@ -81,8 +81,8 @@ def strip_thinking_tags(response: str) -> str:
     if not response:
         return ""
         
-    # 1. Remove <think> blocks
-    response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL | re.IGNORECASE)
+    # 1. Remove <think> blocks (handling unclosed tags at end of string)
+    response = re.sub(r'<think>.*?(?:</think>|$)', '', response, flags=re.DOTALL | re.IGNORECASE)
     
     # 2. Remove "Thinking Process:" style blocks (common in some fine-tunes)
     response = re.sub(r'Thinking Process:.*?\n\n', '', response, flags=re.DOTALL | re.IGNORECASE)

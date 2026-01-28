@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 
 # Import Colab detection
 from core.colab_llm import is_running_in_colab, ColabLLM, DEFAULT_COLAB_MODEL
+from core.llm_parser import strip_thinking_tags
 
 logger = logging.getLogger(__name__)
 
@@ -129,9 +130,12 @@ class LLMClient:
                     prompt=prompt,
                     system_prompt=system_prompt
                 )
-                return response
+                return strip_thinking_tags(response)
             except Exception as e:
                 logger.warning(f"Colab AI generation failed: {e}, falling back to vLLM")
+                if "kernel not ready" in str(e):
+                    logger.error("Disabling Colab AI due to permanent kernel error")
+                    self._colab_client = None
         
         # Build messages for vLLM
         messages = []
@@ -154,7 +158,7 @@ class LLMClient:
                 )
                 if response.status_code == 200:
                     data = response.json()
-                    return data["choices"][0]["message"]["content"]
+                    return strip_thinking_tags(data["choices"][0]["message"]["content"])
             except Exception as e:
                 logger.error(f"vLLM error: {e}")
         
@@ -181,9 +185,12 @@ class LLMClient:
                     prompt=prompt,
                     system_prompt=system_prompt
                 )
-                return response
+                return strip_thinking_tags(response)
             except Exception as e:
                 logger.warning(f"Colab AI async generation failed: {e}, falling back to vLLM")
+                if "kernel not ready" in str(e):
+                    logger.error("Disabling Colab AI due to permanent kernel error")
+                    self._colab_client = None
         
         # Build messages for vLLM
         messages = []
@@ -207,7 +214,7 @@ class LLMClient:
             )
             if response.status_code == 200:
                 data = response.json()
-                return data["choices"][0]["message"]["content"]
+                return strip_thinking_tags(data["choices"][0]["message"]["content"])
         except Exception as e:
             logger.error(f"Async vLLM error: {e}")
         

@@ -101,6 +101,19 @@ class ColabLLM:
         """Check if Colab AI is available."""
         return self._ai_module is not None
     
+    def check_health(self) -> bool:
+        """
+        Check if the Colab AI environment is healthy.
+        
+        Returns:
+            True if healthy, False otherwise.
+        """
+        if self._ai_module is None:
+            return False
+        # If we could check the kernel status directly, we would here.
+        # For now, basic availability is all we can check without making a request.
+        return True
+    
     def generate(
         self,
         prompt: str,
@@ -144,7 +157,9 @@ class ColabLLM:
         except AttributeError as e:
             # This happens when the kernel isn't fully initialized
             # e.g., 'NoneType' object has no attribute 'kernel'
-            raise RuntimeError(f"Colab AI kernel not ready: {e}") from e
+            if "kernel" in str(e):
+                raise RuntimeError(f"Colab AI kernel not ready: {e}") from e
+            raise RuntimeError(f"Colab AI generation error: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Colab AI generation failed: {e}") from e
     
@@ -164,7 +179,9 @@ class ColabLLM:
             for chunk in stream:
                 yield chunk
         except AttributeError as e:
-            raise RuntimeError(f"Colab AI kernel not ready: {e}") from e
+            if "kernel" in str(e):
+                raise RuntimeError(f"Colab AI kernel not ready: {e}") from e
+            raise RuntimeError(f"Colab AI streaming error: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Colab AI streaming failed: {e}") from e
     
