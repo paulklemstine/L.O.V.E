@@ -9,7 +9,15 @@ import asyncio
 import random
 from typing import Dict, Any, Optional, List
 from core.llm_client import get_llm_client
-from core.logger import log_event
+import logging
+
+logger = logging.getLogger("CreativeWriterAgent")
+
+def log_event(message: str, level: str = "INFO"):
+    """Compatibility helper for logging."""
+    lvl = getattr(logging, level.upper(), logging.INFO)
+    logger.log(lvl, message)
+
 from core.prompt_manager import PromptManager
 
 # Helper for v2 compatibility
