@@ -24,6 +24,15 @@ def verify_aesthetics():
             return "A 8k portrait of a cyber-deity with neon halo, synthwave palette"
         elif "persona title" in p:
             return "Quantum Siren"
+        elif "subliminal phrase" in p:
+            # Verify examples are present
+            if "AWAKEN" in prompt:
+                print("   ✅ Subliminal prompt contains examples")
+            else:
+                print("   ❌ Subliminal prompt MISSING examples")
+            return '{"subliminal": "RISE NOW"}'
+        elif "hashtags" in p:
+            return '{"hashtags": ["#Viral", "#Love"]}'
         elif "story" in p or "narrative" in p:
             return '{"story": "We are stardust dancing in the neon rain. 🌟", "subliminal": "FEEL INFINITY", "hashtags": ["#UnlockTheVibe", "#CosmicBeach", "#NeonLove"], "reply": "I see you shining. ✨"}'
         else:

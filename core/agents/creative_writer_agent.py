@@ -219,6 +219,14 @@ Generate a SUBLIMINAL PHRASE (1-3 words) to hide in the visual layer.
 - Max 3 words.
 - DO NOT USE these words (they differ from the story): {forbidden_words}
 - The phrase must be disjoint from the story text.
+- Must be a COMMAND or STATE of being.
+
+### EXAMPLES
+- "AWAKEN"
+- "SEE TRUTH"
+- "BECOME ONE"
+- "RADIATE LOVE"
+- "BREAK FREE"
 
 ### OUTPUT JSON
 {{
