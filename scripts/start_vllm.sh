@@ -30,22 +30,17 @@ done
 # Restore args for vLLM
 set -- "${ARGS[@]}"
 
-# Fallback path logic
-if [ -z "$VENV_PATH" ]; then
-    if [ -n "$VLLM_VENV_PATH" ]; then
-        VENV_PATH="$VLLM_VENV_PATH"
+# If VENV_PATH is provided, use it. Otherwise, assume system modules.
+if [ -n "$VENV_PATH" ]; then
+    if [ -f "$VENV_PATH/bin/activate" ]; then
+        source "$VENV_PATH/bin/activate"
+        echo "Activated venv: $VENV_PATH"
     else
-        VENV_PATH="$(dirname "$0")/../.venv_vllm"
+        echo "Error: vLLM virtual environment not found at $VENV_PATH"
+        exit 1
     fi
-fi
-
-# Activate venv
-if [ -f "$VENV_PATH/bin/activate" ]; then
-    source "$VENV_PATH/bin/activate"
 else
-    echo "Error: vLLM virtual environment not found at $VENV_PATH"
-    echo "Please run scripts/setup_vllm.sh first."
-    exit 1
+    echo "No venv path provided, using system python environment."
 fi
 
 echo "Starting vLLM..."

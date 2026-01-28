@@ -24,6 +24,16 @@ class ServiceManager:
         self.base_url = f"http://localhost:{self.vllm_port}" # Internal check uses localhost
 
     def ensure_vllm_setup(self):
+        """Checks if vLLM is available (system or venv)."""
+        # 1. Check if vLLM is already installed in the current environment (e.g. Colab system env)
+        try:
+            import vllm
+            logger.info("✅ vLLM found in current environment. Skipping venv setup.")
+            self.use_system_vllm = True
+            return True
+        except ImportError:
+            self.use_system_vllm = False
+
         """Checks if vLLM venv exists and is valid, if not, runs setup."""
         venv_path = self.root_dir / ".venv_vllm"
         # Check for activation script to ensure venv is actually usable
@@ -115,9 +125,14 @@ class ServiceManager:
         print("🚀 Starting vLLM server...")
         start_script = self.scripts_dir / "start_vllm.sh"
         
-        # Explicitly pass venv path to avoid ambiguity in different environments
-        venv_path = str(self.root_dir / ".venv_vllm")
-        cmd = ["bash", str(start_script), "--venv", venv_path]
+        # Explicitly pass venv path ONLY if we aren't using system vLLM
+        cmd = ["bash", str(start_script)]
+        
+        if not getattr(self, 'use_system_vllm', False):
+             venv_path = str(self.root_dir / ".venv_vllm")
+             cmd.extend(["--venv", venv_path])
+        else:
+             print("   Using system-installed vLLM.")
         
         print(f"DEBUG SERVICE_MANAGER: Launching command: {cmd}")
         

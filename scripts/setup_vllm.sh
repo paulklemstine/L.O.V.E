@@ -61,7 +61,11 @@ source "$VENV_NAME/bin/activate"
 echo -e "${YELLOW}Upgrading pip...${NC}"
 pip install --upgrade pip
 
-# Install vLLM and dependencies.
+# Check if vLLM is already installed
+if pip show vllm &> /dev/null; then
+    echo -e "${GREEN}vLLM is already installed. Skipping installation.${NC}"
+else
+    # Install vLLM and dependencies.
 # We hardcode a known good configuration or valid requirements just for vLLM to minimize conflicts.
 echo -e "${YELLOW}Installing vLLM...${NC}"
 
@@ -75,6 +79,7 @@ else
     # Given the user wants to "move that up", I should try to use the version they had or a robust one.
     # The lovev1 requirements said vllm>=0.11.1.
     pip install "vllm>=0.11.1" 
+fi
 fi
 
 echo -e "${GREEN}vLLM Setup Complete!${NC}"
