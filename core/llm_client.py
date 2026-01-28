@@ -243,6 +243,7 @@ class LLMClient:
         json_system = (system_prompt or "") + "\n\nYou MUST respond with valid JSON only. No markdown, no explanation."
         
         # Build messages
+        messages = []
         if json_system:
             messages.append({"role": "system", "content": json_system})
         messages.append({"role": "user", "content": prompt})
