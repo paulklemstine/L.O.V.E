@@ -84,6 +84,11 @@ class TestColabStartup(unittest.TestCase):
                 self.assertIn("bash", cmd_list)
                 # Should verify start_vllm.sh is in there
                 self.assertTrue(any("start_vllm.sh" in str(arg) for arg in cmd_list))
+                
+                # Verify Environment Variables
+                env_vars = kwargs.get('env')
+                self.assertIsNotNone(env_vars)
+                self.assertEqual(env_vars.get("VLLM_ALLOW_LONG_MAX_MODEL_LEN"), "1")
 
     def test_service_manager_no_gpu(self):
         # Test that if get_total_vram_mb returns None (no GPU), vLLM startup is skipped

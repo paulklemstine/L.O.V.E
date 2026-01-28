@@ -178,6 +178,9 @@ class ServiceManager:
             env = os.environ.copy()
             env["VLLM_VENV_PATH"] = str(self.root_dir / ".venv_vllm")
             
+            # Fix for max_model_len error (override model config capability)
+            env["VLLM_ALLOW_LONG_MAX_MODEL_LEN"] = "1"
+            
             self.vllm_process = subprocess.Popen(
                 cmd,
                 cwd=self.root_dir,
