@@ -282,7 +282,7 @@ class LLMClient:
                     text = data["choices"][0]["message"]["content"]
                     return self._parse_json(strip_thinking_tags(text))
             except Exception as e:
-                print(f"[LLMClient] vLLM JSON mode error: {e}")
+                logger.warning(f"vLLM JSON mode error: {e}")
         
         # Fallback to standard generation
         response = self.generate(
