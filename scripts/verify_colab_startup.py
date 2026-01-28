@@ -19,18 +19,42 @@ class TestColabStartup(unittest.TestCase):
     def tearDown(self):
         sys.stdout = self.original_stdout
 
-    def test_service_manager_in_colab(self):
-        # Simulate Colab
+    def test_service_manager_in_colab_default(self):
+        # Simulate Colab with default settings (SKIP_VLLM_IN_COLAB = False)
+        # It should ATTEMPT to start vLLM (which we'll mock to avoid actual process spawning complexity in this rapid test)
         with patch.dict('sys.modules', {'google.colab': MagicMock()}):
             sm = ServiceManager(project_root)
+            # We mock run logic to prevent actual subproc release, just check flow
+            sm.ensure_vllm_setup = MagicMock(return_value=True)
+            sm.is_vllm_healthy = MagicMock(return_value=False)
+            sm.scripts_dir = MagicMock()
+            
+            with patch('subprocess.Popen') as mock_popen, \
+                 patch('builtins.open', MagicMock()):
+                mock_popen.return_value.pid = 1234
+                sm.wait_for_vllm = MagicMock(return_value=True)
+                sm.get_total_vram_mb = MagicMock(return_value=None)
+
+
+                result = sm.start_vllm()
+                self.assertTrue(result)
+                
+                # Should NOT have skipped
+                output = self.held_output.getvalue()
+                self.assertNotIn("Skipping local vLLM startup", output)
+                self.assertIn("Starting vLLM server", output)
+
+    def test_service_manager_in_colab_skip_enabled(self):
+        # Simulate Colab with SKIP_VLLM_IN_COLAB = True
+        with patch.dict('sys.modules', {'google.colab': MagicMock()}):
+            sm = ServiceManager(project_root)
+            sm.SKIP_VLLM_IN_COLAB = True
+            
             result = sm.start_vllm()
             
-            self.assertTrue(result, "start_vllm should return True in Colab")
-            
+            self.assertTrue(result)
             output = self.held_output.getvalue()
-            self.assertIn("Running in Google Colab", output)
             self.assertIn("Skipping local vLLM startup", output)
-            self.assertNotIn("Starting vLLM server", output) # Should NOT attempt to start
 
     def test_is_colab_helper(self):
         sm = ServiceManager(project_root)

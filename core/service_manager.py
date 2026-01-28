@@ -12,6 +12,9 @@ class ServiceManager:
     """
     Manages background services for the L.O.V.E. agent, specifically vLLM.
     """
+    # Feature flag to control vLLM startup in Colab
+    SKIP_VLLM_IN_COLAB = False
+
     def __init__(self, root_dir: Path):
         self.root_dir = root_dir
         self.scripts_dir = self.root_dir / "scripts"
@@ -93,7 +96,7 @@ class ServiceManager:
 
     def start_vllm(self, model_name=None, gpu_memory_utilization=None):
         """Starts the vLLM server in a background subprocess."""
-        if self.is_colab():
+        if self.is_colab() and self.SKIP_VLLM_IN_COLAB:
             print("✨ Running in Google Colab. Skipping local vLLM startup.")
             print("   Assume Colab environment handles model serving or API access.")
             return True
