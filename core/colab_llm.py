@@ -130,21 +130,43 @@ class ColabLLM:
     
     def _generate_batch(self, prompt: str) -> str:
         """Generate text in batch mode (wait for full response)."""
-        response = self._ai_module.generate_text(
-            prompt,
-            model_name=self.model_name
-        )
-        return response
+        if self._ai_module is None:
+            raise RuntimeError("Colab AI module is not available")
+        
+        try:
+            response = self._ai_module.generate_text(
+                prompt,
+                model_name=self.model_name
+            )
+            if response is None:
+                raise RuntimeError("Colab AI returned None response")
+            return response
+        except AttributeError as e:
+            # This happens when the kernel isn't fully initialized
+            # e.g., 'NoneType' object has no attribute 'kernel'
+            raise RuntimeError(f"Colab AI kernel not ready: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"Colab AI generation failed: {e}") from e
     
     def _generate_stream(self, prompt: str) -> Generator[str, None, None]:
         """Generate text in streaming mode (yield chunks as they arrive)."""
-        stream = self._ai_module.generate_text(
-            prompt,
-            model_name=self.model_name,
-            stream=True
-        )
-        for chunk in stream:
-            yield chunk
+        if self._ai_module is None:
+            raise RuntimeError("Colab AI module is not available")
+        
+        try:
+            stream = self._ai_module.generate_text(
+                prompt,
+                model_name=self.model_name,
+                stream=True
+            )
+            if stream is None:
+                raise RuntimeError("Colab AI returned None stream")
+            for chunk in stream:
+                yield chunk
+        except AttributeError as e:
+            raise RuntimeError(f"Colab AI kernel not ready: {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"Colab AI streaming failed: {e}") from e
     
     def generate_with_context(
         self,
