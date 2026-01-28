@@ -243,12 +243,26 @@ class LLMClient:
         json_system = (system_prompt or "") + "\n\nYou MUST respond with valid JSON only. No markdown, no explanation."
         
         # Build messages
-        messages = []
         if json_system:
             messages.append({"role": "system", "content": json_system})
         messages.append({"role": "user", "content": prompt})
         
-        # Try vLLM with JSON mode first
+        # Priority 1: Try Colab AI first
+        if self._colab_client is not None:
+            try:
+                # Use standard generation with JSON prompt engineering
+                response = self._colab_client.generate(
+                    prompt=prompt,
+                    system_prompt=json_system
+                )
+                return self._parse_json(strip_thinking_tags(response))
+            except Exception as e:
+                logger.warning(f"Colab AI JSON generation failed: {e}, falling back to vLLM")
+                if "kernel not ready" in str(e):
+                    logger.error("Disabling Colab AI due to permanent kernel error")
+                    self._colab_client = None
+
+        # Priority 2: Try vLLM with JSON mode
         if self._check_vllm_health():
             try:
                 # Try using response_format (OpenAI compatible)
@@ -265,7 +279,7 @@ class LLMClient:
                 if response.status_code == 200:
                     data = response.json()
                     text = data["choices"][0]["message"]["content"]
-                    return self._parse_json(text)
+                    return self._parse_json(strip_thinking_tags(text))
             except Exception as e:
                 print(f"[LLMClient] vLLM JSON mode error: {e}")
         
