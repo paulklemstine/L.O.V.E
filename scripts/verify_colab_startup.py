@@ -33,8 +33,7 @@ class TestColabStartup(unittest.TestCase):
                  patch('builtins.open', MagicMock()):
                 mock_popen.return_value.pid = 1234
                 sm.wait_for_vllm = MagicMock(return_value=True)
-                sm.get_total_vram_mb = MagicMock(return_value=None)
-
+                sm.get_total_vram_mb = MagicMock(return_value=16000) # Simulating 16GB VRAM
 
                 result = sm.start_vllm()
                 self.assertTrue(result)
@@ -72,7 +71,7 @@ class TestColabStartup(unittest.TestCase):
                 sm.is_vllm_healthy = MagicMock(return_value=False)
                 mock_popen.return_value.pid = 9999
                 sm.wait_for_vllm = MagicMock(return_value=True)
-                sm.get_total_vram_mb = MagicMock(return_value=None)
+                sm.get_total_vram_mb = MagicMock(return_value=16000) # Simulating 16GB VRAM
                 
                 res = sm.start_vllm()
                 
@@ -85,6 +84,24 @@ class TestColabStartup(unittest.TestCase):
                 self.assertIn("bash", cmd_list)
                 # Should verify start_vllm.sh is in there
                 self.assertTrue(any("start_vllm.sh" in str(arg) for arg in cmd_list))
+
+    def test_service_manager_no_gpu(self):
+        # Test that if get_total_vram_mb returns None (no GPU), vLLM startup is skipped
+        sm = ServiceManager(project_root)
+        
+        # Mocking
+        sm.is_colab = MagicMock(return_value=False) # Ensure not in colab first
+        sm.get_total_vram_mb = MagicMock(return_value=None)
+        sm.ensure_vllm_setup = MagicMock()
+        
+        result = sm.start_vllm()
+        
+        self.assertTrue(result)
+        sm.ensure_vllm_setup.assert_not_called()
+        
+        output = self.held_output.getvalue()
+        self.assertIn("No GPU/HPU detected", output)
+        self.assertIn("Skipping vLLM startup", output)
 
     def test_is_colab_helper(self):
         sm = ServiceManager(project_root)

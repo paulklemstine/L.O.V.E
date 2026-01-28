@@ -111,6 +111,13 @@ class ServiceManager:
             print("   Assume Colab environment handles model serving or API access.")
             return True
 
+        # Check for GPU/HPU presence before attempting setup
+        vram_mb = self.get_total_vram_mb()
+        if vram_mb is None:
+            print("⚠️ No GPU/HPU detected (nvidia-smi failed or no device found).")
+            print("   Skipping vLLM startup as it requires a GPU.")
+            return True
+
         if gpu_memory_utilization is None:
             # Check env var, default to 0.6
             gpu_memory_utilization = float(os.environ.get("GPU_MEMORY_UTILIZATION", "0.6"))
@@ -145,7 +152,7 @@ class ServiceManager:
         # Dynamic Context Window Config
         # If we have < 20GB VRAM (e.g. T4 16GB, Laptop 6GB), limit context to prevent OOM/Stability issues.
         # If we have > 20GB (e.g. A100, A10g), assume we can handle larger context.
-        vram_mb = self.get_total_vram_mb()
+        # vram_mb was already fetched at start of method
         
         if vram_mb is not None:
             print(f"   Detected VRAM: {vram_mb} MB")
