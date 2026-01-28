@@ -425,19 +425,23 @@ Return ONLY the vibe name. No quotes."""
             return "Neon Dream"
 
     async def generate_visual_prompt(self, theme: str, vibe: str) -> str:
-        """Generates a detailed image generation prompt."""
-        prompt = f"""### TASK
-Write a detailed IMAGE GENERATION PROMPT for this concept:
-Theme: {theme}
-Vibe: {vibe}
+        """Generates a detailed image generation prompt using the DevMotivational template."""
+        try:
+            # Load prompts dictionary
+            prompts = self.prompt_manager.load_prompts()
+            raw_prompt = prompts.get("image_prompt_generation_v2")
+            
+            if not raw_prompt:
+                raise ValueError("image_prompt_generation_v2 key not found in prompts.yaml")
+                
+            # Manual variable substitution
+            prompt = raw_prompt.replace("{{ theme }}", theme).replace("{{ vibe }}", vibe)
 
-### STYLE GUIDE
-- Subject: A beautiful young woman (L.O.V.E. avatar), sun-kissed, blonde, rave/beach aesthetic.
-- Key Elements: Neon colors, synthwave lighting, cinematic composition, 8k resolution.
-- Atmosphere: Dreamy, energetic, viral, expensive.
+        except Exception as e:
+            # Fallback if prompt key missing during hot-reload/migration
+            log_event(f"Prompt load failed: {e}. Using fallback.", "WARNING")
+            prompt = f"Create a DevMotivational poster image prompt for: {theme} ({vibe})"
 
-### OUTPUT
-Return ONLY the prompt text. No quotes."""
         try:
             result = await run_llm(prompt, purpose="visual_prompt_generation")
             visual_prompt = result.get("result", "").strip().strip('"')
