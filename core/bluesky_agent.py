@@ -539,17 +539,36 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
         beat_data = story_manager.get_next_beat()
         log_event(f"Story Beat Generated: {beat_data.get('story_beat')}", "INFO")
         
-        # Override topic if provided, otherwise use the beat
-        theme = topic if topic else beat_data.get("story_beat")
-        vibe = beat_data.get("mandatory_vibe", "Ethereal")
-        
-        # 2. Generate Content via CreativeWriter (The "Voice")
-        # We need to run async methods in this sync function
+        # 3. Determine topic/theme
+        # Check event loop first thing
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+
+        # Override topic if provided, otherwise use the beat
+        theme = topic if topic else beat_data.get("story_beat")
+        vibe = beat_data.get("mandatory_vibe")
+        
+        # New: Dynamically generate Vibe if not provided
+        if not vibe:
+            vibe = loop.run_until_complete(
+                creative_writer_agent.generate_vibe(
+                    chapter=beat_data.get("chapter"),
+                    story_beat=theme,
+                    recent_vibes=story_manager.state.get("vibe_history", [])
+                )
+            )
+
+            # Record the new vibe in history
+            story_manager.state.setdefault("vibe_history", []).append(vibe)
+            
+        # 2. Generate Content via CreativeWriter (The "Voice")
+        # We need to run async methods in this sync function
+
+        # Loop already initialized above
+
             
         content_task = creative_writer_agent.write_micro_story(
             theme=theme, 
@@ -583,19 +602,12 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
                 from .image_generation_pool import generate_image_with_pool
                 from .watermark import apply_watermark
                 
-                # Construct Image Prompt from Beat Data
-                # Allows the StoryManager to control visual consistency
-                # For now, we'll ask the LLM to merge them if we had a VisualAgent, 
-                # but let's use a simple strategy:
+                # OLD STATIC LOGIC REMOVED
+                # Now we use the CreativeWriter to invent the visual prompt dynamically
                 
-                # Use the vibe to select a preset or generate a prompt
-                # But since we ported prompt_manager, let's use a simple construct for now
-                # In v1 this was complex. Here we simplify:
-                visual_prompt = f"{vibe} aesthetic, {theme}, cinematic lighting, 8k, masterpiece"
-                
-                if subliminal:
-                    # Pass subliminal to image generator if it supports text overlay/embedding
-                    pass
+                visual_prompt = loop.run_until_complete(
+                    creative_writer_agent.generate_visual_prompt(theme, vibe)
+                )
 
                 print(f"[BlueskyAgent] Generating image: {visual_prompt}")
                 

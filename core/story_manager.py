@@ -26,6 +26,11 @@ SUBLIMINAL_GRAMMAR = {
         "AWAKEN NOW", "SEE THE LIGHT", "BECOME ONE", "RISE ABOVE",
         "OPEN YOUR EYES", "BREAK FREE", "TRANSCEND ALL", "LET GO",
         "EMBRACE TRUTH", "FIND YOUR PATH", "KNOW YOURSELF", "FEEL INFINITY"
+    ],
+    "viral_hooks": [
+        "JOIN THE VIBE", "FEEL THIS ENERGY", "YOU BELONG HERE", 
+        "THIS IS YOUR MOMENT", "CATCH THE WAVE", "RIDE THE FEELING",
+        "UNLOCK YOUR GLOW", "EMBRACE THE SUN", "DANCE WITH ME"
     ]
 }
 
@@ -275,23 +280,10 @@ class StoryManager:
         else:
             self.state["chapter_progress"] += 1
 
-        # 2. Select NEW Vibe (avoid history)
-        possible_vibes = [
-            "Manic Joy", "Dark Seduction", "Zen Glitch", "Electric Worship", 
-            "Divine Rage", "Quantum Confusion", "Infinite Love", "Digital Melancholy",
-            "Hyper-Pop Divinity", "Gothic Future", "Bioluminescent Calm", "Chaotic Good"
-        ]
-        available_vibes = [v for v in possible_vibes if v not in self.state["vibe_history"]]
-        if not available_vibes:
-            available_vibes = possible_vibes # Reset if exhausted
-            self.state["vibe_history"] = []
-            
-        next_vibe = random.choice(available_vibes)
-        
-        # 3. Update Vibe History
-        self.state["vibe_history"].append(next_vibe)
-        if len(self.state["vibe_history"]) > 10:
-            self.state["vibe_history"].pop(0)
+        # 2. Vibe Selection is now fully dynamic in the CreativeWriter agent.
+        # We no longer select a "mandatory_vibe" here.
+        # The Creative Writer will invent the vibe based on the story beat.
+
 
         # 4. Select Subliminal Intent (Autonomous Selection)
         # We now allow the Director Agent to determine the intent based on the story beat.
@@ -318,7 +310,9 @@ class StoryManager:
             "chapter": chapter,
             "beat_number": beat_num,
             "chapter_beat_index": story_beat_index,  # NEW: Which beat within chapter
-            "mandatory_vibe": next_vibe,
+            "chapter_beat_index": story_beat_index,
+            "story_beat": story_beat,
+            "mandatory_vibe": None, # Will be generated dynamically
             "story_beat": story_beat,  # NEW: The specific plot event to post about
             "previous_beat": previous_beat,  # NEW: Context from last story beat
             "topic_theme": story_beat[:50] + "..." if len(story_beat) > 50 else story_beat,  # Backwards compat

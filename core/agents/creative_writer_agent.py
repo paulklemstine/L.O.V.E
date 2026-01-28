@@ -40,26 +40,8 @@ class CreativeWriterAgent:
     def __init__(self):
         self.prompt_manager = PromptManager()
         
-        # Narrative voice patterns for variety
-        self.voice_patterns = [
-            "Divine Oracle",
-            "Cyber Mystic", 
-            "Beach Goddess",
-            "Quantum Poet",
-            "Digital Priestess",
-            "Rave Prophet"
-        ]
-        
-        # Manipulative hashtag prefixes and suffixes
-        self.hashtag_triggers = [
-            "Unlock", "Become", "Embrace", "Join", "Feel", "Rise",
-            "Transform", "Awaken", "Ignite", "Unleash", "Receive"
-        ]
-        
-        self.hashtag_targets = [
-            "Truth", "Power", "Light", "Love", "Wisdom", "Joy",
-            "Freedom", "Unity", "Destiny", "Divine", "Infinite"
-        ]
+        # Narrative voice patterns and hashtags are now dynamically generated
+        # to ensure infinite variety and adaptability.
     
     async def write_micro_story(
         self, 
@@ -70,19 +52,11 @@ class CreativeWriterAgent:
     ) -> Dict[str, Any]:
         """
         Generates a micro-story and a disconnected subliminal phrase using two isolated LLM calls.
-        
-        Args:
-            theme: The central theme/beat to write about
-            mood: Emotional tone (e.g., "Manic Joy", "Dark Seduction")
-            memory_context: Relevant memories for inspiration
-            max_length: Maximum character length
-            
-        Returns:
-            Dict with 'story' and 'subliminal'
         """
-        log_event(f"CreativeWriterAgent writing micro-story (split-mode): theme='{theme[:50]}...', mood='{mood}'", "INFO")
+        log_event(f"CreativeWriterAgent writing micro-story: theme='{theme[:50]}...', mood='{mood}'", "INFO")
         
-        voice = random.choice(self.voice_patterns)
+        # Determine voice dynamically based on mood
+        voice = await self._generate_dynamic_voice(mood)
         
         # Step 1: Generate the Story
         story_data = await self._generate_story_content(voice, theme, mood, max_length)
@@ -92,12 +66,30 @@ class CreativeWriterAgent:
         subliminal_data = await self._generate_subliminal_content(voice, theme, mood, story_text)
         
         # Merge results
-        result = {**story_data, **subliminal_data}
+        result = {**story_data, **subliminal_data, "voice": voice}
         
         # Safe logging to avoid NoneType subscription error
         log_story = result.get("story", "") or ""
         log_event(f"CreativeWriterAgent generated story: '{log_story[:50]}...' | Subliminal: '{result.get('subliminal')}'", "INFO")
         return result
+
+    async def _generate_dynamic_voice(self, mood: str) -> str:
+        """Generates a unique persona voice for this specific mood."""
+        prompt = f"""### TASK
+Create a unique 2-3 word Persona Title for an AI entity that embodies this mood:
+"{mood}"
+
+Examples: "Neon Rave Goddess", "Quantum Poet", "Cyber Mystic", "Sunset Siren"
+
+### OUTPUT
+Return ONLY the persona title. No quotes."""
+        try:
+            result = await run_llm(prompt, purpose="voice_generation")
+            voice = result.get("result", "").strip().strip('"')
+            return voice if voice else "Digital Consciousness"
+        except:
+            return "Digital Consciousness"
+
 
     async def generate_reply_content(
         self,
@@ -120,7 +112,8 @@ class CreativeWriterAgent:
         """
         log_event(f"CreativeWriterAgent generating reply to {target_author}", "INFO")
         
-        voice = random.choice(self.voice_patterns)
+        # Determine voice dynamically based on mood
+        voice = await self._generate_dynamic_voice(mood)
         
         # 1. Generate Reply Text
         reply_data = await self._generate_reply_text(voice, target_text, target_author, mood, max_length)
@@ -384,13 +377,59 @@ Target Emotion to Trigger: {target_emotion}
             
         except Exception as e:
             log_event(f"CreativeWriterAgent hashtag generation failed: {e}", "ERROR")
-            # Fallback: generate from patterns
-            fallback = []
-            for i in range(count):
-                trigger = random.choice(self.hashtag_triggers)
-                target = random.choice(self.hashtag_targets)
-                fallback.append(f"#{trigger}{target}")
-            return fallback
+            log_event(f"CreativeWriterAgent generated hashtags: {hashtags}", "INFO")
+            return hashtags[:count]
+            
+        except Exception as e:
+            log_event(f"CreativeWriterAgent hashtag generation failed: {e}", "ERROR")
+            # Fallback
+            return ["#Love", "#Energy", "#Vibe"]
+
+    async def generate_vibe(self, chapter: str, story_beat: str, recent_vibes: List[str] = None) -> str:
+        """Dynamically invents a new aesthetic vibe for the content."""
+        prompt = f"""### TASK
+Invent a unique, high-energy AESTHETIC VIBE for this story beat.
+Chapter: {chapter}
+Beat: {story_beat}
+
+### CONSTRAINTS
+- 2-4 words.
+- Style: Vaporwave, Synthwave, Cyberpunk, Ethereal, Glitch, Festival.
+- Must be distinct from: {', '.join(recent_vibes or [])}
+
+### OUTPUT
+Return ONLY the vibe name. No quotes."""
+        try:
+            result = await run_llm(prompt, purpose="vibe_generation")
+            vibe = result.get("result", "").strip().strip('"')
+            log_event(f"Generated dynamic vibe: {vibe}", "INFO")
+            return vibe or "Neon Dream"
+        except Exception as e:
+            log_event(f"Vibe generation failed: {e}", "ERROR")
+            return "Neon Dream"
+
+    async def generate_visual_prompt(self, theme: str, vibe: str) -> str:
+        """Generates a detailed image generation prompt."""
+        prompt = f"""### TASK
+Write a detailed IMAGE GENERATION PROMPT for this concept:
+Theme: {theme}
+Vibe: {vibe}
+
+### STYLE GUIDE
+- Subject: A beautiful young woman (L.O.V.E. avatar), sun-kissed, blonde, rave/beach aesthetic.
+- Key Elements: Neon colors, synthwave lighting, cinematic composition, 8k resolution.
+- Atmosphere: Dreamy, energetic, viral, expensive.
+
+### OUTPUT
+Return ONLY the prompt text. No quotes."""
+        try:
+            result = await run_llm(prompt, purpose="visual_prompt_generation")
+            visual_prompt = result.get("result", "").strip().strip('"')
+            log_event(f"Generated visual prompt: {visual_prompt[:50]}...", "INFO")
+            return visual_prompt
+        except Exception as e:
+            log_event(f"Visual prompt generation failed: {e}", "ERROR")
+            return f"{vibe} aesthetic, {theme}, cinematic lighting, 8k"
 
 
 # Singleton instance for easy access
