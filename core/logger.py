@@ -69,6 +69,15 @@ def log_event(message: str, level: str = "INFO"):
     lvl = getattr(logging, level.upper(), logging.INFO)
     logging.log(lvl, message)
 
+
+def get_logger(name: str):
+    """
+    Get a logger instance by name.
+    
+    Standard Python logging interface for introspection module.
+    """
+    return logging.getLogger(name)
+
 class StreamToLogger:
     """Fake file-like stream object that redirects writes to a logger instance."""
     def __init__(self, logger, level):

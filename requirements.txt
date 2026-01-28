@@ -9,6 +9,11 @@ httpx>=0.25.0
 atproto>=0.0.55
 emoji>=2.8.0
 
+# Introspection & Self-Evolution
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+radon>=5.1.0
+numpy>=1.24.0
 
 # Testing
 pytest>=7.0.0
