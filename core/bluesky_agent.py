@@ -20,6 +20,44 @@ import emoji
 
 load_dotenv()
 
+import asyncio
+
+def _run_sync_safe(coroutine):
+    """
+    Safely run a coroutine synchronously, even if an event loop is already running.
+    Useful for Colab/Jupyter compatibility where the main loop is active.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+        
+    if loop and loop.is_running():
+        # Loop is running, use a thread to avoid RuntimeError
+        import threading
+        
+        result = None
+        exception = None
+        
+        def runner():
+            nonlocal result, exception
+            try:
+                # asyncio.run creates a new event loop
+                result = asyncio.run(coroutine)
+            except Exception as e:
+                exception = e
+                
+        thread = threading.Thread(target=runner)
+        thread.start()
+        thread.join()
+        
+        if exception:
+            raise exception
+        return result
+    else:
+        # No running loop, standard execution
+        return asyncio.run(coroutine)
+
 
 # Rate limiting state
 # Bluesky limit: 5000 points/hour. Create Post = 3 points. ~1666 posts/hour (~2.2s/post).
@@ -352,7 +390,7 @@ def reply_to_comment_agent(
     5. Save to state
     """
     try:
-        import asyncio
+    try:
         from .agents.creative_writer_agent import creative_writer_agent
         
         uri = comment['uri']
@@ -361,11 +399,6 @@ def reply_to_comment_agent(
         text = comment['text']
         
         # 1. Generate Content
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             
         # Determine mood (could be random or based on sentiment)
         mood = "Enigmatic Connection"
@@ -375,7 +408,7 @@ def reply_to_comment_agent(
             target_author=author,
             mood=mood
         )
-        content_result = loop.run_until_complete(content_task)
+        content_result = _run_sync_safe(content_task)
         
         reply_text = content_result.get("text", "")
         subliminal = content_result.get("subliminal", "")
@@ -388,7 +421,7 @@ def reply_to_comment_agent(
             topic="Connection", # Abstract topic for replies
             count=3
         )
-        hashtags = loop.run_until_complete(hashtag_task)
+        hashtags = _run_sync_safe(hashtag_task)
         
         # 3. Image
         image_path = None
@@ -399,7 +432,7 @@ def reply_to_comment_agent(
             visual_prompt = f"Abstract digital connection, ethereal interface, {mood}, cinematic lighting"
             
             print(f"[BlueskyAgent] Generating reply image: {visual_prompt}")
-            image_result = loop.run_until_complete(
+            image_result = _run_sync_safe(
                 generate_image_with_pool(
                     prompt=visual_prompt,
                     text_content=subliminal
@@ -523,7 +556,6 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
             }
 
     try:
-        import asyncio
         from .story_manager import story_manager
         from .agents.creative_writer_agent import creative_writer_agent
         from .logger import log_event
@@ -540,20 +572,14 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
         log_event(f"Story Beat Generated: {beat_data.get('story_beat')}", "INFO")
         
         # 3. Determine topic/theme
-        # Check event loop first thing
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
+        
         # Override topic if provided, otherwise use the beat
         theme = topic if topic else beat_data.get("story_beat")
         vibe = beat_data.get("mandatory_vibe")
         
         # New: Dynamically generate Vibe if not provided
         if not vibe:
-            vibe = loop.run_until_complete(
+            vibe = _run_sync_safe(
                 creative_writer_agent.generate_vibe(
                     chapter=beat_data.get("chapter"),
                     story_beat=theme,
@@ -566,16 +592,13 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
             
         # 2. Generate Content via CreativeWriter (The "Voice")
         # We need to run async methods in this sync function
-
-        # Loop already initialized above
-
             
         content_task = creative_writer_agent.write_micro_story(
             theme=theme, 
             mood=vibe,
             memory_context=beat_data.get("previous_beat", "")
         )
-        content_result = loop.run_until_complete(content_task)
+        content_result = _run_sync_safe(content_task)
         
         text = content_result.get("story", "")
         subliminal = content_result.get("subliminal", "")
@@ -585,7 +608,7 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
             topic=theme,
             count=3
         )
-        hashtags = loop.run_until_complete(hashtag_task)
+        hashtags = _run_sync_safe(hashtag_task)
         
         # 4. Generate Image (The "Visuals")
         image_path = None
@@ -605,13 +628,13 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
                 # OLD STATIC LOGIC REMOVED
                 # Now we use the CreativeWriter to invent the visual prompt dynamically
                 
-                visual_prompt = loop.run_until_complete(
+                visual_prompt = _run_sync_safe(
                     creative_writer_agent.generate_visual_prompt(theme, vibe)
                 )
 
                 print(f"[BlueskyAgent] Generating image: {visual_prompt}")
                 
-                image_result = loop.run_until_complete(
+                image_result = _run_sync_safe(
                     generate_image_with_pool(
                         prompt=visual_prompt, 
                         text_content=subliminal 
