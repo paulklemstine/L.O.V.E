@@ -45,7 +45,37 @@ def setup_logging(verbose: bool = False):
     root_logger.addHandler(file_handler)
     
     # 2. Console Handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Check if sys.stdout is already our wrapper (from a previous run)
+    raw_stdout = sys.stdout
+    if isinstance(raw_stdout, StreamToLogger):
+         # If already wrapped, we won't wrap it again, but we need the underlying stream for the handler
+         # Since we don't store it in StreamToLogger (my bad), we'll try sys.__stdout__ as fallback
+         # But safer: avoid re-wrapping at the end of function
+         # Ideally we should store the original stream
+         pass
+    
+    # Use the raw stream for the handler to prevent loops
+    # If sys.stdout is already wrapped, this might be risky unless we unwrap it.
+    # Let's perform a check.
+    
+    if hasattr(sys.stdout, 'is_pseudo'): 
+        # Detect simple wrapper if we tag it, but for now:
+        pass
+
+    # Better Strategy:
+    # 1. Capture current stdout
+    current_stdout = sys.stdout
+    
+    # 2. If it's ALREADY a StreamToLogger, DO NOT re-wrap, and use its logger for output? 
+    # No, we want to reset the handlers.
+    
+    # If it is our wrapper, let's try to unwrap or fallback to __stdout__
+    target_stream = current_stdout
+    if isinstance(target_stream, StreamToLogger):
+        # Fallback to __stdout__ if available, otherwise we are stuck
+        target_stream = getattr(sys, '__stdout__', target_stream)
+        
+    console_handler = logging.StreamHandler(target_stream)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
@@ -55,9 +85,9 @@ def setup_logging(verbose: bool = False):
     root_logger.addHandler(web_handler)
     
     # Redirect stdout to capture print statements
-    # WARNING: Do NOT redirect stderr, as it causes infinite recursion if the logger itself fails
-    sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO)
-    # sys.stderr = StreamToLogger(logging.getLogger('STDERR'), logging.ERROR)
+    # ONLY wrap if not already wrapped
+    if not isinstance(sys.stdout, StreamToLogger):
+        sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO)
     
     logging.info("Logging initialized. Writing to %s", LOG_FILE)
 
