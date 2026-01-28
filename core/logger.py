@@ -45,18 +45,8 @@ def setup_logging(verbose: bool = False):
     root_logger.addHandler(file_handler)
     
     # 2. Console Handler
-    # Detect if sys.stdout is already a wrapper (duck typing for safety across reloads)
-    current_stdout = sys.stdout
-    original_stream = sys.stdout
-    
-    if hasattr(current_stdout, 'original_stream'):
-        # It's our wrapper (or similar). Unwrap it!
-        original_stream = current_stdout.original_stream
-        # RESTORE sys.stdout to prevent nesting wrappers
-        sys.stdout = original_stream
-        print("Restored sys.stdout from existing wrapper.")
-        
-    console_handler = logging.StreamHandler(original_stream)
+    # Use direct stdout for the console handler
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
@@ -65,13 +55,8 @@ def setup_logging(verbose: bool = False):
     web_handler.setFormatter(formatter)
     root_logger.addHandler(web_handler)
     
-    # Redirect stdout to capture print statements
-    # Pass the original stream so the wrapper knows what to write to if needed (though it logs to logger)
-    # Actually, StreamToLogger usually eats the output and logs it. 
-    # BUT, if we want print() to show up, the Logger 'STDOUT' must eventually output to ConsoleHandler.
-    # ConsoleHandler writes to 'original_stream'.
-    # So StreamToLogger doesn't need to write to stream directly.
-    sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO, original_stream)
+    # DISABLE STDOUT REDIRECTION to prevent recursion errors in Colab
+    # sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO, original_stream)
     
     logging.info("Logging initialized. Writing to %s", LOG_FILE)
 

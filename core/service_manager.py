@@ -30,23 +30,40 @@ class ServiceManager:
         
         if not venv_path.exists() or not activate_path.exists():
             if venv_path.exists():
-                print("⚠️ vLLM environment appears corrupted or incomplete. Removing...")
+                logger.warning("⚠️ vLLM environment appears corrupted or incomplete. Removing...")
                 import shutil
                 try:
                     shutil.rmtree(venv_path)
                 except Exception as e:
-                    print(f"⚠️ Failed to remove corrupt venv: {e}")
+                    logger.error(f"⚠️ Failed to remove corrupt venv: {e}")
             
-            print("⚠️ vLLM environment not found. Running setup script...")
+            logger.info("⚠️ vLLM environment not found. Running setup script...")
             setup_script = self.scripts_dir / "setup_vllm.sh"
             try:
                 # Ensure checking permissions
                 if os.name != 'nt':
                     subprocess.check_call(["chmod", "+x", str(setup_script)])
                     
-                subprocess.check_call(["bash", str(setup_script)], cwd=self.root_dir)
+                # Run setup script and capture output to logs
+                process = subprocess.Popen(
+                    ["bash", str(setup_script)],
+                    cwd=self.root_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                
+                # Stream output to logger
+                for line in process.stdout:
+                    logger.info(f"[SETUP] {line.strip()}")
+                
+                process.wait()
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(process.returncode, ["bash", str(setup_script)])
+                    
             except subprocess.CalledProcessError as e:
-                print(f"❌ Failed to setup vLLM: {e}")
+                logger.error(f"❌ Failed to setup vLLM: {e}")
                 return False
         return True
 
