@@ -112,20 +112,24 @@ class ServiceManager:
         cmd.extend(["--gpu-memory-utilization", str(gpu_memory_utilization)])
         
         # Dynamic Context Window Config
-        # If we have < 7GB VRAM (e.g. 6GB Laptop GPU), limit context to prevent OOM.
-        # If we have > 7GB (e.g. Colab T4/A100), assume we can handle full context or vLLM defaults.
+        # If we have < 20GB VRAM (e.g. T4 16GB, Laptop 6GB), limit context to prevent OOM/Stability issues.
+        # If we have > 20GB (e.g. A100, A10g), assume we can handle larger context.
         vram_mb = self.get_total_vram_mb()
         
         if vram_mb is not None:
             print(f"   Detected VRAM: {vram_mb} MB")
-            if vram_mb < 7000:
-                 print("   ⚠️ Small GPU detected (< 7GB). Limiting context window to 8192.")
-                 cmd.extend(["--max-model-len", "8192"])  # Cap context for small GPUs
+            if vram_mb < 20000:
+                 print("   ⚠️ Consumer/T4 GPU detected (< 20GB). Limiting context window to 8192 for stability.")
+                 cmd.extend(["--max-model-len", "8192"])  # Cap context for T4/Consumer GPUs
+                 # Enforce eager execution for T4 stability (fixes CUDA graph capture crashes)
+                 print("   ⚠️ Enforcing eager execution for stability.")
+                 cmd.extend(["--enforce-eager"])
             else:
                  print("   ✨ High VRAM detected. Unleashing full context window.")
         else:
-             print("   ⚠️ Unknown VRAM (nvidia-smi failed). Assuming server capability (no limit).")
-             # Default: No limit if we can't detect (user likely on server or knows what they are doing)
+             print("   ⚠️ Unknown VRAM (nvidia-smi failed). Enforcing safe defaults.")
+             cmd.extend(["--max-model-len", "8192"])
+             cmd.extend(["--enforce-eager"])
 
         # Start process
         try:
