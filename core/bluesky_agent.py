@@ -22,8 +22,9 @@ load_dotenv()
 
 
 # Rate limiting state
-POST_COOLDOWN_SECONDS = 300  # 5 minutes between posts
-GENERATION_COOLDOWN_SECONDS = 300  # 5 minutes between image generations
+# Bluesky limit: 5000 points/hour. Create Post = 3 points. ~1666 posts/hour (~2.2s/post).
+POST_COOLDOWN_SECONDS = 10  # Reduced from 300s to align with API limits (safe buffer)
+GENERATION_COOLDOWN_SECONDS = 10  # Matched to post cooldown
 REPLIED_STATE_FILE = Path(__file__).parent.parent / "state" / "replied_comments.json"
 
 # Rate limiting state
