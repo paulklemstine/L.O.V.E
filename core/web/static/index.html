@@ -244,6 +244,64 @@
             border-radius: 4px;
             border: 1px solid #333;
             font-size: 0.9em;
+            display: block;
+            /* Ensure visibility */
+        }
+
+        #logs-panel {
+            position: fixed;
+            bottom: 70px;
+            /* Above LLM console */
+            left: 20px;
+            right: 20px;
+            height: 300px;
+            z-index: 900;
+            transition: height 0.3s ease, opacity 0.3s ease;
+            box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #logs-panel.collapsed {
+            height: 40px;
+        }
+
+        #logs-header {
+            cursor: pointer;
+            padding: 10px;
+            background: rgba(40, 40, 40, 0.95);
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #logs-header:hover {
+            background: rgba(60, 60, 60, 0.95);
+        }
+
+        /* Agent Details */
+        .agent-subtasks {
+            margin-top: 5px;
+            padding-left: 10px;
+            border-left: 2px solid #444;
+            font-size: 0.85em;
+        }
+
+        .agent-subtasks ul {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+
+        .agent-info {
+            margin-top: 5px;
+            background: #111;
+            padding: 5px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.8em;
+            color: #ccc;
+            overflow-x: auto;
         }
 
         .log-entry {
@@ -434,9 +492,10 @@
 
     <div id="main-content">
         <!-- Live Logs -->
-        <div id="logs-panel" class="panel">
-            <h2>Live Logs</h2>
-            <div id="log-container"></div>
+        <!-- Live Logs moved to bottom -->
+        <div
+            style="flex-grow: 1; display: flex; align-items: center; justify-content: center; opacity: 0.3; font-style: italic;">
+            Select an agent to see details...
         </div>
     </div>
 
@@ -457,6 +516,15 @@
                 <div style="color: #666; font-style: italic; padding: 10px;">Waiting for signal...</div>
             </div>
         </div>
+    </div>
+
+    <!-- Collapsible Logs Panel -->
+    <div id="logs-panel" class="panel collapsed">
+        <div id="logs-header" onclick="toggleLogs()">
+            <h2 style="margin:0; border:none; font-size:1em;">Live Logs (Click to Toggle)</h2>
+            <span id="log-toggle-icon">▲</span>
+        </div>
+        <div id="log-container"></div>
     </div>
 
     <!-- LLM Bridge -->
@@ -561,10 +629,41 @@
                         <div class="agent-status">${state.status}</div>
                         ${state.action ? `<div style="color: var(--success); font-size: 0.9em;">▶ ${state.action}</div>` : ''}
                         ${state.thought ? `<div class="agent-thought">"${state.thought}"</div>` : ''}
+                        
+                        ${renderSubtasks(state.subtasks)}
+                        ${renderInfo(state.info)}
                     </div>
                 `;
             }
             container.innerHTML = html;
+        }
+
+        function renderSubtasks(subtasks) {
+            if (!subtasks || subtasks.length === 0) return '';
+            return `
+                <div class="agent-subtasks">
+                    <div style="color: #888;">Subtasks:</div>
+                    <ul>${subtasks.map(t => `<li>${t}</li>`).join('')}</ul>
+                </div>
+            `;
+        }
+
+        function renderInfo(info) {
+            if (!info || Object.keys(info).length === 0) return '';
+            // Format info nicely
+            try {
+                const jsonStr = JSON.stringify(info, null, 2);
+                return `<div class="agent-info">${jsonStr}</div>`;
+            } catch (e) {
+                return '';
+            }
+        }
+
+        function toggleLogs() {
+            const panel = document.getElementById('logs-panel');
+            const icon = document.getElementById('log-toggle-icon');
+            panel.classList.toggle('collapsed');
+            icon.textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
         }
 
         function updateInteractions(interactions) {

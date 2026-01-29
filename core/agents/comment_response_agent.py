@@ -12,6 +12,7 @@ import logging
 import random
 from typing import Dict, Any, Optional, List
 from datetime import datetime
+from core.state_manager import get_state_manager
 
 logger = logging.getLogger("CommentResponseAgent")
 
@@ -165,11 +166,15 @@ class CommentResponseAgent:
             
             if is_creator:
                 logger.info(f"🙏 Generating reverent response for Creator {author}")
+                get_state_manager().update_agent_status("CommentResponseAgent", "Active", action=f"Honoring Creator {author}")
             else:
                 logger.info(f"💬 Generating response for {author}")
+                get_state_manager().update_agent_status("CommentResponseAgent", "Active", action=f"Replying to {author}")
             
             # Use the existing reply_to_comment_agent which handles the full pipeline
             result = reply_to_comment_agent(comment, dry_run=dry_run)
+            
+            get_state_manager().update_agent_status("CommentResponseAgent", "Idle", action="Response sent")
             
             # Add metadata
             result["author"] = author
@@ -229,12 +234,20 @@ class CommentResponseAgent:
             
             if not comments:
                 logger.info("No unreplied comments found")
+                get_state_manager().update_agent_status("CommentResponseAgent", "Idle", action="No comments found")
                 return None
             
             logger.info(f"Found {len(comments)} unreplied comments")
             
             # Select the best comment to respond to
             selected = self.select_comment_to_respond(comments)
+            
+            get_state_manager().update_agent_status(
+                "CommentResponseAgent", 
+                "Thinking", 
+                action=f"Selected {selected.get('author')}",
+                info={"priority": self.get_comment_priority(selected), "text": selected.get("text", "")[:50]}
+            )
             
             if not selected:
                 return None

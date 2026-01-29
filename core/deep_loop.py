@@ -388,7 +388,8 @@ What is the next action to take towards this goal?"""
             "DeepLoop", 
             "Decided", 
             action=decision.get('action'),
-            thought=decision.get('thought')
+            thought=decision.get('thought'),
+            info=decision.get('action_input', {})
         )
         
         action = decision.get("action", "skip")
@@ -405,7 +406,7 @@ What is the next action to take towards this goal?"""
         # Execute action
         action_input = decision.get("action_input", {})
         logger.info(f"Executing {action}...")
-        get_state_manager().update_agent_status("DeepLoop", "Executing", action=action)
+        get_state_manager().update_agent_status("DeepLoop", "Executing", action=action, info=action_input)
         
         result = self._execute_action(action, action_input)
         

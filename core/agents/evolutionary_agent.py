@@ -20,6 +20,7 @@ from core.tool_fabricator import ToolFabricator
 from core.tool_validator import ToolValidator, ValidationResult
 from core.tool_registry import get_global_registry
 from core.llm_client import LLMClient
+from core.state_manager import get_state_manager
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,17 @@ class EvolutionaryAgent:
         Returns number of successfully created tools.
         """
         pending = get_pending_specifications()
+        
         if not pending:
+            get_state_manager().update_agent_status("EvolutionaryAgent", "Idle", action="No specs")
             return 0
+            
+        get_state_manager().update_agent_status(
+            "EvolutionaryAgent", 
+            "Active",
+            action=f"Found {len(pending)} specs",
+            subtasks=[s.functional_name for s in pending]
+        )
             
         success_count = 0
         log_event(f"🧬 Evolutionary Agent active. Processing {len(pending)} specs...", "INFO")
@@ -63,6 +73,7 @@ class EvolutionaryAgent:
                 logger.error(f"Failed to process spec {spec.functional_name}: {e}")
                 update_specification_status(spec.id, "failed")
                 
+        get_state_manager().update_agent_status("EvolutionaryAgent", "Idle", action="Cycle complete")
         return success_count
     
     async def _process_single_spec(self, spec: EvolutionarySpecification) -> bool:
@@ -71,6 +82,13 @@ class EvolutionaryAgent:
         """
         log_event(f"🔨 Fabricating tool: {spec.functional_name}", "INFO")
         update_specification_status(spec.id, "fabricating")
+        
+        get_state_manager().update_agent_status(
+            "EvolutionaryAgent", 
+            "Fabricating", 
+            action=f"Building {spec.functional_name}",
+            info={"spec_id": spec.id, "goal": spec.expected_output, "status": "fabricating"}
+        )
         
         # 1. Initial Fabrication
         result = await self.fabricator.fabricate_from_specification(spec)
@@ -103,6 +121,13 @@ class EvolutionaryAgent:
                 
             # 3. Refinement (Self-Correction)
             log_event(f"⚠️ Validation failed (Attempt {attempt+1}/{self.MAX_RETRIES}). Refining...", "WARNING")
+            
+            get_state_manager().update_agent_status(
+                "EvolutionaryAgent", 
+                "Refining", 
+                action=f"Refining {spec.functional_name}",
+                info={"attempt": attempt + 1, "errors": validation_result.error_message[:200]}
+            )
             
             new_code = await self._refine_code(
                 spec, 

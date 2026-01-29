@@ -42,7 +42,7 @@ class StateManager:
         self.logs.append(entry)
         self.last_update = datetime.now()
 
-    def update_agent_status(self, agent_name: str, status: str, action: str = None, thought: str = None):
+    def update_agent_status(self, agent_name: str, status: str, action: str = None, thought: str = None, subtasks: List[str] = None, info: Dict[str, Any] = None):
         """Update the status of a specific agent."""
         if agent_name not in self.agent_states:
             self.agent_states[agent_name] = {}
@@ -52,6 +52,10 @@ class StateManager:
             self.agent_states[agent_name]["action"] = action
         if thought:
             self.agent_states[agent_name]["thought"] = thought
+        if subtasks is not None:
+             self.agent_states[agent_name]["subtasks"] = subtasks
+        if info is not None:
+             self.agent_states[agent_name]["info"] = info
             
         self.last_update = datetime.now()
 

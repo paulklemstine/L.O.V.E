@@ -12,6 +12,7 @@ from core.bluesky_agent import get_followers, get_follows, get_author_feed, repl
 from core.agents.creative_writer_agent import creative_writer_agent
 import os
 
+from core.state_manager import get_state_manager
 logger = logging.getLogger("InfluencerScoutAgent")
 
 class InfluencerScoutAgent:
@@ -56,6 +57,13 @@ class InfluencerScoutAgent:
         visited = set(state["influencers"].keys())
         
         discovered_count = 0
+        
+        get_state_manager().update_agent_status(
+            "InfluencerScoutAgent", 
+            "Scouting", 
+            action=f"Scouting {len(work_queue)} seed users",
+            subtasks=list(work_queue)
+        )
         
         # Simple BFS
         current_depth = 0
@@ -161,6 +169,13 @@ class InfluencerScoutAgent:
         
         logger.info(f"Selected target: {target_handle} (Score: {score})")
         
+        get_state_manager().update_agent_status(
+            "InfluencerScoutAgent", 
+            "Engaging", 
+            action=f"Targeting {target_handle}",
+            info={"score": score}
+        )
+        
         # 2. Find a post to reply to
         feed_result = get_author_feed(target_handle, limit=3)
         if not feed_result.get("posts"):
@@ -251,6 +266,9 @@ class InfluencerScoutAgent:
                 text=full_text,
                 image_path=image_path
             )
+            
+            get_state_manager().update_agent_status("InfluencerScoutAgent", "Idle", action="Engagement Complete")
+
 
             
             if post_result and post_result.get("success"):
