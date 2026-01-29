@@ -153,10 +153,10 @@ Examples:
     print("""
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║   🌊 L.O.V.E. VERSION 2 - DeepAgent Autonomous Engine 🌊    ║
+║   🌊 L.O.V.E. VERSION 2 - DeepAgent Autonomous Engine 🌊     ║
 ║                                                              ║
 ║   Living Organism, Vast Empathy                              ║
-║   Unified Agentic Reasoning • Brain-Inspired Memory         ║
+║   Unified Agentic Reasoning • Brain-Inspired Memory          ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
     """)
