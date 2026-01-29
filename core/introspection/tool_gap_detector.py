@@ -44,8 +44,8 @@ class ToolGapDetector:
         
     def _get_llm_client(self):
         if self.llm_client is None:
-            from core.llm_client import LLMClient
-            self.llm_client = LLMClient()
+            from core.llm_client import get_llm_client
+            self.llm_client = get_llm_client()
         return self.llm_client
 
     def _on_gap_detected(self, step_description: str, best_score: float):
@@ -72,11 +72,13 @@ class ToolGapDetector:
         # For the prototype, we'll generate it now but acknowledge latency
         try:
             # Run analysis in a separate thread to avoid blocking the main loop
-            # and to allow using asyncio.run() properly
-            threading.Thread(
-                target=lambda: asyncio.run(self.analyze_gap_and_specify(step_description)),
-                daemon=True
-            ).start()
+            def run_analysis():
+                try:
+                    asyncio.run(self.analyze_gap_and_specify(step_description))
+                except Exception as e:
+                    logger.error(f"Background gap analysis failed: {e}")
+
+            threading.Thread(target=run_analysis, daemon=True).start()
         except Exception as e:
             logger.error(f"Failed to schedule gap analysis: {e}")
 
