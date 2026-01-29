@@ -26,10 +26,13 @@
             padding: 20px;
             display: grid;
             grid-template-columns: 320px 1fr 320px;
-            grid-template-rows: auto 1fr auto;
+            /* Header, Content, Chat, Logs */
+            grid-template-rows: auto 1fr 400px 400px;
             gap: 20px;
-            height: 100vh;
+            min-height: 100vh;
+            height: auto;
             box-sizing: border-box;
+            overflow-y: auto;
         }
 
         header {
@@ -139,6 +142,8 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
+            /* Allow growth */
+            height: 100%;
         }
 
         #status-panel,
@@ -249,17 +254,17 @@
         }
 
         #logs-panel {
-            position: fixed;
-            bottom: 70px;
-            /* Above LLM console */
-            left: 20px;
-            right: 20px;
-            height: 300px;
-            z-index: 900;
-            transition: height 0.3s ease, opacity 0.3s ease;
-            box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.8);
+            /* Remove fixed positioning */
+            position: relative;
+            grid-column: 1 / -1;
+            grid-row: 4;
+            height: 100%;
+            width: 100%;
             display: flex;
             flex-direction: column;
+            border-top: 1px solid #333;
+            box-shadow: none;
+            z-index: 100;
         }
 
         #logs-panel.collapsed {
@@ -357,8 +362,8 @@
             border-top: 1px solid #333;
             display: flex;
             flex-direction: column;
-            height: 300px;
-            transition: height 0.3s ease;
+            height: 100%;
+            width: 100%;
         }
 
         #chat-header {
@@ -406,6 +411,17 @@
             color: #d0d0d0;
             border-top-left-radius: 2px;
             border: 1px solid rgba(0, 255, 255, 0.2);
+        }
+
+        .message.system {
+            align-self: center;
+            background: #222;
+            color: #888;
+            font-family: monospace;
+            font-size: 0.85em;
+            border: 1px dashed #444;
+            width: 90%;
+            max-width: 90%;
         }
 
         .message-role {
@@ -549,35 +565,35 @@
         </div>
 
         <!-- Active Agents -->
-        <div id="agents-panel" class="panel">
+        <div id="agents-panel" class="panel"
+            style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 300px;">
             <h2>Active Agents</h2>
-            <div id="agent-list">
+            <div id="agent-list" style="overflow-y: auto; flex-grow: 1;">
                 <div style="color: #666; font-style: italic;">No agents active yet...</div>
             </div>
         </div>
     </div>
 
     <div id="main-content">
-        <!-- Live Logs -->
-        <!-- Live Logs moved to bottom -->
-        <div
-            style="flex-grow: 1; display: flex; align-items: center; justify-content: center; opacity: 0.3; font-style: italic;">
-            Select an agent to see details...
+        <!-- Art/Visuals + Latest Post (Moved to Middle) -->
+        <div id="art-panel" class="panel"
+            style="width: 100%; min-height: 500px; box-sizing: border-box; display: flex; flex-direction: column;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; margin-bottom: 10px; padding-bottom: 5px;">
+                <h2 style="border:none; margin:0;">Latest Post</h2>
+            </div>
+
+            <div id="art-display" style="flex-grow: 1; min-height: 0; margin-bottom: 10px;">
+                <span>No Signal</span>
+            </div>
+            <div id="latest-post-text" class="latest-post-content" style="display:none; flex-shrink: 0;"></div>
         </div>
     </div>
 
     <div id="right-sidebar">
-        <!-- Art/Visuals + Latest Post -->
-        <div id="art-panel" class="panel">
-            <h2>Latest Post</h2>
-            <div id="art-display">
-                <span>No Signal</span>
-            </div>
-            <div id="latest-post-text" class="latest-post-content" style="display:none;"></div>
-        </div>
-
         <!-- Interactions Panel (Latest Comments/Replies) -->
-        <div id="interactions-panel" class="panel" style="flex-grow: 1; min-height: 200px;">
+        <div id="interactions-panel" class="panel"
+            style="height: 100%; display: flex; flex-direction: column; overflow: hidden;">
             <h2>Live Comments</h2>
             <div id="interactions-list" style="overflow-y: auto; flex-grow: 1;">
                 <div style="color: #666; font-style: italic; padding: 10px;">Waiting for signal...</div>
@@ -596,9 +612,8 @@
 
     <!-- Chat Interface -->
     <div id="chat-interface">
-        <div id="chat-header" onclick="toggleChatHeight()">
+        <div id="chat-header">
             <span>L.O.V.E. Communication Link</span>
-            <span style="font-size: 0.8em; opacity: 0.7;">Click to resize</span>
         </div>
         <div id="chat-messages">
             <!-- Messages will appear here -->

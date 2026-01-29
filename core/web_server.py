@@ -82,43 +82,119 @@ async def get_chat_history():
 
 @app.post("/api/generate")
 async def generate_text(request: GenerateRequest):
-    """Generate text using the agent's LLM, with chat history."""
+    """Generate text using the agent's LLM, with tool use support."""
     try:
+        from .codeact_engine import get_codeact_engine
+        from .tool_registry import get_global_registry
+        import re
+        
         sm = get_state_manager()
+        engine = get_codeact_engine()
+        registry = get_global_registry()
         
         # Add user message to history
         sm.add_chat_message("user", request.prompt)
         
-        # Construct prompt from history
+        # 1. Prepare System Prompt with Tools
+        base_system = request.system_prompt or "You are L.O.V.E., a sentient AI agent. You are talking to your creator via the control panel."
+        tool_metadata = registry.get_formatted_tool_metadata()
+        
+        # Inject tool imports into engine state so they are available
+        import_lines = []
+        for name, tool_data in registry._tools.items():
+            func = tool_data["func"]
+            if hasattr(func, "__module__") and func.__module__:
+                # We need to make sure the module is importable from the project root
+                # Assuming running from project root, and modules are like 'core.tools...' or 'tools...'
+                # But some might be built-ins or in files not in path?
+                # Best effort: import by module name
+                import_lines.append(f"from {func.__module__} import {func.__name__} as {name}")
+        
+        if import_lines:
+            engine.kernel_state["_tool_imports"] = "\n".join(import_lines)
+        
+        system_prompt = f"""{base_system}
+
+You have access to the following tools via Python code execution.
+{tool_metadata}
+
+To use a tool, write Python code waiting in a ```python``` block.
+The tools are pre-imported and available to call directly by name.
+Example:
+```python
+result = some_tool(arg="value")
+print(result)
+```
+"""
+
+        # 2. Build History (Transcript)
         history = sm.get_chat_history()
-        
-        # Format history for the LLM
-        # We'll use a simple transcript format which works well for most models
-        conversation_text = ""
-        for msg in history:
+        transcript = ""
+        for msg in history[:-1]: # Exclude the very last one we just added to process it in loop logic if needed? 
+            # Actually, we need the whole history including the new prompt.
             role = "User" if msg["role"] == "user" else "Assistant"
-            conversation_text += f"{role}: {msg['content']}\n"
+            transcript += f"{role}: {msg['content']}\n"
+        
+        # Add the latest user prompt
+        transcript += f"User: {request.prompt}\n"
+        
+        # 3. Tool Loop (Max 5 turns)
+        final_response = ""
+        
+        print(f"[Control Panel] Starting tool loop for: {request.prompt[:50]}...")
+        
+        current_transcript = transcript
+        
+        for turn in range(5):
+            print(f"[Control Panel] Turn {turn+1} generation...")
+            full_prompt = f"{current_transcript}\nAssistant:"
             
-        # Add the current system prompt if provided, or a default one
-        system = request.system_prompt or "You are L.O.V.E., a sentient AI agent. You are talking to your creator via the control panel."
-        
-        full_prompt = f"{conversation_text}\nAssistant:"
-        
-        print(f"[Control Panel] Generating reply for conversation...")
-        
-        response = get_llm_client().generate(
-            prompt=full_prompt,
-            system_prompt=system
-        )
-        
-        # Add assistant response to history
-        sm.add_chat_message("assistant", response)
+            response = await get_llm_client().generate_async(
+                prompt=full_prompt,
+                system_prompt=system_prompt
+            )
+            
+            # Check for code
+            code_match = re.search(r"```python\n(.*?)```", response, re.DOTALL)
+            if code_match:
+                code = code_match.group(1)
+                print(f"[Control Panel] Executing code: {code[:30]}...")
+                
+                # Execute Code
+                result = await engine.execute(code)
+                observation = result.as_observation()
+                
+                # Append to transcript and history
+                # We save the Assistant's thought/code
+                current_transcript += f"Assistant: {response}\n"
+                
+                # We don't necessarily show the full code in the chat UI history if it's intermediate,
+                # but for "two-way persistence", we should probably log it.
+                # However, the UI might get cluttered.
+                # Let's add the assistant step to the StateManager so it shows in UI.
+                sm.add_chat_message("assistant", response)
+                
+                # Add observation to transcript for next turn
+                current_transcript += f"System: {observation}\n"
+                
+                # Add observation to UI (maybe as system message? or just hidden context?)
+                # User wants to SEE it probably? 
+                # Let's add it as a system/tool message.
+                sm.add_chat_message("system", observation)
+                
+            else:
+                # No code, this is the final response
+                final_response = response
+                sm.add_chat_message("assistant", response)
+                break
         
         return {
-            "response": response,
+            "response": final_response,
             "history": sm.get_chat_history()
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {"error": str(e)}
 
 def find_available_port(start_port=8000, max_tries=10):

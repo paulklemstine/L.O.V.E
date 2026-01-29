@@ -69,6 +69,7 @@ def _get_love2_tools() -> Dict[str, Callable]:
             get_unreplied_comments
         )
         from .agents.comment_response_agent import respond_to_comments
+        from .agents.influencer_scout_agent import scout_influencers, engage_with_influencer
         
         tools["bluesky_post"] = post_to_bluesky
         tools["bluesky_timeline"] = get_bluesky_timeline
@@ -77,6 +78,8 @@ def _get_love2_tools() -> Dict[str, Callable]:
         tools["generate_content"] = generate_post_content  # LLM-powered content generation
         tools["get_unreplied_comments"] = get_unreplied_comments  # Check pending comments
         tools["respond_to_comments"] = respond_to_comments  # Respond to best comment (Creator priority)
+        tools["scout_influencers"] = scout_influencers # Find new influencers
+        tools["engage_with_influencer"] = engage_with_influencer # Engage with a found influencer
     except ImportError as e:
         import traceback
         print(f"[ToolAdapter] bluesky_agent import failed: {e}")

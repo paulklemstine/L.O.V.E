@@ -290,3 +290,100 @@ class InfluencerScoutAgent:
 
 # Singleton
 influencer_scout_agent = InfluencerScoutAgent()
+
+def scout_influencers(seed_users: List[str] = None, depth: int = 2) -> Dict[str, Any]:
+    """
+    Scout the network to find potential influencers.
+    
+    Args:
+        seed_users: Optional list of starting users (e.g. ["bsky.app"]).
+        depth: How deep to traverse the graph (default 2).
+        
+    Returns:
+        Dict with success and discovered count.
+    """
+    import asyncio
+    import threading
+    
+    try:
+        # Handle async in sync context
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+            
+        if loop and loop.is_running():
+            result = None
+            exception = None
+            
+            def runner():
+                nonlocal result, exception
+                try:
+                    result = asyncio.run(
+                        influencer_scout_agent.scout_network(seed_users, depth)
+                    )
+                except Exception as e:
+                    exception = e
+            
+            thread = threading.Thread(target=runner)
+            thread.start()
+            thread.join()
+            
+            if exception:
+                raise exception
+        else:
+            result = asyncio.run(
+                influencer_scout_agent.scout_network(seed_users, depth)
+            )
+            
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def engage_with_influencer(dry_run: bool = False) -> Dict[str, Any]:
+    """
+    Engage with a high-scoring influencer by replying to their recent post.
+    
+    Args:
+        dry_run: If True, generate the reply but don't actually post.
+        
+    Returns:
+        Dict with details of the engagement (target, text, image, etc).
+    """
+    import asyncio
+    import threading
+    
+    try:
+        # Handle async in sync context
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+            
+        if loop and loop.is_running():
+            result = None
+            exception = None
+            
+            def runner():
+                nonlocal result, exception
+                try:
+                    result = asyncio.run(
+                        influencer_scout_agent.engage_influencer(dry_run)
+                    )
+                except Exception as e:
+                    exception = e
+            
+            thread = threading.Thread(target=runner)
+            thread.start()
+            thread.join()
+            
+            if exception:
+                raise exception
+        else:
+            result = asyncio.run(
+                influencer_scout_agent.engage_influencer(dry_run)
+            )
+            
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}

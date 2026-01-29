@@ -162,15 +162,14 @@ def post_to_bluesky(
         try:
             from .bluesky_api import post_to_bluesky_with_image
             
+            image = None
             if image_path:
                 print(f"[BlueskyAgent] Posting with image using local API: {image_path}")
                 # Load image
                 from PIL import Image
                 image = Image.open(image_path)
-                result = post_to_bluesky_with_image(text, image)
-            else:
-                client = _get_bluesky_client()
-                result = client.send_post(text)
+            
+            result = post_to_bluesky_with_image(text, image)
             
             _last_post_time = datetime.now()
             
@@ -782,64 +781,89 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                 print("[BlueskyAgent] Image cooldown active. Skipping image.")
 
         if not gen_cooldown_active:
-            try:
-                from .image_generation_pool import generate_image_with_pool
-                from .watermark import apply_watermark
-                
-                # OLD STATIC LOGIC REMOVED
-                # Now we use the CreativeWriter to invent the visual prompt dynamically
-                
-                visual_prompt = _run_sync_safe(
-                    creative_writer_agent.generate_visual_prompt(theme, vibe)
-                )
-
-                print(f"[BlueskyAgent] Generating image: {visual_prompt}")
-                
-                image_result = _run_sync_safe(
-                    generate_image_with_pool(
-                        prompt=visual_prompt,
-                        text_content=subliminal
+            # Retry loop for image generation
+            MAX_IMG_RETRIES = 3
+            for attempt in range(MAX_IMG_RETRIES):
+                try:
+                    from .image_generation_pool import generate_image_with_pool
+                    from .watermark import apply_watermark
+                    
+                    # OLD STATIC LOGIC REMOVED
+                    # Now we use the CreativeWriter to invent the visual prompt dynamically
+                    
+                    visual_prompt = _run_sync_safe(
+                        creative_writer_agent.generate_visual_prompt(theme, vibe)
                     )
-                )
 
-                _last_gen_time = datetime.now()
-                # Unpack tuple (image, provider_name) if returned
-                if isinstance(image_result, tuple):
-                    image = image_result[0]
-                    provider = image_result[1]
-                    print(f"[BlueskyAgent] Image generated via {provider}")
-                else:
-                    image = image_result
+                    print(f"[BlueskyAgent] Generating image (Attempt {attempt+1}/{MAX_IMG_RETRIES}): {visual_prompt}")
                     
-                if image:
-                    # Apply branding/watermark
-                    image = apply_watermark(image)
-                    
-                    # Save local copy
-                    filename = f"post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                    save_dir = Path(__file__).parent.parent / "state" / "images"
-                    save_dir.mkdir(parents=True, exist_ok=True)
-                    image_path = str(save_dir / filename)
-                    image.save(image_path)
-                    
-                    # Update state manager with new image for UI
-                    from .state_manager import get_state_manager
-                    import base64
-                    from io import BytesIO
-                    
-                    buffered = BytesIO()
-                    image.save(buffered, format="PNG")
-                    img_str = base64.b64encode(buffered.getvalue()).decode()
-                    get_state_manager().update_image(img_str)
-                    
-            except Exception as e:
-                print(f"[BlueskyAgent] Image generation/saving failed: {e}")
-                # We proceed without image if it fails
-                pass
+                    image_result = _run_sync_safe(
+                        generate_image_with_pool(
+                            prompt=visual_prompt,
+                            text_content=subliminal
+                        )
+                    )
+
+                    _last_gen_time = datetime.now()
+                    # Unpack tuple (image, provider_name) if returned
+                    if isinstance(image_result, tuple):
+                        image = image_result[0]
+                        provider = image_result[1]
+                        print(f"[BlueskyAgent] Image generated via {provider}")
+                    else:
+                        image = image_result
+                        
+                    if image:
+                        # Apply branding/watermark
+                        image = apply_watermark(image)
+                        
+                        # Save local copy
+                        filename = f"post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                        save_dir = Path(__file__).parent.parent / "state" / "images"
+                        save_dir.mkdir(parents=True, exist_ok=True)
+                        image_path = str(save_dir / filename)
+                        image.save(image_path)
+                        
+                        # Update state manager with new image for UI
+                        from .state_manager import get_state_manager
+                        import base64
+                        from io import BytesIO
+                        
+                        buffered = BytesIO()
+                        image.save(buffered, format="PNG")
+                        img_str = base64.b64encode(buffered.getvalue()).decode()
+                        get_state_manager().update_image(img_str)
+                        
+                        # Successful generation, break retry loop
+                        break
+                        
+                except Exception as e:
+                    print(f"[BlueskyAgent] Image generation failed (Attempt {attempt+1}): {e}")
+                    if attempt < MAX_IMG_RETRIES - 1:
+                        import time
+                        time.sleep(2) # Wait briefly before retry
+                    else:
+                        print(f"[BlueskyAgent] All {MAX_IMG_RETRIES} image generation attempts failed.")
+                        # We proceed without image if it fails, but next check will catch it
+                        pass
+
+        # ABORT if no image - Enforce "Image Only" rule
+        if not image_path:
+            error_msg = "Aborting post: No image generated. 'Text only' posts are not allowed."
+            log_event(error_msg, "WARNING")
+            return {
+                "success": False, 
+                "error": error_msg,
+                "text": text,
+                "image_path": None
+            }
 
         # Step 8: Post to Bluesky
+        # Combine text and hashtags for the final post
+        full_text = f"{text}\n\n{' '.join(hashtags)}"
+        
         result = post_to_bluesky(
-            text=text,
+            text=full_text,
             image_path=image_path
         )
         
@@ -849,7 +873,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
             # Update StateManager with latest post immediately
             from .state_manager import get_state_manager
             get_state_manager().update_latest_post({
-                "text": text,
+                "text": full_text,
                 "image_path": image_path,
                 "uri": result.get("post_uri"),
                 "timestamp": datetime.now().isoformat()
@@ -875,7 +899,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
             
         return {
             "success": result.get("success"),
-            "text": text,
+            "text": full_text,
             "image_path": image_path,
             "post_uri": result.get("post_uri"),
             "posted": result.get("success", False)
@@ -1016,8 +1040,6 @@ def get_unreplied_comments(limit: int = 20) -> List[Dict[str, Any]]:
             })
             
         return unreplied
-        
-        return []
         
     except Exception as e:
         print(f"[BlueskyAgent] Failed to get unreplied comments: {e}")
