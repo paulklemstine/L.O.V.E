@@ -116,6 +116,11 @@
             transition: transform 0.3s ease;
         }
 
+        .panel-header:focus-visible {
+            outline: 2px solid #4267B2;
+            outline-offset: -2px;
+        }
+
         .panel.collapsed .panel-header::after {
             transform: rotate(180deg);
         }
@@ -674,10 +679,39 @@
 
         function initializeCollapsiblePanels() {
             const panelHeaders = document.querySelectorAll('.panel-header');
-            panelHeaders.forEach(header => {
-                header.addEventListener('click', () => {
-                    const panel = header.closest('.panel');
+            panelHeaders.forEach((header, index) => {
+                const panel = header.closest('.panel');
+                const content = panel.querySelector('.panel-content');
+
+                // Ensure content has ID for aria-controls
+                if (content && !content.id) {
+                    content.id = `panel-content-${index}`;
+                }
+
+                // Add accessibility attributes
+                header.setAttribute('role', 'button');
+                header.setAttribute('tabindex', '0');
+                if (content) {
+                    header.setAttribute('aria-controls', content.id);
+                }
+
+                // Set initial state
+                const isCollapsed = panel.classList.contains('collapsed');
+                header.setAttribute('aria-expanded', !isCollapsed);
+
+                const togglePanel = () => {
                     panel.classList.toggle('collapsed');
+                    const expanded = !panel.classList.contains('collapsed');
+                    header.setAttribute('aria-expanded', expanded);
+                };
+
+                header.addEventListener('click', togglePanel);
+
+                header.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        togglePanel();
+                    }
                 });
             });
         }
