@@ -73,7 +73,7 @@ class EvolutionaryAgent:
         update_specification_status(spec.id, "fabricating")
         
         # 1. Initial Fabrication
-        result = await self.fabricator.fabricate_tool(spec)
+        result = await self.fabricator.fabricate_from_specification(spec)
         
         if not result["success"]:
             log_event(f"❌ Fabrication failed: {result['message']}", "ERROR")
