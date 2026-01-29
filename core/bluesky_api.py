@@ -277,3 +277,36 @@ def get_profile():
     except Exception as e:
         print(f"Error fetching profile: {e}")
         return None
+
+def get_followers(actor, limit=20):
+    """Fetches followers for a given actor."""
+    client = get_bluesky_client()
+    try:
+        params = models.AppBskyGraphGetFollowers.Params(actor=actor, limit=limit)
+        response = client.app.bsky.graph.get_followers(params)
+        return response.followers
+    except Exception as e:
+        print(f"Error fetching followers for {actor}: {e}")
+        return []
+
+def get_follows(actor, limit=20):
+    """Fetches accounts followed by a given actor."""
+    client = get_bluesky_client()
+    try:
+        params = models.AppBskyGraphGetFollows.Params(actor=actor, limit=limit)
+        response = client.app.bsky.graph.get_follows(params)
+        return response.follows
+    except Exception as e:
+        print(f"Error fetching follows for {actor}: {e}")
+        return []
+
+def get_author_feed(actor, limit=20):
+    """Fetches the author's feed (posts they made)."""
+    client = get_bluesky_client()
+    try:
+        params = models.AppBskyFeedGetAuthorFeed.Params(actor=actor, limit=limit)
+        response = client.app.bsky.feed.get_author_feed(params)
+        return response.feed
+    except Exception as e:
+        print(f"Error fetching author feed for {actor}: {e}")
+        return []

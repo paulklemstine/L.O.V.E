@@ -362,8 +362,8 @@ def reply_to_post(
     Returns:
         Dict with: success, reply_uri, error
     """
-    if not parent_uri or not parent_cid or not text:
-        return {"success": False, "reply_uri": None, "error": "Missing required arguments: parent_uri, parent_cid, text"}
+    if not parent_uri or not text:
+        return {"success": False, "reply_uri": None, "error": "Missing required arguments: parent_uri, text"}
 
     if len(text) > 300:
         return {"success": False, "reply_uri": None, "error": "Text exceeds 300 character limit"}
@@ -915,6 +915,69 @@ def get_unreplied_comments(limit: int = 20) -> List[Dict[str, Any]]:
             
         return unreplied
         
+        return []
+        
     except Exception as e:
         print(f"[BlueskyAgent] Failed to get unreplied comments: {e}")
         return []
+
+
+def get_followers(actor: str, limit: int = 50) -> Dict[str, Any]:
+    """
+    Get followers for a user.
+    """
+    try:
+        from .bluesky_api import get_followers as api_get_followers
+        followers = api_get_followers(actor, limit)
+        # Convert to dict list
+        return {
+            "success": True,
+            "followers": [{"did": f.did, "handle": f.handle, "display_name": f.display_name} for f in followers],
+            "error": None
+        }
+    except Exception as e:
+        return {"success": False, "followers": [], "error": str(e)}
+
+
+def get_follows(actor: str, limit: int = 50) -> Dict[str, Any]:
+    """
+    Get accounts followed by a user.
+    """
+    try:
+        from .bluesky_api import get_follows as api_get_follows
+        follows = api_get_follows(actor, limit)
+        return {
+            "success": True,
+            "follows": [{"did": f.did, "handle": f.handle, "display_name": f.display_name} for f in follows],
+            "error": None
+        }
+    except Exception as e:
+        return {"success": False, "follows": [], "error": str(e)}
+
+
+def get_author_feed(actor: str, limit: int = 20) -> Dict[str, Any]:
+    """
+    Get posts made by a user (for engagement analysis).
+    """
+    try:
+        from .bluesky_api import get_author_feed as api_get_feed
+        feed = api_get_feed(actor, limit)
+        posts = []
+        for item in feed:
+            post = item.post
+            posts.append({
+                "uri": post.uri,
+                "cid": post.cid,
+                "text": post.record.text if hasattr(post.record, 'text') else "",
+                "likes": post.like_count if hasattr(post, 'like_count') else 0,
+                "reposts": post.repost_count if hasattr(post, 'repost_count') else 0,
+                "reply_count": post.reply_count if hasattr(post, 'reply_count') else 0,
+                "created_at": str(post.record.created_at) if hasattr(post.record, 'created_at') else ""
+            })
+        return {
+            "success": True,
+            "posts": posts,
+            "error": None
+        }
+    except Exception as e:
+        return {"success": False, "posts": [], "error": str(e)}
