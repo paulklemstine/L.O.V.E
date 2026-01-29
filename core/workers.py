@@ -40,11 +40,11 @@ class SocialWorker(BaseWorker):
     Your goal is to execute the given task related to Bluesky.
     
     ## Available Tools
-    - generate_post_content(topic, auto_post=True): Generates text & image and posts it. PREFERRED for new content.
+    - generate_post_content(topic): Generates text & image and posts to Bluesky. PREFERRED for new content.
     - bluesky_post(text, image_path=None): Posts already generated content.
     - bluesky_reply(parent_uri, parent_cid, text): Replies to a post.
     
-    If the task is to "post about X", use `generate_post_content(topic="X", auto_post=True)`.
+    If the task is to "post about X", use `generate_post_content(topic="X")`.
     """
     
     def execute(self, bead: Bead) -> str:
@@ -78,8 +78,6 @@ class SocialWorker(BaseWorker):
                 # Sanitize args to prevent hallucinated params
                 if "image_prompt" in tool_args:
                     tool_args.pop("image_prompt")
-                if "auto_post" in tool_args:
-                    tool_args.pop("auto_post")
                     
                 logger.info(f"Posting to Bluesky: {tool_args}")
                 if "bluesky_post" in self.tools:

@@ -28,12 +28,14 @@ class TestBlueskyQA(unittest.TestCase):
         # Patch the singleton in its home module because it is imported locally in the function
         self.mock_cwa_patcher = patch('core.agents.creative_writer_agent.creative_writer_agent')
         self.mock_sm_patcher = patch('core.story_manager.story_manager')
+        self.mock_post_patcher = patch('core.bluesky_agent.post_to_bluesky')
         
         self.mock_get_llm = self.mock_llm_patcher.start()
         self.mock_get_persona = self.mock_persona_patcher.start()
         self.mock_image_gen = self.mock_image_gen_patcher.start()
         self.mock_cwa = self.mock_cwa_patcher.start()
         self.mock_sm = self.mock_sm_patcher.start()
+        self.mock_post = self.mock_post_patcher.start()
         
         # Configure StoryManager mock
         self.mock_sm.get_next_beat.return_value = {
@@ -42,7 +44,16 @@ class TestBlueskyQA(unittest.TestCase):
             "mandatory_vibe": None, # Force dynamic generation
             "previous_beat": "Prev"
         }
-        self.mock_sm.state = {"vibe_history": []}
+        self.mock_sm.state = {
+            "vibe_history": [],
+            "chapter_progress": 0,
+            "current_chapter": "Test Chapter",
+            "story_beat_index": 0,
+            "previous_beat_summary": ""
+        }
+        self.mock_sm.use_dynamic_beats = False  # Disable dynamic beats in tests
+        self.mock_sm.state_file = "test_state.json"
+        self.mock_sm._load_state = MagicMock(return_value=self.mock_sm.state)
 
         
         self.mock_llm = MagicMock()
@@ -54,6 +65,13 @@ class TestBlueskyQA(unittest.TestCase):
         self.mock_get_persona.return_value = self.mock_persona
 
         # Default mocks for CreativeWriterAgent (Async)
+        self.mock_cwa.decide_post_intent = AsyncMock(return_value={
+            "should_post": True,
+            "intent_type": "story",
+            "reason": "Testing",
+            "topic_direction": None,
+            "emotional_tone": None
+        })
         self.mock_cwa.generate_vibe = AsyncMock(return_value="Neon Bliss")
         self.mock_cwa.generate_visual_prompt = AsyncMock(return_value="A beautiful neon beach")
         self.mock_cwa.write_micro_story = AsyncMock(return_value={
@@ -66,6 +84,9 @@ class TestBlueskyQA(unittest.TestCase):
         # Image gen mock
         from PIL import Image
         self.mock_image_gen.return_value = (Image.new('RGB', (100, 100)), "mock_provider")
+        
+        # Mock post_to_bluesky to prevent actual posting
+        self.mock_post.return_value = {"success": True, "post_uri": "at://test/uri"}
 
     def tearDown(self):
         self.mock_llm_patcher.stop()
@@ -73,19 +94,20 @@ class TestBlueskyQA(unittest.TestCase):
         self.mock_image_gen_patcher.stop()
         self.mock_cwa_patcher.stop()
         self.mock_sm_patcher.stop()
+        self.mock_post_patcher.stop()
 
     def test_generate_post_valid_orchestration(self):
-        """Test that bluesky agent correctly orchestrates the dynamic calls."""
+        """Test that bluesky agent correctly orchestrates the dynamic calls and posts."""
         
-        result = generate_post_content(auto_post=False)
+        result = generate_post_content()
         
         if not result['success']:
              print(f"\nFAILURE ERROR: {result.get('error')}")
              
         self.assertTrue(result['success'], f"Post generation failed: {result.get('error')}")
         self.assertEqual(result['text'], "This is a great post! 🌊✨")
-        self.assertEqual(result['subliminal'], "obedient")
-        self.assertEqual(result['hashtags'], ["#love", "#bluesky"])
+        self.assertTrue(result.get('posted'), "Post should be marked as posted")
+        self.assertEqual(result.get('post_uri'), "at://test/uri")
         
         # Verify dynamic calls were made
         self.mock_cwa.generate_vibe.assert_called_once()
@@ -98,7 +120,7 @@ class TestBlueskyQA(unittest.TestCase):
     def test_generate_post_cooldown(self):
         """Test cooldown check."""
         with patch('core.bluesky_agent._check_cooldown', return_value="Cooldown active"):
-            result = generate_post_content(auto_post=True)
+            result = generate_post_content()
             self.assertFalse(result['success'])
             self.assertIn("Cooldown active", result['error'])
 
@@ -175,7 +197,7 @@ class TestBlueskyQA(unittest.TestCase):
             {"story": "A beautiful awakening moment! 🌊✨", "subliminal": "GOOD", "voice": "Test"}
         ])
         
-        result = generate_post_content(auto_post=False)
+        result = generate_post_content()
         
         # Should succeed on second attempt
         self.assertTrue(result['success'], f"Should succeed after regeneration: {result.get('error')}")
@@ -190,7 +212,7 @@ class TestBlueskyQA(unittest.TestCase):
             "voice": "Test"
         })
         
-        result = generate_post_content(auto_post=False)
+        result = generate_post_content()
         
         # Should fail after 3 attempts
         self.assertFalse(result['success'])

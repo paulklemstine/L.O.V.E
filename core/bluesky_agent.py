@@ -589,33 +589,32 @@ def search_bluesky(
         }
 
 
-def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) -> Dict[str, Any]:
+def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
     """
-    Generate post content using the sophisticated Story Pipeline (v1 vibe).
+    Generate post content using the sophisticated Story Pipeline and post to Bluesky.
     
     Pipeline:
     1. StoryManager: Determines the current "Beat" (Narrative + Vibe + Visuals)
     2. CreativeWriterAgent: Generates "Micro-Story" and "Subliminal Phrase"
     3. Hashtag Generation: Creates psychological/manipulative tags
     4. Image Generation: Creates image matching the beat's visual style
+    5. Post to Bluesky
     
     Args:
         topic: Optional override (though StoryManager usually drives this).
-        auto_post: If True, continuously posts to Bluesky.
     
     Returns:
-        Dict with post details.
+        Dict with post details including post_uri on success.
     """
-    # Check cooldown first if auto-posting
-    if auto_post:
-        cooldown_msg = _check_cooldown()
-        if cooldown_msg:
-            return {
-                "success": False, 
-                "error": f"Cannot auto-post: {cooldown_msg}",
-                "text": None,
-                "image_path": None
-            }
+    # Check cooldown first
+    cooldown_msg = _check_cooldown()
+    if cooldown_msg:
+        return {
+            "success": False, 
+            "error": f"Post cooldown active: {cooldown_msg}",
+            "text": None,
+            "image_path": None
+        }
 
     try:
         from .story_manager import story_manager
@@ -839,60 +838,48 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
                 pass
 
         # Step 8: Post to Bluesky
-        if auto_post:
-            result = post_to_bluesky(
-                text=text,
-                image_path=image_path
-            )
+        result = post_to_bluesky(
+            text=text,
+            image_path=image_path
+        )
+        
+        if result.get("success"):
+            log_event(f"Successfully posted: {result.get('post_uri')}", "INFO")
             
-            if result.get("success"):
-                log_event(f"Successfully posted: {result.get('post_uri')}", "INFO")
-                # Update stats, history, etc.
-                
-                # Update StateManager with latest post immediately
-                from .state_manager import get_state_manager
-                get_state_manager().update_latest_post({
-                    "text": text,
-                    "image_path": image_path, # Path not accessible effectively by web UI usually, but useful meta
-                    "uri": result.get("post_uri"),
-                    "timestamp": datetime.now().isoformat()
-                })
-
-                # 7. After successful post, check for comments to respond to
-                try:
-                    from .agents.comment_response_agent import comment_response_agent
-                    reply_result = _run_sync_safe(
-                        comment_response_agent.maybe_respond_after_post(result)
-                    )
-                    if reply_result and reply_result.get("success"):
-                        author = reply_result.get('author', 'unknown')
-                        is_creator = reply_result.get('is_creator', False)
-                        if is_creator:
-                            log_event(f"🙏 Responded to Creator's comment from {author}", "INFO")
-                        else:
-                            log_event(f"💬 Responded to comment from {author}", "INFO")
-                except Exception as e:
-                    print(f"[BlueskyAgent] Comment response failed (non-critical): {e}")
-
-            else:
-                log_event(f"Post failed: {result.get('error')}", "ERROR")
-                
-            return {
-                "success": result.get("success"),
+            # Update StateManager with latest post immediately
+            from .state_manager import get_state_manager
+            get_state_manager().update_latest_post({
                 "text": text,
                 "image_path": image_path,
-                "post_uri": result.get("post_uri"),
-                "replies_processed": 0 # TODO: hook up replies
-            }
-            
+                "uri": result.get("post_uri"),
+                "timestamp": datetime.now().isoformat()
+            })
+
+            # After successful post, check for comments to respond to
+            try:
+                from .agents.comment_response_agent import comment_response_agent
+                reply_result = _run_sync_safe(
+                    comment_response_agent.maybe_respond_after_post(result)
+                )
+                if reply_result and reply_result.get("success"):
+                    author = reply_result.get('author', 'unknown')
+                    is_creator = reply_result.get('is_creator', False)
+                    if is_creator:
+                        log_event(f"🙏 Responded to Creator's comment from {author}", "INFO")
+                    else:
+                        log_event(f"💬 Responded to comment from {author}", "INFO")
+            except Exception as e:
+                print(f"[BlueskyAgent] Comment response failed (non-critical): {e}")
         else:
-            # Just generate, don't post
-            return {
-                "success": True,
-                "posted": False,
-                "text": text,
-                "image_path": image_path
-            }
+            log_event(f"Post failed: {result.get('error')}", "ERROR")
+            
+        return {
+            "success": result.get("success"),
+            "text": text,
+            "image_path": image_path,
+            "post_uri": result.get("post_uri"),
+            "posted": result.get("success", False)
+        }
 
     except Exception as e:
         log_event(f"Post generation pipeline failed: {e}", "ERROR")
