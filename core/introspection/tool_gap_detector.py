@@ -37,10 +37,14 @@ class ToolGapDetector:
         self.llm_client = llm_client
         self.retriever = get_tool_retriever()
         
-        # Subscribe to retriever events
-        self.retriever.add_gap_listener(self._on_gap_detected)
+        from core.feature_flags import ENABLE_TOOL_EVOLUTION
         
-        log_event("ToolGapDetector initialized and listening", "INFO")
+        if ENABLE_TOOL_EVOLUTION:
+            # Subscribe to retriever events
+            self.retriever.add_gap_listener(self._on_gap_detected)
+            log_event("ToolGapDetector initialized and listening", "INFO")
+        else:
+            log_event("ToolGapDetector disabled by feature flag", "INFO")
         
     def _get_llm_client(self):
         if self.llm_client is None:

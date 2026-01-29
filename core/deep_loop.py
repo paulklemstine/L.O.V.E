@@ -304,7 +304,9 @@ What is the next action to take towards this goal?"""
         """
         # Epic 2: Synchronous Evolution Check
         # Before picking a goal, check if we need to build tools
-        if get_pending_specifications():
+        from core.feature_flags import ENABLE_TOOL_EVOLUTION
+        
+        if ENABLE_TOOL_EVOLUTION and get_pending_specifications():
             logger.info("🔧 Evolution Specs Detected! Switching to Engineering Mode...")
             get_state_manager().update_agent_status("DeepLoop", "Engineering")
             

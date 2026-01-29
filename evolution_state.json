@@ -1,0 +1,53 @@
+{
+  "user_stories": [],
+  "current_story_index": -1,
+  "active": false,
+  "current_task_id": null,
+  "tool_specifications": [
+    {
+      "functional_name": "mock_tool",
+      "required_arguments": {
+        "arg1": "str"
+      },
+      "expected_output": "str",
+      "safety_constraints": [
+        "none"
+      ],
+      "trigger_context": "I need to fly to the moon",
+      "priority": 3,
+      "created_at": "2026-01-29T10:37:26.061734",
+      "status": "pending",
+      "id": "93007597"
+    },
+    {
+      "functional_name": "mock_tool",
+      "required_arguments": {
+        "arg1": "str"
+      },
+      "expected_output": "str",
+      "safety_constraints": [
+        "none"
+      ],
+      "trigger_context": "I need to fly to the moon",
+      "priority": 3,
+      "created_at": "2026-01-29T10:37:43.984342",
+      "status": "pending",
+      "id": "54534592"
+    },
+    {
+      "functional_name": "mock_tool",
+      "required_arguments": {
+        "arg1": "str"
+      },
+      "expected_output": "str",
+      "safety_constraints": [
+        "none"
+      ],
+      "trigger_context": "I need to fly to the moon",
+      "priority": 3,
+      "created_at": "2026-01-29T10:37:58.166606",
+      "status": "pending",
+      "id": "18901782"
+    }
+  ]
+}
