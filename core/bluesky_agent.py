@@ -201,6 +201,19 @@ def post_to_bluesky(
 
 
 
+# Known placeholder patterns that indicate broken content generation
+PLACEHOLDER_PATTERNS = [
+    "the complete micro-story text",
+    "with emojis",
+    "your reverent reply",
+    "the text of your reply here",
+    "an attention grabbing opening query",
+    "a closing call to action",
+    "the phrase",
+    "tag1", "tag2", "tag3",  # Generic placeholder hashtags
+]
+
+
 def _validate_post_content(text: str, hashtags: List[str], subliminal_phrase: str) -> List[str]:
     """
     Validate generated content against QA rules.
@@ -210,6 +223,7 @@ def _validate_post_content(text: str, hashtags: List[str], subliminal_phrase: st
     2. At least 1 emoji present
     3. Subliminal phrase NOT in open text
     4. At least 1 hashtag
+    5. No placeholder patterns detected
     """
     errors = []
     
@@ -228,13 +242,62 @@ def _validate_post_content(text: str, hashtags: List[str], subliminal_phrase: st
     if subliminal_phrase and subliminal_phrase.lower() in text.lower():
         errors.append(f"Subliminal phrase '{subliminal_phrase}' exposed in text")
         
+    # 4. Hashtag check
     if not hashtags:
         errors.append("No hashtags generated")
+    
+    # 5. Placeholder detection - CRITICAL for catching broken LLM outputs
+    text_lower = text.lower()
+    for pattern in PLACEHOLDER_PATTERNS:
+        if pattern in text_lower:
+            errors.append(f"Placeholder text detected: '{pattern}'")
+            break  # One placeholder error is enough
+    
+    # Check hashtags for placeholder patterns too
+    hashtags_lower = " ".join(hashtags).lower()
+    for pattern in ["#tag1", "#tag2", "#tag3"]:
+        if pattern in hashtags_lower:
+            errors.append(f"Placeholder hashtag detected: '{pattern}'")
+            break
     
     if errors:
         print(f"[BlueskyAgent] ⚠️ Post validation failed: {'; '.join(errors)}")
         
     return errors
+
+
+def _qa_validate_post(text: str, hashtags: List[str], subliminal_phrase: str) -> Dict[str, Any]:
+    """
+    Comprehensive QA validation for post content before publishing.
+    
+    Returns:
+        Dict with: passed (bool), errors (list), should_regenerate (bool)
+    """
+    errors = _validate_post_content(text, hashtags, subliminal_phrase)
+    
+    # Additional quality checks
+    if text and len(text.strip()) < 20:
+        errors.append("Content too short (< 20 chars)")
+    
+    # Check if content looks like raw JSON (parsing failure)
+    if text and (text.strip().startswith('{') or text.strip().startswith('[')):
+        errors.append("Content appears to be raw JSON (parsing failure)")
+    
+    passed = len(errors) == 0
+    
+    # Determine if we should attempt regeneration
+    # Some errors are fixable by regeneration, others are not
+    regeneratable_keywords = ["placeholder", "too short", "no emojis", "raw json", "parsing"]
+    should_regenerate = any(
+        any(kw in err.lower() for kw in regeneratable_keywords)
+        for err in errors
+    )
+    
+    return {
+        "passed": passed,
+        "errors": errors,
+        "should_regenerate": should_regenerate
+    }
 
 
 def get_bluesky_timeline(limit: int = 20) -> Dict[str, Any]:
@@ -648,23 +711,66 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
             # Record the new vibe in history
             story_manager.state.setdefault("vibe_history", []).append(vibe)
             
-        # Step 6: Generate Content via CreativeWriter (The "Voice")
-        content_task = creative_writer_agent.write_micro_story(
-            theme=theme, 
-            mood=vibe,
-            memory_context=beat_data.get("previous_beat", "")
-        )
-        content_result = _run_sync_safe(content_task)
+        # ═══════════════════════════════════════════════════════════════════
+        # CONTENT GENERATION WITH QA VALIDATION LOOP
+        # Max 3 attempts to generate valid, non-placeholder content
+        # ═══════════════════════════════════════════════════════════════════
+        MAX_QA_RETRIES = 3
+        text = ""
+        subliminal = ""
+        hashtags = []
+        qa_passed = False
         
-        text = content_result.get("story", "")
-        subliminal = content_result.get("subliminal", "")
+        for qa_attempt in range(1, MAX_QA_RETRIES + 1):
+            log_event(f"Content generation attempt {qa_attempt}/{MAX_QA_RETRIES}", "INFO")
+            
+            # Step 6: Generate Content via CreativeWriter (The "Voice")
+            content_task = creative_writer_agent.write_micro_story(
+                theme=theme, 
+                mood=vibe,
+                memory_context=beat_data.get("previous_beat", "")
+            )
+            content_result = _run_sync_safe(content_task)
+            
+            text = content_result.get("story", "")
+            subliminal = content_result.get("subliminal", "")
+            
+            # Step 7: Generate Hashtags
+            hashtag_task = creative_writer_agent.generate_manipulative_hashtags(
+                topic=theme,
+                count=3
+            )
+            hashtags = _run_sync_safe(hashtag_task)
+            
+            # QA VALIDATION - Check content before proceeding
+            qa_result = _qa_validate_post(text, hashtags, subliminal)
+            
+            if qa_result["passed"]:
+                log_event(f"✅ QA passed on attempt {qa_attempt}", "INFO")
+                qa_passed = True
+                break
+            else:
+                log_event(f"❌ QA failed attempt {qa_attempt}: {'; '.join(qa_result['errors'])}", "WARNING")
+                
+                if not qa_result["should_regenerate"]:
+                    # Error is not fixable by regeneration (e.g., length issues)
+                    log_event("QA failure not regeneratable, stopping retries", "WARNING")
+                    break
+                    
+                if qa_attempt < MAX_QA_RETRIES:
+                    log_event(f"Regenerating content (attempt {qa_attempt + 1})...", "INFO")
         
-        # Step 7: Generate Hashtags
-        hashtag_task = creative_writer_agent.generate_manipulative_hashtags(
-            topic=theme,
-            count=3
-        )
-        hashtags = _run_sync_safe(hashtag_task)
+        # If all QA attempts failed, abort before posting
+        if not qa_passed:
+            error_msg = f"Content QA failed after {MAX_QA_RETRIES} attempts. Last errors: {qa_result.get('errors', [])}"
+            log_event(error_msg, "ERROR")
+            return {
+                "success": False,
+                "error": error_msg,
+                "text": text,
+                "qa_errors": qa_result.get("errors", [])
+            }
+        
         
         # 4. Generate Image (The "Visuals")
         image_path = None

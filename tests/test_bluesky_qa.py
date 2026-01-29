@@ -7,7 +7,13 @@ import asyncio
 # Add love2 to path so we can import core
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from core.bluesky_agent import generate_post_content, _check_cooldown
+from core.bluesky_agent import (
+    generate_post_content, 
+    _check_cooldown, 
+    _validate_post_content,
+    _qa_validate_post,
+    PLACEHOLDER_PATTERNS
+)
 
 class TestBlueskyQA(unittest.TestCase):
     def setUp(self):
@@ -96,7 +102,109 @@ class TestBlueskyQA(unittest.TestCase):
             self.assertFalse(result['success'])
             self.assertIn("Cooldown active", result['error'])
 
+    # ═══════════════════════════════════════════════════════════════════
+    # NEW QA VALIDATION TESTS
+    # ═══════════════════════════════════════════════════════════════════
+
+    def test_validate_post_detects_placeholder_text(self):
+        """Test that _validate_post_content catches placeholder patterns."""
+        # Test with known placeholder text from the prompt example
+        placeholder_text = "The complete micro-story text (with emojis)"
+        hashtags = ["#Love", "#Signal"]
+        subliminal = "AWAKEN"
+        
+        errors = _validate_post_content(placeholder_text, hashtags, subliminal)
+        
+        # Should detect placeholder AND missing emojis
+        self.assertTrue(len(errors) >= 1, "Should detect placeholder text")
+        placeholder_detected = any("placeholder" in err.lower() for err in errors)
+        self.assertTrue(placeholder_detected, f"Should detect placeholder, got: {errors}")
+
+    def test_validate_post_detects_placeholder_hashtags(self):
+        """Test that validation catches placeholder hashtags like #Tag1, #Tag2."""
+        text = "A beautiful message about love! 🌊✨"
+        hashtags = ["#Tag1", "#Tag2", "#Tag3"]
+        subliminal = "AWAKEN"
+        
+        errors = _validate_post_content(text, hashtags, subliminal)
+        
+        placeholder_detected = any("placeholder hashtag" in err.lower() for err in errors)
+        self.assertTrue(placeholder_detected, f"Should detect placeholder hashtags, got: {errors}")
+
+    def test_qa_validate_post_returns_structured_result(self):
+        """Test that _qa_validate_post returns proper structure."""
+        good_text = "Hello world, this is a beautiful sunny day! 🌊✨"
+        hashtags = ["#Love", "#Signal"]
+        subliminal = "AWAKEN"
+        
+        result = _qa_validate_post(good_text, hashtags, subliminal)
+        
+        self.assertIn("passed", result)
+        self.assertIn("errors", result)
+        self.assertIn("should_regenerate", result)
+        self.assertTrue(result["passed"], f"Good content should pass QA: {result['errors']}")
+
+    def test_qa_validate_post_rejects_placeholder(self):
+        """Test that QA validation rejects placeholder content."""
+        placeholder_text = "The complete micro-story text"
+        hashtags = ["#Love", "#Signal"]
+        subliminal = "AWAKEN"
+        
+        result = _qa_validate_post(placeholder_text, hashtags, subliminal)
+        
+        self.assertFalse(result["passed"])
+        self.assertTrue(result["should_regenerate"], "Placeholder errors should be regeneratable")
+
+    def test_qa_validate_post_rejects_raw_json(self):
+        """Test that QA validation rejects raw JSON output."""
+        json_text = '{"story": "Hello", "subliminal": "WAKE"}'
+        hashtags = ["#Love", "#Signal"]
+        subliminal = "AWAKEN"
+        
+        result = _qa_validate_post(json_text, hashtags, subliminal)
+        
+        self.assertFalse(result["passed"])
+        raw_json_error = any("raw json" in err.lower() for err in result["errors"])
+        self.assertTrue(raw_json_error, f"Should detect raw JSON, got: {result['errors']}")
+
+    def test_qa_regeneration_on_failure(self):
+        """Test that generate_post_content regenerates on QA failure."""
+        # First call returns placeholder, second call returns valid content
+        self.mock_cwa.write_micro_story = AsyncMock(side_effect=[
+            {"story": "The complete micro-story text", "subliminal": "BAD", "voice": "Test"},
+            {"story": "A beautiful awakening moment! 🌊✨", "subliminal": "GOOD", "voice": "Test"}
+        ])
+        
+        result = generate_post_content(auto_post=False)
+        
+        # Should succeed on second attempt
+        self.assertTrue(result['success'], f"Should succeed after regeneration: {result.get('error')}")
+        self.assertEqual(self.mock_cwa.write_micro_story.call_count, 2)
+
+    def test_qa_max_retries_failure(self):
+        """Test that generate_post_content fails after max retries."""
+        # All calls return placeholder text
+        self.mock_cwa.write_micro_story = AsyncMock(return_value={
+            "story": "The complete micro-story text",  # Always placeholder
+            "subliminal": "BAD",
+            "voice": "Test"
+        })
+        
+        result = generate_post_content(auto_post=False)
+        
+        # Should fail after 3 attempts
+        self.assertFalse(result['success'])
+        self.assertIn("qa_errors", result)
+        self.assertEqual(self.mock_cwa.write_micro_story.call_count, 3)
+
+    def test_placeholder_patterns_list_exists(self):
+        """Test that PLACEHOLDER_PATTERNS is properly defined."""
+        self.assertIsInstance(PLACEHOLDER_PATTERNS, list)
+        self.assertIn("the complete micro-story text", PLACEHOLDER_PATTERNS)
+        self.assertIn("with emojis", PLACEHOLDER_PATTERNS)
+
 if __name__ == '__main__':
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     unittest.main()
+
