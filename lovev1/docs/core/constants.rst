@@ -1,2 +1,0 @@
-.. automodule:: core.constants
-   :members:

@@ -1,3 +1,0 @@
-## 2025-05-24 - [Enabling Full Output Visibility]
-**Learning:** Tools in `core/tool_base.py` were hard-truncating their output to 500 characters before sending it to the UI. This meant users (and the IPFS "More Info" links) never had access to the full data, even if they wanted it. The UI should be responsible for visual truncation, not the data source.
-**Action:** Removed early truncation in the tool wrapper and moved "smart" truncation to the `display.py` layer. Added an automatic "View Full Output on IPFS" link whenever the visual display is truncated, restoring access to the complete data without cluttering the screen.

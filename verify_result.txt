@@ -1,7 +1,0 @@
-
-Generated Specification:
-Name: generate_posters
-Goal: A collection of 'Demotivational' posters generated based on the provided prompt and quantity.
-Args: {'prompt': 'str', 'count': 'int'}
-
-✅ SUCCESS: Tool name appears atomic.

@@ -213,6 +213,280 @@ Test Output (Failures):
         except Exception as e:
             log_event(f"❌ Failed to finalize tool: {e}", "ERROR")
             return False
+    
+    # =========================================================================
+    # MCP Server Generation (Open Agentic Web Pattern)
+    # =========================================================================
+    
+    async def synthesize_mcp_server(
+        self,
+        capability_description: str,
+        server_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate a complete MCP server for a novel capability.
+        
+        This implements the "agent as engineer" pattern from the Open Agentic Web
+        vision - agents can create their own MCP servers to extend capabilities.
+        
+        Args:
+            capability_description: What the server should do
+            server_name: Optional name for the server
+            
+        Returns:
+            Dict with success, file_path, and server config
+        """
+        import os
+        
+        log_event(f"🔧 Synthesizing MCP server for: {capability_description}", "INFO")
+        
+        # Generate server name if not provided
+        if not server_name:
+            server_name = await self._generate_server_name(capability_description)
+        
+        # Generate server code
+        server_code = await self._generate_mcp_server_code(capability_description, server_name)
+        
+        if not server_code:
+            return {"success": False, "message": "Failed to generate server code"}
+        
+        # Write to mcp_servers directory
+        mcp_dir = os.path.join(os.path.dirname(__file__), "..", "..", "mcp_servers")
+        os.makedirs(mcp_dir, exist_ok=True)
+        
+        server_dir = os.path.join(mcp_dir, server_name)
+        os.makedirs(server_dir, exist_ok=True)
+        
+        server_path = os.path.join(server_dir, "server.py")
+        with open(server_path, 'w') as f:
+            f.write(server_code)
+        
+        # Generate requirements.txt
+        requirements = await self._extract_requirements(server_code)
+        if requirements:
+            with open(os.path.join(server_dir, "requirements.txt"), 'w') as f:
+                f.write('\n'.join(requirements))
+        
+        # Optionally generate Dockerfile
+        dockerfile = self._generate_dockerfile(server_name)
+        with open(os.path.join(server_dir, "Dockerfile"), 'w') as f:
+            f.write(dockerfile)
+        
+        log_event(f"✅ MCP server '{server_name}' generated at {server_path}", "INFO")
+        
+        return {
+            "success": True,
+            "file_path": server_path,
+            "server_name": server_name,
+            "server_dir": server_dir,
+            "config": {
+                "name": server_name,
+                "command": "python",
+                "args": [server_path],
+                "type": "stdio"
+            }
+        }
+    
+    async def _generate_server_name(self, description: str) -> str:
+        """Generate a server name from description."""
+        prompt = f"""Generate a short, lowercase, snake_case name for an MCP server:
+        
+Description: {description}
+
+Return ONLY the name (e.g., "weather_api" or "file_operations"), no explanation."""
+        
+        response = await self.llm_client.generate_async(prompt)
+        name = response.strip().lower().replace(' ', '_').replace('-', '_')
+        # Sanitize
+        name = ''.join(c for c in name if c.isalnum() or c == '_')
+        return name[:30] or "custom_server"
+    
+    async def _generate_mcp_server_code(self, description: str, name: str) -> Optional[str]:
+        """Generate MCP server Python code."""
+        prompt = f"""Write a Python MCP (Model Context Protocol) server for:
+
+{description}
+
+Server name: {name}
+
+Requirements:
+1. Use stdio transport (read from stdin, write to stdout)
+2. Implement JSON-RPC 2.0 message handling
+3. Support tools/list and tools/call methods
+4. Include proper error handling
+5. Use only standard library + common packages
+
+Output ONLY the complete Python code, no explanations.
+
+Example structure:
+```python
+import sys
+import json
+
+def handle_request(request):
+    method = request.get("method")
+    if method == "tools/list":
+        return {{"tools": [...]}}
+    elif method == "tools/call":
+        # Handle tool execution
+        pass
+    return {{"error": {{"code": -32601, "message": "Method not found"}}}}
+
+def main():
+    for line in sys.stdin:
+        request = json.loads(line)
+        result = handle_request(request)
+        result["jsonrpc"] = "2.0"
+        result["id"] = request.get("id")
+        print(json.dumps(result), flush=True)
+
+if __name__ == "__main__":
+    main()
+```"""
+        
+        response = await self.llm_client.generate_async(prompt)
+        return self.fabricator._clean_code(response)
+    
+    async def _extract_requirements(self, code: str) -> List[str]:
+        """Extract pip requirements from generated code."""
+        standard_libs = {'sys', 'json', 'os', 'typing', 'datetime', 're', 'collections', 'io'}
+        imports = set()
+        
+        for line in code.split('\n'):
+            line = line.strip()
+            if line.startswith('import '):
+                module = line.split()[1].split('.')[0]
+                if module not in standard_libs:
+                    imports.add(module)
+            elif line.startswith('from ') and ' import ' in line:
+                module = line.split()[1].split('.')[0]
+                if module not in standard_libs:
+                    imports.add(module)
+        
+        return list(imports)
+    
+    def _generate_dockerfile(self, server_name: str) -> str:
+        """Generate a Dockerfile for the MCP server."""
+        return f'''FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt || true
+
+COPY server.py /app/server.py
+
+CMD ["python", "server.py"]
+'''
+    
+    # =========================================================================
+    # Voyager Pattern: Persistent Skill Library
+    # =========================================================================
+    
+    async def add_to_skill_library(
+        self,
+        skill_name: str,
+        skill_code: str,
+        description: str,
+        tags: Optional[List[str]] = None
+    ) -> bool:
+        """
+        Add a successful tool/skill to the persistent library.
+        
+        Implements the Voyager pattern where successful skills are
+        accumulated into a reusable library for future tasks.
+        
+        Args:
+            skill_name: Name of the skill
+            skill_code: The code that implements the skill
+            description: What the skill does
+            tags: Optional tags for categorization
+        """
+        import os
+        
+        skill_library_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "skill_library.json"
+        )
+        
+        # Load existing library
+        try:
+            if os.path.exists(skill_library_path):
+                with open(skill_library_path, 'r') as f:
+                    library = json.load(f)
+            else:
+                library = {"skills": []}
+        except:
+            library = {"skills": []}
+        
+        # Add new skill
+        skill_entry = {
+            "name": skill_name,
+            "description": description,
+            "code": skill_code,
+            "tags": tags or [],
+            "created_at": __import__('datetime').datetime.now().isoformat(),
+            "usage_count": 0
+        }
+        
+        # Check for duplicates
+        existing_names = {s["name"] for s in library["skills"]}
+        if skill_name in existing_names:
+            # Update existing
+            for i, s in enumerate(library["skills"]):
+                if s["name"] == skill_name:
+                    library["skills"][i] = skill_entry
+                    break
+        else:
+            library["skills"].append(skill_entry)
+        
+        # Save
+        try:
+            with open(skill_library_path, 'w') as f:
+                json.dump(library, f, indent=2)
+            log_event(f"📚 Added '{skill_name}' to skill library", "INFO")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save skill library: {e}")
+            return False
+    
+    def get_relevant_skills(self, task_description: str, max_skills: int = 5) -> List[Dict]:
+        """
+        Retrieve relevant skills from the library for a task.
+        
+        Args:
+            task_description: What the current task needs
+            max_skills: Maximum skills to return
+        """
+        import os
+        
+        skill_library_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "skill_library.json"
+        )
+        
+        if not os.path.exists(skill_library_path):
+            return []
+        
+        try:
+            with open(skill_library_path, 'r') as f:
+                library = json.load(f)
+        except:
+            return []
+        
+        # Simple keyword matching (could be enhanced with embeddings)
+        task_words = set(task_description.lower().split())
+        scored_skills = []
+        
+        for skill in library.get("skills", []):
+            skill_words = set(skill.get("description", "").lower().split())
+            skill_words.update(skill.get("tags", []))
+            skill_words.add(skill.get("name", "").lower())
+            
+            overlap = len(task_words & skill_words)
+            if overlap > 0:
+                scored_skills.append((overlap, skill))
+        
+        scored_skills.sort(reverse=True)
+        return [s[1] for s in scored_skills[:max_skills]]
 
 # Global instance
 _evolutionary_agent = None

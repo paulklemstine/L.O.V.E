@@ -1,1 +1,0 @@
-# Filesystem skills category

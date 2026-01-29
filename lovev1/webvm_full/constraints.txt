@@ -1,2 +1,0 @@
-# Exclude pyarrow - requires Apache Arrow C++ libraries not available in 32-bit
-pyarrow

@@ -1,1 +1,0 @@
-Failed to load prompts from '\\wsl.localhost\Ubuntu\home\raver1975\L.O.V.E\core\prompts.yaml': 'charmap' codec can't decode byte 0x81 in position 1482: character maps to <undefined>
