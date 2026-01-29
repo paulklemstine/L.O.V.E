@@ -14,6 +14,7 @@ import logging
 import json
 import re
 import asyncio
+import threading
 from typing import Optional, Dict, Any
 
 from core.logger import log_event
@@ -70,8 +71,12 @@ class ToolGapDetector:
         
         # For the prototype, we'll generate it now but acknowledge latency
         try:
-            # Run analysis synchronously since we are in a sync callback (and no loop is running)
-            asyncio.run(self.analyze_gap_and_specify(step_description))
+            # Run analysis in a separate thread to avoid blocking the main loop
+            # and to allow using asyncio.run() properly
+            threading.Thread(
+                target=lambda: asyncio.run(self.analyze_gap_and_specify(step_description)),
+                daemon=True
+            ).start()
         except Exception as e:
             logger.error(f"Failed to schedule gap analysis: {e}")
 
