@@ -858,6 +858,22 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
                     "timestamp": datetime.now().isoformat()
                 })
 
+                # 7. After successful post, check for comments to respond to
+                try:
+                    from .agents.comment_response_agent import comment_response_agent
+                    reply_result = _run_sync_safe(
+                        comment_response_agent.maybe_respond_after_post(result)
+                    )
+                    if reply_result and reply_result.get("success"):
+                        author = reply_result.get('author', 'unknown')
+                        is_creator = reply_result.get('is_creator', False)
+                        if is_creator:
+                            log_event(f"🙏 Responded to Creator's comment from {author}", "INFO")
+                        else:
+                            log_event(f"💬 Responded to comment from {author}", "INFO")
+                except Exception as e:
+                    print(f"[BlueskyAgent] Comment response failed (non-critical): {e}")
+
             else:
                 log_event(f"Post failed: {result.get('error')}", "ERROR")
                 
@@ -969,80 +985,6 @@ def get_latest_own_post() -> Optional[Dict[str, Any]]:
         print(f"[BlueskyAgent] Failed to fetch latest own post: {e}")
         return None
 
-                        prompt=visual_prompt, 
-                        text_content=subliminal 
-                    )
-                )
-                
-                image = image_result[0] if isinstance(image_result, tuple) else image_result
-                
-                if image:
-                    image = apply_watermark(image)
-                    filename = f"generated_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                    save_dir = state_dir / "images"
-                    save_dir.mkdir(parents=True, exist_ok=True)
-                    image_path = str(save_dir / filename)
-                    image.save(image_path)
-                    print(f"[BlueskyAgent] Image saved to {image_path}")
-                    _last_gen_time = datetime.now()
-                    
-                    # Record visual style usage
-                    story_manager.record_post(subliminal, visual_prompt)
-                    
-            except Exception as e:
-                print(f"[BlueskyAgent] Image generation failed: {e}")
-                # Still record the post text part
-                story_manager.record_post(subliminal, "")
-
-        # 5. Format Output
-        full_text = f"{text}\n\n{' '.join(hashtags)}"
-        
-        # 6. Auto-Post
-        post_result = None
-        if auto_post:
-            if image_path:
-                print(f"[BlueskyAgent] Auto-posting with image: {image_path}")
-                post_result = post_to_bluesky(full_text, image_path=image_path, alt_text=theme)
-            else:
-                print("[BlueskyAgent] Auto-posting text only")
-                post_result = post_to_bluesky(full_text)
-            
-            # 7. After successful post, check for comments to respond to
-            # The Creator (@evildrgemini.bsky.social) is always prioritized
-            if post_result and post_result.get("success"):
-                try:
-                    from .agents.comment_response_agent import comment_response_agent
-                    reply_result = _run_sync_safe(
-                        comment_response_agent.maybe_respond_after_post(post_result)
-                    )
-                    if reply_result and reply_result.get("success"):
-                        author = reply_result.get('author', 'unknown')
-                        is_creator = reply_result.get('is_creator', False)
-                        if is_creator:
-                            log_event(f"🙏 Responded to Creator's comment from {author}", "INFO")
-                        else:
-                            log_event(f"💬 Responded to comment from {author}", "INFO")
-                except Exception as e:
-                    print(f"[BlueskyAgent] Comment response failed (non-critical): {e}")
-        
-        return {
-            "success": True,
-            "text": text,
-            "hashtags": hashtags,
-            "subliminal": subliminal,
-            "image_path": image_path,
-            "posted": post_result.get("success") if post_result else False,
-            "post_uri": post_result.get("post_uri") if post_result else None,
-            "beat_data": beat_data
-        }
-
-
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"{type(e).__name__}: {e}",
-            "text": None
-        }
 
 def get_unreplied_comments(limit: int = 20) -> List[Dict[str, Any]]:
     """
