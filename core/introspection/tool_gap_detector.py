@@ -94,27 +94,41 @@ The agent encountered a step for which no suitable tool was found.
 
 CONTEXT: "{context}"
 
-Your task is to define a NEW tool that would solve this problem.
+Your task is to define a NEW tool that would solve the underlying *primitive* problem.
+
+CRITICAL:
+- Do NOT create a tool that just solves this specific context (e.g., "create_posters_for_investors").
+- Create an ATOMIC, REUSABLE tool (e.g., "generate_image", "overlay_text").
+- The tool must be S.M.A.R.T.: Specific, Measurable, Achievable, Relevant, Time-bound.
+
+EXAMPLES:
+BAD (Too specific): `generate_demotivational_posters_for_campaign`
+GOOD (Atomic): `generate_image_from_prompt`
+
+BAD (Too complex): `search_twitter_and_reply_to_influencers`
+GOOD (Atomic): `search_twitter_users`, `post_reply`
 
 REQUIREMENTS:
-1. Determine the function name (snake_case)
-2. Define required arguments (name: type)
-3. Define expected output
-4. List safety constraints
-5. Return JSON ONLY
+1. Determine the function name (snake_case, verb_noun).
+2. Define required arguments (name: type).
+3. Define expected output.
+4. List safety constraints.
+5. Provide reasoning for why this is the right atomic primitive.
+6. Return JSON ONLY.
 
 FORMAT:
 {{
-    "functional_name": "verb_noun_descriptor",
+    "functional_name": "verb_noun",
     "required_arguments": {{
-        "arg1": "str",
-        "arg2": "int"
+        "prompt": "str",
+        "count": "int"
     }},
     "expected_output": "description of return value",
     "safety_constraints": [
         "must not delete files",
         "must handle errors"
-    ]
+    ],
+    "reasoning": "This tool provides the primitive capability to X, which allows solving the context by..."
 }}
 """
         llm = self._get_llm_client()
