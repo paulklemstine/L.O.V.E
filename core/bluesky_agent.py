@@ -908,7 +908,9 @@ def fetch_recent_interactions(limit: int = 20) -> List[Dict[str, Any]]:
     """
     try:
         client = _get_bluesky_client()
-        response = client.app.bsky.notification.list_notifications(limit=limit)
+        from atproto import models
+        params = models.AppBskyNotificationListNotifications.Params(limit=limit)
+        response = client.app.bsky.notification.list_notifications(params)
         
         interactions = []
         for notification in response.notifications:
