@@ -162,7 +162,7 @@ Test Output (Failures):
 5. Return ONLY the code.
 """
         response = await self.llm_client.generate_async(prompt)
-        return self.fabricator._extract_code(response) # Reuse extractor
+        return self.fabricator._clean_code(response) # Reuse extractor
 
     async def _finalize_tool(self, spec: EvolutionarySpecification, tool_path: str) -> bool:
         """
