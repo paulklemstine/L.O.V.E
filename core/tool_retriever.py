@@ -232,3 +232,55 @@ def get_tool_retriever() -> ToolRetriever:
     if _tool_retriever is None:
         _tool_retriever = ToolRetriever()
     return _tool_retriever
+
+
+def retrieve_tools_for_step(
+    step_description: str,
+    registry=None,
+    max_tools: int = 5
+) -> List[ToolMatch]:
+    """
+    Convenience function to retrieve tools for a step.
+    
+    Args:
+        step_description: The current step description
+        registry: Optional ToolRegistry (will use global if not provided)
+        max_tools: Maximum tools to return
+        
+    Returns:
+        List of ToolMatch objects
+    """
+    retriever = get_tool_retriever()
+    
+    # Re-index if registry provided and cache is empty
+    if registry and not retriever._tool_cache:
+        retriever.index_tools(registry)
+    elif not retriever._tool_cache:
+        # Try to get global registry
+        try:
+            from core.tool_registry import get_global_registry
+            global_registry = get_global_registry()
+            retriever.index_tools(global_registry)
+        except Exception as e:
+            logger.warning(f"Could not index tools: {e}")
+            return []
+    
+    return retriever.retrieve(step_description, max_tools=max_tools)
+
+
+def format_tools_for_step(step_description: str, registry=None) -> str:
+    """
+    Get formatted tool metadata for a specific step.
+    
+    Story 2.3: Returns only relevant tools instead of the full list.
+    
+    Args:
+        step_description: The current step description
+        registry: Optional ToolRegistry
+        
+    Returns:
+        Formatted string of relevant tools
+    """
+    tools = retrieve_tools_for_step(step_description, registry)
+    return get_tool_retriever().get_tool_menu(step_description)  # Use tool menu as subset metadata
+
