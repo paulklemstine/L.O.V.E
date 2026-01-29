@@ -17,6 +17,7 @@ import sys
 import httpx
 import json
 import logging
+import asyncio
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 
@@ -84,8 +85,33 @@ class LLMClient:
         
     async def _get_async_client(self) -> httpx.AsyncClient:
         """Get or create async HTTP client."""
-        if self._async_client is None:
+        # Check if we need to refresh the client due to loop change
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        # Logic to detect if the existing client is stale (bound to a different/closed loop)
+        is_stale = False
+        if self._async_client is not None:
+             # Check if we stored the creation loop
+             creation_loop = getattr(self, '_client_loop', None)
+             if creation_loop and creation_loop is not current_loop:
+                 is_stale = True
+             if self._async_client.is_closed:
+                 is_stale = True
+
+        if self._async_client is None or is_stale:
+            # If stale, try to close the old one gracefully if possible
+            if self._async_client and not self._async_client.is_closed:
+                try:
+                    await self._async_client.aclose()
+                except Exception:
+                    pass # Ignore errors closing old client typically
+
             self._async_client = httpx.AsyncClient(timeout=self.timeout)
+            self._client_loop = current_loop
+            
         return self._async_client
         
     def _check_vllm_health(self) -> bool:

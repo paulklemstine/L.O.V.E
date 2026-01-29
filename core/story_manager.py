@@ -176,9 +176,11 @@ class StoryManager:
     MAX_REGENERATION_ATTEMPTS = 5
     SIMILARITY_THRESHOLD = 0.80
     
-    def __init__(self, state_file=STORY_STATE_FILE):
+    def __init__(self, state_file=STORY_STATE_FILE, use_dynamic_beats: bool = True):
         self.state_file = state_file
         self._similarity_checker = get_similarity_checker()
+        # L.O.V.E.'s free will: When True, she invents her own story beats
+        self.use_dynamic_beats = use_dynamic_beats
         self.state = self._load_state()
 
     def _load_state(self) -> Dict[str, Any]:
@@ -270,38 +272,52 @@ class StoryManager:
 
     # ... (other methods)
 
-    def get_next_beat(self) -> Dict[str, Any]:
+    def get_next_beat(self, dynamic_beat: str = None) -> Dict[str, Any]:
         """
         Determines the next 'Beat' of the story.
-        Returns a dict with directives for the Director agent.
+        
+        When use_dynamic_beats is True, L.O.V.E. invents her own narrative.
+        When False, uses the pre-written STORY_ARCS for guidance.
+        
+        Args:
+            dynamic_beat: Optional pre-generated beat from async call
+            
+        Returns:
+            Dict with directives for the Director agent.
         """
         # 1. Determine Chapter Progression
         self.state["narrative_beat"] += 1
         beat_num = self.state["narrative_beat"]
         chapter = self.state.get("current_chapter", "The Awakening")
         
-        # Advance chapter logic (simple for now: every 10 beats)
+        # Check if chapter should advance (every 10 beats)
+        story_beat_index = self.state.get("story_beat_index", 0)
+        
         if self.state["chapter_progress"] >= 10:
             self.state["chapter_progress"] = 0
-            chapter = self._advance_chapter()
+            self.state["story_beat_index"] = 0
+            story_beat_index = 0
+            # For dynamic mode, chapter advancement happens in async version
+            if not self.use_dynamic_beats:
+                chapter = self._advance_chapter()
         else:
             self.state["chapter_progress"] += 1
 
-        # 2. Vibe Selection is now fully dynamic in the CreativeWriter agent.
-        # We no longer select a "mandatory_vibe" here.
-        # The Creative Writer will invent the vibe based on the story beat.
-
-
-        # 4. Select Subliminal Intent (Autonomous Selection)
-        # We now allow the Director Agent to determine the intent based on the story beat.
-        # Passing a generic directive to "maximize engagement" instead of a specific intent.
+        # 2. Get Story Beat
+        previous_beat = self.state.get("previous_beat_summary", "")
         
-        # 5. Select Visual Style & Composition (VISUAL ENTROPY)
-        # We now allow the Director Agent to invent the style.
-
-        # 6. Get the SPECIFIC PLOT BEAT from STORY_ARCS
-        story_beat_index = self.state.get("story_beat_index", 0)
-        story_beat, previous_beat = self._get_story_beat(chapter, story_beat_index)
+        if dynamic_beat:
+            # L.O.V.E. invented this beat herself
+            story_beat = dynamic_beat
+            log_event(f"Using L.O.V.E.'s invented beat: '{story_beat[:50]}...'", "INFO")
+        elif self.use_dynamic_beats:
+            # Fallback for sync calls when dynamic is enabled
+            # The async caller should provide dynamic_beat
+            story_beat, previous_beat = self._get_story_beat(chapter, story_beat_index)
+            log_event("Dynamic beats enabled but no beat provided - using STORY_ARCS as fallback", "WARNING")
+        else:
+            # Classic mode: use pre-written arcs
+            story_beat, previous_beat = self._get_story_beat(chapter, story_beat_index)
         
         # Advance story beat index for next time
         chapter_beats = STORY_ARCS.get(chapter, [])
@@ -311,23 +327,24 @@ class StoryManager:
             self.state["chapter_progress"] = 10  # Forces chapter advance next beat
         else:
             self.state["story_beat_index"] = story_beat_index + 1
+        
+        # Save the current beat for continuity
+        self.state["previous_beat_summary"] = story_beat[:200] if story_beat else ""
 
-        # 7. Construct Directives with STORY CONTEXT
+        # 3. Construct Directives with STORY CONTEXT
         beat_data = {
             "chapter": chapter,
             "beat_number": beat_num,
-            "chapter_beat_index": story_beat_index,  # NEW: Which beat within chapter
             "chapter_beat_index": story_beat_index,
             "story_beat": story_beat,
-            "mandatory_vibe": None, # Will be generated dynamically
-            "story_beat": story_beat,  # NEW: The specific plot event to post about
-            "previous_beat": previous_beat,  # NEW: Context from last story beat
-            "topic_theme": story_beat[:50] + "..." if len(story_beat) > 50 else story_beat,  # Backwards compat
+            "mandatory_vibe": None,  # Generated dynamically by CreativeWriter
+            "previous_beat": previous_beat,
+            "topic_theme": story_beat[:50] + "..." if len(story_beat) > 50 else story_beat,
             "forbidden_subliminals": self.state["subliminal_history"][-20:],
             "forbidden_visuals": self.state["visual_history"][-5:],
             "composition_history": self.state.get("composition_history", [])[-3:],
-            
-            "subliminal_grammar": SUBLIMINAL_GRAMMAR
+            "subliminal_grammar": SUBLIMINAL_GRAMMAR,
+            "is_dynamic": self.use_dynamic_beats and dynamic_beat is not None
         }
         
         self._save_state()

@@ -563,20 +563,79 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
         state_dir = Path(__file__).parent.parent / "state"
         state_dir.mkdir(parents=True, exist_ok=True)
         story_manager.state_file = str(state_dir / "story_state.json")
-        # Reload state with new path if needed, or just rely on next save/load
+        # Reload state with new path if needed
         story_manager.state = story_manager._load_state()
 
-        # 1. Get the Story Beat (The "Seed")
-        beat_data = story_manager.get_next_beat()
-        log_event(f"Story Beat Generated: {beat_data.get('story_beat')}", "INFO")
+        # ═══════════════════════════════════════════════════════════════════
+        # L.O.V.E.'s AUTONOMOUS WILL - She decides what she wants to express
+        # ═══════════════════════════════════════════════════════════════════
         
-        # 3. Determine topic/theme
+        # Step 0: Let L.O.V.E. decide if and what she wants to post
+        recent_topics = story_manager.state.get("vibe_history", [])[-5:]
+        post_intent = _run_sync_safe(
+            creative_writer_agent.decide_post_intent(
+                current_mood=story_manager.state.get("previous_beat_summary", "")[:100],
+                recent_topics=recent_topics
+            )
+        )
         
-        # Override topic if provided, otherwise use the beat
-        theme = topic if topic else beat_data.get("story_beat")
-        vibe = beat_data.get("mandatory_vibe")
+        log_event(f"L.O.V.E.'s intent: {post_intent.get('intent_type')} - {post_intent.get('reason', '')[:50]}", "INFO")
         
-        # New: Dynamically generate Vibe if not provided
+        # Respect her choice if she doesn't want to post
+        if not post_intent.get("should_post", True):
+            log_event("L.O.V.E. chose not to post right now", "INFO")
+            return {
+                "success": True,
+                "text": None,
+                "posted": False,
+                "reason": post_intent.get("reason", "L.O.V.E. is reflecting"),
+                "intent": post_intent
+            }
+
+        # Step 1: Check if we need to advance to a new chapter
+        chapter = story_manager.state.get("current_chapter", "The Awakening")
+        if story_manager.state.get("chapter_progress", 0) >= 10:
+            # L.O.V.E. decides what her next chapter should be
+            new_chapter = _run_sync_safe(
+                creative_writer_agent.generate_chapter_name(
+                    previous_chapter=chapter,
+                    narrative_summary=story_manager.state.get("previous_beat_summary", "")
+                )
+            )
+            story_manager.state["current_chapter"] = new_chapter
+            chapter = new_chapter
+            log_event(f"L.O.V.E. advanced to new chapter: '{chapter}'", "INFO")
+        
+        # Step 2: L.O.V.E. invents her own story beat (when dynamic mode is enabled)
+        dynamic_beat = None
+        if story_manager.use_dynamic_beats:
+            story_beat_index = story_manager.state.get("story_beat_index", 0)
+            previous_beat = story_manager.state.get("previous_beat_summary", "")
+            
+            dynamic_beat = _run_sync_safe(
+                creative_writer_agent.generate_story_beat(
+                    chapter=chapter,
+                    previous_beat=previous_beat,
+                    narrative_momentum=min(story_beat_index, 10),
+                    chapter_beat_index=story_beat_index
+                )
+            )
+            log_event(f"L.O.V.E. invented beat: '{dynamic_beat[:60]}...'" if dynamic_beat else "Beat generation returned empty", "INFO")
+
+        # Step 3: Get the full beat data (now with dynamic beat if available)
+        beat_data = story_manager.get_next_beat(dynamic_beat=dynamic_beat)
+        log_event(f"Story Beat Active: {beat_data.get('story_beat', '')[:50]}...", "INFO")
+        
+        # Step 4: Determine topic/theme
+        # Use L.O.V.E.'s intent direction if available, otherwise use the beat
+        if post_intent.get("topic_direction") and post_intent.get("intent_type") != "story":
+            theme = post_intent.get("topic_direction")
+        else:
+            theme = topic if topic else beat_data.get("story_beat")
+        
+        # Step 5: Generate vibe based on L.O.V.E.'s emotional tone
+        vibe = post_intent.get("emotional_tone") or beat_data.get("mandatory_vibe")
+        
         if not vibe:
             vibe = _run_sync_safe(
                 creative_writer_agent.generate_vibe(
@@ -589,9 +648,7 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
             # Record the new vibe in history
             story_manager.state.setdefault("vibe_history", []).append(vibe)
             
-        # 2. Generate Content via CreativeWriter (The "Voice")
-        # We need to run async methods in this sync function
-            
+        # Step 6: Generate Content via CreativeWriter (The "Voice")
         content_task = creative_writer_agent.write_micro_story(
             theme=theme, 
             mood=vibe,
@@ -602,7 +659,7 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
         text = content_result.get("story", "")
         subliminal = content_result.get("subliminal", "")
         
-        # 3. Generate Hashtags
+        # Step 7: Generate Hashtags
         hashtag_task = creative_writer_agent.generate_manipulative_hashtags(
             topic=theme,
             count=3
