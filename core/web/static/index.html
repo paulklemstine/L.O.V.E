@@ -308,23 +308,23 @@
             border-bottom: 1px solid #333;
             font-size: 0.9em;
         }
-        
+
         .interaction-header {
             display: flex;
             justify-content: space-between;
             margin-bottom: 4px;
         }
-        
+
         .interaction-author {
             font-weight: bold;
             color: var(--secondary-color);
         }
-        
+
         .interaction-text {
             color: #ddd;
             margin-bottom: 4px;
         }
-        
+
         .interaction-meta {
             font-size: 0.8em;
             color: #666;
@@ -339,7 +339,7 @@
             font-size: 0.9em;
             border-left: 2px solid var(--accent-color);
         }
-        
+
         .latest-post-stats {
             display: flex;
             gap: 10px;
@@ -442,19 +442,32 @@
                 updateAgentList(data.agent_states);
 
                 // Art/Image & Latest Post
+                // Latest Post (Image + Text)
                 if (data.latest_post) {
-                   const lp = data.latest_post;
-                   
-                   // Update image if present and new
-                   if (lp.image_path) {
-                       // Note: Fetching local image path via browser might not work without serving it.
-                       // BUT, StateManager might also have last_image (b64) updated.
-                       // Let's rely on data.last_image for the visual if available.
-                   }
-                   
-                   const postTextDiv = document.getElementById('latest-post-text');
-                   postTextDiv.style.display = 'block';
-                   postTextDiv.innerHTML = `
+                    const lp = data.latest_post;
+
+                    const postTextDiv = document.getElementById('latest-post-text');
+                    const artDisplay = document.getElementById('art-display');
+
+                    postTextDiv.style.display = 'block';
+
+                    // Render Image if available
+                    let imageHtml = '<span>No Image</span>';
+                    if (lp.image_url) {
+                        imageHtml = `<img src="${lp.image_url}" alt="Post Image" />`;
+                    } else if (data.last_image) {
+                        // Fallback to last generated image if it matches context, 
+                        // but strictly speaking user wants "latest bluesky post".
+                        // If the post has no image, we shouldn't show a random generated one.
+                        // However, locally we might not have the URL working if it's strict.
+                        // Let's trust image_url from Bluesky.
+                        imageHtml = '<span style="font-size: 0.8em; color: #555;">(Text only)</span>';
+                    }
+
+                    artDisplay.innerHTML = imageHtml;
+
+                    // Render Text
+                    postTextDiv.innerHTML = `
                        <div>${escapeHtml(lp.text)}</div>
                        <div class="latest-post-stats">
                            <span>❤️ ${lp.likes || 0}</span>
@@ -462,12 +475,12 @@
                            <span>🕒 ${new Date(lp.timestamp).toLocaleTimeString()}</span>
                        </div>
                    `;
-                }
-
-                if (data.last_image && data.last_image !== lastImageHash) {
-                    const artDisplay = document.getElementById('art-display');
-                    artDisplay.innerHTML = `<img src="data:image/png;base64,${data.last_image}" alt="Generated Art" />`;
-                    lastImageHash = data.last_image;
+                } else {
+                    // No latest post data yet
+                    // Maybe show last_image as placeholder? 
+                    // User said: "remove the generate_image tool, the one that was only for the index.html page"
+                    // imply removing the preview that isn't the post.
+                    // So we do nothing or clear it.
                 }
 
                 // Interactions
@@ -485,7 +498,7 @@
         function updateAgentList(agentStates) {
             const container = document.getElementById('agent-list');
             if (!agentStates || Object.keys(agentStates).length === 0) {
-                return; 
+                return;
             }
 
             let html = '';
@@ -506,7 +519,7 @@
         function updateInteractions(interactions) {
             const container = document.getElementById('interactions-list');
             if (!interactions || interactions.length === 0) return;
-            
+
             // Render list
             container.innerHTML = interactions.map(item => {
                 const icon = item.reason === 'reply' ? '💬' : item.reason === 'mention' ? '👋' : '❤️';
