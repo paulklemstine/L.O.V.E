@@ -133,7 +133,8 @@ def _get_bluesky_client():
 def post_to_bluesky(
     text: str,
     image_path: Optional[str] = None,
-    alt_text: Optional[str] = None
+    alt_text: Optional[str] = None,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     Post to Bluesky with optional image.
@@ -299,7 +300,7 @@ def _qa_validate_post(text: str, hashtags: List[str], subliminal_phrase: str) ->
     }
 
 
-def get_bluesky_timeline(limit: int = 20) -> Dict[str, Any]:
+def get_bluesky_timeline(limit: int = 20, **kwargs) -> Dict[str, Any]:
     """
     Get recent posts from the home timeline.
     
@@ -545,7 +546,8 @@ def reply_to_comment_agent(
 
 def search_bluesky(
     query: str,
-    limit: int = 20
+    limit: int = 20,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     Search for posts on Bluesky.
@@ -1039,7 +1041,7 @@ def get_latest_own_post() -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_unreplied_comments(limit: int = 20) -> List[Dict[str, Any]]:
+def get_unreplied_comments(limit: int = 20, **kwargs) -> List[Dict[str, Any]]:
     """
     Get recent mentions/replies that we haven't replied to yet.
     
@@ -1086,7 +1088,7 @@ def get_unreplied_comments(limit: int = 20) -> List[Dict[str, Any]]:
         return []
 
 
-def get_followers(actor: str, limit: int = 50) -> Dict[str, Any]:
+def get_followers(actor: str, limit: int = 50, **kwargs) -> Dict[str, Any]:
     """
     Get followers for a user.
     """
@@ -1103,7 +1105,7 @@ def get_followers(actor: str, limit: int = 50) -> Dict[str, Any]:
         return {"success": False, "followers": [], "error": str(e)}
 
 
-def get_follows(actor: str, limit: int = 50) -> Dict[str, Any]:
+def get_follows(actor: str, limit: int = 50, **kwargs) -> Dict[str, Any]:
     """
     Get accounts followed by a user.
     """
@@ -1119,7 +1121,7 @@ def get_follows(actor: str, limit: int = 50) -> Dict[str, Any]:
         return {"success": False, "follows": [], "error": str(e)}
 
 
-def get_author_feed(actor: str, limit: int = 20) -> Dict[str, Any]:
+def get_author_feed(actor: str, limit: int = 20, **kwargs) -> Dict[str, Any]:
     """
     Get posts made by a user (for engagement analysis).
     """

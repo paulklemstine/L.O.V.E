@@ -26,7 +26,7 @@ You MUST also use the `reply_to_creator` tool to communicate back to the user.
 
 ## Tool Usage
 You can use any registered tool.
-To reply, use: `reply_to_creator(message="...")`
+To reply, use: `reply_to_creator(message="...")` or `reply_to_user(message="...")`
 
 ## Response Format
 You must respond with a JSON object:
@@ -49,12 +49,16 @@ AND then strictly stop.
         self.registry = get_global_registry()
         self.max_turns = 10 # Safety limit
 
-    def reply_to_creator(self, message: str) -> str:
+    def reply_to_creator(self, message: str, **kwargs) -> str:
         """
         Send a message back to the Creator in the control panel.
         """
         get_state_manager().add_chat_message("assistant", message)
         return "Message sent to Creator."
+
+    def reply_to_user(self, message: str, **kwargs) -> str:
+        """Alias for reply_to_creator."""
+        return self.reply_to_creator(message, **kwargs)
 
     async def process_command(self, command_text: str):
         """
@@ -92,7 +96,7 @@ AND then strictly stop.
                 logger.info(f"Turn {turn}: {thought} -> {action}")
                 get_state_manager().update_agent_status("CreatorCommandAgent", "Working", action=action, thought=thought)
                 
-                if action == "reply_to_creator":
+                if action in ["reply_to_creator", "reply_to_user"]:
                     self.reply_to_creator(**action_input)
                     # We assume reply ends the turn usually, but maybe they want to do more?
                     # For now, let's say if they reply, we check if they want to continue or done?

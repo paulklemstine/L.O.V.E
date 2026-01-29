@@ -106,10 +106,6 @@ async def generate_text(request: GenerateRequest):
         import traceback
         traceback.print_exc()
         return {"error": str(e)}
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
 
 def find_available_port(start_port=8000, max_tries=10):
     """Find an available port starting from start_port."""

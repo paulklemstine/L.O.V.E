@@ -95,6 +95,14 @@ def _get_love2_tools() -> Dict[str, Callable]:
 
     
     # Basic utility tools
+    def reply_to_creator(message: str, **kwargs) -> str:
+        """Send a message back to the Creator in the control panel."""
+        from .state_manager import get_state_manager
+        get_state_manager().add_chat_message("assistant", message)
+        return "Message sent to Creator."
+
+    tools["reply_to_creator"] = reply_to_creator
+    tools["reply_to_user"] = reply_to_creator
     tools["log_message"] = _log_message
     tools["get_current_time"] = _get_current_time
     tools["wait"] = _wait

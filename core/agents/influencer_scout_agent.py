@@ -291,7 +291,7 @@ class InfluencerScoutAgent:
 # Singleton
 influencer_scout_agent = InfluencerScoutAgent()
 
-def scout_influencers(seed_users: List[str] = None, depth: int = 2) -> Dict[str, Any]:
+def scout_influencers(seed_users: List[str] = None, depth: int = 2, **kwargs) -> Dict[str, Any]:
     """
     Scout the network to find potential influencers.
     
@@ -340,7 +340,7 @@ def scout_influencers(seed_users: List[str] = None, depth: int = 2) -> Dict[str,
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-def engage_with_influencer(dry_run: bool = False) -> Dict[str, Any]:
+def engage_with_influencer(dry_run: bool = False, **kwargs) -> Dict[str, Any]:
     """
     Engage with a high-scoring influencer by replying to their recent post.
     

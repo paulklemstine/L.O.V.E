@@ -88,7 +88,6 @@ class StateManager:
         """Get a snapshot of the current state."""
         return {
             "iteration": self.iteration,
-            "iteration": self.iteration,
             "current_goal": self.current_goal,
             "current_command": self.current_command,
             "command_queue_len": len(self.command_queue),
@@ -98,6 +97,7 @@ class StateManager:
             "last_image": self.last_image,
             "latest_post": self.latest_post,
             "interactions": self.interactions,
+            "chat_history": self.get_chat_history(),
             "last_update": self.last_update.isoformat(),
             "log_count": len(self.logs)
         }

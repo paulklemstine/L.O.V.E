@@ -699,6 +699,11 @@
                     updateInteractions(data.interactions);
                 }
 
+                // Chat History
+                if (data.chat_history) {
+                    updateChatMessages(data.chat_history);
+                }
+
             } catch (error) {
                 console.error("Status fetch failed:", error);
                 document.getElementById('connection-status').textContent = 'Disconnected';
@@ -853,6 +858,20 @@
             container.appendChild(div);
             // Auto scroll
             container.scrollTop = container.scrollHeight;
+        }
+
+        function updateChatMessages(history) {
+            const container = document.getElementById('chat-messages');
+
+            // Only update if length changed or we have no messages
+            // This prevents flickering while typing or if we just want a simple refresh
+            if (container.children.length === history.length) return;
+            if (history.length === 0 && container.innerHTML.includes('Start a conversation')) return;
+
+            container.innerHTML = '';
+            history.forEach(msg => {
+                renderMessage(msg.role, msg.content);
+            });
         }
 
         async function loadChatHistory() {
