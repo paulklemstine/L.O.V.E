@@ -320,7 +320,7 @@ The code must be immediately executable when saved to a .py file.
                 )
                 
                 # Generate code via LLM
-                response = await llm.generate(prompt)
+                response = await llm.generate_async(prompt)
                 code = self._clean_code(response)
                 
                 # Validate the code

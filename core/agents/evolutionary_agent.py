@@ -161,7 +161,7 @@ Test Output (Failures):
 4. Ensure robust error handling.
 5. Return ONLY the code.
 """
-        response = await self.llm_client.generate(prompt)
+        response = await self.llm_client.generate_async(prompt)
         return self.fabricator._extract_code(response) # Reuse extractor
 
     async def _finalize_tool(self, spec: EvolutionarySpecification, tool_path: str) -> bool:
