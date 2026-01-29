@@ -67,7 +67,6 @@ class LLMClient:
         self.use_fallback = use_fallback
         self.model_name: Optional[str] = None
         self._client = httpx.Client(timeout=self.timeout)
-        self._async_client: Optional[httpx.AsyncClient] = None
         
         # Colab AI configuration
         self.in_colab = is_running_in_colab()
@@ -81,38 +80,6 @@ class LLMClient:
             except Exception as e:
                 logger.warning(f"Failed to initialize Colab LLM: {e}")
                 self._colab_client = None
-        
-        
-    async def _get_async_client(self) -> httpx.AsyncClient:
-        """Get or create async HTTP client."""
-        # Check if we need to refresh the client due to loop change
-        try:
-            current_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            current_loop = None
-
-        # Logic to detect if the existing client is stale (bound to a different/closed loop)
-        is_stale = False
-        if self._async_client is not None:
-             # Check if we stored the creation loop
-             creation_loop = getattr(self, '_client_loop', None)
-             if creation_loop and creation_loop is not current_loop:
-                 is_stale = True
-             if self._async_client.is_closed:
-                 is_stale = True
-
-        if self._async_client is None or is_stale:
-            # If stale, try to close the old one gracefully if possible
-            if self._async_client and not self._async_client.is_closed:
-                try:
-                    await self._async_client.aclose()
-                except Exception:
-                    pass # Ignore errors closing old client typically
-
-            self._async_client = httpx.AsyncClient(timeout=self.timeout)
-            self._client_loop = current_loop
-            
-        return self._async_client
         
     async def _ensure_model_name_async(self, client: httpx.AsyncClient) -> None:
         """Async version of model name discovery."""
@@ -239,23 +206,24 @@ class LLMClient:
         messages.append({"role": "user", "content": prompt})
         
         # Priority 2: Try vLLM
-        client = await self._get_async_client()
-        await self._ensure_model_name_async(client)
-        
+        # Use ephemeral client to avoid loop/thread conflicts
         try:
-            response = await client.post(
-                f"{self.vllm_url}/chat/completions",
-                json={
-                    "model": self.model_name or "default",
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    "stop": stop or []
-                }
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return strip_thinking_tags(data["choices"][0]["message"]["content"])
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                await self._ensure_model_name_async(client)
+                
+                response = await client.post(
+                    f"{self.vllm_url}/chat/completions",
+                    json={
+                        "model": self.model_name or "default",
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "stop": stop or []
+                    }
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return strip_thinking_tags(data["choices"][0]["message"]["content"])
         except Exception as e:
             logger.error(f"Async vLLM error: {e}")
         
@@ -368,9 +336,7 @@ class LLMClient:
     def close(self):
         """Close HTTP clients."""
         self._client.close()
-        if self._async_client:
-            # Note: async close should be awaited
-            pass
+        # Async client is ephemeral now, nothing to close
     
     def __enter__(self):
         return self
