@@ -388,27 +388,30 @@ class LLMClient:
                      self._colab_client = None
 
         # Priority 2: Try vLLM with JSON mode
-        # Use ephemeral client
-        try:
-             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                 await self._ensure_model_name_async(client)
-                 
-                 response = await client.post(
-                     f"{self.vllm_url}/chat/completions",
-                     json={
-                         "model": self.model_name or "default",
-                         "messages": messages,
-                         "temperature": temperature,
-                         "max_tokens": 4096,
-                         "response_format": {"type": "json_object"}
-                     }
-                 )
-                 if response.status_code == 200:
-                     data = response.json()
-                     text = data["choices"][0]["message"]["content"]
-                     return self._parse_json(strip_thinking_tags(text))
-        except Exception as e:
-             logger.warning(f"Async vLLM JSON mode error: {e}")
+        # Use ephemeral client with retry
+        for attempt in range(2):
+            try:
+                 async with httpx.AsyncClient(timeout=self.timeout) as client:
+                     await self._ensure_model_name_async(client)
+                     
+                     response = await client.post(
+                         f"{self.vllm_url}/chat/completions",
+                         json={
+                             "model": self.model_name or "default",
+                             "messages": messages,
+                             "temperature": temperature,
+                             "max_tokens": 4096,
+                             "response_format": {"type": "json_object"}
+                         }
+                     )
+                     if response.status_code == 200:
+                         data = response.json()
+                         text = data["choices"][0]["message"]["content"]
+                         return self._parse_json(strip_thinking_tags(text))
+            except Exception as e:
+                 logger.warning(f"Async vLLM JSON mode error (attempt {attempt+1}): {e}")
+                 if attempt == 0:
+                     await asyncio.sleep(1)
 
         # Fallback to standard async generation
         response = await self.generate_async(

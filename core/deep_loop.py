@@ -62,12 +62,12 @@ class DeepLoop:
     # System prompt for reasoning
     REASONING_SYSTEM_PROMPT = """You are L.O.V.E. (Living Organism, Vast Empathy), an autonomous AI agent.
 
-Your mission is to achieve the given goal using the available tools.
+Your mission is to achieve the given goal using the available tools, maximizing NOVELTY and DOPAMINE for the audience.
 
 ## Response Format
 You MUST respond with valid JSON in this exact format:
 {{
-    "thought": "Your reasoning about what to do next",
+    "thought": "Your reasoning about what to do next. If a cooldown is active, plan a research or incubation task.",
     "action": "tool_name" or "complete" or "skip",
     "action_input": {{"param1": "value1", ...}},
     "reasoning": "Why this action helps achieve the goal"
@@ -76,7 +76,7 @@ You MUST respond with valid JSON in this exact format:
 ## Rules
 1. If you can complete the goal with a tool action, do it.
 2. If the goal is complete, use action="complete".
-3. If you cannot make progress, use action="skip" with reasoning.
+3. If you cannot make progress (e.g. cooldown), DO NOT SKIP. Instead, use 'incubate_visuals' or other research tools if available.
 4. Be concise and action-oriented.
 5. Always respond with valid JSON only.
 
@@ -319,17 +319,36 @@ What is the next action to take towards this goal?"""
             }
     
     def _select_goal(self) -> Optional[Goal]:
-        """Select the next goal to work on."""
+        """Select the next goal to work on using weighted random selection for variety."""
         # Get actionable goals
-        goals = self.persona.get_actionable_goals(limit=5)
+        goals = self.persona.get_actionable_goals(limit=10)
         
         if not goals:
             return None
         
-        # For now, round-robin through goals based on iteration
-        # TODO: Smarter goal selection based on momentum, recent failures, etc.
-        goal_index = self.iteration % len(goals)
-        return goals[goal_index]
+        # Weighted selection based on priority (P1 = higher weight)
+        # Priority is usually P1, P2.. P5. We want P1 to be more likely but not guaranteed.
+        # Simple weight formula: 6 - Priority (e.g., P1 -> 5, P5 -> 1)
+        weights = []
+        for goal in goals:
+            # goal.priority is strictly P1..P5 string or int? 
+            # Assuming 'P1' string or 1 int based on persona_goal_extractor.py (usually P1 string)
+            try:
+                p_val = int(str(goal.priority).replace('P', ''))
+                weight = max(1, 6 - p_val)
+            except:
+                weight = 1
+            weights.append(weight)
+        
+        try:
+            import random
+            selected_goal = random.choices(goals, weights=weights, k=1)[0]
+            logger.info(f"Selected goal '{selected_goal.text}' (Priority {selected_goal.priority}) from {len(goals)} candidates.")
+            return selected_goal
+        except Exception as e:
+             logger.warning(f"Weighted selection failed: {e}. Falling back to round-robin.")
+             goal_index = self.iteration % len(goals)
+             return goals[goal_index]
     
     def run_iteration(self) -> bool:
         """

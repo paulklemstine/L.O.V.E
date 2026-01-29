@@ -20,7 +20,7 @@ class TestBlueskyQA(unittest.TestCase):
         # Mock dependencies - patching the source definitions since they are imported locally
         self.mock_llm_patcher = patch('core.llm_client.get_llm_client')
         self.mock_persona_patcher = patch('core.persona_goal_extractor.get_persona_extractor')
-        self.mock_image_gen_patcher = patch('core.image_generation_pool.generate_image_with_pool')
+        self.mock_image_gen_patcher = patch('core.image_generation_pool.generate_image_with_pool', new_callable=AsyncMock)
         
         # We need to mock the CreativeWriterAgent's internal LLM calls or the methods themselves
         # Since we want to test bluesky_agent orchestration, let's mock the CreativeWriterAgent methods 
@@ -87,6 +87,10 @@ class TestBlueskyQA(unittest.TestCase):
         
         # Mock post_to_bluesky to prevent actual posting
         self.mock_post.return_value = {"success": True, "post_uri": "at://test/uri"}
+        
+        # Reset image cooldown for tests
+        import core.bluesky_agent
+        core.bluesky_agent._last_gen_time = None
 
     def tearDown(self):
         self.mock_llm_patcher.stop()
@@ -105,7 +109,8 @@ class TestBlueskyQA(unittest.TestCase):
              print(f"\nFAILURE ERROR: {result.get('error')}")
              
         self.assertTrue(result['success'], f"Post generation failed: {result.get('error')}")
-        self.assertEqual(result['text'], "This is a great post! 🌊✨")
+        self.assertIn("This is a great post!", result['text'])
+        self.assertIn("#love", result['text'])
         self.assertTrue(result.get('posted'), "Post should be marked as posted")
         self.assertEqual(result.get('post_uri'), "at://test/uri")
         

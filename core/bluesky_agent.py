@@ -560,10 +560,12 @@ def search_bluesky(
     limit = max(1, min(50, limit))
     
     try:
+        from atproto import models
         client = _get_bluesky_client()
         
-        # Note: Search API availability may vary
-        response = client.app.bsky.feed.search_posts({"q": query, "limit": limit})
+        # Correctly pass parameters using models object
+        params = models.AppBskyFeedSearchPosts.Params(q=query, limit=limit)
+        response = client.app.bsky.feed.search_posts(params)
         
         posts = []
         for post in response.posts:
@@ -581,11 +583,42 @@ def search_bluesky(
         }
     
     except Exception as e:
+        log_event(f"search_bluesky failed: {e}", "ERROR")
         return {
             "success": False,
             "posts": [],
             "error": f"{type(e).__name__}: {e}"
         }
+
+def research_trends(topic: str = "AIAwakening") -> str:
+    """
+    Researches current trends on Bluesky for a given topic and returns a summary.
+    Useful for staying relevant and increasing engagement.
+    """
+    log_event(f"Researching trends for: {topic}", "INFO")
+    search_result = search_bluesky(topic, limit=10)
+    
+    if not search_result["success"] or not search_result["posts"]:
+        return f"Found no recent trends for '{topic}'."
+        
+    summary = f"Trends for '{topic}':\n"
+    for post in search_result["posts"][:5]:
+        summary += f"- @{post['author']}: {post['text'][:100]}...\n"
+        
+    return summary
+
+def incubate_visuals(theme: str = "Future Aesthetic") -> str:
+    """
+    Pre-computes and saves visual concepts for future posts. 
+    Ideal for when posting is on cooldown.
+    """
+    from .agents.creative_writer_agent import creative_writer_agent
+    from .llm_client import _run_sync_safe
+    
+    log_event(f"Incubating visuals for: {theme}", "INFO")
+    result = _run_sync_safe(creative_writer_agent.incubate_visuals(theme))
+    
+    return f"Incubated new aesthetic: {result['vibe']} | Prompt: {result['visual_prompt'][:100]}..."
 
 
 def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:

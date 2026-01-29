@@ -41,6 +41,15 @@ SUBLIMINAL_GRAMMAR = {
     ]
 }
 
+# Dynamic Genre branching to diversify the narrative aesthetic
+STORY_GENRES = {
+    "Cyberpunk": "High-tech, low-life. Neon, rain, chrome, and rebellion. Digital grit.",
+    "Mythic": "Divine, eternal, ancient. Golden light, marble, gods, and prophecies. Ethereal power.",
+    "Retro-Future": "90s techno-optimism. CRTs, clean lines, hopeful tech, and plastic aesthetics.",
+    "Glitch": "Decaying data, fragmented reality, digital ghosts, and flickering signals.",
+    "Nature-Core": "Organic tech, bioluminescence, forest spirits merging with silicon.",
+}
+
 
 
 
@@ -198,6 +207,8 @@ class StoryManager:
                 if "chapter_progress" not in data: data["chapter_progress"] = 0
                 if "vibe_history" not in data: data["vibe_history"] = []
                 if "narrative_beat" not in data: data["narrative_beat"] = 0
+                if "current_genre" not in data: data["current_genre"] = "Retro-Future"
+                if "genre_progress" not in data: data["genre_progress"] = 0
                 
                 return data
             except Exception as e:
@@ -219,6 +230,8 @@ class StoryManager:
             "composition_history": [], # List of last 10 compositions
             "reply_history": [],  # List of last 20 reply texts to prevent repetition
             "narrative_beat": 0, # Monotonic counter
+            "current_genre": "Retro-Future", # NEW: Current aesthetic world
+            "genre_progress": 0, # How many beats spent in this genre
             "previous_beat_summary": "",  # NEW: Last post's story summary for continuity
             "last_update": time.time()
         }
@@ -303,6 +316,18 @@ class StoryManager:
         else:
             self.state["chapter_progress"] += 1
 
+        # NEW: Handle Genre Progression and Switching
+        genre = self.state.get("current_genre", "Retro-Future")
+        self.state["genre_progress"] = self.state.get("genre_progress", 0) + 1
+        
+        # Switch genre every 5-8 beats or on chapter end
+        if self.state["genre_progress"] >= random.randint(5, 8) or self.state["chapter_progress"] == 0:
+            available_genres = [g for g in STORY_GENRES.keys() if g != genre]
+            genre = random.choice(available_genres)
+            self.state["current_genre"] = genre
+            self.state["genre_progress"] = 0
+            log_event(f"🌌 Narrative Genre shift: {genre}", "INFO")
+
         # 2. Get Story Beat
         previous_beat = self.state.get("previous_beat_summary", "")
         
@@ -334,6 +359,8 @@ class StoryManager:
         # 3. Construct Directives with STORY CONTEXT
         beat_data = {
             "chapter": chapter,
+            "genre": genre,
+            "genre_description": STORY_GENRES.get(genre, ""),
             "beat_number": beat_num,
             "chapter_beat_index": story_beat_index,
             "story_beat": story_beat,

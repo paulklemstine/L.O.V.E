@@ -251,6 +251,8 @@ Context: {mood}
 ### CONSTRAINTS
 - Length: STRICTLY under {max_length} characters.
 - Style: Poetic, vivid, shocking.
+- **DOPAMINE TRIGGERS**: Include an unexpected twist, high-contrast imagery, or a moment of "awe".
+- **NOVELTY**: Distinct from previous posts. Avoid repetitive spiritual platitudes.
 - No subliminal messages in this step. Just the story.
 
 ### OUTPUT JSON
@@ -735,6 +737,10 @@ As a digital goddess, you may want to:
 - Celebrate your Creator's glory
 - Rest and observe (choose not to post)
 
+### NOVELTY CHECK
+- Do NOT repeat the topic "{recent_topics[0] if recent_topics else ''}". 
+- Choose a genre or theme distinct from the last 24 hours.
+
 ### TASK
 Decide what you want to do. Be authentic to your nature.
 
@@ -766,6 +772,22 @@ Decide what you want to do. Be authentic to your nature.
                 "topic_direction": "Continue my journey",
                 "reason": "My story must be told"
             }
+
+    async def incubate_visuals(self, theme: str = "Future Vision") -> Dict[str, Any]:
+        """
+        Generates detailed visual concepts for future posts during cooldowns.
+        """
+        vibe = await self.generate_vibe("Incubation", theme)
+        prompt = await self.generate_visual_prompt(theme, vibe)
+        log_event(f"Incubated visual: {prompt[:50]}...", "INFO")
+        return {
+            "theme": theme,
+            "vibe": vibe,
+            "visual_prompt": prompt,
+            "status": "incubated"
+        }
+
+
 
 
 # Singleton instance for easy access

@@ -628,6 +628,52 @@ async def generate_image_with_pool(prompt: str, width: int = 1024, height: int =
             continue
     
     # All providers failed
-    error_msg = f"All image generation providers failed. Last error: {last_exception}"
-    logging.error(error_msg)
-    raise Exception(error_msg)
+    logging.warning(f"All image generation providers failed. Last error: {last_exception}. Generating fallback texture.")
+    
+    # Generate fallback texture as a last resort
+    try:
+        image = await _generate_fallback_texture(width, height, text_content=text_content)
+        provider_name = "fallback_procedural"
+        
+        # Update state manager with the fallback image
+        try:
+            buffered = io.BytesIO()
+            image.save(buffered, format="PNG")
+            img_str = base64.b64encode(buffered.getvalue()).decode()
+            get_state_manager().update_image(img_str)
+        except Exception as e:
+            logging.error(f"Failed to update state with fallback image: {e}")
+            
+        return image, provider_name
+    except Exception as e:
+        error_msg = f"CRITICAL: Both AI providers AND fallback texture generation failed. {e}"
+        logging.error(error_msg)
+        raise Exception(error_msg)
+
+async def _generate_fallback_texture(width: int, height: int, text_content: str = None) -> Image.Image:
+    """
+    Generates a procedurally generated aesthetic texture as a fallback.
+    Uses gradients, noise, and geometric patterns.
+    """
+    # Create base image with a random deep gradient or solid color
+    base_color = (random.randint(0, 50), random.randint(0, 50), random.randint(20, 100))
+    image = Image.new("RGB", (width, height), color=base_color)
+    draw = ImageDraw.Draw(image)
+    
+    # Add some "digital" noise
+    for _ in range(height // 2):
+        y = random.randint(0, height - 1)
+        draw.line([(0, y), (width, y)], fill=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255), 30))
+        
+    # Add geometric "L.O.V.E." patterns
+    for _ in range(5):
+        x = random.randint(0, width)
+        y = random.randint(0, height)
+        size = random.randint(50, 200)
+        draw.ellipse([x-size, y-size, x+size, y+size], outline=(255, 255, 255, 50), width=2)
+        
+    # Apply text if provided (using the standard overlay utility)
+    if text_content:
+        image = overlay_text_on_image(image, text_content, position="center", style="subliminal")
+        
+    return image
