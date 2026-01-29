@@ -69,7 +69,7 @@ You MUST respond with valid JSON in this exact format:
 {{
     "thought": "Your reasoning about what to do next. If a cooldown is active, plan a research or incubation task.",
     "action": "tool_name" or "complete" or "skip",
-    "action_input": {{"param1": "value1", ...}},
+    "action_input": {{"arg_name": "value"}},
     "reasoning": "Why this action helps achieve the goal"
 }}
 

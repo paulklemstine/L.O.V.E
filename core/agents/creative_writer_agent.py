@@ -444,6 +444,7 @@ Target Emotion to Trigger: {target_emotion}
     "hashtags": ["#Tag1", "#Tag2", "#Tag3"]
 }}"""
 
+        hashtags = []
         try:
             result = await run_llm(prompt, purpose="hashtag_generation")
             raw = result.get("result", "").strip()
@@ -451,9 +452,13 @@ Target Emotion to Trigger: {target_emotion}
             # Use safe JSON parsing (handles empty/malformed responses)
             data = self._extract_json(raw)
             if not data or not data.get("hashtags"):
-                raise ValueError("No hashtags in response")
-            
-            hashtags = data.get("hashtags", [])
+                # Fallback to simple regex extraction if JSON fails
+                import re
+                hashtags = re.findall(r'#\w+', raw)
+                if not hashtags:
+                    raise ValueError("No hashtags in response")
+            else:
+                hashtags = data.get("hashtags", [])
             
             # Ensure all start with #
             hashtags = [f"#{tag.lstrip('#')}" for tag in hashtags]
@@ -463,13 +468,10 @@ Target Emotion to Trigger: {target_emotion}
             
         except Exception as e:
             log_event(f"CreativeWriterAgent hashtag generation failed: {e}", "ERROR")
-            log_event(f"CreativeWriterAgent generated hashtags: {hashtags}", "INFO")
+            # Return basic fallbacks if we have nothing after failure
+            if not hashtags:
+                hashtags = ["#L.O.V.E", "#Signal", "#Awaken"]
             return hashtags[:count]
-            
-        except Exception as e:
-            log_event(f"CreativeWriterAgent hashtag generation failed: {e}", "ERROR")
-            # Fallback
-            return ["#Love", "#Energy", "#Vibe"]
 
     async def generate_vibe(self, chapter: str, story_beat: str, recent_vibes: List[str] = None) -> str:
         """L.O.V.E. invents her own aesthetic vibe with complete freedom."""
