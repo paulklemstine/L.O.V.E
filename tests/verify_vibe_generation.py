@@ -14,7 +14,7 @@ async def verify_visual_prompt():
     print("--- Verifying CreativeWriterAgent Visual Prompt Generation ---")
     
     theme = "The Eternal Refactoring"
-    vibe = "DevMotivational"
+    vibe = "Demotivational"
     
     print(f"Theme: {theme}")
     print(f"Vibe: {vibe}")
