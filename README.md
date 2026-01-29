@@ -27,8 +27,13 @@ love2/
 │   ├── memory_system.py    # Brain-inspired memory (Episodic/Working/Tool)
 │   ├── autonomous_memory_folding.py # Context compression
 │   ├── llm_client.py       # Local vLLM interface
-│   ├── tool_adapter.py     # Tool bridge to DeepAgent format
-│   ├── bluesky_agent.py    # Bluesky social media agent
+│   ├── tool_registry.py    # Centralized tool management & hot-loading
+│   ├── agents/             # Specialized AI Agents
+│   │   ├── bluesky_agent.py          # Social media orchestration
+│   │   ├── creative_writer_agent.py  # Content generation (Dynamic Aesthetics)
+│   │   ├── influencer_scout_agent.py # Network expansion
+│   │   ├── comment_response_agent.py # Engagement
+│   │   └── evolutionary_agent.py     # Self-improvement & tool fabrication
 │   └── social_media_tools.py # Social media tool wrappers
 ├── tests/                  # Pytest test suite
 ├── docs/                   # Per-module documentation
@@ -49,6 +54,16 @@ python run.py
 ```
 
 ## 🧠 Core Concepts
+
+### 🧬 Self-Evolution & Tool Fabrication
+L.O.V.E. v2 possesses the ability to upgrade itself. The **Evolutionary Agent** monitors execution logs for "Tool Gaps" (failed attempts to perform actions due to missing tools). When a gap is detected, it:
+1. **Specs** a new tool solution.
+2. **Fabricates** the actual Python code.
+3. **Validates** the tool in a sandbox.
+4. **Hot-Loads** the new tool into the live `ToolRegistry` without restarting.
+
+### 🎭 Dynamic Aesthetic Pipeline
+Gone are hardcoded "vibes." The **Creative Writer Agent** dynamically constructs aesthetic profiles (voice, visual style, emojis) for every post based on the current context and persona goals, ensuring varied and "living" content.
 
 ### Brain-Inspired Memory System
 - **Episodic Memory**: High-level log of key events, decisions, sub-task completions

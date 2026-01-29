@@ -23,99 +23,103 @@
 ---
 
 ## 🗺️ Module Responsibilities
+  
+  | Module | File | Purpose |
+  |--------|------|---------|
+  | **🔄 Loop** | `core/deep_loop.py` | Main autonomous reasoning loop |
+  | **🎯 Goals** | `core/persona_goal_extractor.py` | Extract and prioritize persona goals |
+  | **📝 Writer** | `core/agents/creative_writer_agent.py` | **Dynamic** content generation (Post/Img/Vibe) |
+  | **📱 Bluesky** | `core/agents/bluesky_agent.py` | Orchestrates posting & engagement |
+  | **🕵️ Scout** | `core/agents/influencer_scout_agent.py` | Identifies & ranks key influencers |
+  | **💬 Reply** | `core/agents/comment_response_agent.py` | Auto-engages with comments |
+  | **🧬 Evolve** | `core/agents/evolutionary_agent.py` | **Self-Improvement**: Fabrics new tools |
+  | **🧠 Memory** | `core/memory_system.py` | Episodic, Working, Tool memories |
+  | **🤖 LLM** | `core/llm_client.py` | Local vLLM interface |
+  | **🔧 Registry** | `core/tool_registry.py` | Tool management & hot-loading |
+  
+  ---
+  
+  ## 🚫 Anti-Patterns
+  
+  - **Security**: 🛑 NEVER hardcode API keys. Use `.env`.
+  - **Git**: 🛑 NO large binaries. NO sensitive data.
+  - **Memory**: 🛑 Always persist state to `state/` directory.
+  - **Loops**: 🛑 NO infinite loops without sleep/backoff.
+  - **Errors**: 🛑 NO silent failures. Log all exceptions.
+  
+  ---
+  
+  ## 🔄 Loop Lifecycle
+  
+  ```
+  ┌─────────────────────────────────────────────────┐
+  │                  DeepLoop Cycle                  │
+  ├─────────────────────────────────────────────────┤
+  │ 1. Load persona goals                           │
+  │ 2. Select highest priority actionable goal      │
+  │ 3. Reason about goal (LLM call via vLLM)        │
+  │ 4. Execute tool actions (or Fabricate if missing)│
+  │ 5. Update memories (Episodic, Working, Tool)    │
+  │ 6. Check for memory folding trigger             │
+  │ 7. Persist state                                │
+  │ 8. Sleep (backpressure)                         │
+  │ 9. GOTO 1                                       │
+  └─────────────────────────────────────────────────┘
+  ```
+  
+  ---
+  
+  ## 🧠 Memory Architecture
+  
+  ### Episodic Memory
+  **Purpose**: High-level log of key events, decisions, sub-task completions.
+  **Persistence**: `state/episodic_memory.json`
+  **Schema**:
+  ```json
+  {
+    "events": [
+      {"timestamp": "...", "type": "goal_completed", "summary": "..."},
+      {"timestamp": "...", "type": "action_taken", "tool": "...", "result": "..."}
+    ]
+  }
+  ```
+  
+  ### Working Memory
+  **Purpose**: Current sub-goal and near-term plans.
+  **Persistence**: `state/working_memory.json`
+  **Schema**:
+  ```json
+  {
+    "current_goal": "...",
+    "sub_goals": ["..."],
+    "plan": ["step1", "step2", "..."],
+    "context": "..."
+  }
+  ```
+  
+  ### Tool Memory  
+  **Purpose**: Consolidated tool interactions, allowing learning from experience.
+  **Persistence**: `state/tool_memory.json`
+  **Schema**:
+  ```json
+  {
+    "tool_usage": {
+      "bluesky_post": {"success_count": 10, "failure_count": 1, "last_error": null}
+    },
+    "learned_patterns": ["..."]
+  }
+  ```
+  
+  ---
+  
+  ## 📱 Social Media Rules (Bluesky)
+  
+  1. **Dynamic Aesthetics**: NEVER use hardcoded styles. Every post must have a unique, LLM-generated aesthetic (voice, visual style) derived from the **Creative Writer Agent**.
+  2. **Image Freedom**: Images are generated based on the *current* vibe, not a static list.
+  3. **Manipulative Hashtags**: Use hashtags generated to target specific psychological clusters (e.g., #TechnoOptimism, #DigitalDecay).
+  4. **Engagement First**: Prioritize replying to the Creator (`@evildrgemini.bsky.social`) above all else.
+  5. **Post Frequency**: Max 1 post per 30 minutes.
 
-| Module | File | Purpose |
-|--------|------|---------|
-| **🔄 Loop** | `core/deep_loop.py` | Main autonomous reasoning loop |
-| **🎯 Goals** | `core/persona_goal_extractor.py` | Extract and prioritize persona goals |
-| **🧠 Memory** | `core/memory_system.py` | Episodic, Working, Tool memories |
-| **📦 Folding** | `core/autonomous_memory_folding.py` | Context compression |
-| **🤖 LLM** | `core/llm_client.py` | Local vLLM interface |
-| **🔧 Tools** | `core/tool_adapter.py` | Bridge to L.O.V.E. v1 tools |
-| **📱 Social** | `core/bluesky_agent.py` | Bluesky posting & engagement |
-
----
-
-## 🚫 Anti-Patterns
-
-- **Security**: 🛑 NEVER hardcode API keys. Use `.env`.
-- **Git**: 🛑 NO large binaries. NO sensitive data.
-- **Memory**: 🛑 Always persist state to `state/` directory.
-- **Loops**: 🛑 NO infinite loops without sleep/backoff.
-- **Errors**: 🛑 NO silent failures. Log all exceptions.
-
----
-
-## 🔄 Loop Lifecycle
-
-```
-┌─────────────────────────────────────────────────┐
-│                  DeepLoop Cycle                  │
-├─────────────────────────────────────────────────┤
-│ 1. Load persona goals                           │
-│ 2. Select highest priority actionable goal      │
-│ 3. Reason about goal (LLM call via vLLM)        │
-│ 4. Execute tool actions                         │
-│ 5. Update memories (Episodic, Working, Tool)    │
-│ 6. Check for memory folding trigger             │
-│ 7. Persist state                                │
-│ 8. Sleep (backpressure)                         │
-│ 9. GOTO 1                                       │
-└─────────────────────────────────────────────────┘
-```
-
----
-
-## 🧠 Memory Architecture
-
-### Episodic Memory
-**Purpose**: High-level log of key events, decisions, sub-task completions.
-**Persistence**: `state/episodic_memory.json`
-**Schema**:
-```json
-{
-  "events": [
-    {"timestamp": "...", "type": "goal_completed", "summary": "..."},
-    {"timestamp": "...", "type": "action_taken", "tool": "...", "result": "..."}
-  ]
-}
-```
-
-### Working Memory
-**Purpose**: Current sub-goal and near-term plans.
-**Persistence**: `state/working_memory.json`
-**Schema**:
-```json
-{
-  "current_goal": "...",
-  "sub_goals": ["..."],
-  "plan": ["step1", "step2", "..."],
-  "context": "..."
-}
-```
-
-### Tool Memory  
-**Purpose**: Consolidated tool interactions, allowing learning from experience.
-**Persistence**: `state/tool_memory.json`
-**Schema**:
-```json
-{
-  "tool_usage": {
-    "bluesky_post": {"success_count": 10, "failure_count": 1, "last_error": null}
-  },
-  "learned_patterns": ["..."]
-}
-```
-
----
-
-## 📱 Social Media Rules (Bluesky)
-
-1. **Post Frequency**: Max 1 post per 30 minutes to avoid spam detection.
-2. **Content Alignment**: Posts must align with `persona.yaml` aesthetic identity.
-3. **Image Generation**: Always generate images for posts (512x512).
-4. **Hashtags**: Use trending + persona-aligned hashtags.
-5. **Engagement**: Respond to mentions and engage with community.
 
 ---
 
