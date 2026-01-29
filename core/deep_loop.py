@@ -27,6 +27,18 @@ from .persona_goal_extractor import get_persona_extractor, PersonaGoalExtractor,
 from .autonomous_memory_folding import get_memory_folder, AutonomousMemoryFolder
 from .state_manager import get_state_manager
 
+# Epic 1 & Story 2.3 Imports
+from .tool_registry import get_global_registry, ToolDefinitionError
+from .tool_retriever import format_tools_for_step, get_tool_retriever
+from .introspection.tool_gap_detector import get_gap_detector
+
+from .tool_registry import get_global_registry, ToolDefinitionError
+from .tool_retriever import format_tools_for_step, get_tool_retriever
+from .introspection.tool_gap_detector import get_gap_detector
+
+# Epic 2 Import
+from .agents.evolutionary_agent import get_evolutionary_agent, get_pending_specifications
+
 logger = logging.getLogger("DeepLoop")
 
 class DeepLoop:
@@ -112,6 +124,14 @@ What is the next action to take towards this goal?"""
         
         # Tools - will be populated from tool_adapter
         self.tools: Dict[str, Callable] = tools or {}
+        
+        # Initialize Epic 1 Components
+        self.gap_detector = get_gap_detector()
+        self.registry = get_global_registry()
+        
+        # Initialize Epic 2 Components
+        self.evolutionary_agent = get_evolutionary_agent()
+        
         self._load_default_tools()
         
         # State
@@ -132,45 +152,37 @@ What is the next action to take towards this goal?"""
         signal.signal(signal.SIGTERM, handle_signal)
     
     def _load_default_tools(self):
-        """Load default tools from tool_adapter."""
+        """Load default tools from tool_adapter and register them."""
         try:
             from .tool_adapter import get_adapted_tools
-            self.tools.update(get_adapted_tools())
+            adapted = get_adapted_tools()
+            self.tools.update(adapted)
+            
+            # Register loaded tools to the global registry for retrieval
+            for name, func in adapted.items():
+                try:
+                    # Registry wraps/validates the function
+                    self.registry.register(func, name=name)
+                except ToolDefinitionError as e:
+                    logger.warning(f"Skipping registration for {name}: {e}")
+            
+            # Refresh registry to load any custom tools from active/
+            self.registry.refresh()
+            
         except ImportError:
             logger.warning("tool_adapter not found, starting with empty tools")
         except Exception as e:
             logger.error(f"Failed to load tools: {e}")
     
-    def _format_tools_for_prompt(self) -> str:
-        """Format available tools for the system prompt with parameter info."""
-        if not self.tools:
-            return "No tools available. Use action='skip' if you cannot proceed."
+    def _get_tools_context(self, goal_text: str) -> str:
+        """
+        Get relevant tools for the current goal using retrieval.
         
-        import inspect
-        lines = ["ONLY use tools from this list. Do NOT invent new tools.\n"]
-        
-        for name, func in self.tools.items():
-            doc = func.__doc__ or "No description"
-            first_line = doc.strip().split('\n')[0]
-            
-            # Get parameter info
-            try:
-                sig = inspect.signature(func)
-                params = []
-                for pname, param in sig.parameters.items():
-                    if pname == 'self':
-                        continue
-                    if param.default == inspect.Parameter.empty:
-                        params.append(f"{pname} (required)")
-                    else:
-                        params.append(f"{pname}={param.default!r}")
-                param_str = ", ".join(params) if params else "no parameters"
-            except Exception:
-                param_str = "unknown"
-            
-            lines.append(f"- **{name}**({param_str}): {first_line}")
-        
-        return "\n".join(lines)
+        Story 2.3: Context optimization via ToolRetriever.
+        Story 1.1: Triggers Gap Detection if no relevant tools found.
+        """
+        # Get formatted tools string (subset)
+        return format_tools_for_step(goal_text, self.registry)
     
     def _build_context(self) -> str:
         """Build the full context for the LLM."""
@@ -192,7 +204,7 @@ What is the next action to take towards this goal?"""
         """
         memory_context = self._build_context()
         persona_context = self.persona.get_persona_context()
-        tools_str = self._format_tools_for_prompt()
+        tools_str = self._get_tools_context(goal.text)
         
         system_prompt = self.REASONING_SYSTEM_PROMPT.format(
             tools=tools_str,
@@ -289,7 +301,31 @@ What is the next action to take towards this goal?"""
         
         Returns True if work was done, False if skipped/completed.
         """
-        # Iteration logging and state update happened in run()
+        # Epic 2: Synchronous Evolution Check
+        # Before picking a goal, check if we need to build tools
+        if get_pending_specifications():
+            logger.info("🔧 Evolution Specs Detected! Switching to Engineering Mode...")
+            get_state_manager().update_agent_status("DeepLoop", "Engineering")
+            
+            try:
+                # Delegate to Evolutionary Agent
+                # This blocks the main loop until fabrication attempts are done
+                tools_built = asyncio.run(self.evolutionary_agent.process_pending_specifications())
+                
+                if tools_built > 0:
+                    logger.info(f"✨ Successfully built {tools_built} new tools! Resuming...")
+                    self.registry.refresh() # Ensure we can see them
+                    # We continue safely
+                else:
+                    logger.warning("Construction completed but no tools were successfully activated.")
+                    
+            except Exception as e:
+                logger.error(f"Evolutionary Agent failed: {e}")
+                traceback.print_exc()
+            
+            # Whether success or fail, we return True to indicate work was done (attempted build)
+            # effectively consuming this iteration
+            return True
 
         
         # Select goal
