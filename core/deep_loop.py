@@ -174,6 +174,40 @@ What is the next action to take towards this goal?"""
             logger.warning("tool_adapter not found, starting with empty tools")
         except Exception as e:
             logger.error(f"Failed to load tools: {e}")
+        
+        # Load dynamic tooling tools (CodeAct, MCP Registry, Sandbox, etc.)
+        try:
+            from .dynamic_tools import ensure_registered
+            ensure_registered()
+            
+            # Also add to self.tools for direct execution
+            from .dynamic_tools import (
+                execute_python, list_defined_functions,
+                search_mcp_servers, install_mcp_server, list_installed_mcp_servers,
+                synthesize_mcp_server, save_skill, find_skills,
+                run_in_sandbox, check_docker_available, discover_tools
+            )
+            
+            dynamic_tools = {
+                "execute_python": execute_python,
+                "list_defined_functions": list_defined_functions,
+                "search_mcp_servers": search_mcp_servers,
+                "install_mcp_server": install_mcp_server,
+                "list_installed_mcp_servers": list_installed_mcp_servers,
+                "synthesize_mcp_server": synthesize_mcp_server,
+                "save_skill": save_skill,
+                "find_skills": find_skills,
+                "run_in_sandbox": run_in_sandbox,
+                "check_docker_available": check_docker_available,
+                "discover_tools": discover_tools,
+            }
+            self.tools.update(dynamic_tools)
+            logger.info(f"🔧 Loaded {len(dynamic_tools)} dynamic tooling tools")
+            
+        except ImportError as e:
+            logger.warning(f"Dynamic tools not available: {e}")
+        except Exception as e:
+            logger.error(f"Failed to load dynamic tools: {e}")
     
     def _get_tools_context(self, goal_text: str) -> str:
         """
