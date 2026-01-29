@@ -44,6 +44,37 @@ async def get_logs(limit: int = 50):
     """Get recent logs."""
     return get_state_manager().get_recent_logs(limit)
 
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks."""
+    asyncio.create_task(background_polling())
+
+async def background_polling():
+    """Poll for social media updates in the background."""
+    from .bluesky_agent import fetch_recent_interactions, get_latest_own_post
+    
+    print("[Control Panel] Starting background polling for Bluesky data...")
+    while True:
+        try:
+            # Update latest post
+            latest_post = get_latest_own_post()
+            if latest_post:
+                get_state_manager().update_latest_post(latest_post)
+            
+            # Update interactions
+            interactions = fetch_recent_interactions(limit=20)
+            if interactions:
+                get_state_manager().update_interactions(interactions)
+                
+            # Log successful poll (debug only, maybe too noisy)
+            # print(f"[Control Panel] Polled Bluesky data: {len(interactions)} interactions found")
+            
+        except Exception as e:
+            print(f"[Control Panel] Background polling error: {e}")
+            
+        # Poll every 30 seconds
+        await asyncio.sleep(30)
+
 @app.post("/api/generate")
 async def generate_text(request: GenerateRequest):
     """Generate text using the agent's LLM."""

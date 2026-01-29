@@ -26,6 +26,8 @@ class StateManager:
         self.is_running: bool = False
         self.agent_states: Dict[str, Dict[str, str]] = {}  # {agent_name: {status, action, thought}}
         self.last_image: Optional[str] = None  # Base64 string
+        self.latest_post: Optional[Dict[str, Any]] = None
+        self.interactions: List[Dict[str, Any]] = []
         self.last_update = datetime.now()
         self._initialized = True
 
@@ -58,6 +60,16 @@ class StateManager:
         self.last_image = image_b64
         self.last_update = datetime.now()
 
+    def update_latest_post(self, post: Dict[str, Any]):
+        """Update the latest own post."""
+        self.latest_post = post
+        self.last_update = datetime.now()
+
+    def update_interactions(self, interactions: List[Dict[str, Any]]):
+        """Update recent interactions."""
+        self.interactions = interactions
+        self.last_update = datetime.now()
+
     def update_state(self, **kwargs):
         """Update arbitrary state variables."""
         for key, value in kwargs.items():
@@ -74,6 +86,8 @@ class StateManager:
             "memory_stats": self.memory_stats,
             "agent_states": self.agent_states,
             "last_image": self.last_image,
+            "latest_post": self.latest_post,
+            "interactions": self.interactions,
             "last_update": self.last_update.isoformat(),
             "log_count": len(self.logs)
         }

@@ -798,6 +798,177 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
                 
                 image_result = _run_sync_safe(
                     generate_image_with_pool(
+                        prompt=visual_prompt,
+                        text_content=subliminal
+                    )
+                )
+
+                _last_gen_time = datetime.now()
+                # Unpack tuple (image, provider_name) if returned
+                if isinstance(image_result, tuple):
+                    image = image_result[0]
+                    provider = image_result[1]
+                    print(f"[BlueskyAgent] Image generated via {provider}")
+                else:
+                    image = image_result
+                    
+                if image:
+                    # Apply branding/watermark
+                    image = apply_watermark(image)
+                    
+                    # Save local copy
+                    filename = f"post_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                    save_dir = Path(__file__).parent.parent / "state" / "images"
+                    save_dir.mkdir(parents=True, exist_ok=True)
+                    image_path = str(save_dir / filename)
+                    image.save(image_path)
+                    
+                    # Update state manager with new image for UI
+                    from .state_manager import get_state_manager
+                    import base64
+                    from io import BytesIO
+                    
+                    buffered = BytesIO()
+                    image.save(buffered, format="PNG")
+                    img_str = base64.b64encode(buffered.getvalue()).decode()
+                    get_state_manager().update_image(img_str)
+                    
+            except Exception as e:
+                print(f"[BlueskyAgent] Image generation/saving failed: {e}")
+                # We proceed without image if it fails
+                pass
+
+        # Step 8: Post to Bluesky
+        if auto_post:
+            result = post_to_bluesky(
+                text=text,
+                image_path=image_path
+            )
+            
+            if result.get("success"):
+                log_event(f"Successfully posted: {result.get('post_uri')}", "INFO")
+                # Update stats, history, etc.
+                
+                # Update StateManager with latest post immediately
+                from .state_manager import get_state_manager
+                get_state_manager().update_latest_post({
+                    "text": text,
+                    "image_path": image_path, # Path not accessible effectively by web UI usually, but useful meta
+                    "uri": result.get("post_uri"),
+                    "timestamp": datetime.now().isoformat()
+                })
+
+            else:
+                log_event(f"Post failed: {result.get('error')}", "ERROR")
+                
+            return {
+                "success": result.get("success"),
+                "text": text,
+                "image_path": image_path,
+                "post_uri": result.get("post_uri"),
+                "replies_processed": 0 # TODO: hook up replies
+            }
+            
+        else:
+            # Just generate, don't post
+            return {
+                "success": True,
+                "posted": False,
+                "text": text,
+                "image_path": image_path
+            }
+
+    except Exception as e:
+        log_event(f"Post generation pipeline failed: {e}", "ERROR")
+        return {"success": False, "error": str(e)}
+
+
+def fetch_recent_interactions(limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Fetch recent notifications (replies, mentions, likes) and format them for the UI.
+    
+    Returns:
+        List of interaction dicts.
+    """
+    try:
+        client = _get_bluesky_client()
+        response = client.app.bsky.notification.list_notifications(limit=limit)
+        
+        interactions = []
+        for notification in response.notifications:
+            # We care mostly about reply, mention, quote, like
+            reason = notification.reason
+            
+            # Basic info
+            item = {
+                "uri": notification.uri,
+                "cid": notification.cid,
+                "author": {
+                    "handle": notification.author.handle,
+                    "avatar": notification.author.avatar,
+                    "did": notification.author.did
+                },
+                "reason": reason,
+                "timestamp": notification.indexed_at,
+                "is_read": notification.is_read
+            }
+            
+            # Extract content if it's a post (reply/mention/quote)
+            if reason in ['reply', 'mention', 'quote']:
+                if hasattr(notification.record, 'text'):
+                     item['text'] = notification.record.text
+                     
+            interactions.append(item)
+            
+        return interactions
+        
+    except Exception as e:
+        print(f"[BlueskyAgent] Failed to fetch interactions: {e}")
+        return []
+
+def get_latest_own_post() -> Optional[Dict[str, Any]]:
+    """
+    Fetch the most recent post by the logged-in user (the agent).
+    Used to initialize the UI state.
+    """
+    try:
+        client = _get_bluesky_client()
+        
+        # Get own profile to find recent posts
+        # We need the DID or handle. Using 'self' is not an API param but client handles session.
+        # Actually standard way is get_author_feed
+        
+        # Get session handle/did
+        # client.me is available in ATProto client usually
+        profile = client.get_profile(actor=client.me.did)
+        
+        feed = client.get_author_feed(actor=profile.did, limit=1)
+        
+        if not feed.feed:
+            return None
+            
+        post_view = feed.feed[0].post
+        
+        # Format for UI
+        # Check for image
+        image_url = None
+        if post_view.embed and hasattr(post_view.embed, 'images'):
+            if post_view.embed.images:
+                image_url = post_view.embed.images[0].fullsize
+        
+        return {
+            "uri": post_view.uri,
+            "text": post_view.record.text,
+            "timestamp": post_view.record.created_at,
+            "likes": post_view.like_count,
+            "reposts": post_view.repost_count,
+            "image_url": image_url 
+        }
+        
+    except Exception as e:
+        print(f"[BlueskyAgent] Failed to fetch latest own post: {e}")
+        return None
+
                         prompt=visual_prompt, 
                         text_content=subliminal 
                     )

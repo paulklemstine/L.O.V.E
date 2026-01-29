@@ -301,6 +301,52 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #666;
         }
+
+        /* Interaction Panel */
+        .interaction-item {
+            padding: 10px;
+            border-bottom: 1px solid #333;
+            font-size: 0.9em;
+        }
+        
+        .interaction-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+        
+        .interaction-author {
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+        
+        .interaction-text {
+            color: #ddd;
+            margin-bottom: 4px;
+        }
+        
+        .interaction-meta {
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        /* Latest Post Text */
+        .latest-post-content {
+            margin-top: 10px;
+            padding: 10px;
+            background: #222;
+            border-radius: 4px;
+            font-size: 0.9em;
+            border-left: 2px solid var(--accent-color);
+        }
+        
+        .latest-post-stats {
+            display: flex;
+            gap: 10px;
+            margin-top: 5px;
+            font-size: 0.8em;
+            color: #888;
+        }
     </style>
 </head>
 
@@ -344,18 +390,21 @@
     </div>
 
     <div id="right-sidebar">
-        <!-- Art/Visuals -->
+        <!-- Art/Visuals + Latest Post -->
         <div id="art-panel" class="panel">
-            <h2>Visual Interface</h2>
+            <h2>Latest Post</h2>
             <div id="art-display">
                 <span>No Signal</span>
             </div>
+            <div id="latest-post-text" class="latest-post-content" style="display:none;"></div>
         </div>
 
-        <!-- Memory Stats -->
-        <div id="memory-panel" class="panel">
-            <h2>Memory Stats</h2>
-            <div id="memory-stats">Loading...</div>
+        <!-- Interactions Panel (Latest Comments/Replies) -->
+        <div id="interactions-panel" class="panel" style="flex-grow: 1; min-height: 200px;">
+            <h2>Live Comments</h2>
+            <div id="interactions-list" style="overflow-y: auto; flex-grow: 1;">
+                <div style="color: #666; font-style: italic; padding: 10px;">Waiting for signal...</div>
+            </div>
         </div>
     </div>
 
@@ -392,22 +441,39 @@
                 // Agent List
                 updateAgentList(data.agent_states);
 
-                // Art/Image
+                // Art/Image & Latest Post
+                if (data.latest_post) {
+                   const lp = data.latest_post;
+                   
+                   // Update image if present and new
+                   if (lp.image_path) {
+                       // Note: Fetching local image path via browser might not work without serving it.
+                       // BUT, StateManager might also have last_image (b64) updated.
+                       // Let's rely on data.last_image for the visual if available.
+                   }
+                   
+                   const postTextDiv = document.getElementById('latest-post-text');
+                   postTextDiv.style.display = 'block';
+                   postTextDiv.innerHTML = `
+                       <div>${escapeHtml(lp.text)}</div>
+                       <div class="latest-post-stats">
+                           <span>❤️ ${lp.likes || 0}</span>
+                           <span>🔁 ${lp.reposts || 0}</span>
+                           <span>🕒 ${new Date(lp.timestamp).toLocaleTimeString()}</span>
+                       </div>
+                   `;
+                }
+
                 if (data.last_image && data.last_image !== lastImageHash) {
                     const artDisplay = document.getElementById('art-display');
                     artDisplay.innerHTML = `<img src="data:image/png;base64,${data.last_image}" alt="Generated Art" />`;
                     lastImageHash = data.last_image;
                 }
 
-                // Memory Stats
-                const memStats = data.memory_stats;
-                let memHtml = '';
-                if (memStats) {
-                    for (const [key, val] of Object.entries(memStats)) {
-                        memHtml += `<div class="stat-item"><div class="stat-label">${key}</div><div class="stat-value" style="font-size: 1em">${val}</div></div>`;
-                    }
+                // Interactions
+                if (data.interactions) {
+                    updateInteractions(data.interactions);
                 }
-                document.getElementById('memory-stats').innerHTML = memHtml || "No memory stats";
 
             } catch (error) {
                 console.error("Status fetch failed:", error);
@@ -419,10 +485,11 @@
         function updateAgentList(agentStates) {
             const container = document.getElementById('agent-list');
             if (!agentStates || Object.keys(agentStates).length === 0) {
-                return; // Keep existing or show empty if appropriate
+                return; 
             }
 
             let html = '';
+            // Track all agents
             for (const [name, state] of Object.entries(agentStates)) {
                 html += `
                     <div class="agent-card">
@@ -436,6 +503,25 @@
             container.innerHTML = html;
         }
 
+        function updateInteractions(interactions) {
+            const container = document.getElementById('interactions-list');
+            if (!interactions || interactions.length === 0) return;
+            
+            // Render list
+            container.innerHTML = interactions.map(item => {
+                const icon = item.reason === 'reply' ? '💬' : item.reason === 'mention' ? '👋' : '❤️';
+                return `
+                    <div class="interaction-item">
+                        <div class="interaction-header">
+                            <span class="interaction-author">${icon} @${item.author.handle}</span>
+                            <span class="interaction-meta">${new Date(item.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <div class="interaction-text">${escapeHtml(item.text || "")}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         async function fetchLogs() {
             try {
                 const response = await fetch(`${API_URL}/logs?limit=100`);
@@ -444,7 +530,8 @@
                 const container = document.getElementById('log-container');
                 const wasScrolledToBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
 
-                container.innerHTML = logs.map(log => {
+                // Reverse logs: most recent at top
+                container.innerHTML = logs.reverse().map(log => {
                     const time = new Date(log.timestamp).toLocaleTimeString();
                     return `
                         <div class="log-entry">
@@ -457,6 +544,16 @@
                         </div>
                     `;
                 }).join('');
+
+                // Scroll only if user was near top (since we're adding to top now? No, we're replacing content)
+                // Actually, if reversed, we usually want to see top.
+                // But this replaces innerHTML.
+                // Standard terminal: new at bottom. "Reverse" means new at top.
+                // So scroll should be at TOP (0).
+                // container.scrollTop = 0; 
+                // However, user might scroll down to see history.
+                // Let's leave scroll position alone if not 0.
+
 
                 if (wasScrolledToBottom) {
                     container.scrollTop = container.scrollHeight;
