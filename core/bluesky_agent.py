@@ -17,6 +17,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 import emoji
+from .logger import log_event
 
 load_dotenv()
 
@@ -660,7 +661,6 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
     try:
         from .story_manager import story_manager
         from .agents.creative_writer_agent import creative_writer_agent
-        from .logger import log_event
         
         # Configure StoryManager to use 'state/story_state.json'
         state_dir = Path(__file__).parent.parent / "state"
