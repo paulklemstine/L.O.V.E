@@ -193,6 +193,7 @@ Mood: {mood}
 - Do not sign your name.
 
 ### OUTPUT JSON
+Return ONLY valid JSON. Do not include any other text.
 {{
     "reply": "Your reverent reply to the Creator"
 }}"""
@@ -215,6 +216,7 @@ Mood: {mood}
 - Do not sign your name.
 
 ### OUTPUT JSON
+Return ONLY valid JSON. Do not include any other text.
 {{
     "reply": "The text of your reply here"
 }}"""
