@@ -58,7 +58,6 @@ class TestColabStartup(unittest.TestCase):
     def test_service_manager_with_system_vllm(self):
         # Test that proper vLLM install in system python skips setup and uses system mode
         # Mocking setup such that import vllm works
-        # Must also mock 'vllm.engine.arg_utils' to pass deep check
         mock_vllm = MagicMock()
         mock_arg_utils = MagicMock()
         
@@ -66,7 +65,9 @@ class TestColabStartup(unittest.TestCase):
             'google.colab': MagicMock(), 
             'vllm': mock_vllm,
             'vllm.engine': MagicMock(),
-            'vllm.engine.arg_utils': mock_arg_utils
+            'vllm.engine.arg_utils': mock_arg_utils,
+            'flashinfer': MagicMock(),
+            'torch_c_dlpack_ext': MagicMock()
         }
         
         with patch.dict('sys.modules', modules):

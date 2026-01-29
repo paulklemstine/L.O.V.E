@@ -32,6 +32,10 @@ class ServiceManager:
             # This detects ABI mismatches that wouldn't fail on top-level import
             from vllm.engine.arg_utils import EngineArgs
             
+            # Stricter checks for dependencies known to cause C++ ABI issues (OSError: undefined symbol)
+            import flashinfer
+            import torch_c_dlpack_ext
+            
             logger.info("✅ vLLM found in current environment (deep check passed). Skipping venv setup.")
             self.use_system_vllm = True
             return True
