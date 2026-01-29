@@ -28,6 +28,7 @@ class StateManager:
         self.last_image: Optional[str] = None  # Base64 string
         self.latest_post: Optional[Dict[str, Any]] = None
         self.interactions: List[Dict[str, Any]] = []
+        self.chat_history: List[Dict[str, Any]] = []
         self.last_update = datetime.now()
         self._initialized = True
 
@@ -99,6 +100,21 @@ class StateManager:
     def get_recent_logs(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get the most recent logs."""
         return list(self.logs)[-limit:]
+
+    def add_chat_message(self, role: str, content: str):
+        """Add a message to the chat history."""
+        self.chat_history.append({
+            "role": role,
+            "content": content,
+            "timestamp": datetime.now().isoformat()
+        })
+        # Keep history manageable
+        if len(self.chat_history) > 100:
+            self.chat_history.pop(0)
+
+    def get_chat_history(self) -> List[Dict[str, Any]]:
+        """Get the full chat history."""
+        return self.chat_history
 
 # Global accessor
 def get_state_manager() -> StateManager:

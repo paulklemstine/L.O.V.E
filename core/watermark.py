@@ -469,7 +469,7 @@ def apply_watermark(
         # --- 2. Place Hidden "@e-v-l-o-v-e.bsky.social" Text ---
         # Fixed small size ~8pt (approx 11px at 96dpi, but let's say 12px for visibility)
         # We'll scale it slightly with image size but keep it small
-        base_font_size = 12
+        base_font_size = 18
         font_scale = min(img_w, img_h) / 1024
         font_size = int(max(12, base_font_size * font_scale))
         

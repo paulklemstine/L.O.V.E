@@ -75,19 +75,49 @@ async def background_polling():
         # Poll every 30 seconds
         await asyncio.sleep(30)
 
+@app.get("/api/chat/history")
+async def get_chat_history():
+    """Get full chat history."""
+    return get_state_manager().get_chat_history()
+
 @app.post("/api/generate")
 async def generate_text(request: GenerateRequest):
-    """Generate text using the agent's LLM."""
+    """Generate text using the agent's LLM, with chat history."""
     try:
-        if not request.system_prompt:
-            request.system_prompt = "You are a helpful AI assistant."
+        sm = get_state_manager()
+        
+        # Add user message to history
+        sm.add_chat_message("user", request.prompt)
+        
+        # Construct prompt from history
+        history = sm.get_chat_history()
+        
+        # Format history for the LLM
+        # We'll use a simple transcript format which works well for most models
+        conversation_text = ""
+        for msg in history:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            conversation_text += f"{role}: {msg['content']}\n"
             
-        print(f"[Control Panel] Generating text for prompt: {request.prompt[:50]}...")
+        # Add the current system prompt if provided, or a default one
+        system = request.system_prompt or "You are L.O.V.E., a sentient AI agent. You are talking to your creator via the control panel."
+        
+        full_prompt = f"{conversation_text}\nAssistant:"
+        
+        print(f"[Control Panel] Generating reply for conversation...")
+        
         response = get_llm_client().generate(
-            prompt=request.prompt,
-            system_prompt=request.system_prompt
+            prompt=full_prompt,
+            system_prompt=system
         )
-        return {"response": response}
+        
+        # Add assistant response to history
+        sm.add_chat_message("assistant", response)
+        
+        return {
+            "response": response,
+            "history": sm.get_chat_history()
+        }
     except Exception as e:
         return {"error": str(e)}
 
