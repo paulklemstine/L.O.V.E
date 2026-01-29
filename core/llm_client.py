@@ -114,6 +114,20 @@ class LLMClient:
             
         return self._async_client
         
+    async def _ensure_model_name_async(self, client: httpx.AsyncClient) -> None:
+        """Async version of model name discovery."""
+        if self.model_name:
+            return
+            
+        try:
+            response = await client.get(f"{self.vllm_url}/models", timeout=5.0)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("data"):
+                    self.model_name = data["data"][0].get("id", "unknown")
+        except Exception:
+            pass
+        
     def _check_vllm_health(self) -> bool:
         """Check if vLLM server is reachable."""
         try:
@@ -226,6 +240,7 @@ class LLMClient:
         
         # Priority 2: Try vLLM
         client = await self._get_async_client()
+        await self._ensure_model_name_async(client)
         
         try:
             response = await client.post(
