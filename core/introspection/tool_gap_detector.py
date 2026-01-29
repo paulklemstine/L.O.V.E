@@ -13,6 +13,7 @@ Functionality:
 import logging
 import json
 import re
+import asyncio
 from typing import Optional, Dict, Any
 
 from core.logger import log_event
@@ -69,9 +70,10 @@ class ToolGapDetector:
         
         # For the prototype, we'll generate it now but acknowledge latency
         try:
-            self.analyze_gap_and_specify(step_description)
+            # Run analysis in background task since we are in a sync callback
+            asyncio.create_task(self.analyze_gap_and_specify(step_description))
         except Exception as e:
-            logger.error(f"Failed to analyze gap: {e}")
+            logger.error(f"Failed to schedule gap analysis: {e}")
 
     async def analyze_gap_and_specify(self, context: str) -> Optional[EvolutionarySpecification]:
         """
@@ -109,7 +111,8 @@ FORMAT:
 }}
 """
         llm = self._get_llm_client()
-        response = await llm.generate(prompt)
+        # Use async generation
+        response = await llm.generate_async(prompt)
         
         # Parse JSON
         try:
