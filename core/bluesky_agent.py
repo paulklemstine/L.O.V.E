@@ -729,6 +729,24 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
             else:
                 print("[BlueskyAgent] Auto-posting text only")
                 post_result = post_to_bluesky(full_text)
+            
+            # 7. After successful post, check for comments to respond to
+            # The Creator (@evildrgemini.bsky.social) is always prioritized
+            if post_result and post_result.get("success"):
+                try:
+                    from .agents.comment_response_agent import comment_response_agent
+                    reply_result = _run_sync_safe(
+                        comment_response_agent.maybe_respond_after_post(post_result)
+                    )
+                    if reply_result and reply_result.get("success"):
+                        author = reply_result.get('author', 'unknown')
+                        is_creator = reply_result.get('is_creator', False)
+                        if is_creator:
+                            log_event(f"🙏 Responded to Creator's comment from {author}", "INFO")
+                        else:
+                            log_event(f"💬 Responded to comment from {author}", "INFO")
+                except Exception as e:
+                    print(f"[BlueskyAgent] Comment response failed (non-critical): {e}")
         
         return {
             "success": True,
@@ -740,6 +758,7 @@ def generate_post_content(topic: str = None, auto_post: bool = False, **kwargs) 
             "post_uri": post_result.get("post_uri") if post_result else None,
             "beat_data": beat_data
         }
+
 
     except Exception as e:
         return {

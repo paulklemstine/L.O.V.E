@@ -65,13 +65,18 @@ def _get_love2_tools() -> Dict[str, Callable]:
             get_bluesky_timeline,
             reply_to_post,
             search_bluesky,
-            generate_post_content
+            generate_post_content,
+            get_unreplied_comments
         )
+        from .agents.comment_response_agent import respond_to_comments
+        
         tools["bluesky_post"] = post_to_bluesky
         tools["bluesky_timeline"] = get_bluesky_timeline
         tools["bluesky_reply"] = reply_to_post
         tools["bluesky_search"] = search_bluesky
         tools["generate_content"] = generate_post_content  # LLM-powered content generation
+        tools["get_unreplied_comments"] = get_unreplied_comments  # Check pending comments
+        tools["respond_to_comments"] = respond_to_comments  # Respond to best comment (Creator priority)
     except ImportError as e:
         import traceback
         print(f"[ToolAdapter] bluesky_agent import failed: {e}")
@@ -80,6 +85,7 @@ def _get_love2_tools() -> Dict[str, Callable]:
         import traceback
         print(f"[ToolAdapter] Failed to load bluesky tools: {e}")
         traceback.print_exc()
+
     
     # Basic utility tools
     tools["log_message"] = _log_message
