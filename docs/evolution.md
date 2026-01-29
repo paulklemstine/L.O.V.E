@@ -1,41 +1,72 @@
-# 🧬 Self-Evolution & Tool Fabrication
+# 🧬 Self-Evolution & Open Agentic Web
 
-L.O.V.E. v2 introduces a groundbreaking capability: **Autonomous Tool Fabrication**. The system can identify gaps in its own capabilities and write new Python code to fill them, all without human intervention.
+L.O.V.E. v2 implements the **Open Agentic Web** architecture, enabling dynamic discovery, generation, and execution of capabilities at runtime. This goes beyond simple tool caching to true autonomous software engineering.
 
-## The Evolution Loop
+## Architecture
 
 ```mermaid
 graph TD
-    A[Execution Failure] -->|ToolNotRegisteredError| B(Gap Detection)
-    B -->|Spec & Prompt| C{Evolutionary Agent}
-    C -->|Generate Code| D[Tool Fabrication]
-    D -->|Sandbox Test| E(Validation)
-    E -->|Success| F[Hot-Load to Registry]
-    E -->|Failure| C
-    F -->|Availability| G[DeepLoop Retry]
+    A[DeepLoop Goal] --> B{Capability Check}
+    B -->|Tool Exists| C[Execute Action]
+    B -->|Gap Detected| D{Evolutionary Agent}
+    
+    subgraph "Dynamic Capabilities"
+    D -->|Internal Tool| E[Fabricate Python Tool]
+    D -->|External Capability| F[Search MCP Registry]
+    D -->|Novel Requirement| G[Synthesize MCP Server]
+    D -->|Code Problem| H[CodeAct Engine]
+    end
+    
+    subgraph "Persistence"
+    E --> I[Hot-Load to Registry]
+    F --> J[Install MCP Server]
+    G --> K[Generate & Dockerize]
+    H --> L[Save to Skill Library]
+    end
+    
+    I & J & K & L --> M[Available for Retry]
+    M --> A
 ```
 
-### 1. Gap Detection
-The `DeepLoop` monitors tool execution. If the LLM attempts to call a tool that does not exist (e.g., `generate_meme`), the system catches the `ToolNotRegisteredError` and flags a **Tool Gap**.
+## Core Components
 
-### 2. Tool Fabrication
-The **Evolutionary Agent** (`core/agents/evolutionary_agent.py`) receives the gap report. It:
-1.  Analyzes the intent of the missing tool.
-2.  Drafts a **Tool Specification** (inputs, outputs, side effects).
-3.  Uses the `ToolFabricator` to generate Python code based on `core/tool_adapter.py` patterns.
+### 1. CodeAct Engine ("LLM as Engineer")
+When standard tools fail, the agent can write and execute arbitrary Python code.
+- **Thought-Code-Observation Loop**: Iteratively prompts for code, executes it, and observes output.
+- **Self-Correction**: If execution fails, the engine feeds the error back to the LLM to generate a fix.
+- **Persistence**: Functions defined in one step are available in future steps (Define-and-Use pattern).
 
-### 3. Validation (Sandboxed)
-Before a new tool is used, it must pass validation:
--   **Syntax Check**: Ensures valid Python code.
--   **Security Scan**: Checks for forbidden imports (e.g., `os.system`, `subprocess` without guardrails).
--   **Functional Test**: The fabricator generates a unit test to verify the tool returns the expected `ToolResult`.
+### 2. MCP Registry Discovery
+L.O.V.E. connects to the broader AI ecosystem via the **Model Context Protocol (MCP)**.
+- **Search**: Queries public registries (mcp.so, Smithery.ai, GitHub) for capability-matching servers.
+- **Auto-Install**: Automatically installs (npm/git) and configures servers.
+- **Negotiation**: Performs capability negotiation to understand available tools.
 
-### 4. Hot-Loading
-Once validated, the tool is saved to `tools/custom/active/`. The `ToolRegistry` (`core/tool_registry.py`) watches this directory and **hot-loads** the new module immediately. The `DeepLoop` then retries the original action, now with the new capability available.
+### 3. MCP Server Synthesis
+For completely novel capabilities, the Evolutionary Agent can **create its own MCP servers**.
+1. Generates `server.py` implementing the JSON-RPC 2.0 protocol.
+2. Creates `requirements.txt` and `Dockerfile`.
+3. Spins up the server in a container.
+4. Connects L.O.V.E. to the new server's stdio transport.
 
-## Manually Triggering Evolution
+### 4. Voyager Pattern (Skill Library)
+Successful solutions are not lost.
+- **Skill Accumulation**: Working code snippets are saved to `skill_library.json`.
+- **Semantic Retrieval**: Future tasks search this library for reusable skills.
+- **Evolution**: The agent gets "smarter" over time as its library grows.
 
-You can manually request a new tool via the CLI (if implemented) or by simply asking the Agent to perform a task it currently cannot do.
+## Safety & Sandboxing
 
-> [!WARNING]
-> **Safety First**: The `ToolFabricator` has strict prompts to avoid generating harmful code. However, all fabricated tools are logged to `logs/evolution.log` for review.
+All generated code runs in isolated environments:
+- **Docker Sandbox**: Primary execution environment with network isolation (allowlist only) and resource limits.
+- **Subprocess Fallback**: If Docker is unavailable, uses restricted subprocesses with timeouts.
+- **Input Validation**: Static analysis blocks dangerous imports (`os.system`, `subprocess` without wrappers) before execution.
+
+## Usage
+
+These capabilities are exposed via `core/dynamic_tools.py`:
+- `execute_python`
+- `search_mcp_servers` / `install_mcp_server`
+- `synthesize_mcp_server`
+- `save_skill` / `find_skills`
+

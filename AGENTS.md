@@ -32,10 +32,20 @@
   | **📱 Bluesky** | `core/agents/bluesky_agent.py` | Orchestrates posting & engagement |
   | **🕵️ Scout** | `core/agents/influencer_scout_agent.py` | Identifies & ranks key influencers |
   | **💬 Reply** | `core/agents/comment_response_agent.py` | Auto-engages with comments |
-  | **🧬 Evolve** | `core/agents/evolutionary_agent.py` | **Self-Improvement**: Fabrics new tools |
+  | **🧬 Evolve** | `core/agents/evolutionary_agent.py` | **Self-Improvement**: MCP Server Synthesis & Tool Fab |
   | **🧠 Memory** | `core/memory_system.py` | Episodic, Working, Tool memories |
   | **🤖 LLM** | `core/llm_client.py` | Local vLLM interface |
   | **🔧 Registry** | `core/tool_registry.py` | Tool management & hot-loading |
+  | **⚡ Dynamic** | `core/dynamic_tools.py` | CodeAct, MCP Search, & Sandbox Tools |
+  
+  ---
+
+  ## 🛠️ Dynamic Tooling Rules
+
+  1. **Sandbox First**: Always use `run_in_sandbox` or `execute_python` for untrusted code.
+  2. **Check Registry**: Before writing code, use `discover_tools` or `search_mcp_servers` to see if a solution exists.
+  3. **Reuse Skills**: Check `find_skills` before implementing complex logic again.
+  4. **MCP Preference**: Prefer installing standard MCP servers (e.g. for database, git) over writing custom implementations.
   
   ---
   

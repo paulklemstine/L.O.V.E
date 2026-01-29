@@ -39,6 +39,11 @@ love2/
 │   ├── autonomous_memory_folding.py # Context compression
 │   ├── llm_client.py       # Local vLLM interface
 │   ├── tool_registry.py    # Centralized tool management & hot-loading
+│   ├── tool_retriever.py   # Semantic tool search & discovery
+│   ├── mcp_registry.py     # Public MCP registry discovery
+│   ├── codeact_engine.py   # Code-as-Action execution engine
+│   ├── docker_sandbox.py   # Containerized execution environment
+│   ├── dynamic_tools.py    # Interface tools for CodeAct/MCP
 │   ├── agents/             # Specialized AI Agents
 │   │   ├── bluesky_agent.py          # Social media orchestration
 │   │   ├── creative_writer_agent.py  # Content generation (Dynamic Aesthetics)
@@ -48,7 +53,8 @@ love2/
 │   └── social_media_tools.py # Social media tool wrappers
 ├── tests/                  # Pytest test suite
 ├── docs/                   # Per-module documentation
-└── state/                  # Persisted memory state
+├── state/                  # Persisted memory state
+└── mcp_servers/            # Generated MCP servers
 ```
 
 ## 🚀 Quick Start
@@ -66,12 +72,20 @@ python run.py
 
 ## 🧠 Core Concepts
 
+### 🌐 Open Agentic Web
+L.O.V.E. v2 implements the **Open Agentic Web** vision, allowing dynamic discovery and generation of capabilities at runtime:
+
+- **CodeAct Engine**: "LLM as Engineer" - writes and executes Python code to solve novel problems.
+- **MCP Registry**: Discovers and installs Model Context Protocol servers from public registries (mcp.so, Smithery.ai).
+- **Docker Sandbox**: Safely executes generated code in isolated containers.
+- **Skill Library**: Accumulates successful code patterns (Voyager pattern) for future use.
+
 ### 🧬 Self-Evolution & Tool Fabrication
-L.O.V.E. v2 possesses the ability to upgrade itself. The **Evolutionary Agent** monitors execution logs for "Tool Gaps" (failed attempts to perform actions due to missing tools). When a gap is detected, it:
-1. **Specs** a new tool solution.
-2. **Fabricates** the actual Python code.
-3. **Validates** the tool in a sandbox.
-4. **Hot-Loads** the new tool into the live `ToolRegistry` without restarting.
+The **Evolutionary Agent** monitors execution logs for "Tool Gaps". When a gap is detected, it can:
+1. **Synthesize** a new internal tool.
+2. **Generate** a complete independent MCP server.
+3. **Validate** code in the Docker sandbox.
+4. **Hot-Load** the capability immediately.
 
 ### 🎭 Dynamic Aesthetic Pipeline
 Gone are hardcoded "vibes." The **Creative Writer Agent** dynamically constructs aesthetic profiles (voice, visual style, emojis) for every post based on the current context and persona goals, ensuring varied and "living" content.
