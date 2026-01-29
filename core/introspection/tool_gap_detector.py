@@ -70,8 +70,8 @@ class ToolGapDetector:
         
         # For the prototype, we'll generate it now but acknowledge latency
         try:
-            # Run analysis in background task since we are in a sync callback
-            asyncio.create_task(self.analyze_gap_and_specify(step_description))
+            # Run analysis synchronously since we are in a sync callback (and no loop is running)
+            asyncio.run(self.analyze_gap_and_specify(step_description))
         except Exception as e:
             logger.error(f"Failed to schedule gap analysis: {e}")
 
