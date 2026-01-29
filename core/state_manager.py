@@ -29,6 +29,8 @@ class StateManager:
         self.latest_post: Optional[Dict[str, Any]] = None
         self.interactions: List[Dict[str, Any]] = []
         self.chat_history: List[Dict[str, Any]] = []
+        self.command_queue: deque = deque()
+        self.current_command: Optional[str] = None
         self.last_update = datetime.now()
         self._initialized = True
 
@@ -86,7 +88,10 @@ class StateManager:
         """Get a snapshot of the current state."""
         return {
             "iteration": self.iteration,
+            "iteration": self.iteration,
             "current_goal": self.current_goal,
+            "current_command": self.current_command,
+            "command_queue_len": len(self.command_queue),
             "is_running": self.is_running,
             "memory_stats": self.memory_stats,
             "agent_states": self.agent_states,
@@ -115,6 +120,24 @@ class StateManager:
     def get_chat_history(self) -> List[Dict[str, Any]]:
         """Get the full chat history."""
         return self.chat_history
+
+    def add_command(self, command_text: str):
+        """Add a command to the queue."""
+        self.command_queue.append(command_text)
+        self.last_update = datetime.now()
+
+    def get_next_command(self) -> Optional[str]:
+        """Get the next command from the queue, or None."""
+        if self.command_queue:
+            cmd = self.command_queue.popleft()
+            self.current_command = cmd
+            return cmd
+        return None
+
+    def clear_current_command(self):
+        """Clear the currently executing command."""
+        self.current_command = None
+        self.last_update = datetime.now()
 
 # Global accessor
 def get_state_manager() -> StateManager:

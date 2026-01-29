@@ -346,6 +346,80 @@ class LLMClient:
         return False
 
 
+    async def generate_json_async(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3
+    ) -> Dict[str, Any]:
+        """
+        Generate a JSON response asynchronously.
+        
+        Args:
+            prompt: Prompt asking for JSON output.
+            system_prompt: Optional system message.
+            temperature: Lower temperature for more deterministic JSON.
+            
+        Returns:
+            Parsed JSON dictionary.
+        """
+        json_system = (system_prompt or "") + "\n\nYou MUST respond with valid JSON only. No markdown, no explanation."
+        
+        # Build messages for vLLM
+        messages = []
+        if json_system:
+            messages.append({"role": "system", "content": json_system})
+        messages.append({"role": "user", "content": prompt})
+        
+        # Priority 1: Try Colab AI first (Synchronous, but wrapped in async context mainly for interface alignment)
+        if self._colab_client is not None:
+             try:
+                 # Colab AI is sync, so we just call it (could wrap in threadpool if needed to avoid blocking)
+                 # Since it's blocking http, ideally we should run in executor, but for now direct call
+                 response = self._colab_client.generate(
+                     prompt=prompt,
+                     system_prompt=json_system
+                 )
+                 return self._parse_json(strip_thinking_tags(response))
+             except Exception as e:
+                 logger.warning(f"Colab AI JSON generation failed: {e}, falling back to vLLM")
+                 if "kernel not ready" in str(e):
+                     logger.error("Disabling Colab AI due to permanent kernel error")
+                     self._colab_client = None
+
+        # Priority 2: Try vLLM with JSON mode
+        # Use ephemeral client
+        try:
+             async with httpx.AsyncClient(timeout=self.timeout) as client:
+                 await self._ensure_model_name_async(client)
+                 
+                 response = await client.post(
+                     f"{self.vllm_url}/chat/completions",
+                     json={
+                         "model": self.model_name or "default",
+                         "messages": messages,
+                         "temperature": temperature,
+                         "max_tokens": 4096,
+                         "response_format": {"type": "json_object"}
+                     }
+                 )
+                 if response.status_code == 200:
+                     data = response.json()
+                     text = data["choices"][0]["message"]["content"]
+                     return self._parse_json(strip_thinking_tags(text))
+        except Exception as e:
+             logger.warning(f"Async vLLM JSON mode error: {e}")
+
+        # Fallback to standard async generation
+        response = await self.generate_async(
+            prompt=prompt,
+            system_prompt=json_system,
+            temperature=temperature,
+            max_tokens=4096
+        )
+        return self._parse_json(response)
+
+
 # Singleton instance for convenience
 _default_client: Optional[LLMClient] = None
 

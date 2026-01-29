@@ -39,6 +39,7 @@ from .introspection.tool_gap_detector import get_gap_detector
 
 # Epic 2 Import
 from .agents.evolutionary_agent import get_evolutionary_agent, get_pending_specifications
+from .agents.creator_command_agent import get_creator_command_agent
 
 logger = logging.getLogger("DeepLoop")
 
@@ -336,6 +337,23 @@ What is the next action to take towards this goal?"""
         
         Returns True if work was done, False if skipped/completed.
         """
+        # Creator Command Check
+        command_text = get_state_manager().get_next_command()
+        if command_text:
+            logger.info(f"🚨 Creator Command Received: {command_text}")
+            get_state_manager().update_agent_status("DeepLoop", "Executing User Command", info={"command": command_text})
+            
+            try:
+                # Delegate to CreatorCommandAgent
+                asyncio.run(get_creator_command_agent().process_command(command_text))
+                logger.info("✅ Creator Command Loop Completed.")
+            except Exception as e:
+                logger.error(f"Creator command failed: {e}")
+                traceback.print_exc()
+            
+            get_state_manager().clear_current_command()
+            return True
+
         # Epic 2: Synchronous Evolution Check
         # Before picking a goal, check if we need to build tools
         from core.feature_flags import ENABLE_TOOL_EVOLUTION
