@@ -28,7 +28,11 @@ class ServiceManager:
         # 1. Check if vLLM is already installed in the current environment (e.g. Colab system env)
         try:
             import vllm
-            logger.info("✅ vLLM found in current environment. Skipping venv setup.")
+            # Deep check: Import a module that likely triggers C++ extensions/CTypes loading
+            # This detects ABI mismatches that wouldn't fail on top-level import
+            from vllm.engine.arg_utils import EngineArgs
+            
+            logger.info("✅ vLLM found in current environment (deep check passed). Skipping venv setup.")
             self.use_system_vllm = True
             return True
         except Exception as e:
