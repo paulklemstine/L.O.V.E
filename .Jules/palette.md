@@ -1,0 +1,3 @@
+## 2026-01-30 - Interactive Div Anti-Pattern
+**Learning:** The application frequently uses `div` elements with `onclick` handlers for interactive headers (like the Logs panel), completely missing `role="button"`, `tabindex="0"`, and keyboard event listeners. This makes core navigation features inaccessible to keyboard and screen reader users.
+**Action:** When identifying collapsible panels or custom buttons, immediately check for the "Div Button" anti-pattern. Always refactor to include `role="button"`, `tabindex="0"`, `aria-expanded`/`aria-pressed`, and mapped KeyDown handlers (Enter/Space) to match native button behavior.
