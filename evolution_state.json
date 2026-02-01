@@ -16,7 +16,7 @@
       "trigger_context": "I need to fly to the moon",
       "priority": 3,
       "created_at": "2026-01-29T10:37:26.061734",
-      "status": "pending",
+      "status": "failed",
       "id": "93007597"
     },
     {
@@ -31,7 +31,7 @@
       "trigger_context": "I need to fly to the moon",
       "priority": 3,
       "created_at": "2026-01-29T10:37:43.984342",
-      "status": "pending",
+      "status": "failed",
       "id": "54534592"
     },
     {
@@ -46,7 +46,7 @@
       "trigger_context": "I need to fly to the moon",
       "priority": 3,
       "created_at": "2026-01-29T10:37:58.166606",
-      "status": "pending",
+      "status": "failed",
       "id": "18901782"
     }
   ]
