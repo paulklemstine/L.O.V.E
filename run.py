@@ -137,7 +137,6 @@ Examples:
     parser.add_argument(
         "--verbose", "-v",
         action="store_true",
-        action="store_true",
         help="Enable verbose logging"
     )
 
