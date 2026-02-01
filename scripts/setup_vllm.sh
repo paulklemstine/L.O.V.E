@@ -80,6 +80,13 @@ else
     # The lovev1 requirements said vllm>=0.11.1.
     pip install "vllm>=0.11.1" 
 fi
+
+# Install optional extension for JIT performance (fixes UserWarning)
+echo -e "${YELLOW}Checking for torch-c-dlpack-ext...${NC}"
+if ! pip show torch-c-dlpack-ext &> /dev/null; then
+    echo -e "${YELLOW}Installing torch-c-dlpack-ext...${NC}"
+    pip install torch-c-dlpack-ext
+fi
 fi
 
 echo -e "${GREEN}vLLM Setup Complete!${NC}"
