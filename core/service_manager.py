@@ -256,18 +256,9 @@ class ServiceManager:
         
         if vram_mb is not None:
             print(f"   Detected VRAM: {vram_mb} MB")
-            if vram_mb < 20000:
-                 print("   ⚠️ Consumer/T4 GPU detected (< 20GB). Limiting context window to 8192 for stability.")
-                 cmd.extend(["--max-model-len", "8192"])  # Cap context for T4/Consumer GPUs
-                 # Enforce eager execution for T4 stability (fixes CUDA graph capture crashes)
-                 print("   ⚠️ Enforcing eager execution for stability.")
-                 cmd.extend(["--enforce-eager"])
-            else:
-                 print("   ✨ High VRAM detected. Unleashing full context window.")
+            print("   ✨ Unleashing full context window (User Override).")
         else:
-             print("   ⚠️ Unknown VRAM (nvidia-smi failed). Enforcing safe defaults.")
-             cmd.extend(["--max-model-len", "8192"])
-             cmd.extend(["--enforce-eager"])
+             print("   ⚠️ Unknown VRAM (nvidia-smi failed).")
 
         # Start process
         try:
