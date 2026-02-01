@@ -15,6 +15,9 @@ class ServiceManager:
     # Feature flag to control vLLM startup in Colab
     SKIP_VLLM_IN_COLAB = False
 
+    # State file to track model failures/success
+    STATE_FILE = "state/vllm_state.json"
+
     def __init__(self, root_dir: Path):
         self.root_dir = root_dir
         self.scripts_dir = self.root_dir / "scripts"
@@ -112,6 +115,90 @@ class ServiceManager:
             return 'google.colab' in sys.modules
         except ImportError:
             return False
+            
+    def _load_state(self):
+        """Loads vLLM state from JSON file."""
+        import json
+        state_path = self.root_dir / self.STATE_FILE
+        if state_path.exists():
+            try:
+                with open(state_path, "r") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    def _save_state(self, state):
+        """Saves vLLM state to JSON file."""
+        import json
+        state_path = self.root_dir / self.STATE_FILE
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(state_path, "w") as f:
+                json.dump(state, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save vLLM state: {e}")
+
+    def _get_model_tiers(self):
+        """Returns ordered list of model tiers (smallest to largest)."""
+        # Prioritize Qwen3 AWQ models as requested by user.
+        # Format: (min_vram_mb, model_id)
+        # Note: min_vram_mb is a rough "comfortable" minimum for the model + kv cache
+        return [
+             # Micro (< 6GB) -> Qwen3-4B-Thinking
+            (0, "Qwen/Qwen3-4B-Thinking-AWQ"), 
+            (4000, "Qwen/Qwen3-4B-Thinking-AWQ"),
+            
+            # Small (6-16GB) -> Qwen3-8B (The workhorse for standard cards)
+            # Fits easily in 8GB, 12GB, 16GB
+            (6000, "Qwen/Qwen3-8B-Instruct-AWQ"),
+            
+            # Medium/Large (16-30GB) -> Qwen3-30B-Thinking
+            # 30B 4-bit fits in ~16-18GB VRAM (+ context) -> Needs 24GB card ideal
+            (18000, "Qwen/Qwen3-30B-A3B-Thinking-AWQ"),
+            
+            # Massive (>30GB) -> QwQ-32B / DeepAgent-QwQ
+            # For 32GB, 40GB, 80GB cards
+            (30000, "DeepAgent/DeepAgent-QwQ-32B-AWQ"),
+             
+            # Ultra (>80GB)
+            (70000, "Qwen/Qwen3-235B-A22B-Thinking-AWQ")
+        ]
+
+    def _select_model(self, vram_mb):
+        """Selects the best model based on VRAM and past failure state."""
+        tiers = self._get_model_tiers()
+        
+        # 1. Filter tiers that theoretically fit
+        # We assume 'min_vram' is the hard floor.
+        candidates = [t for t in tiers if vram_mb >= t[0]]
+        
+        if not candidates:
+            # Should not happen as first tier starts at 0, but fallback to smallest
+            logger.warning(f"VRAM {vram_mb}MB seems extremely low. Defaulting to smallest model.")
+            return tiers[0][1]
+            
+        # 2. Sort by size (descending) - we want the biggest that fits
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        
+        # 3. Check for "Strikes" (previous crashes)
+        state = self._load_state()
+        strikes = state.get("strikes", 0)
+        
+        if strikes > 0:
+            logger.warning(f"⚠️ Detected {strikes} previous vLLM failure(s). Downgrading model selection.")
+            
+        # Select candidate index based on strikes
+        # 0 = Best fit (Largest)
+        # 1 = Next best
+        # etc.
+        selection_idx = min(strikes, len(candidates) - 1)
+        selected_model = candidates[selection_idx][1]
+        
+        if selection_idx > 0:
+             logger.info(f"📉 Downgraded from {candidates[0][1]} to {selected_model} due to stability history.")
+             
+        return selected_model
 
     def start_vllm(self, model_name=None, gpu_memory_utilization=None):
         """Starts the vLLM server in a background subprocess."""
@@ -138,7 +225,11 @@ class ServiceManager:
         if not self.ensure_vllm_setup():
             return False
 
-        print("🚀 Starting vLLM server...")
+        # --- Dynamic Model Selection ---
+        if model_name is None:  # Only auto-select if not overridden
+            model_name = self._select_model(vram_mb)
+            
+        print(f"🚀 Starting vLLM server with model: {model_name}...")
         start_script = self.scripts_dir / "start_vllm.sh"
         
         # Explicitly pass venv path ONLY if we aren't using system vLLM
@@ -226,23 +317,43 @@ class ServiceManager:
         except:
             return False
 
-    def wait_for_vllm(self, timeout=120):
-        """Polls vLLM health until timeout."""
-        start_time = time.time()
-        while time.time() - start_time < timeout:
+    def wait_for_vllm(self, model_name, timeout=120):
+        # Wait for vLLM to become ready
+        print("⏳ Waiting for vLLM API to respond...")
+        for i in range(timeout):  # Wait up to `timeout` seconds
             if self.is_vllm_healthy():
-                print("✅ vLLM is ready!")
+                print(f"✅ vLLM is online! (Model: {model_name})")
+                
+                # Success! Reset strikes
+                self._save_state({"strikes": 0, "last_success_model": model_name})
                 return True
-            time.sleep(2)
+            time.sleep(1)
+            
             # Check if process died
             if self.vllm_process and self.vllm_process.poll() is not None:
-                print("❌ vLLM process exited unexpectedly. Check logs/vllm.log")
+                # Capture output
+                # Note: communicate() will wait for process to terminate if not already
+                # Since poll() is not None, it has terminated.
+                stdout, stderr = self.vllm_process.communicate()
+                print(f"❌ vLLM process died unexpectedly! Exit code: {self.vllm_process.returncode}")
+                if stdout: print(f"STDOUT: {stdout.decode()}")
+                if stderr: print(f"STDERR: {stderr.decode()}")
+                
+                # Record Strike
+                state = self._load_state()
+                state["strikes"] = state.get("strikes", 0) + 1
+                self._save_state(state)
+                
                 return False
             
             # Simple loading animation/feedback
-            elapsed = int(time.time() - start_time)
-            if elapsed % 5 == 0:
-                print(f"   Waiting... ({elapsed}s)")
-                
-        print("❌ Timed out waiting for vLLM.")
+            if i % 5 == 0:
+                print(f"   Waiting... ({i+1}s)")
+
+        print("❌ vLLM timed out waiting for health check.")
+        # Timeout is also a strike (maybe hung on model load)
+        state = self._load_state()
+        state["strikes"] = state.get("strikes", 0) + 1
+        self._save_state(state)
+        
         return False

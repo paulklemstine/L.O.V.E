@@ -137,7 +137,15 @@ Examples:
     parser.add_argument(
         "--verbose", "-v",
         action="store_true",
+        action="store_true",
         help="Enable verbose logging"
+    )
+
+    parser.add_argument(
+        "--model", "-m",
+        type=str,
+        default=None,
+        help="Override model selection for vLLM"
     )
     
     args = parser.parse_args()
@@ -176,8 +184,9 @@ Examples:
     
     # Check if we should skip vLLM (e.g. for simple tests not requiring it, though default is ON)
     # For now, we always try to start it unless it's a very specific exclusions
+    # For now, we always try to start it unless it's a very specific exclusions
     print("\n🌊 Initializing Neural Engine (vLLM)...")
-    if service_manager.start_vllm():
+    if service_manager.start_vllm(model_name=args.model):
         print("✅ Neural Engine active.")
     else:
         print("⚠️ Warning: Neural Engine failed to start. Agent may be lobotomized.")

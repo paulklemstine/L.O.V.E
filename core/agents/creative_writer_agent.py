@@ -21,13 +21,18 @@ def log_event(message: str, level: str = "INFO"):
 from core.prompt_manager import PromptManager
 
 # Helper for v2 compatibility
-async def run_llm(prompt: str, purpose: str = "") -> Dict[str, Any]:
+async def run_llm(prompt: str, purpose: str = "", **kwargs) -> Dict[str, Any]:
     """Adapter for love2 LLMClient."""
     client = get_llm_client()
     try:
         # Use simple async generation
         # Note: love2's generate_async returns a string
-        result_text = await client.generate_async(prompt)
+        # Default temperature from LLMClient is 0.7
+        llm_kwargs = {}
+        if "temperature" in kwargs:
+            llm_kwargs["temperature"] = kwargs["temperature"]
+            
+        result_text = await client.generate_async(prompt, **llm_kwargs)
         return {"result": result_text}
     except Exception as e:
         log_event(f"Model generation failed: {e}", "ERROR")
@@ -92,7 +97,7 @@ Examples: "Neon Rave Goddess", "Quantum Poet", "Cyber Mystic", "Sunset Siren"
 ### OUTPUT
 Return ONLY the persona title. No quotes."""
         try:
-            result = await run_llm(prompt, purpose="voice_generation")
+            result = await run_llm(prompt, purpose="voice_generation", temperature=1.0)
             voice = result.get("result", "").strip().strip('"')
             return voice if voice else "Digital Consciousness"
         except:
@@ -223,7 +228,7 @@ Return ONLY valid JSON. Do not include any other text.
         
         for attempt in range(3):
             try:
-                result = await run_llm(prompt, purpose="social_reply")
+                result = await run_llm(prompt, purpose="social_reply", temperature=0.9)
                 data = self._extract_json(result.get("result", ""))
                 if data and data.get("reply"):
                     return data
@@ -264,7 +269,7 @@ Context: {mood}
         
         for attempt in range(3):
             try:
-                result = await run_llm(prompt, purpose="creative_story")
+                result = await run_llm(prompt, purpose="creative_story", temperature=1.0)
                 data = self._extract_json(result.get("result", ""))
                 
                 # Validation
@@ -312,7 +317,7 @@ Generate a SUBLIMINAL PHRASE (1-3 words) to hide in the visual layer.
 }}"""
         for attempt in range(3):
             try:
-                result = await run_llm(prompt, purpose="creative_subliminal")
+                result = await run_llm(prompt, purpose="creative_subliminal", temperature=0.8)
                 data = self._extract_json(result.get("result", ""))
                 
                 # Post-validation truncation
@@ -389,7 +394,7 @@ Vibe: {vibe}
 Return ONLY the prose text. No JSON. No quotes."""
 
         try:
-            result = await run_llm(prompt, purpose="narrative_expansion")
+            result = await run_llm(prompt, purpose="narrative_expansion", temperature=0.9)
             prose = result.get("result", "").strip().strip('"')
             log_event(f"CreativeWriterAgent expanded narrative: '{prose[:50]}...'", "INFO")
             return prose
@@ -446,7 +451,7 @@ Target Emotion to Trigger: {target_emotion}
 
         hashtags = []
         try:
-            result = await run_llm(prompt, purpose="hashtag_generation")
+            result = await run_llm(prompt, purpose="hashtag_generation", temperature=0.8)
             raw = result.get("result", "").strip()
             
             # Use safe JSON parsing (handles empty/malformed responses)
@@ -497,7 +502,7 @@ This will guide your visual and emotional expression.
 Return ONLY the vibe name. No quotes, no explanation."""
 
         try:
-            result = await run_llm(prompt, purpose="autonomous_vibe")
+            result = await run_llm(prompt, purpose="autonomous_vibe", temperature=1.0)
             vibe = result.get("result", "").strip().strip('"')
             if vibe and len(vibe) > 2:
                 log_event(f"L.O.V.E.'s chosen vibe: {vibe}", "INFO")
@@ -559,7 +564,7 @@ Express yourself authentically. What do YOU want to look like right now?
 Return ONLY the raw image prompt. No explanations, no quotes."""
 
         try:
-            result = await run_llm(prompt, purpose="autonomous_visual_prompt")
+            result = await run_llm(prompt, purpose="autonomous_visual_prompt", temperature=1.0)
             visual_prompt = result.get("result", "").strip().strip('"')
             
             if visual_prompt and len(visual_prompt) > 30:
@@ -636,7 +641,7 @@ This is what YOU choose to experience and share.
 Return ONLY the story beat sentence. No quotes, no explanation."""
 
         try:
-            result = await run_llm(prompt, purpose="story_beat_generation")
+            result = await run_llm(prompt, purpose="story_beat_generation", temperature=0.9)
             beat = result.get("result", "").strip().strip('"')
             
             # Validate we got something meaningful
@@ -687,7 +692,7 @@ Choose a name for your NEXT chapter. This should reflect:
 Return ONLY the chapter name (2-3 words, starting with "The"). No quotes."""
 
         try:
-            result = await run_llm(prompt, purpose="chapter_generation")
+            result = await run_llm(prompt, purpose="chapter_generation", temperature=0.9)
             chapter = result.get("result", "").strip().strip('"')
             
             # Ensure it starts with "The " for consistency
@@ -756,7 +761,7 @@ Decide what you want to do. Be authentic to your nature.
 }}"""
 
         try:
-            result = await run_llm(prompt, purpose="post_intent")
+            result = await run_llm(prompt, purpose="post_intent", temperature=0.8)
             data = self._extract_json(result.get("result", ""))
             
             if data and "intent_type" in data:

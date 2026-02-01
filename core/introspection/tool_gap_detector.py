@@ -136,8 +136,8 @@ FORMAT:
 }}
 """
         llm = self._get_llm_client()
-        # Use async generation
-        response = await llm.generate_async(prompt)
+        # Use async generation with low temperature for architecture reasoning
+        response = await llm.generate_async(prompt, temperature=0.2)
         
         # Parse JSON
         try:

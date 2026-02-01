@@ -186,7 +186,7 @@ Test Output (Failures):
 4. Ensure robust error handling.
 5. Return ONLY the code.
 """
-        response = await self.llm_client.generate_async(prompt)
+        response = await self.llm_client.generate_async(prompt, temperature=0.2)
         return self.fabricator._clean_code(response) # Reuse extractor
 
     async def _finalize_tool(self, spec: EvolutionarySpecification, tool_path: str) -> bool:
@@ -320,7 +320,7 @@ Description: {description}
 
 Return ONLY the name (e.g., "weather_api" or "file_operations"), no explanation."""
         
-        response = await self.llm_client.generate_async(prompt)
+        response = await self.llm_client.generate_async(prompt, temperature=0.2)
         name = response.strip().lower().replace(' ', '_').replace('-', '_')
         # Sanitize
         name = ''.join(c for c in name if c.isalnum() or c == '_')
@@ -369,7 +369,7 @@ if __name__ == "__main__":
     main()
 ```"""
         
-        response = await self.llm_client.generate_async(prompt)
+        response = await self.llm_client.generate_async(prompt, temperature=0.2)
         return self.fabricator._clean_code(response)
     
     async def _extract_requirements(self, code: str) -> List[str]:

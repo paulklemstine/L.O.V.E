@@ -30,3 +30,9 @@ Refactor the L.O.V.E. Control Panel to improve usability, layout, and enable two
     - **Chat**: Displays User (Right), Assistant (Left), and System (Center/Monospace) messages.
     - **Scrolling**: The page scrolls vertically if content exceeds the viewport.
     - **Agents**: The active agent list has its own scrollbar if many agents are running.
+
+## 4. Technical Stability Fixes
+- **Robust Tool Signatures**: Added `**kwargs` to all tool functions (Bluesky, Scouts, Commenters) to handle extra parameters from LLM hallucinations (e.g., `goal`).
+- **NameError Fix**: Resolved `NameError: log_event` in `bluesky_agent.py` by moving the import to the top-level.
+- **Improved Feedback**: The Control Panel now polls chat history in real-time, allowing Assistant tool-based replies to appear instantly.
+- **Tool Aliasing**: Added `reply_to_user` as a registered tool alias for `reply_to_creator`.

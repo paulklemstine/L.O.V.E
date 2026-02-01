@@ -86,7 +86,8 @@ AND then strictly stop.
             try:
                 response = await self.llm.generate_json_async(
                     prompt=prompt,
-                    system_prompt=self.SYSTEM_PROMPT + f"\n\nAvailable Tools:\n{tools_desc}"
+                    system_prompt=self.SYSTEM_PROMPT + f"\n\nAvailable Tools:\n{tools_desc}",
+                    temperature=0.2
                 )
                 
                 thought = response.get("thought")
@@ -98,25 +99,8 @@ AND then strictly stop.
                 
                 if action in ["reply_to_creator", "reply_to_user"]:
                     self.reply_to_creator(**action_input)
-                    # We assume reply ends the turn usually, but maybe they want to do more?
-                    # For now, let's say if they reply, we check if they want to continue or done?
-                    # The prompt says "stop" after task done.
-                    # Let's assume one main reply = done, but maybe intermediate replies are okay?
-                    # We'll add it to history and continue? 
-                    # Actually, let's trust the agent to keep going if needed, or we might need a specific 'complete' signal.
-                    # But the prompt says "OR if the task is done... stop".
-                    # Let's heuristically say if the message implies completion, break? 
-                    # Hard to tell. Let's just break for now on any reply, 
-                    # OR we can add a 'final_reply' flag?
-                    # Let's just treat 'reply_to_creator' as just another tool, 
-                    # but check if the thought says "Task is done".
-                    
-                    history.append({"role": "assistant", "content": json.dumps(response)})
-                    history.append({"role": "system", "content": "Message sent."})
-                    
-                    # Heuristic: if thought concludes, break.
-                    if "done" in thought.lower() or "completed" in thought.lower():
-                        break
+                    # Break immediately after replying to ensure only one response per command.
+                    break
                     
                 elif action in self.registry._tools:
                     # Execute tool
