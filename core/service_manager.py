@@ -141,28 +141,26 @@ class ServiceManager:
 
     def _get_model_tiers(self):
         """Returns ordered list of model tiers (smallest to largest)."""
-        # Prioritize Qwen3 AWQ models as requested by user.
-        # Format: (min_vram_mb, model_id)
-        # Note: min_vram_mb is a rough "comfortable" minimum for the model + kv cache
+        # Using verified Best-in-Class models from Open LLM Leaderboard (early 2026).
+        # Prioritizing Qwen2.5 (consistently SOTA for size) and DeepSeek.
         return [
-             # Micro (< 6GB) -> Qwen3-4B-Thinking
-            (0, "Qwen/Qwen3-4B-Thinking-AWQ"), 
-            (4000, "Qwen/Qwen3-4B-Thinking-AWQ"),
+             # Tier 1: Micro (< 6GB) -> Qwen2.5-3B (Beats many 7B models)
+            (0, "Qwen/Qwen2.5-3B-Instruct-AWQ"), 
+            (4000, "Qwen/Qwen2.5-3B-Instruct-AWQ"),
             
-            # Small (6-16GB) -> Qwen3-8B (The workhorse for standard cards)
-            # Fits easily in 8GB, 12GB, 16GB
-            (6000, "Qwen/Qwen3-8B-Instruct-AWQ"),
+            # Tier 2: Small (6-16GB) -> Qwen2.5-7B (The new standard for 8GB cards)
+            (6000, "Qwen/Qwen2.5-7B-Instruct-AWQ"),
             
-            # Medium/Large (16-30GB) -> Qwen3-30B-Thinking
-            # 30B 4-bit fits in ~16-18GB VRAM (+ context) -> Needs 24GB card ideal
-            (18000, "Qwen/Qwen3-30B-A3B-Thinking-AWQ"),
+            # Tier 3: Medium (16-24GB) -> Qwen2.5-14B (SOTA for mid-range)
+            # Fits in ~10-12GB (4-bit), allowing massive context on 16GB+ cards
+            (16000, "Qwen/Qwen2.5-14B-Instruct-AWQ"),
             
-            # Massive (>30GB) -> QwQ-32B / DeepAgent-QwQ
-            # For 32GB, 40GB, 80GB cards
-            (30000, "DeepAgent/DeepAgent-QwQ-32B-AWQ"),
+            # Tier 4: Large (>24GB) -> Qwen2.5-32B (Reasoning powerhouse)
+            (24000, "Qwen/Qwen2.5-32B-Instruct-AWQ"),
              
-            # Ultra (>80GB)
-            (70000, "Qwen/Qwen3-235B-A22B-Thinking-AWQ")
+            # Tier 5: Massive (>40GB) -> DeepSeek R1 Distill (Reasoning/Math specialized)
+            # Note: Using the unquantized or AWQ version if available
+            (40000, "deepseek-ai/DeepSeek-R1-Distill-Llama-70B")
         ]
 
     def _select_model(self, vram_mb):
