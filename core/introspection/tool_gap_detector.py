@@ -23,7 +23,7 @@ from core.evolution_state import (
     add_tool_specification,
     get_pending_specifications
 )
-from core.async_utils import run_sync_safe
+from ..async_utils import run_sync_safe
 from core.tool_retriever import get_tool_retriever
 
 logger = logging.getLogger(__name__)
