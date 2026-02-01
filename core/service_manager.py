@@ -257,6 +257,10 @@ class ServiceManager:
         if vram_mb is not None:
             print(f"   Detected VRAM: {vram_mb} MB")
             print("   ✨ Unleashing full context window (User Override).")
+            
+            if vram_mb < 24000:
+                print("   ⚠️ Consumer GPU detected. Enforcing eager execution for stability (fixes CUDA graph hangs).")
+                cmd.extend(["--enforce-eager"])
         else:
              print("   ⚠️ Unknown VRAM (nvidia-smi failed).")
 
