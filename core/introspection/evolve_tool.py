@@ -16,6 +16,7 @@ import os
 import time
 import json
 import asyncio
+from .async_utils import run_sync_safe
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any, Tuple
 from pathlib import Path
@@ -1402,4 +1403,4 @@ if __name__ == "__main__":
             )
             print(result)
     
-    asyncio.run(main())
+    run_sync_safe(main())

@@ -23,6 +23,7 @@ from core.evolution_state import (
     add_tool_specification,
     get_pending_specifications
 )
+from core.async_utils import run_sync_safe
 from core.tool_retriever import get_tool_retriever
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ class ToolGapDetector:
             # Run analysis in a separate thread to avoid blocking the main loop
             def run_analysis():
                 try:
-                    asyncio.run(self.analyze_gap_and_specify(step_description))
+                    run_sync_safe(self.analyze_gap_and_specify(step_description))
                 except Exception as e:
                     logger.error(f"Background gap analysis failed: {e}")
 

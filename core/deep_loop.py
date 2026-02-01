@@ -18,6 +18,7 @@ import logging
 from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 from pathlib import Path
+from .async_utils import run_sync_safe
 
 # Add parent to path for L.O.V.E. v1 imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -364,7 +365,7 @@ What is the next action to take towards this goal?"""
             
             try:
                 # Delegate to CreatorCommandAgent
-                asyncio.run(get_creator_command_agent().process_command(command_text))
+                run_sync_safe(get_creator_command_agent().process_command(command_text))
                 logger.info("✅ Creator Command Loop Completed.")
             except Exception as e:
                 logger.error(f"Creator command failed: {e}")
@@ -384,7 +385,7 @@ What is the next action to take towards this goal?"""
             try:
                 # Delegate to Evolutionary Agent
                 # This blocks the main loop until fabrication attempts are done
-                tools_built = asyncio.run(self.evolutionary_agent.process_pending_specifications())
+                tools_built = run_sync_safe(self.evolutionary_agent.process_pending_specifications())
                 
                 if tools_built > 0:
                     logger.info(f"✨ Successfully built {tools_built} new tools! Resuming...")

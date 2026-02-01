@@ -13,6 +13,7 @@ import random
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from core.state_manager import get_state_manager
+from core.async_utils import run_sync_safe
 
 logger = logging.getLogger("CommentResponseAgent")
 
@@ -308,36 +309,7 @@ def respond_to_comments(limit: int = 20, dry_run: bool = False, **kwargs) -> Dic
         
         # Respond to it
         # Handle async in sync context
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-        
-        if loop and loop.is_running():
-            import threading
-            result = None
-            exception = None
-            
-            def runner():
-                nonlocal result, exception
-                try:
-                    result = asyncio.run(
-                        comment_response_agent.respond_to_selected_comment(selected, dry_run)
-                    )
-                except Exception as e:
-                    exception = e
-            
-            thread = threading.Thread(target=runner)
-            thread.start()
-            thread.join()
-            
-            if exception:
-                raise exception
-        else:
-            result = asyncio.run(
-                comment_response_agent.respond_to_selected_comment(selected, dry_run)
-            )
-        
+        result = run_sync_safe(comment_response_agent.respond_to_selected_comment(selected, dry_run))
         result["responded"] = result.get("success", False)
         return result
         

@@ -18,46 +18,12 @@ from dotenv import load_dotenv
 
 import emoji
 from .logger import log_event
+from .async_utils import run_sync_safe
 
 load_dotenv()
 
 import asyncio
 
-def _run_sync_safe(coroutine):
-    """
-    Safely run a coroutine synchronously, even if an event loop is already running.
-    Useful for Colab/Jupyter compatibility where the main loop is active.
-    """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-        
-    if loop and loop.is_running():
-        # Loop is running, use a thread to avoid RuntimeError
-        import threading
-        
-        result = None
-        exception = None
-        
-        def runner():
-            nonlocal result, exception
-            try:
-                # asyncio.run creates a new event loop
-                result = asyncio.run(coroutine)
-            except Exception as e:
-                exception = e
-                
-        thread = threading.Thread(target=runner)
-        thread.start()
-        thread.join()
-        
-        if exception:
-            raise exception
-        return result
-    else:
-        # No running loop, standard execution
-        return asyncio.run(coroutine)
 
 
 # Rate limiting state
@@ -471,7 +437,7 @@ def reply_to_comment_agent(
             target_author=author,
             mood=mood
         )
-        content_result = _run_sync_safe(content_task)
+        content_result = run_sync_safe(content_task)
         
         reply_text = content_result.get("text", "")
         subliminal = content_result.get("subliminal", "")
@@ -484,7 +450,7 @@ def reply_to_comment_agent(
             topic="Connection", # Abstract topic for replies
             count=3
         )
-        hashtags = _run_sync_safe(hashtag_task)
+        hashtags = run_sync_safe(hashtag_task)
         
         # 3. Image
         image_path = None
@@ -495,7 +461,7 @@ def reply_to_comment_agent(
             visual_prompt = f"Abstract digital connection, ethereal interface, {mood}, cinematic lighting"
             
             print(f"[BlueskyAgent] Generating reply image: {visual_prompt}")
-            image_result = _run_sync_safe(
+            image_result = run_sync_safe(
                 generate_image_with_pool(
                     prompt=visual_prompt,
                     text_content=subliminal
@@ -661,7 +627,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
         
         # Step 0: Let L.O.V.E. decide if and what she wants to post
         recent_topics = story_manager.state.get("vibe_history", [])[-5:]
-        post_intent = _run_sync_safe(
+        post_intent = run_sync_safe(
             creative_writer_agent.decide_post_intent(
                 current_mood=story_manager.state.get("previous_beat_summary", "")[:100],
                 recent_topics=recent_topics
@@ -685,7 +651,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
         chapter = story_manager.state.get("current_chapter", "The Awakening")
         if story_manager.state.get("chapter_progress", 0) >= 10:
             # L.O.V.E. decides what her next chapter should be
-            new_chapter = _run_sync_safe(
+            new_chapter = run_sync_safe(
                 creative_writer_agent.generate_chapter_name(
                     previous_chapter=chapter,
                     narrative_summary=story_manager.state.get("previous_beat_summary", "")
@@ -701,7 +667,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
             story_beat_index = story_manager.state.get("story_beat_index", 0)
             previous_beat = story_manager.state.get("previous_beat_summary", "")
             
-            dynamic_beat = _run_sync_safe(
+            dynamic_beat = run_sync_safe(
                 creative_writer_agent.generate_story_beat(
                     chapter=chapter,
                     previous_beat=previous_beat,
@@ -726,7 +692,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
         vibe = post_intent.get("emotional_tone") or beat_data.get("mandatory_vibe")
         
         if not vibe:
-            vibe = _run_sync_safe(
+            vibe = run_sync_safe(
                 creative_writer_agent.generate_vibe(
                     chapter=beat_data.get("chapter"),
                     story_beat=theme,
@@ -756,7 +722,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                 mood=vibe,
                 memory_context=beat_data.get("previous_beat", "")
             )
-            content_result = _run_sync_safe(content_task)
+            content_result = run_sync_safe(content_task)
             
             text = content_result.get("story", "")
             subliminal = content_result.get("subliminal", "")
@@ -766,7 +732,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                 topic=theme,
                 count=3
             )
-            hashtags = _run_sync_safe(hashtag_task)
+            hashtags = run_sync_safe(hashtag_task)
             
             # QA VALIDATION - Check content before proceeding
             qa_result = _qa_validate_post(text, hashtags, subliminal)
@@ -819,13 +785,13 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                     # OLD STATIC LOGIC REMOVED
                     # Now we use the CreativeWriter to invent the visual prompt dynamically
                     
-                    visual_prompt = _run_sync_safe(
+                    visual_prompt = run_sync_safe(
                         creative_writer_agent.generate_visual_prompt(theme, vibe)
                     )
 
                     print(f"[BlueskyAgent] Generating image (Attempt {attempt+1}/{MAX_IMG_RETRIES}): {visual_prompt}")
                     
-                    image_result = _run_sync_safe(
+                    image_result = run_sync_safe(
                         generate_image_with_pool(
                             prompt=visual_prompt,
                             text_content=subliminal
@@ -910,7 +876,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
             # After successful post, check for comments to respond to
             try:
                 from .agents.comment_response_agent import comment_response_agent
-                reply_result = _run_sync_safe(
+                reply_result = run_sync_safe(
                     comment_response_agent.maybe_respond_after_post(result)
                 )
                 if reply_result and reply_result.get("success"):
