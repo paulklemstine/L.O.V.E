@@ -215,8 +215,8 @@ class ServiceManager:
             return True
 
         if gpu_memory_utilization is None:
-            # Check env var, default to 0.6
-            gpu_memory_utilization = float(os.environ.get("GPU_MEMORY_UTILIZATION", "0.6"))
+            # Check env var, default to 0.95 (aggressive) to fit context on consumer cards
+            gpu_memory_utilization = float(os.environ.get("GPU_MEMORY_UTILIZATION", "0.95"))
 
         if self.is_vllm_healthy():
             print("✅ vLLM is already running and healthy.")
