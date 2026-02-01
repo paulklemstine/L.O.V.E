@@ -1,0 +1,187 @@
+L.O.V.E. COMPREHENSIVE TOOL LIST
+================================================================================
+
+TOOL: bluesky_post
+DESCRIPTION: Post to Bluesky with optional image. Dict with: success, post_uri, error
+PARAMETERS:
+  - text (string): Text content of the post (max 300 chars).
+  - image_path (string): Optional path to image file to attach.
+  - alt_text (string): Alt text for the image.
+----------------------------------------
+
+TOOL: bluesky_reply
+DESCRIPTION: Reply to a Bluesky post with optional image. Dict with: success, reply_uri, error
+PARAMETERS:
+  - parent_uri (string): URI of the post to reply to.
+  - parent_cid (string): CID of the post to reply to.
+  - text (string): Reply text (max 300 chars).
+  - image_path (string): Optional path to image file.
+----------------------------------------
+
+TOOL: bluesky_search
+DESCRIPTION: Search for posts on Bluesky. Dict with: success, posts (list), error
+PARAMETERS:
+  - query (string): Search query string.
+  - limit (integer): Maximum results (1-50).
+----------------------------------------
+
+TOOL: bluesky_timeline
+DESCRIPTION: Get recent posts from the home timeline. Dict with: success, posts (list), error
+PARAMETERS:
+  - limit (integer): Maximum number of posts to fetch (1-50).
+----------------------------------------
+
+TOOL: calculate_fibonacci
+DESCRIPTION: Calculate the nth Fibonacci number. This tool computes Fibonacci numbers using an efficient iterative approach. Useful for mathematical computations and demonstrations. The nth Fibonacci number Example: result = calculate_fibonacci(10)  # Returns 55
+PARAMETERS:
+  - n (integer): The position in the Fibonacci sequence (0-indexed)
+----------------------------------------
+
+TOOL: check_docker_available
+DESCRIPTION: Check if Docker is available for sandboxed execution. Docker availability status and install instructions if needed
+PARAMETERS: None
+----------------------------------------
+
+TOOL: discover_tools
+DESCRIPTION: Discover relevant tools using semantic search across all sources. Searches local registry, MCP servers, and filesystem for matching tools. Matching tools from all sources
+PARAMETERS:
+  - query (string): What capability you're looking for
+  - max_results (integer): Maximum tools to return
+----------------------------------------
+
+TOOL: engage_top_influencer
+DESCRIPTION: Selects the highest scoring influencer and posts a reply to them. Respects "one per day" limit per user. Dict with engagement results (target, text, success).
+PARAMETERS:
+  - dry_run (boolean): If True, simulates the engagement without posting.
+----------------------------------------
+
+TOOL: engage_with_influencer
+DESCRIPTION: Engage with a high-scoring influencer by replying to their recent post. Dict with details of the engagement (target, text, image, etc).
+PARAMETERS:
+  - dry_run (boolean): If True, generate the reply but don't actually post.
+----------------------------------------
+
+TOOL: execute_python
+DESCRIPTION: Execute Python code dynamically using the CodeAct engine. This enables L.O.V.E. to write and run arbitrary Python to solve problems that don't have pre-defined tools. Functions defined in one call persist for subsequent calls. Result with stdout, stderr, and success status
+PARAMETERS:
+  - code (string): Python code to execute
+  - max_retries (integer): Number of self-correction attempts if execution fails
+----------------------------------------
+
+TOOL: find_skills
+DESCRIPTION: Find relevant skills from the library for a task. Searches the accumulated skill library for code that might help with the current task. List of relevant skills with their code
+PARAMETERS:
+  - task_description (string): What you're trying to accomplish
+  - max_skills (integer): Maximum number of skills to return
+----------------------------------------
+
+TOOL: generate_content
+DESCRIPTION: Generate post content using the sophisticated Story Pipeline and post to Bluesky. Pipeline: 1. StoryManager: Determines the current "Beat" (Narrative + Vibe + Visuals) 2. CreativeWriterAgent: Generates "Micro-Story" and "Subliminal Phrase" 3. Hashtag Generation: Creates psychological/manipulative tags 4. Image Generation: Creates image matching the beat's visual style 5. Post to Bluesky Dict with post details including post_uri on success.
+PARAMETERS:
+  - topic (string): Optional override (though StoryManager usually drives this).
+----------------------------------------
+
+TOOL: get_current_time
+DESCRIPTION: Get the current date and time. Current timestamp as ISO string.
+PARAMETERS: None
+----------------------------------------
+
+TOOL: get_unreplied_comments
+DESCRIPTION: Get recent mentions/replies that we haven't replied to yet. List of dicts with: uri, cid, text, author, created_at
+PARAMETERS:
+  - limit (integer): Max notifications to check.
+----------------------------------------
+
+TOOL: install_mcp_server
+DESCRIPTION: Install an MCP server from a public registry. The server will be downloaded and configured for local use. Installation result with path and configuration
+PARAMETERS:
+  - server_id (string): The ID of the server to install (from search results)
+  - registry (string): Which registry to install from (mcp.so, smithery, github)
+----------------------------------------
+
+TOOL: list_defined_functions
+DESCRIPTION: List all functions that have been defined via execute_python. These functions persist across calls and can be reused. List of function names available in the CodeAct kernel
+PARAMETERS: None
+----------------------------------------
+
+TOOL: list_installed_mcp_servers
+DESCRIPTION: List all locally installed MCP servers. List of installed servers with their configurations
+PARAMETERS: None
+----------------------------------------
+
+TOOL: log_message
+DESCRIPTION: Log a message to the console and log file. Confirmation string.
+PARAMETERS:
+  - message (string): Message to log.
+  - level (string): Log level (info, warning, error).
+----------------------------------------
+
+TOOL: reply_to_creator
+DESCRIPTION: Send a message back to the Creator in the control panel.
+PARAMETERS:
+  - message (string): No description
+----------------------------------------
+
+TOOL: reply_to_user
+DESCRIPTION: Send a message back to the Creator in the control panel.
+PARAMETERS:
+  - message (string): No description
+----------------------------------------
+
+TOOL: research_trends
+DESCRIPTION: Researches current trends on Bluesky for a given topic and returns a summary. Useful for staying relevant and increasing engagement.
+PARAMETERS:
+  - topic (string): The search term or hashtag to research.
+----------------------------------------
+
+TOOL: respond_to_comments
+DESCRIPTION: Analyze pending comments and respond to the most important one. The Creator (@evildrgemini.bsky.social) is always prioritized first. L.O.V.E. loves the Creator. Dict with: success, author, reply_uri, is_creator, error
+PARAMETERS:
+  - limit (integer): Maximum number of comments to analyze.
+  - dry_run (boolean): If True, generate response but don't post.
+----------------------------------------
+
+TOOL: run_in_sandbox
+DESCRIPTION: Execute Python code in a safe Docker sandbox. More isolated than execute_python - uses Docker containers when available. Execution result with stdout/stderr
+PARAMETERS:
+  - code (string): Python code to execute
+  - packages (string): Comma-separated pip packages to install (e.g., "requests,pandas")
+  - timeout (integer): Maximum execution time in seconds
+----------------------------------------
+
+TOOL: save_skill
+DESCRIPTION: Save a skill to the persistent skill library for future reuse. Part of the Voyager pattern - accumulate successful code for later retrieval. Confirmation of skill being saved
+PARAMETERS:
+  - skill_name (string): Name for the skill (snake_case recommended)
+  - skill_code (string): The Python code that implements the skill
+  - description (string): What the skill does
+  - tags (string): Comma-separated tags for categorization
+----------------------------------------
+
+TOOL: scout_influencers
+DESCRIPTION: Scout the network to find potential influencers. Dict with success and discovered count.
+PARAMETERS:
+  - seed_users (array): Optional list of starting users (e.g. ["bsky.app"]).
+  - depth (integer): How deep to traverse the graph (default 2).
+----------------------------------------
+
+TOOL: search_mcp_servers
+DESCRIPTION: Search public MCP registries for servers matching a capability. Searches across mcp.so, Smithery.ai, and GitHub registries. List of matching MCP servers with installation info
+PARAMETERS:
+  - query (string): What capability to search for (e.g., "weather", "database", "github")
+  - limit (integer): Maximum number of results to return
+----------------------------------------
+
+TOOL: synthesize_mcp_server
+DESCRIPTION: Generate a new MCP server for a novel capability. Uses the Evolutionary Agent to synthesize a complete MCP server with Python code, requirements, and Dockerfile. Generated server details with file paths
+PARAMETERS:
+  - capability_description (string): What the server should do (e.g., "Fetch cryptocurrency prices")
+  - server_name (string): Optional name for the server
+----------------------------------------
+
+TOOL: wait
+DESCRIPTION: Wait for a specified number of seconds. Confirmation string.
+PARAMETERS:
+  - seconds (number): Number of seconds to wait.
+----------------------------------------
+

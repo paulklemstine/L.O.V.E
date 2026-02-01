@@ -75,12 +75,8 @@ class ToolRetriever:
         # Filesystem tool directories for lazy discovery
         self._tool_directories: List[str] = []
         
-        # Gap detection hooks
-        self._gap_listeners: List[Callable[[str, float], None]] = []
-    
-    def add_gap_listener(self, listener: Callable[[str, float], None]):
-        """Register a callback for when retrieval yields low confidence."""
-        self._gap_listeners.append(listener)
+        # Filesystem tool directories for lazy discovery
+        self._tool_directories: List[str] = []
     
     def index_tools(self, registry) -> None:
         """
@@ -172,20 +168,7 @@ class ToolRetriever:
         matches.sort(key=lambda x: x.score, reverse=True)
         result = matches[:max_tools]
         
-        # Epic 1: Gap Detection Trigger
-        # If no tools matched or best score is low, notify listeners
-        if not result or best_score < self.similarity_threshold:
-            self._notify_gap(step_description, best_score)
-        
         return result
-    
-    def _notify_gap(self, step_description: str, best_score: float):
-        """Notify listeners of potential capability gap."""
-        for listener in self._gap_listeners:
-            try:
-                listener(step_description, best_score)
-            except Exception as e:
-                logger.error(f"Error in gap listener: {e}")
     
     def _prefilter_by_category(
         self,
@@ -227,7 +210,7 @@ class ToolRetriever:
         tools = self.retrieve(step_description, max_tools=max_tools)
         
         if not tools:
-            return "AVAILABLE TOOLS: None matched. (Tool Gap Detection Active)"
+            return "AVAILABLE TOOLS: None matched. Please try broad search."
         
         menu_lines = ["AVAILABLE TOOLS (select one to see full API):"]
         for tool in tools:

@@ -32,11 +32,6 @@ from .state_manager import get_state_manager
 # Epic 1 & Story 2.3 Imports
 from .tool_registry import get_global_registry, ToolDefinitionError
 from .tool_retriever import format_tools_for_step, get_tool_retriever
-from .introspection.tool_gap_detector import get_gap_detector
-
-from .tool_registry import get_global_registry, ToolDefinitionError
-from .tool_retriever import format_tools_for_step, get_tool_retriever
-from .introspection.tool_gap_detector import get_gap_detector
 
 # Epic 2 Import
 from .agents.evolutionary_agent import get_evolutionary_agent, get_pending_specifications
@@ -129,7 +124,6 @@ What is the next action to take towards this goal?"""
         self.tools: Dict[str, Callable] = tools or {}
         
         # Initialize Epic 1 Components
-        self.gap_detector = get_gap_detector()
         self.registry = get_global_registry()
         
         # Initialize Epic 2 Components
@@ -213,13 +207,12 @@ What is the next action to take towards this goal?"""
     
     def _get_tools_context(self, goal_text: str) -> str:
         """
-        Get relevant tools for the current goal using retrieval.
+        Get all tools for the current goal.
         
-        Story 2.3: Context optimization via ToolRetriever.
-        Story 1.1: Triggers Gap Detection if no relevant tools found.
+        Story 2.3: Replaces retrieval with full list as requested.
         """
-        # Get formatted tools string (subset)
-        return format_tools_for_step(goal_text, self.registry)
+        # Return all formatted tool metadata
+        return self.registry.get_formatted_tool_metadata()
     
     def _build_context(self) -> str:
         """Build the full context for the LLM."""
@@ -467,12 +460,28 @@ What is the next action to take towards this goal?"""
         self.running = True
         get_state_manager().update_state(is_running=True)
         
-        logger.info("="*60)
-        logger.info("🌊 L.O.V.E. DeepLoop Starting 🌊")
-        logger.info(f"   Sleep interval: {self.sleep_seconds}s")
-        logger.info(f"   Max iterations: {self.max_iterations or 'Infinite'}")
-        logger.info(f"   Tools loaded: {len(self.tools)}")
-        logger.info("="*60)
+        print("\n" + "="*60)
+        print("🌊 L.O.V.E. DeepLoop Starting 🌊")
+        print(f"   Sleep interval: {self.sleep_seconds}s")
+        print(f"   Max iterations: {self.max_iterations or 'Infinite'}")
+        print("="*60)
+        
+        print("\n🛠️  REGISTERED TOOLS (ALPHABETIZED):")
+        print("-" * 60)
+        
+        for name in sorted(self.tools.keys()):
+            schema = self.registry.get_schema(name)
+            description = "No description available."
+            if schema:
+                description = schema.get("description", description)
+            
+            print(f"[{name}]")
+            print(f"   {description}")
+            print("-" * 60)
+            
+        logger.info(f"DeepLoop starting with {len(self.tools)} tools.")
+        print(f"\n🚀 Total Tools Loaded: {len(self.tools)}")
+        print("="*60 + "\n")
         
         try:
             while self.running:
