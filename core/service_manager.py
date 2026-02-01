@@ -308,7 +308,7 @@ class ServiceManager:
         except:
             return False
 
-    def wait_for_vllm(self, model_name, timeout=120):
+    def wait_for_vllm(self, model_name, timeout=600):
         # Wait for vLLM to become ready
         print("⏳ Waiting for vLLM API to respond...")
         for i in range(timeout):  # Wait up to `timeout` seconds
