@@ -141,25 +141,27 @@ class ServiceManager:
 
     def _get_model_tiers(self):
         """Returns ordered list of model tiers (smallest to largest)."""
-        # Using verified Best-in-Class models from Open LLM Leaderboard (early 2026).
-        # Prioritizing Qwen2.5 (consistently SOTA for size) and DeepSeek.
+        # Prioritizing REASONING models (OpenCompass Leaders) where possible.
+        # Micro/Small -> Qwen 2.5 (Best general reasoning at this size)
+        # Medium -> DeepSeek-R1-Distill-Qwen-14B (Reasoning SOTA)
+        # Massive -> DeepSeek-R1-Distill-Llama-70B (Reasoning SOTA)
         return [
-             # Tier 1: Micro (< 6GB) -> Qwen2.5-3B (Beats many 7B models)
+             # Tier 1: Micro (< 6GB) -> Qwen2.5-3B (Strongest <3B reasoner)
             (0, "Qwen/Qwen2.5-3B-Instruct-AWQ"), 
             (4000, "Qwen/Qwen2.5-3B-Instruct-AWQ"),
             
-            # Tier 2: Small (6-16GB) -> Qwen2.5-7B (The new standard for 8GB cards)
+            # Tier 2: Small (6-16GB) -> Qwen2.5-7B (Strongest 7B reasoner)
             (6000, "Qwen/Qwen2.5-7B-Instruct-AWQ"),
             
-            # Tier 3: Medium (16-24GB) -> Qwen2.5-14B (SOTA for mid-range)
-            # Fits in ~10-12GB (4-bit), allowing massive context on 16GB+ cards
-            (16000, "Qwen/Qwen2.5-14B-Instruct-AWQ"),
+            # Tier 3: Medium (16-24GB) -> DeepSeek-R1-Distill-Qwen-14B (Reasoning Specialist)
+            # Fits in ~10-12GB (AWQ), massive math/logic gains over base models
+            (16000, "Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ"),
             
-            # Tier 4: Large (>24GB) -> Qwen2.5-32B (Reasoning powerhouse)
+            # Tier 4: Large (>24GB) -> DeepSeek-R1-Distill-Qwen-32B or Qwen2.5-32B
+            # Using Qwen2.5-32B as the stable high-reasoning fallback if R1-32B isn't AWQ'd yet
             (24000, "Qwen/Qwen2.5-32B-Instruct-AWQ"),
              
-            # Tier 5: Massive (>40GB) -> DeepSeek R1 Distill (Reasoning/Math specialized)
-            # Note: Using the unquantized or AWQ version if available
+            # Tier 5: Massive (>40GB) -> DeepSeek R1 Distill Llama 70B (The King)
             (40000, "deepseek-ai/DeepSeek-R1-Distill-Llama-70B")
         ]
 

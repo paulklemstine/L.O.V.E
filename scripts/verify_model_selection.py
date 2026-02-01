@@ -45,7 +45,7 @@ test_state = root_dir / "state/vw_test_state.json"
 if test_state.exists():
     os.remove(test_state)
 
-print("🧪 Starting Model Selection Logic Verification (Leaderboard Era)")
+print("🧪 Starting Model Selection Logic Verification (Reasoning Era)")
 
 # Tier 1: Micro
 test_scenario(4096, 0, "Qwen2.5-3B-Instruct-AWQ") 
@@ -54,8 +54,8 @@ test_scenario(4096, 0, "Qwen2.5-3B-Instruct-AWQ")
 test_scenario(8192, 0, "Qwen2.5-7B-Instruct-AWQ") 
 
 # Tier 3: Medium (16GB) - Does 8B fit? Yes. Does 30B? No (req >18GB).
-# Should pick 14B.
-test_scenario(16000, 0, "Qwen2.5-14B-Instruct-AWQ")
+# Should pick DeepSeek R1 Distill 14B AWQ.
+test_scenario(16000, 0, "DeepSeek-R1-Distill-Qwen-14B-AWQ")
 
 # Tier 4: Large (24GB) - Should fit 32B
 test_scenario(24000, 0, "Qwen2.5-32B-Instruct-AWQ")
@@ -63,8 +63,8 @@ test_scenario(24000, 0, "Qwen2.5-32B-Instruct-AWQ")
 # Tier 5: Massive (40GB A100) - Should fit DeepSeek R1
 test_scenario(40000, 0, "DeepSeek-R1-Distill-Llama-70B")
 
-# Fallback Test: 24GB card crashed on 32B -> Should drop to 14B
-test_scenario(24000, 1, "Qwen2.5-14B-Instruct-AWQ")
+# Fallback Test: 24GB card crashed on 32B -> Should drop to 14B Reasoning
+test_scenario(24000, 1, "DeepSeek-R1-Distill-Qwen-14B-AWQ")
 
 # Clean up
 if test_state.exists():
