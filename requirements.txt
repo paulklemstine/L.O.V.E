@@ -25,3 +25,10 @@ ruff>=0.1.0
 
 # Parent project (L.O.V.E. v1) dependencies are assumed to be installed
 # in the main requirements.txt
+
+# Social Graph Intelligence
+networkx>=3.0
+python-louvain>=0.16
+scipy>=1.10.0
+mcp>=1.0.0
+apscheduler>=3.10.0

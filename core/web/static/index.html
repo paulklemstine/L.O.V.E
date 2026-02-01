@@ -572,6 +572,23 @@
                 <div style="color: #666; font-style: italic;">No agents active yet...</div>
             </div>
         </div>
+
+        <!-- Social Graph Stats -->
+        <div id="graph-panel" class="panel" style="margin-top: 10px;">
+            <h2>Social Graph</h2>
+            <div class="stat-item">
+                <div class="stat-label">Nodes / Edges</div>
+                <div id="graph-size" class="stat-value" style="color: var(--accent-color);">-- / --</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Communities</div>
+                <div id="graph-communities" class="stat-value">--</div>
+            </div>
+            <div class="stat-label">Top Clusters</div>
+            <div id="top-communities-list" style="font-size: 0.85em; color: #acc; margin-top: 5px;">
+                Waiting for analysis...
+            </div>
+        </div>
     </div>
 
     <div id="main-content">
@@ -710,6 +727,36 @@
                 document.getElementById('connection-status').style.color = '#ff0000';
             }
         }
+
+        async function fetchGraphStats() {
+            try {
+                const response = await fetch(`${API_URL}/graph/stats`);
+                const data = await response.json();
+
+                if (data.status === "error" || data.status === "not_ready") {
+                    return; // Keep placeholders
+                }
+
+                document.getElementById('graph-size').textContent = `${data.node_count} / ${data.edge_count}`;
+                document.getElementById('graph-communities').textContent = data.total_communities || 0;
+
+                if (data.top_communities && data.top_communities.length > 0) {
+                    const list = data.top_communities.map(c =>
+                        `<div style="display:flex; justify-content:space-between;"><span>Family #${c.id}</span><span>${c.count}</span></div>`
+                    ).join('');
+                    document.getElementById('top-communities-list').innerHTML = list;
+                } else {
+                    document.getElementById('top-communities-list').innerHTML = '<div style="font-style:italic; color:#666">No clusters detected</div>';
+                }
+            } catch (e) {
+                console.error("Graph stats error", e);
+            }
+        }
+
+        // Poll stats
+        setInterval(fetchStatus, UPDATE_INTERVAL);
+        setInterval(fetchGraphStats, 5000); // Top up graph stats every 5s
+
 
         function updateAgentList(agentStates) {
             const container = document.getElementById('agent-list');

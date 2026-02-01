@@ -44,6 +44,21 @@ async def get_logs(limit: int = 50):
     """Get recent logs."""
     return get_state_manager().get_recent_logs(limit)
 
+@app.get("/api/graph/stats")
+async def get_graph_stats():
+    """Get social graph statistics."""
+    try:
+        # Path to stats file: core/../state/social_graph_stats.json
+        stats_file = Path(__file__).parent.parent / "state" / "social_graph_stats.json"
+        if stats_file.exists():
+            import json
+            with open(stats_file, "r") as f:
+                return json.load(f)
+        else:
+            return {"status": "not_ready", "message": "Graph stats not yet available"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
 @app.on_event("startup")
 async def startup_event():
     """Start background tasks."""

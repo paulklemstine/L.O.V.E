@@ -1,0 +1,12 @@
+{
+    "social-graph": {
+        "command": "python",
+        "args": [
+            "-m",
+            "mcp_servers.social_graph.server"
+        ],
+        "description": "Social Graph Intelligence Tools (Crawler, Community Detection)",
+        "type": "stdio",
+        "enabled": true
+    }
+}
