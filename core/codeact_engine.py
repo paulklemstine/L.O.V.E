@@ -20,6 +20,7 @@ import asyncio
 import logging
 import json
 import re
+import textwrap
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -168,6 +169,9 @@ class CodeActEngine:
         """Build execution script with kernel state."""
         preamble = "\n".join(self.kernel_state.values())
         
+        # Indent the user code for the try block
+        indented_code = textwrap.indent(code.strip(), "    ")
+        
         return f'''
 import sys
 import json
@@ -177,7 +181,7 @@ import json
 
 # Execute new code
 try:
-    {code}
+{indented_code}
     print(json.dumps({{"success": True}}))
 except Exception as e:
     print(json.dumps({{"success": False, "error": str(e), "type": type(e).__name__}}), file=sys.stderr)
@@ -258,12 +262,27 @@ except Exception as e:
             stdout_str = stdout.decode('utf-8', errors='replace')
             stderr_str = stderr.decode('utf-8', errors='replace')
             
+            error_type = None
+            if process.returncode != 0:
+                error_type = "RuntimeError"
+                # Try to extract the real error type from the JSON footer in stderr if it exists
+                try:
+                    lines = stderr_str.strip().split('\n')
+                    if lines:
+                        last_line = lines[-1]
+                        if last_line.startswith('{') and last_line.endswith('}'):
+                            error_info = json.loads(last_line)
+                            if "type" in error_info:
+                                error_type = error_info["type"]
+                except:
+                    pass
+            
             return CodeExecutionResult(
                 success=process.returncode == 0,
                 stdout=stdout_str,
                 stderr=stderr_str,
                 execution_time=time.time() - start_time,
-                error_type="RuntimeError" if process.returncode != 0 else None
+                error_type=error_type
             )
             
         except Exception as e:
