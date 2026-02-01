@@ -178,15 +178,12 @@ What is the next action to take towards this goal?"""
             
             # Also add to self.tools for direct execution
             from .dynamic_tools import (
-                execute_python, list_defined_functions,
                 search_mcp_servers, install_mcp_server, list_installed_mcp_servers,
                 synthesize_mcp_server, save_skill, find_skills,
                 run_in_sandbox, check_docker_available, discover_tools
             )
             
             dynamic_tools = {
-                "execute_python": execute_python,
-                "list_defined_functions": list_defined_functions,
                 "search_mcp_servers": search_mcp_servers,
                 "install_mcp_server": install_mcp_server,
                 "list_installed_mcp_servers": list_installed_mcp_servers,

@@ -151,7 +151,7 @@ class ServiceManager:
             (4000, "Qwen/Qwen2.5-3B-Instruct-AWQ"),
             
             # Tier 2: Small (6-16GB) -> Qwen2.5-7B (Strongest 7B reasoner)
-            (6000, "Qwen/Qwen2.5-7B-Instruct-AWQ"),
+            (,6300 "Qwen/Qwen2.5-7B-Instruct-AWQ"),
             
             # Tier 3: Medium (16-24GB) -> DeepSeek-R1-Distill-Qwen-14B (Reasoning Specialist)
             # Fits in ~10-12GB (AWQ), massive math/logic gains over base models

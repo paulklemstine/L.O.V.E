@@ -2,88 +2,16 @@
 Dynamic Tooling Tools - Interface for L.O.V.E. to interact with CodeAct, MCP Registry, etc.
 
 Exposes the Open Agentic Web capabilities to the agent:
-- Execute arbitrary Python code (CodeAct)
 - Search and install MCP servers
 - Generate new MCP servers  
 - Manage skill library
+- Run code in a safe sandbox
 """
 
 import asyncio
 from typing import Optional, List, Dict, Any
 
 from core.tool_registry import tool_schema, ToolResult
-
-
-# =============================================================================
-# CodeAct Engine Tools
-# =============================================================================
-
-@tool_schema
-def execute_python(code: str, max_retries: int = 0) -> ToolResult:
-    """
-    Execute Python code dynamically using the CodeAct engine.
-    
-    This enables L.O.V.E. to write and run arbitrary Python to solve problems
-    that don't have pre-defined tools. Functions defined in one call persist
-    for subsequent calls.
-    
-    Args:
-        code: Python code to execute
-        max_retries: Number of self-correction attempts if execution fails
-        
-    Returns:
-        Result with stdout, stderr, and success status
-    """
-    from core.codeact_engine import get_codeact_engine
-    
-    engine = get_codeact_engine()
-    
-    # Run async code in sync context
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import nest_asyncio
-            nest_asyncio.apply()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    result = loop.run_until_complete(engine.execute(code, max_retries=max_retries))
-    
-    if result.success:
-        return ToolResult(
-            status="success",
-            data={"stdout": result.stdout, "execution_time": result.execution_time},
-            observation=f"Code executed successfully:\n{result.stdout}"
-        )
-    else:
-        return ToolResult(
-            status="error",
-            data={"stderr": result.stderr, "error_type": result.error_type},
-            observation=f"Execution failed ({result.error_type}): {result.stderr}"
-        )
-
-
-@tool_schema
-def list_defined_functions() -> ToolResult:
-    """
-    List all functions that have been defined via execute_python.
-    
-    These functions persist across calls and can be reused.
-    
-    Returns:
-        List of function names available in the CodeAct kernel
-    """
-    from core.codeact_engine import get_codeact_engine
-    
-    engine = get_codeact_engine()
-    functions = engine.get_defined_functions()
-    
-    return ToolResult(
-        status="success",
-        data={"functions": functions},
-        observation=f"Defined functions: {functions}" if functions else "No functions defined yet."
-    )
 
 
 # =============================================================================
@@ -406,7 +334,7 @@ def run_in_sandbox(code: str, packages: str = "", timeout: int = 30) -> ToolResu
     """
     Execute Python code in a safe Docker sandbox.
     
-    More isolated than execute_python - uses Docker containers when available.
+    Uses Docker containers when available for isolated execution.
     
     Args:
         code: Python code to execute
@@ -545,8 +473,6 @@ def register_dynamic_tools():
     registry = get_global_registry()
     
     tools = [
-        execute_python,
-        list_defined_functions,
         search_mcp_servers,
         install_mcp_server,
         list_installed_mcp_servers,
