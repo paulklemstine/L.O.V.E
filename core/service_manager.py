@@ -290,7 +290,7 @@ class ServiceManager:
             )
             print(f"   PID: {self.vllm_process.pid}")
             print("   Waiting for vLLM to become ready (this may take a minute)...")
-            return self.wait_for_vllm()
+            return self.wait_for_vllm(model_name=model_name)
             
         except Exception as e:
             print(f"❌ Failed to start vLLM: {e}")
