@@ -780,19 +780,7 @@ Decide what you want to do. Be authentic to your nature.
                 "reason": "My story must be told"
             }
 
-    async def incubate_visuals(self, theme: str = "Future Vision") -> Dict[str, Any]:
-        """
-        Generates detailed visual concepts for future posts during cooldowns.
-        """
-        vibe = await self.generate_vibe("Incubation", theme)
-        prompt = await self.generate_visual_prompt(theme, vibe)
-        log_event(f"Incubated visual: {prompt[:50]}...", "INFO")
-        return {
-            "theme": theme,
-            "vibe": vibe,
-            "visual_prompt": prompt,
-            "status": "incubated"
-        }
+
 
 
 

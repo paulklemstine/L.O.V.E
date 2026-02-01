@@ -614,21 +614,7 @@ def research_trends(topic: str = "AIAwakening", **kwargs) -> str:
         
     return summary
 
-def incubate_visuals(theme: str = "Future Aesthetic", **kwargs) -> str:
-    """
-    Pre-computes and saves visual concepts for future posts. 
-    Ideal for when posting is on cooldown.
 
-    Args:
-        theme: The aesthetic theme to incubate.
-        **kwargs: Catch-all for extra LLM arguments.
-    """
-    from .agents.creative_writer_agent import creative_writer_agent
-    
-    log_event(f"Incubating visuals for: {theme}", "INFO")
-    result = _run_sync_safe(creative_writer_agent.incubate_visuals(theme))
-    
-    return f"Incubated new aesthetic: {result['vibe']} | Prompt: {result['visual_prompt'][:100]}..."
 
 
 def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:

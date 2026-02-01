@@ -67,8 +67,7 @@ def _get_love2_tools() -> Dict[str, Callable]:
             search_bluesky,
             generate_post_content,
             get_unreplied_comments,
-            research_trends,
-            incubate_visuals
+            research_trends
         )
         from .agents.comment_response_agent import respond_to_comments
         from .agents.influencer_scout_agent import scout_influencers, engage_with_influencer
@@ -83,7 +82,6 @@ def _get_love2_tools() -> Dict[str, Callable]:
         tools["scout_influencers"] = scout_influencers # Find new influencers
         tools["engage_with_influencer"] = engage_with_influencer # Engage with a found influencer
         tools["research_trends"] = research_trends
-        tools["incubate_visuals"] = incubate_visuals
     except ImportError as e:
         import traceback
         print(f"[ToolAdapter] bluesky_agent import failed: {e}")

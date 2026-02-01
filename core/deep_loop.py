@@ -76,7 +76,7 @@ You MUST respond with valid JSON in this exact format:
 ## Rules
 1. If you can complete the goal with a tool action, do it.
 2. If the goal is complete, use action="complete".
-3. If you cannot make progress (e.g. cooldown), DO NOT SKIP. Instead, use 'incubate_visuals' or other research tools if available.
+3. If you cannot make progress (e.g. cooldown), use action="skip".
 4. Be concise and action-oriented.
 5. Always respond with valid JSON only.
 
