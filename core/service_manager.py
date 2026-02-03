@@ -3,7 +3,9 @@ import time
 import subprocess
 import requests
 import logging
+import json
 from pathlib import Path
+from typing import Optional
 
 # Setup simple logger if not already configured
 logger = logging.getLogger("ServiceManager")
@@ -22,6 +24,7 @@ class ServiceManager:
         self.vllm_host = "0.0.0.0"
         self.vllm_port = 8000
         self.base_url = f"http://localhost:{self.vllm_port}" # Internal check uses localhost
+        self.config_file = self.root_dir / ".vllm_config"
 
     def ensure_vllm_setup(self):
         """Checks if vLLM is available (system or venv)."""
@@ -113,6 +116,47 @@ class ServiceManager:
         except ImportError:
             return False
 
+    def load_config(self) -> dict:
+        """Loads vLLM configuration from file."""
+        if self.config_file.exists():
+            try:
+                with open(self.config_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load persistence config: {e}")
+        return {}
+
+    def save_config(self, config: dict):
+        """Saves vLLM configuration to file."""
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump(config, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save persistence config: {e}")
+
+    def discover_best_model(self, vram_mb: Optional[int]) -> Optional[str]:
+        """
+        Uses ModelSelector and LeaderboardFetcher to find the best model.
+        """
+        print("🔍 Searching for the best available model on Leaderboard...")
+        try:
+            from core.model_selector import ModelSelector
+            selector = ModelSelector()
+            candidates = selector.select_best_models(vram_mb=vram_mb)
+            
+            if not candidates:
+                print("⚠️ No suitable models found on leaderboard.")
+                return None
+            
+            print(f"✨ Found {len(candidates)} candidates. Top 3:")
+            for i, c in enumerate(candidates[:3]):
+                print(f" {i+1}. {c.name} (ID: {c.repo_id or 'N/A'}, Score: {c.score}, Params: {c.params_b})")
+                
+            return candidates
+        except Exception as e:
+            logger.error(f"Error during model discovery: {e}")
+            return None
+
     def start_vllm(self, model_name=None, gpu_memory_utilization=None):
         """Starts the vLLM server in a background subprocess."""
         if self.is_colab() and self.SKIP_VLLM_IN_COLAB:
@@ -137,11 +181,83 @@ class ServiceManager:
 
         if not self.ensure_vllm_setup():
             return False
-
-        print("🚀 Starting vLLM server...")
-        start_script = self.scripts_dir / "start_vllm.sh"
+            
+        print("\n" + "="*50)
+        print("🚀  INITIALIZING VLLM STARTUP SEQUENCE")
+        print("="*50 + "\n")
         
-        # Explicitly pass venv path ONLY if we aren't using system vLLM
+        # Reset log file for this session
+        with open(self.root_dir / "logs" / "vllm.log", "w") as f:
+            f.write(f"--- VLLM Session Started at {time.ctime()} ---\n")
+            
+        # --- Model Selection Logic ---
+        config = self.load_config()
+        
+        # Determine candidates
+        candidate_queue = []
+        
+        if model_name:
+            # Explicit override
+            candidate_queue.append(model_name)
+        elif "model_name" in config:
+            # Persistence
+            print(f"💾 Found saved model preference: {config['model_name']}")
+            candidate_queue.append(config["model_name"])
+        else:
+            # Smart Discovery
+            candidates = self.discover_best_model(vram_mb)
+            if candidates:
+                # Try the top models
+                # For safety, let's limit to top 5 to avoid infinite loops if all fail
+                # Use repo_id if available, otherwise name
+                candidate_queue.extend([c.repo_id or c.name for c in candidates[:5]])
+                
+                # Filter out None values in case repo_id is missing and name is not useful? 
+                # Ideally candidates should be valid.
+                candidate_queue = [c for c in candidate_queue if c]
+            else:
+                # Fallback default
+                candidate_queue.append("Qwen/Qwen2.5-0.5B-Instruct") # Safer fallback with chat template
+
+        # Try to start models in order
+        for idx, candidate in enumerate(candidate_queue):
+            print(f"🚀 Attempting to start vLLM with model: {candidate} ({idx+1}/{len(candidate_queue)})")
+            
+            # Attempt 1: Default/Native settings
+            if self._launch_process(candidate, gpu_memory_utilization, vram_mb):
+                print(f"✅ Successfully started {candidate}")
+                if candidate != config.get("model_name"):
+                    self.save_config({"model_name": candidate})
+                return True
+            
+            print(f"⚠️ First attempt for {candidate} failed.")
+            
+            # Attempt 2: Retry with reduced context window (16384)
+            # This helps if the native context (e.g. 40k, 128k) causes OOM
+            print(f"🔄 Retrying {candidate} with reduced context window (16384)...")
+            if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=16384):
+                 print(f"✅ Successfully started {candidate} (Reduced Context)")
+                 if candidate != config.get("model_name"):
+                    self.save_config({"model_name": candidate})
+                 return True
+            
+            # Attempt 3: Retry with even smaller context (8192)
+            print(f"🔄 Retrying {candidate} with reduced context window (8192)...")
+            if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=8192):
+                 print(f"✅ Successfully started {candidate} (Reduced Context 8192)")
+                 if candidate != config.get("model_name"):
+                    self.save_config({"model_name": candidate})
+                 return True
+            
+            print(f"❌ Failed to start {candidate} even with reduced context. Trying next...")
+            self.stop_vllm() # Cleanup any partial state
+                
+        print("❌ All model candidates failed to start.")
+        return False
+
+    def _launch_process(self, model_name, gpu_memory_utilization, vram_mb, max_model_len=None):
+        """Internal helper to launch the process and wait for ready."""
+        start_script = self.scripts_dir / "start_vllm.sh"
         cmd = ["bash", str(start_script)]
         
         if not getattr(self, 'use_system_vllm', False):
@@ -150,44 +266,37 @@ class ServiceManager:
         else:
              print("   Using system-installed vLLM.")
         
-        print(f"DEBUG SERVICE_MANAGER: Launching command: {cmd}")
+        # Normalize model name (remove extra spaces often in JSON)
+        model_name = model_name.strip()
+        cmd.extend(["--model", model_name])
         
-        if model_name:
-            cmd.extend(["--model", model_name])
-        
-        # Add common optimization and safety limits
         cmd.extend(["--gpu-memory-utilization", str(gpu_memory_utilization)])
         
-        # Dynamic Context Window Config
-        # If we have < 20GB VRAM (e.g. T4 16GB, Laptop 6GB), limit context to prevent OOM/Stability issues.
-        # If we have > 20GB (e.g. A100, A10g), assume we can handle larger context.
-        # vram_mb was already fetched at start of method
-        
         if vram_mb is not None:
-            print(f"   Detected VRAM: {vram_mb} MB")
-            if vram_mb < 20000:
-                 print("   ⚠️ Consumer/T4 GPU detected (< 20GB). Limiting context window to 8192 for stability.")
-                 cmd.extend(["--max-model-len", "8192"])  # Cap context for T4/Consumer GPUs
-                 # Enforce eager execution for T4 stability (fixes CUDA graph capture crashes)
-                 print("   ⚠️ Enforcing eager execution for stability.")
-                 cmd.extend(["--enforce-eager"])
+            if vram_mb < 24000:
+                 print("   ⚠️ Consumer GPU detected (< 24GB).")
             else:
-                 print("   ✨ High VRAM detected. Unleashing full context window.")
-        else:
-             print("   ⚠️ Unknown VRAM (nvidia-smi failed). Enforcing safe defaults.")
-             cmd.extend(["--max-model-len", "8192"])
-             cmd.extend(["--enforce-eager"])
+                 print("   ✨ High VRAM detected.")
+
+        # Enable checking for custom code (needed for Qwen and others)
+        cmd.extend(["--trust-remote-code"])
+        
+        # Max Model Len Override
+        if max_model_len:
+            cmd.extend(["--max-model-len", str(max_model_len)])
 
         # Start process
         try:
-            # We redirect stdout/stderr to a log file
-            log_file = open(self.root_dir / "logs" / "vllm.log", "w")
+            # Open in append mode so we don't lose logs from previous attempts in this session
+            log_file = open(self.root_dir / "logs" / "vllm.log", "a")
             
-            # Pass absolute venv path to script to avoid relative path issues
+            # Add separator for this attempt
+            mode_msg = f" (Max Context: {max_model_len})" if max_model_len else " (Native Context)"
+            log_file.write(f"\n--- Attempting launch of {model_name}{mode_msg} ---\n")
+            log_file.flush()
+            
             env = os.environ.copy()
             env["VLLM_VENV_PATH"] = str(self.root_dir / ".venv_vllm")
-            
-            # Fix for max_model_len error (override model config capability)
             env["VLLM_ALLOW_LONG_MAX_MODEL_LEN"] = "1"
             
             self.vllm_process = subprocess.Popen(
@@ -198,11 +307,15 @@ class ServiceManager:
                 stderr=subprocess.STDOUT
             )
             print(f"   PID: {self.vllm_process.pid}")
-            print("   Waiting for vLLM to become ready (this may take a minute)...")
-            return self.wait_for_vllm()
+            print("   Waiting for vLLM to become ready...")
             
+            if self.wait_for_vllm(timeout=600): # 10 mins timeout per candidate
+                return True
+            else:
+                return False
+                
         except Exception as e:
-            print(f"❌ Failed to start vLLM: {e}")
+            print(f"❌ Launch exception: {e}")
             return False
 
     def stop_vllm(self):
@@ -226,7 +339,7 @@ class ServiceManager:
         except:
             return False
 
-    def wait_for_vllm(self, timeout=120):
+    def wait_for_vllm(self, timeout=600):
         """Polls vLLM health until timeout."""
         start_time = time.time()
         while time.time() - start_time < timeout:

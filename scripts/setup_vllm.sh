@@ -61,25 +61,24 @@ source "$VENV_NAME/bin/activate"
 echo -e "${YELLOW}Upgrading pip...${NC}"
 pip install --upgrade pip
 
-# Check if vLLM is already installed
-if pip show vllm &> /dev/null; then
-    echo -e "${GREEN}vLLM is already installed. Skipping installation.${NC}"
+# Install vLLM if missing
+if ! pip show vllm &> /dev/null; then
+    echo -e "${YELLOW}Installing vLLM...${NC}"
+    if [ -f "requirements-vllm.txt" ]; then
+        pip install -r requirements-vllm.txt
+    else
+        pip install "vllm>=0.15.0"
+    fi
 else
-    # Install vLLM and dependencies.
-# We hardcode a known good configuration or valid requirements just for vLLM to minimize conflicts.
-echo -e "${YELLOW}Installing vLLM...${NC}"
-
-# If requirements-vllm.txt exists, use it, otherwise install direct
-if [ -f "requirements-vllm.txt" ]; then
-    pip install -r requirements-vllm.txt
-else
-    # Fallback/Default install - using version from lovev1 findings (~0.11.1 or latest stable if not specified)
-    # Note: Using a newer version might be better, but let's stick to something compatible.
-    # Actually, let's try to install the latest consistent vllm unless user specified otherwise.
-    # Given the user wants to "move that up", I should try to use the version they had or a robust one.
-    # The lovev1 requirements said vllm>=0.11.1.
-    pip install "vllm>=0.11.1" 
+    echo -e "${GREEN}vLLM is already installed.${NC}"
 fi
+
+# Ensure bitsandbytes is installed (often missed if vLLM was pre-installed or system-wide)
+if ! pip show bitsandbytes &> /dev/null; then
+    echo -e "${YELLOW}Installing bitsandbytes...${NC}"
+    pip install "bitsandbytes>=0.46.1"
+else
+    echo -e "${GREEN}bitsandbytes is already installed.${NC}"
 fi
 
 echo -e "${GREEN}vLLM Setup Complete!${NC}"
