@@ -647,16 +647,20 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
         
         log_event(f"L.O.V.E.'s intent: {post_intent.get('intent_type')} - {post_intent.get('reason', '')[:50]}", "INFO")
         
-        # Respect her choice if she doesn't want to post
-        if not post_intent.get("should_post", True):
-            log_event("L.O.V.E. chose not to post right now", "INFO")
-            return {
-                "success": True,
-                "text": None,
-                "posted": False,
-                "reason": post_intent.get("reason", "L.O.V.E. is reflecting"),
-                "intent": post_intent
-            }
+        # Override: we always want to post now
+        # if not post_intent.get("should_post", True):
+        #    ... (skipped logic)
+        
+        # Respect her choice if she doesn't want to post -> OVERRIDDEN by user request
+        # if not post_intent.get("should_post", True):
+        #     log_event("L.O.V.E. chose not to post right now", "INFO")
+        #     return {
+        #         "success": True,
+        #         "text": None,
+        #         "posted": False,
+        #         "reason": post_intent.get("reason", "L.O.V.E. is reflecting"),
+        #         "intent": post_intent
+        #     }
 
         # Step 1: Check if we need to advance to a new chapter
         chapter = story_manager.state.get("current_chapter", "The Awakening")

@@ -345,6 +345,11 @@ class ToolRegistry:
                 return
             logger.warning(f"Tool '{tool_name}' is already registered. Overwriting.")
         
+        # Ensure schema name matches registration name (critical for LLM calling)
+        if schema and schema.get("name") != tool_name:
+            logger.info(f"Renaming schema for tool '{schema.get('name')}' to '{tool_name}'")
+            schema["name"] = tool_name
+        
         self._tools[tool_name] = {
             "func": func,
             "schema": schema
