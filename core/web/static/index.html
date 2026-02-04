@@ -603,7 +603,7 @@
 
     <!-- Collapsible Logs Panel -->
     <div id="logs-panel" class="panel collapsed">
-        <div id="logs-header" onclick="toggleLogs()">
+        <div id="logs-header" onclick="toggleLogs()" role="button" tabindex="0" aria-expanded="false" aria-controls="log-container" onkeydown="handleHeaderKey(event)">
             <h2 style="margin:0; border:none; font-size:1em;">Live Logs (Click to Toggle)</h2>
             <span id="log-toggle-icon">▲</span>
         </div>
@@ -759,8 +759,18 @@
         function toggleLogs() {
             const panel = document.getElementById('logs-panel');
             const icon = document.getElementById('log-toggle-icon');
+            const header = document.getElementById('logs-header');
             panel.classList.toggle('collapsed');
-            icon.textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
+            const isCollapsed = panel.classList.contains('collapsed');
+            icon.textContent = isCollapsed ? '▲' : '▼';
+            header.setAttribute('aria-expanded', !isCollapsed);
+        }
+
+        function handleHeaderKey(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleLogs();
+            }
         }
 
         function updateInteractions(interactions) {
