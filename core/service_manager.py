@@ -264,6 +264,13 @@ class ServiceManager:
                  self.save_config({"model_name": candidate, "max_model_len": 8192})
                  return True
             
+            # Attempt 4: Retry with even smaller context (4096)
+            print(f"🔄 Retrying {candidate} with reduced context window (4096)...")
+            if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=4096):
+                 print(f"✅ Successfully started {candidate} (Reduced Context 4096)")
+                 self.save_config({"model_name": candidate, "max_model_len": 4096})
+                 return True
+            
             print(f"❌ Failed to start {candidate} even with reduced context. Trying next...")
             self.stop_vllm() # Cleanup any partial state
                 
