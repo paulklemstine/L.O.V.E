@@ -1,14 +1,16 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
 import threading
+import json
 from pathlib import Path
 from pydantic import BaseModel
 from .state_manager import get_state_manager
 from .llm_client import get_llm_client
+from .pi_rpc_bridge import get_pi_bridge
 
 app = FastAPI(title="L.O.V.E. v2 Control Panel")
 
@@ -33,6 +35,53 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.get("/")
 async def read_index():
     return FileResponse(STATIC_DIR / "index.html")
+
+@app.get("/interactive")
+async def read_interactive():
+    return FileResponse(STATIC_DIR / "interactive.html")
+
+@app.websocket("/ws/pi")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    bridge = get_pi_bridge()
+    
+    # Callback to forward agent events to UI
+    async def on_agent_event(event_data):
+        try:
+            await websocket.send_json(event_data)
+        except Exception:
+            pass # Socket likely closed
+
+    bridge.set_callback(on_agent_event)
+    
+    # Ensure bridge is started
+    if not bridge.running:
+        await bridge.start()
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # User input from UI
+            # We expect a simple string prompt for now, or JSON command
+            # If it's a JSON string, try to parse it
+            try:
+                cmd = json.loads(data)
+                # If command object, send as is
+                if isinstance(cmd, dict) and "type" in cmd:
+                    await bridge.send_command_json(cmd)
+                else:
+                    # Treat as prompt
+                    await bridge.send_prompt(str(data))
+            except json.JSONDecodeError:
+                # Treat raw text as prompt
+                 await bridge.send_prompt(data)
+                 
+    except WebSocketDisconnect:
+        print("[WebSocket] Client disconnected")
+        # Optional: stop agent if no clients? 
+        # await bridge.stop() 
+    except Exception as e:
+        print(f"[WebSocket] Error: {e}")
 
 @app.get("/api/status")
 async def get_status():

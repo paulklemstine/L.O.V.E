@@ -288,7 +288,7 @@ def _qa_validate_post(text: str, hashtags: List[str], subliminal_phrase: str) ->
     
     # Determine if we should attempt regeneration
     # Some errors are fixable by regeneration, others are not
-    regeneratable_keywords = ["placeholder", "too short", "no emojis", "raw json", "parsing"]
+    regeneratable_keywords = ["placeholder", "too short", "no emojis", "raw json", "parsing", "too long", "length"]
     should_regenerate = any(
         any(kw in err.lower() for kw in regeneratable_keywords)
         for err in errors
@@ -755,11 +755,12 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
         # CONTENT GENERATION WITH QA VALIDATION LOOP
         # Max 3 attempts to generate valid, non-placeholder content
         # ═══════════════════════════════════════════════════════════════════
-        MAX_QA_RETRIES = 3
+        MAX_QA_RETRIES = 10
         text = ""
         subliminal = ""
         hashtags = []
         qa_passed = False
+        feedback = ""
         
         for qa_attempt in range(1, MAX_QA_RETRIES + 1):
             log_event(f"Content generation attempt {qa_attempt}/{MAX_QA_RETRIES}", "INFO")
@@ -768,7 +769,8 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
             content_task = creative_writer_agent.write_micro_story(
                 theme=theme, 
                 mood=vibe,
-                memory_context=beat_data.get("previous_beat", "")
+                memory_context=beat_data.get("previous_beat", ""),
+                feedback=feedback
             )
             content_result = _run_sync_safe(content_task)
             
@@ -799,6 +801,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                     
                 if qa_attempt < MAX_QA_RETRIES:
                     log_event(f"Regenerating content (attempt {qa_attempt + 1})...", "INFO")
+                    feedback = f"Previous attempt failed.\\nYOUR OUTPUT:\\n{text}\\n\\nERRORS:\\n{'; '.join(qa_result['errors'])}.\\nPlease fix these specific issues."
         
         # If all QA attempts failed, abort before posting
         if not qa_passed:

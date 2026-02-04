@@ -349,6 +349,12 @@ class ToolRegistry:
             "func": func,
             "schema": schema
         }
+        
+        # Log to console for visibility
+        print(f"🔧 Tool Registered: {tool_name}")
+        if schema and schema.get("description"):
+            desc = schema["description"].split("\n")[0]
+            print(f"   Desc: {desc[:100]}...")
     
     def get_tool(self, name: str) -> Callable:
         """

@@ -43,7 +43,8 @@ else
     echo "No venv path provided, using system python environment."
 fi
 
-echo "Starting vLLM..."
+echo "Starting vLLM with tool support..."
 echo "Using venv: $VENV_PATH"
 # We use exec so the shell process is replaced by vLLM
-exec python3 -m vllm.entrypoints.openai.api_server --host "$HOST" --port "$PORT" "$@"
+# --enable-auto-tool-choice and --tool-call-parser enable function calling via OpenAI API
+exec python3 -m vllm.entrypoints.openai.api_server --host "$HOST" --port "$PORT" --enable-auto-tool-choice --tool-call-parser hermes "$@"

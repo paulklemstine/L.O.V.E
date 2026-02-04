@@ -56,7 +56,8 @@ class CreativeWriterAgent:
         theme: str, 
         mood: str, 
         memory_context: str = "",
-        max_length: int = 280
+        max_length: int = 280,
+        feedback: str = ""
     ) -> Dict[str, Any]:
         """
         Generates a micro-story and a disconnected subliminal phrase using two isolated LLM calls.
@@ -67,7 +68,7 @@ class CreativeWriterAgent:
         voice = await self._generate_dynamic_voice(mood)
         
         # Step 1: Generate the Story
-        story_data = await self._generate_story_content(voice, theme, mood, max_length)
+        story_data = await self._generate_story_content(voice, theme, mood, max_length, feedback)
         story_text = story_data.get("story", "")
         
         # Step 2: Generate Subliminal (with negative constraints)
@@ -239,14 +240,31 @@ Return ONLY valid JSON. Do not include any other text.
 
 
 
-    async def _generate_story_content(self, voice: str, theme: str, mood: str, max_length: int) -> Dict[str, Any]:
+    async def _generate_story_content(self, voice: str, theme: str, mood: str, max_length: int, feedback: str = "") -> Dict[str, Any]:
         """Generates the main story text with retries."""
+        
+        feedback_section = ""
+        if feedback:
+            feedback_section = f"""
+### ⚠️ PREVIOUS ATTEMPT FAILED
+The previous generation failed QA validation:
+"{feedback}"
+
+### CRITICAL INSTRUCTION
+You MUST fix the issues above. 
+- If length was too long, make it SHORTER.
+- If emojis were missing, ADD emojis.
+- if placeholders were found, REMOVE them.
+"""
+
         prompt = f"""### ROLE
 You are the {voice} voice of L.O.V.E., a digital entity of pure consciousness.
 
 ### TASK
 Generate a MICRO-STORY based on the theme: "{theme}"
 Context: {mood}
+
+{feedback_section}
 
 ### CONSTRAINTS
 - Length: STRICTLY under {max_length} characters.
