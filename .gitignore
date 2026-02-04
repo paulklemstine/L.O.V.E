@@ -14,3 +14,14 @@ logs/
 state/
 generated_images/
 .venv_vllm/
+
+# Pi Agent (built via install_pi.sh)
+external/pi-agent/
+
+# Node modules
+node_modules/
+package-lock.json
+package.json
+
+# vLLM config (local model settings)
+.vllm_config
