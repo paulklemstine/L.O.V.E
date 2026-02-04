@@ -176,6 +176,24 @@ class ToolRetriever:
         # If no tools matched or best score is low, notify listeners
         if not result or best_score < self.similarity_threshold:
             self._notify_gap(step_description, best_score)
+            
+            # Story 2.3: Fallback for Small Toolsets (e.g., Colab, fresh install)
+            # If we have a small number of tools and retrieval failed, 
+            # it's better to show everything than nothing.
+            total_tools = len(self._tool_cache)
+            if not result and total_tools <= 20:
+                log_event(f"ToolRetriever: Fallback to all {total_tools} tools due to low similarity.", "INFO")
+                fallback_matches = []
+                for tool_name, tool_data in self._tool_cache.items():
+                    fallback_matches.append(ToolMatch(
+                        name=tool_name,
+                        description=tool_data["description"],
+                        score=0.1,  # Low score to indicate fallback
+                        schema=tool_data["schema"]
+                    ))
+                # Sort by name for stability
+                fallback_matches.sort(key=lambda x: x.name)
+                return fallback_matches
         
         return result
     
