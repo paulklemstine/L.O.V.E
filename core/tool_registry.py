@@ -355,6 +355,9 @@ class ToolRegistry:
         if schema and schema.get("description"):
             desc = schema["description"].split("\n")[0]
             print(f"   Desc: {desc[:100]}...")
+            
+        # Notify listeners
+        self._notify_tool_added(tool_name)
     
     def get_tool(self, name: str) -> Callable:
         """

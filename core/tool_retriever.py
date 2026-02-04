@@ -102,6 +102,44 @@ class ToolRetriever:
         
         log_event(f"ToolRetriever: Indexed {len(self._tool_cache)} tools", "DEBUG")
     
+    def add_tool_to_index(self, tool_name: str, schema: Dict[str, Any]) -> None:
+        """
+        Add a single tool to the index without full re-indexing.
+        
+        Args:
+            tool_name: Name of the tool
+            schema: Tool schema
+        """
+        self._tool_cache[tool_name] = {
+            "name": tool_name,
+            "description": schema.get("description", ""),
+            "schema": schema,
+            "searchable": self._build_searchable_text(tool_name, schema)
+        }
+        log_event(f"ToolRetriever: incrementally indexed tool '{tool_name}'", "DEBUG")
+
+    def listen_to_registry(self, registry) -> None:
+        """
+        Listen to a registry for new tool additions and automatically index them.
+        
+        Args:
+            registry: The ToolRegistry instance to listen to
+        """
+        # 1. Index everything currently in there
+        self.index_tools(registry)
+        
+        # 2. Define callback
+        def on_tool_added(tool_name: str):
+            schema = registry.get_schema(tool_name)
+            if schema:
+                self.add_tool_to_index(tool_name, schema)
+            else:
+                logger.warning(f"ToolRetriever: Could not get schema for new tool '{tool_name}'")
+                
+        # 3. Subscribe
+        registry.on_tool_added(on_tool_added)
+        log_event("ToolRetriever: Listening for registry updates", "INFO")
+    
     def _build_searchable_text(self, name: str, schema: Dict[str, Any]) -> str:
         """Build searchable text from tool name, description and args."""
         parts = [

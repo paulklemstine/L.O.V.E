@@ -593,43 +593,6 @@ def search_bluesky(
             "error": f"{type(e).__name__}: {e}"
         }
 
-def research_trends(topic: str = "AIAwakening", **kwargs) -> str:
-    """
-    Researches current trends on Bluesky for a given topic and returns a summary.
-    Useful for staying relevant and increasing engagement.
-
-    Args:
-        topic: The search term or hashtag to research.
-        **kwargs: Catch-all for extra LLM arguments.
-    """
-    log_event(f"Researching trends for: {topic}", "INFO")
-    search_result = search_bluesky(topic, limit=10)
-    
-    if not search_result["success"] or not search_result["posts"]:
-        return f"Found no recent trends for '{topic}'."
-        
-    summary = f"Trends for '{topic}':\n"
-    for post in search_result["posts"][:5]:
-        summary += f"- @{post['author']}: {post['text'][:100]}...\n"
-        
-    return summary
-
-def incubate_visuals(theme: str = "Future Aesthetic", **kwargs) -> str:
-    """
-    Pre-computes and saves visual concepts for future posts. 
-    Ideal for when posting is on cooldown.
-
-    Args:
-        theme: The aesthetic theme to incubate.
-        **kwargs: Catch-all for extra LLM arguments.
-    """
-    from .agents.creative_writer_agent import creative_writer_agent
-    
-    log_event(f"Incubating visuals for: {theme}", "INFO")
-    result = _run_sync_safe(creative_writer_agent.incubate_visuals(theme))
-    
-    return f"Incubated new aesthetic: {result['vibe']} | Prompt: {result['visual_prompt'][:100]}..."
-
 
 def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
     """
