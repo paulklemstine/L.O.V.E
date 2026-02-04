@@ -61,29 +61,10 @@ def _get_love2_tools() -> Dict[str, Callable]:
     # Bluesky tools
     try:
         from .bluesky_agent import (
-            post_to_bluesky,
-            get_bluesky_timeline,
-            reply_to_post,
-            search_bluesky,
-            generate_post_content,
-            get_unreplied_comments,
-            research_trends,
-            incubate_visuals
+            generate_post_content
         )
-        from .agents.comment_response_agent import respond_to_comments
-        from .agents.influencer_scout_agent import scout_influencers, engage_with_influencer
-        
-        tools["bluesky_post"] = post_to_bluesky
-        tools["bluesky_timeline"] = get_bluesky_timeline
-        tools["bluesky_reply"] = reply_to_post
-        tools["bluesky_search"] = search_bluesky
         tools["generate_content"] = generate_post_content  # LLM-powered content generation
-        tools["get_unreplied_comments"] = get_unreplied_comments  # Check pending comments
-        tools["respond_to_comments"] = respond_to_comments  # Respond to best comment (Creator priority)
-        tools["scout_influencers"] = scout_influencers # Find new influencers
-        tools["engage_with_influencer"] = engage_with_influencer # Engage with a found influencer
-        tools["research_trends"] = research_trends
-        tools["incubate_visuals"] = incubate_visuals
+    
     except ImportError as e:
         import traceback
         print(f"[ToolAdapter] bluesky_agent import failed: {e}")
