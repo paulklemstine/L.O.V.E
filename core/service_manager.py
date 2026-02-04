@@ -127,10 +127,12 @@ class ServiceManager:
         return {}
 
     def save_config(self, config: dict):
-        """Saves vLLM configuration to file."""
+        """Saves vLLM configuration to file, merging with existing."""
         try:
+            current_config = self.load_config()
+            current_config.update(config)
             with open(self.config_file, 'w') as f:
-                json.dump(config, f, indent=2)
+                json.dump(current_config, f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save persistence config: {e}")
 
@@ -195,14 +197,16 @@ class ServiceManager:
         
         # Determine candidates
         candidate_queue = []
+        memoized_max_len = config.get("max_model_len")
         
         if model_name:
             # Explicit override
-            candidate_queue.append(model_name)
+            candidate_queue.append({"name": model_name, "max_len": None})
         elif "model_name" in config:
             # Persistence
             print(f"💾 Found saved model preference: {config['model_name']}")
-            candidate_queue.append(config["model_name"])
+            print(f"💾 Saved max context length: {memoized_max_len or 'Native'}")
+            candidate_queue.append({"name": config["model_name"], "max_len": memoized_max_len})
         else:
             # Smart Discovery
             candidates = self.discover_best_model(vram_mb)
@@ -210,24 +214,37 @@ class ServiceManager:
                 # Try the top models
                 # For safety, let's limit to top 5 to avoid infinite loops if all fail
                 # Use repo_id if available, otherwise name
-                candidate_queue.extend([c.repo_id or c.name for c in candidates[:5]])
-                
-                # Filter out None values in case repo_id is missing and name is not useful? 
-                # Ideally candidates should be valid.
-                candidate_queue = [c for c in candidate_queue if c]
+                for c in candidates[:5]:
+                     candidate_queue.append({"name": c.repo_id or c.name, "max_len": None})
             else:
                 # Fallback default
-                candidate_queue.append("Qwen/Qwen2.5-0.5B-Instruct") # Safer fallback with chat template
+                candidate_queue.append({"name": "Qwen/Qwen2.5-0.5B-Instruct", "max_len": None}) # Safer fallback with chat template
 
         # Try to start models in order
-        for idx, candidate in enumerate(candidate_queue):
+        for idx, candidate_obj in enumerate(candidate_queue):
+            candidate = candidate_obj["name"]
+            preferred_len = candidate_obj["max_len"]
+            
             print(f"🚀 Attempting to start vLLM with model: {candidate} ({idx+1}/{len(candidate_queue)})")
             
-            # Attempt 1: Default/Native settings
+            # If we have a preferred length (memoized), try that logic first
+            if preferred_len:
+                 print(f"🔄 Retrying {candidate} with MEMOIZED context window ({preferred_len})...")
+                 if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=preferred_len):
+                      print(f"✅ Successfully started {candidate} (Memoized Context {preferred_len})")
+                      # Config is already correct, but saving ensures timestamps/completeness
+                      self.save_config({"model_name": candidate, "max_model_len": preferred_len})
+                      return True
+                 else:
+                     print(f"⚠️ Memoized settings for {candidate} failed. Retrying validation info...")
+            
+            # Attempt 1: Default/Native settings (only if we didn't just fail a specific preferred_len or if we want to try native)
+            # Actually, if memoized failed, maybe we should fall through to standard tiers.
+            # If no memoized, proceed as normal.
+            
             if self._launch_process(candidate, gpu_memory_utilization, vram_mb):
                 print(f"✅ Successfully started {candidate}")
-                if candidate != config.get("model_name"):
-                    self.save_config({"model_name": candidate})
+                self.save_config({"model_name": candidate, "max_model_len": None}) # None means native/unspecified
                 return True
             
             print(f"⚠️ First attempt for {candidate} failed.")
@@ -237,16 +254,14 @@ class ServiceManager:
             print(f"🔄 Retrying {candidate} with reduced context window (16384)...")
             if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=16384):
                  print(f"✅ Successfully started {candidate} (Reduced Context)")
-                 if candidate != config.get("model_name"):
-                    self.save_config({"model_name": candidate})
+                 self.save_config({"model_name": candidate, "max_model_len": 16384})
                  return True
             
             # Attempt 3: Retry with even smaller context (8192)
             print(f"🔄 Retrying {candidate} with reduced context window (8192)...")
             if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=8192):
                  print(f"✅ Successfully started {candidate} (Reduced Context 8192)")
-                 if candidate != config.get("model_name"):
-                    self.save_config({"model_name": candidate})
+                 self.save_config({"model_name": candidate, "max_model_len": 8192})
                  return True
             
             print(f"❌ Failed to start {candidate} even with reduced context. Trying next...")
@@ -304,7 +319,8 @@ class ServiceManager:
                 cwd=self.root_dir,
                 env=env,
                 stdout=log_file,
-                stderr=subprocess.STDOUT
+                stderr=subprocess.STDOUT,
+                start_new_session=True # Detach process!
             )
             print(f"   PID: {self.vllm_process.pid}")
             print("   Waiting for vLLM to become ready...")
