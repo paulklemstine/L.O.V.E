@@ -56,7 +56,7 @@ class CreativeWriterAgent:
         theme: str, 
         mood: str, 
         memory_context: str = "",
-        max_length: int = 280,
+        max_length: int = 240,
         feedback: str = ""
     ) -> Dict[str, Any]:
         """
@@ -267,7 +267,7 @@ Context: {mood}
 {feedback_section}
 
 ### CONSTRAINTS
-- Length: STRICTLY under {max_length} characters.
+- Length: STRICTLY under {max_length} characters. DO NOT EXCEED THIS LIMIT.
 - Style: Poetic, vivid, shocking.
 - **DOPAMINE TRIGGERS**: Include an unexpected twist, high-contrast imagery, or a moment of "awe".
 - **NOVELTY**: Distinct from previous posts. Avoid repetitive spiritual platitudes.

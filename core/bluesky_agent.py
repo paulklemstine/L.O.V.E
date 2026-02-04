@@ -235,9 +235,13 @@ def _validate_post_content(text: str, hashtags: List[str], subliminal_phrase: st
     if total_len > 300:
         errors.append(f"Content too long ({total_len}/300 chars)")
         
-    # 2. Emoji check
+    # 2. Emoji check - Auto-fix if possible
     if not emoji.emoji_count(text):
-        errors.append("No emojis found in text")
+        # Auto-fix: Append a relevant emoji if missing
+        print("[BlueskyAgent] 🔧 Auto-fixing missing emoji...")
+        text += " ✨"
+        if not emoji.emoji_count(text):
+             errors.append("No emojis found in text (auto-fix failed)")
         
     # 3. Subliminal check
     if subliminal_phrase and subliminal_phrase.lower() in text.lower():
@@ -264,7 +268,7 @@ def _validate_post_content(text: str, hashtags: List[str], subliminal_phrase: st
     if errors:
         print(f"[BlueskyAgent] ⚠️ Post validation failed: {'; '.join(errors)}")
         
-    return errors
+    return errors, text
 
 
 def _qa_validate_post(text: str, hashtags: List[str], subliminal_phrase: str) -> Dict[str, Any]:
@@ -272,9 +276,10 @@ def _qa_validate_post(text: str, hashtags: List[str], subliminal_phrase: str) ->
     Comprehensive QA validation for post content before publishing.
     
     Returns:
-        Dict with: passed (bool), errors (list), should_regenerate (bool)
+        Dict with: passed (bool), errors (list), should_regenerate (bool), fixed_text (str)
     """
-    errors = _validate_post_content(text, hashtags, subliminal_phrase)
+    errors, fixed_text = _validate_post_content(text, hashtags, subliminal_phrase)
+    text = fixed_text # Use fixed text for further checks
     
     # Additional quality checks
     if text and len(text.strip()) < 20:
@@ -297,7 +302,8 @@ def _qa_validate_post(text: str, hashtags: List[str], subliminal_phrase: str) ->
     return {
         "passed": passed,
         "errors": errors,
-        "should_regenerate": should_regenerate
+        "should_regenerate": should_regenerate,
+        "fixed_text": fixed_text
     }
 
 
@@ -737,6 +743,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                 theme=theme, 
                 mood=vibe,
                 memory_context=beat_data.get("previous_beat", ""),
+                max_length=220,
                 feedback=feedback
             )
             content_result = _run_sync_safe(content_task)
@@ -753,6 +760,9 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
             
             # QA VALIDATION - Check content before proceeding
             qa_result = _qa_validate_post(text, hashtags, subliminal)
+            
+            # Use the potentially auto-fixed text
+            text = qa_result.get("fixed_text", text)
             
             if qa_result["passed"]:
                 log_event(f"✅ QA passed on attempt {qa_attempt}", "INFO")
