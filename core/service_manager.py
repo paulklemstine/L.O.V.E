@@ -296,9 +296,10 @@ class ServiceManager:
         
         if vram_mb is not None:
             if vram_mb < 24000:
-                 print("   ⚠️ Consumer GPU detected (< 24GB).")
+                print("   ⚠️ Consumer GPU detected (< 24GB). Enforcing eager mode.")
+                cmd.extend(["--enforce-eager"])
             else:
-                 print("   ✨ High VRAM detected.")
+                print("   ✨ High VRAM detected.")
 
         # Enable checking for custom code (needed for Qwen and others)
         cmd.extend(["--trust-remote-code"])

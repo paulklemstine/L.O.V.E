@@ -20,19 +20,17 @@ class VariantFinder:
         base_name = repo_id.split('/')[-1]
         
         # Define search keywords based on type
+        # Define search keywords based on type
         if search_type == "AWQ":
             keywords = ["AWQ", "4bit", "4-bit"]
-            # We prefer models that differ mostly by these tags
+        elif search_type == "GPTQ":
+             keywords = ["GPTQ", "4bit", "Int4", "4-bit"]
         elif search_type == "ABLITERATED":
             keywords = ["abliterated", "uncensored"]
         else:
             return None
             
         logger.info(f"Searching for {search_type} variant of {base_name}...")
-        
-        # We search specifically for models containing the base name and the keyword
-        # This is a bit loose, so we need to verify similarity?
-        # A good heuristic: filtered search by name
         
         candidates = []
         

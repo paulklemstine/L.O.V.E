@@ -23,6 +23,7 @@ class ModelSelector:
     def select_best_models(self, vram_mb: Optional[int] = None) -> List[LeaderboardModel]:
         """
         Returns a prioritized list of open-source models that likely fit in the available VRAM.
+        Unquantized > GPTQ > (Exclude others for now per user request)
         """
         print("🔍 Analyzing leaderboard data for best model candidates...")
         all_models = self.fetcher.fetch_data()
@@ -39,16 +40,12 @@ class ModelSelector:
         # Parse sizes and estimate VRAM
         candidates = []
         
-        # Sort by score first to prioritize search for high scorers
+        # Sort by score first
         open_models.sort(key=lambda x: x.score, reverse=True)
-        
-        # Optimization: Don't limit to top 15 blindly. 
-        # Iterate until we find enough candidates OR check a max number of items.
-        # But for low VRAM, we might need to go deep to find a 1B/3B model.
         
         checked_count = 0
         found_count = 0
-        MAX_CHECK = 500 # Check deeper to skip large models in weak VRAM
+        MAX_CHECK = 500
         
         print(f"   VRAM Constraint: {vram_mb} MB")
         
@@ -69,56 +66,25 @@ class ModelSelector:
             if base_fits:
                 candidates.append((model, size_b, est_vram))
                 found_count += 1
+            elif model.repo_id:
+                # 2. Base doesn't fit, check for GPTQ variant
+                # Only check if base doesn't fit, as preferred by user
+                gptq_vram = self._estimate_vram_usage(size_b, "GPTQ", vram_mb=vram_mb)
+                gptq_fits = not vram_mb or gptq_vram <= vram_mb
                 
-            # 2. Check for Variants (Abliterated / AWQ)
-            # Only if we have a valid repo_id to search against
-            if model.repo_id:
-                # A. Look for AWQ
-                awq_vram = self._estimate_vram_usage(size_b, "AWQ", vram_mb=vram_mb)
-                awq_fits = not vram_mb or awq_vram <= vram_mb
-                
-                # Search criteria:
-                # 1. Base doesn't fit, but AWQ estimate DOES fit (Enable new model)
-                # 2. Base fits, but we want to see if optimized version exists (Optimization)
-                
-                should_search_awq = False
-                if not base_fits and awq_fits:
-                    should_search_awq = True
-                elif base_fits:
-                    # Optional: Search anyway if we want to prefer AWQ? 
-                    # Let's do it if we haven't found many yet.
-                     should_search_awq = True
-                     
-                if should_search_awq:
-                    # Try to find AWQ variant
-                    awq_id = self.variant_finder.find_best_variant(model.repo_id, "AWQ")
-                    if awq_id:
-                        # Create virtual model
-                        awq_model = LeaderboardModel(
-                            name=f"{model.name} (AWQ)",
+                if gptq_fits:
+                     gptq_id = self.variant_finder.find_best_variant(model.repo_id, "GPTQ")
+                     if gptq_id:
+                        gptq_model = LeaderboardModel(
+                            name=f"{model.name} (GPTQ)",
                             params_b=model.params_b,
-                            score=model.score, 
+                            score=model.score, # Assume similar score
                             is_open_source=True,
                             verified=False,
-                            repo_id=awq_id
+                            repo_id=gptq_id
                         )
-                        candidates.append((awq_model, size_b, awq_vram))
-                        if not base_fits: found_count += 1 # Count as new find
-                
-                # B. Look for Abliterated
-                # Assuming Abliterated is same size as base
-                if base_fits:
-                     abl_id = self.variant_finder.find_best_variant(model.repo_id, "ABLITERATED")
-                     if abl_id:
-                        abl_model = LeaderboardModel(
-                            name=f"{model.name} (Abliterated)",
-                            params_b=model.params_b,
-                            score=model.score + 0.1, 
-                            is_open_source=True,
-                            verified=False,
-                            repo_id=abl_id
-                        )
-                        candidates.append((abl_model, size_b, est_vram))
+                        candidates.append((gptq_model, size_b, gptq_vram))
+                        found_count += 1
 
         # Sort: Score Desc, Size Desc
         candidates.sort(key=lambda x: (x[0].score, x[1]), reverse=True)
@@ -159,9 +125,9 @@ class ModelSelector:
             # Standard overhead
             overhead_mb = 4.0 * 1024 
         
-        if quant_type == "AWQ":
-            # 4-bit approx 0.7 GB per B
-            multiplier = 0.7 * 1024
+        if quant_type in ["AWQ", "GPTQ"]:
+            # 4-bit approx 0.7-0.8 GB per B. Let's be safe with 0.75
+            multiplier = 0.75 * 1024
         else:
             # FP16 = 2 bytes per param
             multiplier = 2.0 * 1024
