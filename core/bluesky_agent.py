@@ -702,6 +702,9 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
         beat_data = story_manager.get_next_beat(dynamic_beat=dynamic_beat)
         log_event(f"Story Beat Active: {beat_data.get('story_beat', '')[:50]}...", "INFO")
         
+        # Get dedup context for content uniqueness
+        dedup_context = story_manager.get_dedup_context(["subliminal", "visual", "hashtag", "vibe", "post"])
+        
         # Step 4: Determine topic/theme
         # Use L.O.V.E.'s intent direction if available, otherwise use the beat
         if post_intent.get("topic_direction") and post_intent.get("intent_type") != "story":
@@ -738,23 +741,25 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
         for qa_attempt in range(1, MAX_QA_RETRIES + 1):
             log_event(f"Content generation attempt {qa_attempt}/{MAX_QA_RETRIES}", "INFO")
             
-            # Step 6: Generate Content via CreativeWriter (The "Voice")
+            # Step 6: Generate Content via CreativeWriter with dedup context
             content_task = creative_writer_agent.write_micro_story(
                 theme=theme, 
                 mood=vibe,
                 memory_context=beat_data.get("previous_beat", ""),
                 max_length=220,
-                feedback=feedback
+                feedback=feedback,
+                dedup_context=dedup_context
             )
             content_result = _run_sync_safe(content_task)
             
             text = content_result.get("story", "")
             subliminal = content_result.get("subliminal", "")
             
-            # Step 7: Generate Hashtags
+            # Step 7: Generate Hashtags with dedup context
             hashtag_task = creative_writer_agent.generate_manipulative_hashtags(
                 topic=theme,
-                count=3
+                count=3,
+                forbidden_hashtags=dedup_context.get("hashtag", [])
             )
             hashtags = _run_sync_safe(hashtag_task)
             
@@ -916,6 +921,15 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                         log_event(f"💬 Responded to comment from {author}", "INFO")
             except Exception as e:
                 print(f"[BlueskyAgent] Comment response failed (non-critical): {e}")
+            # Record all content to memory for future deduplication
+            story_manager.record_post(
+                post_text=text,
+                subliminal=subliminal,
+                visual_style=visual_prompt if 'visual_prompt' in dir() else "",
+                hashtags=hashtags,
+                vibe=vibe
+            )
+            log_event(f"Recorded post to memory for deduplication", "DEBUG")
         else:
             log_event(f"Post failed: {result.get('error')}", "ERROR")
             
