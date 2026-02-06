@@ -212,9 +212,8 @@ class ServiceManager:
             candidates = self.discover_best_model(vram_mb)
             if candidates:
                 # Try the top models
-                # For safety, let's limit to top 5 to avoid infinite loops if all fail
                 # Use repo_id if available, otherwise name
-                for c in candidates[:5]:
+                for c in candidates:
                      candidate_queue.append({"name": c.repo_id or c.name, "max_len": None})
             else:
                 # Fallback default
