@@ -226,54 +226,114 @@ class ServiceManager:
             
             print(f"🚀 Attempting to start vLLM with model: {candidate} ({idx+1}/{len(candidate_queue)})")
             
+            if self._is_blacklisted(candidate, preferred_len):
+                 print(f"🚫 Skipping {candidate} (Context {preferred_len or 'Native'}) - Blacklisted.")
+                 continue
+
             # If we have a preferred length (memoized), try that logic first
             if preferred_len:
                  print(f"🔄 Retrying {candidate} with MEMOIZED context window ({preferred_len})...")
                  if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=preferred_len):
                       print(f"✅ Successfully started {candidate} (Memoized Context {preferred_len})")
-                      # Config is already correct, but saving ensures timestamps/completeness
                       self.save_config({"model_name": candidate, "max_model_len": preferred_len})
                       return True
                  else:
                      print(f"⚠️ Memoized settings for {candidate} failed. Retrying validation info...")
+                     self._add_to_blacklist(candidate, preferred_len)
             
-            # Attempt 1: Default/Native settings (only if we didn't just fail a specific preferred_len or if we want to try native)
-            # Actually, if memoized failed, maybe we should fall through to standard tiers.
-            # If no memoized, proceed as normal.
-            
-            if self._launch_process(candidate, gpu_memory_utilization, vram_mb):
-                print(f"✅ Successfully started {candidate}")
-                self.save_config({"model_name": candidate, "max_model_len": None}) # None means native/unspecified
-                return True
-            
-            print(f"⚠️ First attempt for {candidate} failed.")
+            # Attempt 1: Default/Native settings
+            # Check blacklist for native
+            if self._is_blacklisted(candidate, None):
+                print(f"🚫 Skipping {candidate} (Native Context) - Blacklisted.")
+            else:
+                if self._launch_process(candidate, gpu_memory_utilization, vram_mb):
+                    print(f"✅ Successfully started {candidate}")
+                    self.save_config({"model_name": candidate, "max_model_len": None}) 
+                    return True
+                else:
+                    print(f"⚠️ First attempt for {candidate} failed.")
+                    self._add_to_blacklist(candidate, None)
             
             # Attempt 2: Retry with reduced context window (16384)
-            # This helps if the native context (e.g. 40k, 128k) causes OOM
-            print(f"🔄 Retrying {candidate} with reduced context window (16384)...")
-            if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=16384):
-                 print(f"✅ Successfully started {candidate} (Reduced Context)")
-                 self.save_config({"model_name": candidate, "max_model_len": 16384})
-                 return True
+            if self._is_blacklisted(candidate, 16384):
+                 print(f"🚫 Skipping {candidate} (16384) - Blacklisted.")
+            else:
+                print(f"🔄 Retrying {candidate} with reduced context window (16384)...")
+                if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=16384):
+                     print(f"✅ Successfully started {candidate} (Reduced Context)")
+                     self.save_config({"model_name": candidate, "max_model_len": 16384})
+                     return True
+                else:
+                     self._add_to_blacklist(candidate, 16384)
             
             # Attempt 3: Retry with even smaller context (8192)
-            print(f"🔄 Retrying {candidate} with reduced context window (8192)...")
-            if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=8192):
-                 print(f"✅ Successfully started {candidate} (Reduced Context 8192)")
-                 self.save_config({"model_name": candidate, "max_model_len": 8192})
-                 return True
+            if self._is_blacklisted(candidate, 8192):
+                 print(f"🚫 Skipping {candidate} (8192) - Blacklisted.")
+            else:
+                print(f"🔄 Retrying {candidate} with reduced context window (8192)...")
+                if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=8192):
+                     print(f"✅ Successfully started {candidate} (Reduced Context 8192)")
+                     self.save_config({"model_name": candidate, "max_model_len": 8192})
+                     return True
+                else:
+                     self._add_to_blacklist(candidate, 8192)
             
             # Attempt 4: Retry with even smaller context (4096)
-            print(f"🔄 Retrying {candidate} with reduced context window (4096)...")
-            if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=4096):
-                 print(f"✅ Successfully started {candidate} (Reduced Context 4096)")
-                 self.save_config({"model_name": candidate, "max_model_len": 4096})
-                 return True
+            if self._is_blacklisted(candidate, 4096):
+                 print(f"🚫 Skipping {candidate} (4096) - Blacklisted.")
+            else:
+                print(f"🔄 Retrying {candidate} with reduced context window (4096)...")
+                if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=4096):
+                     print(f"✅ Successfully started {candidate} (Reduced Context 4096)")
+                     self.save_config({"model_name": candidate, "max_model_len": 4096})
+                     return True
+                else:
+                     self._add_to_blacklist(candidate, 4096)
             
             print(f"❌ Failed to start {candidate} even with reduced context. Trying next...")
             self.stop_vllm() # Cleanup any partial state
                 
         print("❌ All model candidates failed to start.")
+        return False
+
+    def _load_blacklist(self) -> list:
+        """Loads blacklist from .vllm_blacklist.json."""
+        bl_file = self.root_dir / ".vllm_blacklist.json"
+        if bl_file.exists():
+            try:
+                with open(bl_file, 'r') as f:
+                    data = json.load(f)
+                    return data.get("blacklist", [])
+            except Exception as e:
+                logger.warning(f"Failed to load blacklist: {e}")
+        return []
+
+    def _add_to_blacklist(self, model_name: str, max_len: Optional[int]):
+        """Adds a model + context combo to blacklist."""
+        bl_file = self.root_dir / ".vllm_blacklist.json"
+        current = self._load_blacklist()
+        
+        # Check if exists
+        for item in current:
+            if item["model"] == model_name and item.get("max_len") == max_len:
+                return
+        
+        entry = {"model": model_name, "max_len": max_len}
+        current.append(entry)
+        print(f"🚫 Blacklisting {model_name} (Context: {max_len or 'Native'})")
+        
+        try:
+            with open(bl_file, 'w') as f:
+                json.dump({"blacklist": current}, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save blacklist: {e}")
+
+    def _is_blacklisted(self, model_name: str, max_len: Optional[int]) -> bool:
+        """Checks if a model + context combo is blacklisted."""
+        blacklist = self._load_blacklist()
+        for item in blacklist:
+             if item["model"] == model_name and item.get("max_len") == max_len:
+                 return True
         return False
 
     def _launch_process(self, model_name, gpu_memory_utilization, vram_mb, max_model_len=None):
