@@ -746,7 +746,7 @@ def generate_post_content(topic: str = None, **kwargs) -> Dict[str, Any]:
                 theme=theme, 
                 mood=vibe,
                 memory_context=beat_data.get("previous_beat", ""),
-                max_length=220,
+                max_length=180,  # Reduced from 220 to leave room for hashtags (~60-80 chars)
                 feedback=feedback,
                 dedup_context=dedup_context
             )
