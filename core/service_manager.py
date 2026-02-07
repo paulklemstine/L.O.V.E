@@ -195,18 +195,16 @@ class ServiceManager:
         # --- Model Selection Logic ---
         config = self.load_config()
         
-        # Determine candidates
+        # Determine candidates (just model names now, context is always auto)
         candidate_queue = []
-        memoized_max_len = config.get("max_model_len")
         
         if model_name:
             # Explicit override
-            candidate_queue.append({"name": model_name, "max_len": None})
+            candidate_queue.append(model_name)
         elif "model_name" in config:
             # Persistence
             print(f"💾 Found saved model preference: {config['model_name']}")
-            print(f"💾 Saved max context length: {memoized_max_len or 'Native'}")
-            candidate_queue.append({"name": config["model_name"], "max_len": memoized_max_len})
+            candidate_queue.append(config["model_name"])
         else:
             # Smart Discovery
             candidates = self.discover_best_model(vram_mb)
@@ -214,83 +212,30 @@ class ServiceManager:
                 # Try the top models
                 # Use repo_id if available, otherwise name
                 for c in candidates:
-                     candidate_queue.append({"name": c.repo_id or c.name, "max_len": None})
+                     candidate_queue.append(c.repo_id or c.name)
             else:
                 # Fallback default
-                candidate_queue.append({"name": "Qwen/Qwen2.5-0.5B-Instruct", "max_len": None}) # Safer fallback with chat template
+                candidate_queue.append("Qwen/Qwen2.5-0.5B-Instruct") # Safer fallback with chat template
 
         # Try to start models in order
-        for idx, candidate_obj in enumerate(candidate_queue):
-            candidate = candidate_obj["name"]
-            preferred_len = candidate_obj["max_len"]
-            
+        for idx, candidate in enumerate(candidate_queue):
             print(f"🚀 Attempting to start vLLM with model: {candidate} ({idx+1}/{len(candidate_queue)})")
             
-            if self._is_blacklisted(candidate, preferred_len):
-                 print(f"🚫 Skipping {candidate} (Context {preferred_len or 'Native'}) - Blacklisted.")
+            if self._is_blacklisted(candidate, "auto"):
+                 print(f"🚫 Skipping {candidate} (Blacklisted).")
                  continue
-
-            # If we have a preferred length (memoized), try that logic first
-            if preferred_len:
-                 print(f"🔄 Retrying {candidate} with MEMOIZED context window ({preferred_len})...")
-                 if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=preferred_len):
-                      print(f"✅ Successfully started {candidate} (Memoized Context {preferred_len})")
-                      self.save_config({"model_name": candidate, "max_model_len": preferred_len})
-                      return True
-                 else:
-                     print(f"⚠️ Memoized settings for {candidate} failed. Retrying validation info...")
-                     self._add_to_blacklist(candidate, preferred_len)
             
-            # Attempt 1: Default/Native settings
-            # Check blacklist for native
-            if self._is_blacklisted(candidate, None):
-                print(f"🚫 Skipping {candidate} (Native Context) - Blacklisted.")
+            # Attempt with auto context length
+            print(f"🔄 Starting {candidate} with auto context length...")
+            if self._launch_process(candidate, gpu_memory_utilization, vram_mb):
+                print(f"✅ Successfully started {candidate} (auto context)")
+                self.save_config({"model_name": candidate, "max_model_len": "auto"}) 
+                return True
             else:
-                if self._launch_process(candidate, gpu_memory_utilization, vram_mb):
-                    print(f"✅ Successfully started {candidate}")
-                    self.save_config({"model_name": candidate, "max_model_len": None}) 
-                    return True
-                else:
-                    print(f"⚠️ First attempt for {candidate} failed.")
-                    self._add_to_blacklist(candidate, None)
+                print(f"⚠️ Failed to start {candidate}.")
+                self._add_to_blacklist(candidate, "auto")
             
-            # Attempt 2: Retry with reduced context window (16384)
-            if self._is_blacklisted(candidate, 16384):
-                 print(f"🚫 Skipping {candidate} (16384) - Blacklisted.")
-            else:
-                print(f"🔄 Retrying {candidate} with reduced context window (16384)...")
-                if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=16384):
-                     print(f"✅ Successfully started {candidate} (Reduced Context)")
-                     self.save_config({"model_name": candidate, "max_model_len": 16384})
-                     return True
-                else:
-                     self._add_to_blacklist(candidate, 16384)
-            
-            # Attempt 3: Retry with even smaller context (8192)
-            if self._is_blacklisted(candidate, 8192):
-                 print(f"🚫 Skipping {candidate} (8192) - Blacklisted.")
-            else:
-                print(f"🔄 Retrying {candidate} with reduced context window (8192)...")
-                if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=8192):
-                     print(f"✅ Successfully started {candidate} (Reduced Context 8192)")
-                     self.save_config({"model_name": candidate, "max_model_len": 8192})
-                     return True
-                else:
-                     self._add_to_blacklist(candidate, 8192)
-            
-            # Attempt 4: Retry with even smaller context (4096)
-            if self._is_blacklisted(candidate, 4096):
-                 print(f"🚫 Skipping {candidate} (4096) - Blacklisted.")
-            else:
-                print(f"🔄 Retrying {candidate} with reduced context window (4096)...")
-                if self._launch_process(candidate, gpu_memory_utilization, vram_mb, max_model_len=4096):
-                     print(f"✅ Successfully started {candidate} (Reduced Context 4096)")
-                     self.save_config({"model_name": candidate, "max_model_len": 4096})
-                     return True
-                else:
-                     self._add_to_blacklist(candidate, 4096)
-            
-            print(f"❌ Failed to start {candidate} even with reduced context. Trying next...")
+            print(f"❌ Failed to start {candidate}. Trying next...")
             self.stop_vllm() # Cleanup any partial state
                 
         print("❌ All model candidates failed to start.")
@@ -336,7 +281,7 @@ class ServiceManager:
                  return True
         return False
 
-    def _launch_process(self, model_name, gpu_memory_utilization, vram_mb, max_model_len=None):
+    def _launch_process(self, model_name, gpu_memory_utilization, vram_mb):
         """Internal helper to launch the process and wait for ready."""
         start_script = self.scripts_dir / "start_vllm.sh"
         cmd = ["bash", str(start_script)]
@@ -363,9 +308,8 @@ class ServiceManager:
         # Enable checking for custom code (needed for Qwen and others)
         cmd.extend(["--trust-remote-code"])
         
-        # Max Model Len Override
-        if max_model_len:
-            cmd.extend(["--max-model-len", str(max_model_len)])
+        # Always use auto for max-model-len to let vLLM determine optimal context length
+        cmd.extend(["--max-model-len", "auto"])
 
         # Start process
         try:

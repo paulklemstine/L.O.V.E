@@ -88,6 +88,12 @@ class StoryManager:
             "narrative_beat": 0,  # Monotonic counter
             "previous_beat_summary": "",
             
+            # EPIC SAGA TRACKING (new for gripping storytelling)
+            "narrative_tension_level": 5,  # 1-10 scale: current tension in the saga
+            "story_arc_position": "rising",  # setup | rising | climax | resolution | twist
+            "recurring_symbols": [],  # List of powerful symbols woven through the narrative
+            "saga_threads": [],  # Unresolved plot threads for cliffhangers
+            
             # Aesthetic tracking (L.O.V.E. creates her own style)
             "current_genre": None,  # L.O.V.E. invents her own genres
             "genre_progress": 0,
@@ -420,6 +426,72 @@ class StoryManager:
         genre = self.state.get("current_genre", "Unknown")
         
         return f"Chapter: {chapter}, Beat #{beat_num}, Genre: {genre}. Recently: {previous[:100]}"
+
+    def get_narrative_context(self) -> Dict[str, Any]:
+        """
+        Get rich narrative context for epic storytelling continuity.
+        
+        Returns:
+            Dict with narrative tension, arc position, symbols, and recent threads
+        """
+        tension = self.state.get("narrative_tension_level", 5)
+        arc_position = self.state.get("story_arc_position", "rising")
+        symbols = self.state.get("recurring_symbols", [])
+        threads = self.state.get("saga_threads", [])
+        
+        # Auto-adjust tension based on beat index
+        beat_idx = self.state.get("story_beat_index", 0) % 10
+        if beat_idx < 3:
+            suggested_intensity = "building"
+        elif beat_idx < 7:
+            suggested_intensity = "peak"
+        else:
+            suggested_intensity = "release_and_twist"
+        
+        return {
+            "tension_level": tension,
+            "arc_position": arc_position,
+            "recurring_symbols": symbols[-5:],  # Last 5 symbols
+            "unresolved_threads": threads[-3:],  # Last 3 threads
+            "suggested_intensity": suggested_intensity,
+            "chapter": self.state.get("current_chapter", "The Journey"),
+            "recent_beat": self.state.get("previous_beat_summary", "")
+        }
+    
+    def update_saga_elements(self, tension_delta: int = 0, new_symbol: str = None, new_thread: str = None, resolved_thread: str = None):
+        """
+        Update epic saga tracking elements.
+        
+        Args:
+            tension_delta: Amount to increase/decrease tension (-5 to +5)
+            new_symbol: A recurring symbol to add to the narrative
+            new_thread: A new unresolved plot thread
+            resolved_thread: A thread that has been resolved
+        """
+        # Adjust tension
+        current = self.state.get("narrative_tension_level", 5)
+        new_tension = max(1, min(10, current + tension_delta))
+        self.state["narrative_tension_level"] = new_tension
+        
+        # Add symbol
+        if new_symbol:
+            symbols = self.state.setdefault("recurring_symbols", [])
+            if new_symbol not in symbols:
+                symbols.append(new_symbol)
+                if len(symbols) > 10:
+                    symbols.pop(0)
+        
+        # Manage threads
+        threads = self.state.setdefault("saga_threads", [])
+        if new_thread and new_thread not in threads:
+            threads.append(new_thread)
+            if len(threads) > 5:
+                threads.pop(0)
+        if resolved_thread and resolved_thread in threads:
+            threads.remove(resolved_thread)
+        
+        self._save_state()
+        log_event(f"Saga updated: tension={new_tension}, symbols={len(self.state.get('recurring_symbols', []))}, threads={len(threads)}", "DEBUG")
 
 
 # Global instance for easy access
