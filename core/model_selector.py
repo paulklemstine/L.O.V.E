@@ -20,10 +20,30 @@ class ModelSelector:
         self.fetcher = fetcher or LeaderboardFetcher()
         self.variant_finder = VariantFinder()
 
+    # Vision/Multimodal model patterns to exclude (don't support text-only chat)
+    VISION_MODEL_PATTERNS = [
+        'VL', 'Vision', 'Ovis', 'LLaVA', 'Llava', 'llava',
+        'InternVL', 'CogVLM', 'MiniCPM-V', 'Qwen-VL', 'QwenVL',
+        'mPLUG', 'Fuyu', 'BLIP', 'Flamingo', 'PaLI', 'Idefics',
+        'LMM', 'Multimodal', 'Image', 'Visual'
+    ]
+    
+    def _is_vision_model(self, model: LeaderboardModel) -> bool:
+        """Check if model is a vision/multimodal model that doesn't support text-only chat."""
+        name_upper = model.name.upper()
+        repo_upper = (model.repo_id or "").upper()
+        
+        for pattern in self.VISION_MODEL_PATTERNS:
+            pattern_upper = pattern.upper()
+            if pattern_upper in name_upper or pattern_upper in repo_upper:
+                return True
+        return False
+    
     def select_best_models(self, vram_mb: Optional[int] = None) -> List[LeaderboardModel]:
         """
         Returns a prioritized list of open-source models that likely fit in the available VRAM.
         Unquantized > GPTQ > (Exclude others for now per user request)
+        Excludes vision/multimodal models that don't support text-only chat.
         """
         print("🔍 Analyzing leaderboard data for best model candidates...")
         all_models = self.fetcher.fetch_data()
@@ -31,6 +51,13 @@ class ModelSelector:
         # Filter for Open Source
         open_models = [m for m in all_models if m.is_open_source]
         print(f"   Found {len(open_models)} Open Source models out of {len(all_models)} total.")
+        
+        # Filter out vision/multimodal models
+        text_only_models = [m for m in open_models if not self._is_vision_model(m)]
+        excluded_count = len(open_models) - len(text_only_models)
+        if excluded_count > 0:
+            print(f"   Excluded {excluded_count} vision/multimodal models (text-only required).")
+        open_models = text_only_models
         
         if not open_models:
             logger.warning("No open source models found on leaderboard.")
