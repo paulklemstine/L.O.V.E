@@ -799,6 +799,14 @@ Return ONLY the raw image prompt. No explanations, no quotes."""
             result = await run_llm(prompt, purpose="autonomous_visual_prompt")
             visual_prompt = result.get("result", "").strip().strip('"')
             
+            # Strip any markdown code block formatting
+            if "```" in visual_prompt:
+                import re
+                # Match code blocks like ```python\n...\n``` or ```json\n...\n```
+                match = re.search(r'```\w*\n?(.*?)```', visual_prompt, re.DOTALL)
+                if match:
+                    visual_prompt = match.group(1).strip()
+            
             if visual_prompt and len(visual_prompt) > 30:
                 log_event(f"L.O.V.E.'s aesthetic choice: {visual_prompt[:60]}...", "INFO")
                 return visual_prompt

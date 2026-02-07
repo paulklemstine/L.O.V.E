@@ -1,18 +1,17 @@
 """
 leaderboard_fetcher.py
 
-Fetches and parses model data from the Open LMM Reasoning Leaderboard.
-Source: http://opencompass.openxlab.space/assets/MathLB.json
+Fetches and parses model data from the Open LLM Leaderboard.
+Source: https://huggingface.co/datasets/open-llm-leaderboard/contents
 """
 
-import requests
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger("LeaderboardFetcher")
 
-LEADERBOARD_URL = "http://opencompass.openxlab.space/assets/MathLB.json"
+LEADERBOARD_DATASET = "open-llm-leaderboard/contents"
 
 @dataclass
 class LeaderboardModel:
@@ -24,110 +23,135 @@ class LeaderboardModel:
     repo_id: Optional[str] = None
 
 class LeaderboardFetcher:
-    def __init__(self, url: str = LEADERBOARD_URL):
-        self.url = url
+    def __init__(self, dataset_name: str = LEADERBOARD_DATASET):
+        self.dataset_name = dataset_name
+        self._cache = None
 
     def fetch_data(self) -> List[LeaderboardModel]:
         """
-        Fetches the leaderboard JSON and parses it into a list of model objects.
+        Fetches the leaderboard data from HuggingFace datasets and parses into model objects.
+        Uses the Open LLM Leaderboard dataset which contains text-only LLM evaluations.
         """
+        if self._cache is not None:
+            return self._cache
+            
         try:
-            print(f"⬇️  Fetching leaderboard data from {self.url}...")
-            logger.info(f"Fetching leaderboard data from {self.url}...")
-            response = requests.get(self.url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            print(f"⬇️  Fetching leaderboard data from HuggingFace: {self.dataset_name}...")
+            logger.info(f"Fetching leaderboard data from {self.dataset_name}...")
             
-            # The structure appears to be: { "MathVista": [...], "MathVision": [...], ... }
-            # Or simpler list. Based on app.py study, it seems to load 'results'. 
-            # Let's inspect the raw JSON structure if we can, but assumption is generic list or dict of lists.
-            # Wait, meta_data.py said URL = "http://opencompass.openxlab.space/assets/MathLB.json"
-            # Let's assume it returns a generic structure and we extract unique models.
-            
-            # Structure: { "results": { "ModelName": { "META": {...}, "Benchmark1": {...} } } }
-            results_dict = {}
-            if 'results' in data and isinstance(data['results'], dict):
-                results_dict = data['results']
-            elif isinstance(data, dict) and 'results' not in data:
-                # Fallback if 'results' key missing but data is the dict
-                 results_dict = data
-            
-            models_map: Dict[str, LeaderboardModel] = {}
-            
-            print(f"   Processing {len(results_dict)} entries from leaderboard...")
-            
-            for model_name, details in results_dict.items():
-                if not isinstance(details, dict):
+            # Try to use datasets library
+            try:
+                from datasets import load_dataset
+                ds = load_dataset(self.dataset_name, split="train")
+                return self._parse_hf_dataset(ds)
+            except ImportError:
+                logger.warning("datasets library not available, falling back to API")
+                return self._fetch_via_api()
+            except Exception as e:
+                logger.warning(f"Failed to load via datasets library: {e}, falling back to API")
+                return self._fetch_via_api()
+                
+        except Exception as e:
+            print(f"❌ Failed to fetch leaderboard data: {e}")
+            logger.error(f"Failed to fetch leaderboard data: {e}")
+            return []
+
+    def _parse_hf_dataset(self, ds) -> List[LeaderboardModel]:
+        """Parse the HuggingFace dataset into LeaderboardModel objects."""
+        models_map = {}
+        
+        print(f"   Processing {len(ds)} entries from leaderboard...")
+        
+        for row in ds:
+            try:
+                # The Open LLM Leaderboard dataset has these columns:
+                # - fullname or model_name: The model identifier
+                # - Average or score: The average score
+                # - Params or params: Parameter count
+                # - Type: Model type (pretrained, fine-tuned, etc.)
+                
+                model_name = row.get('fullname') or row.get('model_name') or row.get('Model', '')
+                if not model_name:
                     continue
-                    
-                meta = details.get('META', {})
                 
-                # Name from Dict Key is usually cleanest
-                clean_name = self._clean_name(model_name)
+                # Extract repo_id (should be in fullname as org/model format)
+                repo_id = model_name if '/' in model_name else None
                 
-                # Params -> 'Parameters'
-                params = str(meta.get('Parameters', 'Unknown'))
-                
-                # OpenSource -> 'OpenSource': 'Yes'/'No'
-                is_open = str(meta.get('OpenSource', '')).lower() in ['yes', 'true', 'open']
-                verified = str(meta.get('Verified', '')).lower() in ['yes', 'true']
-                
-                # Extract Repo ID
-                repo_id = None
-                method_data = meta.get('Method')
-                if isinstance(method_data, list):
-                    for item in method_data:
-                        if isinstance(item, str) and 'huggingface.co/' in item:
-                             repo_id = self._extract_repo_id_from_url(item)
-                             if repo_id:
-                                 break
-                                 
-                # Fallback: if name looks like Org/Repo
-                if not repo_id and '/' in clean_name and not ' ' in clean_name:
-                    repo_id = clean_name
-                
-                # Calculate Score
-                total_score = 0.0
-                count = 0
-                
-                for k, v in details.items():
-                    if k == 'META':
-                        continue
-                    if isinstance(v, dict) and 'Overall' in v:
+                # Get score - try different column names
+                score = 0.0
+                for score_col in ['Average', 'score', 'average', 'Average ⬆️']:
+                    if score_col in row and row[score_col] is not None:
                         try:
-                            val = float(v['Overall'])
-                            total_score += val
-                            count += 1
-                        except:
-                            pass
+                            score = float(row[score_col])
+                            break
+                        except (ValueError, TypeError):
+                            continue
                 
-                final_score = round(total_score / count, 2) if count > 0 else 0.0
+                # Get params
+                params = 'Unknown'
+                for param_col in ['#Params (B)', 'Params', 'params', 'Parameters']:
+                    if param_col in row and row[param_col] is not None:
+                        params = str(row[param_col])
+                        break
+                
+                # Get architecture/type info
+                model_type = row.get('Type', row.get('type', ''))
+                
+                # All models in the Open LLM Leaderboard are open source
+                is_open = True
+                
+                # Clean the name for display
+                clean_name = self._clean_name(model_name)
                 
                 if clean_name not in models_map:
                     models_map[clean_name] = LeaderboardModel(
                         name=clean_name,
                         params_b=params,
-                        score=final_score,
+                        score=score,
                         is_open_source=is_open,
-                        verified=verified,
+                        verified=True,  # All are verified on this leaderboard
                         repo_id=repo_id
                     )
+                    
+            except Exception as e:
+                logger.debug(f"Error parsing row: {e}")
+                continue
 
-            results = list(models_map.values())
-            print(f"✅ Parsed {len(results)} unique models from leaderboard.")
-            logger.info(f"Parsed {len(results)} unique models from leaderboard.")
-            return results
+        results = list(models_map.values())
+        print(f"✅ Parsed {len(results)} unique models from Open LLM Leaderboard.")
+        logger.info(f"Parsed {len(results)} unique models from leaderboard.")
+        
+        self._cache = results
+        return results
+    
+    def _fetch_via_api(self) -> List[LeaderboardModel]:
+        """Fallback: Fetch via HuggingFace API if datasets library unavailable."""
+        import requests
+        
+        # Try to get the parquet file directly
+        api_url = f"https://huggingface.co/api/datasets/{self.dataset_name}"
+        
+        try:
+            response = requests.get(api_url, timeout=10)
+            response.raise_for_status()
+            
+            # This gives us dataset metadata, not actual data
+            # For actual data we need the datasets library
+            print("⚠️ API fallback: Limited data available. Install 'datasets' for full access.")
+            logger.warning("Using API fallback - limited functionality")
+            
+            # Return empty list if datasets library not available
+            # The model selector will fall back to hardcoded defaults
+            return []
             
         except Exception as e:
-            print(f"❌ Failed to fetch leaderboard data: {e}")
-            logger.error(f"Failed to fetch leaderboard data: {e}")
+            logger.error(f"API fallback also failed: {e}")
             return []
 
     def _clean_name(self, raw_name: str) -> str:
         """Removes HTML/Markdown artifacts from model name."""
         # Simple extraction
         if '<a' in raw_name and '>' in raw_name:
-            # Extract text between > and </a>
             try:
                 part = raw_name.split('>')[1]
                 return part.split('<')[0].strip()
@@ -141,20 +165,3 @@ class LeaderboardFetcher:
                 pass
                 
         return raw_name.strip()
-
-    def _extract_repo_id_from_url(self, url: str) -> Optional[str]:
-        """Extracts 'Org/Repo' from https://huggingface.co/Org/Repo..."""
-        try:
-            # Remove protocol
-            if '://' in url:
-                url = url.split('://')[1]
-            # Remove domain
-            if url.startswith('huggingface.co/'):
-                path = url.replace('huggingface.co/', '')
-                # Take first two components: Org/Repo
-                parts = path.split('/')
-                if len(parts) >= 2:
-                    return f"{parts[0]}/{parts[1]}"
-        except:
-            pass
-        return None
