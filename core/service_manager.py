@@ -317,8 +317,7 @@ class ServiceManager:
             log_file = open(self.root_dir / "logs" / "vllm.log", "a")
             
             # Add separator for this attempt
-            mode_msg = f" (Max Context: {max_model_len})" if max_model_len else " (Native Context)"
-            log_file.write(f"\n--- Attempting launch of {model_name}{mode_msg} ---\n")
+            log_file.write(f"\n--- Attempting launch of {model_name} (Max Context: auto) ---\n")
             log_file.flush()
             
             env = os.environ.copy()
