@@ -48,7 +48,7 @@ class AutonomousMemoryFolder:
     """
     
     # Thresholds for triggering folding
-    DEFAULT_MAX_TOKENS = 8000
+    DEFAULT_MAX_TOKENS = 4096  # Safer default for local models
     FOLD_TRIGGER_RATIO = 0.75  # Fold when context is 75% of max
     
     # Prompts for the LLM summarizer
@@ -104,7 +104,13 @@ Respond with JSON in this exact format:
     def should_fold(self, context: str) -> bool:
         """Check if context needs folding."""
         estimated_tokens = self.estimate_tokens(context)
-        threshold = int(self.max_tokens * self.fold_ratio)
+        
+        # Check if LLM client has detected a specific model length
+        current_max = self.max_tokens
+        if hasattr(self.llm, 'max_model_len') and self.llm.max_model_len:
+             current_max = self.llm.max_model_len
+
+        threshold = int(current_max * self.fold_ratio)
         return estimated_tokens > threshold
     
     def fold(self, context: str, preserve_recent: int = 1000) -> str:

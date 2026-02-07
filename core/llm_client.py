@@ -45,6 +45,7 @@ class LLMClient:
     
     DEFAULT_VLLM_URL = "http://localhost:8000/v1"
     DEFAULT_TIMEOUT = 120.0
+    DEFAULT_MAX_TOKENS = 800  # Safe default for 4k context models
     
     def __init__(
         self, 
@@ -66,6 +67,8 @@ class LLMClient:
         self.timeout = timeout
         self.use_fallback = use_fallback
         self.model_name: Optional[str] = None
+        self.max_model_len: Optional[int] = None  # Fetched from vLLM
+        self._safe_max_tokens: int = self.DEFAULT_MAX_TOKENS
         self._client = httpx.Client(timeout=self.timeout)
         
         # Colab AI configuration
@@ -91,7 +94,13 @@ class LLMClient:
             if response.status_code == 200:
                 data = response.json()
                 if data.get("data"):
-                    self.model_name = data["data"][0].get("id", "unknown")
+                    model_info = data["data"][0]
+                    self.model_name = model_info.get("id", "unknown")
+                    if model_info.get("max_model_len"):
+                        self.max_model_len = model_info["max_model_len"]
+                        # Use 25% of context for output, leaving 75% for input
+                        self._safe_max_tokens = max(256, self.max_model_len // 4)
+                        logger.debug(f"vLLM model context: {self.max_model_len}, safe max_tokens: {self._safe_max_tokens}")
         except Exception:
             pass
         
@@ -102,7 +111,13 @@ class LLMClient:
             if response.status_code == 200:
                 data = response.json()
                 if data.get("data"):
-                    self.model_name = data["data"][0].get("id", "unknown")
+                    model_info = data["data"][0]
+                    self.model_name = model_info.get("id", "unknown")
+                    if model_info.get("max_model_len"):
+                        self.max_model_len = model_info["max_model_len"]
+                        # Use 25% of context for output, leaving 75% for input
+                        self._safe_max_tokens = max(256, self.max_model_len // 4)
+                        logger.debug(f"vLLM model context: {self.max_model_len}, safe max_tokens: {self._safe_max_tokens}")
                 return True
         except Exception:
             pass
@@ -282,7 +297,7 @@ class LLMClient:
                         "model": self.model_name or "default",
                         "messages": messages,
                         "temperature": temperature,
-                        "max_tokens": 4096,  # Increased for JSON
+                        "max_tokens": self._safe_max_tokens,
                         "response_format": {"type": "json_object"}
                     }
                 )
@@ -298,7 +313,7 @@ class LLMClient:
             prompt=prompt,
             system_prompt=json_system,
             temperature=temperature,
-            max_tokens=4096
+            max_tokens=self._safe_max_tokens
         )
         return self._parse_json(response)
     
@@ -400,7 +415,7 @@ class LLMClient:
                              "model": self.model_name or "default",
                              "messages": messages,
                              "temperature": temperature,
-                             "max_tokens": 4096,
+                             "max_tokens": self._safe_max_tokens,
                              "response_format": {"type": "json_object"}
                          }
                      )
@@ -418,7 +433,7 @@ class LLMClient:
             prompt=prompt,
             system_prompt=json_system,
             temperature=temperature,
-            max_tokens=4096
+            max_tokens=self._safe_max_tokens
         )
         return self._parse_json(response)
 

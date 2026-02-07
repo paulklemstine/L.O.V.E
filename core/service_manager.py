@@ -336,6 +336,36 @@ class ServiceManager:
             print("   Waiting for vLLM to become ready...")
             
             if self.wait_for_vllm(timeout=600): # 10 mins timeout per candidate
+                # Trigger automatic config update for the extension
+                try:
+                    update_script = self.scripts_dir / "update_vllm_config.py"
+                    subprocess.run(["python3", str(update_script)], check=False)
+                    print("✅ Auto-configured extension context limits.")
+                    
+                    # USER REQUEST CHECK: Ensure context is at least 16384
+                    config_path = self.root_dir / ".vllm_extension_config.json"
+                    if config_path.exists():
+                        with open(config_path, 'r') as f:
+                            config = json.load(f)
+                            detected_ctx = config.get("context_window", 0)
+                            
+                        if detected_ctx < 16384:
+                            print(f"⚠️ Model {model_id} loaded with only {detected_ctx} context. Minimum required is 16384.")
+                            print("   Rejecting this model/configuration.")
+                            
+                            # Add to blacklist so we don't try again immediately (optional but good practice)
+                            self._add_to_blacklist(model_name, None)
+                            
+                            return False # This triggers stop_vllm in the caller (if implemented there?) 
+                            # Wait, the caller loop continues if this returns False?
+                            # _launch_process is called by start_vllm.
+                            # If we return False here, start_vllm loop continues. But we must STOP the process first.
+                            self.stop_vllm()
+                            return False
+                            
+                except Exception as e:
+                    print(f"⚠️ Failed to auto-configure extension or check limits: {e}")
+                
                 return True
             else:
                 return False

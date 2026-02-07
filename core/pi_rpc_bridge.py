@@ -35,6 +35,45 @@ class PiRPCBridge:
         except Exception as e:
             logger.warning(f"Failed to read .vllm_config: {e}")
         return self.DEFAULT_MODEL
+    
+    def _write_extension_config(self):
+        """Write config file for the vLLM extension with current model info."""
+        import requests
+        
+        model_id = self._get_vllm_model()
+        context_window = 4096  # Default
+        max_tokens = 1024  # Default (conservative)
+        
+        # Try to get actual context window from vLLM
+        try:
+            response = requests.get("http://127.0.0.1:8000/v1/models", timeout=5)
+            if response.ok:
+                data = response.json()
+                if data.get("data") and len(data["data"]) > 0:
+                    model_info = data["data"][0]
+                    # vLLM returns max_model_len
+                    if "max_model_len" in model_info:
+                        context_window = model_info["max_model_len"]
+                        max_tokens = max(256, context_window // 4)  # 25% of context
+                    # Use actual model ID from vLLM
+                    model_id = model_info.get("id", model_id)
+                    logger.info(f"Got vLLM model info: {model_id}, context={context_window}")
+        except Exception as e:
+            logger.warning(f"Failed to query vLLM for model info: {e}")
+        
+        # Write config for JS extension
+        config_path = os.path.join(self.agent_dir, ".vllm_extension_config.json")
+        config = {
+            "model_id": model_id,
+            "context_window": context_window,
+            "max_tokens": max_tokens
+        }
+        try:
+            with open(config_path, "w") as f:
+                json.dump(config, f, indent=2)
+            logger.info(f"Wrote extension config: {config}")
+        except Exception as e:
+            logger.warning(f"Failed to write extension config: {e}")
 
     def set_callback(self, callback: Callable[[Dict[str, Any]], Awaitable[None]]):
         self.event_callback = callback
@@ -43,6 +82,9 @@ class PiRPCBridge:
         """Start the Pi Agent in RPC mode."""
         if self.running:
             return
+        
+        # Write extension config with current vLLM model info
+        self._write_extension_config()
 
         # Check if we are potentially dealing with a WSL path on Windows
         is_wsl_share = self.agent_dir.startswith(r"\\wsl")
@@ -161,10 +203,15 @@ which node
             else:
                 cmd_str = f'node {wsl_target_cli_quoted} --mode rpc --extension "{wsl_extension_path}" --provider vllm --model {self._get_vllm_model()}'
 
+            # Convert config path to WSL format
+            config_win_path = os.path.join(self.agent_dir, ".vllm_extension_config.json")
+            wsl_config_path = to_wsl_path(config_win_path)
+
             runner_content = f"""#!/bin/bash
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" > /dev/null 2>&1
 nvm use 22 > /dev/null 2>&1
+export VLLM_EXTENSION_CONFIG_PATH="{wsl_config_path}"
 {cmd_str}
 """
             with open(os.path.join(self.agent_dir, runner_script_name), "w", newline='\n') as f:
@@ -219,6 +266,8 @@ nvm use 22 > /dev/null 2>&1
                 
             else:
                 # LINUX Native (likely WSL direct or Linux box)
+                config_path = os.path.join(self.agent_dir, ".vllm_extension_config.json")
+                
                 # Use wrapper script to source NVM
                 
                 runner_script_name = "run_pi_native.sh"
@@ -235,6 +284,7 @@ nvm use 22 > /dev/null 2>&1
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" > /dev/null 2>&1
 nvm use 22 > /dev/null 2>&1
+export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
 {cmd_str}
 """
                 output_script = os.path.join(self.agent_dir, runner_script_name)
@@ -253,12 +303,18 @@ nvm use 22 > /dev/null 2>&1
                 popen_cwd = cwd
 
         try:
+            # Set up environment with config path for the extension
+            env = os.environ.copy()
+            config_path = os.path.join(self.agent_dir, ".vllm_extension_config.json")
+            env["VLLM_EXTENSION_CONFIG_PATH"] = config_path
+            
             self.process = subprocess.Popen(
                 command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 cwd=popen_cwd,
+                env=env,
                 text=True,
                 bufsize=1 
             )

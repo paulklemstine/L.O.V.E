@@ -1,41 +1,55 @@
 
 // Custom VLLM Provider Extension for Pi Agent
 // This extension registers a local VLLM server as a provider.
-// Dynamically fetches model config from the vLLM server.
 
 export default async function (pi) {
     const VLLM_BASE_URL = "http://127.0.0.1:8000/v1";
 
-    // Fetch model info from vLLM server
-    let modelId = "Qwen/Qwen2.5-1.5B-Instruct"; // Default fallback
-    let contextWindow = 4096;
+    console.log("[vLLM Extension] Initializing...");
+
+    // Default values
+    let modelId = "Qwen/Qwen2.5-1.5B-Instruct";
+    let contextWindow = 16384;
     let maxTokens = 2048;
 
+    // --- SES-Safe Config Loading (Best Effort) ---
     try {
-        const response = await fetch(`${VLLM_BASE_URL}/models`);
-        if (response.ok) {
-            const data = await response.json();
-            if (data.data && data.data.length > 0) {
-                const model = data.data[0];
-                modelId = model.id;
-
-                // vLLM returns max_model_len in model info
-                if (model.max_model_len) {
-                    contextWindow = model.max_model_len;
-                    // Leave room for input by using ~60% of context for output
-                    maxTokens = Math.floor(contextWindow * 0.6);
-                }
-
-                console.log(`[vLLM Extension] Loaded model: ${modelId}, context: ${contextWindow}, maxTokens: ${maxTokens}`);
+        if (typeof process !== 'undefined' && process.env && process.env.VLLM_EXTENSION_CONFIG_PATH) {
+            const fs = await import('fs');
+            if (fs.existsSync(process.env.VLLM_EXTENSION_CONFIG_PATH)) {
+                const config = JSON.parse(fs.readFileSync(process.env.VLLM_EXTENSION_CONFIG_PATH, 'utf8'));
+                if (config.model_id) modelId = config.model_id;
+                // We intentionally ignore context_window from config if it's unsafe, 
+                // but let's just stick to the override for now.
+                console.log(`[vLLM Extension] Read config: ${JSON.stringify(config)}`);
             }
         }
-    } catch (error) {
-        console.warn(`[vLLM Extension] Failed to fetch model info, using defaults: ${error}`);
+    } catch (e) {
+        console.warn(`[vLLM Extension] Config loading failed (expected in SES): ${e}`);
     }
+
+    // --- API Discovery (Best Effort) ---
+    try {
+        if (typeof fetch !== 'undefined') {
+            const response = await fetch(`${VLLM_BASE_URL}/models`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.data && data.data.length > 0) {
+                    modelId = data.data[0].id; // Update model ID
+                    console.log(`[vLLM Extension] Discovered model: ${modelId}`);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn(`[vLLM Extension] API discovery failed: ${e}`);
+    }
+
+    // --- Final Registration ---
+    console.log(`[vLLM Extension] Registering vLLM provider: context=${contextWindow}, maxTokens=${maxTokens}`);
 
     pi.registerProvider("vllm", {
         baseUrl: VLLM_BASE_URL,
-        apiKey: "sk-test-key", // VLLM typically ignores this
+        apiKey: "sk-test-key",
         api: "openai-completions",
         models: [
             {

@@ -574,6 +574,7 @@ Target Emotion to Trigger: {target_emotion}
 - Make them feel like secret badges of membership
 - Use action verbs that compel engagement
 - Be creative and unexpected
+- RETURN ONLY THE HASHTAGS. NO DESCRIPTIONS.
 
 ### OUTPUT JSON
 {{
@@ -594,8 +595,22 @@ Target Emotion to Trigger: {target_emotion}
             else:
                 hashtags = data.get("hashtags", [])
             
-            # Ensure all start with #
-            hashtags = [f"#{tag.lstrip('#')}" for tag in hashtags]
+            # Ensure all start with # and clean up any descriptions (e.g., "#Tag: Description")
+            cleaned_hashtags = []
+            for tag in hashtags:
+                # Remove descriptions after colon or space
+                clean_tag = tag.split(':')[0].strip()
+                clean_tag = clean_tag.split(' ')[0].strip()
+                
+                # Make sure it starts with #
+                if not clean_tag.startswith('#'):
+                    clean_tag = f"#{clean_tag}"
+                
+                # Basic validation: must be more than just "#"
+                if len(clean_tag) > 1:
+                    cleaned_hashtags.append(clean_tag)
+            
+            hashtags = cleaned_hashtags
             
             log_event(f"CreativeWriterAgent generated hashtags: {hashtags}", "INFO")
             return hashtags[:count]

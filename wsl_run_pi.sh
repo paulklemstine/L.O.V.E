@@ -14,4 +14,5 @@ else
 fi
 
 echo "Using model: $MODEL"
+export VLLM_EXTENSION_CONFIG_PATH="$SCRIPT_DIR/.vllm_extension_config.json"
 node "$SCRIPT_DIR/external/pi-agent/packages/coding-agent/dist/cli.js" --mode rpc --extension "$SCRIPT_DIR/external/vllm-extension" --provider vllm --model "$MODEL"

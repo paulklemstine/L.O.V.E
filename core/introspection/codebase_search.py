@@ -345,7 +345,7 @@ class CodebaseSearch:
         query: str,
         search_type: str = 'hybrid',
         top_k: int = 5,
-        max_context_tokens: int = 4000
+        max_context_tokens: int = 2000
     ) -> Tuple[List[SearchResult], str]:
         """
         Search and return both results and assembled context.
