@@ -13,12 +13,28 @@ class PiRPCBridge:
     """
     Bridge to communicate with the Pi Agent via RPC/JSON-RPC.
     """
+    DEFAULT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+    
     def __init__(self, agent_dir: str):
         self.agent_dir = agent_dir
         self.process: Optional[subprocess.Popen] = None
         self.event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
         self.running = False
         self.loop = asyncio.get_event_loop()
+    
+    def _get_vllm_model(self) -> str:
+        """Get the model name from .vllm_config, or use default."""
+        config_path = os.path.join(self.agent_dir, ".vllm_config")
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                    model_name = config.get("model_name", self.DEFAULT_MODEL)
+                    logger.info(f"Using model from .vllm_config: {model_name}")
+                    return model_name
+        except Exception as e:
+            logger.warning(f"Failed to read .vllm_config: {e}")
+        return self.DEFAULT_MODEL
 
     def set_callback(self, callback: Callable[[Dict[str, Any]], Awaitable[None]]):
         self.event_callback = callback
@@ -141,9 +157,9 @@ which node
             if use_src:
                 # For src we need npx. We can assume npx is in same dir as node?
                 # Or just source nvm again in the runner script (it works fine in a file)
-                cmd_str = f'npx -y tsx {wsl_target_cli_quoted} --mode rpc --extension "{wsl_extension_path}" --provider vllm --model Qwen/Qwen2.5-1.5B-Instruct'
+                cmd_str = f'npx -y tsx {wsl_target_cli_quoted} --mode rpc --extension "{wsl_extension_path}" --provider vllm --model {self._get_vllm_model()}'
             else:
-                cmd_str = f'node {wsl_target_cli_quoted} --mode rpc --extension "{wsl_extension_path}" --provider vllm --model Qwen/Qwen2.5-1.5B-Instruct'
+                cmd_str = f'node {wsl_target_cli_quoted} --mode rpc --extension "{wsl_extension_path}" --provider vllm --model {self._get_vllm_model()}'
 
             runner_content = f"""#!/bin/bash
 export NVM_DIR="$HOME/.nvm"
@@ -195,7 +211,7 @@ nvm use 22 > /dev/null 2>&1
                     "--mode", "rpc",
                     "--extension", extension_path,
                     "--provider", "vllm", 
-                    "--model", "Qwen/Qwen2.5-1.5B-Instruct",
+                    "--model", self._get_vllm_model(),
                 ]
                 
                 logger.info(f"Starting Pi Agent (Native Windows): {' '.join(command)}")
@@ -211,9 +227,9 @@ nvm use 22 > /dev/null 2>&1
                 if use_src:
                     # npx tsx ...
                     # We assume npx is in path after nvm use
-                    cmd_str = f'npx -y tsx "{target_cli}" --mode rpc --extension "{extension_path}" --provider vllm --model Qwen/Qwen2.5-1.5B-Instruct'
+                    cmd_str = f'npx -y tsx "{target_cli}" --mode rpc --extension "{extension_path}" --provider vllm --model {self._get_vllm_model()}'
                 else:
-                    cmd_str = f'node "{target_cli}" --mode rpc --extension "{extension_path}" --provider vllm --model Qwen/Qwen2.5-1.5B-Instruct'
+                    cmd_str = f'node "{target_cli}" --mode rpc --extension "{extension_path}" --provider vllm --model {self._get_vllm_model()}'
 
                 runner_content = f"""#!/bin/bash
 export NVM_DIR="$HOME/.nvm"
