@@ -356,10 +356,26 @@ class ToolRegistry:
         }
         
         # Log to console for visibility
-        print(f"🔧 Tool Registered: {tool_name}")
-        if schema and schema.get("description"):
-            desc = schema["description"].split("\n")[0]
-            print(f"   Desc: {desc[:100]}...")
+        print(f"\n🔧 Tool Registered: {tool_name}")
+        if schema:
+            if schema.get("description"):
+                desc = schema["description"].split("\n")[0]
+                print(f"   📝 Description: {desc}")
+            params = schema.get("parameters", {})
+            properties = params.get("properties", {})
+            required = params.get("required", [])
+            if properties:
+                print(f"   📋 Parameters:")
+                for param_name, param_info in properties.items():
+                    param_type = param_info.get("type", "any")
+                    param_desc = param_info.get("description", "")
+                    req_marker = "* " if param_name in required else "  "
+                    if param_desc:
+                        print(f"      {req_marker}{param_name} ({param_type}): {param_desc}")
+                    else:
+                        print(f"      {req_marker}{param_name} ({param_type})")
+            else:
+                print(f"   📋 Parameters: None")
             
         # Notify listeners
         self._notify_tool_added(tool_name)

@@ -72,12 +72,14 @@ class ModelSelector:
         
         checked_count = 0
         found_count = 0
-        MAX_CHECK = 500
+        # User requested to try "all" models. Expanding limits significantly.
+        MAX_CHECK = 2000 
+        MAX_FOUND = 50
         
         print(f"   VRAM Constraint: {vram_mb} MB")
         
         for model in open_models:
-            if found_count >= 5 and checked_count > MAX_CHECK:
+            if found_count >= MAX_FOUND and checked_count > MAX_CHECK:
                 break
             
             size_b = self._parse_param_size(model.params_b)

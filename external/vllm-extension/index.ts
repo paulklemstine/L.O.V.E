@@ -17,11 +17,14 @@ export default async function (pi) {
         if (typeof process !== 'undefined' && process.env && process.env.VLLM_EXTENSION_CONFIG_PATH) {
             const fs = await import('fs');
             if (fs.existsSync(process.env.VLLM_EXTENSION_CONFIG_PATH)) {
-                const config = JSON.parse(fs.readFileSync(process.env.VLLM_EXTENSION_CONFIG_PATH, 'utf8'));
-                if (config.model_id) modelId = config.model_id;
-                // We intentionally ignore context_window from config if it's unsafe, 
-                // but let's just stick to the override for now.
-                console.log(`[vLLM Extension] Read config: ${JSON.stringify(config)}`);
+                try {
+                    const config = JSON.parse(fs.readFileSync(process.env.VLLM_EXTENSION_CONFIG_PATH, 'utf8'));
+                    if (config.model_id) modelId = config.model_id;
+                    // Use config values if available
+                    if (config.context_window) contextWindow = config.context_window;
+                    if (config.max_tokens) maxTokens = config.max_tokens;
+                    console.log(`[vLLM Extension] Read config: ${JSON.stringify(config)}`);
+                } catch (e) { /* ignore parse error */ }
             }
         }
     } catch (e) {
@@ -35,8 +38,13 @@ export default async function (pi) {
             if (response.ok) {
                 const data = await response.json();
                 if (data.data && data.data.length > 0) {
-                    modelId = data.data[0].id; // Update model ID
-                    console.log(`[vLLM Extension] Discovered model: ${modelId}`);
+                    const model = data.data[0];
+                    modelId = model.id;
+                    if (model.max_model_len) {
+                        contextWindow = model.max_model_len;
+                        maxTokens = Math.floor(contextWindow * 0.2);
+                    }
+                    console.log(`[vLLM Extension] Discovered model: ${modelId}, context=${contextWindow}`);
                 }
             }
         }

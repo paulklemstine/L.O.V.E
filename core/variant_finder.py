@@ -34,14 +34,27 @@ class VariantFinder:
         
         candidates = []
         
+        import time
+        from huggingface_hub.utils import HfHubHTTPError
+        
         for kw in keywords:
             query = f"{base_name} {kw}"
             try:
+                # Rate limit protection: Sleep briefly before request
+                time.sleep(0.5) 
+                
                 models = self.api.list_models(search=query, limit=5, sort="downloads", direction=-1)
                 for m in models:
                     # Basic filtering: strictly ensure the keyword is in the ID (case insensitive)
                     if kw.lower() in m.modelId.lower():
                         candidates.append(m)
+            except HfHubHTTPError as e:
+                if e.response.status_code == 429:
+                    logger.warning(f"⚠️ HF Rate Limit (429) hit checking {query}. Backing off.")
+                    time.sleep(5) # Wait longer if we hit a limit
+                    # Optional: Break completely if we really can't continue, but sleep might handle transient spikes
+                else:
+                    logger.warning(f"Search failed for {query}: {e}")
             except Exception as e:
                 logger.warning(f"Search failed for {query}: {e}")
                 

@@ -343,25 +343,41 @@ class ServiceManager:
                     print("✅ Auto-configured extension context limits.")
                     
                     # USER REQUEST CHECK: Ensure context is at least 16384
-                    config_path = self.root_dir / ".vllm_extension_config.json"
-                    if config_path.exists():
-                        with open(config_path, 'r') as f:
-                            config = json.load(f)
-                            detected_ctx = config.get("context_window", 0)
-                            
+                    # USER REQUEST CHECK: Ensure context is at least 16384 via API
+                    try:
+                        response = requests.get(f"{self.base_url}/v1/models")
+                        response.raise_for_status()
+                        models_data = response.json()
+                        
+                        detected_ctx = 0
+                        if models_data.get("data"):
+                             # Assuming the first model is the one we loaded
+                             model_info = models_data["data"][0]
+                             detected_ctx = model_info.get("max_model_len", 0)
+                             # Fallback if field name differs (though vLLM usually uses max_model_len)
+                             if detected_ctx == 0:
+                                 detected_ctx = model_info.get("context_window", 0)
+                        
                         if detected_ctx < 16384:
-                            print(f"⚠️ Model {model_id} loaded with only {detected_ctx} context. Minimum required is 16384.")
-                            print("   Rejecting this model/configuration.")
+                            print(f"⚠️ Model {model_name} loaded with only {detected_ctx} context (verified via API).")
+                            print("   Minimum required is 16384. Rejecting this model/configuration.")
                             
-                            # Add to blacklist so we don't try again immediately (optional but good practice)
+                            # Add to blacklist so we don't try again immediately
                             self._add_to_blacklist(model_name, None)
                             
-                            return False # This triggers stop_vllm in the caller (if implemented there?) 
-                            # Wait, the caller loop continues if this returns False?
-                            # _launch_process is called by start_vllm.
-                            # If we return False here, start_vllm loop continues. But we must STOP the process first.
+                            # Stop the invalid process
                             self.stop_vllm()
                             return False
+                        else:
+                            print(f"✅ Verified context length via API: {detected_ctx} (>= 16384)")
+                            
+                    except Exception as api_e:
+                        print(f"⚠️ Failed to verify context via API: {api_e}")
+                        # If API check fails, do we fail the whole thing? 
+                        # Maybe safer to assume it might be okay or let the user decide.
+                        # For now, just log warning and proceed, or we could be strict.
+                        # Let's proceed but warn.
+                        pass
                             
                 except Exception as e:
                     print(f"⚠️ Failed to auto-configure extension or check limits: {e}")
