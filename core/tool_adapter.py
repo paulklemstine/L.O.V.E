@@ -192,6 +192,7 @@ def _get_love2_tools() -> Dict[str, Callable]:
         import asyncio
         from .pi_rpc_bridge import get_pi_bridge
         
+
         bridge = get_pi_bridge()
         response_text = []
         response_complete = asyncio.Event()
@@ -200,21 +201,26 @@ def _get_love2_tools() -> Dict[str, Callable]:
             """Collect response events from Pi Agent."""
             event_type = event.get("type", "")
             
-            if event_type == "text":
-                # Streaming text chunk
+            # Pi Agent RPC protocol event types
+            if event_type == "response":
+                # Command acknowledgment - check if prompt was accepted
+                if not event.get("success", False):
+                    error_msg = event.get("error", "Unknown error")
+                    response_text.append(f"[Error: {error_msg}]")
+                    response_complete.set()
+            elif event_type == "text_delta" or event_type == "text":
                 text = event.get("text", "")
                 if text:
                     response_text.append(text)
             elif event_type == "message":
-                # Complete message
                 content = event.get("content", "")
                 if content:
                     response_text.append(content)
-            elif event_type == "done" or event_type == "end":
-                # Response complete
+            elif event_type in ("agent_end", "done", "end"):
                 response_complete.set()
             elif event_type == "error":
-                error_msg = event.get("message", "Unknown error")
+                error_msg = event.get("message", event.get("error", "Unknown error"))
+                print(f"[ask_pi_agent] Error: {error_msg}")
                 response_text.append(f"[Error: {error_msg}]")
                 response_complete.set()
         
@@ -225,7 +231,6 @@ def _get_love2_tools() -> Dict[str, Callable]:
             # Ensure bridge is started
             if not bridge.running:
                 await bridge.start()
-                # Give it time to initialize
                 await asyncio.sleep(2.0)
             
             # Send the prompt
@@ -235,6 +240,7 @@ def _get_love2_tools() -> Dict[str, Callable]:
             try:
                 await asyncio.wait_for(response_complete.wait(), timeout=timeout)
             except asyncio.TimeoutError:
+                print(f"[ask_pi_agent] Timeout after {timeout}s")
                 response_text.append(f"[Timeout: No response within {timeout}s]")
             
             return "".join(response_text)

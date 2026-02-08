@@ -20,7 +20,6 @@ class PiRPCBridge:
         self.process: Optional[subprocess.Popen] = None
         self.event_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
         self.running = False
-        self.loop = asyncio.get_event_loop()
     
     def _get_vllm_model(self) -> str:
         """Get the model name from .vllm_config, or use default."""
@@ -316,7 +315,10 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
                 cwd=popen_cwd,
                 env=env,
                 text=True,
-                bufsize=1 
+                bufsize=1,
+                # CRITICAL: Start in new process group to prevent SIGINT propagation
+                # Without this, Ctrl+C in parent kills the Pi Agent subprocess
+                start_new_session=True
             )
             self.running = True
             
@@ -379,7 +381,6 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
         if not self.process or not self.process.stdout:
             return
             
-        logger.info("Started reading agent stdout.")
         while self.running:
             line = await asyncio.to_thread(self.process.stdout.readline)
             if not line:
@@ -395,12 +396,13 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
                 if self.event_callback:
                     await self.event_callback(data)
             except json.JSONDecodeError:
-                # If not JSON, just log it (maybe part of a stream we missed?)
-                logger.info(f"Pi Output (Raw): {line}")
+                # Non-JSON output (e.g., extension init messages)
+                pass
             except Exception as e:
                 logger.error(f"Error handling agent output: {e}")
         
-        logger.info(f"Finished reading agent stdout. Process return code: {self.process.poll()}")
+        if self.process:
+            logger.info(f"Pi Agent process exited with code: {self.process.poll()}")
 
     async def _read_stderr(self):
         """Read stderr for logs."""
