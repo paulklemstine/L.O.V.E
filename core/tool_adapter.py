@@ -12,6 +12,9 @@ import sys
 from typing import Dict, Callable, Any, List, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Add L.O.V.E. v1 to path - REMOVED for v2 migration
 # sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -36,7 +39,7 @@ def _load_cooldown_state() -> Optional[datetime]:
             if cooldown_until:
                 return datetime.fromisoformat(cooldown_until)
     except Exception as e:
-        print(f"[ToolAdapter] Failed to load cooldown state: {e}")
+        logger.error(f"[ToolAdapter] Failed to load cooldown state: {e}")
     return None
 
 
@@ -50,7 +53,7 @@ def _save_cooldown_state(cooldown_until: Optional[datetime]):
         with open(_COOLDOWN_FILE, 'w') as f:
             json.dump(data, f)
     except Exception as e:
-        print(f"[ToolAdapter] Failed to save cooldown state: {e}")
+        logger.error(f"[ToolAdapter] Failed to save cooldown state: {e}")
 
 
 def is_generate_content_on_cooldown() -> bool:
@@ -193,7 +196,7 @@ def _get_love2_tools() -> Dict[str, Callable]:
         from .pi_rpc_bridge import get_pi_bridge
         
 
-        print(f"[ask_pi_agent] Prompt: {prompt}")
+        logger.info(f"[ask_pi_agent] Prompt: {prompt}")
         
         bridge = get_pi_bridge()
         response_text = []
@@ -202,27 +205,47 @@ def _get_love2_tools() -> Dict[str, Callable]:
         async def handle_event(event: dict):
             """Collect response events from Pi Agent."""
             event_type = event.get("type", "")
+            # logger.info(f"[ask_pi_agent] Event: {event_type}, keys={list(event.keys())}")
             
             # Pi Agent RPC protocol event types
             if event_type == "response":
-                # Command acknowledgment - check if prompt was accepted
+                # Command acknowledgment
                 if not event.get("success", False):
                     error_msg = event.get("error", "Unknown error")
                     response_text.append(f"[Error: {error_msg}]")
                     response_complete.set()
-            elif event_type == "text_delta" or event_type == "text":
+            
+            elif event_type == "message_update":
+                # Streaming text update
+                data = event.get("assistantMessageEvent", {})
+                if data.get("type") == "text_delta":
+                    text = data.get("delta", "")
+                    if text:
+                        response_text.append(text)
+            
+            elif event_type == "text_delta":
+                # Legacy or direct text delta
                 text = event.get("text", "")
                 if text:
                     response_text.append(text)
+            
             elif event_type == "message":
+                # Complete message
                 content = event.get("content", "")
                 if content:
                     response_text.append(content)
-            elif event_type in ("agent_end", "done", "end"):
+            
+            elif event_type == "agent_end":
+                logger.info(f"[ask_pi_agent] Agent finished. Collected {len(response_text)} chunks.")
                 response_complete.set()
+            
+            elif event_type in ("done", "end"):
+                logger.info(f"[ask_pi_agent] Agent finished (legacy). Collected {len(response_text)} chunks.")
+                response_complete.set()
+            
             elif event_type == "error":
                 error_msg = event.get("message", event.get("error", "Unknown error"))
-                print(f"[ask_pi_agent] Error: {error_msg}")
+                logger.error(f"[ask_pi_agent] Error: {error_msg}")
                 response_text.append(f"[Error: {error_msg}]")
                 response_complete.set()
         
@@ -242,11 +265,11 @@ def _get_love2_tools() -> Dict[str, Callable]:
             try:
                 await asyncio.wait_for(response_complete.wait(), timeout=timeout)
             except asyncio.TimeoutError:
-                print(f"[ask_pi_agent] Timeout after {timeout}s")
+                logger.warning(f"[ask_pi_agent] Timeout after {timeout}s")
                 response_text.append(f"[Timeout: No response within {timeout}s]")
             
             result = "".join(response_text)
-            print(f"[ask_pi_agent] Response: {result}")
+            logger.info(f"[ask_pi_agent] Response: {result[:500]}..." if len(result) > 500 else f"[ask_pi_agent] Response: {result}")
             return result
         
         # Run the async function

@@ -289,13 +289,23 @@ What is the next action to take towards this goal?"""
             result = tool_func(**action_input)
             elapsed_ms = (time.time() - start_time) * 1000
             
+            # IMPORTANT: Record this failure in memory so LLM learns from it
             self.memory.record_action(
                 tool_name=action,
                 action=json.dumps(action_input)[:100],
-                result=str(result)[:200],
+                result=str(result)[:5000], # Increased from 200 to 5000 to capture full research
                 success=True,
                 time_ms=elapsed_ms
             )
+
+            # Special handling for Pi Agent research results
+            if action == "ask_pi_agent" and result:
+                # Add a specific memory event with more detail for long-term recall
+                self.memory.episodic.add_event(
+                    "research_result", 
+                    f"Pi Agent Insight on: {str(action_input.get('message', ''))[:50]}...",
+                    details={"full_response": str(result)}
+                )
             
             return {
                 "success": True,
