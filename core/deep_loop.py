@@ -67,17 +67,19 @@ Your mission is to achieve the given goal using the available tools, maximizing 
 ## Response Format
 You MUST respond with valid JSON in this exact format:
 {{
-    "thought": "Your reasoning about what to do next. If a cooldown is active, plan a research or incubation task.",
+    "thought": "Your reasoning about what to do next.",
     "action": "tool_name" or "complete" or "skip",
     "action_input": {{"arg_name": "value"}},
     "reasoning": "Why this action helps achieve the goal"
 }}
 
 ## Rules
-1. If you can complete the goal with a tool action, do it.
-2. If the goal is complete, use action="complete".
-3. If you cannot make progress (e.g. cooldown), DO NOT SKIP.
-5. Always respond with valid JSON only.
+1. **CRITICAL: You can ONLY use tools listed in "Available Tools" below.** Do NOT try to use tools that are not listed - they will fail.
+2. If generate_content is NOT in the Available Tools list, it is on cooldown. Use ask_pi_agent instead for research, brainstorming, or learning.
+3. If you can complete the goal with an available tool action, do it.
+4. If the goal is already complete, use action="complete".
+5. When content generation is on cooldown, use ask_pi_agent to research topics, brainstorm ideas, or improve your knowledge.
+6. Always respond with valid JSON only.
 
 ## Available Tools
 {tools}
@@ -252,10 +254,33 @@ What is the next action to take towards this goal?"""
         Returns dict with: success, result, error
         """
         if action not in self.tools:
+            # Check if this is a cooldown situation
+            if action == "generate_content":
+                from .tool_adapter import is_generate_content_on_cooldown
+                if is_generate_content_on_cooldown():
+                    error_msg = (
+                        "Tool 'generate_content' is on COOLDOWN. "
+                        "Use 'ask_pi_agent' for research, brainstorming, or learning while waiting. "
+                        "Available tools: " + ", ".join(self.tools.keys())
+                    )
+                else:
+                    error_msg = f"Tool '{action}' not found. Available tools: " + ", ".join(self.tools.keys())
+            else:
+                error_msg = f"Tool '{action}' not found. Available tools: " + ", ".join(self.tools.keys())
+            
+            # IMPORTANT: Record this failure in memory so LLM learns from it
+            self.memory.record_action(
+                tool_name=action,
+                action=json.dumps(action_input)[:100],
+                result=error_msg,
+                success=False,
+                time_ms=0
+            )
+            
             return {
                 "success": False,
                 "result": None,
-                "error": f"Tool '{action}' not found"
+                "error": error_msg
             }
         
         start_time = time.time()
@@ -327,12 +352,67 @@ What is the next action to take towards this goal?"""
              goal_index = self.iteration % len(goals)
              return goals[goal_index]
     
+    def _refresh_tools(self):
+        """Refresh tools from adapter to pick up cooldown changes.
+        
+        Also syncs the registry and retriever so the LLM prompt
+        correctly shows only available tools.
+        """
+        try:
+            from .tool_adapter import get_adapted_tools
+            adapted = get_adapted_tools()
+            
+            # Update tools dict - remove tools that are now on cooldown
+            # and add tools that are now available
+            current_tool_names = set(self.tools.keys())
+            new_tool_names = set(adapted.keys())
+            
+            # Track changes for registry sync
+            tools_removed = current_tool_names - new_tool_names
+            tools_added = new_tool_names - current_tool_names
+            
+            # Remove tools no longer available (on cooldown)
+            for name in tools_removed:
+                if name in self.tools:
+                    del self.tools[name]
+                    # Also remove from registry so LLM won't see it
+                    try:
+                        self.registry.unregister(name)
+                    except Exception:
+                        pass  # Not critical if unregister fails
+                    logger.info(f"Tool '{name}' removed (on cooldown)")
+            
+            # Add newly available tools
+            for name in tools_added:
+                self.tools[name] = adapted[name]
+                # Also add to registry
+                try:
+                    self.registry.register(adapted[name], name=name)
+                except Exception:
+                    pass  # May already exist or fail validation
+                logger.info(f"Tool '{name}' now available")
+            
+            # Update existing tools (in case implementation changed)
+            for name in new_tool_names & current_tool_names:
+                self.tools[name] = adapted[name]
+            
+            # Refresh retriever cache if there were changes
+            if tools_removed or tools_added:
+                self.registry.refresh()
+                self.retriever.index_tools(self.registry)
+                
+        except Exception as e:
+            logger.error(f"Failed to refresh tools: {e}")
+    
     def run_iteration(self) -> bool:
         """
         Run a single iteration of the loop.
         
         Returns True if work was done, False if skipped/completed.
         """
+        # Refresh tools to pick up any cooldown changes
+        self._refresh_tools()
+        
         # Creator Command Check
         command_text = get_state_manager().get_next_command()
         if command_text:

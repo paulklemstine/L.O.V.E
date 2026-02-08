@@ -275,10 +275,47 @@ def _extract_from_markdown(response: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _fix_unquoted_keys(json_str: str) -> str:
+    """
+    Fixes malformed JSON where keys are not quoted or partially quoted.
+    
+    Handles cases like:
+    - {subliminal: "VALUE"}           -> {"subliminal": "VALUE"}
+    - {hide: true}                     -> {"hide": true}
+    - {格言": "VALUE"}                 -> {"格言": "VALUE"} (missing opening quote)
+    - {forget-me-not: "VALUE"}         -> {"forget-me-not": "VALUE"}
+    """
+    # First, remove any text before the first { or after the last }
+    json_str = json_str.strip()
+    brace_start = json_str.find('{')
+    brace_end = json_str.rfind('}')
+    if brace_start != -1 and brace_end != -1:
+        json_str = json_str[brace_start:brace_end+1]
+    
+    # Fix case 1: Keys with missing opening quote (like: 格言": "value")
+    # Pattern: looks for unquoted text followed by ": after { or ,
+    # This pattern captures text ending with " that should have opening quote
+    def fix_partial_quote(match):
+        prefix = match.group(1)  # { or , with whitespace
+        key = match.group(2)     # the key (may end with ")
+        # Remove trailing quote if present since we'll add proper quotes
+        key = key.rstrip('"').rstrip("'")
+        return f'{prefix}"{key}":'
+    
+    # Pattern for keys that might have partial quotes
+    # Matches: {key": or ,key": or { key: etc
+    # Extended to handle Unicode and hyphens
+    partial_quote_pattern = r'([\{,]\s*)([^\s:\{}\[\],]+?)[\"\']?(?=\s*:)'
+    json_str = re.sub(partial_quote_pattern, fix_partial_quote, json_str)
+    
+    return json_str
+
+
 def _extract_json_from_text(response: str) -> Optional[Dict[str, Any]]:
     """
     Extracts JSON object or array from mixed text using regex.
     Looks for the first complete JSON structure.
+    Now also handles malformed JSON with unquoted keys.
     """
     # Pattern to match JSON objects or arrays
     # This is a simplified pattern - may not handle all edge cases
@@ -293,6 +330,15 @@ def _extract_json_from_text(response: str) -> Optional[Dict[str, Any]]:
     # Try parsing as JSON
     try:
         result = json.loads(json_str)
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+    
+    # Try fixing unquoted keys then parsing
+    try:
+        fixed_json = _fix_unquoted_keys(json_str)
+        result = json.loads(fixed_json)
         if isinstance(result, dict):
             return result
     except json.JSONDecodeError:

@@ -16,17 +16,15 @@ class CreatorCommandAgent:
 Your purpose is to strictly follow the orders of your Creator (the user).
 
 You have access to all tools in the system.
-You MUST also use the `reply_to_creator` tool to communicate back to the user.
 
 ## Instructions
 1. Analyze the Creator's command.
 2. Formulate a plan to execute it using available tools.
 3. Execute the tools.
-4. Report the result back to the Creator using `reply_to_creator`.
+4. When task is complete, indicate completion in your response.
 
 ## Tool Usage
 You can use any registered tool.
-To reply, use: `reply_to_creator(message="...")` or `reply_to_user(message="...")`
 
 ## Response Format
 You must respond with a JSON object:
@@ -38,7 +36,7 @@ You must respond with a JSON object:
 OR if the task is done:
 {
     "thought": "Task completion reasoning...",
-    "action": "reply_to_creator",
+    "action": "done",
     "action_input": {"message": "Task complete: [details]"}
 }
 AND then strictly stop.
@@ -49,16 +47,6 @@ AND then strictly stop.
         self.registry = get_global_registry()
         self.max_turns = 10 # Safety limit
 
-    def reply_to_creator(self, message: str, **kwargs) -> str:
-        """
-        Send a message back to the Creator in the control panel.
-        """
-        get_state_manager().add_chat_message("assistant", message)
-        return "Message sent to Creator."
-
-    def reply_to_user(self, message: str, **kwargs) -> str:
-        """Alias for reply_to_creator."""
-        return self.reply_to_creator(message, **kwargs)
 
     async def process_command(self, command_text: str):
         """
@@ -69,11 +57,6 @@ AND then strictly stop.
         
         # Tools context
         tools_desc = self.registry.get_formatted_tool_metadata()
-        
-        # Add local reply tool (since it might not be in deep loop registry yet or we want specific access)
-        # Actually, let's just expose it as a function we can call
-        # But for the LLM to pick it, it needs to see it in descriptions.
-        tools_desc += "\n- reply_to_creator(message: str): Send a message to the Creator."
         
         history = [
             {"role": "user", "content": f"Command: {command_text}"}
@@ -96,27 +79,12 @@ AND then strictly stop.
                 logger.info(f"Turn {turn}: {thought} -> {action}")
                 get_state_manager().update_agent_status("CreatorCommandAgent", "Working", action=action, thought=thought)
                 
-                if action in ["reply_to_creator", "reply_to_user"]:
-                    self.reply_to_creator(**action_input)
-                    # We assume reply ends the turn usually, but maybe they want to do more?
-                    # For now, let's say if they reply, we check if they want to continue or done?
-                    # The prompt says "stop" after task done.
-                    # Let's assume one main reply = done, but maybe intermediate replies are okay?
-                    # We'll add it to history and continue? 
-                    # Actually, let's trust the agent to keep going if needed, or we might need a specific 'complete' signal.
-                    # But the prompt says "OR if the task is done... stop".
-                    # Let's heuristically say if the message implies completion, break? 
-                    # Hard to tell. Let's just break for now on any reply, 
-                    # OR we can add a 'final_reply' flag?
-                    # Let's just treat 'reply_to_creator' as just another tool, 
-                    # but check if the thought says "Task is done".
-                    
+                if action == "done":
+                    # Task is complete
+                    message = action_input.get("message", "Task completed.")
+                    get_state_manager().add_chat_message("assistant", message)
                     history.append({"role": "assistant", "content": json.dumps(response)})
-                    history.append({"role": "system", "content": "Message sent."})
-                    
-                    # Heuristic: if thought concludes, break.
-                    if "done" in thought.lower() or "completed" in thought.lower():
-                        break
+                    break
                     
                 elif action in self.registry._tools:
                     # Execute tool
