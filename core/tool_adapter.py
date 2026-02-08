@@ -193,6 +193,8 @@ def _get_love2_tools() -> Dict[str, Callable]:
         from .pi_rpc_bridge import get_pi_bridge
         
 
+        print(f"[ask_pi_agent] Prompt: {prompt}")
+        
         bridge = get_pi_bridge()
         response_text = []
         response_complete = asyncio.Event()
@@ -243,7 +245,9 @@ def _get_love2_tools() -> Dict[str, Callable]:
                 print(f"[ask_pi_agent] Timeout after {timeout}s")
                 response_text.append(f"[Timeout: No response within {timeout}s]")
             
-            return "".join(response_text)
+            result = "".join(response_text)
+            print(f"[ask_pi_agent] Response: {result}")
+            return result
         
         # Run the async function
         # Use asyncio.run() which handles event loop creation properly
