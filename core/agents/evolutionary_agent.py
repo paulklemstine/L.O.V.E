@@ -14,7 +14,6 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from core.logger import log_event
-from core.logger import log_event
 from core.evolution_state import (
     EvolutionarySpecification,
     get_pending_specifications,
@@ -340,8 +339,7 @@ Requirements:
 3. Support tools/list and tools/call methods
 4. Include proper error handling
 5. Use only standard library + common packages
-
-Output ONLY the complete Python code, no explanations.
+6. Output ONLY the complete Python code, no explanations.
 
 Example structure:
 ```python
