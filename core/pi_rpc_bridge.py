@@ -506,7 +506,6 @@ export VLLM_EXTENSION_CONFIG_PATH="{config_path}"
             try:
                 # Try parsing as JSON event
                 data = json.loads(line)
-                logger.info(f"Pi Agent JSON event: type={data.get('type', 'unknown')}")
                 # Emit to all registered callbacks
                 if self.callbacks:
                     for cid, cb in list(self.callbacks.items()):

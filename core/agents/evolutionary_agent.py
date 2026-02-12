@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from core.logger import log_event
+from core.logger import log_event
 from core.evolution_state import (
     EvolutionarySpecification,
     get_pending_specifications,

@@ -81,6 +81,14 @@ Current Goal: {goal}
 
 Pursue this goal. Use your tools (read, bash, edit, write) to make real progress.
 Be decisive. Take action.
+
+IMPORTANT: To use a tool, you must output a JSON object in this format:
+{
+  "thought": "reasoning here",
+  "action": "tool_name",
+  "action_input": { "arg": "value" }
+}
+If no tool is needed yet, just output your reasoning.
 """
 
     GOAL_PROMPT_TEMPLATE = """Goal: {goal}
@@ -634,11 +642,35 @@ What will you do to pursue this goal? Use your tools."""
         response_preview = response[:500].replace('\n', ' ') if response else '(empty)'
         logger.info(f"📝 Pi Agent response: {response_preview}")
 
+        # === Parse and Execute Action ===
+        action_data = self._parse_pi_response(response)
+        action_name = action_data.get("action")
+        
+        if action_name and action_name != "skip":
+            logger.info(f"⚡ Executing action: {action_name}")
+            action_input = action_data.get("action_input", {})
+            
+            # Execute tool
+            try:
+                result_data = await self._execute_action(action_name, action_input)
+                
+                # Update status
+                get_state_manager().update_agent_status(
+                    "Pi Agent",
+                    "Action Complete",
+                    action=f"{action_name}",
+                    info={"result": str(result_data.get("result"))[:100]}
+                )
+            except Exception as e:
+                logger.error(f"Action execution failed: {e}")
+        else:
+             logger.info("No executable action found in response. (skip)")
+
         get_state_manager().update_agent_status(
             "Pi Agent",
             "Goal work complete",
             action=f"Goal: {goal.text}",
-            thought=response if response else '(empty)',
+            thought=response[:200] if response else '(empty)',
             info={"goal": goal.text, "response_length": len(response) if response else 0}
         )
 

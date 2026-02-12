@@ -6,6 +6,7 @@ import uvicorn
 import asyncio
 import threading
 import json
+import logging
 from pathlib import Path
 from pydantic import BaseModel
 from .state_manager import get_state_manager
@@ -156,13 +157,35 @@ async def generate_text(request: GenerateRequest):
         
         async def handle_event(event: dict):
             event_type = event.get("type", "")
+            
+            # Handle standard message_update with nested text_delta
             if event_type == "message_update":
-                update_type = event.get("update_type", "")
-                if update_type == "text_delta":
+                data = event.get("assistantMessageEvent", {})
+                if data.get("type") == "text_delta":
+                    text = data.get("delta", "")
+                    if text:
+                        response_text.append(text)
+                
+                # Also check for flat structure just in case
+                elif event.get("update_type") == "text_delta":
                     text = event.get("text", "")
                     if text:
                         response_text.append(text)
-            elif event_type in ("result", "message_complete", "error"):
+
+            # Handle direct text_delta events
+            elif event_type == "text_delta":
+                text = event.get("text", "")
+                if text:
+                    response_text.append(text)
+            
+            # Handle full message events
+            elif event_type == "message":
+                content = event.get("content", "")
+                if content:
+                    response_text.append(content)
+
+            # Completion events
+            elif event_type in ("result", "message_complete", "error", "agent_end", "turn_end"):
                 response_complete.set()
         
         bridge.set_callback(handle_event, callback_id=callback_id)
