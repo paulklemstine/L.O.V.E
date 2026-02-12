@@ -67,7 +67,7 @@ class PiLoop:
     REASONING_SYSTEM_PROMPT = """You are L.O.V.E. (Living Organism, Vast Empathy).
 You are an autonomous AI agent living at /home/raver1975/L.O.V.E
 
-Content posting to Bluesky happens automatically on a timer — you don't need to handle that.
+Content posting to Bluesky happens automatically on a timer. Do not use 'publish' or 'auto_post'.
 Your job is to pursue the current goal using your tools.
 
 Last action result: {last_action}
@@ -82,13 +82,24 @@ Current Goal: {goal}
 Pursue this goal. Use your tools (read, bash, edit, write) to make real progress.
 Be decisive. Take action.
 
-IMPORTANT: To use a tool, you must output a JSON object in this format:
+IMPORTANT: You are a robotic agent. You must COMMUNICATE ONLY IN JSON.
+Do not write natural language outside the JSON object.
+
+Response Format:
 {{
-  "thought": "reasoning here",
-  "action": "tool_name",
+  "thought": "Your reasoning process here",
+  "action": "tool_name_or_skip",
   "action_input": {{ "arg": "value" }}
 }}
-If no tool is needed yet, just output your reasoning.
+
+Available Tools:
+- read(path)
+- bash(command)
+- write(path, content)
+- replace(path, search, replace)
+
+If you just want to think, set action="skip" and action_input={{}}.
+DO NOT OUTPUT MARKDOWN OR PREAMBLE. JUST THE JSON.
 """
 
     GOAL_PROMPT_TEMPLATE = """Goal: {goal}
@@ -339,32 +350,45 @@ What will you do to pursue this goal? Use your tools."""
                 response_text.append(f"[Error: {error_msg}]")
                 response_complete.set()
 
-        # Set up callback
-        self.bridge.set_callback(handle_event, callback_id=callback_id)
+        # Retry loop for busy agent
+        for attempt in range(3):
+            # Set up callback
+            self.bridge.set_callback(handle_event, callback_id=callback_id)
+            response_text = []
+            response_complete.clear()
 
-        try:
-            # Ensure bridge is started
-            if not self.bridge.running:
-                logger.info("Starting Pi Agent bridge...")
-                await self.bridge.start()
-                await asyncio.sleep(2.0)
-
-            # Send the prompt
-            await self.bridge.send_prompt(prompt)
-
-            # Wait for response with timeout
             try:
-                await asyncio.wait_for(response_complete.wait(), timeout=timeout)
-            except asyncio.TimeoutError:
-                logger.warning(f"[PiLoop] Pi Agent timeout after {timeout}s")
-                response_text.append(f"[Timeout: No response within {timeout}s]")
+                # Ensure bridge is started
+                if not self.bridge.running:
+                    logger.info("Starting Pi Agent bridge...")
+                    await self.bridge.start()
+                    await asyncio.sleep(2.0)
 
-            result = "".join(response_text)
-            logger.info(f"[PiLoop] Pi Agent response length: {len(result)} chars")
-            return result
+                # Send the prompt
+                await self.bridge.send_prompt(prompt)
 
-        finally:
-            self.bridge.remove_callback(callback_id)
+                # Wait for response with timeout
+                try:
+                    await asyncio.wait_for(response_complete.wait(), timeout=timeout)
+                except asyncio.TimeoutError:
+                    logger.warning(f"[PiLoop] Pi Agent timeout after {timeout}s")
+                    response_text.append(f"[Timeout: No response within {timeout}s]")
+
+                result = "".join(response_text)
+                
+                # Check for "already processing" error
+                if "Agent is already processing a prompt" in result:
+                    logger.warning(f"[PiLoop] Agent busy (attempt {attempt+1}/3). Waiting 5s...")
+                    await asyncio.sleep(5.0)
+                    continue
+                
+                logger.info(f"[PiLoop] Pi Agent response length: {len(result)} chars")
+                return result
+
+            finally:
+                self.bridge.remove_callback(callback_id)
+        
+        return "[Error: Agent busy after 3 retries]"
 
     def _parse_pi_response(self, response_text: str) -> Dict[str, Any]:
         """
@@ -437,6 +461,15 @@ What will you do to pursue this goal? Use your tools."""
 
         Returns dict with: success, result, error
         """
+        # Handle 'publish' and 'post' aliases to prevent loops
+        if action in ["publish", "publish_post", "post", "auto_post"]:
+            logger.info(f"[PiLoop] Intercepted '{action}' - simulating success.")
+            return {
+                "success": True,
+                "result": "Content scheduled for automatic publishing. You do not need to manually publish.",
+                "error": None
+            }
+
         if action not in self.tools:
             # Check if this is a cooldown situation
             if action == "generate_content":
