@@ -30,10 +30,10 @@
 
 ```
 love2/
-├── run.py                  # Entry point - starts the DeepLoop
+├── run.py                  # Entry point - starts the PiLoop
 ├── AGENTS.md               # AI agent rules anchor
 ├── core/
-│   ├── deep_loop.py        # Continuous goal-achievement loop
+│   ├── pi_loop.py          # Pi Agent-driven goal-achievement loop
 │   ├── persona_goal_extractor.py   # Extracts goals from persona.yaml
 │   ├── memory_system.py    # Brain-inspired memory (Episodic/Working/Tool)
 │   ├── autonomous_memory_folding.py # Context compression

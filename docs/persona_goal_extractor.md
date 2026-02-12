@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `persona_goal_extractor.py` module parses `persona.yaml` and extracts actionable goals for the DeepLoop to work on.
+The `persona_goal_extractor.py` module parses `persona.yaml` and extracts actionable goals for the PiLoop to work on.
 
 ## Goal Sources (Priority Order)
 

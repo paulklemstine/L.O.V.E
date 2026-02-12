@@ -1,7 +1,7 @@
 """
 persona_goal_extractor.py - Extract Goals from Persona Configuration
 
-Parses the persona.yaml file and extracts actionable goals for the DeepLoop.
+Parses the persona.yaml file and extracts actionable goals for the PiLoop.
 Prioritizes goals based on the persona's standing_goals and creator_directives.
 
 See docs/persona_goal_extractor.md for detailed documentation.

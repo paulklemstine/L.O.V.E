@@ -96,7 +96,7 @@ if content["success"]:
         print(f"Posted: {result['post_uri']}")
 ```
 
-## Integration with DeepLoop
+## Integration with PiLoop
 
 These functions are registered as tools via `tool_adapter.py`:
 - `bluesky_post` - Posts to Bluesky

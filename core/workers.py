@@ -62,7 +62,7 @@ class SocialWorker(BaseWorker):
         """
         
         # For now, we'll try a direct tool use via LLM
-        # This mirrors the DeepLoop logic but scoped to just this task
+        # This mirrors the PiLoop logic but scoped to just this task
         
         try:
             # 1. Plan/Generate

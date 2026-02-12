@@ -133,7 +133,7 @@ async def get_chat_history():
 async def generate_text(request: GenerateRequest):
     """
     Handle user commands from the control panel.
-    Now queues them for the main DeepLoop instead of running a separate loop.
+    Queues them for the main PiLoop to pick up.
     """
     try:
         sm = get_state_manager()
@@ -141,7 +141,7 @@ async def generate_text(request: GenerateRequest):
         # Add user message to history
         sm.add_chat_message("user", request.prompt)
         
-        # Add to command queue for DeepLoop to pick up
+        # Add to command queue for PiLoop to pick up
         sm.add_command(request.prompt)
         
         response_msg = "Command received. I will attend to it shortly."

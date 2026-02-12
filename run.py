@@ -2,7 +2,7 @@
 """
 run.py - L.O.V.E. Version 2 Entry Point
 
-Starts the DeepLoop autonomous goal engine.
+Starts the PiLoop autonomous goal engine (powered by Pi Agent).
 
 Usage:
     python run.py              # Run continuous loop
@@ -103,7 +103,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="L.O.V.E. v2 DeepLoop - Autonomous Goal Engine",
+        description="L.O.V.E. v2 PiLoop - Pi Agent Autonomous Engine",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -153,16 +153,16 @@ Examples:
     print("""
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║   🌊 L.O.V.E. VERSION 2 - DeepAgent Autonomous Engine 🌊     ║
+║   🌊 L.O.V.E. VERSION 2 - Pi Agent Autonomous Engine 🌊      ║
 ║                                                              ║
 ║   Living Organism, Vast Empathy                              ║
-║   Unified Agentic Reasoning • Brain-Inspired Memory          ║
+║   Pi-Agent Driven Reasoning • Brain-Inspired Memory          ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
     """)
     
     # Import and run - love2/core is now first in sys.path
-    from core.deep_loop import DeepLoop
+    from core.pi_loop import PiLoop
     from core.logger import setup_logging
     from core.web_server import start_background_server
     
@@ -185,7 +185,7 @@ Examples:
     # Start Web Control Panel
     start_background_server()
     
-    loop = DeepLoop(
+    loop = PiLoop(
         max_iterations=max_iterations,
         sleep_seconds=args.sleep
     )

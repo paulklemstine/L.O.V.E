@@ -1,7 +1,7 @@
 <div align="center">
 
 # ꧁ 𝑨𝑮𝑬𝑵𝑻 𝑹𝑼𝑳𝑬𝑺 ꧂
-### *L.O.V.E. Version 2 - DeepAgent Integration*
+### *L.O.V.E. Version 2 - Pi Agent Integration*
 
 </div>
 
@@ -26,7 +26,7 @@
   
   | Module | File | Purpose |
   |--------|------|---------|
-  | **🔄 Loop** | `core/deep_loop.py` | Main autonomous reasoning loop |
+  | **🔄 Loop** | `core/pi_loop.py` | Main autonomous reasoning loop (Pi Agent) |
   | **🎯 Goals** | `core/persona_goal_extractor.py` | Extract and prioritize persona goals |
   | **📝 Writer** | `core/agents/creative_writer_agent.py` | **Dynamic** content generation (Post/Img/Vibe) |
   | **📱 Bluesky** | `core/agents/bluesky_agent.py` | Orchestrates posting & engagement |
@@ -63,17 +63,18 @@
   
   ```
   ┌─────────────────────────────────────────────────┐
-  │                  DeepLoop Cycle                  │
+  │                   PiLoop Cycle                   │
   ├─────────────────────────────────────────────────┤
   │ 1. Load persona goals                           │
   │ 2. Select highest priority actionable goal      │
-  │ 3. Reason about goal (LLM call via vLLM)        │
-  │ 4. Execute tool actions (or Fabricate if missing)│
-  │ 5. Update memories (Episodic, Working, Tool)    │
-  │ 6. Check for memory folding trigger             │
-  │ 7. Persist state                                │
-  │ 8. Sleep (backpressure)                         │
-  │ 9. GOTO 1                                       │
+  │ 3. Send goal to Pi Agent for reasoning          │
+  │ 4. Parse Pi Agent response for action           │
+  │ 5. Execute tool actions                         │
+  │ 6. Update memories (Episodic, Working, Tool)    │
+  │ 7. Check for memory folding trigger             │
+  │ 8. Persist state                                │
+  │ 9. Sleep (backpressure)                         │
+  │ 10. GOTO 1                                      │
   └─────────────────────────────────────────────────┘
   ```
   

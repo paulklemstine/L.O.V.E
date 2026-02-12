@@ -74,7 +74,7 @@ class MasterPlanManager:
         # The last output had separate sections for Epics, Features, and Tasks lists.
         # We need to try to link them or just treat them as a flat list if linking is hard.
         
-        # Let's try to capture the high-level items as "Goals" for the DeepLoop.
+        # Let's try to capture the high-level items as "Goals" for the PiLoop.
         
         epics = []
         features = []

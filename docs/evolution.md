@@ -6,7 +6,7 @@ L.O.V.E. v2 implements the **Open Agentic Web** architecture, enabling dynamic d
 
 ```mermaid
 graph TD
-    A[DeepLoop Goal] --> B{Capability Check}
+    A[PiLoop Goal] --> B{Capability Check}
     B -->|Tool Exists| C[Execute Action]
     B -->|Gap Detected| D{Evolutionary Agent}
     

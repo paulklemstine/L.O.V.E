@@ -9,117 +9,100 @@ from pathlib import Path
 # Add project root to path
 sys.path.append(os.getcwd())
 
-from core.deep_loop import DeepLoop
+from core.pi_loop import PiLoop
 from core.memory_system import MemorySystem
 from core.persona_goal_extractor import Goal
 
+
 @pytest.mark.asyncio
-async def test_pi_back_and_forth(tmp_path):
+async def test_pi_reasoning_and_action(tmp_path):
     """
-    Test the back-and-forth communication between L.O.V.E. and Pi Agent.
+    Test that PiLoop correctly sends goals to Pi Agent and parses action responses.
+    Uses a mock Pi Agent bridge to verify the flow.
     """
-    
+
     # 1. Setup Mock Components
-    mock_llm = AsyncMock()
     mock_persona = Mock()
     mock_folder = Mock()
-    
+
     mock_persona.get_actionable_goals.return_value = [
         Goal(text="Research future technologies", priority=1, category="research")
     ]
     mock_persona.get_persona_context.return_value = "I am L.O.V.E."
     mock_folder.should_fold.return_value = False
-    
-    # Mock ask_pi_agent tool
-    mock_pi_tool = AsyncMock()
-    
-    async def ask_pi_agent_wrapper(prompt: str, timeout: float = 600.0) -> str:
-        """Send a prompt to the Pi Agent and get a response."""
-        print(f"   [Tool Call] ask_pi_agent(prompt='{prompt}')")
-        res = await mock_pi_tool(prompt, timeout)
-        print(f"   [Pi Response] {res}")
-        return res
-    
-    # 2. Define LLM and Pi behaviors for Turn 1
-    mock_llm.generate_json_async.side_effect = [
-        # Turn 1 Decision
-        {
-            "thought": "I should ask Pi for a research outline.",
-            "action": "ask_pi_agent",
-            "action_input": {"prompt": "Give me a research outline for future tech."},
-            "reasoning": "Need a starting point."
-        },
-        # Turn 2 Decision (after seeing Pi's response)
-        {
-            "thought": "Pi asked for a focus. I will choose AI Ethics.",
-            "action": "ask_pi_agent",
-            "action_input": {"prompt": "Focus on AI Ethics, please."},
-            "reasoning": "Answering Pi's question to continue the research."
-        }
-    ]
-    
-    # Pi's response for Turn 1
-    mock_pi_tool.side_effect = [
-        "Outline: 1. AI, 2. BioTech. Which one should I focus on first?",
-        "Focused Research: AI Ethics is a critical field..."
-    ]
-    
-    # 3. Initialize DeepLoop with patched tools
-    with patch('core.tool_adapter.get_adapted_tools') as mock_get_tools:
-        mock_get_tools.return_value = {"ask_pi_agent": ask_pi_agent_wrapper}
-        
-        loop = DeepLoop(
-            llm=mock_llm,
+
+    # 2. Create PiLoop with mocked components
+    with patch('core.pi_loop.get_pi_bridge') as mock_get_bridge, \
+         patch('core.tool_adapter.get_adapted_tools') as mock_get_tools:
+
+        # Mock tools dict (no ask_pi_agent since Pi IS the brain now)
+        mock_tool = AsyncMock(return_value="Research completed successfully.")
+        mock_get_tools.return_value = {"manage_project": mock_tool}
+
+        # Mock bridge
+        mock_bridge = AsyncMock()
+        mock_bridge.running = True
+        mock_get_bridge.return_value = mock_bridge
+
+        loop = PiLoop(
             persona=mock_persona,
-            folder=mock_folder
+            folder=mock_folder,
+            max_iterations=1,
+            sleep_seconds=0
         )
         loop.memory = MemorySystem(state_dir=tmp_path)
-        
-        # 4. Run Turn 1
-        print("\n" + "="*20 + " TURN 1 " + "="*20)
-        success1 = await loop.run_iteration()
-        
-        # Print LLM decision for Turn 1
-        turn1_decision = mock_llm.generate_json_async.call_args_list[0][1]
-        print(f"   [LLM Thought] I should ask Pi for a research outline.")
-        print(f"   [LLM Action] ask_pi_agent")
-        
-        assert success1 is True
-        assert loop.last_pi_interaction["prompt"] == "Give me a research outline for future tech."
-        assert "AI, 2. BioTech" in str(loop.last_pi_interaction["response"])
-        
-        # 5. Run Turn 2
-        print("\n" + "="*20 + " TURN 2 " + "="*20)
-        
-        # Before iteration, check the context that will be passed
-        pi_interaction = (
-            f"Your last prompt to Pi: {loop.last_pi_interaction['prompt']}\n"
-            f"Pi's Response: {loop.last_pi_interaction['response']}"
-        )
-        print(f"   [Injected Context]\n{pi_interaction}")
-        
-        success2 = await loop.run_iteration()
-        
-        # Print LLM decision for Turn 2
-        print(f"   [LLM Thought] Pi asked for a focus. I will choose AI Ethics.")
-        print(f"   [LLM Action] ask_pi_agent")
 
-        assert success2 is True
-        
-        # Verify Turn 2 outcome
-        assert loop.last_pi_interaction["prompt"] == "Focus on AI Ethics, please."
-        assert "AI Ethics is a critical field" in str(loop.last_pi_interaction["response"])
-        
-        # 6. Verify LLM prompt context for Turn 2
-        args, kwargs = mock_llm.generate_json_async.call_args_list[1]
-        user_prompt = kwargs.get('prompt')
-        assert "Your last prompt to Pi: Give me a research outline" in user_prompt
-        assert "Pi's Response: Outline: 1. AI, 2. BioTech" in user_prompt
-    
-    print("\n" + "="*50)
-    print("Test passed! Back-and-forth communication verified.")
-    print("="*50)
+        # 3. Mock the _ask_pi method to return a structured JSON response
+        async def mock_ask_pi(prompt, timeout=600.0):
+            return json.dumps({
+                "thought": "I should use manage_project to track this research.",
+                "action": "manage_project",
+                "action_input": {"action": "get_plan"},
+                "reasoning": "Need to check the current plan first."
+            })
+
+        loop._ask_pi = mock_ask_pi
+
+        # 4. Run one iteration
+        print("\n" + "=" * 20 + " TURN 1 " + "=" * 20)
+        success = await loop.run_iteration()
+
+        print(f"   [Result] success={success}")
+        assert success is True
+
+    print("\n" + "=" * 50)
+    print("Test passed! Pi Agent reasoning flow verified.")
+    print("=" * 50)
+
+
+@pytest.mark.asyncio
+async def test_pi_response_parsing():
+    """Test that PiLoop can parse various Pi Agent response formats."""
+
+    loop = PiLoop.__new__(PiLoop)  # Create without __init__
+
+    # Test 1: Clean JSON
+    result = loop._parse_pi_response('{"thought": "test", "action": "skip", "action_input": {}}')
+    assert result["action"] == "skip"
+
+    # Test 2: JSON in markdown fence
+    result = loop._parse_pi_response('```json\n{"thought": "test", "action": "complete", "action_input": {}}\n```')
+    assert result["action"] == "complete"
+
+    # Test 3: JSON embedded in text
+    result = loop._parse_pi_response('Here is my answer:\n{"thought": "test", "action": "manage_project", "action_input": {"action": "get_plan"}}\nDone!')
+    assert result["action"] == "manage_project"
+
+    # Test 4: Empty response
+    result = loop._parse_pi_response("")
+    assert result["action"] == "skip"
+
+    # Test 5: Non-JSON response
+    result = loop._parse_pi_response("I don't know what to do")
+    assert result["action"] == "skip"
+
+    print("All parsing tests passed!")
+
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(test_pi_back_and_forth(Path("./tests/tmp")))

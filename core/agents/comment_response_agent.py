@@ -266,7 +266,7 @@ class CommentResponseAgent:
 comment_response_agent = CommentResponseAgent()
 
 
-# Tool function for manual triggering via DeepLoop
+# Tool function for manual triggering via PiLoop
 def respond_to_comments(limit: int = 20, dry_run: bool = False, **kwargs) -> Dict[str, Any]:
     """
     Analyze pending comments and respond to the most important one.

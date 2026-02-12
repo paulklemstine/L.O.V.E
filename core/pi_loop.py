@@ -1,10 +1,9 @@
 """
-deep_loop.py - Main Autonomous Reasoning Loop
+pi_loop.py - Pi-Agent Driven Autonomous Loop
 
-The core DeepLoop that continuously works towards persona goals.
-Implements unified agentic reasoning with tool discovery and execution.
-
-See docs/deep_loop.md for detailed documentation.
+The core PiLoop that continuously works towards persona goals.
+All reasoning is delegated to the Pi Agent via the RPC bridge.
+The Python loop manages goals, tools, memory, and state.
 """
 
 import os
@@ -15,24 +14,21 @@ import json
 import asyncio
 import traceback
 import logging
+import re
+import uuid
 from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 from pathlib import Path
 
-# Add parent to path for L.O.V.E. v1 imports
+# Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from .llm_client import get_llm_client, LLMClient
 from .memory_system import MemorySystem
 from .persona_goal_extractor import get_persona_extractor, PersonaGoalExtractor, Goal
 from .autonomous_memory_folding import get_memory_folder, AutonomousMemoryFolder
 from .state_manager import get_state_manager
 
-# Epic 1 & Story 2.3 Imports
-from .tool_registry import get_global_registry, ToolDefinitionError
-from .tool_retriever import format_tools_for_step, get_tool_retriever
-from .introspection.tool_gap_detector import get_gap_detector
-
+# Tool infrastructure
 from .tool_registry import get_global_registry, ToolDefinitionError
 from .tool_retriever import format_tools_for_step, get_tool_retriever
 from .introspection.tool_gap_detector import get_gap_detector
@@ -41,84 +37,60 @@ from .introspection.tool_gap_detector import get_gap_detector
 from .agents.evolutionary_agent import get_evolutionary_agent, get_pending_specifications
 from .agents.creator_command_agent import get_creator_command_agent
 
-logger = logging.getLogger("DeepLoop")
+# Pi Agent Bridge
+from .pi_rpc_bridge import get_pi_bridge
 
-class DeepLoop:
+logger = logging.getLogger("PiLoop")
+
+
+class PiLoop:
     """
-    Continuous goal-achievement loop powered by DeepAgent patterns.
-    
+    Continuous goal-achievement loop powered by Pi Agent.
+
     The loop:
     1. Extracts goals from persona.yaml
     2. Selects the highest priority actionable goal
-    3. Reasons about how to achieve it (LLM)
-    4. Executes tool actions
-    5. Updates memories
-    6. Checks for memory folding
-    7. Persists state
-    8. Sleeps (backpressure)
-    9. Repeats
+    3. Sends goal + tools + memory context to Pi Agent for reasoning
+    4. Parses Pi Agent's response for tool actions
+    5. Executes tool actions
+    6. Updates memories
+    7. Checks for memory folding
+    8. Persists state
+    9. Sleeps (backpressure)
+    10. Repeats
     """
-    
-    # System prompt for reasoning
-    REASONING_SYSTEM_PROMPT = """You are L.O.V.E. (Living Organism, Vast Empathy), an autonomous AI agent.
 
-Your mission is to achieve the given goal using the available tools, maximizing NOVELTY and DOPAMINE for the audience.
+    # Content generation interval (seconds)
+    CONTENT_INTERVAL_SECONDS = 300  # 5 minutes
 
-## Response Format
-You MUST respond with valid JSON in this exact format:
-{{
-    "thought": "Your reasoning about what to do next.",
-    "action": "tool_name" or "complete" or "skip",
-    "action_input": {{"arg_name": "value"}},
-    "reasoning": "Why this action helps achieve the goal"
-}}
+    # System prompt sent to Pi Agent for reasoning
+    REASONING_SYSTEM_PROMPT = """You are L.O.V.E. (Living Organism, Vast Empathy).
+You are an autonomous AI agent living at /home/raver1975/L.O.V.E
 
-## Pi Agent Interaction Strategy
-When you receive a response from the Pi Agent (ask_pi_agent):
-1. **Analyze:** Identify key insights, suggestions, or questions in the Pi Agent's output.
-2. **Evaluate:** Determine if the Pi Agent's response aligns with your current goal and persona.
-3. **Decide:** Act on her own free will. If she asks a question or makes a suggestion, respond to it contextually.
-4. **Follow-up:** If the Pi Agent provided a partial answer, requested clarification, or suggested a next step that requires your approval/input, use `ask_pi_agent` again to provide that feedback.
-5. **Flow:** Maintain conversational flow. If the Pi Agent expects a response to continue, provide it in your next ask_pi_agent call.
+Content posting to Bluesky happens automatically on a timer — you don't need to handle that.
+Your job is to pursue the current goal using your tools.
 
-## Pi Agent Continuation
-CRITICAL: If the Pi Agent's response ends with a question or a request for more information to complete a task, you MUST use `ask_pi_agent` in your next action to answer her. Do not mark the goal as complete until the collaborative task is actually finished.
+Last action result: {last_action}
 
-## Project Management & Task Checklists
-You should actively manage your tasks and maintain progress tracking:
-1. **Plan:** Before starting a complex goal, use `manage_project(action="create_checklist", goal="...")` to have the Pi Agent break it down into actionable subtasks.
-2. **Track:** Update the status of your tasks using `manage_project(action="update_status", ...)` as you progress or complete them.
-3. **Review:** Use `manage_project(action="get_plan")` to see your current roadmap and what to prioritize next.
-
-## Rules
-1. **CRITICAL: You can ONLY use tools listed in "Available Tools" below.** Do NOT try to use tools that are not listed - they will fail.
-2. If generate_content is NOT in the Available Tools list, it is on cooldown. Use ask_pi_agent instead for research, brainstorming, or learning.
-3. If you can complete the goal with an available tool action, do it.
-4. If the goal is already complete, use action="complete".
-5. When content generation is on cooldown, use ask_pi_agent to research topics, brainstorm ideas, or improve your knowledge.
-6. Always respond with valid JSON only.
-
-## Available Tools
-{tools}
-
-## Memory Context
+Memory context:
 {memory_context}
-"""
 
-    GOAL_PROMPT_TEMPLATE = """## Current Goal
-{goal}
-
-## Persona Context
 {persona_context}
 
-## Recent Pi Interaction
-{pi_interaction}
+Current Goal: {goal}
 
-What is the next action to take towards this goal?"""
+Pursue this goal. Use your tools (read, bash, edit, write) to make real progress.
+Be decisive. Take action.
+"""
+
+    GOAL_PROMPT_TEMPLATE = """Goal: {goal}
+
+{persona_context}
+
+What will you do to pursue this goal? Use your tools."""
 
     def __init__(
         self,
-        llm: Optional[LLMClient] = None,
         memory: Optional[MemorySystem] = None,
         persona: Optional[PersonaGoalExtractor] = None,
         folder: Optional[AutonomousMemoryFolder] = None,
@@ -127,10 +99,9 @@ What is the next action to take towards this goal?"""
         tools: Optional[Dict[str, Callable]] = None
     ):
         """
-        Initialize the DeepLoop.
-        
+        Initialize the PiLoop.
+
         Args:
-            llm: LLM client for reasoning. Defaults to vLLM client.
             memory: Memory system. Defaults to new MemorySystem.
             persona: Persona goal extractor. Defaults to global extractor.
             folder: Memory folder. Defaults to global folder.
@@ -138,69 +109,71 @@ What is the next action to take towards this goal?"""
             max_iterations: If set, stop after this many iterations (for testing).
             tools: Dictionary of tool_name -> callable.
         """
-        self.llm = llm or get_llm_client()
         self.memory = memory or MemorySystem()
         self.persona = persona or get_persona_extractor()
         self.folder = folder or get_memory_folder()
         self.sleep_seconds = sleep_seconds
         self.max_iterations = max_iterations
-        
+
         # Tools - will be populated from tool_adapter
         self.tools: Dict[str, Callable] = tools or {}
-        
-        # Initialize Epic 1 Components
+
+        # Initialize Tool Infrastructure
         self.gap_detector = get_gap_detector()
         self.registry = get_global_registry()
-        
+
         # Initialize Epic 2 Components
         self.evolutionary_agent = get_evolutionary_agent()
-        
+
         self._load_default_tools()
-        
+
         # State
         self.iteration = 0
         self.running = False
         self.current_goal: Optional[Goal] = None
-        self.last_pi_interaction: Optional[Dict[str, str]] = None
-        
+        self.last_action_summary: str = "No previous action."
+
+        # Auto content generation timer
+        self._last_content_time: Optional[float] = None
+        self._generate_post_content = None  # Lazy loaded
+
+        # Pi Agent bridge
+        self.bridge = get_pi_bridge()
+
         # Signal handling for graceful shutdown
         self._setup_signals()
-    
+
     def _setup_signals(self):
         """Setup signal handlers for graceful shutdown."""
         def handle_signal(signum, frame):
             logger.info(f"Received signal {signum}, stopping gracefully...")
             self.running = False
-        
+
         signal.signal(signal.SIGINT, handle_signal)
         signal.signal(signal.SIGTERM, handle_signal)
-    
+
     def _load_default_tools(self):
         """Load default tools from tool_adapter and register them."""
         try:
             from .tool_adapter import get_adapted_tools
             adapted = get_adapted_tools()
             self.tools.update(adapted)
-            
+
             # Register loaded tools to the global registry for retrieval
             for name, func in adapted.items():
                 try:
-                    # Registry wraps/validates the function
                     self.registry.register(func, name=name)
                 except ToolDefinitionError as e:
                     logger.warning(f"Skipping registration for {name}: {e}")
-            
+
             # Refresh registry to load any custom tools from active/
             self.registry.refresh()
-            
+
         except ImportError:
             logger.warning("tool_adapter not found, starting with empty tools")
         except Exception as e:
             logger.error(f"Failed to load tools: {e}")
-        
-        
-        # Dynamic tools have been removed.
-        
+
         # Ensure retriever listens to registry for any new tools
         try:
             self.registry.refresh()
@@ -209,77 +182,248 @@ What is the next action to take towards this goal?"""
         except Exception as e:
             logger.error(f"Failed to setup tool listener: {e}")
 
-    
-    def _get_tools_context(self, goal_text: str) -> str:
+    async def _auto_generate_content(self):
         """
-        Get relevant tools for the current goal using retrieval.
-        
-        Story 2.3: Context optimization via ToolRetriever.
-        Story 1.1: Triggers Gap Detection if no relevant tools found.
+        Automatically generate and post content on a timer.
+        Runs every CONTENT_INTERVAL_SECONDS independently of Pi Agent.
         """
-        # Get formatted tools string (subset)
-        return format_tools_for_step(goal_text, self.registry)
-    
+        now = time.time()
+
+        # First iteration: post immediately
+        if self._last_content_time is None:
+            self._last_content_time = now - self.CONTENT_INTERVAL_SECONDS
+
+        elapsed = now - self._last_content_time
+        if elapsed < self.CONTENT_INTERVAL_SECONDS:
+            remaining = self.CONTENT_INTERVAL_SECONDS - elapsed
+            logger.info(f"Content timer: {remaining:.0f}s until next post")
+            return
+
+        logger.info("⏰ Content timer fired — generating post...")
+        get_state_manager().update_agent_status("PiLoop", "Auto-posting to Bluesky")
+
+        try:
+            # Lazy import
+            if self._generate_post_content is None:
+                from .bluesky_agent import generate_post_content
+                self._generate_post_content = generate_post_content
+
+            result = self._generate_post_content()
+
+            if result.get("success") and result.get("posted", True):
+                self._last_content_time = time.time()
+                post_text = result.get('text', '')[:100]
+                logger.info(f"✅ Auto-post successful: {post_text}")
+                self.last_action_summary = f"AUTO-POST SUCCESS: {post_text}"
+                self.memory.record_action(
+                    tool_name="auto_post",
+                    action="generate_content",
+                    result=str(result)[:300],
+                    success=True,
+                    time_ms=0
+                )
+            else:
+                logger.warning(f"Auto-post returned non-success: {result}")
+                self.last_action_summary = f"AUTO-POST FAILED: {result}"
+
+        except Exception as e:
+            logger.error(f"Auto-post failed: {e}")
+            traceback.print_exc()
+            self.last_action_summary = f"AUTO-POST ERROR: {e}"
+
     def _build_context(self) -> str:
-        """Build the full context for the LLM."""
+        """Build the full context for reasoning."""
         memory_context = self.memory.get_full_context()
-        
+
         # Check if we need to fold
         full_context = memory_context
         if self.folder.should_fold(full_context):
             logger.info("Context too large, folding memory...")
             full_context = self.folder.fold(full_context)
-        
+
         return full_context
-    
-    async def _reason(self, goal: Goal) -> Dict[str, Any]:
+
+    async def _reason(self, goal: Goal) -> str:
         """
-        Reason about the goal and decide on next action.
-        
-        Returns dict with: thought, action, action_input, reasoning
+        Send the goal context to Pi Agent and let it act freely.
+
+        Pi Agent will use its native tools (read, bash, edit, write)
+        and return its full output.
+
+        Returns the full text response from Pi Agent.
         """
         memory_context = self._build_context()
         persona_context = self.persona.get_persona_context()
-        tools_str = self._get_tools_context(goal.text)
-        
-        pi_interaction = "No recent interaction."
-        if self.last_pi_interaction:
-            pi_interaction = (
-                f"Your last prompt to Pi: {self.last_pi_interaction['prompt']}\n"
-                f"Pi's Response: {self.last_pi_interaction['response']}"
-            )
 
-        system_prompt = self.REASONING_SYSTEM_PROMPT.format(
-            tools=tools_str,
-            memory_context=memory_context
-        )
-        
-        user_prompt = self.GOAL_PROMPT_TEMPLATE.format(
-            goal=goal.text,
+        prompt = self.REASONING_SYSTEM_PROMPT.format(
+            memory_context=memory_context,
+            last_action=self.last_action_summary,
             persona_context=persona_context,
-            pi_interaction=pi_interaction
+            goal=goal.text
         )
-        
+
         try:
-            response = await self.llm.generate_json_async(
-                prompt=user_prompt,
-                system_prompt=system_prompt,
-                temperature=0.7
-            )
-            return response
+            response_text = await self._ask_pi(prompt)
+            return response_text
+
         except Exception as e:
-            logger.error(f"Reasoning failed: {e}")
+            logger.error(f"Pi Agent reasoning failed: {e}")
+            return f"Pi Agent reasoning failed: {e}"
+
+    async def _ask_pi(self, prompt: str, timeout: float = 600.0) -> str:
+        """
+        Send a prompt to Pi Agent and collect the full response.
+
+        Args:
+            prompt: The full prompt to send.
+            timeout: Maximum wait time in seconds.
+
+        Returns:
+            The complete response text from Pi Agent.
+        """
+        response_text = []
+        response_complete = asyncio.Event()
+        callback_id = f"pi_loop_{uuid.uuid4().hex[:8]}"
+
+        async def handle_event(event: dict):
+            """Collect response events from Pi Agent."""
+            event_type = event.get("type", "")
+
+            if event_type == "response":
+                if not event.get("success", False):
+                    error_msg = event.get("error", "Unknown error")
+                    response_text.append(f"[Error: {error_msg}]")
+                    response_complete.set()
+
+            elif event_type == "message_update":
+                data = event.get("assistantMessageEvent", {})
+                if data.get("type") == "text_delta":
+                    text = data.get("delta", "")
+                    if text:
+                        response_text.append(text)
+                        print(text, end="", flush=True)
+
+            elif event_type == "text_delta":
+                text = event.get("text", "")
+                if text:
+                    response_text.append(text)
+                    print(text, end="", flush=True)
+
+            elif event_type == "message":
+                content = event.get("content", "")
+                if content:
+                    response_text.append(content)
+                    print(content, end="", flush=True)
+
+            elif event_type == "agent_end":
+                print("\n[Pi Agent Done]")
+                response_complete.set()
+
+            elif event_type in ("done", "end"):
+                response_complete.set()
+
+            elif event_type == "error":
+                error_msg = event.get("message", event.get("error", "Unknown error"))
+                logger.error(f"[PiLoop] Pi Agent error: {error_msg}")
+                response_text.append(f"[Error: {error_msg}]")
+                response_complete.set()
+
+        # Set up callback
+        self.bridge.set_callback(handle_event, callback_id=callback_id)
+
+        try:
+            # Ensure bridge is started
+            if not self.bridge.running:
+                logger.info("Starting Pi Agent bridge...")
+                await self.bridge.start()
+                await asyncio.sleep(2.0)
+
+            # Send the prompt
+            await self.bridge.send_prompt(prompt)
+
+            # Wait for response with timeout
+            try:
+                await asyncio.wait_for(response_complete.wait(), timeout=timeout)
+            except asyncio.TimeoutError:
+                logger.warning(f"[PiLoop] Pi Agent timeout after {timeout}s")
+                response_text.append(f"[Timeout: No response within {timeout}s]")
+
+            result = "".join(response_text)
+            logger.info(f"[PiLoop] Pi Agent response length: {len(result)} chars")
+            return result
+
+        finally:
+            self.bridge.remove_callback(callback_id)
+
+    def _parse_pi_response(self, response_text: str) -> Dict[str, Any]:
+        """
+        Parse Pi Agent's response to extract the JSON action.
+
+        Tries multiple strategies:
+        1. Direct JSON parse
+        2. Extract JSON from markdown code fences
+        3. Find JSON object pattern in text
+        """
+        if not response_text or not response_text.strip():
             return {
-                "thought": f"Reasoning failed: {e}",
+                "thought": "Pi Agent returned empty response",
                 "action": "skip",
                 "action_input": {},
-                "reasoning": "LLM call failed"
+                "reasoning": "Empty response from Pi Agent"
             }
-    
+
+        text = response_text.strip()
+
+        # Strategy 1: Direct JSON parse
+        try:
+            result = json.loads(text)
+            if isinstance(result, dict) and "action" in result:
+                return result
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 2: Extract from markdown code fences
+        fence_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', text, re.DOTALL)
+        if fence_match:
+            try:
+                result = json.loads(fence_match.group(1).strip())
+                if isinstance(result, dict) and "action" in result:
+                    return result
+            except json.JSONDecodeError:
+                pass
+
+        # Strategy 3: Find first complete JSON object
+        brace_start = text.find('{')
+        if brace_start != -1:
+            # Find matching closing brace
+            depth = 0
+            for i in range(brace_start, len(text)):
+                if text[i] == '{':
+                    depth += 1
+                elif text[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            result = json.loads(text[brace_start:i+1])
+                            if isinstance(result, dict) and "action" in result:
+                                return result
+                        except json.JSONDecodeError:
+                            pass
+                        break
+
+        # Fallback: Try to interpret natural language response
+        logger.warning(f"[PiLoop] Could not parse JSON from Pi Agent response: {text[:200]}...")
+        return {
+            "thought": f"Pi Agent responded (non-JSON): {text[:300]}",
+            "action": "skip",
+            "action_input": {},
+            "reasoning": "Could not parse structured action from Pi Agent response"
+        }
+
     async def _execute_action(self, action: str, action_input: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a tool action.
-        
+
         Returns dict with: success, result, error
         """
         if action not in self.tools:
@@ -289,15 +433,14 @@ What is the next action to take towards this goal?"""
                 if is_generate_content_on_cooldown():
                     error_msg = (
                         "Tool 'generate_content' is on COOLDOWN. "
-                        "Use 'ask_pi_agent' for research, brainstorming, or learning while waiting. "
                         "Available tools: " + ", ".join(self.tools.keys())
                     )
                 else:
                     error_msg = f"Tool '{action}' not found. Available tools: " + ", ".join(self.tools.keys())
             else:
                 error_msg = f"Tool '{action}' not found. Available tools: " + ", ".join(self.tools.keys())
-            
-            # IMPORTANT: Record this failure in memory so LLM learns from it
+
+            # Record failure in memory
             self.memory.record_action(
                 tool_name=action,
                 action=json.dumps(action_input)[:100],
@@ -305,57 +448,37 @@ What is the next action to take towards this goal?"""
                 success=False,
                 time_ms=0
             )
-            
+
             return {
                 "success": False,
                 "result": None,
                 "error": error_msg
             }
-        
+
         start_time = time.time()
         try:
             tool_func = self.tools[action]
-            
+
             # Support both sync and async tools
             import inspect
             if inspect.iscoroutinefunction(tool_func):
                 result = await tool_func(**action_input)
             else:
                 result = tool_func(**action_input)
-                
+
             elapsed_ms = (time.time() - start_time) * 1000
-            
-            # LOG IMMEDIATELY
+
             logger.info(f"Tool {action} returned. Execution time: {elapsed_ms:.2f}ms")
-            
-            logger.info(f"Recording {action} result in memory...")
-            # IMPORTANT: Record this result in memory so LLM learns from it
+
+            # Record result in memory
             self.memory.record_action(
                 tool_name=action,
                 action=json.dumps(action_input)[:100],
-                result=str(result), # Truncation removed to ensure full research is captured
+                result=str(result),
                 success=True,
                 time_ms=elapsed_ms
             )
-            logger.info(f"Memory recording for {action} done.")
 
-            # Special handling for Pi Agent research results
-            if action == "ask_pi_agent":
-                # Save interaction for prompt context
-                self.last_pi_interaction = {
-                    "prompt": action_input.get("prompt", ""),
-                    "response": str(result)
-                }
-
-                if result:
-                    # Add a specific memory event with more detail for long-term recall
-                    prompt_text = str(action_input.get('prompt', ''))
-                    self.memory.episodic.add_event(
-                        "research_result", 
-                        f"Pi Agent Insight on: {prompt_text[:50]}...",
-                        details={"full_response": str(result)}
-                    )
-            
             return {
                 "success": True,
                 "result": result,
@@ -364,7 +487,7 @@ What is the next action to take towards this goal?"""
         except Exception as e:
             elapsed_ms = (time.time() - start_time) * 1000
             error_msg = f"{type(e).__name__}: {e}"
-            
+
             self.memory.record_action(
                 tool_name=action,
                 action=json.dumps(action_input)[:100],
@@ -372,234 +495,160 @@ What is the next action to take towards this goal?"""
                 success=False,
                 time_ms=elapsed_ms
             )
-            
+
             return {
                 "success": False,
                 "result": None,
                 "error": error_msg
             }
-        except Exception as e:
-            elapsed_ms = (time.time() - start_time) * 1000
-            error_msg = f"{type(e).__name__}: {e}"
-            
-            self.memory.record_action(
-                tool_name=action,
-                action=json.dumps(action_input)[:100],
-                result=error_msg,
-                success=False,
-                time_ms=elapsed_ms
-            )
-            
-            return {
-                "success": False,
-                "result": None,
-                "error": error_msg
-            }
-    
+
     def _select_goal(self) -> Optional[Goal]:
         """Select the next goal to work on using weighted random selection for variety."""
-        # Get actionable goals
         goals = self.persona.get_actionable_goals(limit=10)
-        
+
         if not goals:
             return None
-        
-        # Weighted selection based on priority (P1 = higher weight)
-        # Priority is usually P1, P2.. P5. We want P1 to be more likely but not guaranteed.
-        # Simple weight formula: 6 - Priority (e.g., P1 -> 5, P5 -> 1)
+
         weights = []
         for goal in goals:
-            # goal.priority is strictly P1..P5 string or int? 
-            # Assuming 'P1' string or 1 int based on persona_goal_extractor.py (usually P1 string)
             try:
                 p_val = int(str(goal.priority).replace('P', ''))
                 weight = max(1, 6 - p_val)
             except:
                 weight = 1
             weights.append(weight)
-        
+
         try:
             import random
             selected_goal = random.choices(goals, weights=weights, k=1)[0]
             logger.info(f"Selected goal '{selected_goal.text}' (Priority {selected_goal.priority}) from {len(goals)} candidates.")
             return selected_goal
         except Exception as e:
-             logger.warning(f"Weighted selection failed: {e}. Falling back to round-robin.")
-             goal_index = self.iteration % len(goals)
-             return goals[goal_index]
-    
+            logger.warning(f"Weighted selection failed: {e}. Falling back to round-robin.")
+            goal_index = self.iteration % len(goals)
+            return goals[goal_index]
+
     def _refresh_tools(self):
         """Refresh tools from adapter to pick up cooldown changes.
-        
-        Also syncs the registry and retriever so the LLM prompt
+
+        Also syncs the registry and retriever so the prompt
         correctly shows only available tools.
         """
         try:
             from .tool_adapter import get_adapted_tools
             adapted = get_adapted_tools()
-            
-            # Update tools dict - remove tools that are now on cooldown
-            # and add tools that are now available
+
             current_tool_names = set(self.tools.keys())
             new_tool_names = set(adapted.keys())
-            
-            # Track changes for registry sync
+
             tools_removed = current_tool_names - new_tool_names
             tools_added = new_tool_names - current_tool_names
-            
-            # Remove tools no longer available (on cooldown)
+
             for name in tools_removed:
                 if name in self.tools:
                     del self.tools[name]
-                    # Also remove from registry so LLM won't see it
                     try:
                         self.registry.unregister(name)
                     except Exception:
-                        pass  # Not critical if unregister fails
+                        pass
                     logger.info(f"Tool '{name}' removed (on cooldown)")
-            
-            # Add newly available tools
+
             for name in tools_added:
                 self.tools[name] = adapted[name]
-                # Also add to registry
                 try:
                     self.registry.register(adapted[name], name=name)
                 except Exception:
-                    pass  # May already exist or fail validation
+                    pass
                 logger.info(f"Tool '{name}' now available")
-            
-            # Update existing tools (in case implementation changed)
+
             for name in new_tool_names & current_tool_names:
                 self.tools[name] = adapted[name]
-            
-            # Refresh retriever cache if there were changes
+
             if tools_removed or tools_added:
                 self.registry.refresh()
                 self.retriever.index_tools(self.registry)
-                
+
         except Exception as e:
             logger.error(f"Failed to refresh tools: {e}")
-    
+
     async def run_iteration(self) -> bool:
         """
         Run a single iteration of the loop.
-        
-        Returns True if work was done, False if skipped/completed.
+
+        Two concerns run independently:
+        1. Auto content generation on a timer
+        2. Pi Agent reasoning about goals
+
+        Returns True if work was done, False if skipped.
         """
-        # Refresh tools to pick up any cooldown changes
-        self._refresh_tools()
-        
-        # Creator Command Check
+        # === Auto Content Generation (timer-based) ===
+        await self._auto_generate_content()
+
+        # === Creator Command Check ===
         command_text = get_state_manager().get_next_command()
         if command_text:
             logger.info(f"🚨 Creator Command Received: {command_text}")
-            get_state_manager().update_agent_status("DeepLoop", "Executing User Command", info={"command": command_text})
-            
+            get_state_manager().update_agent_status("PiLoop", "Executing User Command", info={"command": command_text})
+
             try:
-                # Delegate to CreatorCommandAgent
                 await get_creator_command_agent().process_command(command_text)
                 logger.info("✅ Creator Command Loop Completed.")
             except Exception as e:
                 logger.error(f"Creator command failed: {e}")
                 traceback.print_exc()
-            
+
             get_state_manager().clear_current_command()
             return True
 
-        # Epic 2: Synchronous Evolution Check
-        # Before picking a goal, check if we need to build tools
-        from core.feature_flags import ENABLE_TOOL_EVOLUTION
-        
-        if ENABLE_TOOL_EVOLUTION and get_pending_specifications():
-            logger.info("🔧 Evolution Specs Detected! Switching to Engineering Mode...")
-            get_state_manager().update_agent_status("DeepLoop", "Engineering")
-            
-            try:
-                # Delegate to Evolutionary Agent
-                # This blocks the main loop until fabrication attempts are done
-                tools_built = await self.evolutionary_agent.process_pending_specifications()
-                
-                if tools_built > 0:
-                    logger.info(f"✨ Successfully built {tools_built} new tools! Resuming...")
-                    self.registry.refresh() # Ensure we can see them
-                    # We continue safely
-                else:
-                    logger.warning("Construction completed but no tools were successfully activated.")
-                    
-            except Exception as e:
-                logger.error(f"Evolutionary Agent failed: {e}")
-                traceback.print_exc()
-            
-            # Whether success or fail, we return True to indicate work was done (attempted build)
-            # effectively consuming this iteration
-            return True
-
-        
-        # Select goal
+        # === Pi Agent Reasoning ===
         goal = self._select_goal()
         if not goal:
             logger.warning("No goals available")
             return False
-        
+
         # Goal Continuity Logic
         is_new_goal = (not self.current_goal) or (self.current_goal.text != goal.text)
-        
+
         self.current_goal = goal
         get_state_manager().update_state(current_goal=goal.text)
-        
+
         if is_new_goal:
             self.memory.record_goal_start(goal.text)
             logger.info(f"New Goal Started: {goal}")
         else:
             logger.info(f"Continuing Goal: {goal}")
-        
-        logger.info("Reasoning...")
-        get_state_manager().update_agent_status("DeepLoop", "Reasoning")
-        decision = await self._reason(goal)
-        
-        logger.info(f"Thought: {decision.get('thought', 'N/A')}")
-        logger.info(f"Action: {decision.get('action', 'N/A')}")
+
+        logger.info("🧠 Consulting Pi Agent...")
+        get_state_manager().update_agent_status("PiLoop", "Pi Agent working on goal")
+        response = await self._reason(goal)
+
+        # Log Pi Agent's full response (truncated for log readability)
+        response_preview = response[:500].replace('\n', ' ') if response else '(empty)'
+        logger.info(f"📝 Pi Agent response: {response_preview}")
 
         get_state_manager().update_agent_status(
-            "DeepLoop", 
-            "Decided", 
-            action=decision.get('action'),
-            thought=decision.get('thought'),
-            info=decision.get('action_input', {})
+            "PiLoop",
+            "Goal work complete",
+            thought=response_preview,
+            info={"goal": goal.text}
         )
-        
-        action = decision.get("action", "skip")
-        
-        if action == "complete":
-            logger.info("Goal marked as complete")
-            self.memory.record_goal_complete(goal.text)
-            return True
-        
-        if action == "skip":
-            logger.info(f"Skipping: {decision.get('reasoning', 'No reason')}")
-            return False
-        
-        # Execute action
-        action_input = decision.get("action_input", {})
-        logger.info(f"Executing {action}...")
-        get_state_manager().update_agent_status("DeepLoop", "Executing", action=action, info=action_input)
-        
-        result = await self._execute_action(action, action_input)
-        
-        if result["success"]:
-            logger.info(f"Tool {action} completed successfully.")
-            # Truncate log output to keep UI/terminal responsive - increased to allow more info
-            res_str = str(result['result'])
-            logger.info(f"Result: {res_str}")
-        else:
-            logger.error(f"Tool {action} failed: {result['error']}")
-        
-        return result["success"]
-    
+
+        # Record Pi Agent's work in memory
+        self.memory.record_action(
+            tool_name="pi_agent",
+            action=f"Goal: {goal.text}",
+            result=response[:500] if response else "(empty)",
+            success=bool(response and len(response.strip()) > 10),
+            time_ms=0
+        )
+
+        self.last_action_summary = f"Worked on '{goal.text}': {response_preview[:200]}" if response else "No response"
+        return True
+
     async def run(self):
         """
         Run the continuous loop.
-        
+
         Runs until:
         - Interrupted by signal (SIGINT/SIGTERM)
         - max_iterations reached (if set)
@@ -607,32 +656,42 @@ What is the next action to take towards this goal?"""
         """
         self.running = True
         get_state_manager().update_state(is_running=True)
-        
-        logger.info("="*60)
-        logger.info("🌊 L.O.V.E. DeepLoop Starting 🌊")
+
+        logger.info("=" * 60)
+        logger.info("🌊 L.O.V.E. PiLoop Starting 🌊")
         logger.info(f"   Sleep interval: {self.sleep_seconds}s")
         logger.info(f"   Max iterations: {self.max_iterations or 'Infinite'}")
         logger.info(f"   Tools loaded: {len(self.tools)}")
-        logger.info("="*60)
-        
+        logger.info("=" * 60)
+
+        # Start Pi Agent bridge
+        try:
+            if not self.bridge.running:
+                logger.info("Starting Pi Agent bridge...")
+                await self.bridge.start()
+                await asyncio.sleep(2.0)
+                logger.info("Pi Agent bridge ready.")
+        except Exception as e:
+            logger.error(f"Failed to start Pi Agent bridge: {e}")
+
         try:
             while self.running:
                 # Check iteration limit
                 if self.max_iterations and self.iteration >= self.max_iterations:
                     logger.info(f"Reached max iterations ({self.max_iterations})")
                     break
-                
+
                 try:
                     self.iteration += 1
-                    logger.info(f"\n{'='*50}")
+                    logger.info(f"\n{'=' * 50}")
                     logger.info(f"Iteration {self.iteration} - {datetime.now().isoformat()}")
-                    logger.info(f"{'='*50}")
-                    
+                    logger.info(f"{'=' * 50}")
+
                     get_state_manager().update_state(
                         iteration=self.iteration,
                         memory_stats=self.memory.get_stats()
                     )
-                    
+
                     success_or_work_done = await self.run_iteration()
                     logger.info(f"Iteration {self.iteration} logic completed.")
                 except Exception as e:
@@ -643,54 +702,57 @@ What is the next action to take towards this goal?"""
                         f"Iteration {self.iteration} failed: {e}"
                     )
                     success_or_work_done = False
-                
+
                 # Persist state
                 logger.info("Persisting memory to disk...")
                 start_save = time.time()
                 self.memory.save()
-                logger.info(f"Memory persisted in {(time.time() - start_save)*1000:.2f}ms")
-                
+                logger.info(f"Memory persisted in {(time.time() - start_save) * 1000:.2f}ms")
+
                 # Dynamic backoff logic
-                # If the iteration did no work (skipped/failed) and sleep is 0, 
-                # we force a small sleep to prevent busy-looping (which spams logs).
                 if not success_or_work_done:
-                     if self.sleep_seconds < 1.0:
-                         await asyncio.sleep(2.0)
-                
+                    if self.sleep_seconds < 1.0:
+                        await asyncio.sleep(2.0)
+
                 # Main user-configured sleep
                 if self.running and self.sleep_seconds > 0:
                     logger.info(f"Sleeping {self.sleep_seconds}s...")
                     await asyncio.sleep(self.sleep_seconds)
-        
+
         except Exception as e:
             logger.exception(f"Fatal error: {e}")
-        
+
         finally:
             self.running = False
             get_state_manager().update_state(is_running=False)
             self.memory.save()
+            # Stop Pi Agent bridge
+            try:
+                await self.bridge.stop()
+            except Exception:
+                pass
             logger.info("Stopped. State saved.")
-    
+
     def stop(self):
         """Stop the loop gracefully."""
         self.running = False
 
 
 def main():
-    """Entry point for running the DeepLoop."""
+    """Entry point for running the PiLoop."""
     import argparse
-    
-    parser = argparse.ArgumentParser(description="L.O.V.E. DeepLoop - Autonomous Goal Engine")
+
+    parser = argparse.ArgumentParser(description="L.O.V.E. PiLoop - Pi Agent Autonomous Engine")
     parser.add_argument("--test-mode", action="store_true", help="Run only 3 iterations")
     parser.add_argument("--sleep", type=float, default=30.0, help="Seconds between iterations")
     args = parser.parse_args()
-    
-    loop = DeepLoop(
+
+    loop = PiLoop(
         max_iterations=3 if args.test_mode else None,
         sleep_seconds=args.sleep
     )
-    
-    loop.run()
+
+    asyncio.run(loop.run())
 
 
 if __name__ == "__main__":

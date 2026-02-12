@@ -92,7 +92,7 @@ AND then strictly stop.
                     try:
                         # Need to handle async vs sync tools? 
                         # Registry usually wraps them.
-                        # We executed them in DeepLoop synchronously.
+                        # Execute tools (sync or async).
                         # But here we are in async method.
                         # Ideally we run them in executor if they are blocking.
                         import asyncio

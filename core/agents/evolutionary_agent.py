@@ -2,7 +2,7 @@
 Evolutionary Agent - The Software Engineer
 
 Epic 2: Handles the lifecycle of creating, validating, and refining new tools.
-Acts as a specialized sub-agent invoked by the DeepLoop when a tool gap is detected.
+Acts as a specialized sub-agent invoked by the PiLoop when a tool gap is detected.
 """
 
 import logging
